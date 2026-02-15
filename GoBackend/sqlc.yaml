@@ -3,7 +3,7 @@ sql:
   # User domain - SQL queries and generated code in internal/user/sql/
   - engine: "postgresql"
     queries: "internal/stuff/sql"
-    schema: "internal/database/migrations"
+    schema: "supabase/schemas"
     gen:
       go:
         package: "sql"
@@ -19,7 +19,7 @@ sql:
   # Example for post domain:
   # - engine: "postgresql"
   #   queries: "internal/post/sql"
-  #   schema: "internal/database/migrations"
+  #   schema: "supabase/schemas"
   #   gen:
   #     go:
   #       package: "sql"

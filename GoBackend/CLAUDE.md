@@ -197,6 +197,27 @@
 - Pin versions in production for reproducible builds
 - Use `go mod vendor` if vendoring dependencies
 
+**Database Schema Patterns**
+- **PRIMARY KEY declaration**: Always use separate `PRIMARY KEY (...)` line at end of table definition
+  - Good: `PRIMARY KEY (id)` or `PRIMARY KEY (user_id, gym_id)` as separate line
+  - Bad: `id UUID PRIMARY KEY` (inline declaration)
+- **UUID generation**: Use `DEFAULT uuid_generate_v4()` for auto-generated UUIDs
+  - Good: `gym_id UUID NOT NULL DEFAULT uuid_generate_v4()`
+  - Then: `PRIMARY KEY (gym_id)` on separate line
+  - Note: Use `DEFAULT`, NOT `GENERATED ALWAYS AS` (uuid_generate_v4 is volatile, not immutable)
+  - Always include `NOT NULL` for explicitness (even though PRIMARY KEY implies it)
+- **Timestamps**: Use `DEFAULT now()` for auto-timestamps
+  - Good: `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+  - Good: `time TIMESTAMPTZ NOT NULL DEFAULT now()`
+  - Prevents API mistakes, ensures database-controlled timestamps
+  - Note: Use `DEFAULT`, NOT `GENERATED ALWAYS AS` (now() is volatile, not immutable)
+- **User-controlled timestamps**: No default (user sets the value)
+  - Good: `last_class TIMESTAMPTZ` (no DEFAULT)
+  - Good: `scheduled_date TIMESTAMPTZ` (no DEFAULT)
+- **Composite foreign keys**: When table has both `user_id` and `gym_id`, add composite FK
+  - Always add: `CONSTRAINT user_gym FOREIGN KEY (user_id, gym_id) REFERENCES user_gym_profiles (user_id, gym_id)`
+  - Ensures users can only create records for gyms they belong to
+
 **sqlc Patterns**
 - **Co-locate SQL with domains** - Each domain has its own `sql/` subdirectory
 - **Write SQL queries in domain sql folder**: `internal/{domain}/sql/queries.sql`
