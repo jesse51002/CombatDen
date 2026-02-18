@@ -11,8 +11,7 @@ import (
 )
 
 type Querier interface {
-	GetJustName(ctx context.Context, id pgtype.UUID) (GetJustNameRow, error)
-	GetStuff(ctx context.Context, id pgtype.UUID) (User, error)
+	GetGym(ctx context.Context, gymID pgtype.UUID) (Gym, error)
 }
 
 var _ Querier = (*Queries)(nil)

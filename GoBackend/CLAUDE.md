@@ -13,6 +13,17 @@
 - YAGNI (You Aren't Gonna Need It): Don't add features until needed
 - Separation of Concerns: Separate different aspects into distinct sections
 
+**Development Workflow**
+- **ALWAYS read the Makefile before running commands manually**
+  - The Makefile contains standardized project commands
+  - Use `make help` to see available commands
+  - Prefer `make run`, `make build`, `make test`, etc. over manual go commands
+  - The Makefile ensures consistency (e.g., `make run` runs `sqlc generate` first)
+  - Only run commands manually if they're not in the Makefile or for one-off tasks
+- Example:
+  - Good: `make run` (uses project standards)
+  - Bad: `go run cmd/api/main.go` (bypasses sqlc generation and other setup)
+
 ## Go Standards
 
 **Imports**
@@ -51,7 +62,7 @@
   - Configuration: `MAX_UPLOAD_SIZE`, `API_TIMEOUT`
 
 **Formatting**
-- **MUST run `gofmt` or `goimports`** - non-negotiable, Go standard
+- **MUST run `make check`** - non-negotiable, Go standard
 - Max 120 characters per line (soft limit, Go doesn't enforce)
 - Use tabs for indentation (Go standard)
 - One blank line between function/method definitions
@@ -930,13 +941,48 @@
   ```
 
 **Configuration**
+- **ALL configuration MUST go in `internal/config/` package**
+  - Single source of truth for all application configuration
+  - Never create separate config files in other packages (database, middleware, etc.)
+  - All config structs and types belong in `internal/config/config.go`
+  - Other packages import and use `config.Config` or specific config types
 - **Environment variables for all secrets**:
   - `SUPABASE_URL` - Supabase project URL
   - `SUPABASE_ANON_KEY` - Supabase anonymous key (for client-side)
   - `SUPABASE_SERVICE_KEY` - Supabase service role key (for server-side)
   - `DATABASE_URL` - PostgreSQL connection string
   - `JWT_SECRET` - Additional JWT secret if needed
-- **Use configuration package** (e.g., `viper`, `envconfig`, or custom loader)
+- **Configuration structure pattern**:
+  ```go
+  // In internal/config/config.go
+  type Config struct {
+      ServerPort string
+      ServerHost string
+      Env        Environment
+
+      // Group related config into sub-structs
+      Database DatabaseConfig
+      Supabase SupabaseConfig
+  }
+
+  type DatabaseConfig struct {
+      URL               string
+      MaxConns          int32
+      MinConns          int32
+      MaxConnLifetime   time.Duration
+      MaxConnIdleTime   time.Duration
+      HealthCheckPeriod time.Duration
+  }
+  ```
+- **Usage in other packages**:
+  ```go
+  // In internal/database/postgres.go
+  import "github.com/yourorg/combatden-api/internal/config"
+
+  func New(ctx context.Context, url string, cfg config.DatabaseConfig) (*DB, error) {
+      // Use cfg.MaxConns, cfg.MinConns, etc.
+  }
+  ```
 - **CORS configuration**:
   - Specific origins only in production (include Supabase domains)
   - `Access-Control-Allow-Credentials: true` for Supabase

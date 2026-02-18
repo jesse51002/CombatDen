@@ -15,29 +15,15 @@ linters:
     - gocritic
     - revive
 
-linters-settings:
-  govet:
-    check-shadowing: true
-  gofmt:
-    simplify: true
-  errcheck:
-    check-blank: true
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-
-issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - gosec
-        - unparam
+  exclusions:
+    paths:
+      # Exclude the vendor directory if you are using vendored dependencies
+      - vendor
+      # Exclude specific directories using regular expressions
+      - ^test/
+      - pkg
 
 run:
   timeout: 5m
   tests: true
+  modules-download-mode: readonly

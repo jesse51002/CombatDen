@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -47,13 +48,36 @@ type Config struct {
 
 	// Database configuration
 	DatabaseURL string
+	Database    DatabaseConfig
+}
+
+// DatabaseConfig holds database connection pool configuration.
+type DatabaseConfig struct {
+	MaxConns          int32         // Maximum number of connections in the pool
+	MinConns          int32         // Minimum number of connections in the pool
+	MaxConnLifetime   time.Duration // Maximum lifetime of a connection
+	MaxConnIdleTime   time.Duration // Maximum idle time before connection is closed
+	HealthCheckPeriod time.Duration // Health check interval
 }
 
 // Load reads configuration from environment variables.
-// It attempts to load from a .env file first, then falls back to system environment variables.
+// It loads .env.dev for local development (when ENV is not set),
+// or .env for other environments (when ENV is set).
 func Load() (*Config, error) {
-	// Try to load .env file (ignore error if file doesn't exist)
-	_ = godotenv.Load()
+	// Check if ENV variable is set
+	env := os.Getenv("ENV")
+
+	// If ENV is not set, use .env.dev for local development
+	// If ENV is set (DEV, QA, PROD, etc.), use .env or system env vars
+	if env == "" {
+		// Load .env.dev for local development
+		if err := godotenv.Load(".env.dev"); err != nil {
+			return nil, fmt.Errorf("failed to load .env.dev: %w", err)
+		}
+	} else {
+		// ENV is set, try to load .env (ignore error if not present)
+		_ = godotenv.Load()
+	}
 
 	config := &Config{
 		ServerPort: getEnv("SERVER_PORT", "8080"),
@@ -65,6 +89,13 @@ func Load() (*Config, error) {
 		SupabaseServiceKey: getEnv("SUPABASE_SERVICE_KEY", ""),
 
 		DatabaseURL: getEnv("DATABASE_URL", ""),
+		Database: DatabaseConfig{
+			MaxConns:          25,
+			MinConns:          5,
+			MaxConnLifetime:   1 * time.Hour,
+			MaxConnIdleTime:   30 * time.Minute,
+			HealthCheckPeriod: 1 * time.Minute,
+		},
 	}
 
 	// Validate required configuration

@@ -29,6 +29,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Enum values and validation rules
 - Update models when API spec changes: `make update-openapi`
 
+## Backend & Database
+
+**Supabase Integration**
+- **We are using Supabase** as our backend-as-a-service platform
+- Supabase provides:
+  - PostgreSQL database with real-time subscriptions
+  - Authentication and authorization
+  - Row-level security (RLS) policies
+  - Storage for files and media
+  - Edge functions for serverless compute
+
+**Supabase Best Practices**
+- Use `supabase_flutter` package for all Supabase interactions
+- Initialize Supabase client in `main.dart` before app starts
+- Store Supabase URL and anon key in environment variables (`.env`)
+- Never commit Supabase service role key or secrets
+- Use repositories to abstract Supabase data sources
+- Leverage RLS policies for security - don't bypass them
+- Use Supabase real-time subscriptions for live data updates
+- Handle Supabase auth state changes through AuthBloc
+
+**Repository Pattern with Supabase**
+- Repository layer wraps Supabase client calls
+- Convert Supabase responses to domain models
+- Handle Supabase errors and convert to custom exceptions
+- Example:
+  ```dart
+  class UserRepository {
+    final SupabaseClient _supabase;
+
+    Future<User> getUserById(String id) async {
+      try {
+        final response = await _supabase
+          .from('users')
+          .select()
+          .eq('id', id)
+          .single();
+        return User.fromJson(response);
+      } on PostgrestException catch (e) {
+        throw DatabaseException(e.message);
+      }
+    }
+  }
+  ```
+
 ## Development Commands
 
 ### API Management
@@ -221,12 +266,25 @@ class IngredientCheckboxItem extends StatelessWidget {
 
 ## Theming System
 
+**CRITICAL: ALWAYS Use DesignConstants**
+- **EVERY widget MUST import and use `package:flutter_crm/core/constants/design_constants.dart`**
+- **NEVER use default colors** (e.g., `Colors.red`, `Colors.blue`, `Color(0xFF...)` hardcoded values)
+- **NEVER use default fonts** (e.g., hardcoded `fontFamily`, default text styles)
+- **NEVER create new design constants without explicit permission** - Always ask first before adding new colors, text styles, or design values
+- **ALWAYS reference DesignConstants** for:
+  - All colors: `DesignConstants.primaryColor`, `DesignConstants.text`, etc.
+  - All text styles: `DesignConstants.h1`, `DesignConstants.h2`, `DesignConstants.p`, etc.
+  - All design values: `DesignConstants.buttonBorder`, spacing, radii, etc.
+- Good: `color: DesignConstants.primaryColor`, `style: DesignConstants.h2`
+- Bad: `color: Colors.orange`, `color: Color(0xFFFF6C2D)`, `fontSize: 16`
+- This ensures consistent theming across the entire app
+
 **Architecture**: DesignConstants + Material 3 ColorScheme + Custom Widgets
 
-**DesignConstants** (`lib/shared/themes/design_constants.dart`)
+**DesignConstants** (`lib/core/constants/design_constants.dart`)
 - Single source of truth for all design values
 - Colors: primary, secondary, background, text, and opacity variations
-- Design values: defaultRadius (16), buttonBorderSize (3)
+- Design values: radiusBig (16), buttonBorderSize (3)
 - Can be inherited for theme variations (e.g., light theme, brand variations)
 
 **AppTheme** (`lib/shared/themes/app_theme.dart`)
@@ -236,13 +294,13 @@ class IngredientCheckboxItem extends StatelessWidget {
 
 **Usage in Widgets**:
 ```dart
-import 'package:squillo/shared/themes/design_constants.dart';
+import 'package:flutter_crm/core/constants/design_constants.dart';
 
 // Access colors and design values directly
 Container(
   color: DesignConstants.primary,
   decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(DesignConstants.defaultRadius),
+    borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
     border: Border.all(
       color: DesignConstants.buttonStroke,
       width: DesignConstants.buttonBorderSize,
@@ -279,6 +337,7 @@ lib/
 │   └── routes.dart              # Route definitions
 ├── core/                        # Shared utilities
 │   ├── constants/
+│   │   └── design_constants.dart  # Design system constants (colors, fonts, styles)
 │   ├── errors/
 │   ├── network/
 │   └── utils/
@@ -299,7 +358,6 @@ lib/
 └── shared/                      # Shared widgets, themes
     ├── widgets/
     └── themes/
-        ├── design_constants.dart  # Design system constants
         └── app_theme.dart         # Theme configuration
 ```
 

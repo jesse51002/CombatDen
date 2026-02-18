@@ -2,7 +2,7 @@ version: "2"
 sql:
   # User domain - SQL queries and generated code in internal/user/sql/
   - engine: "postgresql"
-    queries: "internal/stuff/sql"
+    queries: "internal/database/sql"
     schema: "supabase/schemas"
     gen:
       go:
@@ -14,18 +14,3 @@ sql:
         emit_empty_slices: true
         emit_pointers_for_null_types: true
         # Generated files: db.go, models.go, queries.sql.go in internal/user/sql/
-
-  # Add more domains here as you create them
-  # Example for post domain:
-  # - engine: "postgresql"
-  #   queries: "internal/post/sql"
-  #   schema: "supabase/schemas"
-  #   gen:
-  #     go:
-  #       package: "sql"
-  #       out: "internal/post/sql"
-  #       sql_package: "pgx/v5"
-  #       emit_json_tags: true
-  #       emit_interface: true
-  #       emit_empty_slices: true
-  #       emit_pointers_for_null_types: true

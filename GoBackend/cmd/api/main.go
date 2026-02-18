@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yourorg/combatden-api/internal/config"
+	"github.com/yourorg/combatden-api/internal/database"
 	"github.com/yourorg/combatden-api/internal/logger"
 	"github.com/yourorg/combatden-api/internal/router"
 )
@@ -27,6 +28,20 @@ func main() {
 	appLogger.Info("Starting CombatDen API",
 		"environment", cfg.Env,
 		"port", cfg.ServerPort,
+		"database_url", cfg.DatabaseURL,
+	)
+
+	// Initialize database connection
+	db, err := database.New(context.Background(), cfg.DatabaseURL, cfg.Database)
+	if err != nil {
+		appLogger.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	appLogger.Info("Connected to database",
+		"environment", cfg.Env,
+		"is_local", cfg.IsDev(),
 	)
 
 	// Set up router with all routes
@@ -65,6 +80,10 @@ func main() {
 		appLogger.Error("Server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
+
+	// Close database connection
+	db.Close()
+	appLogger.Info("Database connection closed")
 
 	appLogger.Info("Server stopped gracefully")
 }

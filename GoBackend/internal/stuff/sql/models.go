@@ -8,10 +8,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type User struct {
-	ID        pgtype.UUID        `json:"id"`
-	Email     string             `json:"email"`
-	Name      string             `json:"name"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+type Gym struct {
+	GymID   pgtype.UUID `json:"gym_id"`
+	GymName *string     `json:"gym_name"`
+	OwnerID pgtype.UUID `json:"owner_id"`
+}
+
+type GymHistory struct {
+	GymID           pgtype.UUID `json:"gym_id"`
+	Date            pgtype.Date `json:"date"`
+	MembersTotal    int32       `json:"members_total"`
+	MembersChurned  int32       `json:"members_churned"`
+	MembersGained   int32       `json:"members_gained"`
+	MembersRetained int32       `json:"members_retained"`
+	Revenue         float64     `json:"revenue"`
+}
+
+type UserActivity struct {
+	ActivityID   pgtype.UUID        `json:"activity_id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	GymID        pgtype.UUID        `json:"gym_id"`
+	ActivityType string             `json:"activity_type"`
+	ActivityInfo []byte             `json:"activity_info"`
+	Time         pgtype.Timestamptz `json:"time"`
+}
+
+type UserGymProfile struct {
+	UserID        pgtype.UUID        `json:"user_id"`
+	GymID         pgtype.UUID        `json:"gym_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	LastClass     pgtype.Timestamptz `json:"last_class"`
+	Rank          *string            `json:"rank"`
+	AccountStatus *string            `json:"account_status"`
+}
+
+type UserGymTransaction struct {
+	TransactionID    pgtype.UUID        `json:"transaction_id"`
+	UserID           pgtype.UUID        `json:"user_id"`
+	GymID            pgtype.UUID        `json:"gym_id"`
+	ItemID           pgtype.UUID        `json:"item_id"`
+	AmountPaid       float64            `json:"amount_paid"`
+	ItemType         *string            `json:"item_type"`
+	Time             pgtype.Timestamptz `json:"time"`
+	AppliedDiscounts []byte             `json:"applied_discounts"`
+	ExtraInfo        []byte             `json:"extra_info"`
 }

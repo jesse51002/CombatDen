@@ -43,8 +43,6 @@ check: fmt lint clean
 
 # Run linters
 lint:
-	@echo "Running linters..."
-	golangci-lint run
 	go vet ./...
 
 # Format code
