@@ -22,6 +22,7 @@ class _LoginFormState extends State<LoginForm> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -45,16 +46,14 @@ class _LoginFormState extends State<LoginForm> {
   Widget build(BuildContext context) {
     return BlocConsumer<LoginBloc, LoginState>(
       listener: (context, state) {
-        // Handle successful authentication
-        if (state is LoginAuthenticated) {
-          // Navigation will be handled by the app-level auth listener
+        if (state is LoginError && state.isLoginError) {
+          setState(() => _errorMessage = state.message);
+        } else if (state is LoginLoading) {
+          setState(() => _errorMessage = null);
         }
       },
       builder: (context, state) {
         final isLoading = state is LoginLoading;
-        final errorMessage = state is LoginError && state.isLoginError
-            ? state.message
-            : null;
 
         return ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
@@ -74,8 +73,8 @@ class _LoginFormState extends State<LoginForm> {
                     subtitle: 'Sign in to continue',
                   ),
                   SizedBox(height: DesignConstants.spacingBig.toDouble()),
-                  if (errorMessage != null) ...[
-                    ErrorMessage(message: errorMessage),
+                  if (_errorMessage != null) ...[
+                    ErrorMessage(message: _errorMessage!),
                     SizedBox(height: DesignConstants.spacingLarge.toDouble()),
                   ],
                   CustomTextField(

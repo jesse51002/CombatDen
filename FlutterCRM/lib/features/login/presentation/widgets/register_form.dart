@@ -23,6 +23,7 @@ class _RegisterFormState extends State<RegisterForm> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -45,12 +46,16 @@ class _RegisterFormState extends State<RegisterForm> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<LoginBloc, LoginState>(
+    return BlocConsumer<LoginBloc, LoginState>(
+      listener: (context, state) {
+        if (state is LoginError && !state.isLoginError) {
+          setState(() => _errorMessage = state.message);
+        } else if (state is LoginLoading) {
+          setState(() => _errorMessage = null);
+        }
+      },
       builder: (context, state) {
         final isLoading = state is LoginLoading;
-        final errorMessage = state is LoginError && !state.isLoginError
-            ? state.message
-            : null;
 
         return ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
@@ -70,8 +75,8 @@ class _RegisterFormState extends State<RegisterForm> {
                     subtitle: 'Sign up to get started',
                   ),
                   SizedBox(height: DesignConstants.spacingBig.toDouble()),
-                  if (errorMessage != null) ...[
-                    ErrorMessage(message: errorMessage),
+                  if (_errorMessage != null) ...[
+                    ErrorMessage(message: _errorMessage!),
                     SizedBox(height: DesignConstants.spacingLarge.toDouble()),
                   ],
                   CustomTextField(
