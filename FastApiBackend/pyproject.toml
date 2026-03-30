@@ -19,7 +19,6 @@ dependencies = [
     "asyncpg (>=0.31.0,<0.32.0)"
 ]
 
-
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
@@ -35,3 +34,6 @@ line-length = 99
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ASYNC"]
+
+[tool.poetry]
+package-mode = false
