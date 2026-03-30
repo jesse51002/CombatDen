@@ -6,40 +6,114 @@ import 'package:crm/features/login/bloc/login_bloc.dart';
 import 'package:crm/features/login/bloc/login_event.dart';
 import 'package:crm/features/login/bloc/login_state.dart';
 import 'package:crm/features/login/presentation/screens/login_screen.dart';
+import 'package:crm/features/gym_setup/data/repositories/gym_repository.dart';
+import 'package:crm/features/gym_setup/presentation/screens/gym_setup_screen.dart';
 
-/// Placeholder home screen - will be replaced with actual CRM features
-class HomeScreen extends StatelessWidget {
+/// Home screen that checks gym setup status on load
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _isCheckingSetup = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkGymSetup();
+    });
+  }
+
+  Future<void> _checkGymSetup() async {
+    final userId = Supabase
+        .instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    final gymRepo = GymRepository();
+    final gym = await gymRepo.getGymByOwnerId(userId);
+
+    if (gym == null) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => const GymSetupScreen(),
+        ),
+      );
+      return;
+    }
+
+    final gymId = gym['gym_id'] as String;
+    final profile = await gymRepo.getUserGymProfile(
+      userId: userId,
+      gymId: gymId,
+    );
+
+    if (profile == null) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => const GymSetupScreen(),
+        ),
+      );
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _isCheckingSetup = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user =
+        Supabase.instance.client.auth.currentUser;
+
+    if (_isCheckingSetup) {
+      return Scaffold(
+        backgroundColor: DesignConstants.background,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: DesignConstants.primary,
+          ),
+        ),
+      );
+    }
 
     return BlocListener<LoginBloc, LoginState>(
       listener: (context, state) {
-        // When logged out, navigate back to LoginScreen
         if (state is LoginUnauthenticated) {
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            MaterialPageRoute(
+              builder: (_) => const LoginScreen(),
+            ),
           );
         }
       },
       child: Scaffold(
         backgroundColor: DesignConstants.background,
         appBar: AppBar(
-          backgroundColor: DesignConstants.cardBackground,
+          backgroundColor:
+              DesignConstants.cardBackground,
           title: Text(
             'CRM Home',
-            style: DesignConstants.h2.copyWith(color: DesignConstants.text),
+            style: DesignConstants.h2.copyWith(
+              color: DesignConstants.text,
+            ),
           ),
         ),
         body: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: DesignConstants.screenHorizontalPadding,
+            horizontal:
+                DesignConstants.screenHorizontalPadding,
           ),
           child: Center(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
               children: [
                 Icon(
                   Icons.check_circle_outline,
@@ -49,37 +123,47 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 Text(
                   'Welcome!',
-                  style: DesignConstants.h1.copyWith(color: DesignConstants.text),
+                  style: DesignConstants.h1.copyWith(
+                    color: DesignConstants.text,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Logged in as: ${user?.email ?? "Unknown"}',
+                  'Logged in as:'
+                  ' ${user?.email ?? "Unknown"}',
                   style: DesignConstants.p.copyWith(
-                    color: DesignConstants.text.withValues(alpha: 0.7),
+                    color: DesignConstants.text
+                        .withValues(alpha: 0.7),
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 40),
                 ElevatedButton(
                   onPressed: () {
-                    context.read<LoginBloc>().add(const LoginSignOutRequested());
+                    context.read<LoginBloc>().add(
+                          const LoginSignOutRequested(),
+                        );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: DesignConstants.badRed,
-                    foregroundColor: DesignConstants.text,
+                    backgroundColor:
+                        DesignConstants.badRed,
+                    foregroundColor:
+                        DesignConstants.text,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 32,
                       vertical: 16,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
+                      borderRadius:
+                          BorderRadius.circular(
                         DesignConstants.radiusBig,
                       ),
                     ),
                   ),
                   child: Text(
                     'Logout',
-                    style: DesignConstants.h2.copyWith(
+                    style:
+                        DesignConstants.h2.copyWith(
                       color: DesignConstants.text,
                     ),
                   ),
