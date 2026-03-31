@@ -74,6 +74,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   }
   ```
 
+**API Client for Backend Requests**
+- **ALWAYS use `ApiClient`** (`lib/core/network/api_client.dart`) for all REST API calls to the backend
+- `ApiClient` automatically attaches the Supabase JWT as a Bearer token
+- Repositories should receive an `ApiClient` instance and use it for HTTP calls
+- Never make raw HTTP requests or create new Dio instances — use `ApiClient`
+- API base URL is configured via `API_BASE_URL` in `.env` files
+- Example:
+  ```dart
+  class MemberRepository {
+    final ApiClient _apiClient;
+    MemberRepository({required ApiClient apiClient})
+        : _apiClient = apiClient;
+
+    Future<Member> getMember(String id) async {
+      final response = await _apiClient.get(
+        '/members/$id',
+      );
+      return Member.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    }
+  }
+  ```
+
 ## Development Commands
 
 ### API Management

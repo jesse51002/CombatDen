@@ -1,0 +1,1 @@
+{"kty":"EC","kid":"198773c1-df56-44ca-82ab-86b0437c6c1f","use":"sig","key_ops":["sign","verify"],"alg":"ES256","ext":true,"d":"Eg_VnAlZEcp46GhpHmKl9FF2oSYhwR5R9ksAvBQRpuU","crv":"P-256","x":"VzAm35A9esNsaS0ev7UFI-vHiqBH9WWAYKEdP73Jkog","y":"e7BYr3QDDXpBDsot9fhiIYVS8EZ4VwpExVb4RkNYow4"}

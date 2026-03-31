@@ -3,6 +3,7 @@ import uuid
 from faker import Faker
 
 from config import get_supabase_client
+from utils import make_seeded_uuids
 from constants import (
     ACTIVITIES_PER_MEMBER,
     DISCOUNTS_PER_GYM,
@@ -37,25 +38,31 @@ fake = Faker()
 def seed():
     client = get_supabase_client()
 
+    # Generate deterministic IDs (each category has its own seed so they're independent)
+    owner_ids = make_seeded_uuids(seed=1, count=NUM_GYMS)
+    member_auth_ids = make_seeded_uuids(seed=2, count=NUM_GYMS * LINKED_MEMBERS_PER_GYM)
+    gym_ids = make_seeded_uuids(seed=3, count=NUM_GYMS)
+    profile_ids = make_seeded_uuids(seed=4, count=NUM_GYMS * MEMBERS_PER_GYM)
+
     # Phase 1: Create auth users
     print("Creating auth users...")
     owner_users = []
     for i in range(NUM_GYMS):
-        user = auth.create_user(client, f"owner{i + 1}@test.com")
+        user = auth.create_user(client, f"owner{i + 1}@test.com", user_id=owner_ids[i])
         owner_users.append(user)
         print(f"  Owner: {user['email']}")
 
     member_auth_users = []
-    for _ in range(NUM_GYMS * LINKED_MEMBERS_PER_GYM):
-        user = auth.create_user(client, fake.unique.email())
+    for i in range(NUM_GYMS * LINKED_MEMBERS_PER_GYM):
+        user = auth.create_user(client, fake.unique.email(), user_id=member_auth_ids[i])
         member_auth_users.append(user)
     print(f"  Created {len(member_auth_users)} member auth accounts")
 
     # Phase 2: Create gyms
     print("Creating gyms...")
     gym_records: list[GymCreate] = []
-    for owner in owner_users:
-        gym = gyms.generate(owner["id"])
+    for i, owner in enumerate(owner_users):
+        gym = gyms.generate(owner["id"], gym_id=gym_ids[i])
         gym_records.append(gym)
         print(f"  {gym.gym_name} ({gym.rank_preset})")
     client.table("gyms").insert([g.to_insert_dict() for g in gym_records]).execute()
@@ -64,6 +71,7 @@ def seed():
     print("Creating member profiles...")
     all_profiles: dict[uuid.UUID, list[UserGymProfileCreate]] = {}
     auth_idx = 0
+    profile_idx = 0
     for gym in gym_records:
         gym_profiles = []
         for j in range(MEMBERS_PER_GYM):
@@ -71,7 +79,10 @@ def seed():
             if j < LINKED_MEMBERS_PER_GYM:
                 user_id = member_auth_users[auth_idx]["id"]
                 auth_idx += 1
-            gym_profiles.append(profiles.generate(gym.gym_id, user_id))
+            gym_profiles.append(
+                profiles.generate(gym.gym_id, crm_user_id=profile_ids[profile_idx], user_id=user_id)
+            )
+            profile_idx += 1
         all_profiles[gym.gym_id] = gym_profiles
         client.table("user_gym_profiles").insert(
             [p.to_insert_dict() for p in gym_profiles]

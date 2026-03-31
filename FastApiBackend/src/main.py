@@ -5,7 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
-from src.core.dependencies import Container
+from src.core.dependencies import DependencyInjector
+from src.members.members_router import members_router
 
 
 @asynccontextmanager
@@ -17,7 +18,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
-    container = Container()
+    container = DependencyInjector()
 
     application = FastAPI(
         title="CombatDen API",
@@ -36,6 +37,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    application.include_router(members_router)
 
     return application
 

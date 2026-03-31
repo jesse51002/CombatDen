@@ -10,9 +10,13 @@ from utils import random_past_datetime
 fake = Faker()
 
 
-def generate(gym_id: uuid.UUID, user_id: Optional[str] = None) -> UserGymProfileCreate:
+def generate(
+    gym_id: uuid.UUID,
+    crm_user_id: Optional[uuid.UUID] = None,
+    user_id: Optional[str] = None,
+) -> UserGymProfileCreate:
     return UserGymProfileCreate(
-        crm_user_id=uuid.uuid4(),
+        crm_user_id=crm_user_id or uuid.uuid4(),
         user_id=user_id,
         gym_id=gym_id,
         first_name=fake.first_name(),

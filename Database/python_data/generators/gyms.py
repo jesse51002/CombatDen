@@ -1,5 +1,6 @@
 import random
 import uuid
+from typing import Optional
 
 from schema.gym import GymCreate
 
@@ -22,12 +23,12 @@ NAME_SUFFIXES = [
 ]
 
 
-def generate(owner_id: str) -> GymCreate:
+def generate(owner_id: str, gym_id: Optional[uuid.UUID] = None) -> GymCreate:
     preset = random.choice(list(RANK_PRESETS.keys()))
     ranks = RANK_PRESETS[preset]
     name = f"{random.choice(NAME_PREFIXES)} {random.choice(NAME_SUFFIXES)}"
     return GymCreate(
-        gym_id=uuid.uuid4(),
+        gym_id=gym_id or uuid.uuid4(),
         gym_name=name,
         owner_id=owner_id,
         rank_preset=preset,

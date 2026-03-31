@@ -97,18 +97,24 @@ src/
 │   ├── session.py
 │   └── base.py
 ├── auth/                   # Authentication domain
-│   ├── router.py           # API routes
-│   ├── schemas.py          # Pydantic models
-│   ├── models.py           # Database models
-│   ├── service.py          # Business logic
-│   ├── repository.py       # Data access
-│   ├── dependencies.py     # Dependencies
-│   └── exceptions.py       # Custom exceptions
+│   ├── auth_router.py      # API routes
+│   ├── auth_schemas.py     # Pydantic models
+│   ├── auth_models.py      # Database models
+│   ├── auth_service.py     # Business logic
+│   ├── auth_repository.py  # Data access
+│   ├── auth_dependencies.py# Dependencies
+│   └── auth_exceptions.py  # Custom exceptions
 ├── users/                  # Users domain
 │   └── ...
 └── posts/                  # Posts domain
     └── ...
 ```
+
+**Domain-Prefixed File Names**
+- **All files within a domain folder must be prefixed with the domain name**
+- Good: `members/members_router.py`, `members/members_service.py`
+- Bad: `members/router.py`, `members/service.py`
+- This prevents confusion when multiple domain files are open in the editor (e.g., distinguishing `members_router.py` from `auth_router.py` in editor tabs)
 
 **Why Domain-Driven**
 - Clear boundaries between business domains
@@ -127,6 +133,7 @@ src/
 - Good: `DbSession = Annotated[AsyncSession, Depends(Provide[Container.db_session])]`
 - Good: `@inject` on any handler or dependency function using `Provide[...]`
 - Bad: Importing `settings` directly — use container injection instead
+- **Never import Container in service/shared modules** — DI wiring (`Provide[Container.xxx]`) belongs only in router files. Shared classes should use `self` and receive dependencies via constructor.
 - Chain dependencies for authorization
 - Apply common dependencies at router level
 

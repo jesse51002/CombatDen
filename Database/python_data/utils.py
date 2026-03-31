@@ -1,5 +1,11 @@
 import random
+import uuid
 from datetime import date, datetime, timedelta, timezone
+
+
+def make_seeded_uuids(seed: int, count: int) -> list[uuid.UUID]:
+    rng = random.Random(seed)
+    return [uuid.UUID(int=rng.getrandbits(128)) for _ in range(count)]
 
 
 def random_past_datetime(days_back: int) -> datetime:
