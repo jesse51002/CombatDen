@@ -13,49 +13,25 @@ CREATE TABLE gym_discounts (
 -- Enable Row Level Security
 ALTER TABLE gym_discounts ENABLE ROW LEVEL SECURITY;
 
--- Policy: Gym owners can view their discounts
-CREATE POLICY "Gym owners can view discounts"
+-- Policy: Gym staff can view their discounts
+CREATE POLICY "Gym staff can view discounts"
     ON gym_discounts
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_discounts.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    USING (is_gym_admin_or_owner(gym_discounts.gym_id));
 
--- Policy: Gym owners can insert discounts
-CREATE POLICY "Gym owners can insert discounts"
+-- Policy: Gym staff can insert discounts
+CREATE POLICY "Gym staff can insert discounts"
     ON gym_discounts
     FOR INSERT
     TO authenticated
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_discounts.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    WITH CHECK (is_gym_admin_or_owner(gym_discounts.gym_id));
 
--- Policy: Gym owners can update their discounts
-CREATE POLICY "Gym owners can update discounts"
+-- Policy: Gym staff can update their discounts
+CREATE POLICY "Gym staff can update discounts"
     ON gym_discounts
     FOR UPDATE
-    USING (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_discounts.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    )
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_discounts.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    USING (is_gym_admin_or_owner(gym_discounts.gym_id))
+    WITH CHECK (is_gym_admin_or_owner(gym_discounts.gym_id));
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
 REVOKE UPDATE (discount_id, gym_id, created_at) ON TABLE gym_discounts FROM authenticated;

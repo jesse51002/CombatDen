@@ -1,0 +1,1346 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CombatDen API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/members/member_details": {
+      "get": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Get member detail",
+        "description": "Returns full member detail for the Specific Member screen.",
+        "operationId": "get_member_detail_api_v1_members_member_details_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "crm_user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Crm User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Member detail retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to view this member"
+          },
+          "404": {
+            "description": "Member not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/members/crm_members_list": {
+      "post": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Get CRM members list",
+        "description": "Returns a filtered, sorted, paginated list of gym members for the CRM members list screen.",
+        "operationId": "crm_members_list_api_v1_members_crm_members_list_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrmMembersListRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Members list retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrmMembersListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to access this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/members/crm_total_counts": {
+      "get": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Get CRM member total counts",
+        "description": "Returns unfiltered member counts per status for the CRM members list subtitle.",
+        "operationId": "crm_total_counts_api_v1_members_crm_total_counts_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Total counts retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersListTotalCounts"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to access this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Health check endpoint.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Check Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AllViewRow": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "view": {
+            "type": "string",
+            "const": "all",
+            "title": "View",
+            "default": "all"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "membership_status": {
+            "$ref": "#/components/schemas/MembershipStatus"
+          },
+          "membership_text": {
+            "type": "string",
+            "title": "Membership Text"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "rank_icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Icon Url"
+          },
+          "days_since_last_class": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Since Last Class"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "name",
+          "membership_status",
+          "membership_text"
+        ],
+        "title": "AllViewRow",
+        "description": "Row for the All view.\n\nIncludes contact, membership badge, rank, and last class."
+      },
+      "CrmMembersListRequest": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "prev_view": {
+            "$ref": "#/components/schemas/MembersListView"
+          },
+          "requested_view": {
+            "$ref": "#/components/schemas/MembersListView"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/MembersListFilters",
+            "default": {
+              "membership_status": [],
+              "rank": []
+            }
+          },
+          "start_index": {
+            "type": "integer",
+            "title": "Start Index",
+            "default": 0
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "prev_view",
+          "requested_view"
+        ],
+        "title": "CrmMembersListRequest",
+        "description": "Request body for the CRM members list endpoint.\n\nAttributes:\n    gym_id: The gym to list members for.\n    prev_view: The view the user was on before this request.\n    requested_view: The view the user is requesting.\n    filters: Active filters from the frontend.\n    start_index: Pagination offset.\n    count: Number of rows to fetch per page."
+      },
+      "CrmMembersListResponse": {
+        "properties": {
+          "view": {
+            "$ref": "#/components/schemas/MembersListView"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/MembersListFilters"
+          },
+          "data": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AllViewRow"
+                },
+                {
+                  "$ref": "#/components/schemas/PromotionsViewRow"
+                },
+                {
+                  "$ref": "#/components/schemas/TrialViewRow"
+                },
+                {
+                  "$ref": "#/components/schemas/FrozenViewRow"
+                },
+                {
+                  "$ref": "#/components/schemas/OverdueViewRow"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "view",
+                "mapping": {
+                  "all": "#/components/schemas/AllViewRow",
+                  "frozen": "#/components/schemas/FrozenViewRow",
+                  "overdue": "#/components/schemas/OverdueViewRow",
+                  "promotions": "#/components/schemas/PromotionsViewRow",
+                  "trial": "#/components/schemas/TrialViewRow"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "view",
+          "filters",
+          "data"
+        ],
+        "title": "CrmMembersListResponse",
+        "description": "Response for the CRM members list endpoint.\n\nAttributes:\n    view: The resolved view (echoed from request).\n    filters: The applied filters (echoed from request).\n    data: Pre-sorted, pre-filtered, pre-formatted rows."
+      },
+      "DateRangeFilter": {
+        "properties": {
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        },
+        "type": "object",
+        "title": "DateRangeFilter",
+        "description": "Filter by date range (membership start date).\n\nAttributes:\n    start_date: Start of the date range.\n    end_date: End of the date range."
+      },
+      "DiscountInfo": {
+        "properties": {
+          "discount_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Discount Id"
+          },
+          "discount_name": {
+            "type": "string",
+            "title": "Discount Name"
+          },
+          "percentage_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage Off"
+          },
+          "dollar_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dollar Off"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "discount_id",
+          "discount_name"
+        ],
+        "title": "DiscountInfo",
+        "description": "An active discount applied to a membership."
+      },
+      "FrozenViewRow": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "view": {
+            "type": "string",
+            "const": "frozen",
+            "title": "View",
+            "default": "frozen"
+          },
+          "freeze_start": {
+            "type": "string",
+            "title": "Freeze Start"
+          },
+          "freeze_duration": {
+            "type": "string",
+            "title": "Freeze Duration"
+          },
+          "freeze_end": {
+            "type": "string",
+            "title": "Freeze End"
+          },
+          "price": {
+            "type": "string",
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "name",
+          "freeze_start",
+          "freeze_duration",
+          "freeze_end",
+          "price"
+        ],
+        "title": "FrozenViewRow",
+        "description": "Row for the Frozen view.\n\nIncludes freeze period and membership price."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LinkedAccount": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "first_name",
+          "last_name"
+        ],
+        "title": "LinkedAccount",
+        "description": "A linked family/group member account."
+      },
+      "MemberDetailResponse": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "account_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Status"
+          },
+          "personal_info": {
+            "$ref": "#/components/schemas/PersonalInfo"
+          },
+          "membership": {
+            "$ref": "#/components/schemas/MembershipInfo"
+          },
+          "rank_retention": {
+            "$ref": "#/components/schemas/RankRetention"
+          },
+          "recently_redeemed_rewards": {
+            "items": {
+              "$ref": "#/components/schemas/RewardCard"
+            },
+            "type": "array",
+            "title": "Recently Redeemed Rewards",
+            "default": []
+          },
+          "payment_history": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentRecord"
+            },
+            "type": "array",
+            "title": "Payment History",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "first_name",
+          "last_name",
+          "personal_info",
+          "membership",
+          "rank_retention"
+        ],
+        "title": "MemberDetailResponse",
+        "description": "Full member detail response for the Specific Member screen."
+      },
+      "MembersListFilters": {
+        "properties": {
+          "membership_status": {
+            "items": {
+              "$ref": "#/components/schemas/MembershipStatus"
+            },
+            "type": "array",
+            "title": "Membership Status",
+            "default": []
+          },
+          "rank": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Rank",
+            "default": []
+          },
+          "date_range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateRangeFilter"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "MembersListFilters",
+        "description": "All filters for the members list.\n\nAttributes:\n    membership_status: Statuses to include.\n    rank: Rank levels to include.\n    date_range: Optional date range filter.\n    name: Optional name search string."
+      },
+      "MembersListTotalCounts": {
+        "properties": {
+          "active": {
+            "type": "integer",
+            "title": "Active"
+          },
+          "trial": {
+            "type": "integer",
+            "title": "Trial"
+          },
+          "frozen": {
+            "type": "integer",
+            "title": "Frozen"
+          },
+          "overdue": {
+            "type": "integer",
+            "title": "Overdue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "active",
+          "trial",
+          "frozen",
+          "overdue"
+        ],
+        "title": "MembersListTotalCounts",
+        "description": "Aggregate member counts across the full dataset.\n\nAlways reflects totals regardless of active view or filters."
+      },
+      "MembersListView": {
+        "type": "string",
+        "enum": [
+          "all",
+          "promotions",
+          "trial",
+          "frozen",
+          "overdue"
+        ],
+        "title": "MembersListView",
+        "description": "Available views for the members list screen."
+      },
+      "MembershipInfo": {
+        "properties": {
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "plan_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "base_cost": {
+            "type": "number",
+            "title": "Base Cost"
+          },
+          "billing_cycle": {
+            "type": "string",
+            "title": "Billing Cycle"
+          },
+          "total_cost": {
+            "type": "number",
+            "title": "Total Cost"
+          },
+          "cost_formula": {
+            "type": "string",
+            "title": "Cost Formula"
+          },
+          "last_paid_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Paid Date"
+          },
+          "next_due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due Date"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Date"
+          },
+          "linked_accounts": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedAccount"
+            },
+            "type": "array",
+            "title": "Linked Accounts",
+            "default": []
+          },
+          "discounts": {
+            "items": {
+              "$ref": "#/components/schemas/DiscountInfo"
+            },
+            "type": "array",
+            "title": "Discounts",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_name",
+          "status",
+          "base_cost",
+          "billing_cycle",
+          "total_cost",
+          "cost_formula",
+          "start_date"
+        ],
+        "title": "MembershipInfo",
+        "description": "Membership details including cost, dates, linked accounts, and discounts."
+      },
+      "MembershipStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "trial",
+          "frozen",
+          "cancelled",
+          "overdue"
+        ],
+        "title": "MembershipStatus",
+        "description": "Possible membership statuses."
+      },
+      "OverdueViewRow": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "view": {
+            "type": "string",
+            "const": "overdue",
+            "title": "View",
+            "default": "overdue"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "membership_text": {
+            "type": "string",
+            "title": "Membership Text"
+          },
+          "days_late": {
+            "type": "integer",
+            "title": "Days Late"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "name",
+          "membership_text",
+          "days_late"
+        ],
+        "title": "OverdueViewRow",
+        "description": "Row for the Overdue view.\n\nShows members with overdue payments."
+      },
+      "PaymentRecord": {
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Transaction Id"
+          },
+          "item_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Type"
+          },
+          "amount_paid": {
+            "type": "number",
+            "title": "Amount Paid"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "amount_paid",
+          "time"
+        ],
+        "title": "PaymentRecord",
+        "description": "A single payment transaction."
+      },
+      "PersonalInfo": {
+        "properties": {
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "emergency_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Name"
+          },
+          "emergency_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Phone"
+          },
+          "emergency_contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Email"
+          },
+          "waiver_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiver Id"
+          }
+        },
+        "type": "object",
+        "title": "PersonalInfo",
+        "description": "Member personal information and emergency contact."
+      },
+      "PromotionsViewRow": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "view": {
+            "type": "string",
+            "const": "promotions",
+            "title": "View",
+            "default": "promotions"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "rank_icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Icon Url"
+          },
+          "time_in_rank": {
+            "type": "string",
+            "title": "Time In Rank"
+          },
+          "classes_until_promotion": {
+            "type": "integer",
+            "title": "Classes Until Promotion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "name",
+          "time_in_rank",
+          "classes_until_promotion"
+        ],
+        "title": "PromotionsViewRow",
+        "description": "Row for the Promotions view.\n\nIncludes rank info and classes until promotion."
+      },
+      "RankRetention": {
+        "properties": {
+          "current_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Rank"
+          },
+          "rank_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Name"
+          },
+          "rank_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank Image Url"
+          },
+          "classes_in_rank": {
+            "type": "integer",
+            "title": "Classes In Rank"
+          },
+          "estimated_classes_for_rank": {
+            "type": "integer",
+            "title": "Estimated Classes For Rank"
+          },
+          "recommend_promo_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommend Promo In"
+          },
+          "last_class": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Class"
+          },
+          "class_streak_weeks": {
+            "type": "integer",
+            "title": "Class Streak Weeks"
+          },
+          "points_balance": {
+            "type": "integer",
+            "title": "Points Balance"
+          },
+          "videos_watched": {
+            "type": "integer",
+            "title": "Videos Watched"
+          }
+        },
+        "type": "object",
+        "required": [
+          "classes_in_rank",
+          "estimated_classes_for_rank",
+          "class_streak_weeks",
+          "points_balance",
+          "videos_watched"
+        ],
+        "title": "RankRetention",
+        "description": "Rank progression and retention statistics."
+      },
+      "RewardCard": {
+        "properties": {
+          "reward_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reward Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "amount_off": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Off"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "point_cost": {
+            "type": "integer",
+            "title": "Point Cost"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reward_id",
+          "title",
+          "point_cost"
+        ],
+        "title": "RewardCard",
+        "description": "A recently redeemed reward."
+      },
+      "TrialViewRow": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "view": {
+            "type": "string",
+            "const": "trial",
+            "title": "View",
+            "default": "trial"
+          },
+          "days_remaining": {
+            "type": "integer",
+            "title": "Days Remaining"
+          },
+          "start_date": {
+            "type": "string",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "title": "End Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "name",
+          "days_remaining",
+          "start_date",
+          "end_date"
+        ],
+        "title": "TrialViewRow",
+        "description": "Row for the Trial view.\n\nIncludes trial period dates and days remaining."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

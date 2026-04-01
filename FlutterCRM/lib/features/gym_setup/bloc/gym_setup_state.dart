@@ -37,47 +37,41 @@ class GymSetupGymNameStep extends GymSetupState {
   List<Object?> get props => [errorMessage, isSubmitting];
 }
 
-/// Step 2: Configure rank settings
-class GymSetupRankConfigStep extends GymSetupState {
-  final String gymId;
-  final String? errorMessage;
-  final bool isSubmitting;
-
-  const GymSetupRankConfigStep({
-    required this.gymId,
-    this.errorMessage,
-    this.isSubmitting = false,
-  });
-
-  @override
-  List<Object?> get props => [
-        gymId,
-        errorMessage,
-        isSubmitting,
-      ];
-}
-
-/// Step 3: Enter owner first/last name
+/// Step 2: Enter owner first/last name
 class GymSetupOwnerNameStep extends GymSetupState {
-  final String gymId;
   final String? errorMessage;
   final bool isSubmitting;
 
   const GymSetupOwnerNameStep({
-    required this.gymId,
     this.errorMessage,
     this.isSubmitting = false,
   });
 
   @override
   List<Object?> get props => [
-        gymId,
         errorMessage,
         isSubmitting,
       ];
 }
 
-/// Setup complete — both gym and profile exist
+/// Step 3: Configure rank settings (final step, triggers submission)
+class GymSetupRankConfigStep extends GymSetupState {
+  final String? errorMessage;
+  final bool isSubmitting;
+
+  const GymSetupRankConfigStep({
+    this.errorMessage,
+    this.isSubmitting = false,
+  });
+
+  @override
+  List<Object?> get props => [
+        errorMessage,
+        isSubmitting,
+      ];
+}
+
+/// Setup complete — gym and owner employee exist
 class GymSetupComplete extends GymSetupState {
   const GymSetupComplete();
 }

@@ -64,7 +64,7 @@ class _RegisterFormState extends State<RegisterForm> {
               color: DesignConstants.cardBackground,
               borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
             ),
-            padding: EdgeInsets.all(DesignConstants.paddingBig.toDouble()),
+            padding: EdgeInsets.all(DesignConstants.paddingBig),
             child: Form(
               key: _formKey,
               child: Column(
@@ -72,12 +72,12 @@ class _RegisterFormState extends State<RegisterForm> {
                 children: [
                   const AuthHeader(
                     title: 'Create Account',
-                    subtitle: 'Sign up to get started',
+                    amountOff: 'Sign up to get started',
                   ),
-                  SizedBox(height: DesignConstants.spacingBig.toDouble()),
+                  SizedBox(height: DesignConstants.spacingBig),
                   if (_errorMessage != null) ...[
                     ErrorMessage(message: _errorMessage!),
-                    SizedBox(height: DesignConstants.spacingLarge.toDouble()),
+                    SizedBox(height: DesignConstants.spacingLarge),
                   ],
                   CustomTextField(
                     controller: _emailController,
@@ -87,7 +87,7 @@ class _RegisterFormState extends State<RegisterForm> {
                     validator: Validators.validateEmail,
                     keyboardType: TextInputType.emailAddress,
                   ),
-                  SizedBox(height: DesignConstants.spacingLarge.toDouble()),
+                  SizedBox(height: DesignConstants.spacingLarge),
                   CustomTextField(
                     controller: _passwordController,
                     label: 'Password',
@@ -96,7 +96,7 @@ class _RegisterFormState extends State<RegisterForm> {
                     enabled: !isLoading,
                     validator: Validators.validatePassword,
                   ),
-                  SizedBox(height: DesignConstants.spacingLarge.toDouble()),
+                  SizedBox(height: DesignConstants.spacingLarge),
                   CustomTextField(
                     controller: _confirmPasswordController,
                     label: 'Confirm Password',
@@ -109,13 +109,13 @@ class _RegisterFormState extends State<RegisterForm> {
                           value,
                         ),
                   ),
-                  SizedBox(height: DesignConstants.spacingBig.toDouble()),
+                  SizedBox(height: DesignConstants.spacingBig),
                   PrimaryButton(
                     text: 'Sign Up',
                     onPressed: _handleRegister,
                     isLoading: isLoading,
                   ),
-                  SizedBox(height: DesignConstants.spacingLarge.toDouble()),
+                  SizedBox(height: DesignConstants.spacingLarge),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -143,8 +143,8 @@ class _RegisterFormState extends State<RegisterForm> {
                           'Sign In',
                           style: DesignConstants.p.copyWith(
                             color: isLoading
-                                ? DesignConstants.primary.withValues(alpha: 0.5)
-                                : DesignConstants.primary,
+                                ? DesignConstants.primaryColor.withValues(alpha: 0.5)
+                                : DesignConstants.primaryColor,
                             fontWeight: FontWeight.bold,
                           ),
                         ),

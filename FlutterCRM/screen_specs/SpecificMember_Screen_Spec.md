@@ -302,7 +302,7 @@
 
 #### RewardCard (extract as reusable widget)
 
-- Column(image + title + subtitle)
+- Column(image + title + amount_off)
 - Image: ClipRRect, AppRadius.image, ~AppSizing.thumbnailLarge, BoxFit.cover
 - Title: AppTypography.bodySmall, AppColors.textPrimary, center
 - Subtitle: AppTypography.labelSmall, AppColors.textSecondary, center
@@ -584,7 +584,7 @@ Shimmer placeholders for: profile photo (circle shimmer), text lines (rectangula
 | OutlinedActionButton | Full-width outlined button | Reused ~6 times |
 | LinkedAccountChip | Avatar + name chip (tappable) | Reused per linked account |
 | RetentionStatItem | Icon + value + label, color from threshold util | Reused 4 times |
-| RewardCard | Image + title + subtitle column | Reused per reward |
+| RewardCard | Image + title + amount_off column | Reused per reward |
 | PaymentHistoryRow | Name + date + invoice button | Reused per payment |
 | MemberListItem | Avatar + name (sidebar) | Reused 12+ times |
 | SmallOutlinedButton | Pill-shaped button (Invoice style) | Reused in table |

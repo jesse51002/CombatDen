@@ -17,11 +17,11 @@ class WelcomeStep extends StatelessWidget {
         Icon(
           Icons.fitness_center,
           size: 80,
-          color: DesignConstants.primary,
+          color: DesignConstants.primaryColor,
         ),
         SizedBox(
           height:
-              DesignConstants.spacingBig.toDouble(),
+              DesignConstants.spacingBig,
         ),
         Text(
           "Let's Get Set Up",
@@ -32,7 +32,7 @@ class WelcomeStep extends StatelessWidget {
         ),
         SizedBox(
           height:
-              DesignConstants.spacingSmall.toDouble(),
+              DesignConstants.spacingSmall,
         ),
         Text(
           "We'll set up your gym and profile"
@@ -45,7 +45,7 @@ class WelcomeStep extends StatelessWidget {
         ),
         SizedBox(
           height:
-              DesignConstants.spacingBig.toDouble(),
+              DesignConstants.spacingBig,
         ),
         PrimaryButton(
           text: 'Get Started',

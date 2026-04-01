@@ -3,12 +3,12 @@ import 'package:crm/core/constants/design_constants.dart';
 
 class AuthHeader extends StatelessWidget {
   final String title;
-  final String subtitle;
+  final String amountOff;
 
   const AuthHeader({
     super.key,
     required this.title,
-    required this.subtitle,
+    required this.amountOff,
   });
 
   @override
@@ -20,9 +20,9 @@ class AuthHeader extends StatelessWidget {
           style: DesignConstants.h1,
           textAlign: TextAlign.center,
         ),
-        SizedBox(height: DesignConstants.spacingMedium.toDouble()),
+        SizedBox(height: DesignConstants.spacingMedium),
         Text(
-          subtitle,
+          amountOff,
           style: DesignConstants.p.copyWith(
             color: DesignConstants.text.withValues(alpha: 0.7),
           ),

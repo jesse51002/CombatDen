@@ -17,4 +17,5 @@
 ## Structure
 - `schemas/` — source-of-truth SQL for each table (DDL, RLS policies, column permissions, triggers)
 - `migrations/` — generated migration files (do not touch)
+- `schema_db_diagram.io` — dbdiagram.io markup; always update this file when adding, removing, or renaming columns/tables
 - `config.toml` — Supabase project config

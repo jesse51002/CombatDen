@@ -24,7 +24,6 @@ def generate(
         email=fake.email(),
         phone=fake.phone_number(),
         address=fake.address().replace("\n", ", "),
-        account_status=random.choice(["active", "inactive", "suspended"]),
         current_rank=random.choice([None, 1, 2, 3, 4, 5]),
         points_balance=random.randint(0, 500),
         last_class=random_past_datetime(30) if random.random() > 0.3 else None,

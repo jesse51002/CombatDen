@@ -2,7 +2,7 @@ CREATE TABLE gym_rewards (
     reward_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_id UUID NOT NULL CONSTRAINT fk_reward_gym REFERENCES gyms(gym_id),
     title VARCHAR NOT NULL CHECK (title <> ''),
-    subtitle VARCHAR,
+    amount_off VARCHAR,
     image_url VARCHAR,
     point_cost INTEGER NOT NULL CHECK (point_cost > 0),
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -13,17 +13,11 @@ CREATE TABLE gym_rewards (
 -- Enable Row Level Security
 ALTER TABLE gym_rewards ENABLE ROW LEVEL SECURITY;
 
--- Policy: Gym owners can view their rewards
-CREATE POLICY "Gym owners can view rewards"
+-- Policy: Gym staff can view their rewards
+CREATE POLICY "Gym staff can view rewards"
     ON gym_rewards
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_rewards.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    USING (is_gym_admin_or_owner(gym_rewards.gym_id));
 
 -- Policy: Members can view active rewards for their gym
 CREATE POLICY "Members can view active rewards"
@@ -38,37 +32,19 @@ CREATE POLICY "Members can view active rewards"
         )
     );
 
--- Policy: Gym owners can insert rewards
-CREATE POLICY "Gym owners can insert rewards"
+-- Policy: Gym staff can insert rewards
+CREATE POLICY "Gym staff can insert rewards"
     ON gym_rewards
     FOR INSERT
     TO authenticated
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_rewards.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    WITH CHECK (is_gym_admin_or_owner(gym_rewards.gym_id));
 
--- Policy: Gym owners can update their rewards
-CREATE POLICY "Gym owners can update rewards"
+-- Policy: Gym staff can update their rewards
+CREATE POLICY "Gym staff can update rewards"
     ON gym_rewards
     FOR UPDATE
-    USING (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_rewards.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    )
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_rewards.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    USING (is_gym_admin_or_owner(gym_rewards.gym_id))
+    WITH CHECK (is_gym_admin_or_owner(gym_rewards.gym_id));
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
 REVOKE UPDATE (reward_id, gym_id, created_at) ON TABLE gym_rewards FROM authenticated;

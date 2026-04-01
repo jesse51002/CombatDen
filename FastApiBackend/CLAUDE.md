@@ -1,5 +1,12 @@
 # FastAPI Coding Standards
 
+## Workflow
+
+**Always Ask Clarifying Questions**
+- Before starting implementation, ask clarifying questions about ambiguous requirements
+- Don't assume intent — confirm with the user when the spec is unclear or has multiple valid interpretations
+- Better to ask upfront than to build the wrong thing
+
 ## General Principles
 
 **SOLID Principles**
@@ -30,6 +37,16 @@
 - Good: `settings.db_pool_size` or `MAX_RETRIES = 3` at the top of the file
 - Bad: `pool_size=10` buried inside a function or constructor
 
+**Enums**
+- **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `str, Enum` classes
+- **NEVER use hardcoded strings** when an enum exists — all comparisons, match/case, filter values, and Pydantic field types must use the enum
+- Pydantic auto-serializes `str` enums to their string values in JSON responses, so no manual conversion needed
+- Use `Literal[MyEnum.value]` for Pydantic discriminated union fields, not `Literal["some_string"]`
+- Good: `type: Literal[FilterType.date_range] = FilterType.date_range`
+- Bad: `type: Literal["date_range"] = "date_range"`
+- Good: `value: list[MembershipStatus]` with `class MembershipStatus(str, Enum): active = "active"`
+- Bad: `value: list[str]` with hardcoded `"active"`, `"frozen"` scattered through the code
+
 **PEP 8 Naming**
 - Modules/packages: `my_module.py`
 - Classes: `UserService`, `PostRepository`
@@ -49,6 +66,17 @@
 - Bad: Deep nesting (4+ levels) makes code hard to read and maintain
 - Example: Instead of `if/for/if/for/if/try`, extract the inner logic into `_validate_and_correct_item()`
 - Benefits: Easier to test, read, and maintain; follows Single Responsibility Principle
+- **Prefer flat functions with an orchestrator over deep nesting** (situational)
+  - Write small, focused functions that each do one thing
+  - Use an orchestrator function to call them in sequence
+  - Good: `orchestrate()` calls `_validate()`, `_transform()`, `_persist()` sequentially
+  - Bad: `orchestrate()` contains all logic in deeply nested blocks
+  - Use judgment — simple logic doesn't need to be split into 5 tiny functions
+- **Keep files small and focused** — don't put everything in one giant file
+  - Split logically distinct concerns into separate modules (e.g., formatters, query builders, mappers)
+  - A file with 5+ responsibilities is too big — break it up
+  - Good: `formatters.py` for formatting, `queries.py` for SQL, `service.py` for orchestration
+  - Bad: One 500-line service file that formats, queries, maps, and orchestrates
 
 **Type Hints**
 - **MUST have type hints on ALL function parameters and return values**
@@ -177,6 +205,14 @@ src/
 - Proper ordering: CORS → Logging → Auth → Rate Limiting
 
 ## Database Patterns
+
+**SQL Files**
+- **Store SQL queries in `.sql` files**, not as inline strings in Python
+- Place SQL files in a `sql/` subfolder within the domain (e.g., `src/members/sql/all_view.sql`)
+- Use `src/shared/sql_loader.py`'s `load_sql(filepath, variables)` to load and template them
+- Use `{variable_name}` for structural parts (e.g., WHERE clauses) and `:param_name` for bind parameters
+- Good: `load_sql(SQL_DIR / "all_view.sql", {"where_clause": where})` then pass params to SQLAlchemy
+- Bad: Inline SQL strings in service files
 
 **Repository Pattern**
 - Separate data access from business logic

@@ -23,7 +23,7 @@ const _rankPresets = [
   _RankPreset('mma', 'MMA'),
 ];
 
-/// Step 2: Configure rank settings for the gym
+/// Step 3: Configure rank settings (final step, triggers submission)
 class RankConfigStep extends StatefulWidget {
   final String? errorMessage;
   final bool isSubmitting;
@@ -71,7 +71,7 @@ class _RankConfigStepState
         ),
         SizedBox(
           height:
-              DesignConstants.spacingSmall.toDouble(),
+              DesignConstants.spacingSmall,
         ),
         Text(
           'Set up a ranking system for your members.',
@@ -82,20 +82,20 @@ class _RankConfigStepState
         ),
         SizedBox(
           height:
-              DesignConstants.spacingBig.toDouble(),
+              DesignConstants.spacingBig,
         ),
         _buildRankToggle(),
         if (_rankEnabled) ...[
           SizedBox(
             height: DesignConstants.spacingLarge
-                .toDouble(),
+                ,
           ),
           _buildPresetSelector(),
         ],
         if (widget.errorMessage != null) ...[
           SizedBox(
             height: DesignConstants.spacingLarge
-                .toDouble(),
+                ,
           ),
           ErrorMessage(
             message: widget.errorMessage!,
@@ -103,10 +103,10 @@ class _RankConfigStepState
         ],
         SizedBox(
           height:
-              DesignConstants.spacingBig.toDouble(),
+              DesignConstants.spacingBig,
         ),
         PrimaryButton(
-          text: 'Continue',
+          text: 'Complete Setup',
           isLoading: widget.isSubmitting,
           onPressed: widget.isSubmitting
               ? null
@@ -142,7 +142,7 @@ class _RankConfigStepState
                     }
                   });
                 },
-          activeThumbColor: DesignConstants.primary,
+          activeThumbColor: DesignConstants.primaryColor,
         ),
       ],
     );
@@ -161,13 +161,13 @@ class _RankConfigStepState
         ),
         SizedBox(
           height:
-              DesignConstants.spacingMedium.toDouble(),
+              DesignConstants.spacingMedium,
         ),
         Wrap(
           spacing:
-              DesignConstants.spacingMedium.toDouble(),
+              DesignConstants.spacingMedium,
           runSpacing:
-              DesignConstants.spacingMedium.toDouble(),
+              DesignConstants.spacingMedium,
           children: _rankPresets
               .map((preset) =>
                   _buildPresetChip(preset))
@@ -191,20 +191,20 @@ class _RankConfigStepState
       child: Container(
         padding: EdgeInsets.symmetric(
           horizontal: DesignConstants.spacingLarge
-              .toDouble(),
+              ,
           vertical: DesignConstants.spacingMedium
-              .toDouble(),
+              ,
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? DesignConstants.primary
+              ? DesignConstants.primaryColor
               : DesignConstants.cardBackground,
           borderRadius: BorderRadius.circular(
             DesignConstants.radiusSmall,
           ),
           border: Border.all(
             color: isSelected
-                ? DesignConstants.primary
+                ? DesignConstants.primaryColor
                 : DesignConstants.buttonStroke,
             width: DesignConstants.buttonBorderSize,
           ),
@@ -213,7 +213,7 @@ class _RankConfigStepState
           preset.label,
           style: DesignConstants.p.copyWith(
             color: isSelected
-                ? DesignConstants.background
+                ? DesignConstants.backgroundColor
                 : DesignConstants.text,
           ),
         ),

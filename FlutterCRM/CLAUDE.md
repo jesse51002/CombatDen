@@ -291,9 +291,10 @@ class IngredientCheckboxItem extends StatelessWidget {
 ## Theming System
 
 **CRITICAL: ALWAYS Use DesignConstants**
-- **EVERY widget MUST import and use `package:flutter_crm/core/constants/design_constants.dart`**
+- **EVERY widget MUST import and use `package:crm/core/constants/design_constants.dart`**
 - **NEVER use default colors** (e.g., `Colors.red`, `Colors.blue`, `Color(0xFF...)` hardcoded values)
 - **NEVER use default fonts** (e.g., hardcoded `fontFamily`, default text styles)
+- **ABSOLUTELY NEVER MODIFY `design_constants.dart`** - This file is IMMUTABLE. Do not add, remove, rename, or change any value in it under any circumstances. If a needed design token does not exist, use the closest existing constant or inline the value — but NEVER edit this file.
 - **NEVER create new design constants without explicit permission** - Always ask first before adding new colors, text styles, or design values
 - **ALWAYS reference DesignConstants** for:
   - All colors: `DesignConstants.primaryColor`, `DesignConstants.text`, etc.
@@ -557,3 +558,8 @@ blocTest<AuthBloc, AuthState>(
 - [ ] No secrets in code
 
 **Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**
+
+
+**Schema Location:** `../Database/supabase/schemas/` contains all Supabase table definitions with RLS policies.
+- Never modify migration files directly — only edit schema files
+- All tables use Supabase RLS for row-level authorization

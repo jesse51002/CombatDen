@@ -15,6 +15,7 @@ class PersonalInfo(BaseModel):
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None
+    waiver_id: str | None = None
 
 
 class LinkedAccount(BaseModel):
@@ -59,6 +60,7 @@ class RankRetention(BaseModel):
 
     current_rank: int | None = None
     rank_name: str | None = None
+    rank_image_url: str | None = None
     classes_in_rank: int
     estimated_classes_for_rank: int
     recommend_promo_in: int | None = None
@@ -73,7 +75,7 @@ class RewardCard(BaseModel):
 
     reward_id: UUID
     title: str
-    subtitle: str | None = None
+    amount_off: str | None = None
     image_url: str | None = None
     point_cost: int
 

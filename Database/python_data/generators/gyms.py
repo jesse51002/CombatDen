@@ -23,14 +23,13 @@ NAME_SUFFIXES = [
 ]
 
 
-def generate(owner_id: str, gym_id: Optional[uuid.UUID] = None) -> GymCreate:
+def generate(gym_id: Optional[uuid.UUID] = None) -> GymCreate:
     preset = random.choice(list(RANK_PRESETS.keys()))
     ranks = RANK_PRESETS[preset]
     name = f"{random.choice(NAME_PREFIXES)} {random.choice(NAME_SUFFIXES)}"
     return GymCreate(
         gym_id=gym_id or uuid.uuid4(),
         gym_name=name,
-        owner_id=owner_id,
         rank_preset=preset,
         rank_1_name=ranks[0],
         rank_2_name=ranks[1],

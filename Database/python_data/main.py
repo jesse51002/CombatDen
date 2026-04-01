@@ -7,6 +7,7 @@ from utils import make_seeded_uuids
 from constants import (
     ACTIVITIES_PER_MEMBER,
     DISCOUNTS_PER_GYM,
+    EXTRA_EMPLOYEES_PER_GYM,
     HISTORY_DAYS,
     LINKED_MEMBERS_PER_GYM,
     MEMBERS_PER_GYM,
@@ -19,6 +20,7 @@ from generators import (
     activities,
     auth,
     discounts,
+    employees,
     gyms,
     history,
     memberships,
@@ -61,11 +63,22 @@ def seed():
     # Phase 2: Create gyms
     print("Creating gyms...")
     gym_records: list[GymCreate] = []
-    for i, owner in enumerate(owner_users):
-        gym = gyms.generate(owner["id"], gym_id=gym_ids[i])
+    for i in range(NUM_GYMS):
+        gym = gyms.generate(gym_id=gym_ids[i])
         gym_records.append(gym)
         print(f"  {gym.gym_name} ({gym.rank_preset})")
     client.table("gyms").insert([g.to_insert_dict() for g in gym_records]).execute()
+
+    # Phase 2.5: Create employees (owner + extra staff per gym)
+    print("Creating employees...")
+    for i, gym in enumerate(gym_records):
+        owner_employee = employees.generate_owner(gym.gym_id, owner_users[i]["id"], owner_users[i]["email"])
+        staff = employees.generate_staff(gym.gym_id, EXTRA_EMPLOYEES_PER_GYM)
+        all_employees = [owner_employee] + staff
+        client.table("gym_employees").insert(
+            [e.to_insert_dict() for e in all_employees]
+        ).execute()
+        print(f"  {gym.gym_name}: 1 owner + {len(staff)} staff")
 
     # Phase 3: Create profiles
     print("Creating member profiles...")

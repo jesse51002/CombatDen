@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from src.members.members_schemas import (
+from src.members.schema.member_details_schema import (
     DiscountInfo,
     LinkedAccount,
     MemberDetailResponse,
@@ -39,7 +39,7 @@ class MemberService:
         """Return full member detail for the Specific Member screen.
 
         Args:
-            gym_id: The gym this member belongs to.
+            crm_user_id: The member's CRM user ID.
 
         Returns:
             MemberDetailResponse with all screen sections populated.
@@ -102,6 +102,7 @@ class MemberService:
             rank_retention=RankRetention(
                 current_rank=2,
                 rank_name="Silver (Amateur)",
+                rank_image_url="https://placehold.co/100x100",
                 classes_in_rank=10,
                 estimated_classes_for_rank=100,
                 recommend_promo_in=5,
@@ -113,22 +114,22 @@ class MemberService:
             recently_redeemed_rewards=[
                 RewardCard(
                     reward_id=UUID("11112222-3333-4444-5555-666677778888"),
-                    title="Free T-Shirt",
-                    subtitle="Redeemed 2 weeks ago",
+                    title="T-Shirt",
+                    amount_off="Free",
                     image_url="https://placehold.co/100x100",
                     point_cost=500,
                 ),
                 RewardCard(
                     reward_id=UUID("22223333-4444-5555-6666-777788889999"),
                     title="Private Session",
-                    subtitle="Redeemed 1 month ago",
+                    amount_off="50% off",
                     image_url="https://placehold.co/100x100",
                     point_cost=1500,
                 ),
                 RewardCard(
                     reward_id=UUID("33334444-5555-6666-7777-888899990000"),
                     title="Protein Shake",
-                    subtitle="Redeemed 2 months ago",
+                    amount_off="$2 bucks",
                     image_url="https://placehold.co/100x100",
                     point_cost=200,
                 ),

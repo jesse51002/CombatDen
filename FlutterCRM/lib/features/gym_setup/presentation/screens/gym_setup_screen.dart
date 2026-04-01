@@ -42,7 +42,7 @@ class GymSetupScreen extends StatelessWidget {
           }
         },
         child: Scaffold(
-          backgroundColor: DesignConstants.background,
+          backgroundColor: DesignConstants.backgroundColor,
           body: SafeArea(
             child: Stack(
               children: [
@@ -63,7 +63,7 @@ class GymSetupScreen extends StatelessWidget {
                               child:
                                   CircularProgressIndicator(
                                 color: DesignConstants
-                                    .primary,
+                                    .primaryColor,
                               ),
                             ),
                           GymSetupWelcomeStep() =>
@@ -102,9 +102,9 @@ class GymSetupScreen extends StatelessWidget {
                 ),
                 Positioned(
                   top: DesignConstants.spacingMedium
-                      .toDouble(),
+                      ,
                   right: DesignConstants.spacingMedium
-                      .toDouble(),
+                      ,
                   child: TextButton.icon(
                     onPressed: () {
                       context.read<LoginBloc>().add(
@@ -145,7 +145,7 @@ class GymSetupScreen extends StatelessWidget {
           ),
         ),
         padding: EdgeInsets.all(
-          DesignConstants.paddingBig.toDouble(),
+          DesignConstants.paddingBig,
         ),
         child: child,
       ),
@@ -163,7 +163,7 @@ class GymSetupScreen extends StatelessWidget {
         ),
         SizedBox(
           height:
-              DesignConstants.spacingLarge.toDouble(),
+              DesignConstants.spacingLarge,
         ),
         Text(
           'Basic Setup Complete!',
@@ -173,7 +173,7 @@ class GymSetupScreen extends StatelessWidget {
         ),
         SizedBox(
           height:
-              DesignConstants.spacingMedium.toDouble(),
+              DesignConstants.spacingMedium,
         ),
         Text(
           'Your gym is ready to go.',
@@ -184,7 +184,7 @@ class GymSetupScreen extends StatelessWidget {
         ),
         SizedBox(
           height:
-              DesignConstants.spacingBig.toDouble(),
+              DesignConstants.spacingBig,
         ),
         PrimaryButton(
           text: 'Finish',

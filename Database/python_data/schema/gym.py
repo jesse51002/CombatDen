@@ -7,7 +7,6 @@ from . import SeedModel
 class GymCreate(SeedModel):
     gym_id: UUID
     gym_name: str
-    owner_id: UUID
     rank_enabled: bool = True
     rank_preset: Optional[
         Literal["bjj", "muay_thai", "karate", "taekwondo", "judo", "mma"]

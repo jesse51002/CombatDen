@@ -4,10 +4,15 @@ CREATE TABLE member_memberships (
     plan_id UUID NOT NULL,
     start_date DATE NOT NULL,
     status VARCHAR NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'frozen', 'cancelled')),
+    end_date DATE,
+    freeze_start_date DATE,
+    freeze_end_date DATE,
     last_paid_date DATE,
     next_due_date DATE,
     discount_ids JSONB,
+    total_price FLOAT NOT NULL CHECK (total_price >= 0),
     custom_discounts JSONB,
+    account_linked_to_id UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (crm_user_id, gym_id, plan_id),
     CONSTRAINT fk_membership_profile_gym
@@ -15,23 +20,20 @@ CREATE TABLE member_memberships (
         REFERENCES user_gym_profiles (crm_user_id, gym_id),
     CONSTRAINT fk_membership_plan_gym
         FOREIGN KEY (plan_id, gym_id)
-        REFERENCES membership_plans (plan_id, gym_id)
+        REFERENCES membership_plans (plan_id, gym_id),
+    CONSTRAINT fk_membership_linked_account_same_gym
+        FOREIGN KEY (account_linked_to_id, gym_id)
+        REFERENCES user_gym_profiles (crm_user_id, gym_id)
 );
 
 -- Enable Row Level Security
 ALTER TABLE member_memberships ENABLE ROW LEVEL SECURITY;
 
--- Policy: Gym owners can view memberships for their gyms
-CREATE POLICY "Gym owners can view memberships"
+-- Policy: Gym staff can view memberships for their gyms
+CREATE POLICY "Gym staff can view memberships"
     ON member_memberships
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = member_memberships.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    USING (is_gym_admin_or_owner(member_memberships.gym_id));
 
 -- Policy: Members can view their own memberships
 CREATE POLICY "Members can view own memberships"
@@ -45,37 +47,19 @@ CREATE POLICY "Members can view own memberships"
         )
     );
 
--- Policy: Gym owners can insert memberships
-CREATE POLICY "Gym owners can insert memberships"
+-- Policy: Gym staff can insert memberships
+CREATE POLICY "Gym staff can insert memberships"
     ON member_memberships
     FOR INSERT
     TO authenticated
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = member_memberships.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    WITH CHECK (is_gym_admin_or_owner(member_memberships.gym_id));
 
--- Policy: Gym owners can update memberships
-CREATE POLICY "Gym owners can update memberships"
+-- Policy: Gym staff can update memberships
+CREATE POLICY "Gym staff can update memberships"
     ON member_memberships
     FOR UPDATE
-    USING (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = member_memberships.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    )
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = member_memberships.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    USING (is_gym_admin_or_owner(member_memberships.gym_id))
+    WITH CHECK (is_gym_admin_or_owner(member_memberships.gym_id));
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
 REVOKE UPDATE (crm_user_id, gym_id, plan_id, start_date, created_at) ON TABLE member_memberships FROM authenticated;

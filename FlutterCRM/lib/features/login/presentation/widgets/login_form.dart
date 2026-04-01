@@ -62,7 +62,7 @@ class _LoginFormState extends State<LoginForm> {
               color: DesignConstants.cardBackground,
               borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
             ),
-            padding: EdgeInsets.all(DesignConstants.paddingBig.toDouble()),
+            padding: EdgeInsets.all(DesignConstants.paddingBig),
             child: Form(
               key: _formKey,
               child: Column(
@@ -70,12 +70,12 @@ class _LoginFormState extends State<LoginForm> {
                 children: [
                   const AuthHeader(
                     title: 'Welcome Back',
-                    subtitle: 'Sign in to continue',
+                    amountOff: 'Sign in to continue',
                   ),
-                  SizedBox(height: DesignConstants.spacingBig.toDouble()),
+                  SizedBox(height: DesignConstants.spacingBig),
                   if (_errorMessage != null) ...[
                     ErrorMessage(message: _errorMessage!),
-                    SizedBox(height: DesignConstants.spacingLarge.toDouble()),
+                    SizedBox(height: DesignConstants.spacingLarge),
                   ],
                   CustomTextField(
                     controller: _emailController,
@@ -85,7 +85,7 @@ class _LoginFormState extends State<LoginForm> {
                     validator: Validators.validateEmail,
                     keyboardType: TextInputType.emailAddress,
                   ),
-                  SizedBox(height: DesignConstants.spacingLarge.toDouble()),
+                  SizedBox(height: DesignConstants.spacingLarge),
                   CustomTextField(
                     controller: _passwordController,
                     label: 'Password',
@@ -95,13 +95,13 @@ class _LoginFormState extends State<LoginForm> {
                     validator: (value) =>
                         value?.isEmpty ?? true ? 'Password is required' : null,
                   ),
-                  SizedBox(height: DesignConstants.spacingBig.toDouble()),
+                  SizedBox(height: DesignConstants.spacingBig),
                   PrimaryButton(
                     text: 'Sign In',
                     onPressed: _handleLogin,
                     isLoading: isLoading,
                   ),
-                  SizedBox(height: DesignConstants.spacingLarge.toDouble()),
+                  SizedBox(height: DesignConstants.spacingLarge),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -129,8 +129,8 @@ class _LoginFormState extends State<LoginForm> {
                           'Sign Up',
                           style: DesignConstants.p.copyWith(
                             color: isLoading
-                                ? DesignConstants.primary.withValues(alpha: 0.5)
-                                : DesignConstants.primary,
+                                ? DesignConstants.primaryColor.withValues(alpha: 0.5)
+                                : DesignConstants.primaryColor,
                             fontWeight: FontWeight.bold,
                           ),
                         ),

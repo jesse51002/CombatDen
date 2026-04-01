@@ -8,10 +8,10 @@ class LoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DesignConstants.background,
+      backgroundColor: DesignConstants.backgroundColor,
       body: Center(
         child: CircularProgressIndicator(
-          color: DesignConstants.primary,
+          color: DesignConstants.primaryColor,
         ),
       ),
     );

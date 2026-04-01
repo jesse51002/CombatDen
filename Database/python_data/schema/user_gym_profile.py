@@ -12,7 +12,6 @@ class UserGymProfileCreate(SeedModel):
     user_id: Optional[UUID] = None
     gym_id: UUID
     last_class: Optional[datetime] = None
-    account_status: Optional[str] = None
     first_name: str
     last_name: str
     photo_url: Optional[str] = None
@@ -24,7 +23,6 @@ class UserGymProfileCreate(SeedModel):
     emergency_contact_email: Optional[str] = None
     current_rank: Optional[int] = None
     points_balance: int = 0
-    account_linked_to_id: Optional[UUID] = None
 
     @field_validator("current_rank")
     @classmethod

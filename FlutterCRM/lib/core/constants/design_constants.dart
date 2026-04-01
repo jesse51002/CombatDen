@@ -21,30 +21,37 @@ class DesignConstants {
   static const Color okYellow = Color(0xFFCCCE44);
   static const Color badRed = Color(0xFFF94A4D);
 
-  // Aliases for consistency
-  static const Color primary = primaryColor;
-  static const Color secondary = hyperlink;
-  static const Color background = backgroundColor;
   static const Color cardBackground = Color(0xFF1A1E22);
   static const Color buttonStroke = Color(0xFF2A2E32);
+
+  static final Color yellowDark = Color(0xFF83852F).withValues(alpha: 0.25);
+  static final Color greenDark = Color(0xFF0E7A29).withValues(alpha: 0.25);
+  static final Color purpleDark = Color(0xFF744373).withValues(alpha: 0.25);
+  static final Color blueDark = Color(0xFF425E67).withValues(alpha: 0.25);
+  static final Color redDark = Color(0xFF6D2C22).withValues(alpha: 0.25);
+
 
   // Design values
   static const double radiusBig = 32.0;
   static const double radiusSmall = 16.0;
 
-  static const int paddingBig = 32;
-  static const int paddingSmall = 16;
+  static const double paddingBig = 32;
+  static const double paddingSmall = 16;
 
-  static const int spacingBig = 32;
-  static const int spacingLarge = 16;
-  static const int spacingMedium = 8;
-  static const int spacingSmall = 4;
-  static const int spacingTiny = 2;
+  static const double spacingBig = 32;
+  static const double spacingLarge = 16;
+  static const double spacingMedium = 8;
+  static const double spacingSmall = 4;
+  static const double spacingTiny = 2;
 
-  static final int buttonBorder = 2;
+  static final double buttonBorder = 2;
 
   static const double buttonBorderSize = 3.0;
   static const double screenHorizontalPadding = 16.0;
+
+  static final Color divider = text3rd;
+  static const double sideNavWidth = 100.0;
+  static const double tableRowHeight = 30.0;
 
   static const String fontFamily = 'Jura';
 

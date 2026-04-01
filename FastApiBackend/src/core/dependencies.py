@@ -1,8 +1,19 @@
 from dependency_injector import containers, providers
 
-from src.members.members_service import MemberService
+from src.members.service.member_details_service import (
+    MemberService,
+)
+from src.members.service.members_crm_members_list_service import (
+    CrmMembersListService,
+)
+from src.members.service.members_crm_total_counts_service import (
+    CrmTotalCountsService,
+)
 from src.shared.auth import Auth
-from src.shared.database import DirectDatabasePool, SupabaseClient
+from src.shared.database import (
+    DirectDatabasePool,
+    SupabaseClient,
+)
 
 
 class DependencyInjector(containers.DeclarativeContainer):
@@ -23,3 +34,5 @@ class DependencyInjector(containers.DeclarativeContainer):
     supabase = providers.Singleton(SupabaseClient)
     auth = providers.Singleton(Auth, supabase=supabase)
     member_service = providers.Factory(MemberService)
+    crm_members_list_service = providers.Factory(CrmMembersListService, db_pool=db_pool)
+    crm_total_counts_service = providers.Factory(CrmTotalCountsService, db_pool=db_pool)

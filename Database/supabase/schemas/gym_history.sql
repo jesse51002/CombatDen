@@ -12,14 +12,8 @@ CREATE TABLE gym_history (
 -- Enable Row Level Security
 ALTER TABLE gym_history ENABLE ROW LEVEL SECURITY;
 
--- Policy: Gym owners can read their gym's history (read-only, backend generates data)
-CREATE POLICY "Gym owners can view own gym history"
+-- Policy: Gym staff can read their gym's history (read-only, backend generates data)
+CREATE POLICY "Gym staff can view own gym history"
     ON gym_history
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = gym_history.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    USING (is_gym_admin_or_owner(gym_history.gym_id));

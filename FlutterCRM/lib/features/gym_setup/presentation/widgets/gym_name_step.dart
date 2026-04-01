@@ -58,7 +58,7 @@ class _GymNameStepState extends State<GymNameStep> {
           ),
           SizedBox(
             height: DesignConstants.spacingSmall
-                .toDouble(),
+                ,
           ),
           Text(
             'What is your gym called?',
@@ -69,7 +69,7 @@ class _GymNameStepState extends State<GymNameStep> {
           ),
           SizedBox(
             height: DesignConstants.spacingBig
-                .toDouble(),
+                ,
           ),
           CustomTextField(
             controller: _gymNameController,
@@ -87,7 +87,7 @@ class _GymNameStepState extends State<GymNameStep> {
           if (widget.errorMessage != null) ...[
             SizedBox(
               height: DesignConstants.spacingLarge
-                  .toDouble(),
+                  ,
             ),
             ErrorMessage(
               message: widget.errorMessage!,
@@ -95,7 +95,7 @@ class _GymNameStepState extends State<GymNameStep> {
           ],
           SizedBox(
             height: DesignConstants.spacingBig
-                .toDouble(),
+                ,
           ),
           PrimaryButton(
             text: 'Continue',

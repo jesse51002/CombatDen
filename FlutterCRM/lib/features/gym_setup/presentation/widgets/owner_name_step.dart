@@ -7,7 +7,7 @@ import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/features/gym_setup/bloc/gym_setup_bloc.dart';
 import 'package:crm/features/gym_setup/bloc/gym_setup_event.dart';
 
-/// Step 2: Enter owner first and last name
+/// Step 2: Enter owner first and last name (no API call)
 class OwnerNameStep extends StatefulWidget {
   final String? errorMessage;
   final bool isSubmitting;
@@ -64,10 +64,10 @@ class _OwnerNameStepState extends State<OwnerNameStep> {
           ),
           SizedBox(
             height: DesignConstants.spacingSmall
-                .toDouble(),
+                ,
           ),
           Text(
-            'Enter your name to complete setup',
+            'Enter your name as the gym owner.',
             style: DesignConstants.p.copyWith(
               color: DesignConstants.text
                   .withValues(alpha: 0.7),
@@ -75,7 +75,7 @@ class _OwnerNameStepState extends State<OwnerNameStep> {
           ),
           SizedBox(
             height: DesignConstants.spacingBig
-                .toDouble(),
+                ,
           ),
           CustomTextField(
             controller: _firstNameController,
@@ -92,7 +92,7 @@ class _OwnerNameStepState extends State<OwnerNameStep> {
           ),
           SizedBox(
             height: DesignConstants.spacingLarge
-                .toDouble(),
+                ,
           ),
           CustomTextField(
             controller: _lastNameController,
@@ -110,7 +110,7 @@ class _OwnerNameStepState extends State<OwnerNameStep> {
           if (widget.errorMessage != null) ...[
             SizedBox(
               height: DesignConstants.spacingLarge
-                  .toDouble(),
+                  ,
             ),
             ErrorMessage(
               message: widget.errorMessage!,
@@ -118,10 +118,10 @@ class _OwnerNameStepState extends State<OwnerNameStep> {
           ],
           SizedBox(
             height: DesignConstants.spacingBig
-                .toDouble(),
+                ,
           ),
           PrimaryButton(
-            text: 'Complete Basic Setup',
+            text: 'Continue',
             isLoading: widget.isSubmitting,
             onPressed:
                 widget.isSubmitting ? null : _onSubmit,

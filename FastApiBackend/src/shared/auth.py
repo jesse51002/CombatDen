@@ -6,7 +6,6 @@ from uuid import UUID
 import jwt
 from fastapi import HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from postgrest.exceptions import APIError
 
 from src.core.config import settings
 from src.shared.database import SupabaseClient
@@ -56,6 +55,43 @@ class Auth:
                 detail="Invalid token",
             ) from None
 
+    async def verify_gym_employee(
+        self,
+        gym_id: UUID,
+        user_payload: dict,
+    ) -> None:
+        """Verify the authenticated user is an employee of the gym.
+
+        Args:
+            gym_id: The gym to check access for.
+            user_payload: Decoded JWT payload from get_current_user.
+
+        Raises:
+            HTTPException: 403 if user is not an employee of
+                the gym.
+        """
+        auth_user_id = user_payload["sub"]
+
+        employee = await (
+            self._supabase.client.from_("gym_employees")
+            .select("employee_id")
+            .eq("user_id", auth_user_id)
+            .eq("gym_id", str(gym_id))
+            .maybe_single()
+            .execute()
+        )
+
+        if not employee.data:
+            logger.warning(
+                "Unauthorized gym access attempt: user=%s, gym_id=%s",
+                auth_user_id,
+                gym_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this gym",
+            ) from None
+
     async def verify_can_view_member(
         self,
         crm_user_id: UUID,
@@ -64,7 +100,7 @@ class Auth:
         """Verify the authenticated user can view this member.
 
         Access is granted if the user is the member themselves
-        (linked account) or the owner of the member's gym.
+        (linked account) or an employee of the member's gym.
 
         Args:
             crm_user_id: The member's CRM user ID.
@@ -76,19 +112,18 @@ class Auth:
         """
         auth_user_id = user_payload["sub"]
 
-        try:
-            member = await (
-                self._supabase.client.from_("user_gym_profiles")
-                .select("user_id, gym_id")
-                .eq("crm_user_id", str(crm_user_id))
-                .single()
-                .execute()
-            )
-        except APIError:
+        member = await (
+            self._supabase.client.from_("user_gym_profiles")
+            .select("user_id, gym_id")
+            .eq("crm_user_id", str(crm_user_id))
+            .maybe_single()
+            .execute()
+        )
+
+        if not member.data:
             logger.error(
                 "Member not found: crm_user_id=%s",
                 crm_user_id,
-                exc_info=True,
             )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -98,26 +133,16 @@ class Auth:
         if member.data["user_id"] == auth_user_id:
             return
 
-        try:
-            gym = await (
-                self._supabase.client.from_("gyms")
-                .select("owner_id")
-                .eq("gym_id", member.data["gym_id"])
-                .single()
-                .execute()
-            )
-        except APIError:
-            logger.error(
-                "Gym not found: gym_id=%s",
-                member.data["gym_id"],
-                exc_info=True,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Gym not found",
-            ) from None
+        employee = await (
+            self._supabase.client.from_("gym_employees")
+            .select("employee_id")
+            .eq("user_id", auth_user_id)
+            .eq("gym_id", member.data["gym_id"])
+            .maybe_single()
+            .execute()
+        )
 
-        if gym.data["owner_id"] == auth_user_id:
+        if employee.data:
             return
 
         logger.warning(

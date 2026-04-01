@@ -35,7 +35,7 @@ alter table "public"."gym_discounts" enable row level security;
     "reward_id" uuid not null default extensions.uuid_generate_v4(),
     "gym_id" uuid not null,
     "title" character varying not null,
-    "subtitle" character varying,
+    "amount_off" character varying,
     "image_url" character varying,
     "point_cost" integer not null,
     "is_active" boolean not null default true,

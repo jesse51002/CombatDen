@@ -14,8 +14,8 @@ CREATE TABLE user_activities (
 -- Enable Row Level Security
 ALTER TABLE user_activities ENABLE ROW LEVEL SECURITY;
 
--- Policy: Users can read their own activities OR gym owners can read activities from their gyms
-CREATE POLICY "Users and gym owners can view activities"
+-- Policy: Users can read their own activities OR gym staff can read activities from their gyms
+CREATE POLICY "Users and gym staff can view activities"
     ON user_activities
     FOR SELECT
     USING (
@@ -24,25 +24,15 @@ CREATE POLICY "Users and gym owners can view activities"
             WHERE user_gym_profiles.crm_user_id = user_activities.crm_user_id
             AND user_gym_profiles.user_id = auth.uid()
         )
-        OR EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = user_activities.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
+        OR is_gym_admin_or_owner(user_activities.gym_id)
     );
 
--- Policy: Gym owners can insert activities for their gyms
-CREATE POLICY "Gym owners can insert activities"
+-- Policy: Gym staff can insert activities for their gyms
+CREATE POLICY "Gym staff can insert activities"
     ON user_activities
     FOR INSERT
     TO authenticated
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM gyms
-            WHERE gyms.gym_id = user_activities.gym_id
-            AND gyms.owner_id = auth.uid()
-        )
-    );
+    WITH CHECK (is_gym_admin_or_owner(user_activities.gym_id));
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
 REVOKE UPDATE (activity_id, crm_user_id, gym_id, time) ON TABLE user_activities FROM authenticated;

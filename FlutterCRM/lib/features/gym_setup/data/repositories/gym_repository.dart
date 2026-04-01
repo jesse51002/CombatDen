@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:crm/core/errors/exceptions.dart';
 
-/// Repository for gym and user gym profile data access
+/// Repository for gym setup data access
 class GymRepository {
   final SupabaseClient _supabase;
 
@@ -9,15 +9,17 @@ class GymRepository {
       : _supabase =
             supabaseClient ?? Supabase.instance.client;
 
-  /// Returns the gym owned by [userId], or null
-  Future<Map<String, dynamic>?> getGymByOwnerId(
+  /// Returns the owner employee record for [userId],
+  /// or null if the user doesn't own any gym.
+  Future<Map<String, dynamic>?> getOwnerEmployee(
     String userId,
   ) async {
     try {
       final response = await _supabase
-          .from('gyms')
-          .select()
-          .eq('owner_id', userId)
+          .from('gym_employees')
+          .select('*, gyms(*)')
+          .eq('user_id', userId)
+          .eq('employee_type', 'owner')
           .maybeSingle();
       return response;
     } on PostgrestException catch (e) {
@@ -25,16 +27,14 @@ class GymRepository {
     }
   }
 
-  /// Returns the user gym profile, or null
-  Future<Map<String, dynamic>?> getUserGymProfile({
-    required String userId,
-    required String gymId,
-  }) async {
+  /// Returns the gym by [gymId], or null.
+  Future<Map<String, dynamic>?> getGymById(
+    String gymId,
+  ) async {
     try {
       final response = await _supabase
-          .from('user_gym_profiles')
+          .from('gyms')
           .select()
-          .eq('user_id', userId)
           .eq('gym_id', gymId)
           .maybeSingle();
       return response;
@@ -43,56 +43,38 @@ class GymRepository {
     }
   }
 
-  /// Creates a gym and returns the created row
-  Future<Map<String, dynamic>> createGym({
+  /// Creates a gym and its owner employee in one flow.
+  /// Returns the created gym row.
+  Future<Map<String, dynamic>> setupGym({
     required String gymName,
-    required String ownerId,
-  }) async {
-    try {
-      final response = await _supabase
-          .from('gyms')
-          .insert({
-            'gym_name': gymName,
-            'owner_id': ownerId,
-          })
-          .select()
-          .single();
-      return response;
-    } on PostgrestException catch (e) {
-      throw DatabaseException(e.message);
-    }
-  }
-
-  /// Updates rank configuration for a gym
-  Future<void> updateGymRankConfig({
-    required String gymId,
+    required String userId,
+    required String firstName,
+    required String lastName,
     required bool rankEnabled,
     String? rankPreset,
   }) async {
     try {
-      await _supabase.from('gyms').update({
-        'rank_enabled': rankEnabled,
-        'rank_preset': rankPreset,
-      }).eq('gym_id', gymId);
-    } on PostgrestException catch (e) {
-      throw DatabaseException(e.message);
-    }
-  }
+      final gym = await _supabase
+          .from('gyms')
+          .insert({
+            'gym_name': gymName,
+            'rank_enabled': rankEnabled,
+            'rank_preset': rankPreset,
+          })
+          .select()
+          .single();
 
-  /// Creates a user gym profile
-  Future<void> createUserGymProfile({
-    required String userId,
-    required String gymId,
-    required String firstName,
-    required String lastName,
-  }) async {
-    try {
-      await _supabase.from('user_gym_profiles').insert({
+      final gymId = gym['gym_id'] as String;
+
+      await _supabase.from('gym_employees').insert({
         'user_id': userId,
         'gym_id': gymId,
+        'employee_type': 'owner',
         'first_name': firstName,
         'last_name': lastName,
       });
+
+      return gym;
     } on PostgrestException catch (e) {
       throw DatabaseException(e.message);
     }
