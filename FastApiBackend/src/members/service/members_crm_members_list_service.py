@@ -20,9 +20,6 @@ from src.members.service.crm_member_services.members_crm_frozen_service import (
 from src.members.service.crm_member_services.members_crm_overdue_service import (
     CrmOverdueViewService,
 )
-from src.members.service.crm_member_services.members_crm_promotions_service import (
-    CrmPromotionsViewService,
-)
 from src.members.service.crm_member_services.members_crm_trial_service import (
     CrmTrialViewService,
 )
@@ -42,7 +39,6 @@ class CrmMembersListService:
     def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db_pool = db_pool
         self._all = CrmAllViewService(db_pool)
-        self._promotions = CrmPromotionsViewService(db_pool)
         self._trial = CrmTrialViewService(db_pool)
         self._frozen = CrmFrozenViewService(db_pool)
         self._overdue = CrmOverdueViewService(db_pool)
@@ -69,8 +65,6 @@ class CrmMembersListService:
         match resolved_view:
             case MembersListView.all:
                 service = self._all
-            case MembersListView.promotions:
-                service = self._promotions
             case MembersListView.trial:
                 service = self._trial
             case MembersListView.frozen:
@@ -125,7 +119,7 @@ class CrmMembersListService:
         """Handle reconciliation when the user switches views.
 
         Replaces membership_status with the view's required
-        status, keeps date_range and rank.
+        status, keeps date_range.
 
         Args:
             requested_view: The view the user is switching to.
@@ -141,12 +135,6 @@ class CrmMembersListService:
                 status = [MembershipStatus.frozen]
             case MembersListView.overdue:
                 status = [MembershipStatus.overdue]
-            case MembersListView.promotions:
-                status = [
-                    MembershipStatus.active,
-                    MembershipStatus.trial,
-                    MembershipStatus.frozen,
-                ]
             case _:
                 status = []
 
@@ -171,9 +159,6 @@ class CrmMembersListService:
         Returns:
             Tuple of (resolved_view, cleaned_filters).
         """
-        if current_view == MembersListView.promotions:
-            return MembersListView.promotions, filters
-
         statuses = filters.membership_status
 
         if len(statuses) != 1:
@@ -186,5 +171,5 @@ class CrmMembersListService:
                 return MembersListView.frozen, filters
             case MembershipStatus.overdue:
                 return MembersListView.overdue, filters
-            case MembershipStatus.active | MembershipStatus.cancelled:
+            case _:
                 return MembersListView.all, filters

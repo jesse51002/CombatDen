@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
@@ -19,12 +20,13 @@ class BackButtonRow extends StatelessWidget {
         child: TextButton.icon(
           onPressed: () => Navigator.of(context).pop(),
           icon: Icon(
-            Icons.chevron_left,
+            Symbols.chevron_left_sharp,
             color: DesignConstants.text2nd,
+            weight: DesignConstants.iconWeight,
           ),
           label: Text(
             'Back',
-            style: DesignConstants.p.copyWith(
+            style: DesignConstants.h2.copyWith(
               color: DesignConstants.text2nd,
             ),
           ),

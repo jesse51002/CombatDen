@@ -19,7 +19,8 @@ class Auth:
     """Handles Supabase JWT authentication and gym ownership verification."""
 
     def __init__(self, supabase: SupabaseClient) -> None:
-        self._jwt_secret = settings.supabase_jwt_secret
+        jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+        self._jwks_client = jwt.PyJWKClient(jwks_url)
         self._supabase = supabase
 
     def get_current_user(
@@ -35,10 +36,13 @@ class Auth:
             HTTPException: 401 if token is invalid or expired.
         """
         try:
+            signing_key = self._jwks_client.get_signing_key_from_jwt(
+                credentials.credentials,
+            )
             payload = jwt.decode(
                 credentials.credentials,
-                self._jwt_secret,
-                algorithms=["HS256"],
+                signing_key.key,
+                algorithms=["ES256"],
                 audience="authenticated",
             )
             return payload
@@ -81,7 +85,7 @@ class Auth:
             .execute()
         )
 
-        if not employee.data:
+        if not employee or not employee.data:
             logger.warning(
                 "Unauthorized gym access attempt: user=%s, gym_id=%s",
                 auth_user_id,
@@ -142,7 +146,7 @@ class Auth:
             .execute()
         )
 
-        if employee.data:
+        if employee and employee.data:
             return
 
         logger.warning(

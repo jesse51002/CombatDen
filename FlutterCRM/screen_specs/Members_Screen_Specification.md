@@ -104,7 +104,7 @@
 - **Type:** TextField inside Container
 - **Background:** `DesignConstants.card` (text at 10% opacity)
 - **Border Radius:** `DesignConstants.radiusSmall` (16)
-- **Border:** 1px `DesignConstants.buttonStroke` (#2A2E32)
+- **Border:** 1px `DesignConstants.text` (#2A2E32)
 - **Prefix Icon:** Icons.search, color: `DesignConstants.text3rd`
 - **Placeholder Text:** "search name...."
   - Style: `DesignConstants.h3` (w600, 13px) — with color override to `DesignConstants.text3rd`
@@ -118,7 +118,7 @@ These are **view buttons**, not just filters. Selecting a view changes both the 
 
 - **Type:** ChoiceChip / InkWell → Container
 - **Border Radius:** `DesignConstants.radiusBig` (32)
-- **Border:** 1px `DesignConstants.buttonStroke` (#2A2E32)
+- **Border:** 1px `DesignConstants.text` (#2A2E32)
 - **Background (default):** Transparent
 - **Background (selected):** `DesignConstants.card` (text at 10% opacity)
 - **Text Style:** `DesignConstants.p` (w400, 12px)
@@ -161,7 +161,7 @@ The FilterBar sits between the toolbar and the table. It allows users to add gra
 - **Text:** "Add Filter +"
   - Style: `DesignConstants.p` (w400, 12px)
   - Color: `DesignConstants.text2nd`
-- **Border:** 1px `DesignConstants.buttonStroke` (#2A2E32)
+- **Border:** 1px `DesignConstants.text` (#2A2E32)
 - **Border Radius:** `DesignConstants.radiusBig` (32)
 - **Background:** Transparent
 - **Padding:** `DesignConstants.spacingLarge` (16) horizontal, `DesignConstants.spacingMedium` (8) vertical
@@ -185,7 +185,7 @@ When switching views, **Date** and **Rank** filters persist. **Membership Status
 - **Type:** Container (pill shape) with remove button
 - **Border Radius:** `DesignConstants.radiusBig` (32)
 - **Background:** `DesignConstants.card` (text at 10% opacity)
-- **Border:** 1px `DesignConstants.buttonStroke`
+- **Border:** 1px `DesignConstants.text`
 - **Text:** Filter description, e.g., "Status: Frozen", "Rank: Gold", "Date: Jan–Mar 2025"
   - Style: `DesignConstants.pSmall` (w400, 11px)
   - Color: `DesignConstants.text`
@@ -691,7 +691,7 @@ All tokens used in this spec mapped to `DesignConstants`:
 | Tertiary text / placeholders / icons | `text3rd` | text @ 50% |
 | Primary accent (orange) | `primaryColor` | #FF6C2D |
 | Input/card surfaces | `card` | text @ 10% |
-| Borders / strokes | `buttonStroke` | #2A2E32 |
+| Borders / strokes | `text` | #2A2E32 |
 | Divider line (2px) | `divider` | alias for `text3rd` (text @ 50%) |
 | Good / recent status | `goodGreen` | #74F394 |
 | Ok / moderate status | `okYellow` | #CCCE44 |

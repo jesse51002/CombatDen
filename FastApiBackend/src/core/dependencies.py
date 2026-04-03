@@ -1,5 +1,8 @@
 from dependency_injector import containers, providers
 
+from src.members.service.member_details.member_details_price_recalc import (
+    MemberDetailsPriceRecalc,
+)
 from src.members.service.member_details_service import (
     MemberService,
 )
@@ -33,6 +36,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     db_pool = providers.Singleton(DirectDatabasePool)
     supabase = providers.Singleton(SupabaseClient)
     auth = providers.Singleton(Auth, supabase=supabase)
-    member_service = providers.Factory(MemberService)
+    member_service = providers.Factory(MemberService, db_pool=db_pool)
+    price_recalc = providers.Factory(MemberDetailsPriceRecalc, db_pool=db_pool)
     crm_members_list_service = providers.Factory(CrmMembersListService, db_pool=db_pool)
     crm_total_counts_service = providers.Factory(CrmTotalCountsService, db_pool=db_pool)

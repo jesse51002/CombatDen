@@ -3,10 +3,10 @@ SELECT
     p.first_name,
     p.last_name,
     p.photo_url,
-    m.start_date,
-    m.end_date
+    MAX(m.start_date) AS start_date,
+    MAX(m.end_date) AS end_date
 FROM user_gym_profiles p
-JOIN member_memberships m
+JOIN member_memberships_status m
     ON p.crm_user_id = m.crm_user_id
     AND p.gym_id = m.gym_id
 JOIN membership_plans mp
@@ -15,5 +15,23 @@ JOIN membership_plans mp
 JOIN gyms g ON p.gym_id = g.gym_id
 {where_clause}
     AND mp.plan_type = 'trial'
-ORDER BY (m.end_date - CURRENT_DATE) DESC
+    AND NOT EXISTS (
+        SELECT 1
+        FROM member_memberships_status m2
+        JOIN membership_plans mp2
+            ON m2.plan_id = mp2.plan_id
+            AND m2.gym_id = mp2.gym_id
+        WHERE m2.crm_user_id = p.crm_user_id 
+        AND m2.gym_id = p.gym_id 
+        AND ( 
+            (
+                m2.status = 'active' AND mp2.plan_type ='recurring'
+            )
+            OR (
+                mp2.plan_type ='one_time' and m2.start_date > m.start_date
+            )
+        )  
+    )
+GROUP BY p.crm_user_id
+ORDER BY (MAX(m.end_date) - CURRENT_DATE) DESC
 LIMIT :limit OFFSET :offset

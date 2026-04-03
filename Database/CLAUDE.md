@@ -3,6 +3,8 @@
 ## Schema workflow
 - **Never edit migration files directly.** Only modify schema files in `schemas/`.
 - The user will run the Supabase migration command themselves.
+- **Never run the migration script** (`supabase db reset`, `supabase migration`, etc.). The user always runs migrations manually because they need to reset the data.
+- **Never run the seeding script** (`python python_data/main.py`, etc.). The user will seed data manually.
 
 ## Security
 - Always enable Row Level Security (RLS) on every table.

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/shared/widgets/primary_button.dart';
+import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/features/gym_setup/bloc/gym_setup_bloc.dart';
 import 'package:crm/features/gym_setup/bloc/gym_setup_event.dart';
 
@@ -15,9 +16,10 @@ class WelcomeStep extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
-          Icons.fitness_center,
+          Symbols.fitness_center_sharp,
           size: 80,
           color: DesignConstants.primaryColor,
+          weight: DesignConstants.iconWeight,
         ),
         SizedBox(
           height:
@@ -47,7 +49,7 @@ class WelcomeStep extends StatelessWidget {
           height:
               DesignConstants.spacingBig,
         ),
-        PrimaryButton(
+        AppPrimaryButton(fullWidth: true,
           text: 'Get Started',
           onPressed: () {
             context.read<GymSetupBloc>().add(

@@ -4,10 +4,12 @@ CREATE TABLE membership_plans (
     plan_name VARCHAR NOT NULL CHECK (plan_name <> ''),
     plan_type VARCHAR NOT NULL CHECK (plan_type IN ('trial', 'recurring', 'one_time')),
     base_cost FLOAT NOT NULL CHECK (base_cost >= 0),
-    additional_member_costs JSONB,
+    additional_member_discount FLOAT CHECK (additional_member_discount > 0 AND additional_member_discount < 100),
     class_count INTEGER CHECK (class_count > 0),
     duration_amount INTEGER NOT NULL CHECK (duration_amount > 0),
     duration_unit VARCHAR NOT NULL CHECK (duration_unit IN ('week', 'month', 'year')),
+    is_public BOOLEAN NOT NULL DEFAULT TRUE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (plan_id),
     UNIQUE (plan_id, gym_id)

@@ -33,7 +33,7 @@ class MemberRepository {
   /// Fetches all members for the sidebar quick-list.
   Future<List<MemberSummary>> getAllMembers() async {
     final response = await _supabase
-        .from('crm_users')
+        .from('user_gym_profiles')
         .select(
           'crm_user_id, first_name, last_name, photo_url',
         )

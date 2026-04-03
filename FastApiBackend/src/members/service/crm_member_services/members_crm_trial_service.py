@@ -75,7 +75,7 @@ class CrmTrialViewService(CrmBaseViewService):
             crm_user_id=row["crm_user_id"],
             name=f"{row['first_name']} {row['last_name']}",
             avatar_url=row.get("photo_url"),
-            days_remaining=max(0, days_remaining),
+            days_remaining=days_remaining,
             start_date=format_date(row["start_date"]),
             end_date=(format_date(end_date) if end_date else "N/A"),
         )

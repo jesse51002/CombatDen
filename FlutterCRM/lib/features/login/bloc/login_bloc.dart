@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:developer';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:crm/features/login/bloc/login_event.dart';
 import 'package:crm/features/login/bloc/login_state.dart';
 import 'package:crm/features/login/data/repositories/auth_repository.dart';
@@ -8,6 +11,8 @@ import 'package:crm/features/login/data/repositories/auth_repository.dart';
 /// BLoC for managing authentication state
 class LoginBloc extends Bloc<LoginEvent, LoginState> {
   final AuthRepository _authRepository;
+  late final StreamSubscription<AuthState>
+      _authSubscription;
 
   LoginBloc({
     required AuthRepository authRepository,
@@ -18,6 +23,19 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     on<LoginSignUpRequested>(_onSignUpRequested);
     on<LoginSignOutRequested>(_onSignOutRequested);
     on<LoginStatusChecked>(_onStatusChecked);
+
+    // Listen to Supabase auth state changes so
+    // that session expiry or external sign-outs
+    // automatically redirect to login.
+    _authSubscription =
+        _authRepository.authStateChanges.listen(
+      (authState) {
+        if (authState.event ==
+            AuthChangeEvent.signedOut) {
+          add(const LoginSignOutRequested());
+        }
+      },
+    );
 
     // Check initial auth status
     add(const LoginStatusChecked());
@@ -119,5 +137,11 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     } else {
       emit(const LoginUnauthenticated());
     }
+  }
+
+  @override
+  Future<void> close() {
+    _authSubscription.cancel();
+    return super.close();
   }
 }

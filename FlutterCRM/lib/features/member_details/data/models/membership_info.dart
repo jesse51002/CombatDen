@@ -3,6 +3,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/discount_info.dart';
 import 'package:crm/features/member_details/data/models/linked_account.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
 
 part 'membership_info.g.dart';
 
@@ -13,33 +14,38 @@ part 'membership_info.g.dart';
   createToJson: false,
 )
 class MembershipInfo extends Equatable {
+  final String planId;
   final String planName;
   final String? planType;
-  final String status;
+  @JsonKey(fromJson: MembershipStatus.fromJson)
+  final MembershipStatus status;
   final double baseCost;
   final String billingCycle;
   final double totalCost;
-  final String costFormula;
+  final String? costFormula;
+  final double? additionalMemberDiscount;
   final DateTime? lastPaidDate;
   final DateTime? nextDueDate;
   final DateTime startDate;
   @JsonKey(defaultValue: [])
-  final List<LinkedAccount> linkedAccounts;
+  final List<LinkedAccount> payingFor;
   @JsonKey(defaultValue: [])
   final List<DiscountInfo> discounts;
 
   const MembershipInfo({
+    required this.planId,
     required this.planName,
     this.planType,
     required this.status,
     required this.baseCost,
     required this.billingCycle,
     required this.totalCost,
-    required this.costFormula,
+    this.costFormula,
+    this.additionalMemberDiscount,
     this.lastPaidDate,
     this.nextDueDate,
     required this.startDate,
-    this.linkedAccounts = const [],
+    this.payingFor = const [],
     this.discounts = const [],
   });
 
@@ -58,6 +64,7 @@ class MembershipInfo extends Equatable {
 
   @override
   List<Object?> get props => [
+        planId,
         planName,
         planType,
         status,
@@ -65,10 +72,11 @@ class MembershipInfo extends Equatable {
         billingCycle,
         totalCost,
         costFormula,
+        additionalMemberDiscount,
         lastPaidDate,
         nextDueDate,
         startDate,
-        linkedAccounts,
+        payingFor,
         discounts,
       ];
 }

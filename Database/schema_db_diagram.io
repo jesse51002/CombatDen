@@ -9,18 +9,6 @@ Table gyms {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_name varchar [not null]
 
-  rank_enabled boolean [not null, default: true]
-  rank_preset varchar [note: 'enum: bjj, muay_thai, karate, taekwondo, judo, mma']
-  rank_1_name varchar
-  rank_2_name varchar
-  rank_3_name varchar
-  rank_4_name varchar
-  rank_5_name varchar
-  estimated_classes_rank_1 integer
-  estimated_classes_rank_2 integer
-  estimated_classes_rank_3 integer
-  estimated_classes_rank_4 integer
-  estimated_classes_rank_5 integer
 }
 
 Table user_gym_profiles {
@@ -38,8 +26,8 @@ Table user_gym_profiles {
   emergency_contact_name varchar
   emergency_contact_phone varchar
   emergency_contact_email varchar
-  current_rank integer [note: '1-5, CHECK constraint']
   points_balance integer [not null, default: 0]
+  account_linked_to_id uuid [note: 'sub-account linked to primary member, must be same gym']
 
   indexes {
     (user_id, gym_id) [unique, note: 'partial index WHERE user_id IS NOT NULL']
@@ -87,10 +75,12 @@ Table membership_plans {
   plan_name varchar [not null]
   plan_type varchar [not null, note: 'enum: trial, recurring, one_time']
   base_cost float [not null]
-  additional_member_costs jsonb [note: 'array of up to 5 costs, e.g. [80, 80, 60, 60, 40]']
+  additional_member_discount float [note: 'percentage off base_cost for linked members, e.g. 20 = 20% off']
   class_count integer [note: 'nullable, number of classes included']
   duration_amount integer [not null, note: 'e.g. 1, 3, 6']
   duration_unit varchar [not null, note: 'enum: week, month, year']
+  is_public boolean [not null, default: true]
+  is_deleted boolean [not null, default: false]
   created_at timestamptz [not null, default: `now()`]
 }
 
@@ -98,8 +88,8 @@ Table member_memberships {
   crm_user_id uuid [not null]
   gym_id uuid [not null]
   plan_id uuid [not null]
-  status varchar [not null, default: 'active', note: 'active/frozen/cancelled']
   end_date date
+  cancel_date date
   freeze_start_date date
   freeze_end_date date
   start_date date [not null]
@@ -107,8 +97,6 @@ Table member_memberships {
   next_due_date date
   total_price float [not null]
   discount_ids jsonb [note: 'array of gym_discounts discount_id refs, validated by trigger']
-  custom_discounts jsonb [note: 'array of objects, e.g. [{"amount": 20, "end_date": "2026-06-01"}]']
-  account_linked_to_id uuid [note: 'sub-account linked to primary member, must be same gym']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -120,10 +108,13 @@ Table gym_discounts {
   discount_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   discount_name varchar [not null]
+  discount_type varchar [not null, note: 'enum: membership, custom']
+  discount_active boolean [not null, default: true]
   percentage_off float [note: 'exactly one of percentage_off or dollar_off must be set']
   dollar_off float [note: 'exactly one of percentage_off or dollar_off must be set']
   start_date date [not null]
   end_date date [not null]
+  is_deleted boolean [not null, default: false]
   created_at timestamptz [not null, default: `now()`]
 }
 
@@ -152,8 +143,9 @@ Table gym_rewards {
 
 // --- Integrity Notes ---
 // user_gym_profiles: UNIQUE partial index on (user_id, gym_id) WHERE user_id IS NOT NULL — prevents same auth user linking to multiple profiles in one gym
-// member_memberships: composite FK on account_linked_to_id ensures linked account belongs to the same gym
+// user_gym_profiles: self-referencing composite FK on account_linked_to_id ensures linked account belongs to the same gym
 // member_memberships: trigger on discount_ids validates all UUIDs exist in gym_discounts for the same gym
+// member_memberships: status is derived via member_memberships_with_status view (cancelled > ended > frozen > active)
 
 // --- Relationships ---
 
@@ -183,7 +175,8 @@ Ref: gyms.gym_id < membership_plans.gym_id
 Ref: user_gym_profiles.crm_user_id < member_memberships.crm_user_id
 Ref: gyms.gym_id < member_memberships.gym_id
 Ref: membership_plans.plan_id < member_memberships.plan_id
-Ref: user_gym_profiles.crm_user_id < member_memberships.account_linked_to_id
+// user_gym_profiles (self-ref for linked accounts)
+Ref: user_gym_profiles.crm_user_id < user_gym_profiles.account_linked_to_id
 
 // gym_discounts
 Ref: gyms.gym_id < gym_discounts.gym_id

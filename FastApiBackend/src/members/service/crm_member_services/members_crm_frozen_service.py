@@ -2,7 +2,7 @@
 
 from datetime import date
 from uuid import UUID
-
+import logging
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,14 +14,22 @@ from src.members.schema.members_crm_members_list_schema import (
 from src.members.service.crm_member_services.members_crm_base_service import (
     CrmBaseViewService,
 )
-from src.shared.formatters import format_date, format_duration, format_price
+from src.shared.formatters import format_date, format_price
 from src.shared.sql_loader import load_sql
 
+MONTHLY_MULTIPLIERS = {
+    "week": 52 / 12,
+    "month": 1,
+    "year": 1 / 12,
+}
+
+logger = logging.getLogger(__name__)
 
 class CrmFrozenViewService(CrmBaseViewService):
     """Fetches and formats rows for the Frozen view.
 
-    Shows frozen members sorted by days frozen ascending.
+    Shows frozen members sorted by days until unfrozen.
+    Aggregates multiple frozen memberships per member.
     """
 
     async def fetch(
@@ -60,34 +68,62 @@ class CrmFrozenViewService(CrmBaseViewService):
         return [self._map_row(r, today) for r in rows]
 
     def _map_row(self, row: dict, today: date) -> FrozenViewRow:
-        """Map a database row to a FrozenViewRow.
+        """Map an aggregated database row to a FrozenViewRow.
 
         Args:
-            row: Database result row as a mapping.
-            today: Current date for computing freeze duration.
+            row: Database result row with aggregated fields.
+            today: Current date for computing days until unfrozen.
 
         Returns:
             FrozenViewRow with pre-formatted fields.
         """
-        freeze_start = row.get("freeze_start_date")
-        freeze_end = row.get("freeze_end_date")
+        earliest_end = row.get("earliest_freeze_end")
+        days_until_unfrozen = (earliest_end - today).days if earliest_end else 0
 
-        if freeze_start and freeze_end:
-            duration_days = (freeze_end - freeze_start).days
-        elif freeze_start:
-            duration_days = (today - freeze_start).days
-        else:
-            duration_days = 0
+        monthly_total = self._normalize_prices_to_monthly(
+            row.get("prices", []),
+            row.get("duration_units", []),
+        )
 
         return FrozenViewRow(
             crm_user_id=row["crm_user_id"],
             name=f"{row['first_name']} {row['last_name']}",
             avatar_url=row.get("photo_url"),
-            freeze_start=(format_date(freeze_start) if freeze_start else "N/A"),
-            freeze_duration=format_duration(duration_days),
-            freeze_end=(format_date(freeze_end) if freeze_end else "N/A"),
-            price=format_price(
-                row.get("total_price", 0),
-                row.get("duration_unit", "month"),
+            freeze_start=(
+                format_date(row.get("freeze_start_date"))
+                if row.get("freeze_start_date")
+                else "N/A"
             ),
+            days_until_unfrozen=days_until_unfrozen,
+            freeze_end=(
+                format_date(row.get("freeze_end_date")) if row.get("freeze_end_date") else "N/A"
+            ),
+            price=format_price(monthly_total, "month"),
         )
+
+    def _normalize_prices_to_monthly(
+        self,
+        prices: list[float],
+        duration_units: list[str],
+    ) -> float:
+        """Normalize and sum prices to a monthly equivalent.
+
+        Converts weekly prices (x 52/12) and yearly prices
+        (/ 12) to monthly, then sums them.
+
+        Args:
+            prices: List of raw prices from ARRAY_AGG.
+            duration_units: Matching duration units.
+
+        Returns:
+            Total monthly price.
+        """
+        total = 0.0
+        for price, unit in zip(prices, duration_units, strict=False):
+            if unit in MONTHLY_MULTIPLIERS:
+                multiplier = MONTHLY_MULTIPLIERS[unit]
+            else:
+                multiplier = 1
+                logger.warning(f"Duration unit isnt in dictionary {unit}")
+            total += price * multiplier
+        return round(total, 2)

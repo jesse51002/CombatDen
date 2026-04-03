@@ -1,10 +1,11 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/models/personal_info.dart';
-import 'package:crm/features/member_details/data/models/rank_retention.dart';
+import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/models/reward_card_model.dart';
 
 part 'member_detail_response.g.dart';
@@ -17,13 +18,20 @@ part 'member_detail_response.g.dart';
 )
 class MemberDetailResponse extends Equatable {
   final String crmUserId;
+  final String gymId;
   final String firstName;
   final String lastName;
   final String? photoUrl;
   final String? accountStatus;
+  final String membershipOverview;
+  final String? linkedToAccount;
+  final int totalMembershipCount;
   final PersonalInfo personalInfo;
-  final MembershipInfo membership;
-  final RankRetention rankRetention;
+  @JsonKey(defaultValue: [])
+  final List<LinkedAccount> linkedAccounts;
+  @JsonKey(defaultValue: [])
+  final List<MembershipInfo> memberships;
+  final Retention retention;
   @JsonKey(defaultValue: [])
   final List<RewardCardModel> recentlyRedeemedRewards;
   @JsonKey(defaultValue: [])
@@ -31,13 +39,18 @@ class MemberDetailResponse extends Equatable {
 
   const MemberDetailResponse({
     required this.crmUserId,
+    required this.gymId,
     required this.firstName,
     required this.lastName,
     this.photoUrl,
     this.accountStatus,
+    required this.membershipOverview,
+    this.linkedToAccount,
+    required this.totalMembershipCount,
     required this.personalInfo,
-    required this.membership,
-    required this.rankRetention,
+    this.linkedAccounts = const [],
+    this.memberships = const [],
+    required this.retention,
     this.recentlyRedeemedRewards = const [],
     this.paymentHistory = const [],
   });
@@ -56,13 +69,18 @@ class MemberDetailResponse extends Equatable {
   @override
   List<Object?> get props => [
         crmUserId,
+        gymId,
         firstName,
         lastName,
         photoUrl,
         accountStatus,
+        membershipOverview,
+        linkedToAccount,
+        totalMembershipCount,
         personalInfo,
-        membership,
-        rankRetention,
+        linkedAccounts,
+        memberships,
+        retention,
         recentlyRedeemedRewards,
         paymentHistory,
       ];

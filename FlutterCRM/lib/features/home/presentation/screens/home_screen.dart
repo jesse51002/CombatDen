@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
@@ -9,7 +10,7 @@ import 'package:crm/features/login/bloc/login_state.dart';
 import 'package:crm/features/login/presentation/screens/login_screen.dart';
 import 'package:crm/features/gym_setup/data/repositories/gym_repository.dart';
 import 'package:crm/features/gym_setup/presentation/screens/gym_setup_screen.dart';
-import 'package:crm/shared/widgets/app_shell.dart';
+import 'package:crm/features/members_list/presentation/screens/members_list_screen.dart';
 
 /// Home screen that checks gym setup status on load
 class HomeScreen extends StatefulWidget {
@@ -51,9 +52,14 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      if (mounted) {
-        setState(() => _isCheckingSetup = false);
-      }
+      if (!mounted) return;
+      final gymId = employee['gym_id'] as String;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              MembersListScreen(gymId: gymId),
+        ),
+      );
     } on Exception catch (e) {
       if (!mounted) return;
       setState(() {
@@ -65,9 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user =
-        Supabase.instance.client.auth.currentUser;
-
     return BlocListener<LoginBloc, LoginState>(
       listener: (context, state) {
         if (state is LoginUnauthenticated) {
@@ -103,10 +106,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               );
                         },
                         icon: Icon(
-                          Icons.logout,
+                          Symbols.logout_sharp,
                           color: DesignConstants.text
                               .withValues(alpha: 0.7),
                           size: 18,
+                          weight: DesignConstants.iconWeight,
                         ),
                         label: Text(
                           'Logout',
@@ -122,60 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             )
-          : AppShell(
-        activeRoute: 'dashboard',
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.check_circle_outline,
-                size: 80,
-                color: DesignConstants.primaryColor,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Welcome!',
-                style: DesignConstants.h1,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Logged in as:'
-                ' ${user?.email ?? "Unknown"}',
-                style: DesignConstants.p.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 40),
-              ElevatedButton(
-                onPressed: () {
-                  context.read<LoginBloc>().add(
-                        const LoginSignOutRequested(),
-                      );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: DesignConstants.badRed,
-                  foregroundColor: DesignConstants.text,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      DesignConstants.radiusBig,
-                    ),
-                  ),
-                ),
-                child: Text(
-                  'Logout',
-                  style: DesignConstants.h2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+          : const SizedBox.shrink(),
     );
   }
 
@@ -196,9 +147,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.error_outline,
+                      Symbols.error_sharp,
                       size: 64,
                       color: DesignConstants.badRed,
+                      weight: DesignConstants.iconWeight,
                     ),
                     SizedBox(
                       height:
@@ -256,10 +208,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                 },
                 icon: Icon(
-                  Icons.logout,
+                  Symbols.logout_sharp,
                   color: DesignConstants.text
                       .withValues(alpha: 0.7),
                   size: 18,
+                  weight: DesignConstants.iconWeight,
                 ),
                 label: Text(
                   'Logout',

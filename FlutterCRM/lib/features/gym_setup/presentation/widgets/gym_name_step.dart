@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
-import 'package:crm/shared/widgets/primary_button.dart';
+import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/features/gym_setup/bloc/gym_setup_bloc.dart';
 import 'package:crm/features/gym_setup/bloc/gym_setup_event.dart';
@@ -97,7 +97,7 @@ class _GymNameStepState extends State<GymNameStep> {
             height: DesignConstants.spacingBig
                 ,
           ),
-          PrimaryButton(
+          AppPrimaryButton(fullWidth: true,
             text: 'Continue',
             isLoading: widget.isSubmitting,
             onPressed:

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 
@@ -24,12 +25,10 @@ class MemberListItem extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(
-          vertical:
-              DesignConstants.spacingTiny,
-          horizontal:
-              DesignConstants.spacingSmall,
+          vertical: DesignConstants.spacingMedium
         ),
         child: Row(
+          spacing: DesignConstants.paddingSmall,
           children: [
             CircleAvatar(
               radius: 36.0 / 2,
@@ -39,15 +38,12 @@ class MemberListItem extends StatelessWidget {
                   : null,
               child: photoUrl == null
                   ? Icon(
-                      Icons.person,
+                      Symbols.person_sharp,
                       size: 36.0 / 2,
                       color: DesignConstants.text3rd,
+                      weight: DesignConstants.iconWeight,
                     )
                   : null,
-            ),
-            const SizedBox(
-              width:
-                  DesignConstants.spacingSmall,
             ),
             Expanded(
               child: Text(

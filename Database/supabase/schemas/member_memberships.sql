@@ -3,16 +3,14 @@ CREATE TABLE member_memberships (
     gym_id UUID NOT NULL CONSTRAINT fk_membership_gym REFERENCES gyms(gym_id),
     plan_id UUID NOT NULL,
     start_date DATE NOT NULL,
-    status VARCHAR NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'frozen', 'cancelled')),
     end_date DATE,
+    cancel_date DATE,
     freeze_start_date DATE,
     freeze_end_date DATE,
     last_paid_date DATE,
     next_due_date DATE,
     discount_ids JSONB,
     total_price FLOAT NOT NULL CHECK (total_price >= 0),
-    custom_discounts JSONB,
-    account_linked_to_id UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (crm_user_id, gym_id, plan_id),
     CONSTRAINT fk_membership_profile_gym
@@ -20,10 +18,7 @@ CREATE TABLE member_memberships (
         REFERENCES user_gym_profiles (crm_user_id, gym_id),
     CONSTRAINT fk_membership_plan_gym
         FOREIGN KEY (plan_id, gym_id)
-        REFERENCES membership_plans (plan_id, gym_id),
-    CONSTRAINT fk_membership_linked_account_same_gym
-        FOREIGN KEY (account_linked_to_id, gym_id)
-        REFERENCES user_gym_profiles (crm_user_id, gym_id)
+        REFERENCES membership_plans (plan_id, gym_id)
 );
 
 -- Enable Row Level Security
@@ -46,13 +41,6 @@ CREATE POLICY "Members can view own memberships"
             AND user_gym_profiles.user_id = auth.uid()
         )
     );
-
--- Policy: Gym staff can insert memberships
-CREATE POLICY "Gym staff can insert memberships"
-    ON member_memberships
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (is_gym_admin_or_owner(member_memberships.gym_id));
 
 -- Policy: Gym staff can update memberships
 CREATE POLICY "Gym staff can update memberships"
@@ -91,3 +79,19 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_check_discount_ids_gym_match
     BEFORE INSERT OR UPDATE OF discount_ids ON member_memberships
     FOR EACH ROW EXECUTE FUNCTION check_discount_ids_gym_match();
+
+-- View: derives status from date fields (cancel_date > end_date > freeze window > active)
+CREATE VIEW member_memberships_status
+WITH (security_invoker = true)
+AS
+SELECT *,
+    CASE
+        WHEN cancel_date IS NOT NULL AND cancel_date <= CURRENT_DATE THEN 'cancelled'
+        WHEN end_date IS NOT NULL AND end_date <= CURRENT_DATE THEN 'ended'
+        WHEN freeze_start_date IS NOT NULL
+             AND freeze_end_date IS NOT NULL
+             AND freeze_start_date <= CURRENT_DATE
+             AND CURRENT_DATE <= freeze_end_date THEN 'frozen'
+        ELSE 'active'
+    END AS status
+FROM member_memberships;

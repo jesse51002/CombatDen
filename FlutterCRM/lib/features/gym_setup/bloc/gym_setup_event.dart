@@ -30,21 +30,7 @@ class GymSetupGymNameSubmitted extends GymSetupEvent {
   List<Object?> get props => [gymName];
 }
 
-/// Submit rank configuration (step 2)
-class GymSetupRankConfigSubmitted extends GymSetupEvent {
-  final bool rankEnabled;
-  final String? rankPreset;
-
-  const GymSetupRankConfigSubmitted({
-    required this.rankEnabled,
-    this.rankPreset,
-  });
-
-  @override
-  List<Object?> get props => [rankEnabled, rankPreset];
-}
-
-/// Submit owner name (step 3)
+/// Submit owner name (final step, triggers gym creation)
 class GymSetupOwnerNameSubmitted extends GymSetupEvent {
   final String firstName;
   final String lastName;

@@ -19,3 +19,7 @@ def random_past_datetime(days_back: int) -> datetime:
 
 def random_past_date(days_back: int) -> date:
     return date.today() - timedelta(days=random.randint(0, days_back))
+
+
+def today_offset(days: int) -> date:
+    return date.today() + timedelta(days=days)

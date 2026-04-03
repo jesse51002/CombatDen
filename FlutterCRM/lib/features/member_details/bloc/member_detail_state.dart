@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 
 /// States for the MemberDetailBloc.
 sealed class MemberDetailState extends Equatable {
@@ -27,19 +28,29 @@ class MemberDetailLoaded extends MemberDetailState {
   final List<MemberSummary> allMembers;
   final List<MemberSummary> filteredMembers;
   final String searchQuery;
+  final int currentMembershipIndex;
 
   const MemberDetailLoaded({
     required this.member,
     required this.allMembers,
     required this.filteredMembers,
     this.searchQuery = '',
+    this.currentMembershipIndex = 0,
   });
+
+  /// The currently visible membership in the carousel,
+  /// or null if no memberships exist.
+  MembershipInfo? get currentMembership {
+    if (member.memberships.isEmpty) return null;
+    return member.memberships[currentMembershipIndex];
+  }
 
   MemberDetailLoaded copyWith({
     MemberDetailResponse? member,
     List<MemberSummary>? allMembers,
     List<MemberSummary>? filteredMembers,
     String? searchQuery,
+    int? currentMembershipIndex,
   }) {
     return MemberDetailLoaded(
       member: member ?? this.member,
@@ -47,6 +58,8 @@ class MemberDetailLoaded extends MemberDetailState {
       filteredMembers:
           filteredMembers ?? this.filteredMembers,
       searchQuery: searchQuery ?? this.searchQuery,
+      currentMembershipIndex: currentMembershipIndex ??
+          this.currentMembershipIndex,
     );
   }
 
@@ -56,15 +69,20 @@ class MemberDetailLoaded extends MemberDetailState {
         allMembers,
         filteredMembers,
         searchQuery,
+        currentMembershipIndex,
       ];
 }
 
 /// Error state when loading fails.
 class MemberDetailError extends MemberDetailState {
   final String message;
+  final String crmUserId;
 
-  const MemberDetailError(this.message);
+  const MemberDetailError(
+    this.message, {
+    required this.crmUserId,
+  });
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [message, crmUserId];
 }

@@ -1,3 +1,7 @@
+import 'dart:developer';
+
+import 'package:flutter/foundation.dart';
+
 import 'package:crm/core/config/environment.dart';
 import 'package:crm/core/config/supabase_config.dart';
 import 'package:crm/core/constants/env_constants.dart';
@@ -11,6 +15,10 @@ import 'package:dio/dio.dart';
 class ApiClient {
   late final Dio _dio;
 
+  /// Called when a 401 cannot be recovered by
+  /// refreshing the Supabase session.
+  static VoidCallback? onUnauthorized;
+
   /// Creates an [ApiClient] configured with the
   /// API base URL from environment variables.
   ApiClient() {
@@ -22,7 +30,6 @@ class ApiClient {
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
-        sendTimeout: const Duration(seconds: 30),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -107,19 +114,67 @@ class ApiClient {
 }
 
 /// Interceptor that attaches the Supabase JWT token
-/// to every outgoing request.
+/// to every outgoing request and retries on 401 after
+/// refreshing the session.
 class _AuthInterceptor extends Interceptor {
   @override
   void onRequest(
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) {
-    final String? token = SupabaseConfig
-        .client.auth.currentSession?.accessToken;
+    final session =
+        SupabaseConfig.client.auth.currentSession;
+    final String? token = session?.accessToken;
     if (token != null) {
       options.headers['Authorization'] =
           'Bearer $token';
+    } else {
+      log(
+        'No auth token available for '
+        '${options.method} ${options.path}',
+      );
     }
     handler.next(options);
+  }
+
+  @override
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    if (err.response?.statusCode != 401) {
+      return handler.next(err);
+    }
+
+    try {
+      final response = await SupabaseConfig
+          .client.auth
+          .refreshSession();
+      final newToken =
+          response.session?.accessToken;
+
+      if (newToken == null) {
+        ApiClient.onUnauthorized?.call();
+        return handler.next(err);
+      }
+
+      // Retry the original request with the
+      // refreshed token.
+      final options = err.requestOptions;
+      options.headers['Authorization'] =
+          'Bearer $newToken';
+
+      final retryResponse = await Dio().fetch<dynamic>(
+        options,
+      );
+      return handler.resolve(retryResponse);
+    } catch (e) {
+      log(
+        'Session refresh failed',
+        error: e,
+      );
+      ApiClient.onUnauthorized?.call();
+      return handler.next(err);
+    }
   }
 }

@@ -1,60 +1,59 @@
-"""Generate a Supabase-compatible JWT for local development/testing."""
+"""Fetch a Supabase JWT token for local development/testing (e.g. Postman)."""
 
 import argparse
 import json
-from datetime import datetime, timedelta, timezone
 
-import jwt
+import httpx
 
-SUPABASE_DEV_JWT_SECRET = (
-    "super-secret-jwt-token-with-at-least-32-characters-long"
-)
+import sys
+sys.path.append(".")
+from src.core.config import settings
 
-DEFAULT_EXPIRY_DAYS = 30
+DEFAULT_SUPABASE_URL = "http://127.0.0.1:54321"
 
 
-def generate_token(user_id: str, expiry_days: int) -> str:
-    """Generate a signed JWT with Supabase-compatible claims."""
-    now = datetime.now(timezone.utc)
-    payload = {
-        "sub": user_id,
-        "aud": "authenticated",
-        "role": "authenticated",
-        "iss": "supabase",
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(days=expiry_days)).timestamp()),
+def fetch_token(email: str, password: str) -> dict:
+    """Sign in via Supabase Auth and return the session data.
+
+    Args:
+        email: User email address.
+        password: User password.
+
+    Returns:
+        Dict containing access_token, refresh_token, user, etc.
+    """
+    url = f"{settings.supabase_url}/auth/v1/token?grant_type=password"
+    headers = {
+        "apikey": settings.supabase_anon_key,
+        "Content-Type": "application/json",
     }
-    token = jwt.encode(payload, SUPABASE_DEV_JWT_SECRET, algorithm="HS256")
-    return token
+    body = {"email": email, "password": password}
+
+    response = httpx.post(url, json=body, headers=headers, timeout=30.0)
+    response.raise_for_status()
+    return response.json()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate a Supabase dev JWT token."
+        description="Fetch a Supabase JWT token for local dev/Postman.",
     )
     parser.add_argument(
-        "--user-id", required=True, help="UUID for the sub claim"
+        "--email", required=True, help="User email address",
     )
     parser.add_argument(
-        "--expiry",
-        type=int,
-        default=DEFAULT_EXPIRY_DAYS,
-        help=f"Days until expiry (default: {DEFAULT_EXPIRY_DAYS})",
+        "--password", required=True, help="User password",
     )
     args = parser.parse_args()
 
-    token = generate_token(args.user_id, args.expiry)
+    session = fetch_token(args.email, args.password)
 
-    decoded = jwt.decode(
-        token,
-        SUPABASE_DEV_JWT_SECRET,
-        algorithms=["HS256"],
-        audience="authenticated",
-    )
-    print("Token:")
-    print(token)
-    print("\nDecoded payload:")
-    print(json.dumps(decoded, indent=2))
+    print("Access Token:")
+    print(session["access_token"])
+    print("\nToken Type:", session.get("token_type"))
+    print("Expires In:", session.get("expires_in"), "seconds")
+    print("\nFull Response:")
+    print(json.dumps(session, indent=2))
 
 
 if __name__ == "__main__":

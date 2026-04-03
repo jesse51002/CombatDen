@@ -1,9 +1,18 @@
 """Pydantic schemas for the members domain."""
 
-from datetime import datetime
+from datetime import date, datetime
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel
+
+
+class TransactionItemType(StrEnum):
+    """Known transaction item types."""
+
+    membership_payment = "membership_payment"
+    reward_purchase = "reward_purchase"
+    merchandise = "merchandise"
 
 
 class PersonalInfo(BaseModel):
@@ -32,38 +41,38 @@ class DiscountInfo(BaseModel):
 
     discount_id: UUID
     discount_name: str
+    discount_type: str
     percentage_off: float | None = None
     dollar_off: float | None = None
-    start_date: datetime | None = None
-    end_date: datetime | None = None
+    end_date: date | None = None
 
 
 class MembershipInfo(BaseModel):
-    """Membership details including cost, dates, linked accounts, and discounts."""
+    """A grouped plan in the membership carousel.
 
+    Represents one unique plan across the family group,
+    with a list of which members are covered by this plan.
+    """
+
+    plan_id: UUID
     plan_name: str
     plan_type: str | None = None
     status: str
     base_cost: float
     billing_cycle: str
     total_cost: float
-    cost_formula: str
-    last_paid_date: datetime | None = None
-    next_due_date: datetime | None = None
-    start_date: datetime
-    linked_accounts: list[LinkedAccount] = []
+    cost_formula: str | None = None
+    additional_member_discount: float | None = None
+    last_paid_date: date | None = None
+    next_due_date: date | None = None
+    start_date: date
+    paying_for: list[LinkedAccount] = []
     discounts: list[DiscountInfo] = []
 
 
-class RankRetention(BaseModel):
-    """Rank progression and retention statistics."""
+class Retention(BaseModel):
+    """Member retention and engagement statistics."""
 
-    current_rank: int | None = None
-    rank_name: str | None = None
-    rank_image_url: str | None = None
-    classes_in_rank: int
-    estimated_classes_for_rank: int
-    recommend_promo_in: int | None = None
     last_class: datetime | None = None
     class_streak_weeks: int
     points_balance: int
@@ -93,12 +102,17 @@ class MemberDetailResponse(BaseModel):
     """Full member detail response for the Specific Member screen."""
 
     crm_user_id: UUID
+    gym_id: UUID
     first_name: str
     last_name: str
     photo_url: str | None = None
     account_status: str | None = None
+    membership_overview: str
+    linked_to_account: UUID | None = None
+    total_membership_count: int
     personal_info: PersonalInfo
-    membership: MembershipInfo
-    rank_retention: RankRetention
+    linked_accounts: list[LinkedAccount] = []
+    memberships: list[MembershipInfo]
+    retention: Retention
     recently_redeemed_rewards: list[RewardCard] = []
     payment_history: list[PaymentRecord] = []

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// Custom text field for forms
@@ -33,12 +34,12 @@ class _CustomTextFieldState extends State<CustomTextField> {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingMedium,
       children: [
         Text(
           widget.label,
           style: DesignConstants.h2.copyWith(color: DesignConstants.text),
         ),
-        const SizedBox(height: 8),
         TextFormField(
           controller: widget.controller,
           enabled: widget.enabled,
@@ -52,18 +53,18 @@ class _CustomTextFieldState extends State<CustomTextField> {
               color: DesignConstants.text.withValues(alpha: 0.5),
             ),
             filled: true,
-            fillColor: DesignConstants.cardBackground,
+            fillColor: DesignConstants.card,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
               borderSide: BorderSide(
-                color: DesignConstants.buttonStroke,
+                color: DesignConstants.text,
                 width: 2,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
               borderSide: BorderSide(
-                color: DesignConstants.buttonStroke,
+                color: DesignConstants.text,
                 width: 2,
               ),
             ),
@@ -82,7 +83,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
             disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
               borderSide: BorderSide(
-                color: DesignConstants.buttonStroke.withValues(alpha: 0.5),
+                color: DesignConstants.text.withValues(alpha: 0.5),
                 width: 2,
               ),
             ),
@@ -93,8 +94,9 @@ class _CustomTextFieldState extends State<CustomTextField> {
             suffixIcon: widget.isPassword
                 ? IconButton(
                     icon: Icon(
-                      _obscureText ? Icons.visibility_off : Icons.visibility,
+                      _obscureText ? Symbols.visibility_off_sharp : Symbols.visibility_sharp,
                       color: DesignConstants.text.withValues(alpha: 0.5),
+                      weight: DesignConstants.iconWeight,
                     ),
                     onPressed: widget.enabled
                         ? () {

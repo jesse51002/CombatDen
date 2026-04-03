@@ -13,11 +13,14 @@ CREATE TABLE user_gym_profiles (
     emergency_contact_name VARCHAR,
     emergency_contact_phone VARCHAR,
     emergency_contact_email VARCHAR,
-    current_rank INTEGER CHECK (current_rank IS NULL OR (current_rank BETWEEN 1 AND 5)),
     points_balance INTEGER NOT NULL DEFAULT 0 CHECK (points_balance >= 0),
+    account_linked_to_id UUID,
     PRIMARY KEY (crm_user_id),
     UNIQUE (crm_user_id, gym_id),
-    UNIQUE (user_id, gym_id)
+    UNIQUE (user_id, gym_id),
+    CONSTRAINT fk_profile_linked_account_same_gym
+        FOREIGN KEY (account_linked_to_id, gym_id)
+        REFERENCES user_gym_profiles (crm_user_id, gym_id)
 );
 
 -- Partial unique index: a user can only have one profile per gym
@@ -58,7 +61,7 @@ CREATE POLICY "Gym staff can insert profiles"
     WITH CHECK (is_gym_admin_or_owner(user_gym_profiles.gym_id));
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
-REVOKE UPDATE (crm_user_id, gym_id, created_at) ON TABLE user_gym_profiles FROM authenticated;
+REVOKE UPDATE (crm_user_id, gym_id, created_at, account_linked_to_id) ON TABLE user_gym_profiles FROM authenticated;
 
 -- Trigger: once user_id is set, it cannot be changed to a different value
 CREATE OR REPLACE FUNCTION prevent_user_id_overwrite()
@@ -74,3 +77,36 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_prevent_user_id_overwrite
     BEFORE UPDATE OF user_id ON user_gym_profiles
     FOR EACH ROW EXECUTE FUNCTION prevent_user_id_overwrite();
+
+-- Trigger: an account cannot be both a parent and a child in linked accounts
+CREATE OR REPLACE FUNCTION enforce_linked_account_hierarchy()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.account_linked_to_id IS NOT NULL THEN
+        -- This profile is becoming a child — ensure it is not already a parent
+        IF EXISTS (
+            SELECT 1 FROM user_gym_profiles
+            WHERE account_linked_to_id = NEW.crm_user_id
+        ) THEN
+            RAISE EXCEPTION 'Cannot link account % to a parent — it already has linked child accounts',
+                NEW.crm_user_id;
+        END IF;
+
+        -- Ensure the target parent is not itself a child
+        IF EXISTS (
+            SELECT 1 FROM user_gym_profiles
+            WHERE crm_user_id = NEW.account_linked_to_id
+              AND account_linked_to_id IS NOT NULL
+        ) THEN
+            RAISE EXCEPTION 'Cannot link to account % — it is already linked to another account',
+                NEW.account_linked_to_id;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_enforce_linked_account_hierarchy
+    BEFORE INSERT OR UPDATE OF account_linked_to_id ON user_gym_profiles
+    FOR EACH ROW EXECUTE FUNCTION enforce_linked_account_hierarchy();

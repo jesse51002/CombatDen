@@ -1,12 +1,15 @@
-import 'package:crm/features/login/presentation/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import 'package:crm/core/config/supabase_config.dart';
+import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/home/presentation/screens/home_screen.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
+import 'package:crm/features/login/bloc/login_event.dart';
 import 'package:crm/features/login/bloc/login_state.dart';
 import 'package:crm/features/login/data/repositories/auth_repository.dart';
+import 'package:crm/features/login/presentation/screens/login_screen.dart';
 import 'package:crm/shared/widgets/loading_screen.dart';
-import 'package:crm/features/home/presentation/screens/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +33,15 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => LoginBloc(authRepository: AuthRepository()),
+      create: (context) {
+        final bloc = LoginBloc(
+          authRepository: AuthRepository(),
+        );
+        ApiClient.onUnauthorized = () => bloc.add(
+              const LoginSignOutRequested(),
+            );
+        return bloc;
+      },
       child: const MaterialApp(
         title: 'CombatDen',
         debugShowCheckedModeBanner: false,

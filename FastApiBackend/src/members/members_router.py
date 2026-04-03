@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -16,6 +16,9 @@ from src.members.schema.members_crm_members_list_schema import (
     CrmMembersListRequest,
     CrmMembersListResponse,
     MembersListTotalCounts,
+)
+from src.members.service.member_details.member_details_price_recalc import (
+    MemberDetailsPriceRecalc,
 )
 from src.members.service.member_details_service import (
     MemberService,
@@ -39,65 +42,77 @@ members_router = APIRouter(
 @members_router.get(
     "/member_details",
     response_model=MemberDetailResponse,
-    summary="Get member detail",
-    description=("Returns full member detail for the Specific Member screen."),
+    summary="Get member details",
+    description=(
+        "Returns full details for a single member including "
+        "all memberships, discounts, payment history, and rewards."
+    ),
     responses={
-        200: {"description": "Member detail retrieved successfully"},
+        200: {"description": "Member details retrieved successfully"},
         401: {"description": "Not authenticated"},
-        403: {"description": ("Not authorized to view this member")},
+        403: {"description": "Not authorized to view this member"},
         404: {"description": "Member not found"},
     },
 )
 @inject
-async def get_member_detail(
+async def get_member_details(
     crm_user_id: UUID,
+    background_tasks: BackgroundTasks,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     member_service: MemberService = Depends(Provide[DependencyInjector.member_service]),
+    price_recalc: MemberDetailsPriceRecalc = Depends(Provide[DependencyInjector.price_recalc]),
 ) -> MemberDetailResponse:
-    """Get full detail for a specific member.
+    """Get full details for a single member.
 
     Args:
         crm_user_id: The member's CRM user ID.
+        background_tasks: FastAPI background tasks.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         member_service: Injected member service.
+        price_recalc: Injected price recalculation service.
 
     Returns:
-        MemberDetailResponse with all screen sections.
+        MemberDetailResponse with all memberships and
+        supplementary data.
 
     Raises:
         HTTPException: 401 if not authenticated,
-            403 if not authorized to view this member,
-            404 if member not found.
+            403 if not authorized, 404 if not found,
+            500 on unexpected errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(crm_user_id, user_payload)
 
     try:
-        return await member_service.get_member_detail(
+        response = await member_service.get_member_details(
             crm_user_id=crm_user_id,
         )
-    except ValueError as exc:
-        logger.error(
-            "Member not found: crm_user_id=%s",
-            crm_user_id,
-            exc_info=True,
-        )
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
+            detail="Member not found",
         ) from None
     except Exception:
         logger.error(
-            "Failed to get member detail: crm_user_id=%s",
+            "Failed to get member details: crm_user_id=%s",
             crm_user_id,
             exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve member detail",
+            detail="Failed to retrieve member details",
         ) from None
+
+    family_ids = {response.crm_user_id} | {la.crm_user_id for la in response.linked_accounts}
+    background_tasks.add_task(
+        price_recalc.recalculate_family_prices,
+        response.gym_id,
+        family_ids,
+    )
+
+    return response
 
 
 @members_router.post(

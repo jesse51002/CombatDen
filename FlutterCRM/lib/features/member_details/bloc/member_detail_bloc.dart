@@ -20,6 +20,7 @@ class MemberDetailBloc
         super(const MemberDetailInitial()) {
     on<MemberDetailRequested>(_onDetailRequested);
     on<MemberSearchChanged>(_onSearchChanged);
+    on<MembershipPageChanged>(_onPageChanged);
   }
 
   Future<void> _onDetailRequested(
@@ -48,7 +49,10 @@ class MemberDetailBloc
         error: e,
         stackTrace: stackTrace,
       );
-      emit(MemberDetailError(e.toString()));
+      emit(MemberDetailError(
+        e.toString(),
+        crmUserId: event.crmUserId,
+      ));
     }
   }
 
@@ -78,6 +82,17 @@ class MemberDetailBloc
     emit(currentState.copyWith(
       filteredMembers: filtered,
       searchQuery: query,
+    ));
+  }
+
+  void _onPageChanged(
+    MembershipPageChanged event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final currentState = state;
+    if (currentState is! MemberDetailLoaded) return;
+    emit(currentState.copyWith(
+      currentMembershipIndex: event.pageIndex,
     ));
   }
 }

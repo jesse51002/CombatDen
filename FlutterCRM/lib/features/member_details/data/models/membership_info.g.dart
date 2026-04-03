@@ -8,13 +8,16 @@ part of 'membership_info.dart';
 
 MembershipInfo _$MembershipInfoFromJson(Map<String, dynamic> json) =>
     MembershipInfo(
+      planId: json['plan_id'] as String,
       planName: json['plan_name'] as String,
       planType: json['plan_type'] as String?,
-      status: json['status'] as String,
+      status: MembershipStatus.fromJson(json['status'] as String),
       baseCost: (json['base_cost'] as num).toDouble(),
       billingCycle: json['billing_cycle'] as String,
       totalCost: (json['total_cost'] as num).toDouble(),
-      costFormula: json['cost_formula'] as String,
+      costFormula: json['cost_formula'] as String?,
+      additionalMemberDiscount: (json['additional_member_discount'] as num?)
+          ?.toDouble(),
       lastPaidDate: json['last_paid_date'] == null
           ? null
           : DateTime.parse(json['last_paid_date'] as String),
@@ -22,8 +25,8 @@ MembershipInfo _$MembershipInfoFromJson(Map<String, dynamic> json) =>
           ? null
           : DateTime.parse(json['next_due_date'] as String),
       startDate: DateTime.parse(json['start_date'] as String),
-      linkedAccounts:
-          (json['linked_accounts'] as List<dynamic>?)
+      payingFor:
+          (json['paying_for'] as List<dynamic>?)
               ?.map((e) => LinkedAccount.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],

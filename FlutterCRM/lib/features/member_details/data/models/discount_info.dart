@@ -11,17 +11,17 @@ part 'discount_info.g.dart';
 class DiscountInfo extends Equatable {
   final String discountId;
   final String discountName;
+  final String discountType;
   final double? percentageOff;
   final double? dollarOff;
-  final DateTime? startDate;
   final DateTime? endDate;
 
   const DiscountInfo({
     required this.discountId,
     required this.discountName,
+    required this.discountType,
     this.percentageOff,
     this.dollarOff,
-    this.startDate,
     this.endDate,
   });
 
@@ -45,9 +45,9 @@ class DiscountInfo extends Equatable {
   List<Object?> get props => [
         discountId,
         discountName,
+        discountType,
         percentageOff,
         dollarOff,
-        startDate,
         endDate,
       ];
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
@@ -22,7 +23,12 @@ class RightMemberSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 200.0,
-      color: DesignConstants.backgroundColor,
+      color: DesignConstants.card,
+      padding: EdgeInsets.fromLTRB(
+        DesignConstants.paddingSmall, 
+        DesignConstants.paddingBig,
+        0, 0
+      ),
       child: Column(
         children: [
           // Search field
@@ -34,7 +40,7 @@ class RightMemberSidebar extends StatelessWidget {
               label: 'Search members',
               child: TextField(
                 onChanged: onSearchChanged,
-                style: DesignConstants.p,
+                style: DesignConstants.h2,
                 decoration: InputDecoration(
                   hintText: 'search...',
                   hintStyle:
@@ -42,13 +48,14 @@ class RightMemberSidebar extends StatelessWidget {
                     color: DesignConstants.text3rd,
                   ),
                   prefixIcon: Icon(
-                    Icons.search,
+                    Symbols.search_sharp,
                     color: DesignConstants.text3rd,
                     size: 18,
+                    weight: DesignConstants.iconWeight,
                   ),
                   filled: true,
                   fillColor:
-                      DesignConstants.cardBackground,
+                      DesignConstants.card,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(
                       DesignConstants.radiusSmall,

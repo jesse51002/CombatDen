@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
-    supabase_jwt_secret: str
 
     # Database (direct Postgres connection)
     database_url: str
@@ -30,7 +29,7 @@ class Settings(BaseSettings):
     # App
     app_env: AppEnv = AppEnv.DEV
     app_debug: bool = False
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8080"]
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

@@ -12,7 +12,6 @@ class MembersListView(StrEnum):
     """Available views for the members list screen."""
 
     all = "all"
-    promotions = "promotions"
     trial = "trial"
     frozen = "frozen"
     overdue = "overdue"
@@ -25,7 +24,9 @@ class MembershipStatus(StrEnum):
     trial = "trial"
     frozen = "frozen"
     cancelled = "cancelled"
+    ended = "ended"
     overdue = "overdue"
+    no_membership = "no_membership"
 
 
 class DateRangeFilter(BaseModel):
@@ -45,13 +46,11 @@ class MembersListFilters(BaseModel):
 
     Attributes:
         membership_status: Statuses to include.
-        rank: Rank levels to include.
         date_range: Optional date range filter.
         name: Optional name search string.
     """
 
     membership_status: list[MembershipStatus] = []
-    rank: list[int] = []
     date_range: DateRangeFilter | None = None
     name: str | None = None
 
@@ -90,29 +89,14 @@ class BaseRow(BaseModel):
 class AllViewRow(BaseRow):
     """Row for the All view.
 
-    Includes contact, membership badge, rank, and last class.
+    Includes contact, membership badge, and last class.
     """
 
     view: Literal[MembersListView.all] = MembersListView.all
     email: str | None = None
     membership_status: MembershipStatus
     membership_text: str
-    rank: str | None = None
-    rank_icon_url: str | None = None
     days_since_last_class: int | None = None
-
-
-class PromotionsViewRow(BaseRow):
-    """Row for the Promotions view.
-
-    Includes rank info and classes until promotion.
-    """
-
-    view: Literal[MembersListView.promotions] = MembersListView.promotions
-    rank: str | None = None
-    rank_icon_url: str | None = None
-    time_in_rank: str
-    classes_until_promotion: int
 
 
 class TrialViewRow(BaseRow):
@@ -135,7 +119,7 @@ class FrozenViewRow(BaseRow):
 
     view: Literal[MembersListView.frozen] = MembersListView.frozen
     freeze_start: str
-    freeze_duration: str
+    days_until_unfrozen: int
     freeze_end: str
     price: str
 
@@ -154,7 +138,7 @@ class OverdueViewRow(BaseRow):
 
 
 MembersListRow = Annotated[
-    AllViewRow | PromotionsViewRow | TrialViewRow | FrozenViewRow | OverdueViewRow,
+    AllViewRow | TrialViewRow | FrozenViewRow | OverdueViewRow,
     Field(discriminator="view"),
 ]
 

@@ -11,6 +11,7 @@ class SidebarNavItem extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback? onTap;
+  final bool isPrimary;
 
   const SidebarNavItem({
     super.key,
@@ -18,13 +19,17 @@ class SidebarNavItem extends StatelessWidget {
     required this.label,
     this.isActive = false,
     this.onTap,
+    this.isPrimary = false
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive
-        ? DesignConstants.primaryColor
-        : DesignConstants.text3rd;
+
+    Color textColor = isActive ?
+      DesignConstants.text : DesignConstants.text2nd;
+
+    textColor = isPrimary ?
+      DesignConstants.primaryColor : textColor;
 
     return InkWell(
       onTap: onTap,
@@ -33,25 +38,25 @@ class SidebarNavItem extends StatelessWidget {
           vertical:
               DesignConstants.spacingMedium,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(
-              height:
-                  DesignConstants.spacingTiny,
-            ),
-            Text(
-              label,
-              style: DesignConstants.pSmall.copyWith(
-                color: color,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+        child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingTiny,
+              children: [
+                Icon(icon, color: textColor, size: 24, weight: DesignConstants.iconWeight,),
+                Text(
+                  label,
+                  style: DesignConstants.h3.copyWith(
+                    color: textColor,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+          ),
+        ) 
+        
       ),
     );
   }

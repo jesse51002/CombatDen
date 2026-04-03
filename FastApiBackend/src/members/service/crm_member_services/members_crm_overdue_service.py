@@ -21,8 +21,8 @@ from src.shared.sql_loader import load_sql
 class CrmOverdueViewService(CrmBaseViewService):
     """Fetches and formats rows for the Overdue view.
 
-    Shows members with overdue payments, sorted by most
-    days late first.
+    Shows members with overdue payments, aggregating
+    multiple overdue memberships per member.
     """
 
     async def fetch(
@@ -61,10 +61,10 @@ class CrmOverdueViewService(CrmBaseViewService):
         return [self._map_row(r, today) for r in rows]
 
     def _map_row(self, row: dict, today: date) -> OverdueViewRow:
-        """Map a database row to an OverdueViewRow.
+        """Map an aggregated database row to an OverdueViewRow.
 
         Args:
-            row: Database result row as a mapping.
+            row: Database result row with aggregated fields.
             today: Current date for computing days late.
 
         Returns:
@@ -85,16 +85,24 @@ class CrmOverdueViewService(CrmBaseViewService):
         )
 
     def _build_membership_text(self, row: dict) -> str:
-        """Build membership type display text.
+        """Build comma-separated membership display text.
+
+        Combines all overdue plan names with their prices
+        into a single string.
 
         Args:
-            row: Database row with plan and price info.
+            row: Database row with aggregated plan/price arrays.
 
         Returns:
-            String like 'Recurring ($165/month)'.
+            String like 'Gold ($165/month), Silver ($80/month)'.
         """
-        plan_name = row.get("plan_name", "")
-        price = row.get("total_price", 0)
-        duration_unit = row.get("duration_unit", "month")
-        price_str = format_price(price, duration_unit)
-        return f"{plan_name} ({price_str})"
+        plan_names = row.get("plan_names", [])
+        prices = row.get("prices", [])
+        duration_units = row.get("duration_units", [])
+
+        parts = []
+        for name, price, unit in zip(plan_names, prices, duration_units, strict=False):
+            price_str = format_price(price, unit)
+            parts.append(f"{name} ({price_str})")
+
+        return ", ".join(parts) if parts else "Overdue"

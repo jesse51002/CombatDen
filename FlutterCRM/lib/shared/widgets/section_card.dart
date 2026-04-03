@@ -7,42 +7,41 @@ import 'package:crm/core/constants/design_constants.dart';
 class SectionCard extends StatelessWidget {
   final String? title;
   final List<Widget> children;
+  final double spacing;
+  final CrossAxisAlignment crossAxisAlignment;
+  final EdgeInsetsGeometry padding;
 
   const SectionCard({
     super.key,
     this.title,
     required this.children,
+    this.spacing = DesignConstants.spacingLarge,
+    this.crossAxisAlignment = CrossAxisAlignment.start,
+    this.padding = const EdgeInsets.all(
+      DesignConstants.paddingBig,
+    ),
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(
-        bottom: DesignConstants.spacingLarge,
-      ),
-      padding: const EdgeInsets.all(
-        DesignConstants.paddingSmall,
-      ),
+      padding: padding,
       decoration: BoxDecoration(
-        color: DesignConstants.cardBackground,
+        color: DesignConstants.card,
         borderRadius: BorderRadius.circular(
           DesignConstants.radiusSmall,
         ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: crossAxisAlignment,
+        spacing: spacing,
         children: [
-          if (title != null) ...[
+          if (title != null)
             Text(
               title!,
-              style: DesignConstants.h2,
+              style: DesignConstants.h1,
             ),
-            const SizedBox(
-              height:
-                  DesignConstants.spacingMedium,
-            ),
-          ],
           ...children,
         ],
       ),

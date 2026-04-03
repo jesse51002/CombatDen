@@ -1,0 +1,91 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
+
+/// Builds a label widget for info table rows.
+Widget membershipLabel(String text) {
+  return Text(
+    text,
+    style: DesignConstants.h2.copyWith(
+      color: DesignConstants.text2nd,
+    ),
+  );
+}
+
+/// Returns the color for a [MembershipStatus].
+Color statusColor(MembershipStatus status) {
+  return switch (status) {
+    MembershipStatus.active => DesignConstants.goodGreen,
+    MembershipStatus.trial => DesignConstants.goodGreen,
+    MembershipStatus.frozen => DesignConstants.okYellow,
+    MembershipStatus.cancelled => DesignConstants.badRed,
+    MembershipStatus.ended => DesignConstants.badRed,
+    MembershipStatus.overdue => DesignConstants.badRed,
+    MembershipStatus.noMembership =>
+      DesignConstants.text2nd,
+    MembershipStatus.unknown => DesignConstants.text,
+  };
+}
+
+/// Builds a colored status text widget.
+Widget statusValue(MembershipStatus status) {
+  return Semantics(
+    label: 'Membership status: ${status.displayLabel}',
+    child: Text(
+      status.displayLabel,
+      style: DesignConstants.h2.copyWith(
+        color: statusColor(status),
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
+/// Builds a cost display, optionally showing a formula.
+Widget costValue(MembershipInfo membership) {
+  if (membership.costFormula != null) {
+    return RichText(
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '${membership.costFormula} = ',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+          TextSpan(
+            text:
+                '\$${membership.totalCost.toStringAsFixed(0)}',
+            style: DesignConstants.h2.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  return Text(
+    '\$${membership.totalCost.toStringAsFixed(0)}',
+    style: DesignConstants.h2.copyWith(
+      fontWeight: FontWeight.w700,
+    ),
+  );
+}
+
+/// Builds a formatted date text or an em-dash for null.
+Widget dateValue(DateTime? date, DateFormat fmt) {
+  if (date == null) {
+    return Text('—', style: DesignConstants.h2);
+  }
+  return Text(
+    fmt.format(date.toLocal()),
+    style: DesignConstants.h2.copyWith(
+      fontWeight: FontWeight.w700,
+    ),
+  );
+}

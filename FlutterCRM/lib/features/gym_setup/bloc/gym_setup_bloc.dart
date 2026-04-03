@@ -31,9 +31,6 @@ class GymSetupBloc
     on<GymSetupOwnerNameSubmitted>(
       _onOwnerNameSubmitted,
     );
-    on<GymSetupRankConfigSubmitted>(
-      _onRankConfigSubmitted,
-    );
   }
 
   Future<void> _onCheckRequested(
@@ -80,20 +77,13 @@ class GymSetupBloc
     emit(const GymSetupOwnerNameStep());
   }
 
-  void _onOwnerNameSubmitted(
+  Future<void> _onOwnerNameSubmitted(
     GymSetupOwnerNameSubmitted event,
     Emitter<GymSetupState> emit,
-  ) {
+  ) async {
     _firstName = event.firstName;
     _lastName = event.lastName;
-    emit(const GymSetupRankConfigStep());
-  }
-
-  Future<void> _onRankConfigSubmitted(
-    GymSetupRankConfigSubmitted event,
-    Emitter<GymSetupState> emit,
-  ) async {
-    emit(const GymSetupRankConfigStep(
+    emit(const GymSetupOwnerNameStep(
       isSubmitting: true,
     ));
     try {
@@ -102,8 +92,6 @@ class GymSetupBloc
         userId: _userId,
         firstName: _firstName!,
         lastName: _lastName!,
-        rankEnabled: event.rankEnabled,
-        rankPreset: event.rankPreset,
       );
       emit(const GymSetupComplete());
     } on DatabaseException catch (e, stackTrace) {
@@ -112,7 +100,7 @@ class GymSetupBloc
         error: e,
         stackTrace: stackTrace,
       );
-      emit(GymSetupRankConfigStep(
+      emit(GymSetupOwnerNameStep(
         errorMessage: e.message,
       ));
     }

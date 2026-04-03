@@ -8,4 +8,4 @@ format:
 	poetry run ruff format src/
 
 token:
-	poetry run python scripts/generate_token.py --user-id $(user_id)
+	poetry run python scripts/generate_token.py --email owner2@test.com --password abcd1234

@@ -146,13 +146,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Create type aliases for complex types
 
 **Code Complexity & Nesting**
-- **Limit deep nesting**
-- **Extract methods when nesting gets complex** - create helper methods
-- **Once nesting starts getting deep, separate it out**:
-  - Create a new function widget in the same file for related UI logic
-  - Move to a different file if the widget becomes reusable or substantial
-- Good: Extract nested logic into separate, well-named private methods or widgets
-- Bad: Deep nesting makes code hard to read and maintain
+- **Prefer deep module trees over flat files** — more small files is better than fewer large files
+- **Aggressively extract into sub-widgets and functions** — group every logical piece into its own widget or helper method to keep each unit short and readable
+- **Extract to a separate file early** — don't wait until a widget is "big enough"; if it has a distinct responsibility, give it its own file immediately
+- **Use Column/Row with `spacing`** to structure layouts — this keeps widget trees shallow and readable
+- Good: A parent widget that composes 3-4 named child widgets, each in its own file
+- Bad: A single build method with deep nesting and inline widget construction
+
+**File Length & Organization**
+- **Keep files short and focused** — aim for under ~150 lines per file
+- **Prefer many small files over few large ones** — each widget, helper, or logical group gets its own file
+- **Group related widgets into subfolders** — avoid flat widget directories with many files. Related widgets should be organized into named subfolders:
+  - `widgets/profile_header/` — profile_header_section, profile_info_section, linked_accounts_section, linked_account_chip
+  - `widgets/rank_retention/` — rank_retention_card, retention_stat_item, reward_card
+  - `widgets/membership_carousel/` — membership_carousel, carousel_header, discounts_section, payment_history_section, etc.
+  - Standalone widgets (e.g., `back_button_row.dart`, `responsive_two_column.dart`) can remain flat
+- Helper functions (display builders, formatters) should live in their own `_helpers.dart` or `_display_helpers.dart` file within the subfolder
+- One public widget per file — private helper widgets within a file are fine only if very small (<30 lines)
+
+**Resilient Enum Parsing**
+- **ALL enums that parse from JSON MUST have a fallback** in their `fromJson` method
+- Use `orElse` in `firstWhere` to return a safe default when the backend sends an unrecognised value
+- This prevents crashes when the backend adds new enum values before the frontend is updated
+- Good: `MembershipStatus.values.firstWhere((v) => v.value == value, orElse: () => MembershipStatus.unknown)`
+- Bad: `MembershipStatus.values.firstWhere((v) => v.value == value)` (throws `StateError` on unknown values)
+- For status-like enums, use an `unknown` fallback value; for view-like enums, fall back to the default view (e.g., `all`)
+- Every switch statement on such enums must handle the fallback case
 
 **DateTime Handling**
 - Use local timezone for UI display and local operations
@@ -172,6 +191,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Good: `Padding(padding: EdgeInsets.symmetric(horizontal: DesignConstants.screenHorizontalPadding))`
 - This ensures visual consistency across all screens in the app
 
+**Spacing**
+- **NEVER use SizedBox for spacing** — always use the `spacing` parameter on Column/Row instead
+- **Use `DesignConstants.spacing*` constants** for all spacing values — never hardcode pixel values
+- Available constants: `spacingBig` (32), `spacingLarge` (16), `spacingMedium` (8), `spacingSmall` (4), `spacingTiny` (2)
+- Good: `Column(spacing: DesignConstants.spacingLarge, children: [...])`
+- Bad: `SizedBox(height: 16)` between Column children, `Padding(padding: EdgeInsets.only(bottom: 8))` wrapping mapped children
+- If children need different spacing, restructure into nested Column/Row groups with uniform `spacing` on each — do not fall back to SizedBox
+- **Never use `margin`** on Container/DecoratedBox for spacing between widgets — use the `spacing` parameter on the parent Column/Row instead
+- If a repeated spacing pattern emerges that doesn't match existing constants, extract it into a helper function or a dedicated file — do not scatter magic numbers
+
 ## Screen Architecture & Widget Separation
 
 **Screens as Widget Composition**
@@ -181,19 +210,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - This improves readability, testability, and maintainability
 
 **Widget Separation Guidelines**
-- **When to extract to a separate widget file**:
-  - Widget becomes substantial (>50-100 lines)
-  - Widget is reusable across different screens or features
-  - Widget has complex internal state or logic
-  - Widget represents a distinct UI component (e.g., `TechniqueCard`, `IngredientCheckboxItem`)
-- **When to use private helper methods** (`_buildSection()`):
-  - Small UI pieces within the same screen (<30 lines)
-  - UI logic tightly coupled to the parent widget's state
-  - One-off UI elements not used elsewhere
+- **Default to extracting into its own file** — if a widget has a clear name and responsibility, it gets a file
+- **Extract early, extract often** — don't wait for complexity; even simple widgets benefit from separation
+- **When to keep as a private widget in the same file**: only if very small (<30 lines) and tightly coupled to the parent
 - **Widget file organization**:
   - Feature-specific widgets → `features/[feature]/presentation/widgets/`
   - Reusable components → `shared/widgets/`
-  - One widget per file for clarity
+  - One public widget per file
 
 **Widget Naming Conventions**
 - Use clear, descriptive names that indicate purpose
@@ -288,6 +311,13 @@ class IngredientCheckboxItem extends StatelessWidget {
 }
 ```
 
+## UX Requirements
+
+**Logout Access**
+- **Every screen MUST have a way to log out** — the logout button lives in the `AppShell` left sidebar
+- All authenticated screens should be wrapped in `AppShell`, which includes the logout nav item at the bottom of the sidebar
+- Never create a screen where the user has no way to sign out
+
 ## Theming System
 
 **CRITICAL: ALWAYS Use DesignConstants**
@@ -303,6 +333,14 @@ class IngredientCheckboxItem extends StatelessWidget {
 - Good: `color: DesignConstants.primaryColor`, `style: DesignConstants.h2`
 - Bad: `color: Colors.orange`, `color: Color(0xFFFF6C2D)`, `fontSize: 16`
 - This ensures consistent theming across the entire app
+
+**Icons: Use Material Symbols**
+- **ALWAYS use `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart`
+- **NEVER use `Icons.*`** from Flutter's built-in Material icons
+- **ALWAYS set `weight: DesignConstants.iconWeight`** on every `Icon()` widget
+- Import: `import 'package:material_symbols_icons/symbols.dart';`
+- Good: `Icon(Symbols.person_sharp, weight: DesignConstants.iconWeight)`
+- Bad: `Icon(Icons.person)`
 
 **Architecture**: DesignConstants + Material 3 ColorScheme + Custom Widgets
 
@@ -327,7 +365,7 @@ Container(
   decoration: BoxDecoration(
     borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
     border: Border.all(
-      color: DesignConstants.buttonStroke,
+      color: DesignConstants.text,
       width: DesignConstants.buttonBorderSize,
     ),
   ),
@@ -350,6 +388,7 @@ class LightDesignConstants extends DesignConstants {
 **Custom Widget Components**: Build reusable components in `lib/shared/widgets/`
 - Use DesignConstants for specific styling needs
 - Example: PrimaryButton, SecondaryButton, CustomCard
+- **ALWAYS check `lib/shared/widgets/` before building custom UI** — if a shared widget already exists for the pattern you need (tables, cards, buttons, etc.), use it instead of creating a custom implementation
 
 ## Project Structure
 

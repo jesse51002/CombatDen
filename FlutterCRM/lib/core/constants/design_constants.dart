@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class DesignConstants {
   static const Color primaryColor = Color(0xFFFF6C2D);
@@ -15,14 +16,15 @@ class DesignConstants {
   static final Color text3rd = text.withValues(alpha: 0.50);
 
   static final Color card = text.withValues(alpha: 0.1);
+  static final Color popup = Color.alphaBlend(
+    backgroundColor, 
+    text.withValues(alpha: 0.05)
+    );
 
   static const Color hyperlink = Color(0xFF83C7FF);
   static const Color goodGreen = Color(0xFF74F394);
   static const Color okYellow = Color(0xFFCCCE44);
   static const Color badRed = Color(0xFFF94A4D);
-
-  static const Color cardBackground = Color(0xFF1A1E22);
-  static const Color buttonStroke = Color(0xFF2A2E32);
 
   static final Color yellowDark = Color(0xFF83852F).withValues(alpha: 0.25);
   static final Color greenDark = Color(0xFF0E7A29).withValues(alpha: 0.25);
@@ -45,43 +47,43 @@ class DesignConstants {
   static const double spacingTiny = 2;
 
   static final double buttonBorder = 2;
+  static final double iconWeight = 300.0;
 
   static const double buttonBorderSize = 3.0;
   static const double screenHorizontalPadding = 16.0;
 
-  static final Color divider = text3rd;
+  static final Color divider = card;
   static const double sideNavWidth = 100.0;
-  static const double tableRowHeight = 30.0;
+  static const double tableRowHeight = 35.0;
 
-  static const String fontFamily = 'Jura';
+  static final TextStyle baseFont = GoogleFonts.jura();
 
   /// H1 text style (light, 30)
-  static const TextStyle h1 = TextStyle(
-    fontFamily: fontFamily,
+  static final TextStyle h1 = baseFont.copyWith(
     fontWeight: FontWeight.w700,
     fontSize: 24,
     color: text,
     letterSpacing: -0.02,
   );
 
-  static final TextStyle h1Regular = h2.copyWith(fontWeight: FontWeight.w500);
+  static final TextStyle h1Regular = h1.copyWith(fontWeight: FontWeight.w500);
   static final TextStyle big1 = h2.copyWith(fontSize: 160);
   static final TextStyle big2 = h2.copyWith(fontSize: 32);
 
   /// H2 text style (light, 18)
-  static const TextStyle h2 = TextStyle(
-    fontFamily: fontFamily,
+  static final TextStyle h2 = baseFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 16,
     color: text,
-    letterSpacing: -0.01,
+    letterSpacing: 0,
   );
 
-  static final TextStyle h2Regular = h2.copyWith(fontWeight: FontWeight.w400);
+  static final TextStyle h2Regular = h2.copyWith(fontWeight: FontWeight.w400, 
+    letterSpacing: 0.03,
+  );
 
   /// H3 text style (regular, 15)
-  static const TextStyle h3 = TextStyle(
-    fontFamily: fontFamily,
+  static final TextStyle h3 = baseFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 13,
     color: text,
@@ -89,8 +91,7 @@ class DesignConstants {
   );
 
   /// Paragraph text style (regular, 12)
-  static const TextStyle p = TextStyle(
-    fontFamily: fontFamily,
+  static final TextStyle p = TextStyle(
     fontWeight: FontWeight.w400,
     fontSize: 12,
     color: text,

@@ -41,7 +41,7 @@ class ConfirmationModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: DesignConstants.cardBackground,
+      backgroundColor: DesignConstants.popup,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(
           DesignConstants.radiusSmall,

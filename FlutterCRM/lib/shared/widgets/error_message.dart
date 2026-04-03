@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// Error message display widget
@@ -18,9 +19,9 @@ class ErrorMessage extends StatelessWidget {
         border: Border.all(color: DesignConstants.badRed, width: 2),
       ),
       child: Row(
+        spacing: DesignConstants.spacingLarge,
         children: [
-          Icon(Icons.error_outline, color: DesignConstants.badRed, size: 24),
-          const SizedBox(width: 12),
+          Icon(Symbols.error_sharp, color: DesignConstants.badRed, size: 24, weight: DesignConstants.iconWeight),
           Expanded(
             child: Text(
               message,

@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/validators.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
-import 'package:crm/shared/widgets/primary_button.dart';
+import 'package:crm/shared/widgets/app_primary_button.dart';
 import 'package:crm/shared/widgets/error_message.dart';
 import 'package:crm/features/login/presentation/widgets/auth_header.dart';
 import 'package:crm/features/login/presentation/screens/register_screen.dart';
@@ -59,7 +59,7 @@ class _LoginFormState extends State<LoginForm> {
           constraints: const BoxConstraints(maxWidth: 500),
           child: Container(
             decoration: BoxDecoration(
-              color: DesignConstants.cardBackground,
+              color: DesignConstants.card,
               borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
             ),
             padding: EdgeInsets.all(DesignConstants.paddingBig),
@@ -96,7 +96,7 @@ class _LoginFormState extends State<LoginForm> {
                         value?.isEmpty ?? true ? 'Password is required' : null,
                   ),
                   SizedBox(height: DesignConstants.spacingBig),
-                  PrimaryButton(
+                  AppPrimaryButton(fullWidth: true,
                     text: 'Sign In',
                     onPressed: _handleLogin,
                     isLoading: isLoading,

@@ -66,7 +66,7 @@ def seed():
     for i in range(NUM_GYMS):
         gym = gyms.generate(gym_id=gym_ids[i])
         gym_records.append(gym)
-        print(f"  {gym.gym_name} ({gym.rank_preset})")
+        print(f"  {gym.gym_name}")
     client.table("gyms").insert([g.to_insert_dict() for g in gym_records]).execute()
 
     # Phase 2.5: Create employees (owner + extra staff per gym)
@@ -80,8 +80,8 @@ def seed():
         ).execute()
         print(f"  {gym.gym_name}: 1 owner + {len(staff)} staff")
 
-    # Phase 3: Create profiles
-    print("Creating member profiles...")
+    # Phase 3: Generate profiles (insert deferred until after linking)
+    print("Generating member profiles...")
     all_profiles: dict[uuid.UUID, list[UserGymProfileCreate]] = {}
     auth_idx = 0
     profile_idx = 0
@@ -97,10 +97,7 @@ def seed():
             )
             profile_idx += 1
         all_profiles[gym.gym_id] = gym_profiles
-        client.table("user_gym_profiles").insert(
-            [p.to_insert_dict() for p in gym_profiles]
-        ).execute()
-    print(f"  Created {NUM_GYMS * MEMBERS_PER_GYM} profiles")
+    print(f"  Generated {NUM_GYMS * MEMBERS_PER_GYM} profiles")
 
     # Phase 4: Plans, discounts, rewards
     print("Creating plans, discounts, rewards...")
@@ -124,16 +121,47 @@ def seed():
             [r.to_insert_dict() for r in gym_rewards]
         ).execute()
 
-    # Phase 5: Memberships
-    print("Creating memberships...")
+    # Phase 5: Memberships + linked account assignment
+    print("Creating memberships and linking accounts...")
+    all_memberships: dict[uuid.UUID, list] = {}
     for gym in gym_records:
-        gym_memberships = memberships.generate(
+        gym_memberships, link_pairs = memberships.generate(
             all_profiles[gym.gym_id],
             all_plans[gym.gym_id],
             all_discounts[gym.gym_id],
         )
+        all_memberships[gym.gym_id] = gym_memberships
+
+        # Apply link pairs to profiles
+        profile_map = {p.crm_user_id: p for p in all_profiles[gym.gym_id]}
+        for linked_id, primary_id in link_pairs:
+            profile_map[linked_id].account_linked_to_id = primary_id
+
+    # Now insert profiles (without account_linked_to_id first, then update linked ones)
+    print("Inserting profiles...")
+    for gym in gym_records:
+        gym_profiles = all_profiles[gym.gym_id]
+        # Insert all profiles without links
+        insert_dicts = []
+        for p in gym_profiles:
+            d = p.to_insert_dict()
+            d.pop("account_linked_to_id", None)
+            insert_dicts.append(d)
+        client.table("user_gym_profiles").insert(insert_dicts).execute()
+
+        # Update linked profiles with their account_linked_to_id
+        for p in gym_profiles:
+            if p.account_linked_to_id is not None:
+                client.table("user_gym_profiles").update(
+                    {"account_linked_to_id": str(p.account_linked_to_id)}
+                ).eq("crm_user_id", str(p.crm_user_id)).execute()
+    print(f"  Created {NUM_GYMS * MEMBERS_PER_GYM} profiles")
+
+    # Insert memberships
+    print("Inserting memberships...")
+    for gym in gym_records:
         client.table("member_memberships").insert(
-            [m.to_insert_dict() for m in gym_memberships]
+            [m.to_insert_dict() for m in all_memberships[gym.gym_id]]
         ).execute()
 
     # Phase 6: Activities and transactions

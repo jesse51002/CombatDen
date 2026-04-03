@@ -1,7 +1,7 @@
 """Base service for CRM members list view services.
 
-Provides shared query building and rank lookup
-logic inherited by each view-specific service.
+Provides shared query building logic inherited by
+each view-specific service.
 """
 
 from uuid import UUID
@@ -16,8 +16,7 @@ from src.shared.database import DirectDatabasePool
 class CrmBaseViewService:
     """Base class for CRM members list view services.
 
-    Provides shared helpers for filtering, formatting,
-    and rank name resolution.
+    Provides shared helpers for filtering and formatting.
 
     Args:
         db_pool: Injected database connection pool.
@@ -37,37 +36,38 @@ class CrmBaseViewService:
 
         Args:
             gym_id: The gym to filter by.
-            filters: Filters object with status, rank,
-                and date range.
+            filters: Filters object with status and date range.
 
         Returns:
             Tuple of (WHERE clause string, params dict).
         """
-        conditions = ["p.gym_id = :gym_id"]
         params: dict = {"gym_id": str(gym_id)}
+        user_filters: list[str] = []
 
         if filters.membership_status:
-            self._apply_status_filter(filters.membership_status, conditions, params)
-
-        if filters.rank:
-            placeholders = ", ".join(f":rank_{j}" for j in range(len(filters.rank)))
-            conditions.append(f"p.current_rank IN ({placeholders})")
-            for j, v in enumerate(filters.rank):
-                params[f"rank_{j}"] = v
+            self._apply_status_filter(
+                filters.membership_status,
+                user_filters,
+                params,
+            )
 
         if filters.date_range:
             if filters.date_range.start_date:
-                conditions.append("m.start_date >= :date_start")
+                user_filters.append("m.start_date >= :date_start")
                 params["date_start"] = filters.date_range.start_date.isoformat()
             if filters.date_range.end_date:
-                conditions.append("m.start_date <= :date_end")
+                user_filters.append("m.start_date <= :date_end")
                 params["date_end"] = filters.date_range.end_date.isoformat()
 
         if filters.name:
-            conditions.append("(p.first_name || ' ' || p.last_name ILIKE :name_search)")
+            user_filters.append(
+                "(p.first_name || ' ' || p.last_name ILIKE :name_search)",
+            )
             params["name_search"] = f"%{filters.name}%"
 
-        where = "WHERE " + " AND ".join(conditions)
+        where = "WHERE p.gym_id = :gym_id"
+        if user_filters:
+            where += " AND (" + " OR ".join(user_filters) + ")"
         return where, params
 
     def _apply_status_filter(
@@ -87,7 +87,16 @@ class CrmBaseViewService:
             conditions: List of WHERE conditions to append to.
             params: Dict of query params to append to.
         """
-        db_statuses = [v for v in statuses if v != MembershipStatus.overdue]
+        db_statuses = [
+            v
+            for v in statuses
+            if v
+            not in (
+                MembershipStatus.overdue,
+                MembershipStatus.trial,
+                MembershipStatus.no_membership,
+            )
+        ]
 
         if db_statuses:
             placeholders = ", ".join(f":status_{j}" for j in range(len(db_statuses)))
@@ -98,32 +107,8 @@ class CrmBaseViewService:
         if MembershipStatus.overdue in statuses:
             conditions.append("m.next_due_date < CURRENT_DATE")
 
-    # -- Rank helpers --
+        if MembershipStatus.trial in statuses:
+            conditions.append("mp.plan_type = 'trial'")
 
-    def get_rank_name(self, rank: int | None, row: dict) -> str | None:
-        """Get the rank display name from gym config.
-
-        Args:
-            rank: The member's current rank (1-5) or None.
-            row: Database row containing rank_N_name columns.
-
-        Returns:
-            Rank name string or None if no rank.
-        """
-        if not rank:
-            return None
-        return row.get(f"rank_{rank}_name")
-
-    def get_estimated_classes_for_rank(self, rank: int | None, row: dict) -> int:
-        """Get estimated classes needed for a rank level.
-
-        Args:
-            rank: The member's current rank (1-5) or None.
-            row: Database row with estimated_classes_rank_N.
-
-        Returns:
-            Estimated class count, or 0 if rank is None.
-        """
-        if not rank:
-            return 0
-        return row.get(f"estimated_classes_rank_{rank}", 0)
+        if MembershipStatus.no_membership in statuses:
+            conditions.append("m.status IS NULL")

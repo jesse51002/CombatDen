@@ -10,9 +10,9 @@
         "tags": [
           "members"
         ],
-        "summary": "Get member detail",
-        "description": "Returns full member detail for the Specific Member screen.",
-        "operationId": "get_member_detail_api_v1_members_member_details_get",
+        "summary": "Get member details",
+        "description": "Returns full details for a single member including all memberships, discounts, payment history, and rewards.",
+        "operationId": "get_member_details_api_v1_members_member_details_get",
         "security": [
           {
             "HTTPBearer": []
@@ -32,7 +32,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Member detail retrieved successfully",
+            "description": "Member details retrieved successfully",
             "content": {
               "application/json": {
                 "schema": {
@@ -241,28 +241,6 @@
             "type": "string",
             "title": "Membership Text"
           },
-          "rank": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rank"
-          },
-          "rank_icon_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rank Icon Url"
-          },
           "days_since_last_class": {
             "anyOf": [
               {
@@ -283,7 +261,7 @@
           "membership_text"
         ],
         "title": "AllViewRow",
-        "description": "Row for the All view.\n\nIncludes contact, membership badge, rank, and last class."
+        "description": "Row for the All view.\n\nIncludes contact, membership badge, and last class."
       },
       "CrmMembersListRequest": {
         "properties": {
@@ -301,8 +279,7 @@
           "filters": {
             "$ref": "#/components/schemas/MembersListFilters",
             "default": {
-              "membership_status": [],
-              "rank": []
+              "membership_status": []
             }
           },
           "start_index": {
@@ -340,9 +317,6 @@
                   "$ref": "#/components/schemas/AllViewRow"
                 },
                 {
-                  "$ref": "#/components/schemas/PromotionsViewRow"
-                },
-                {
                   "$ref": "#/components/schemas/TrialViewRow"
                 },
                 {
@@ -358,7 +332,6 @@
                   "all": "#/components/schemas/AllViewRow",
                   "frozen": "#/components/schemas/FrozenViewRow",
                   "overdue": "#/components/schemas/OverdueViewRow",
-                  "promotions": "#/components/schemas/PromotionsViewRow",
                   "trial": "#/components/schemas/TrialViewRow"
                 }
               }
@@ -418,6 +391,10 @@
             "type": "string",
             "title": "Discount Name"
           },
+          "discount_type": {
+            "type": "string",
+            "title": "Discount Type"
+          },
           "percentage_off": {
             "anyOf": [
               {
@@ -440,23 +417,11 @@
             ],
             "title": "Dollar Off"
           },
-          "start_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Date"
-          },
           "end_date": {
             "anyOf": [
               {
                 "type": "string",
-                "format": "date-time"
+                "format": "date"
               },
               {
                 "type": "null"
@@ -468,7 +433,8 @@
         "type": "object",
         "required": [
           "discount_id",
-          "discount_name"
+          "discount_name",
+          "discount_type"
         ],
         "title": "DiscountInfo",
         "description": "An active discount applied to a membership."
@@ -505,9 +471,9 @@
             "type": "string",
             "title": "Freeze Start"
           },
-          "freeze_duration": {
-            "type": "string",
-            "title": "Freeze Duration"
+          "days_until_unfrozen": {
+            "type": "integer",
+            "title": "Days Until Unfrozen"
           },
           "freeze_end": {
             "type": "string",
@@ -523,7 +489,7 @@
           "crm_user_id",
           "name",
           "freeze_start",
-          "freeze_duration",
+          "days_until_unfrozen",
           "freeze_end",
           "price"
         ],
@@ -586,6 +552,11 @@
             "format": "uuid",
             "title": "Crm User Id"
           },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
           "first_name": {
             "type": "string",
             "title": "First Name"
@@ -616,14 +587,46 @@
             ],
             "title": "Account Status"
           },
+          "membership_overview": {
+            "type": "string",
+            "title": "Membership Overview"
+          },
+          "linked_to_account": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked To Account"
+          },
+          "total_membership_count": {
+            "type": "integer",
+            "title": "Total Membership Count"
+          },
           "personal_info": {
             "$ref": "#/components/schemas/PersonalInfo"
           },
-          "membership": {
-            "$ref": "#/components/schemas/MembershipInfo"
+          "linked_accounts": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedAccount"
+            },
+            "type": "array",
+            "title": "Linked Accounts",
+            "default": []
           },
-          "rank_retention": {
-            "$ref": "#/components/schemas/RankRetention"
+          "memberships": {
+            "items": {
+              "$ref": "#/components/schemas/MembershipInfo"
+            },
+            "type": "array",
+            "title": "Memberships"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/Retention"
           },
           "recently_redeemed_rewards": {
             "items": {
@@ -645,11 +648,14 @@
         "type": "object",
         "required": [
           "crm_user_id",
+          "gym_id",
           "first_name",
           "last_name",
+          "membership_overview",
+          "total_membership_count",
           "personal_info",
-          "membership",
-          "rank_retention"
+          "memberships",
+          "retention"
         ],
         "title": "MemberDetailResponse",
         "description": "Full member detail response for the Specific Member screen."
@@ -662,14 +668,6 @@
             },
             "type": "array",
             "title": "Membership Status",
-            "default": []
-          },
-          "rank": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array",
-            "title": "Rank",
             "default": []
           },
           "date_range": {
@@ -696,7 +694,7 @@
         },
         "type": "object",
         "title": "MembersListFilters",
-        "description": "All filters for the members list.\n\nAttributes:\n    membership_status: Statuses to include.\n    rank: Rank levels to include.\n    date_range: Optional date range filter.\n    name: Optional name search string."
+        "description": "All filters for the members list.\n\nAttributes:\n    membership_status: Statuses to include.\n    date_range: Optional date range filter.\n    name: Optional name search string."
       },
       "MembersListTotalCounts": {
         "properties": {
@@ -731,7 +729,6 @@
         "type": "string",
         "enum": [
           "all",
-          "promotions",
           "trial",
           "frozen",
           "overdue"
@@ -741,6 +738,11 @@
       },
       "MembershipInfo": {
         "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
           "plan_name": {
             "type": "string",
             "title": "Plan Name"
@@ -773,14 +775,32 @@
             "title": "Total Cost"
           },
           "cost_formula": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Cost Formula"
+          },
+          "additional_member_discount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Member Discount"
           },
           "last_paid_date": {
             "anyOf": [
               {
                 "type": "string",
-                "format": "date-time"
+                "format": "date"
               },
               {
                 "type": "null"
@@ -792,7 +812,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "format": "date-time"
+                "format": "date"
               },
               {
                 "type": "null"
@@ -802,15 +822,15 @@
           },
           "start_date": {
             "type": "string",
-            "format": "date-time",
+            "format": "date",
             "title": "Start Date"
           },
-          "linked_accounts": {
+          "paying_for": {
             "items": {
               "$ref": "#/components/schemas/LinkedAccount"
             },
             "type": "array",
-            "title": "Linked Accounts",
+            "title": "Paying For",
             "default": []
           },
           "discounts": {
@@ -824,16 +844,16 @@
         },
         "type": "object",
         "required": [
+          "plan_id",
           "plan_name",
           "status",
           "base_cost",
           "billing_cycle",
           "total_cost",
-          "cost_formula",
           "start_date"
         ],
         "title": "MembershipInfo",
-        "description": "Membership details including cost, dates, linked accounts, and discounts."
+        "description": "A grouped plan in the membership carousel.\n\nRepresents one unique plan across the family group,\nwith a list of which members are covered by this plan."
       },
       "MembershipStatus": {
         "type": "string",
@@ -842,7 +862,9 @@
           "trial",
           "frozen",
           "cancelled",
-          "overdue"
+          "ended",
+          "overdue",
+          "no_membership"
         ],
         "title": "MembershipStatus",
         "description": "Possible membership statuses."
@@ -1037,129 +1059,8 @@
         "title": "PersonalInfo",
         "description": "Member personal information and emergency contact."
       },
-      "PromotionsViewRow": {
+      "Retention": {
         "properties": {
-          "crm_user_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Crm User Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "avatar_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Avatar Url"
-          },
-          "view": {
-            "type": "string",
-            "const": "promotions",
-            "title": "View",
-            "default": "promotions"
-          },
-          "rank": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rank"
-          },
-          "rank_icon_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rank Icon Url"
-          },
-          "time_in_rank": {
-            "type": "string",
-            "title": "Time In Rank"
-          },
-          "classes_until_promotion": {
-            "type": "integer",
-            "title": "Classes Until Promotion"
-          }
-        },
-        "type": "object",
-        "required": [
-          "crm_user_id",
-          "name",
-          "time_in_rank",
-          "classes_until_promotion"
-        ],
-        "title": "PromotionsViewRow",
-        "description": "Row for the Promotions view.\n\nIncludes rank info and classes until promotion."
-      },
-      "RankRetention": {
-        "properties": {
-          "current_rank": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Current Rank"
-          },
-          "rank_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rank Name"
-          },
-          "rank_image_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rank Image Url"
-          },
-          "classes_in_rank": {
-            "type": "integer",
-            "title": "Classes In Rank"
-          },
-          "estimated_classes_for_rank": {
-            "type": "integer",
-            "title": "Estimated Classes For Rank"
-          },
-          "recommend_promo_in": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recommend Promo In"
-          },
           "last_class": {
             "anyOf": [
               {
@@ -1187,14 +1088,12 @@
         },
         "type": "object",
         "required": [
-          "classes_in_rank",
-          "estimated_classes_for_rank",
           "class_streak_weeks",
           "points_balance",
           "videos_watched"
         ],
-        "title": "RankRetention",
-        "description": "Rank progression and retention statistics."
+        "title": "Retention",
+        "description": "Member retention and engagement statistics."
       },
       "RewardCard": {
         "properties": {

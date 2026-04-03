@@ -10,52 +10,50 @@ class InfoRow extends StatelessWidget {
   final String label;
   final String? value;
   final InfoRowLinkType? linkType;
+  final TextStyle? textStyle;
 
   const InfoRow({
     super.key,
     required this.label,
     this.value,
     this.linkType,
+    this.textStyle,
   });
 
   @override
   Widget build(BuildContext context) {
     final displayValue = value ?? '—';
+    final style = textStyle ?? DesignConstants.p;
 
-    return Padding(
-      padding: const EdgeInsets.only(
-        bottom: DesignConstants.spacingSmall,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$label: ',
-            style: DesignConstants.p.copyWith(
-              color: DesignConstants.text2nd,
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$label: ',
+          style: style.copyWith(
+            color: DesignConstants.text2nd,
           ),
-          Expanded(
-            child: linkType != null && value != null
-                ? _buildLink(displayValue)
-                : Text(
-                    displayValue,
-                    style: DesignConstants.p,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-          ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: linkType != null && value != null
+              ? _buildLink(displayValue, style)
+              : Text(
+                  displayValue,
+                  style: style,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+        ),
+      ],
     );
   }
 
-  Widget _buildLink(String text) {
+  Widget _buildLink(String text, TextStyle style) {
     return GestureDetector(
       onTap: () => _launchLink(),
       child: Text(
         text,
-        style: DesignConstants.p.copyWith(
+        style: style.copyWith(
           color: DesignConstants.hyperlink,
           decoration: TextDecoration.underline,
           decorationColor: DesignConstants.hyperlink,

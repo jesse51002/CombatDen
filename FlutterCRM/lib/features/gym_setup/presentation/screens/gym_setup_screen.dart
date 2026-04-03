@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
@@ -13,9 +14,8 @@ import 'package:crm/features/gym_setup/data/repositories/gym_repository.dart';
 import 'package:crm/features/home/presentation/screens/home_screen.dart';
 import 'package:crm/features/gym_setup/presentation/widgets/welcome_step.dart';
 import 'package:crm/features/gym_setup/presentation/widgets/gym_name_step.dart';
-import 'package:crm/features/gym_setup/presentation/widgets/rank_config_step.dart';
 import 'package:crm/features/gym_setup/presentation/widgets/owner_name_step.dart';
-import 'package:crm/shared/widgets/primary_button.dart';
+import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// Multi-step gym setup wizard screen
 class GymSetupScreen extends StatelessWidget {
@@ -75,13 +75,6 @@ class GymSetupScreen extends StatelessWidget {
                               isSubmitting:
                                   state.isSubmitting,
                             ),
-                          GymSetupRankConfigStep() =>
-                            RankConfigStep(
-                              errorMessage:
-                                  state.errorMessage,
-                              isSubmitting:
-                                  state.isSubmitting,
-                            ),
                           GymSetupOwnerNameStep() =>
                             OwnerNameStep(
                               errorMessage:
@@ -112,10 +105,11 @@ class GymSetupScreen extends StatelessWidget {
                           );
                     },
                     icon: Icon(
-                      Icons.logout,
+                      Symbols.logout_sharp,
                       color: DesignConstants.text
                           .withValues(alpha: 0.7),
                       size: 18,
+                      weight: DesignConstants.iconWeight,
                     ),
                     label: Text(
                       'Logout',
@@ -139,7 +133,7 @@ class GymSetupScreen extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 500),
       child: Container(
         decoration: BoxDecoration(
-          color: DesignConstants.cardBackground,
+          color: DesignConstants.card,
           borderRadius: BorderRadius.circular(
             DesignConstants.radiusSmall,
           ),
@@ -157,9 +151,10 @@ class GymSetupScreen extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
-          Icons.check_circle_outline,
+          Symbols.check_circle_sharp,
           size: 80,
           color: DesignConstants.goodGreen,
+          weight: DesignConstants.iconWeight,
         ),
         SizedBox(
           height:
@@ -186,7 +181,7 @@ class GymSetupScreen extends StatelessWidget {
           height:
               DesignConstants.spacingBig,
         ),
-        PrimaryButton(
+        AppPrimaryButton(fullWidth: true,
           text: 'Finish',
           onPressed: () {
             Navigator.of(context).pushReplacement(

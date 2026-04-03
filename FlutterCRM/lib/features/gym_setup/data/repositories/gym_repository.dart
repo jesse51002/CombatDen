@@ -50,16 +50,12 @@ class GymRepository {
     required String userId,
     required String firstName,
     required String lastName,
-    required bool rankEnabled,
-    String? rankPreset,
   }) async {
     try {
       final gym = await _supabase
           .from('gyms')
           .insert({
             'gym_name': gymName,
-            'rank_enabled': rankEnabled,
-            'rank_preset': rankPreset,
           })
           .select()
           .single();

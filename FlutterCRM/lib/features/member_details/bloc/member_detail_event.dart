@@ -27,3 +27,14 @@ class MemberSearchChanged extends MemberDetailEvent {
   @override
   List<Object?> get props => [query];
 }
+
+/// Change the currently visible membership page in the
+/// carousel.
+class MembershipPageChanged extends MemberDetailEvent {
+  final int pageIndex;
+
+  const MembershipPageChanged(this.pageIndex);
+
+  @override
+  List<Object?> get props => [pageIndex];
+}
