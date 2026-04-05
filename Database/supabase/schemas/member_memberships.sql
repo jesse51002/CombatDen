@@ -89,3 +89,6 @@ SELECT *,
         ELSE 'active'
     END AS status
 FROM member_memberships;
+
+-- Safety net: CLI migration diffing can strip security_invoker from CREATE VIEW
+ALTER VIEW member_memberships_status SET (security_invoker = true);
