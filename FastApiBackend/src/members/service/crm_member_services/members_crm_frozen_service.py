@@ -1,8 +1,9 @@
 """Frozen view service for the CRM members list."""
 
+import logging
 from datetime import date
 from uuid import UUID
-import logging
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +25,7 @@ MONTHLY_MULTIPLIERS = {
 }
 
 logger = logging.getLogger(__name__)
+
 
 class CrmFrozenViewService(CrmBaseViewService):
     """Fetches and formats rows for the Frozen view.

@@ -4,6 +4,8 @@ from datetime import date
 from uuid import UUID
 
 from pydantic import BaseModel
+from schema.member_membership import MembershipDbStatus
+from schema.membership_plan import PlanType
 
 
 class MemberMembershipInput(BaseModel):
@@ -11,7 +13,7 @@ class MemberMembershipInput(BaseModel):
 
     crm_user_id: UUID
     plan_id: UUID
-    status: str
+    status: MembershipDbStatus
     is_additional_member: bool
     discount_ids: list[UUID] = []
 
@@ -21,7 +23,7 @@ class PlanInput(BaseModel):
 
     plan_id: UUID
     plan_name: str
-    plan_type: str
+    plan_type: PlanType
     base_cost: float
     additional_member_discount: float | None = None
 

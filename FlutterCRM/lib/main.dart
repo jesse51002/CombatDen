@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/config/supabase_config.dart';
+import 'package:crm/core/constants/app_theme.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/home/presentation/screens/home_screen.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
@@ -42,10 +43,11 @@ class MyApp extends StatelessWidget {
             );
         return bloc;
       },
-      child: const MaterialApp(
+      child: MaterialApp(
         title: 'CombatDen',
         debugShowCheckedModeBanner: false,
-        home: AuthGate(),
+        theme: AppTheme.dark,
+        home: const AuthGate(),
       ),
     );
   }

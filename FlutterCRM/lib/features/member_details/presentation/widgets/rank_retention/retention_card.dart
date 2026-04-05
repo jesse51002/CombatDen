@@ -27,61 +27,48 @@ class RetentionCard extends StatelessWidget {
     return SectionCard(
       title: 'Retention',
       children: [
-        SubtitleSection(
-          title: 'Retention',
-          child: _RetentionGrid(retention: retention),
-        ),
+        _RetentionGrid(retention: retention),
         Expanded(
-          child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingLarge,
-            children: [
-              Text(
-                'Recently Redeemed Rewards',
-                style: DesignConstants.h2,
-              ),
-              Expanded(
-                child: rewards.isEmpty
-                    ? Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color:
-                              DesignConstants.card,
-                          borderRadius:
-                              BorderRadius.circular(
-                            DesignConstants
-                                .radiusSmall,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'No rewards claimed yet',
-                            style: DesignConstants.h2
-                                .copyWith(
-                              color: DesignConstants
-                                  .text2nd,
-                            ),
-                          ),
-                        ),
-                      )
-                    : SingleChildScrollView(
-                        scrollDirection:
-                            Axis.horizontal,
-                        child: Row(
-                          spacing: DesignConstants
-                              .spacingMedium,
-                          children: rewards
-                              .map(
-                                (r) => RewardCard(
-                                  reward: r,
-                                ),
-                              )
-                              .toList(),
+          child: SubtitleSection(
+            title: 'Recently Redeemed Rewards',
+            child: Expanded(
+              child: rewards.isEmpty
+                  ? Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: DesignConstants.card,
+                        borderRadius:
+                            BorderRadius.circular(
+                          DesignConstants.radiusSmall,
                         ),
                       ),
-              ),
-            ],
+                      child: Center(
+                        child: Text(
+                          'No rewards claimed yet',
+                          style: DesignConstants.h2
+                              .copyWith(
+                            color:
+                                DesignConstants.text2nd,
+                          ),
+                        ),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      scrollDirection:
+                          Axis.horizontal,
+                      child: Row(
+                        spacing: DesignConstants
+                            .spacingMedium,
+                        children: rewards
+                            .map(
+                              (r) => RewardCard(
+                                reward: r,
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+            ),
           ),
         ),
       ],
@@ -99,25 +86,23 @@ class _RetentionGrid extends StatelessWidget {
     final daysSince = retention.daysSinceLastClass;
 
     return Column(
+      spacing: DesignConstants.spacingLarge,
       children: [
         Row(
+          spacing: DesignConstants.spacingLarge,
           children: [
             Expanded(
               child: RetentionStatItem(
                 icon: Symbols.schedule_sharp,
                 value: daysSince != null
                     ? '$daysSince days ago'
-                    : 'Unknown',
+                    : 'No Classes',
                 label: 'Last Class',
                 valueColor: daysSince != null
                     ? RetentionThreshold
                         .getLastClassColor(daysSince)
                     : DesignConstants.text2nd,
               ),
-            ),
-            const SizedBox(
-              width:
-                  DesignConstants.spacingMedium,
             ),
             Expanded(
               child: RetentionStatItem(
@@ -132,9 +117,6 @@ class _RetentionGrid extends StatelessWidget {
               ),
             ),
           ],
-        ),
-        const SizedBox(
-          height: DesignConstants.spacingMedium,
         ),
         Row(
           children: [

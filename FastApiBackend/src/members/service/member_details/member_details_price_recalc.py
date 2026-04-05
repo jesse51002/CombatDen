@@ -27,9 +27,13 @@ class MemberDetailsPriceRecalc:
         db_pool: Injected database connection pool.
     """
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        pricing: MembershipPricingService,
+    ) -> None:
         self._db_pool = db_pool
-        self._pricing = MembershipPricingService()
+        self._pricing = pricing
 
     async def recalculate_family_prices(
         self,
@@ -54,7 +58,7 @@ class MemberDetailsPriceRecalc:
             SQL_DIR / "member_details_discounts.sql",
         )
 
-        async for session in self._db_pool.session():
+        async with self._db_pool.session() as session:
             discounts = await self._fetch_discounts(
                 session,
                 discount_sql,

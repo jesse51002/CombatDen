@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from postgrest import AsyncPostgrestClient
 from sqlalchemy.ext.asyncio import (
@@ -27,6 +28,7 @@ class DirectDatabasePool:
             expire_on_commit=False,
         )
 
+    @asynccontextmanager
     async def session(self) -> AsyncGenerator[AsyncSession]:
         """Yield an async database session, closing it after use."""
         async with self._session_factory() as session:

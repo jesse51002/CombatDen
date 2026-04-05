@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -12,7 +12,7 @@ class SeedModel(BaseModel):
         for key, value in data.items():
             if isinstance(value, UUID):
                 data[key] = str(value)
-            elif isinstance(value, (date, datetime)):
+            elif isinstance(value, (date, datetime, time)):
                 data[key] = value.isoformat()
             elif isinstance(value, list):
                 data[key] = [

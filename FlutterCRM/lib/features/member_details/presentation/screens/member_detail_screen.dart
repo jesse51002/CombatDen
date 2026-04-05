@@ -169,14 +169,14 @@ class _MemberDetailView extends StatelessWidget {
                 _navigateToMember(context, id),
           ),
           ResponsiveGrid(
-            topLeft: PersonalInfoCard(
+            personalInfoCard: PersonalInfoCard(
               personalInfo: member.personalInfo,
             ),
-            bottomLeft: RetentionCard(
+            retentionCard: RetentionCard(
               retention: member.retention,
               rewards: member.recentlyRedeemedRewards,
             ),
-            right: MembershipCarousel(
+            membershipCard: MembershipCarousel(
               memberships: member.memberships,
               currentIndex:
                   state.currentMembershipIndex,

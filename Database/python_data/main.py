@@ -6,6 +6,7 @@ from config import get_supabase_client
 from utils import make_seeded_uuids
 from constants import (
     ACTIVITIES_PER_MEMBER,
+    CLASSES_PER_GYM,
     DISCOUNTS_PER_GYM,
     EXTRA_EMPLOYEES_PER_GYM,
     HISTORY_DAYS,
@@ -19,6 +20,7 @@ from constants import (
 from generators import (
     activities,
     auth,
+    classes,
     discounts,
     employees,
     gyms,
@@ -31,6 +33,7 @@ from generators import (
 )
 from schema.gym import GymCreate
 from schema.gym_discount import GymDiscountCreate
+from schema.gym_employee import GymEmployeeCreate
 from schema.membership_plan import MembershipPlanCreate
 from schema.user_gym_profile import UserGymProfileCreate
 
@@ -71,12 +74,14 @@ def seed():
 
     # Phase 2.5: Create employees (owner + extra staff per gym)
     print("Creating employees...")
+    all_employees_by_gym: dict[uuid.UUID, list[GymEmployeeCreate]] = {}
     for i, gym in enumerate(gym_records):
         owner_employee = employees.generate_owner(gym.gym_id, owner_users[i]["id"], owner_users[i]["email"])
         staff = employees.generate_staff(gym.gym_id, EXTRA_EMPLOYEES_PER_GYM)
-        all_employees = [owner_employee] + staff
+        gym_employees = [owner_employee] + staff
+        all_employees_by_gym[gym.gym_id] = gym_employees
         client.table("gym_employees").insert(
-            [e.to_insert_dict() for e in all_employees]
+            [e.to_insert_dict() for e in gym_employees]
         ).execute()
         print(f"  {gym.gym_name}: 1 owner + {len(staff)} staff")
 
@@ -120,6 +125,31 @@ def seed():
         client.table("gym_rewards").insert(
             [r.to_insert_dict() for r in gym_rewards]
         ).execute()
+
+    # Phase 4.5: Create gym classes (parent + schedules + exceptions)
+    print("Creating gym classes...")
+    all_class_parents: dict[uuid.UUID, list] = {}
+    all_schedules: dict[uuid.UUID, list] = {}
+    for gym in gym_records:
+        parents, gym_schedules, gym_exceptions = classes.generate(
+            gym.gym_id,
+            CLASSES_PER_GYM,
+            all_employees_by_gym[gym.gym_id],
+            all_plans[gym.gym_id],
+        )
+        all_class_parents[gym.gym_id] = parents
+        all_schedules[gym.gym_id] = gym_schedules
+        client.table("gym_classes").insert(
+            [p.to_insert_dict() for p in parents]
+        ).execute()
+        client.table("gym_class_schedules").insert(
+            [s.to_insert_dict() for s in gym_schedules]
+        ).execute()
+        if gym_exceptions:
+            client.table("gym_class_exceptions").insert(
+                [e.to_insert_dict() for e in gym_exceptions]
+            ).execute()
+        print(f"  {gym.gym_name}: {len(parents)} classes, {len(gym_schedules)} schedules, {len(gym_exceptions)} exceptions")
 
     # Phase 5: Memberships + linked account assignment
     print("Creating memberships and linking accounts...")
@@ -182,6 +212,25 @@ def seed():
             client.table("user_gym_transactions").insert(
                 [t.to_insert_dict() for t in txns]
             ).execute()
+
+    # Phase 6.5: Class attendance logs
+    print("Creating class attendance logs...")
+    for gym in gym_records:
+        gym_logs = classes.generate_logs(
+            gym.gym_id,
+            all_schedules[gym.gym_id],
+            all_profiles[gym.gym_id],
+            all_memberships[gym.gym_id],
+        )
+        if gym_logs:
+            # Insert in batches to avoid payload limits
+            batch_size = 500
+            for i in range(0, len(gym_logs), batch_size):
+                batch = gym_logs[i : i + batch_size]
+                client.table("gym_classes_log").insert(
+                    [lg.to_insert_dict() for lg in batch]
+                ).execute()
+        print(f"  {gym.gym_name}: {len(gym_logs)} log entries")
 
     # Phase 7: Gym history
     print("Creating gym history...")

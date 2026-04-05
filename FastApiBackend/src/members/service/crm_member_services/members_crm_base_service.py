@@ -7,7 +7,7 @@ each view-specific service.
 from uuid import UUID
 
 from src.members.schema.members_crm_members_list_schema import (
-    MembershipStatus,
+    CrmMemberStatus,
     MembersListFilters,
 )
 from src.shared.database import DirectDatabasePool
@@ -72,7 +72,7 @@ class CrmBaseViewService:
 
     def _apply_status_filter(
         self,
-        statuses: list[MembershipStatus],
+        statuses: list[CrmMemberStatus],
         conditions: list[str],
         params: dict,
     ) -> None:
@@ -92,9 +92,9 @@ class CrmBaseViewService:
             for v in statuses
             if v
             not in (
-                MembershipStatus.overdue,
-                MembershipStatus.trial,
-                MembershipStatus.no_membership,
+                CrmMemberStatus.overdue,
+                CrmMemberStatus.trial,
+                CrmMemberStatus.no_membership,
             )
         ]
 
@@ -104,11 +104,11 @@ class CrmBaseViewService:
             for j, v in enumerate(db_statuses):
                 params[f"status_{j}"] = v.value
 
-        if MembershipStatus.overdue in statuses:
+        if CrmMemberStatus.overdue in statuses:
             conditions.append("m.next_due_date < CURRENT_DATE")
 
-        if MembershipStatus.trial in statuses:
+        if CrmMemberStatus.trial in statuses:
             conditions.append("mp.plan_type = 'trial'")
 
-        if MembershipStatus.no_membership in statuses:
+        if CrmMemberStatus.no_membership in statuses:
             conditions.append("m.status IS NULL")

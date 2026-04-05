@@ -2,6 +2,7 @@
 CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
+    gym_description VARCHAR,
     PRIMARY KEY (gym_id)
 );
 
@@ -18,9 +19,12 @@ CREATE TABLE gym_employees (
     last_name VARCHAR NOT NULL CHECK (last_name <> ''),
     phone VARCHAR,
     email VARCHAR,
+    employee_pic_url VARCHAR,
+    employee_public_description VARCHAR,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (employee_id),
-    UNIQUE (user_id, gym_id)
+    UNIQUE (user_id, gym_id),
+    UNIQUE (employee_id, gym_id)
 );
 
 -- ============================================================

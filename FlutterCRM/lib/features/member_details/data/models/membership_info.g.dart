@@ -13,7 +13,8 @@ MembershipInfo _$MembershipInfoFromJson(Map<String, dynamic> json) =>
       planType: json['plan_type'] as String?,
       status: MembershipStatus.fromJson(json['status'] as String),
       baseCost: (json['base_cost'] as num).toDouble(),
-      billingCycle: json['billing_cycle'] as String,
+      durationAmount: (json['duration_amount'] as num).toInt(),
+      durationUnit: json['duration_unit'] as String,
       totalCost: (json['total_cost'] as num).toDouble(),
       costFormula: json['cost_formula'] as String?,
       additionalMemberDiscount: (json['additional_member_discount'] as num?)
@@ -25,9 +26,18 @@ MembershipInfo _$MembershipInfoFromJson(Map<String, dynamic> json) =>
           ? null
           : DateTime.parse(json['next_due_date'] as String),
       startDate: DateTime.parse(json['start_date'] as String),
+      endDate: json['end_date'] == null
+          ? null
+          : DateTime.parse(json['end_date'] as String),
+      freezeStartDate: json['freeze_start_date'] == null
+          ? null
+          : DateTime.parse(json['freeze_start_date'] as String),
+      freezeEndDate: json['freeze_end_date'] == null
+          ? null
+          : DateTime.parse(json['freeze_end_date'] as String),
       payingFor:
           (json['paying_for'] as List<dynamic>?)
-              ?.map((e) => LinkedAccount.fromJson(e as Map<String, dynamic>))
+              ?.map((e) => PayingForMember.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
       discounts:

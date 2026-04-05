@@ -14,6 +14,7 @@ CREATE TABLE user_gym_profiles (
     emergency_contact_phone VARCHAR,
     emergency_contact_email VARCHAR,
     points_balance INTEGER NOT NULL DEFAULT 0 CHECK (points_balance >= 0),
+    streak INTEGER NOT NULL DEFAULT 0 CHECK (streak >= 0),
     account_linked_to_id UUID,
     PRIMARY KEY (crm_user_id),
     UNIQUE (crm_user_id, gym_id),

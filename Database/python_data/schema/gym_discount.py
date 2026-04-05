@@ -1,5 +1,6 @@
 from datetime import date
-from typing import Literal, Optional
+from enum import StrEnum
+from typing import Optional
 from uuid import UUID
 
 from pydantic import model_validator
@@ -7,11 +8,18 @@ from pydantic import model_validator
 from . import SeedModel
 
 
+class DiscountType(StrEnum):
+    """Gym discount type."""
+
+    membership = "membership"
+    custom = "custom"
+
+
 class GymDiscountCreate(SeedModel):
     discount_id: UUID
     gym_id: UUID
     discount_name: str
-    discount_type: Literal["membership", "custom"]
+    discount_type: DiscountType
     discount_active: bool = True
     percentage_off: Optional[float] = None
     dollar_off: Optional[float] = None

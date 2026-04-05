@@ -11,6 +11,7 @@ CREATE TABLE member_memberships (
     next_due_date DATE,
     discount_ids JSONB,
     total_price FLOAT NOT NULL CHECK (total_price >= 0),
+    price_formula VARCHAR,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (crm_user_id, gym_id, plan_id),
     CONSTRAINT fk_membership_profile_gym
@@ -42,15 +43,8 @@ CREATE POLICY "Members can view own memberships"
         )
     );
 
--- Policy: Gym staff can update memberships
-CREATE POLICY "Gym staff can update memberships"
-    ON member_memberships
-    FOR UPDATE
-    USING (is_gym_admin_or_owner(member_memberships.gym_id))
-    WITH CHECK (is_gym_admin_or_owner(member_memberships.gym_id));
-
 -- Column-level permissions: Revoke UPDATE on immutable columns
-REVOKE UPDATE (crm_user_id, gym_id, plan_id, start_date, created_at) ON TABLE member_memberships FROM authenticated;
+REVOKE UPDATE ON TABLE member_memberships FROM authenticated;
 
 -- Trigger: validates that every UUID in discount_ids exists in gym_discounts for the same gym
 CREATE OR REPLACE FUNCTION check_discount_ids_gym_match()

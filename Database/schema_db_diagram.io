@@ -8,7 +8,7 @@ Table auth_users {
 Table gyms {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_name varchar [not null]
-
+  gym_description varchar
 }
 
 Table user_gym_profiles {
@@ -27,6 +27,7 @@ Table user_gym_profiles {
   emergency_contact_phone varchar
   emergency_contact_email varchar
   points_balance integer [not null, default: 0]
+  streak integer [not null, default: 0]
   account_linked_to_id uuid [note: 'sub-account linked to primary member, must be same gym']
 
   indexes {
@@ -96,6 +97,7 @@ Table member_memberships {
   last_paid_date date
   next_due_date date
   total_price float [not null]
+  price_formula varchar
   discount_ids jsonb [note: 'array of gym_discounts discount_id refs, validated by trigger']
   created_at timestamptz [not null, default: `now()`]
 
@@ -127,6 +129,8 @@ Table gym_employees {
   last_name varchar [not null]
   phone varchar
   email varchar
+  employee_pic_url varchar
+  employee_public_description varchar
   created_at timestamptz [not null, default: `now()`]
 }
 
@@ -141,11 +145,81 @@ Table gym_rewards {
   created_at timestamptz [not null, default: `now()`]
 }
 
+Table gym_classes {
+  class_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null]
+  class_name varchar [not null]
+  class_description varchar
+  allowed_plan_ids jsonb [note: 'array of membership_plans plan_id refs, validated by trigger; NULL = any plan']
+  max_capacity integer
+  is_active boolean [not null, default: true]
+  is_deleted boolean [not null, default: false]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table gym_class_schedules {
+  schedule_id uuid [primary key, default: `uuid_generate_v4()`]
+  class_id uuid [not null]
+  gym_id uuid [not null]
+  class_time time [not null]
+  duration_minutes integer [not null]
+  recurring_unit varchar [not null, note: 'enum: daily, weekly, monthly']
+  recurring_interval integer [not null, default: 1]
+  sun boolean [not null, default: false]
+  mon boolean [not null, default: false]
+  tue boolean [not null, default: false]
+  wed boolean [not null, default: false]
+  thu boolean [not null, default: false]
+  fri boolean [not null, default: false]
+  sat boolean [not null, default: false]
+  sun_instructor_id uuid
+  mon_instructor_id uuid
+  tue_instructor_id uuid
+  wed_instructor_id uuid
+  thu_instructor_id uuid
+  fri_instructor_id uuid
+  sat_instructor_id uuid
+  is_cancelled boolean [not null, default: false]
+  start_date date [not null]
+  end_date date [note: 'NULL = ongoing; exclusion constraint prevents overlaps']
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table gym_class_exceptions {
+  exception_id uuid [primary key, default: `uuid_generate_v4()`]
+  schedule_id uuid [not null]
+  gym_id uuid [not null]
+  original_date date [not null]
+  is_cancelled boolean
+  new_class_time time
+  new_duration_minutes integer
+  new_max_capacity integer
+  new_instructor_id uuid
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table gym_classes_log {
+  log_id uuid [primary key, default: `uuid_generate_v4()`]
+  crm_user_id uuid [not null]
+  gym_id uuid [not null]
+  class_id uuid [not null]
+  plan_id uuid [not null]
+  instructor_id uuid
+  time timestamptz [not null, default: `now()`]
+}
+
 // --- Integrity Notes ---
 // user_gym_profiles: UNIQUE partial index on (user_id, gym_id) WHERE user_id IS NOT NULL — prevents same auth user linking to multiple profiles in one gym
 // user_gym_profiles: self-referencing composite FK on account_linked_to_id ensures linked account belongs to the same gym
 // member_memberships: trigger on discount_ids validates all UUIDs exist in gym_discounts for the same gym
 // member_memberships: status is derived via member_memberships_with_status view (cancelled > ended > frozen > active)
+// gym_classes: trigger on allowed_plan_ids validates all UUIDs exist in membership_plans for the same gym
+// gym_class_schedules: composite FKs on each day's instructor_id ensure instructor belongs to the same gym
+// gym_class_schedules: exclusion constraint prevents overlapping date ranges for the same class
+// gym_class_schedules: trigger enforces no gaps between schedule segments (contiguous history)
+// gym_class_schedules: CHECK only enforces day booleans when recurring_unit = 'weekly'
+// gym_class_exceptions: UNIQUE (schedule_id, original_date) — one exception per date per schedule
+// gym_classes_log: denormalizes class_name/time/duration/instructor for historical snapshot
 
 // --- Relationships ---
 
@@ -180,6 +254,32 @@ Ref: user_gym_profiles.crm_user_id < user_gym_profiles.account_linked_to_id
 
 // gym_discounts
 Ref: gyms.gym_id < gym_discounts.gym_id
+
+// gym_classes
+Ref: gyms.gym_id < gym_classes.gym_id
+
+// gym_class_schedules
+Ref: gym_classes.class_id < gym_class_schedules.class_id
+Ref: gyms.gym_id < gym_class_schedules.gym_id
+Ref: gym_employees.employee_id < gym_class_schedules.sun_instructor_id
+Ref: gym_employees.employee_id < gym_class_schedules.mon_instructor_id
+Ref: gym_employees.employee_id < gym_class_schedules.tue_instructor_id
+Ref: gym_employees.employee_id < gym_class_schedules.wed_instructor_id
+Ref: gym_employees.employee_id < gym_class_schedules.thu_instructor_id
+Ref: gym_employees.employee_id < gym_class_schedules.fri_instructor_id
+Ref: gym_employees.employee_id < gym_class_schedules.sat_instructor_id
+
+// gym_class_exceptions
+Ref: gym_class_schedules.schedule_id < gym_class_exceptions.schedule_id
+Ref: gyms.gym_id < gym_class_exceptions.gym_id
+Ref: gym_employees.employee_id < gym_class_exceptions.new_instructor_id
+
+// gym_classes_log
+Ref: user_gym_profiles.crm_user_id < gym_classes_log.crm_user_id
+Ref: gyms.gym_id < gym_classes_log.gym_id
+Ref: gym_classes.class_id < gym_classes_log.class_id
+Ref: membership_plans.plan_id < gym_classes_log.plan_id
+Ref: gym_employees.employee_id < gym_classes_log.instructor_id
 
 // gym_rewards
 Ref: gyms.gym_id < gym_rewards.gym_id

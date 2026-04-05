@@ -22,8 +22,8 @@ class MemberDetailsPricingBridge:
     row-parsing logic specific to the member details query.
     """
 
-    def __init__(self) -> None:
-        self._pricing = MembershipPricingService()
+    def __init__(self, pricing: MembershipPricingService) -> None:
+        self._pricing = pricing
 
     def calculate_prices(
         self,

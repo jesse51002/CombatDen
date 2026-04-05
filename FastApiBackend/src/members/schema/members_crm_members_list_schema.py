@@ -17,8 +17,12 @@ class MembersListView(StrEnum):
     overdue = "overdue"
 
 
-class MembershipStatus(StrEnum):
-    """Possible membership statuses."""
+class CrmMemberStatus(StrEnum):
+    """Computed membership status for CRM display.
+
+    Extends DB statuses with derived values like trial,
+    overdue, and no_membership.
+    """
 
     active = "active"
     trial = "trial"
@@ -50,7 +54,7 @@ class MembersListFilters(BaseModel):
         name: Optional name search string.
     """
 
-    membership_status: list[MembershipStatus] = []
+    membership_status: list[CrmMemberStatus] = []
     date_range: DateRangeFilter | None = None
     name: str | None = None
 
@@ -94,7 +98,7 @@ class AllViewRow(BaseRow):
 
     view: Literal[MembersListView.all] = MembersListView.all
     email: str | None = None
-    membership_status: MembershipStatus
+    membership_status: CrmMemberStatus
     membership_text: str
     days_since_last_class: int | None = None
 

@@ -2,7 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/discount_info.dart';
-import 'package:crm/features/member_details/data/models/linked_account.dart';
+import 'package:crm/features/member_details/data/models/paying_for_member.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 
 part 'membership_info.g.dart';
@@ -20,15 +20,19 @@ class MembershipInfo extends Equatable {
   @JsonKey(fromJson: MembershipStatus.fromJson)
   final MembershipStatus status;
   final double baseCost;
-  final String billingCycle;
+  final int durationAmount;
+  final String durationUnit;
   final double totalCost;
   final String? costFormula;
   final double? additionalMemberDiscount;
   final DateTime? lastPaidDate;
   final DateTime? nextDueDate;
   final DateTime startDate;
+  final DateTime? endDate;
+  final DateTime? freezeStartDate;
+  final DateTime? freezeEndDate;
   @JsonKey(defaultValue: [])
-  final List<LinkedAccount> payingFor;
+  final List<PayingForMember> payingFor;
   @JsonKey(defaultValue: [])
   final List<DiscountInfo> discounts;
 
@@ -38,13 +42,17 @@ class MembershipInfo extends Equatable {
     this.planType,
     required this.status,
     required this.baseCost,
-    required this.billingCycle,
+    required this.durationAmount,
+    required this.durationUnit,
     required this.totalCost,
     this.costFormula,
     this.additionalMemberDiscount,
     this.lastPaidDate,
     this.nextDueDate,
     required this.startDate,
+    this.endDate,
+    this.freezeStartDate,
+    this.freezeEndDate,
     this.payingFor = const [],
     this.discounts = const [],
   });
@@ -54,13 +62,8 @@ class MembershipInfo extends Equatable {
   ) =>
       _$MembershipInfoFromJson(json);
 
-  /// Display name combining plan name and type.
-  String get displayName {
-    if (planType != null && planType!.isNotEmpty) {
-      return '$planName ($planType)';
-    }
-    return planName;
-  }
+  /// Display name for the membership plan.
+  String get displayName => planName;
 
   @override
   List<Object?> get props => [
@@ -69,13 +72,17 @@ class MembershipInfo extends Equatable {
         planType,
         status,
         baseCost,
-        billingCycle,
+        durationAmount,
+        durationUnit,
         totalCost,
         costFormula,
         additionalMemberDiscount,
         lastPaidDate,
         nextDueDate,
         startDate,
+        endDate,
+        freezeStartDate,
+        freezeEndDate,
         payingFor,
         discounts,
       ];

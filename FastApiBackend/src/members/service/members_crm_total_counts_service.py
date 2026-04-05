@@ -37,7 +37,7 @@ class CrmTotalCountsService:
         """
         sql = load_sql(SQL_DIR / "total_counts.sql")
 
-        async for session in self._db_pool.session():
+        async with self._db_pool.session() as session:
             result = await session.execute(text(sql), {"gym_id": str(gym_id)})
             row = result.mappings().one()
 

@@ -6,21 +6,21 @@ import 'package:crm/core/constants/design_constants.dart';
 /// A responsive grid layout with fixed height on desktop.
 ///
 /// Desktop (≥900px): 2-column grid at 2000px height.
-/// Left column splits into topLeft (1/3) and
-/// bottomLeft (2/3). Right column spans full height.
+/// Left column splits into personalInfoCard (1/3) and
+/// retentionCard (2/3). Right column spans full height.
 ///
 /// Tablet/narrow: stacks all items vertically.
 class ResponsiveGrid extends StatelessWidget {
-  final Widget topLeft;
-  final Widget bottomLeft;
-  final Widget right;
+  final Widget personalInfoCard;
+  final Widget retentionCard;
+  final Widget membershipCard;
   final double spacing;
 
   const ResponsiveGrid({
     super.key,
-    required this.topLeft,
-    required this.bottomLeft,
-    required this.right,
+    required this.personalInfoCard,
+    required this.retentionCard,
+    required this.membershipCard,
     this.spacing = DesignConstants.spacingBig,
   });
 
@@ -49,17 +49,18 @@ class ResponsiveGrid extends StatelessWidget {
               spacing: spacing,
               children: [
                 Expanded(
-                  child: topLeft,
+                  flex: 2,
+                  child: personalInfoCard,
                 ),
                 Expanded(
-                  flex: 2,
-                  child: bottomLeft,
+                  flex: 3,
+                  child: retentionCard,
                 ),
               ],
             ),
           ),
           Expanded(
-            child: right,
+            child: membershipCard,
           ),
         ],
       ),
@@ -72,9 +73,9 @@ class ResponsiveGrid extends StatelessWidget {
       child: Column(
         spacing: spacing,
         children: [
-          Expanded(child: topLeft),
-          Expanded(flex: 2, child: bottomLeft),
-          Expanded(flex: 3, child: right),
+          Expanded(flex: 2, child: personalInfoCard),
+          Expanded(flex: 3, child: retentionCard),
+          Expanded(flex: 5, child: membershipCard),
         ],
       ),
     );

@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.members import SQL_DIR
 from src.members.schema.member_details_schema import (
@@ -52,14 +53,25 @@ class MemberDetailsSupplementary:
             "crm_user_id": str(crm_user_id),
         }
 
-        async for session in self._db_pool.session():
-            await self._fetch_discounts(session, gym_params)
-            await self._fetch_profiles(session, gym_params)
-            await self._fetch_rewards(session, gym_params)
-            await self._fetch_transactions(
+        async with self._db_pool.session() as session:
+            self._discounts = await self._fetch_discounts(
+                session,
+                gym_params,
+            )
+            self._profiles = await self._fetch_profiles(
+                session,
+                gym_params,
+            )
+            self._rewards = await self._fetch_rewards(
+                session,
+                gym_params,
+            )
+            payments, redeemed = await self._fetch_transactions(
                 session,
                 member_params,
             )
+            self._payment_history = payments
+            self._redeemed_rewards = redeemed
 
     def _reset(self) -> None:
         """Clear all internal lookup state."""
@@ -71,12 +83,13 @@ class MemberDetailsSupplementary:
 
     async def _fetch_discounts(
         self,
-        session: object,
+        session: AsyncSession,
         params: dict[str, str],
-    ) -> None:
+    ) -> dict[UUID, DiscountInfo]:
         """Load gym discounts into lookup dict."""
         sql = load_sql(SQL_DIR / "member_details_discounts.sql")
         result = await session.execute(text(sql), params)
+        discounts: dict[UUID, DiscountInfo] = {}
         for row in result.mappings().all():
             discount = DiscountInfo(
                 discount_id=row["discount_id"],
@@ -86,18 +99,20 @@ class MemberDetailsSupplementary:
                 dollar_off=row["dollar_off"],
                 end_date=row["end_date"],
             )
-            self._discounts[row["discount_id"]] = discount
+            discounts[row["discount_id"]] = discount
+        return discounts
 
     async def _fetch_profiles(
         self,
-        session: object,
+        session: AsyncSession,
         params: dict[str, str],
-    ) -> None:
+    ) -> dict[UUID, LinkedAccount]:
         """Load gym profiles into lookup dict."""
         sql = load_sql(
             SQL_DIR / "member_details_linked_profiles.sql",
         )
         result = await session.execute(text(sql), params)
+        profiles: dict[UUID, LinkedAccount] = {}
         for row in result.mappings().all():
             profile = LinkedAccount(
                 crm_user_id=row["crm_user_id"],
@@ -105,16 +120,18 @@ class MemberDetailsSupplementary:
                 last_name=row["last_name"],
                 photo_url=row["photo_url"],
             )
-            self._profiles[row["crm_user_id"]] = profile
+            profiles[row["crm_user_id"]] = profile
+        return profiles
 
     async def _fetch_rewards(
         self,
-        session: object,
+        session: AsyncSession,
         params: dict[str, str],
-    ) -> None:
+    ) -> dict[UUID, RewardCard]:
         """Load gym rewards into lookup dict."""
         sql = load_sql(SQL_DIR / "member_details_rewards.sql")
         result = await session.execute(text(sql), params)
+        rewards: dict[UUID, RewardCard] = {}
         for row in result.mappings().all():
             reward = RewardCard(
                 reward_id=row["reward_id"],
@@ -123,25 +140,28 @@ class MemberDetailsSupplementary:
                 image_url=row["image_url"],
                 point_cost=row["point_cost"],
             )
-            self._rewards[row["reward_id"]] = reward
+            rewards[row["reward_id"]] = reward
+        return rewards
 
     async def _fetch_transactions(
         self,
-        session: object,
+        session: AsyncSession,
         params: dict[str, str],
-    ) -> None:
+    ) -> tuple[list[PaymentRecord], list[RewardCard]]:
         """Load member transactions, split into payments/rewards."""
         sql = load_sql(
             SQL_DIR / "member_details_transactions.sql",
         )
         result = await session.execute(text(sql), params)
+        payments: list[PaymentRecord] = []
+        redeemed: list[RewardCard] = []
         for row in result.mappings().all():
             item_type = row["item_type"]
 
             if item_type == TransactionItemType.reward_purchase:
                 reward = self._rewards.get(row["item_id"])
                 if reward:
-                    self._redeemed_rewards.append(reward)
+                    redeemed.append(reward)
             else:
                 payment = PaymentRecord(
                     transaction_id=row["transaction_id"],
@@ -149,7 +169,8 @@ class MemberDetailsSupplementary:
                     amount_paid=row["amount_paid"],
                     time=row["time"],
                 )
-                self._payment_history.append(payment)
+                payments.append(payment)
+        return payments, redeemed
 
     def get_discounts(
         self,

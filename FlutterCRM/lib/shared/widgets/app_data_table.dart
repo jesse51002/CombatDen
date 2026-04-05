@@ -59,6 +59,10 @@ class AppDataTable extends StatefulWidget {
   /// container with [DesignConstants.card] background.
   final bool showBackground;
 
+  /// When true, the table sizes itself to fit all rows
+  /// without needing bounded height from a parent.
+  final bool shrinkWrap;
+
   const AppDataTable({
     super.key,
     required this.columns,
@@ -71,6 +75,7 @@ class AppDataTable extends StatefulWidget {
     this.stickyHeader = true,
     this.isLoadingMore = false,
     this.showBackground = false,
+    this.shrinkWrap = false,
   });
 
   @override
@@ -169,54 +174,69 @@ class _AppDataTableState extends State<AppDataTable> {
           headerColor,
         );
 
-        final body = ListView.separated(
-          controller: _scrollController,
-          physics: const ClampingScrollPhysics(),
-          itemCount: widget.rows.length +
-              (widget.isLoadingMore ? 1 : 0),
-          separatorBuilder: (_, _) => Padding(
-            padding: const EdgeInsets.symmetric(
-              vertical: DesignConstants.spacingLarge,
-            ),
-            child: Container(
-              height: 2,
-              color: dividerColor,
-            ),
-          ),
-          itemBuilder: (context, index) {
-            if (index == widget.rows.length) {
-              return Padding(
+        final Widget body;
+        if (widget.shrinkWrap) {
+          body = _buildShrinkWrappedBody(
+            columnWidths,
+            dividerColor,
+          );
+        } else {
+          body = Expanded(
+            child: ListView.separated(
+              controller: _scrollController,
+              physics: const ClampingScrollPhysics(),
+              itemCount: widget.rows.length +
+                  (widget.isLoadingMore ? 1 : 0),
+              separatorBuilder: (_, _) => Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical:
                       DesignConstants.spacingLarge,
                 ),
-                child: Center(
-                  child: SizedBox(
-                    height: 20,
-                    width: 20,
-                    child:
-                        CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: DesignConstants
-                          .primaryColor,
-                    ),
-                  ),
+                child: Container(
+                  height: 2,
+                  color: dividerColor,
                 ),
-              );
-            }
+              ),
+              itemBuilder: (context, index) {
+                if (index == widget.rows.length) {
+                  return Padding(
+                    padding:
+                        const EdgeInsets.symmetric(
+                      vertical:
+                          DesignConstants.spacingLarge,
+                    ),
+                    child: Center(
+                      child: SizedBox(
+                        height: 20,
+                        width: 20,
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: DesignConstants
+                              .primaryColor,
+                        ),
+                      ),
+                    ),
+                  );
+                }
 
-            return _buildRow(
-              widget.rows[index],
-              columnWidths,
-            );
-          },
-        );
+                return _buildRow(
+                  widget.rows[index],
+                  columnWidths,
+                );
+              },
+            ),
+          );
+        }
 
         final tableContent = Column(
+          mainAxisSize: widget.shrinkWrap
+              ? MainAxisSize.min
+              : MainAxisSize.max,
           spacing: DesignConstants.spacingMedium,
           children: [
             header,
-            Expanded(child: body),
+            body,
           ],
         );
 
@@ -225,22 +245,27 @@ class _AppDataTableState extends State<AppDataTable> {
             horizontal:
                 DesignConstants.screenHorizontalPadding,
           ),
-          child: Scrollbar(
-            controller: _hScrollController,
-            thumbVisibility:
-                contentWidth > viewportWidth,
-            scrollbarOrientation:
-                ScrollbarOrientation.bottom,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              controller: _hScrollController,
-              child: SizedBox(
-                width: contentWidth,
-                height: constraints.maxHeight,
-                child: tableContent,
-              ),
-            ),
-          ),
+          child: widget.shrinkWrap
+              ? SizedBox(
+                  width: contentWidth,
+                  child: tableContent,
+                )
+              : Scrollbar(
+                  controller: _hScrollController,
+                  thumbVisibility:
+                      contentWidth > viewportWidth,
+                  scrollbarOrientation:
+                      ScrollbarOrientation.bottom,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    controller: _hScrollController,
+                    child: SizedBox(
+                      width: contentWidth,
+                      height: constraints.maxHeight,
+                      child: tableContent,
+                    ),
+                  ),
+                ),
         );
 
         if (widget.showBackground) {
@@ -343,6 +368,36 @@ class _AppDataTableState extends State<AppDataTable> {
     }
 
     return content;
+  }
+
+  /// Builds all rows as a [Column] for shrink-wrap mode.
+  Widget _buildShrinkWrappedBody(
+    List<double> columnWidths,
+    Color dividerColor,
+  ) {
+    final children = <Widget>[];
+    for (int i = 0; i < widget.rows.length; i++) {
+      if (i > 0) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: DesignConstants.spacingLarge,
+            ),
+            child: Container(
+              height: 2,
+              color: dividerColor,
+            ),
+          ),
+        );
+      }
+      children.add(
+        _buildRow(widget.rows[i], columnWidths),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
   }
 
   /// Computes column widths based on available space.

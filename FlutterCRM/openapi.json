@@ -5,6 +5,59 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/classes/checkin": {
+      "post": {
+        "tags": [
+          "classes"
+        ],
+        "summary": "Check a member into a class",
+        "description": "Selects the best eligible membership plan and logs the class attendance. Returns full membership breakdown. If no eligible plan is found, returns null for log_id and chosen_plan_id with the membership breakdown.",
+        "operationId": "checkin_api_v1_classes_checkin_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassesCheckinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Check-in result returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassesCheckinResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to access this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/members/member_details": {
       "get": {
         "tags": [
@@ -235,7 +288,7 @@
             "title": "Email"
           },
           "membership_status": {
-            "$ref": "#/components/schemas/MembershipStatus"
+            "$ref": "#/components/schemas/CrmMemberStatus"
           },
           "membership_text": {
             "type": "string",
@@ -262,6 +315,143 @@
         ],
         "title": "AllViewRow",
         "description": "Row for the All view.\n\nIncludes contact, membership badge, and last class."
+      },
+      "CheckinMembershipBreakdown": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "plan_type": {
+            "$ref": "#/components/schemas/PlanType"
+          },
+          "class_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Count"
+          },
+          "classes_used": {
+            "type": "integer",
+            "title": "Classes Used"
+          },
+          "classes_remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classes Remaining"
+          },
+          "is_eligible": {
+            "type": "boolean",
+            "title": "Is Eligible"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "plan_type",
+          "class_count",
+          "classes_used",
+          "classes_remaining",
+          "is_eligible"
+        ],
+        "title": "CheckinMembershipBreakdown",
+        "description": "Usage breakdown for one membership after check-in.\n\nAttributes:\n    plan_id: The membership plan.\n    plan_type: Trial, one_time, or recurring.\n    class_count: Max classes allowed (None = unlimited).\n    classes_used: Classes used this cycle (post-checkin).\n    classes_remaining: Classes left (None = unlimited).\n    is_eligible: Whether this plan covers the checked-in class."
+      },
+      "ClassesCheckinRequest": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "class_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Class Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "gym_id",
+          "class_id"
+        ],
+        "title": "ClassesCheckinRequest",
+        "description": "Request body for checking a member into a class.\n\nAttributes:\n    crm_user_id: The member checking in.\n    gym_id: The gym where the class takes place.\n    class_id: The class being attended."
+      },
+      "ClassesCheckinResponse": {
+        "properties": {
+          "log_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Id"
+          },
+          "chosen_plan_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chosen Plan Id"
+          },
+          "memberships": {
+            "items": {
+              "$ref": "#/components/schemas/CheckinMembershipBreakdown"
+            },
+            "type": "array",
+            "title": "Memberships"
+          }
+        },
+        "type": "object",
+        "required": [
+          "log_id",
+          "chosen_plan_id",
+          "memberships"
+        ],
+        "title": "ClassesCheckinResponse",
+        "description": "Response for the check-in endpoint.\n\nAttributes:\n    log_id: The newly created log entry. None if check-in\n        was not possible.\n    chosen_plan_id: The plan that was charged. None if no\n        eligible plan with capacity was found.\n    memberships: Full breakdown of all active memberships."
+      },
+      "CrmMemberStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "trial",
+          "frozen",
+          "cancelled",
+          "ended",
+          "overdue",
+          "no_membership"
+        ],
+        "title": "CrmMemberStatus",
+        "description": "Computed membership status for CRM display.\n\nExtends DB statuses with derived values like trial,\noverdue, and no_membership."
       },
       "CrmMembersListRequest": {
         "properties": {
@@ -664,7 +854,7 @@
         "properties": {
           "membership_status": {
             "items": {
-              "$ref": "#/components/schemas/MembershipStatus"
+              "$ref": "#/components/schemas/CrmMemberStatus"
             },
             "type": "array",
             "title": "Membership Status",
@@ -736,6 +926,17 @@
         "title": "MembersListView",
         "description": "Available views for the members list screen."
       },
+      "MembershipDbStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "frozen",
+          "cancelled",
+          "ended"
+        ],
+        "title": "MembershipDbStatus",
+        "description": "Raw membership status as derived by the DB view."
+      },
       "MembershipInfo": {
         "properties": {
           "plan_id": {
@@ -750,25 +951,27 @@
           "plan_type": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/PlanType"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Plan Type"
+            ]
           },
           "status": {
-            "type": "string",
-            "title": "Status"
+            "$ref": "#/components/schemas/MembershipDbStatus"
           },
           "base_cost": {
             "type": "number",
             "title": "Base Cost"
           },
-          "billing_cycle": {
+          "duration_amount": {
+            "type": "integer",
+            "title": "Duration Amount"
+          },
+          "duration_unit": {
             "type": "string",
-            "title": "Billing Cycle"
+            "title": "Duration Unit"
           },
           "total_cost": {
             "type": "number",
@@ -825,9 +1028,45 @@
             "format": "date",
             "title": "Start Date"
           },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "freeze_start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freeze Start Date"
+          },
+          "freeze_end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freeze End Date"
+          },
           "paying_for": {
             "items": {
-              "$ref": "#/components/schemas/LinkedAccount"
+              "$ref": "#/components/schemas/PayingForMember"
             },
             "type": "array",
             "title": "Paying For",
@@ -848,26 +1087,13 @@
           "plan_name",
           "status",
           "base_cost",
-          "billing_cycle",
+          "duration_amount",
+          "duration_unit",
           "total_cost",
           "start_date"
         ],
         "title": "MembershipInfo",
         "description": "A grouped plan in the membership carousel.\n\nRepresents one unique plan across the family group,\nwith a list of which members are covered by this plan."
-      },
-      "MembershipStatus": {
-        "type": "string",
-        "enum": [
-          "active",
-          "trial",
-          "frozen",
-          "cancelled",
-          "ended",
-          "overdue",
-          "no_membership"
-        ],
-        "title": "MembershipStatus",
-        "description": "Possible membership statuses."
       },
       "OverdueViewRow": {
         "properties": {
@@ -938,6 +1164,73 @@
         "title": "OverdueViewRow",
         "description": "Row for the Overdue view.\n\nShows members with overdue payments."
       },
+      "PayingForMember": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MembershipDbStatus"
+          },
+          "class_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Count"
+          },
+          "classes_used": {
+            "type": "integer",
+            "title": "Classes Used",
+            "default": 0
+          },
+          "classes_remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classes Remaining"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "first_name",
+          "last_name",
+          "status"
+        ],
+        "title": "PayingForMember",
+        "description": "A member on a plan with their class usage for the current cycle.\n\nExtends LinkedAccount with cycle-based class usage fields."
+      },
       "PaymentRecord": {
         "properties": {
           "transaction_id": {
@@ -948,13 +1241,12 @@
           "item_type": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/TransactionItemType"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Item Type"
+            ]
           },
           "amount_paid": {
             "type": "number",
@@ -1059,6 +1351,16 @@
         "title": "PersonalInfo",
         "description": "Member personal information and emergency contact."
       },
+      "PlanType": {
+        "type": "string",
+        "enum": [
+          "trial",
+          "one_time",
+          "recurring"
+        ],
+        "title": "PlanType",
+        "description": "Membership plan type, matching the DB CHECK constraint."
+      },
       "Retention": {
         "properties": {
           "last_class": {
@@ -1141,6 +1443,16 @@
         ],
         "title": "RewardCard",
         "description": "A recently redeemed reward."
+      },
+      "TransactionItemType": {
+        "type": "string",
+        "enum": [
+          "membership_payment",
+          "reward_purchase",
+          "merchandise"
+        ],
+        "title": "TransactionItemType",
+        "description": "Known transaction item types."
       },
       "TrialViewRow": {
         "properties": {

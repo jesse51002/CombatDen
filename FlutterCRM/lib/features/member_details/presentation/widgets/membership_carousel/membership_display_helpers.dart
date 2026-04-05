@@ -77,6 +77,49 @@ Widget costValue(MembershipInfo membership) {
   );
 }
 
+/// Returns the appropriate label for the duration row
+/// based on the plan type.
+String durationLabel(String? planType) {
+  if (planType?.toLowerCase() == 'recurring') {
+    return 'Billing Cycle:';
+  }
+  return 'Duration:';
+}
+
+/// Formats duration for display based on plan type.
+///
+/// Recurring: frequency style — "Monthly", "Every 2 Months"
+/// One-time/trial: amount style — "1 Month", "2 Weeks"
+String formatDuration(
+  int amount,
+  String unit,
+  String? planType,
+) {
+  final lower = unit.toLowerCase();
+  if (planType?.toLowerCase() == 'recurring') {
+    if (amount == 1) {
+      return switch (lower) {
+        'year' => 'Yearly',
+        'month' => 'Monthly',
+        'week' => 'Weekly',
+        'day' => 'Daily',
+        _ => 'Every $amount '
+            '${lower[0].toUpperCase()}${lower.substring(1)}',
+      };
+    }
+    final capitalised =
+        lower[0].toUpperCase() + lower.substring(1);
+    final plural = '${capitalised}s';
+    return 'Every $amount $plural';
+  }
+  final capitalised =
+      lower[0].toUpperCase() + lower.substring(1);
+  if (amount == 1) {
+    return '$amount $capitalised';
+  }
+  return '$amount ${capitalised}s';
+}
+
 /// Builds a formatted date text or an em-dash for null.
 Widget dateValue(DateTime? date, DateFormat fmt) {
   if (date == null) {

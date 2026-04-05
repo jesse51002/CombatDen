@@ -1,18 +1,12 @@
 """Pydantic schemas for the members domain."""
 
 from datetime import date, datetime
-from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel
-
-
-class TransactionItemType(StrEnum):
-    """Known transaction item types."""
-
-    membership_payment = "membership_payment"
-    reward_purchase = "reward_purchase"
-    merchandise = "merchandise"
+from schema.member_membership import MembershipDbStatus
+from schema.membership_plan import PlanType
+from schema.user_gym_transaction import TransactionItemType
 
 
 class PersonalInfo(BaseModel):
@@ -36,6 +30,18 @@ class LinkedAccount(BaseModel):
     photo_url: str | None = None
 
 
+class PayingForMember(LinkedAccount):
+    """A member on a plan with their class usage for the current cycle.
+
+    Extends LinkedAccount with cycle-based class usage fields.
+    """
+
+    status: MembershipDbStatus
+    class_count: int | None = None
+    classes_used: int = 0
+    classes_remaining: int | None = None
+
+
 class DiscountInfo(BaseModel):
     """An active discount applied to a membership."""
 
@@ -56,17 +62,21 @@ class MembershipInfo(BaseModel):
 
     plan_id: UUID
     plan_name: str
-    plan_type: str | None = None
-    status: str
+    plan_type: PlanType | None = None
+    status: MembershipDbStatus
     base_cost: float
-    billing_cycle: str
+    duration_amount: int
+    duration_unit: str
     total_cost: float
     cost_formula: str | None = None
     additional_member_discount: float | None = None
     last_paid_date: date | None = None
     next_due_date: date | None = None
     start_date: date
-    paying_for: list[LinkedAccount] = []
+    end_date: date | None = None
+    freeze_start_date: date | None = None
+    freeze_end_date: date | None = None
+    paying_for: list[PayingForMember] = []
     discounts: list[DiscountInfo] = []
 
 
@@ -93,7 +103,7 @@ class PaymentRecord(BaseModel):
     """A single payment transaction."""
 
     transaction_id: UUID
-    item_type: str | None = None
+    item_type: TransactionItemType | None = None
     amount_paid: float
     time: datetime
 

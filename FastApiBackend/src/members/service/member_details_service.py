@@ -4,11 +4,17 @@ from uuid import UUID
 
 from sqlalchemy import text
 
+from src.classes.service.classes_cycle_counts_service import (
+    ClassesCycleCountsService,
+)
 from src.members import SQL_DIR
 from src.members.schema.member_details_schema import (
     MemberDetailResponse,
     PersonalInfo,
     Retention,
+)
+from src.members.service.member_details.member_details_cycle_counts_bridge import (
+    MemberDetailsCycleCountsBridge,
 )
 from src.members.service.member_details.member_details_membership_grouper import (
     MemberDetailsMembershipGrouper,
@@ -20,6 +26,9 @@ from src.members.service.member_details.member_details_supplementary import (
     MemberDetailsSupplementary,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.membership_pricing.membership_pricing_service import (
+    MembershipPricingService,
+)
 from src.shared.sql_loader import load_sql
 
 
@@ -31,12 +40,21 @@ class MemberService:
 
     Args:
         db_pool: Injected database connection pool.
+        pricing: Injected membership pricing service.
     """
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        pricing: MembershipPricingService,
+        cycle_counts_service: ClassesCycleCountsService,
+    ) -> None:
         self._db_pool = db_pool
         self._supplementary = MemberDetailsSupplementary(db_pool)
-        self._pricing_bridge = MemberDetailsPricingBridge()
+        self._pricing_bridge = MemberDetailsPricingBridge(pricing)
+        self._cycle_counts_bridge = MemberDetailsCycleCountsBridge(
+            cycle_counts_service,
+        )
         self._grouper = MemberDetailsMembershipGrouper()
 
     async def get_member_details(
@@ -68,6 +86,11 @@ class MemberService:
         family_ids = {row["crm_user_id"] for row in rows}
         membership_rows = [r for r in rows if r["plan_id"] is not None]
 
+        usage_lookup = await self._cycle_counts_bridge.fetch_usage(
+            gym_id,
+            list(family_ids),
+        )
+
         pricing_result = self._pricing_bridge.calculate_prices(
             membership_rows,
             self._supplementary.discounts_dict,
@@ -77,6 +100,7 @@ class MemberService:
             membership_rows,
             pricing_result,
             self._supplementary,
+            usage_lookup,
         )
 
         linked_to_id = target_row["account_linked_to_id"]
@@ -129,11 +153,9 @@ class MemberService:
         sql = load_sql(SQL_DIR / "member_details.sql")
         params = {"crm_user_id": str(crm_user_id)}
 
-        async for session in self._db_pool.session():
+        async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
             return result.mappings().all()
-
-        return []
 
     def _build_response(
         self,
@@ -186,7 +208,7 @@ class MemberService:
             memberships=grouped,
             retention=Retention(
                 last_class=target_row["last_class"],
-                class_streak_weeks=0,
+                class_streak_weeks=target_row["streak"],
                 points_balance=(target_row["points_balance"] or 0),
                 videos_watched=0,
             ),

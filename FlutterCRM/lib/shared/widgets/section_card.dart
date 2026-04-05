@@ -15,7 +15,7 @@ class SectionCard extends StatelessWidget {
     super.key,
     this.title,
     required this.children,
-    this.spacing = DesignConstants.spacingLarge,
+    this.spacing = DesignConstants.spacingBig,
     this.crossAxisAlignment = CrossAxisAlignment.start,
     this.padding = const EdgeInsets.all(
       DesignConstants.paddingBig,

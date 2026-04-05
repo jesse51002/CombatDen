@@ -3,10 +3,13 @@
 from collections import defaultdict
 from uuid import UUID
 
+from src.classes.schema.classes_cycle_counts_schema import (
+    MembershipUsage,
+)
 from src.members.schema.member_details_schema import (
     DiscountInfo,
-    LinkedAccount,
     MembershipInfo,
+    PayingForMember,
 )
 from src.members.service.member_details.member_details_supplementary import (
     MemberDetailsSupplementary,
@@ -29,6 +32,7 @@ class MemberDetailsMembershipGrouper:
         membership_rows: list,
         pricing_result: AccountPricingResult,
         supplementary: MemberDetailsSupplementary,
+        usage_lookup: dict[tuple[UUID, UUID], MembershipUsage] | None = None,
     ) -> list[MembershipInfo]:
         """Group membership rows by plan_id.
 
@@ -36,6 +40,7 @@ class MemberDetailsMembershipGrouper:
             membership_rows: Rows with membership data.
             pricing_result: Calculated prices per membership.
             supplementary: For discount and profile lookups.
+            usage_lookup: (crm_user_id, plan_id) -> MembershipUsage.
 
         Returns:
             List of MembershipInfo, one per unique plan.
@@ -55,6 +60,8 @@ class MemberDetailsMembershipGrouper:
             paying_for = self._build_paying_for(
                 rows,
                 supplementary,
+                usage_lookup,
+                plan_id,
             )
 
             priced_rows = [r for r in rows if (r["crm_user_id"], plan_id) in price_lookup]
@@ -79,13 +86,17 @@ class MemberDetailsMembershipGrouper:
                     plan_type=representative["plan_type"],
                     status=representative["membership_status"],
                     base_cost=representative["base_cost"],
-                    billing_cycle=representative["duration_unit"],
+                    duration_amount=representative["duration_amount"],
+                    duration_unit=representative["duration_unit"],
                     total_cost=total_cost,
                     cost_formula=first_price.cost_formula if first_price else None,
                     additional_member_discount=(representative["additional_member_discount"]),
                     last_paid_date=representative["last_paid_date"],
                     next_due_date=representative["next_due_date"],
                     start_date=representative["membership_start_date"],
+                    end_date=representative["membership_end_date"],
+                    freeze_start_date=representative["freeze_start_date"],
+                    freeze_end_date=representative["freeze_end_date"],
                     paying_for=paying_for,
                     discounts=all_discounts,
                 )
@@ -158,31 +169,40 @@ class MemberDetailsMembershipGrouper:
         self,
         rows: list,
         supplementary: MemberDetailsSupplementary,
-    ) -> list[LinkedAccount]:
-        """Build the paying_for list for a plan group.
+        usage_lookup: dict[tuple[UUID, UUID], MembershipUsage] | None,
+        plan_id: UUID,
+    ) -> list[PayingForMember]:
+        """Build the paying_for list with class usage for a plan group.
 
         Args:
             rows: All membership rows sharing the same plan.
             supplementary: For profile lookups.
+            usage_lookup: (crm_user_id, plan_id) -> MembershipUsage.
+            plan_id: The plan to look up usage for.
 
         Returns:
-            LinkedAccount list for each member on this plan.
+            PayingForMember list for each member on this plan.
         """
-        paying_for = []
+        paying_for: list[PayingForMember] = []
         for row in rows:
             uid = row["crm_user_id"]
             profile = supplementary.profiles_dict.get(uid)
-            if profile:
-                paying_for.append(profile)
-            else:
-                paying_for.append(
-                    LinkedAccount(
-                        crm_user_id=uid,
-                        first_name=row["first_name"],
-                        last_name=row["last_name"],
-                        photo_url=row["photo_url"],
-                    )
-                )
+
+            fields: dict = {
+                "crm_user_id": uid,
+                "status": row["membership_status"],
+                "first_name": (profile.first_name if profile else row["first_name"]),
+                "last_name": (profile.last_name if profile else row["last_name"]),
+                "photo_url": (profile.photo_url if profile else row["photo_url"]),
+            }
+
+            usage = usage_lookup.get((uid, plan_id)) if usage_lookup else None
+            if usage:
+                fields["class_count"] = usage.class_count
+                fields["classes_used"] = usage.classes_used
+                fields["classes_remaining"] = usage.classes_remaining
+
+            paying_for.append(PayingForMember(**fields))
         return paying_for
 
     def _collect_plan_discounts(

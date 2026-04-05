@@ -1,10 +1,20 @@
 from datetime import date
-from typing import Literal, Optional
+from enum import StrEnum
+from typing import Optional
 from uuid import UUID
 
 from pydantic import computed_field
 
 from . import SeedModel
+
+
+class MembershipDbStatus(StrEnum):
+    """Raw membership status as derived by the DB view."""
+
+    active = "active"
+    frozen = "frozen"
+    cancelled = "cancelled"
+    ended = "ended"
 
 
 class MemberMembershipCreate(SeedModel):
@@ -19,6 +29,7 @@ class MemberMembershipCreate(SeedModel):
     last_paid_date: Optional[date] = None
     next_due_date: Optional[date] = None
     total_price: float
+    price_formula: Optional[str] = None
     discount_ids: Optional[list[UUID]] = None
 
     def to_insert_dict(self) -> dict:
@@ -28,16 +39,16 @@ class MemberMembershipCreate(SeedModel):
 
     @computed_field
     @property
-    def status(self) -> Literal["active", "frozen", "cancelled", "ended"]:
+    def status(self) -> MembershipDbStatus:
         today = date.today()
         if self.cancel_date is not None and self.cancel_date <= today:
-            return "cancelled"
+            return MembershipDbStatus.cancelled
         if self.end_date is not None and self.end_date <= today:
-            return "ended"
+            return MembershipDbStatus.ended
         if (
             self.freeze_start_date is not None
             and self.freeze_end_date is not None
             and self.freeze_start_date <= today <= self.freeze_end_date
         ):
-            return "frozen"
-        return "active"
+            return MembershipDbStatus.frozen
+        return MembershipDbStatus.active

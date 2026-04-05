@@ -173,6 +173,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - For status-like enums, use an `unknown` fallback value; for view-like enums, fall back to the default view (e.g., `all`)
 - Every switch statement on such enums must handle the fallback case
 
+**Backend String Display**
+- **Always capitalize strings from the backend** before displaying in the UI
+- Enum values, status strings, type labels, etc. from the API are lowercase — capitalize them for user-facing display
+- Good: `cycle[0].toUpperCase() + cycle.substring(1)` or a formatter function
+- Bad: Displaying raw `'recurring'`, `'year'`, `'active'` directly in the UI
+
 **DateTime Handling**
 - Use local timezone for UI display and local operations
 - **Convert to UTC when sending to backend**

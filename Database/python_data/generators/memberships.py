@@ -65,13 +65,19 @@ def _build_membership(
 
     total_price = plan.base_cost
     discount_ids = None
+    price_formula = None
 
     if is_linked:
         discount_pct = plan.additional_member_discount or DEFAULT_LINKED_MEMBER_DISCOUNT
         total_price = round(total_price * (1 - discount_pct / 100), 2)
+        price_formula = f"${plan.base_cost:.2f} base - {discount_pct:.0f}% linked member = ${total_price:.2f}"
     elif discounts and random.random() < 0.3:
-        discount_ids = [random.choice(discounts).discount_id]
+        disc = random.choice(discounts)
+        discount_ids = [disc.discount_id]
         total_price = round(total_price * 0.9, 2)
+        price_formula = f"${plan.base_cost:.2f} base - {disc.discount_name} = ${total_price:.2f}"
+    else:
+        price_formula = f"${plan.base_cost:.2f} base"
 
     return MemberMembershipCreate(
         crm_user_id=profile.crm_user_id,
@@ -85,6 +91,7 @@ def _build_membership(
         last_paid_date=last_paid,
         next_due_date=next_due,
         total_price=total_price,
+        price_formula=price_formula,
         discount_ids=discount_ids,
     )
 

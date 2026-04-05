@@ -4,13 +4,14 @@ from collections import defaultdict
 from datetime import UTC, date, datetime
 from uuid import UUID
 
+from schema.membership_plan import PlanType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.members import SQL_DIR
 from src.members.schema.members_crm_members_list_schema import (
     AllViewRow,
-    MembershipStatus,
+    CrmMemberStatus,
     MembersListFilters,
 )
 from src.members.service.crm_member_services.members_crm_base_service import (
@@ -116,19 +117,19 @@ class CrmAllViewService(CrmBaseViewService):
         if status is None:
             return PRIORITY_LOWEST
 
-        if status != MembershipStatus.cancelled and next_due and next_due < today:
+        if status != CrmMemberStatus.cancelled and next_due and next_due < today:
             return 1
 
-        if status == MembershipStatus.active and plan_type != "trial":
+        if status == CrmMemberStatus.active and plan_type != PlanType.trial:
             return 2
 
-        if plan_type == "trial" and status == MembershipStatus.active:
+        if plan_type == PlanType.trial and status == CrmMemberStatus.active:
             return 3
 
-        if status == MembershipStatus.frozen:
+        if status == CrmMemberStatus.frozen:
             return 4
 
-        if status == MembershipStatus.ended:
+        if status == CrmMemberStatus.ended:
             return 5
 
         return PRIORITY_LOWEST + 1
@@ -148,19 +149,19 @@ class CrmAllViewService(CrmBaseViewService):
                 name=f"{row['first_name']} {row['last_name']}",
                 avatar_url=row.get("photo_url"),
                 email=row.get("email"),
-                membership_status=MembershipStatus.no_membership,
+                membership_status=CrmMemberStatus.no_membership,
                 membership_text="No Membership",
                 days_since_last_class=self._days_since_last_class(row),
             )
 
         today = date.today()
-        status = MembershipStatus(row["status"])
+        status = CrmMemberStatus(row["status"])
         next_due = row.get("next_due_date")
 
-        if status != MembershipStatus.cancelled and next_due and next_due < today:
-            status = MembershipStatus.overdue
-        elif row.get("plan_type") == "trial":
-            status = MembershipStatus.trial
+        if status != CrmMemberStatus.cancelled and next_due and next_due < today:
+            status = CrmMemberStatus.overdue
+        elif row.get("plan_type") == PlanType.trial:
+            status = CrmMemberStatus.trial
 
         membership_text = self._build_membership_text(row)
 
@@ -217,7 +218,7 @@ class CrmAllViewService(CrmBaseViewService):
         end = row.get("end_date")
         today = date.today()
 
-        if status == MembershipStatus.cancelled:
+        if status == CrmMemberStatus.cancelled:
             cancel = row.get("cancel_date")
             if cancel:
                 return f"Cancelled (On {cancel.month}/{cancel.day}/{cancel.year})"
@@ -228,12 +229,12 @@ class CrmAllViewService(CrmBaseViewService):
                 return f"Overdue since {last_paid.month}/{last_paid.day}/{last_paid.year}"
             return f"Overdue ({price_str})"
 
-        if plan_type == "trial":
+        if plan_type == PlanType.trial:
             end_str = f"{end.month}/{end.day}/{end.year}" if end else ""
 
-            if status == MembershipStatus.ended:
+            if status == CrmMemberStatus.ended:
                 return f"Trial ended {end_str}"
-            elif status == MembershipStatus.frozen:
+            elif status == CrmMemberStatus.frozen:
                 freeze_end = row.get("freeze_end_date")
                 if freeze_end:
                     return f"Trial Frozen (Until {freeze_end.month}/{freeze_end.day}/{freeze_end.year})"  # noqa: E501
@@ -241,12 +242,12 @@ class CrmAllViewService(CrmBaseViewService):
 
             return f"Trial until {end_str}"
 
-        if status == MembershipStatus.ended:
+        if status == CrmMemberStatus.ended:
             if end:
                 return f"Ended (On {end.month}/{end.day}/{end.year})"
             return "Ended"
 
-        if status == MembershipStatus.frozen:
+        if status == CrmMemberStatus.frozen:
             freeze_end = row.get("freeze_end_date")
             if freeze_end:
                 return f"Frozen (Until {freeze_end.month}/{freeze_end.day}/{freeze_end.year})"

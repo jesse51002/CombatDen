@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
+from src.classes.classes_router import classes_router
 from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.members.members_router import members_router
@@ -38,6 +40,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    application.include_router(classes_router)
     application.include_router(members_router)
 
     return application

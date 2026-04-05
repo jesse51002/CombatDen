@@ -21,15 +21,13 @@ class RetentionStatItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      spacing: DesignConstants.spacingMedium,
       children: [
         Icon(
           icon,
           color: valueColor,
-          size: 20,
+          size: 40,
           weight: DesignConstants.iconWeight,
-        ),
-        const SizedBox(
-          width: DesignConstants.spacingSmall,
         ),
         Expanded(
           child: Column(
@@ -43,7 +41,7 @@ class RetentionStatItem extends StatelessWidget {
               ),
               Text(
                 label,
-                style: DesignConstants.pSmall.copyWith(
+                style: DesignConstants.h3.copyWith(
                   color: DesignConstants.text2nd,
                 ),
               ),

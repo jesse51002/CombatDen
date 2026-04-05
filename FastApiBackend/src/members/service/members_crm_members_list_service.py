@@ -7,7 +7,7 @@ the final response.
 from src.members.schema.members_crm_members_list_schema import (
     CrmMembersListRequest,
     CrmMembersListResponse,
-    MembershipStatus,
+    CrmMemberStatus,
     MembersListFilters,
     MembersListView,
 )
@@ -72,7 +72,7 @@ class CrmMembersListService:
             case MembersListView.overdue:
                 service = self._overdue
 
-        async for session in self._db_pool.session():
+        async with self._db_pool.session() as session:
             data = await service.fetch(
                 session,
                 request.gym_id,
@@ -130,11 +130,11 @@ class CrmMembersListService:
         """
         match requested_view:
             case MembersListView.trial:
-                status = [MembershipStatus.trial]
+                status = [CrmMemberStatus.trial]
             case MembersListView.frozen:
-                status = [MembershipStatus.frozen]
+                status = [CrmMemberStatus.frozen]
             case MembersListView.overdue:
-                status = [MembershipStatus.overdue]
+                status = [CrmMemberStatus.overdue]
             case _:
                 status = []
 
@@ -165,11 +165,11 @@ class CrmMembersListService:
             return MembersListView.all, filters
 
         match statuses[0]:
-            case MembershipStatus.trial:
+            case CrmMemberStatus.trial:
                 return MembersListView.trial, filters
-            case MembershipStatus.frozen:
+            case CrmMemberStatus.frozen:
                 return MembersListView.frozen, filters
-            case MembershipStatus.overdue:
+            case CrmMemberStatus.overdue:
                 return MembersListView.overdue, filters
             case _:
                 return MembersListView.all, filters

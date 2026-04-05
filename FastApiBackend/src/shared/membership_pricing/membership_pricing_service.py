@@ -3,6 +3,9 @@
 from datetime import date
 from uuid import UUID
 
+from schema.member_membership import MembershipDbStatus
+from schema.membership_plan import PlanType
+
 from src.shared.membership_pricing.membership_pricing_schema import (
     AccountPricingInput,
     AccountPricingResult,
@@ -10,10 +13,6 @@ from src.shared.membership_pricing.membership_pricing_schema import (
     MembershipPriceResult,
     PlanInput,
 )
-
-CANCELLED_STATUS = "cancelled"
-FROZEN_STATUS = "frozen"
-TRIAL_PLAN_TYPE = "trial"
 
 
 class MembershipPricingService:
@@ -49,13 +48,13 @@ class MembershipPricingService:
         paying_count = 0
 
         for membership in account_input.memberships:
-            if membership.status == CANCELLED_STATUS:
+            if membership.status == MembershipDbStatus.cancelled:
                 has_cancelled = True
                 continue
 
             plan = account_input.plans[membership.plan_id]
 
-            if plan.plan_type == TRIAL_PLAN_TYPE:
+            if plan.plan_type == PlanType.trial:
                 has_trial = True
                 continue
 
@@ -80,7 +79,7 @@ class MembershipPricingService:
                 )
             )
 
-            if membership.status == FROZEN_STATUS:
+            if membership.status == MembershipDbStatus.frozen:
                 frozen_total += price
             else:
                 active_total += price
