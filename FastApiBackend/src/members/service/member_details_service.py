@@ -7,6 +7,7 @@ from sqlalchemy import text
 from src.classes.service.classes_cycle_counts_service import (
     ClassesCycleCountsService,
 )
+from src.classes.service.classes_streak_service import ClassesStreakService
 from src.members import SQL_DIR
 from src.members.schema.member_details_schema import (
     MemberDetailResponse,
@@ -21,6 +22,9 @@ from src.members.service.member_details.member_details_membership_grouper import
 )
 from src.members.service.member_details.member_details_pricing_bridge import (
     MemberDetailsPricingBridge,
+)
+from src.members.service.member_details.member_details_streak_bridge import (
+    MemberDetailsStreakBridge,
 )
 from src.members.service.member_details.member_details_supplementary import (
     MemberDetailsSupplementary,
@@ -48,6 +52,7 @@ class MemberService:
         db_pool: DirectDatabasePool,
         pricing: MembershipPricingService,
         cycle_counts_service: ClassesCycleCountsService,
+        streak_service: ClassesStreakService,
     ) -> None:
         self._db_pool = db_pool
         self._supplementary = MemberDetailsSupplementary(db_pool)
@@ -55,6 +60,7 @@ class MemberService:
         self._cycle_counts_bridge = MemberDetailsCycleCountsBridge(
             cycle_counts_service,
         )
+        self._streak_bridge = MemberDetailsStreakBridge(streak_service)
         self._grouper = MemberDetailsMembershipGrouper()
 
     async def get_member_details(
@@ -82,6 +88,10 @@ class MemberService:
         gym_id = target_row["gym_id"]
 
         await self._supplementary.fetch_all(gym_id, crm_user_id)
+        streak_weeks = await self._streak_bridge.fetch_streak(
+            gym_id,
+            crm_user_id,
+        )
 
         family_ids = {row["crm_user_id"] for row in rows}
         membership_rows = [r for r in rows if r["plan_id"] is not None]
@@ -136,6 +146,7 @@ class MemberService:
             overview=overview,
             linked_to_account=linked_to_account,
             linked_accounts=linked_accounts,
+            streak_weeks=streak_weeks,
         )
 
     async def _fetch_family_rows(
@@ -167,6 +178,7 @@ class MemberService:
         overview: str,
         linked_to_account: UUID | None,
         linked_accounts: list,
+        streak_weeks: int,
     ) -> MemberDetailResponse:
         """Assemble the final MemberDetailResponse.
 
@@ -208,7 +220,7 @@ class MemberService:
             memberships=grouped,
             retention=Retention(
                 last_class=target_row["last_class"],
-                class_streak_weeks=target_row["streak"],
+                class_streak_weeks=streak_weeks,
                 points_balance=(target_row["points_balance"] or 0),
                 videos_watched=0,
             ),

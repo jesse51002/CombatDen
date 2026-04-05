@@ -7,6 +7,7 @@ CREATE TABLE gym_classes (
     max_capacity INTEGER CHECK (max_capacity > 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    end_date DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (class_id),
     UNIQUE (class_id, gym_id)

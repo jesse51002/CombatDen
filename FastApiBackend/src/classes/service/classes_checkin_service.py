@@ -136,6 +136,7 @@ class ClassesCheckinService:
             )
 
         log_id = await self._insert_log(request, chosen_plan_id)
+        await self._update_last_class(request)
 
         chosen_membership = next(m for m in active_memberships if m.plan_id == chosen_plan_id)
         if self._should_end_membership(chosen_membership):
@@ -222,6 +223,27 @@ class ClassesCheckinService:
             await session.commit()
 
         return log_id
+
+    async def _update_last_class(
+        self,
+        request: ClassesCheckinRequest,
+    ) -> None:
+        """Update the member's last_class timestamp on their profile.
+
+        Args:
+            request: The checkin request with user/gym identifiers.
+        """
+        update_sql = load_sql(SQL_DIR / "classes_checkin_update_last_class.sql")
+
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(update_sql),
+                {
+                    "crm_user_id": str(request.crm_user_id),
+                    "gym_id": str(request.gym_id),
+                },
+            )
+            await session.commit()
 
     @staticmethod
     def _select_best_plan(

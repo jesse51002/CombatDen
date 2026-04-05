@@ -20,5 +20,11 @@ class UserGymProfileCreate(SeedModel):
     emergency_contact_phone: Optional[str] = None
     emergency_contact_email: Optional[str] = None
     points_balance: int = 0
-    streak: int = 0
     account_linked_to_id: Optional[UUID] = None
+    stripe_customer_id: Optional[str] = None
+    stripe_payment_method_id: Optional[str] = None
+    payment_type: Optional[str] = None
+    card_brand: Optional[str] = None
+    card_last_four: Optional[str] = None
+    card_exp_month: Optional[int] = None
+    card_exp_year: Optional[int] = None

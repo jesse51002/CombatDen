@@ -10,6 +10,7 @@ CREATE TABLE member_memberships (
     last_paid_date DATE,
     next_due_date DATE,
     discount_ids JSONB,
+    stripe_subscription_id VARCHAR,
     total_price FLOAT NOT NULL CHECK (total_price >= 0),
     price_formula VARCHAR,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

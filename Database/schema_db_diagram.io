@@ -9,6 +9,8 @@ Table gyms {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_name varchar [not null]
   gym_description varchar
+  stripe_account_id varchar [note: 'Stripe Connect account ID, NULL until onboarded']
+  stripe_onboarding_status varchar [not null, default: 'not_started', note: 'enum: not_started, pending, complete, disabled']
 }
 
 Table user_gym_profiles {
@@ -27,8 +29,14 @@ Table user_gym_profiles {
   emergency_contact_phone varchar
   emergency_contact_email varchar
   points_balance integer [not null, default: 0]
-  streak integer [not null, default: 0]
   account_linked_to_id uuid [note: 'sub-account linked to primary member, must be same gym']
+  stripe_customer_id varchar [note: 'Stripe Customer ID, NULL for CRM-only profiles']
+  stripe_payment_method_id varchar [note: 'Stripe PaymentMethod ID']
+  payment_type varchar [note: 'card, us_bank_account, etc.']
+  card_brand varchar [note: 'visa, mastercard, etc.']
+  card_last_four varchar(4)
+  card_exp_month integer
+  card_exp_year integer
 
   indexes {
     (user_id, gym_id) [unique, note: 'partial index WHERE user_id IS NOT NULL']
@@ -67,6 +75,8 @@ Table user_gym_transactions {
   item_type varchar
   time timestamptz [not null, default: `now()`]
   applied_discounts jsonb
+  stripe_payment_intent_id varchar [note: 'Stripe PaymentIntent ID']
+  stripe_invoice_id varchar [note: 'Stripe Invoice ID, for subscription payments']
   extra_info jsonb [default: '{}']
 }
 
@@ -82,6 +92,8 @@ Table membership_plans {
   duration_unit varchar [not null, note: 'enum: week, month, year']
   is_public boolean [not null, default: true]
   is_deleted boolean [not null, default: false]
+  stripe_product_id varchar [note: 'Stripe Product ID']
+  stripe_price_id varchar [note: 'Stripe Price ID, updated when price changes']
   created_at timestamptz [not null, default: `now()`]
 }
 
@@ -99,6 +111,7 @@ Table member_memberships {
   total_price float [not null]
   price_formula varchar
   discount_ids jsonb [note: 'array of gym_discounts discount_id refs, validated by trigger']
+  stripe_subscription_id varchar [note: 'Stripe Subscription ID, NULL for one_time/trial']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -117,6 +130,7 @@ Table gym_discounts {
   start_date date [not null]
   end_date date [not null]
   is_deleted boolean [not null, default: false]
+  stripe_coupon_id varchar [note: 'Stripe Coupon ID']
   created_at timestamptz [not null, default: `now()`]
 }
 
@@ -208,6 +222,13 @@ Table gym_classes_log {
   time timestamptz [not null, default: `now()`]
 }
 
+Table stripe_webhook_events {
+  event_id varchar [primary key, note: 'Stripe event ID (evt_xxx)']
+  gym_id uuid [not null]
+  event_type varchar [not null, note: 'e.g. invoice.paid']
+  processed_at timestamptz [not null, default: `now()`]
+}
+
 // --- Integrity Notes ---
 // user_gym_profiles: UNIQUE partial index on (user_id, gym_id) WHERE user_id IS NOT NULL — prevents same auth user linking to multiple profiles in one gym
 // user_gym_profiles: self-referencing composite FK on account_linked_to_id ensures linked account belongs to the same gym
@@ -280,6 +301,9 @@ Ref: gyms.gym_id < gym_classes_log.gym_id
 Ref: gym_classes.class_id < gym_classes_log.class_id
 Ref: membership_plans.plan_id < gym_classes_log.plan_id
 Ref: gym_employees.employee_id < gym_classes_log.instructor_id
+
+// stripe_webhook_events
+Ref: gyms.gym_id < stripe_webhook_events.gym_id
 
 // gym_rewards
 Ref: gyms.gym_id < gym_rewards.gym_id

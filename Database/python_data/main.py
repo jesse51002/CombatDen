@@ -232,6 +232,18 @@ def seed():
                 ).execute()
         print(f"  {gym.gym_name}: {len(gym_logs)} log entries")
 
+        # Compute last_class per profile from actual log entries
+        latest_by_user: dict[uuid.UUID, str] = {}
+        for lg in gym_logs:
+            uid = lg.crm_user_id
+            ts = lg.time.isoformat()
+            if uid not in latest_by_user or ts > latest_by_user[uid]:
+                latest_by_user[uid] = ts
+        for uid, last_ts in latest_by_user.items():
+            client.table("user_gym_profiles").update(
+                {"last_class": last_ts}
+            ).eq("crm_user_id", str(uid)).execute()
+
     # Phase 7: Gym history
     print("Creating gym history...")
     for gym in gym_records:

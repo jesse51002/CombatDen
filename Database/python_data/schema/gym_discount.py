@@ -25,6 +25,7 @@ class GymDiscountCreate(SeedModel):
     dollar_off: Optional[float] = None
     end_date: Optional[date] = None
     is_deleted: bool = False
+    stripe_coupon_id: Optional[str] = None
 
     @model_validator(mode="after")
     def exactly_one_discount_type(self) -> "GymDiscountCreate":

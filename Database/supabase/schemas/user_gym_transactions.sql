@@ -7,6 +7,8 @@ CREATE TABLE user_gym_transactions (
     item_type VARCHAR,
     time TIMESTAMPTZ NOT NULL DEFAULT now(),
     applied_discounts JSONB,
+    stripe_payment_intent_id VARCHAR,
+    stripe_invoice_id VARCHAR,
     extra_info JSONB DEFAULT '{}',
     PRIMARY KEY (transaction_id),
     CONSTRAINT fk_transaction_profile_gym
@@ -38,4 +40,9 @@ CREATE POLICY "Gym staff can insert transactions"
     WITH CHECK (is_gym_admin_or_owner(user_gym_transactions.gym_id));
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
-REVOKE UPDATE (transaction_id, crm_user_id, gym_id, time) ON TABLE user_gym_transactions FROM authenticated;
+REVOKE UPDATE (transaction_id, crm_user_id, gym_id, time, stripe_payment_intent_id, stripe_invoice_id) ON TABLE user_gym_transactions FROM authenticated;
+
+-- Partial index: fast webhook lookup by payment intent
+CREATE INDEX idx_transactions_stripe_pi
+    ON user_gym_transactions (stripe_payment_intent_id)
+    WHERE stripe_payment_intent_id IS NOT NULL;

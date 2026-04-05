@@ -33,3 +33,5 @@ class MembershipPlanCreate(SeedModel):
     duration_unit: DurationUnit
     is_public: bool = True
     is_deleted: bool = False
+    stripe_product_id: Optional[str] = None
+    stripe_price_id: Optional[str] = None

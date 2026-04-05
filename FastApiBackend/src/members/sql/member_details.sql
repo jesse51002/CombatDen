@@ -29,7 +29,6 @@ SELECT
     p.emergency_contact_email,
     p.last_class,
     p.points_balance,
-    p.streak,
     p.account_linked_to_id,
     m.plan_id,
     m.discount_ids,

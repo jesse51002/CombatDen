@@ -22,4 +22,6 @@ class UserGymTransactionCreate(SeedModel):
     item_type: Optional[TransactionItemType] = None
     time: Optional[datetime] = None
     applied_discounts: Optional[list[dict]] = None
+    stripe_payment_intent_id: Optional[str] = None
+    stripe_invoice_id: Optional[str] = None
     extra_info: dict = {}

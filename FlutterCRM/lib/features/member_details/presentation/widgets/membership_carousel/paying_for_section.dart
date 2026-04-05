@@ -160,7 +160,7 @@ class PayingForSection extends StatelessWidget {
   TextStyle _nameStyle(MembershipStatus status) {
     return switch (status) {
       MembershipStatus.frozen => DesignConstants.h3
-          .copyWith(color: DesignConstants.blueDark),
+          .copyWith(color: DesignConstants.okYellow),
       MembershipStatus.cancelled => DesignConstants.h3
           .copyWith(color: DesignConstants.badRed),
       MembershipStatus.ended => DesignConstants.h3

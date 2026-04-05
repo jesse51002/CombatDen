@@ -31,6 +31,7 @@ class MemberMembershipCreate(SeedModel):
     total_price: float
     price_formula: Optional[str] = None
     discount_ids: Optional[list[UUID]] = None
+    stripe_subscription_id: Optional[str] = None
 
     def to_insert_dict(self) -> dict:
         data = super().to_insert_dict()

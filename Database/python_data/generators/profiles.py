@@ -31,8 +31,6 @@ def generate(
         phone=fake.phone_number(),
         address=fake.address().replace("\n", ", "),
         points_balance=random.randint(0, 500),
-        streak=random.randint(0, 30),
-        last_class=random_past_datetime(30) if random.random() > 0.3 else None,
         emergency_contact_name=fake.name(),
         emergency_contact_phone=fake.phone_number(),
         emergency_contact_email=fake.email(),

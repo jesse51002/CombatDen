@@ -3,6 +3,9 @@ CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
     gym_description VARCHAR,
+    stripe_account_id VARCHAR,
+    stripe_onboarding_status VARCHAR NOT NULL DEFAULT 'not_started'
+        CHECK (stripe_onboarding_status IN ('not_started', 'pending', 'complete', 'disabled')),
     PRIMARY KEY (gym_id)
 );
 
@@ -94,7 +97,7 @@ CREATE POLICY "Authenticated users can create gyms"
     WITH CHECK (true);
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
-REVOKE UPDATE (gym_id) ON TABLE gyms FROM authenticated;
+REVOKE UPDATE (gym_id, stripe_account_id) ON TABLE gyms FROM authenticated;
 
 
 

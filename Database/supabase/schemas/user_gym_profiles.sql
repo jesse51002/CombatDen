@@ -14,8 +14,14 @@ CREATE TABLE user_gym_profiles (
     emergency_contact_phone VARCHAR,
     emergency_contact_email VARCHAR,
     points_balance INTEGER NOT NULL DEFAULT 0 CHECK (points_balance >= 0),
-    streak INTEGER NOT NULL DEFAULT 0 CHECK (streak >= 0),
     account_linked_to_id UUID,
+    stripe_customer_id VARCHAR,
+    stripe_payment_method_id VARCHAR,
+    payment_type VARCHAR,
+    card_brand VARCHAR,
+    card_last_four VARCHAR(4),
+    card_exp_month INTEGER,
+    card_exp_year INTEGER,
     PRIMARY KEY (crm_user_id),
     UNIQUE (crm_user_id, gym_id),
     UNIQUE (user_id, gym_id),
@@ -62,7 +68,12 @@ CREATE POLICY "Gym staff can insert profiles"
     WITH CHECK (is_gym_admin_or_owner(user_gym_profiles.gym_id));
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
-REVOKE UPDATE (crm_user_id, gym_id, created_at, account_linked_to_id) ON TABLE user_gym_profiles FROM authenticated;
+REVOKE UPDATE (crm_user_id, gym_id, created_at, account_linked_to_id, stripe_customer_id) ON TABLE user_gym_profiles FROM authenticated;
+
+-- Partial unique index: each Stripe customer maps to exactly one profile
+CREATE UNIQUE INDEX idx_profiles_stripe_customer
+    ON user_gym_profiles (stripe_customer_id)
+    WHERE stripe_customer_id IS NOT NULL;
 
 -- Trigger: once user_id is set, it cannot be changed to a different value
 CREATE OR REPLACE FUNCTION prevent_user_id_overwrite()
@@ -78,6 +89,21 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_prevent_user_id_overwrite
     BEFORE UPDATE OF user_id ON user_gym_profiles
     FOR EACH ROW EXECUTE FUNCTION prevent_user_id_overwrite();
+
+-- Trigger: once stripe_customer_id is set, it cannot be changed to a different value
+CREATE OR REPLACE FUNCTION prevent_stripe_customer_id_overwrite()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.stripe_customer_id IS NOT NULL AND NEW.stripe_customer_id IS DISTINCT FROM OLD.stripe_customer_id THEN
+        RAISE EXCEPTION 'stripe_customer_id cannot be changed once set (crm_user_id: %)', OLD.crm_user_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_prevent_stripe_customer_id_overwrite
+    BEFORE UPDATE OF stripe_customer_id ON user_gym_profiles
+    FOR EACH ROW EXECUTE FUNCTION prevent_stripe_customer_id_overwrite();
 
 -- Trigger: an account cannot be both a parent and a child in linked accounts
 CREATE OR REPLACE FUNCTION enforce_linked_account_hierarchy()

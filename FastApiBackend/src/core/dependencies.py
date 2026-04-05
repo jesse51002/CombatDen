@@ -4,6 +4,7 @@ from src.classes.service.classes_checkin_service import ClassesCheckinService
 from src.classes.service.classes_cycle_counts_service import (
     ClassesCycleCountsService,
 )
+from src.classes.service.classes_streak_service import ClassesStreakService
 from src.members.service.member_details.member_details_price_recalc import (
     MemberDetailsPriceRecalc,
 )
@@ -46,11 +47,13 @@ class DependencyInjector(containers.DeclarativeContainer):
     auth = providers.Singleton(Auth, supabase=supabase)
     membership_pricing = providers.Singleton(MembershipPricingService)
     cycle_counts_service = providers.Factory(ClassesCycleCountsService, db_pool=db_pool)
+    streak_service = providers.Factory(ClassesStreakService, db_pool=db_pool)
     member_service = providers.Factory(
         MemberService,
         db_pool=db_pool,
         pricing=membership_pricing,
         cycle_counts_service=cycle_counts_service,
+        streak_service=streak_service,
     )
     price_recalc = providers.Factory(
         MemberDetailsPriceRecalc,
