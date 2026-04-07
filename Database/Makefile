@@ -10,6 +10,10 @@ migration: start
 push:
 	npx supabase db push
 
+pull:
+	npx supabase db pull
+
+
 reset:
 	npx supabase db reset
 

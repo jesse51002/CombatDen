@@ -2,6 +2,7 @@ import random
 import uuid
 
 from schema.membership_plan import MembershipPlanCreate
+from schema.membership_plan_price import MembershipPlanPriceCreate
 from schema.user_gym_transaction import UserGymTransactionCreate
 from utils import random_past_datetime
 
@@ -12,6 +13,7 @@ def generate(
     crm_user_id: uuid.UUID,
     gym_id: uuid.UUID,
     plans: list[MembershipPlanCreate],
+    prices: dict[uuid.UUID, MembershipPlanPriceCreate],
     count: int,
 ) -> list[UserGymTransactionCreate]:
     transactions = []
@@ -20,10 +22,10 @@ def generate(
         if item_type == "membership_payment":
             plan = random.choice(plans)
             item_id = plan.plan_id
-            amount = plan.base_cost
+            amount = prices[plan.plan_id].price
         else:
             item_id = uuid.uuid4()
-            amount = round(random.uniform(5, 100), 2)
+            amount = random.randint(500, 10000)
 
         transactions.append(
             UserGymTransactionCreate(

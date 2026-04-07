@@ -2,6 +2,7 @@ CREATE TABLE member_memberships (
     crm_user_id UUID NOT NULL,
     gym_id UUID NOT NULL CONSTRAINT fk_membership_gym REFERENCES gyms(gym_id),
     plan_id UUID NOT NULL,
+    price_id UUID NOT NULL CONSTRAINT fk_membership_price REFERENCES membership_plan_prices(price_id),
     start_date DATE NOT NULL,
     end_date DATE,
     cancel_date DATE,
@@ -10,8 +11,8 @@ CREATE TABLE member_memberships (
     last_paid_date DATE,
     next_due_date DATE,
     discount_ids JSONB,
-    stripe_subscription_id VARCHAR,
-    total_price FLOAT NOT NULL CHECK (total_price >= 0),
+    stripe_id VARCHAR,
+    total_price INTEGER NOT NULL CHECK (total_price >= 0),
     price_formula VARCHAR,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (crm_user_id, gym_id, plan_id),
@@ -20,7 +21,10 @@ CREATE TABLE member_memberships (
         REFERENCES user_gym_profiles (crm_user_id, gym_id),
     CONSTRAINT fk_membership_plan_gym
         FOREIGN KEY (plan_id, gym_id)
-        REFERENCES membership_plans (plan_id, gym_id)
+        REFERENCES membership_plans (plan_id, gym_id),
+    CONSTRAINT fk_membership_price_plan
+        FOREIGN KEY (price_id, plan_id)
+        REFERENCES membership_plan_prices (price_id, plan_id)
 );
 
 -- Enable Row Level Security

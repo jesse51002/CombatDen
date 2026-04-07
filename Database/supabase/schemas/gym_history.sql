@@ -5,7 +5,7 @@ CREATE TABLE gym_history (
     members_churned INTEGER NOT NULL CHECK (members_churned >= 0),
     members_gained INTEGER NOT NULL CHECK (members_gained >= 0),
     members_retained INTEGER NOT NULL CHECK (members_retained >= 0),
-    revenue FLOAT NOT NULL CHECK (revenue >= 0),
+    revenue INTEGER NOT NULL CHECK (revenue >= 0),
     PRIMARY KEY (gym_id, date)
 );
 

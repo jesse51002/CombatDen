@@ -2,10 +2,10 @@ import random
 from datetime import date, timedelta
 from uuid import UUID
 
-from constants import DEFAULT_LINKED_MEMBER_DISCOUNT
 from schema.gym_discount import GymDiscountCreate
 from schema.member_membership import MemberMembershipCreate
 from schema.membership_plan import MembershipPlanCreate
+from schema.membership_plan_price import MembershipPlanPriceCreate
 from schema.user_gym_profile import UserGymProfileCreate
 from utils import random_past_date, today_offset
 
@@ -17,7 +17,9 @@ MAX_LINKED_MEMBERS = 5
 def _build_membership(
     profile: UserGymProfileCreate,
     plan: MembershipPlanCreate,
+    price: MembershipPlanPriceCreate,
     discounts: list[GymDiscountCreate],
+    family_discounts: list[GymDiscountCreate],
     is_linked: bool = False,
     expired_trial: bool = False,
     start_after: date | None = None,
@@ -63,26 +65,37 @@ def _build_membership(
         last_paid = start + timedelta(days=random.randint(0, interval * 3))
         next_due = last_paid + timedelta(days=interval)
 
-    total_price = plan.base_cost
+    total_price = price.price
     discount_ids = None
     price_formula = None
 
-    if is_linked:
-        discount_pct = plan.additional_member_discount or DEFAULT_LINKED_MEMBER_DISCOUNT
-        total_price = round(total_price * (1 - discount_pct / 100), 2)
-        price_formula = f"${plan.base_cost:.2f} base - {discount_pct:.0f}% linked member = ${total_price:.2f}"
+    if is_linked and family_discounts:
+        # Pick the first available family discount for this plan
+        plan_family = [
+            d for d in family_discounts
+            if d.membership_plan_id == plan.plan_id
+        ]
+        if plan_family:
+            disc = plan_family[0]
+            discount_pct = disc.percentage_off
+            total_price = round(total_price * (1 - discount_pct / 100))
+            discount_ids = [disc.discount_id]
+            price_formula = f"${price.price / 100:.2f} base - {discount_pct:.0f}% family = ${total_price / 100:.2f}"
+        else:
+            price_formula = f"${price.price / 100:.2f} base"
     elif discounts and random.random() < 0.3:
         disc = random.choice(discounts)
         discount_ids = [disc.discount_id]
-        total_price = round(total_price * 0.9, 2)
-        price_formula = f"${plan.base_cost:.2f} base - {disc.discount_name} = ${total_price:.2f}"
+        total_price = round(total_price * 0.9)
+        price_formula = f"${price.price / 100:.2f} base - {disc.discount_name} = ${total_price / 100:.2f}"
     else:
-        price_formula = f"${plan.base_cost:.2f} base"
+        price_formula = f"${price.price / 100:.2f} base"
 
     return MemberMembershipCreate(
         crm_user_id=profile.crm_user_id,
         gym_id=profile.gym_id,
         plan_id=plan.plan_id,
+        price_id=price.price_id,
         start_date=start,
         end_date=end_date,
         cancel_date=cancel_date,
@@ -99,7 +112,9 @@ def _build_membership(
 def generate(
     profiles: list[UserGymProfileCreate],
     plans: list[MembershipPlanCreate],
+    prices: dict[UUID, MembershipPlanPriceCreate],
     discounts: list[GymDiscountCreate],
+    family_discounts: list[GymDiscountCreate],
 ) -> tuple[list[MemberMembershipCreate], list[tuple[UUID, UUID]]]:
     memberships: list[MemberMembershipCreate] = []
     link_pairs: list[tuple[UUID, UUID]] = []
@@ -136,30 +151,40 @@ def generate(
 
         elif roll < 0.40 and trial_plans:
             # 35%: trial first, then converted to a paid membership
+            trial_plan = random.choice(trial_plans)
             trial = _build_membership(
-                profile, random.choice(trial_plans), discounts, is_linked,
+                profile, trial_plan, prices[trial_plan.plan_id],
+                discounts, family_discounts, is_linked,
                 expired_trial=True,
             )
             memberships.append(trial)
             if paid_plans:
+                paid_plan = random.choice(paid_plans)
                 paid = _build_membership(
-                    profile, random.choice(paid_plans), discounts, is_linked,
+                    profile, paid_plan, prices[paid_plan.plan_id],
+                    discounts, family_discounts, is_linked,
                     start_after=trial.end_date,
                 )
                 memberships.append(paid)
 
         elif roll < 0.75 and trial_plans:
             # 35%: trial only (mix of active and expired, never converted)
+            trial_plan = random.choice(trial_plans)
             trial = _build_membership(
-                profile, random.choice(trial_plans), discounts, is_linked,
+                profile, trial_plan, prices[trial_plan.plan_id],
+                discounts, family_discounts, is_linked,
             )
             memberships.append(trial)
 
         else:
             # 25%: direct purchase (or fallback when no trial plan)
             if paid_plans:
+                paid_plan = random.choice(paid_plans)
                 memberships.append(
-                    _build_membership(profile, random.choice(paid_plans), discounts, is_linked)
+                    _build_membership(
+                        profile, paid_plan, prices[paid_plan.plan_id],
+                        discounts, family_discounts, is_linked,
+                    )
                 )
 
     return memberships, link_pairs

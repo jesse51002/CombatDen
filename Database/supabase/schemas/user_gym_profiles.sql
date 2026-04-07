@@ -16,6 +16,9 @@ CREATE TABLE user_gym_profiles (
     points_balance INTEGER NOT NULL DEFAULT 0 CHECK (points_balance >= 0),
     account_linked_to_id UUID,
     stripe_customer_id VARCHAR,
+    stripe_sub_id_week VARCHAR,
+    stripe_sub_id_month VARCHAR,
+    stripe_sub_id_year VARCHAR,
     stripe_payment_method_id VARCHAR,
     payment_type VARCHAR,
     card_brand VARCHAR,
@@ -47,28 +50,8 @@ CREATE POLICY "Users and gym staff can view profiles"
         OR is_gym_admin_or_owner(user_gym_profiles.gym_id)
     );
 
--- Policy: Users can update their own profile OR gym staff can update profiles from their gyms
-CREATE POLICY "Users and gym staff can update profiles"
-    ON user_gym_profiles
-    FOR UPDATE
-    USING (
-        auth.uid() = user_id
-        OR is_gym_admin_or_owner(user_gym_profiles.gym_id)
-    )
-    WITH CHECK (
-        auth.uid() = user_id
-        OR is_gym_admin_or_owner(user_gym_profiles.gym_id)
-    );
-
--- Policy: Gym staff can insert profiles for their gyms
-CREATE POLICY "Gym staff can insert profiles"
-    ON user_gym_profiles
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (is_gym_admin_or_owner(user_gym_profiles.gym_id));
-
--- Column-level permissions: Revoke UPDATE on immutable columns
-REVOKE UPDATE (crm_user_id, gym_id, created_at, account_linked_to_id, stripe_customer_id) ON TABLE user_gym_profiles FROM authenticated;
+-- Column-level permissions: no INSERT/UPDATE for authenticated (stripe rule)
+REVOKE INSERT, UPDATE ON TABLE user_gym_profiles FROM authenticated;
 
 -- Partial unique index: each Stripe customer maps to exactly one profile
 CREATE UNIQUE INDEX idx_profiles_stripe_customer

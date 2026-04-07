@@ -22,6 +22,9 @@ class UserGymProfileCreate(SeedModel):
     points_balance: int = 0
     account_linked_to_id: Optional[UUID] = None
     stripe_customer_id: Optional[str] = None
+    stripe_sub_id_week: Optional[str] = None
+    stripe_sub_id_month: Optional[str] = None
+    stripe_sub_id_year: Optional[str] = None
     stripe_payment_method_id: Optional[str] = None
     payment_type: Optional[str] = None
     card_brand: Optional[str] = None

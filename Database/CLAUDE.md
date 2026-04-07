@@ -9,6 +9,7 @@
 ## Security
 - Always enable Row Level Security (RLS) on every table.
 - Always use `REVOKE UPDATE` on immutable columns (e.g. PKs, FKs, created_at) for the `authenticated` role.
+- Tables with any `stripe_*_id` column must NOT have INSERT or UPDATE RLS policies for the `authenticated` role — those operations go through `service_role` only. SELECT policies for `authenticated` are allowed.
 
 ## Integrity constraints
 - Always name constraints with the `CONSTRAINT` keyword for readable error messages (e.g. `CONSTRAINT membership_must_match_gym`).

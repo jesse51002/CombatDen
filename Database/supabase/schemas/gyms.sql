@@ -82,22 +82,8 @@ CREATE POLICY "Gym staff can view own gym"
     FOR SELECT
     USING (is_gym_admin_or_owner(gyms.gym_id));
 
--- Policy: Owners and admins can update their gym
-CREATE POLICY "Gym staff can update own gym"
-    ON gyms
-    FOR UPDATE
-    USING (is_gym_admin_or_owner(gyms.gym_id))
-    WITH CHECK (is_gym_admin_or_owner(gyms.gym_id));
-
--- Policy: Any authenticated user can create a gym
-CREATE POLICY "Authenticated users can create gyms"
-    ON gyms
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (true);
-
--- Column-level permissions: Revoke UPDATE on immutable columns
-REVOKE UPDATE (gym_id, stripe_account_id) ON TABLE gyms FROM authenticated;
+-- Column-level permissions: no INSERT/UPDATE for authenticated (stripe rule)
+REVOKE INSERT, UPDATE ON TABLE gyms FROM authenticated;
 
 
 

@@ -16,7 +16,7 @@ def generate(
         churned = random.randint(0, 2)
         total = max(0, total + gained - churned)
         retained = max(0, total - churned)
-        avg_revenue_per_member = random.uniform(40, 80)
+        avg_revenue_per_member = random.randint(4000, 8000)
         rows.append(
             GymHistoryCreate(
                 gym_id=gym_id,
@@ -25,7 +25,7 @@ def generate(
                 members_gained=gained,
                 members_churned=churned,
                 members_retained=retained,
-                revenue=round(total * avg_revenue_per_member, 2),
+                revenue=total * avg_revenue_per_member,
             )
         )
     return rows

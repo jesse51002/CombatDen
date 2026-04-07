@@ -1,6 +1,7 @@
 import enum
 import logging
 import sys
+from typing import Final
 
 from pydantic_settings import BaseSettings
 
@@ -21,6 +22,10 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
 
+    # Stripe
+    stripe_secret_key: str
+    stripe_webhook_secret: str
+
     # Database (direct Postgres connection)
     database_url: str
     db_pool_size: int = 10
@@ -38,6 +43,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Billing cycle anchor constants
+MONTHLY_BILLING_ANCHOR_DAY: Final[int] = 1  # 1st of month
+WEEKLY_BILLING_ANCHOR_WEEKDAY: Final[int] = 6  # Sunday (Python weekday: Mon=0, Sun=6)
 
 
 def setup_logging(log_level: str | None = None) -> None:

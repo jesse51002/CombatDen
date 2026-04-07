@@ -27,6 +27,7 @@ from generators import (
     history,
     memberships,
     plans,
+    prices,
     profiles,
     rewards,
     transactions,
@@ -35,6 +36,7 @@ from schema.gym import GymCreate
 from schema.gym_discount import GymDiscountCreate
 from schema.gym_employee import GymEmployeeCreate
 from schema.membership_plan import MembershipPlanCreate
+from schema.membership_plan_price import MembershipPlanPriceCreate
 from schema.user_gym_profile import UserGymProfileCreate
 
 fake = Faker()
@@ -104,15 +106,29 @@ def seed():
         all_profiles[gym.gym_id] = gym_profiles
     print(f"  Generated {NUM_GYMS * MEMBERS_PER_GYM} profiles")
 
-    # Phase 4: Plans, discounts, rewards
-    print("Creating plans, discounts, rewards...")
+    # Phase 4: Plans, prices, discounts, rewards
+    print("Creating plans, prices, discounts, rewards...")
     all_plans: dict[uuid.UUID, list[MembershipPlanCreate]] = {}
+    all_prices: dict[uuid.UUID, dict[uuid.UUID, MembershipPlanPriceCreate]] = {}
     all_discounts: dict[uuid.UUID, list[GymDiscountCreate]] = {}
+    all_family_discounts: dict[uuid.UUID, list[GymDiscountCreate]] = {}
     for gym in gym_records:
-        gym_plans = plans.generate(gym.gym_id, PLANS_PER_GYM)
+        gym_plans, plan_templates = plans.generate(gym.gym_id, PLANS_PER_GYM)
         all_plans[gym.gym_id] = gym_plans
         client.table("membership_plans").insert(
             [p.to_insert_dict() for p in gym_plans]
+        ).execute()
+
+        # Generate one active price per plan
+        gym_prices: dict[uuid.UUID, MembershipPlanPriceCreate] = {}
+        price_records = []
+        for tmpl in plan_templates:
+            price_rec = prices.generate(tmpl["plan_id"], gym.gym_id, tmpl["base_cost"])
+            gym_prices[tmpl["plan_id"]] = price_rec
+            price_records.append(price_rec)
+        all_prices[gym.gym_id] = gym_prices
+        client.table("membership_plan_prices").insert(
+            [p.to_insert_dict() for p in price_records]
         ).execute()
 
         gym_discounts = discounts.generate(gym.gym_id, DISCOUNTS_PER_GYM)
@@ -120,6 +136,14 @@ def seed():
         client.table("gym_discounts").insert(
             [d.to_insert_dict() for d in gym_discounts]
         ).execute()
+
+        # Generate family discounts for recurring plans
+        gym_family_discounts = discounts.generate_family_discounts(gym.gym_id, gym_plans)
+        all_family_discounts[gym.gym_id] = gym_family_discounts
+        if gym_family_discounts:
+            client.table("gym_discounts").insert(
+                [d.to_insert_dict() for d in gym_family_discounts]
+            ).execute()
 
         gym_rewards = rewards.generate(gym.gym_id, REWARDS_PER_GYM)
         client.table("gym_rewards").insert(
@@ -158,7 +182,9 @@ def seed():
         gym_memberships, link_pairs = memberships.generate(
             all_profiles[gym.gym_id],
             all_plans[gym.gym_id],
+            all_prices[gym.gym_id],
             all_discounts[gym.gym_id],
+            all_family_discounts[gym.gym_id],
         )
         all_memberships[gym.gym_id] = gym_memberships
 
@@ -207,7 +233,7 @@ def seed():
 
             txns = transactions.generate(
                 profile.crm_user_id, gym.gym_id, all_plans[gym.gym_id],
-                TRANSACTIONS_PER_MEMBER,
+                all_prices[gym.gym_id], TRANSACTIONS_PER_MEMBER,
             )
             client.table("user_gym_transactions").insert(
                 [t.to_insert_dict() for t in txns]

@@ -11,4 +11,4 @@ class GymHistoryCreate(SeedModel):
     members_churned: int
     members_gained: int
     members_retained: int
-    revenue: float
+    revenue: int

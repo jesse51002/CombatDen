@@ -18,7 +18,7 @@ class UserGymTransactionCreate(SeedModel):
     crm_user_id: UUID
     gym_id: UUID
     item_id: UUID
-    amount_paid: float
+    amount_paid: int
     item_type: Optional[TransactionItemType] = None
     time: Optional[datetime] = None
     applied_discounts: Optional[list[dict]] = None

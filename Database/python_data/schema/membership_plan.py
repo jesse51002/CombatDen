@@ -26,12 +26,9 @@ class MembershipPlanCreate(SeedModel):
     gym_id: UUID
     plan_name: str
     plan_type: PlanType
-    base_cost: float
-    additional_member_discount: Optional[float] = None
     class_count: Optional[int] = None
     duration_amount: int
     duration_unit: DurationUnit
     is_public: bool = True
     is_deleted: bool = False
     stripe_product_id: Optional[str] = None
-    stripe_price_id: Optional[str] = None
