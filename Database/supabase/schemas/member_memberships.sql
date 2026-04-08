@@ -11,7 +11,8 @@ CREATE TABLE member_memberships (
     last_paid_date DATE,
     next_due_date DATE,
     discount_ids JSONB,
-    stripe_id VARCHAR,
+    stripe_item_id VARCHAR,
+    prorate BOOLEAN NOT NULL DEFAULT true,
     total_price INTEGER NOT NULL CHECK (total_price >= 0),
     price_formula VARCHAR,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -78,6 +79,30 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_check_discount_ids_gym_match
     BEFORE INSERT OR UPDATE OF discount_ids ON member_memberships
     FOR EACH ROW EXECUTE FUNCTION check_discount_ids_gym_match();
+
+-- Trigger: recurring plans cannot have an end_date
+CREATE OR REPLACE FUNCTION check_recurring_no_end_date()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_plan_type VARCHAR;
+BEGIN
+    IF NEW.end_date IS NOT NULL THEN
+        SELECT plan_type INTO v_plan_type
+        FROM membership_plans
+        WHERE plan_id = NEW.plan_id;
+
+        IF v_plan_type = 'recurring' THEN
+            RAISE EXCEPTION 'recurring memberships cannot have an end_date'
+                USING CONSTRAINT = 'recurring_no_end_date';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_recurring_no_end_date
+    BEFORE INSERT OR UPDATE OF end_date ON member_memberships
+    FOR EACH ROW EXECUTE FUNCTION check_recurring_no_end_date();
 
 -- View: derives status from date fields (cancel_date > end_date > freeze window > active)
 CREATE VIEW member_memberships_status

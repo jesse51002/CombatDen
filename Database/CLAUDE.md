@@ -18,8 +18,17 @@
 - Only use triggers when the constraint can't be expressed as a FK (e.g. JSONB array validation, immutability logic).
 - Keep triggers in the same schema file as the table they apply to, not in a separate file.
 
+## Immutable Columns
+
+`python_data/schema/immutable_columns.py` defines frozensets of column names per table that must never appear in an UPDATE SET clause from **user-facing update requests** (i.e. data sent by the client). These are not about what the backend/service_role can write — they guard against clients modifying columns they shouldn't (PKs, FKs, auto-generated timestamps, Stripe-managed columns, backend-managed columns like linking and discount assignments, etc.).
+
+- **Always keep this file in sync with schema changes** — when adding, removing, or renaming columns in `schemas/`, update `immutable_columns.py` to match.
+- The FastAPI backend imports these via `from schema.immutable_columns import <TABLE_NAME>` (available through `db_schema_path.py`).
+- Used with `validate_mutable_columns()` in `src/shared/column_guard.py` to reject update requests that try to write immutable columns.
+
 ## Structure
 - `schemas/` — source-of-truth SQL for each table (DDL, RLS policies, column permissions, triggers)
 - `migrations/` — generated migration files (do not touch)
+- `python_data/schema/` — shared Python enums, Pydantic models, and immutable column definitions used by both the seeding scripts and the FastAPI backend
 - `schema_db_diagram.io` — dbdiagram.io markup; always update this file when adding, removing, or renaming columns/tables
 - `config.toml` — Supabase project config

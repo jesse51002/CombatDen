@@ -21,6 +21,7 @@ class UserGymProfileCreate(SeedModel):
     emergency_contact_email: Optional[str] = None
     points_balance: int = 0
     account_linked_to_id: Optional[UUID] = None
+    linked_discount_id: Optional[UUID] = None
     stripe_customer_id: Optional[str] = None
     stripe_sub_id_week: Optional[str] = None
     stripe_sub_id_month: Optional[str] = None

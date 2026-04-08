@@ -12,7 +12,7 @@ class DiscountType(StrEnum):
 
     preset = "preset"
     custom = "custom"
-    family = "family"
+    linked = "linked"
 
 
 class GymDiscountCreate(SeedModel):
@@ -20,11 +20,10 @@ class GymDiscountCreate(SeedModel):
     gym_id: UUID
     discount_name: str
     discount_type: DiscountType
-    discount_active: bool = True
     percentage_off: Optional[float] = None
     dollar_off: Optional[int] = None
     membership_plan_id: Optional[UUID] = None
-    family_discount_num: Optional[int] = None
+    linked_discount_num: Optional[int] = None
     duration: str
     duration_in_months: Optional[int] = None
     is_deleted: bool = False
@@ -38,16 +37,16 @@ class GymDiscountCreate(SeedModel):
             raise ValueError(
                 "Exactly one of percentage_off or dollar_off must be set"
             )
-        is_family = self.discount_type == DiscountType.family
+        is_linked = self.discount_type == DiscountType.linked
         has_plan = self.membership_plan_id is not None
-        has_num = self.family_discount_num is not None
-        if is_family and (not has_plan or not has_num):
+        has_num = self.linked_discount_num is not None
+        if is_linked and (not has_plan or not has_num):
             raise ValueError(
-                "family discounts require membership_plan_id and family_discount_num"
+                "linked discounts require membership_plan_id and linked_discount_num"
             )
-        if not is_family and (has_plan or has_num):
+        if not is_linked and (has_plan or has_num):
             raise ValueError(
-                "membership_plan_id and family_discount_num are only for family discounts"
+                "membership_plan_id and linked_discount_num are only for linked discounts"
             )
         if self.duration == "repeating" and self.duration_in_months is None:
             raise ValueError(

@@ -50,7 +50,6 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
             items=items,
             metadata=request.metadata,
             billing_mode={"type": "classic"},
-            proration_behavior="always_invoice",
         )
 
         sub_discounts = self._build_subscription_discounts(

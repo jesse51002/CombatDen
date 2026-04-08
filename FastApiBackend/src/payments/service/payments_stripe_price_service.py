@@ -9,10 +9,7 @@ from stripe.params._price_create_params import (
 from stripe.params._price_update_params import PriceUpdateParams
 
 import src.shared.db_schema_path  # noqa: F401
-from src.payments.payments_exceptions import (
-    PaymentsResourceInactiveError,
-    PaymentsResourceNotFoundError,
-)
+from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_price_schema import (
     PaymentsPriceCreateRequest,
@@ -180,10 +177,11 @@ class PaymentsStripePriceService:
         price_id: str,
         stripe_account_id: str,
     ) -> PaymentsPriceResponse:
-        """Validate that a price and its product are active.
+        """Ensure a price and its product are active, reactivating if needed.
 
-        Retrieves the price and its parent product, raising if
-        either is inactive or deleted.
+        Retrieves the price and its parent product. If either is
+        inactive (archived), it is reactivated on Stripe — the gym
+        owner is explicitly trying to use this resource.
 
         Args:
             price_id: The Stripe price ID.
@@ -195,8 +193,6 @@ class PaymentsStripePriceService:
         Raises:
             PaymentsResourceNotFoundError: If the price or product
                 does not exist or is deleted.
-            PaymentsResourceInactiveError: If the price or product
-                is inactive.
         """
         opts = self._client.connect_opts(stripe_account_id)
 
@@ -213,10 +209,10 @@ class PaymentsStripePriceService:
             ) from exc
 
         if not price.active:
-            raise PaymentsResourceInactiveError(
-                f"Price {price_id} is inactive",
-                resource_id=price_id,
-                resource_type=StripeResourceType.price,
+            price = await self._stripe.v1.prices.update_async(
+                price_id,
+                params=PriceUpdateParams(active=True),
+                options=opts,
             )
 
         try:
@@ -238,10 +234,10 @@ class PaymentsStripePriceService:
                 resource_type=StripeResourceType.product,
             )
         if not product.active:
-            raise PaymentsResourceInactiveError(
-                f"Product {product.id} is inactive",
-                resource_id=product.id,
-                resource_type=StripeResourceType.product,
+            await self._stripe.v1.products.update_async(
+                product.id,
+                params={"active": True},
+                options=opts,
             )
 
         return self._map_price(price)

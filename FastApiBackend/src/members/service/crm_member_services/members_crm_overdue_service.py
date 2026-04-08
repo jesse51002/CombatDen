@@ -47,7 +47,7 @@ class CrmOverdueViewService(CrmBaseViewService):
         """
         where, params = self.build_where_clause(gym_id, filters)
         sql = load_sql(
-            SQL_DIR / "overdue_view.sql",
+            SQL_DIR / "crm_views" / "overdue_view.sql",
             {"where_clause": where},
         )
         params["limit"] = count

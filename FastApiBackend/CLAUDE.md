@@ -40,6 +40,10 @@
 **Enums**
 - **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `str, Enum` classes
 - **NEVER use hardcoded strings** when an enum exists — all comparisons, match/case, filter values, and Pydantic field types must use the enum
+- **ALWAYS reuse enums and schemas from the Database package** (`../Database/python_data/schema/`) when they exist — import via `from schema.<module> import <Enum>` (available through `src/shared/db_schema_path.py`). Never redefine enums that already exist in the Database package.
+- Good: `from schema.gym_discount import DiscountType`
+- Good: `from schema.membership_plan import PlanType`
+- Bad: Redefining `class DiscountType(StrEnum)` in the FastAPI backend when it already exists in the Database package
 - Pydantic auto-serializes `str` enums to their string values in JSON responses, so no manual conversion needed
 - Use `Literal[MyEnum.value]` for Pydantic discriminated union fields, not `Literal["some_string"]`
 - Good: `type: Literal[FilterType.date_range] = FilterType.date_range`
@@ -179,6 +183,9 @@ src/
 - Update schemas have optional fields
 - Response schemas exclude sensitive data
 - Use `EmailStr`, `HttpUrl`, built-in validators
+- **Update requests must separate IDs from mutable data** — the request model contains identity fields (`discount_id`, `gym_id`) and a nested `data` model with only mutable fields (all optional). This allows the service to extract change keys from `data` and validate them against the immutable columns guard (`validate_mutable_columns` from `src/shared/column_guard.py` + frozensets in `schema.immutable_columns` from the Database package).
+- Good: `DiscountUpdateRequest(discount_id, gym_id, data: DiscountUpdateData)` where `DiscountUpdateData` has only mutable optional fields
+- Bad: Flat update model mixing PKs, immutable columns, and mutable fields together
 
 **Error Handling**
 - Create custom exception hierarchy
@@ -234,6 +241,23 @@ src/
 - Service handles business logic
 - Repository handles data access
 - Never skip layers
+
+## Stripe-First Operation Order
+
+**ALWAYS perform Stripe operations before CRM database changes.** Stripe is the source of truth — if a Stripe call fails, the CRM should remain unchanged. Writing to the CRM first risks leaving the database in an inconsistent state if the subsequent Stripe call fails.
+
+- Good: Create Stripe coupon → insert CRM row with `stripe_coupon_id`
+- Good: Delete Stripe coupon → soft-delete CRM row
+- Bad: Soft-delete CRM row → delete Stripe coupon (CRM is dirty if Stripe fails)
+
+## Stripe Resource Not Found Handling
+
+**`PaymentsResourceNotFoundError` must ALWAYS be explicitly caught** — never let it fall through to a generic `Exception` handler.
+
+Stripe is the source of truth. When a Stripe resource is not found:
+- **Write operations (create/update):** If the specific resource being edited is not found (check `exc.resource_type` against `StripeResourceType`), recreate it. The gym owner is explicitly performing this action, so re-creating is the correct behavior.
+- **Read operations (list/get):** If the resource is not found, remove the stale linkage on the CRM side (clear the Stripe ID from the database). A dedicated Stripe reconciliation service will handle this cleanup — **TODO: build this service**.
+- **Other resource types:** If the not-found resource is not the one being directly operated on, re-raise or delegate to the reconciliation service.
 
 ## Security
 

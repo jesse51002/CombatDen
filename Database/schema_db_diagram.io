@@ -30,6 +30,7 @@ Table user_gym_profiles {
   emergency_contact_email varchar
   points_balance integer [not null, default: 0]
   account_linked_to_id uuid [note: 'sub-account linked to primary member, must be same gym']
+  linked_discount_id uuid [note: 'FK to gym_discounts, must be type linked']
   stripe_customer_id varchar [note: 'Stripe Customer ID, NULL for CRM-only profiles']
   stripe_sub_id_week varchar [note: 'Stripe Subscription ID for weekly-interval plans']
   stripe_sub_id_month varchar [note: 'Stripe Subscription ID for monthly-interval plans']
@@ -122,7 +123,8 @@ Table member_memberships {
   total_price integer [not null]
   price_formula varchar
   discount_ids jsonb [note: 'array of gym_discounts discount_id refs, validated by trigger']
-  stripe_id varchar [note: 'Stripe ID — subscription item ID for recurring, invoice ID for one-time']
+  stripe_item_id varchar [note: 'Stripe subscription item ID for recurring, invoice ID for one-time']
+  prorate boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -134,12 +136,11 @@ Table gym_discounts {
   discount_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   discount_name varchar [not null]
-  discount_type varchar [not null, note: 'enum: preset, custom, family']
-  discount_active boolean [not null, default: true]
+  discount_type varchar [not null, note: 'enum: preset, custom, linked']
   percentage_off float [note: 'exactly one of percentage_off or dollar_off must be set']
   dollar_off integer [note: 'exactly one of percentage_off or dollar_off must be set']
-  membership_plan_id uuid [note: 'only for family discounts, FK to membership_plans']
-  family_discount_num integer [note: 'sequential position, only for family discounts']
+  membership_plan_id uuid [note: 'only for linked discounts, FK to membership_plans']
+  linked_discount_num integer [note: 'sequential position, only for linked discounts']
   duration varchar [not null, note: 'enum: once, repeating, forever']
   duration_in_months integer [note: 'required when duration = repeating']
   is_deleted boolean [not null, default: false]
@@ -248,6 +249,7 @@ Table stripe_webhook_events {
 // membership_plan_prices: partial unique index on (plan_id) WHERE is_active = TRUE — at most one active price per plan
 // member_memberships: composite FK ensures price_id belongs to the same plan_id
 // member_memberships: trigger on discount_ids validates all UUIDs exist in gym_discounts for the same gym
+// member_memberships: trigger rejects end_date on recurring plans (plan_type looked up from membership_plans)
 // member_memberships: status is derived via member_memberships_with_status view (cancelled > ended > frozen > active)
 // gym_classes: trigger on allowed_plan_ids validates all UUIDs exist in membership_plans for the same gym
 // gym_class_schedules: composite FKs on each day's instructor_id ensure instructor belongs to the same gym
@@ -255,7 +257,7 @@ Table stripe_webhook_events {
 // gym_class_schedules: trigger enforces no gaps between schedule segments (contiguous history)
 // gym_class_schedules: CHECK only enforces day booleans when recurring_unit = 'weekly'
 // gym_class_exceptions: UNIQUE (schedule_id, original_date) — one exception per date per schedule
-// gym_discounts: trigger enforces sequential family_discount_num per (gym_id, membership_plan_id); rejects gaps on delete
+// gym_discounts: trigger enforces sequential linked_discount_num per (gym_id, membership_plan_id); rejects gaps on delete
 // gym_classes_log: denormalizes class_name/time/duration/instructor for historical snapshot
 
 // --- Relationships ---

@@ -52,7 +52,7 @@ class CrmAllViewService(CrmBaseViewService):
         """
         where, params = self.build_where_clause(gym_id, filters)
         sql = load_sql(
-            SQL_DIR / "all_view.sql",
+            SQL_DIR / "crm_views" / "all_view.sql",
             {"where_clause": where},
         )
         query = text(sql)

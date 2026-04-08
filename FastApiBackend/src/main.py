@@ -8,6 +8,10 @@ import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.classes_router import classes_router
 from src.core.config import settings
 from src.core.dependencies import DependencyInjector
+from src.discounts.discounts_router import discounts_router
+from src.member_memberships.member_memberships_router import (
+    member_memberships_router,
+)
 from src.members.members_router import members_router
 
 
@@ -41,7 +45,9 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(classes_router)
+    application.include_router(discounts_router)
     application.include_router(members_router)
+    application.include_router(member_memberships_router)
 
     return application
 

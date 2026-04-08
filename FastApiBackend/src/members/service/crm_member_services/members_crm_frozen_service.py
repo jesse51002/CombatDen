@@ -56,7 +56,7 @@ class CrmFrozenViewService(CrmBaseViewService):
         """
         where, params = self.build_where_clause(gym_id, filters)
         sql = load_sql(
-            SQL_DIR / "frozen_view.sql",
+            SQL_DIR / "crm_views" / "frozen_view.sql",
             {"where_clause": where},
         )
         params["limit"] = count

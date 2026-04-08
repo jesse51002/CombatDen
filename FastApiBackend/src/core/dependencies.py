@@ -6,6 +6,13 @@ from src.classes.service.classes_cycle_counts_service import (
 )
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.core.config import settings
+from src.discounts.service.discounts_service import DiscountsService
+from src.member_memberships.service.member_memberships_service import (
+    MemberMembershipsService,
+)
+from src.member_memberships.service.membership_payment_sync_service import (
+    MembershipPaymentSyncService,
+)
 from src.members.service.member_details.member_details_price_recalc import (
     MemberDetailsPriceRecalc,
 )
@@ -17,6 +24,9 @@ from src.members.service.members_crm_members_list_service import (
 )
 from src.members.service.members_crm_total_counts_service import (
     CrmTotalCountsService,
+)
+from src.members.service.members_management_service import (
+    MembersManagementService,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
@@ -42,8 +52,12 @@ from src.shared.database import (
     DirectDatabasePool,
     SupabaseClient,
 )
+from src.shared.gym_stripe_service import GymStripeService
 from src.shared.membership_pricing.membership_pricing_service import (
     MembershipPricingService,
+)
+from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
+    StripeReconciliationService,
 )
 
 
@@ -58,7 +72,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         modules=[
             "src.main",
             "src.members.members_router",
+            "src.member_memberships.member_memberships_router",
             "src.classes.classes_router",
+            "src.discounts.discounts_router",
         ],
     )
 
@@ -87,6 +103,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         cycle_counts_service=cycle_counts_service,
     )
+
+    # ── Shared ───────────────────────────────────────────────────
+    gym_stripe_service = providers.Factory(GymStripeService, db_pool=db_pool)
 
     # ── Payments (Stripe) ────────────────────────────────────────
     stripe_client = providers.Singleton(
@@ -122,4 +141,39 @@ class DependencyInjector(containers.DeclarativeContainer):
         stripe_client=stripe_client,
         members_service=payments_members_service,
         price_service=payments_price_service,
+    )
+
+    # ── Member Management (depends on payments) ─────────────────
+    member_memberships_service = providers.Factory(
+        MemberMembershipsService,
+        db_pool=db_pool,
+    )
+    members_management_service = providers.Factory(
+        MembersManagementService,
+        db_pool=db_pool,
+        payments_members_service=payments_members_service,
+        member_memberships_service=member_memberships_service,
+    )
+
+    # ── Stripe Reconciliation ──────────────────────────────────
+    stripe_reconciliation_service = providers.Factory(
+        StripeReconciliationService,
+        db_pool=db_pool,
+        members_management_service=members_management_service,
+    )
+
+    # ── Payment Sync & Discounts ───────────────────────────────
+    membership_payment_sync_service = providers.Factory(
+        MembershipPaymentSyncService,
+        db_pool=db_pool,
+        subscription_service=payments_subscription_service,
+        gym_stripe_service=gym_stripe_service,
+        stripe_reconciliation_service=stripe_reconciliation_service,
+    )
+    discounts_service = providers.Factory(
+        DiscountsService,
+        db_pool=db_pool,
+        gym_stripe_service=gym_stripe_service,
+        stripe_discount_service=payments_discount_service,
+        membership_payment_sync_service=membership_payment_sync_service,
     )

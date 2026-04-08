@@ -143,3 +143,31 @@ class PaymentsStripeDiscountService:
             options=opts,
         )
         return self._map_coupon(coupon)
+
+    async def delete_discount(
+        self,
+        coupon_id: str,
+        stripe_account_id: str,
+    ) -> None:
+        """Delete a Stripe Coupon.
+
+        Args:
+            coupon_id: The Stripe coupon ID to delete.
+            stripe_account_id: The gym's Stripe Connect account ID.
+
+        Raises:
+            PaymentsResourceNotFoundError: If the coupon does not exist.
+        """
+        opts = self._client.connect_opts(stripe_account_id)
+
+        try:
+            await self._stripe.v1.coupons.delete_async(
+                coupon_id,
+                options=opts,
+            )
+        except stripe.InvalidRequestError as exc:
+            raise PaymentsResourceNotFoundError(
+                f"Coupon {coupon_id} not found",
+                resource_id=coupon_id,
+                resource_type=StripeResourceType.coupon,
+            ) from exc

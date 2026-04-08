@@ -29,10 +29,11 @@ class MemberMembershipCreate(SeedModel):
     freeze_end_date: Optional[date] = None
     last_paid_date: Optional[date] = None
     next_due_date: Optional[date] = None
+    prorate: bool = True
     total_price: int
     price_formula: Optional[str] = None
     discount_ids: Optional[list[UUID]] = None
-    stripe_id: Optional[str] = None
+    stripe_item_id: Optional[str] = None
 
     def to_insert_dict(self) -> dict:
         data = super().to_insert_dict()

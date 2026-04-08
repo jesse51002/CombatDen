@@ -15,6 +15,7 @@ CREATE TABLE user_gym_profiles (
     emergency_contact_email VARCHAR,
     points_balance INTEGER NOT NULL DEFAULT 0 CHECK (points_balance >= 0),
     account_linked_to_id UUID,
+    linked_discount_id UUID CONSTRAINT fk_profile_linked_discount REFERENCES gym_discounts(discount_id),
     stripe_customer_id VARCHAR,
     stripe_sub_id_week VARCHAR,
     stripe_sub_id_month VARCHAR,
@@ -27,10 +28,12 @@ CREATE TABLE user_gym_profiles (
     card_exp_year INTEGER,
     PRIMARY KEY (crm_user_id),
     UNIQUE (crm_user_id, gym_id),
-    UNIQUE (user_id, gym_id),
     CONSTRAINT fk_profile_linked_account_same_gym
         FOREIGN KEY (account_linked_to_id, gym_id)
-        REFERENCES user_gym_profiles (crm_user_id, gym_id)
+        REFERENCES user_gym_profiles (crm_user_id, gym_id),
+    CONSTRAINT fk_profile_linked_discount_gym
+        FOREIGN KEY (linked_discount_id, gym_id)
+        REFERENCES gym_discounts (discount_id, gym_id)
 );
 
 -- Partial unique index: a user can only have one profile per gym
@@ -120,3 +123,24 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_enforce_linked_account_hierarchy
     BEFORE INSERT OR UPDATE OF account_linked_to_id ON user_gym_profiles
     FOR EACH ROW EXECUTE FUNCTION enforce_linked_account_hierarchy();
+
+-- Trigger: linked_discount_id must reference a discount with discount_type = 'linked'
+CREATE OR REPLACE FUNCTION check_linked_discount_type()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.linked_discount_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM gym_discounts
+            WHERE discount_id = NEW.linked_discount_id
+              AND discount_type = 'linked'
+        ) THEN
+            RAISE EXCEPTION 'linked_discount_id % must reference a discount with type linked', NEW.linked_discount_id;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_linked_discount_type
+    BEFORE INSERT OR UPDATE OF linked_discount_id ON user_gym_profiles
+    FOR EACH ROW EXECUTE FUNCTION check_linked_discount_type();

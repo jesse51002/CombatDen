@@ -46,7 +46,7 @@ class CrmTrialViewService(CrmBaseViewService):
         """
         where, params = self.build_where_clause(gym_id, filters)
         sql = load_sql(
-            SQL_DIR / "trial_view.sql",
+            SQL_DIR / "crm_views" / "trial_view.sql",
             {"where_clause": where},
         )
         params["limit"] = count

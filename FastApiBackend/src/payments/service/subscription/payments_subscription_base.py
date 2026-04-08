@@ -128,6 +128,7 @@ class PaymentsSubscriptionBase:
             entry: dict[str, Any] = {
                 "price": item.stripe_price_id,
                 "quantity": item.quantity,
+                "proration_behavior": ("always_invoice" if item.prorate else "none"),
             }
             if item.discounts:
                 entry["discounts"] = [{"coupon": d.coupon} for d in item.discounts]
@@ -139,46 +140,39 @@ class PaymentsSubscriptionBase:
         consolidated_items: list[PaymentsSubscriptionDesiredItem],
         sub: stripe.Subscription,
     ) -> list[dict[str, Any]]:
-        """Build item dicts for a subscription update (reconcile or preview).
+        """Build item dicts for a subscription update (reconcile).
 
-        Diffs desired items against current subscription items.
-        Items with ``id`` are updates, without ``id`` are adds,
-        and items with ``deleted=True`` are removals.
+        Matches desired items to current Stripe items by
+        ``stripe_item_id`` when present. Items without an ID
+        are treated as new additions.
+
+        Raises:
+            PaymentsResourceNotFoundError: If a desired item's
+                stripe_item_id is not found in the current
+                subscription (out of sync with Stripe).
 
         Returns:
-            List of item dicts ready for subscription update or preview.
+            List of item dicts ready for subscription update.
         """
-        current_by_price: dict[str, Any] = {}
+        current_by_id: dict[str, Any] = {}
         if sub.items and sub.items.data:
             for si in sub.items.data:
-                current_by_price[si.price.id] = si
+                current_by_id[si.id] = si
 
-        desired_prices = {item.stripe_price_id for item in consolidated_items}
-
+        referenced_ids: set[str] = set()
         items: list[dict[str, Any]] = []
+
         for item in consolidated_items:
-            if item.stripe_price_id in current_by_price:
-                si = current_by_price[item.stripe_price_id]
-                entry: dict[str, Any] = {
-                    "id": si.id,
-                    "price": item.stripe_price_id,
-                    "quantity": item.quantity,
-                    "discounts": (
-                        [{"coupon": d.coupon} for d in item.discounts] if item.discounts else ""
-                    ),
-                }
-            else:
-                entry = {
-                    "price": item.stripe_price_id,
-                    "quantity": item.quantity,
-                }
-                if item.discounts:
-                    entry["discounts"] = [{"coupon": d.coupon} for d in item.discounts]
+            entry = _build_reconcile_entry(
+                item,
+                current_by_id,
+                referenced_ids,
+            )
             items.append(entry)
 
-        for price_id, si in current_by_price.items():
-            if price_id not in desired_prices:
-                items.append({"id": si.id, "deleted": True})
+        for si_id, _si in current_by_id.items():
+            if si_id not in referenced_ids:
+                items.append({"id": si_id, "deleted": True})
 
         return items
 
@@ -249,9 +243,9 @@ class PaymentsSubscriptionBase:
         subscription_id: str,
         opts: stripe.RequestOptions,
     ) -> stripe.Subscription:
-        """Retrieve a Stripe Subscription, raising if not found."""
+        """Retrieve a Stripe Subscription, raising if not found or canceled."""
         try:
-            return await self._stripe.v1.subscriptions.retrieve_async(
+            subscription = await self._stripe.v1.subscriptions.retrieve_async(
                 subscription_id,
                 options=opts,
             )
@@ -261,6 +255,15 @@ class PaymentsSubscriptionBase:
                 resource_id=subscription_id,
                 resource_type=StripeResourceType.subscription,
             ) from exc
+
+        if subscription.status == "canceled":
+            raise PaymentsResourceNotFoundError(
+                f"Subscription {subscription_id} is canceled",
+                resource_id=subscription_id,
+                resource_type=StripeResourceType.subscription,
+            )
+
+        return subscription
 
     async def _validate_coupon_ids(
         self,
@@ -307,3 +310,49 @@ class PaymentsSubscriptionBase:
             await self._validate_coupon_ids(all_coupon_ids, opts)
 
         return interval
+
+
+# ── Module-Level Helpers ─────────────────────────────────────────
+
+
+def _build_reconcile_entry(
+    item: PaymentsSubscriptionDesiredItem,
+    current_by_id: dict[str, Any],
+    referenced_ids: set[str],
+) -> dict[str, Any]:
+    """Build a single reconcile entry for a desired item.
+
+    Raises:
+        PaymentsResourceNotFoundError: If stripe_item_id is set
+            but not found in the current subscription.
+    """
+    proration = "always_invoice" if item.prorate else "none"
+
+    if item.stripe_item_id:
+        if item.stripe_item_id not in current_by_id:
+            raise PaymentsResourceNotFoundError(
+                f"Subscription item {item.stripe_item_id} not found "
+                "in current subscription — Stripe may be out of sync",
+                resource_id=item.stripe_item_id,
+                resource_type=StripeResourceType.subscription_item,
+            )
+        referenced_ids.add(item.stripe_item_id)
+        entry: dict[str, Any] = {
+            "id": item.stripe_item_id,
+            "price": item.stripe_price_id,
+            "quantity": item.quantity,
+            "proration_behavior": proration,
+            "discounts": (
+                [{"coupon": d.coupon} for d in item.discounts] if item.discounts else ""
+            ),
+        }
+    else:
+        entry = {
+            "price": item.stripe_price_id,
+            "quantity": item.quantity,
+            "proration_behavior": proration,
+        }
+        if item.discounts:
+            entry["discounts"] = [{"coupon": d.coupon} for d in item.discounts]
+
+    return entry

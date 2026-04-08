@@ -87,7 +87,7 @@ class MemberDetailsSupplementary:
         params: dict[str, str],
     ) -> dict[UUID, DiscountInfo]:
         """Load gym discounts into lookup dict."""
-        sql = load_sql(SQL_DIR / "member_details_discounts.sql")
+        sql = load_sql(SQL_DIR / "member_details" / "member_details_discounts.sql")
         result = await session.execute(text(sql), params)
         discounts: dict[UUID, DiscountInfo] = {}
         for row in result.mappings().all():
@@ -109,7 +109,7 @@ class MemberDetailsSupplementary:
     ) -> dict[UUID, LinkedAccount]:
         """Load gym profiles into lookup dict."""
         sql = load_sql(
-            SQL_DIR / "member_details_linked_profiles.sql",
+            SQL_DIR / "member_details" / "member_details_linked_profiles.sql",
         )
         result = await session.execute(text(sql), params)
         profiles: dict[UUID, LinkedAccount] = {}
@@ -129,7 +129,7 @@ class MemberDetailsSupplementary:
         params: dict[str, str],
     ) -> dict[UUID, RewardCard]:
         """Load gym rewards into lookup dict."""
-        sql = load_sql(SQL_DIR / "member_details_rewards.sql")
+        sql = load_sql(SQL_DIR / "member_details" / "member_details_rewards.sql")
         result = await session.execute(text(sql), params)
         rewards: dict[UUID, RewardCard] = {}
         for row in result.mappings().all():
@@ -150,7 +150,7 @@ class MemberDetailsSupplementary:
     ) -> tuple[list[PaymentRecord], list[RewardCard]]:
         """Load member transactions, split into payments/rewards."""
         sql = load_sql(
-            SQL_DIR / "member_details_transactions.sql",
+            SQL_DIR / "member_details" / "member_details_transactions.sql",
         )
         result = await session.execute(text(sql), params)
         payments: list[PaymentRecord] = []

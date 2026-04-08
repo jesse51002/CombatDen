@@ -6,6 +6,7 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCreateRequest,
     PaymentsSubscriptionFreezeRequest,
     PaymentsSubscriptionFreezeResponse,
+    PaymentsSubscriptionItemResponse,
     PaymentsSubscriptionPriceMigrationRequest,
     PaymentsSubscriptionPriceMigrationResponse,
     PaymentsSubscriptionResponse,
@@ -32,6 +33,9 @@ from src.payments.service.subscription.payments_subscription_create import (
 )
 from src.payments.service.subscription.payments_subscription_freeze import (
     PaymentsSubscriptionFreeze,
+)
+from src.payments.service.subscription.payments_subscription_item import (
+    PaymentsSubscriptionItem,
 )
 from src.payments.service.subscription.payments_subscription_migration import (
     PaymentsSubscriptionMigration,
@@ -68,6 +72,7 @@ class PaymentsStripeSubscriptionService:
         self._cancel = PaymentsSubscriptionCancel(*deps)
         self._freeze = PaymentsSubscriptionFreeze(*deps)
         self._migration = PaymentsSubscriptionMigration(*deps)
+        self._item = PaymentsSubscriptionItem(*deps)
 
     # ── Create ────────────────────────────────────────────────────
 
@@ -130,6 +135,16 @@ class PaymentsStripeSubscriptionService:
     ) -> PaymentsSubscriptionResponse:
         """Resume collection on a paused subscription (unfreeze)."""
         return await self._freeze.unfreeze_subscription(request, stripe_account_id)
+
+    # ── Item ─────────────────────────────────────────────────────
+
+    async def get_subscription_item(
+        self,
+        subscription_item_id: str,
+        stripe_account_id: str,
+    ) -> PaymentsSubscriptionItemResponse:
+        """Retrieve a single subscription item."""
+        return await self._item.get_item(subscription_item_id, stripe_account_id)
 
     # ── Batch Migration ───────────────────────────────────────────
 

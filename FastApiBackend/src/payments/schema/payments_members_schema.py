@@ -36,10 +36,10 @@ class PaymentsCustomerResponse(BaseModel):
     name: str | None = None
     email: str | None = None
     phone: str | None = None
-    card_brand: str
-    card_last_four: str
-    card_exp_month: int
-    card_exp_year: int
+    card_brand: str | None = None
+    card_last_four: str | None = None
+    card_exp_month: int | None = None
+    card_exp_year: int | None = None
 
 
 # ── Subscription ────────────────────────────────────────────────
@@ -55,6 +55,8 @@ class PaymentsSubscriptionDesiredItem(BaseModel):
     """Desired state of a single item in a subscription."""
 
     stripe_price_id: str
+    stripe_item_id: str | None = None
+    prorate: bool = True
     quantity: int = 1
     discounts: list[SubscriptionItemDiscount] = []
 

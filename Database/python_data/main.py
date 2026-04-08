@@ -1,3 +1,4 @@
+import random
 import uuid
 
 from faker import Faker
@@ -111,7 +112,7 @@ def seed():
     all_plans: dict[uuid.UUID, list[MembershipPlanCreate]] = {}
     all_prices: dict[uuid.UUID, dict[uuid.UUID, MembershipPlanPriceCreate]] = {}
     all_discounts: dict[uuid.UUID, list[GymDiscountCreate]] = {}
-    all_family_discounts: dict[uuid.UUID, list[GymDiscountCreate]] = {}
+    all_linked_discounts: dict[uuid.UUID, list[GymDiscountCreate]] = {}
     for gym in gym_records:
         gym_plans, plan_templates = plans.generate(gym.gym_id, PLANS_PER_GYM)
         all_plans[gym.gym_id] = gym_plans
@@ -137,12 +138,12 @@ def seed():
             [d.to_insert_dict() for d in gym_discounts]
         ).execute()
 
-        # Generate family discounts for recurring plans
-        gym_family_discounts = discounts.generate_family_discounts(gym.gym_id, gym_plans)
-        all_family_discounts[gym.gym_id] = gym_family_discounts
-        if gym_family_discounts:
+        # Generate linked discounts for recurring plans
+        gym_linked_discounts = discounts.generate_linked_discounts(gym.gym_id, gym_plans)
+        all_linked_discounts[gym.gym_id] = gym_linked_discounts
+        if gym_linked_discounts:
             client.table("gym_discounts").insert(
-                [d.to_insert_dict() for d in gym_family_discounts]
+                [d.to_insert_dict() for d in gym_linked_discounts]
             ).execute()
 
         gym_rewards = rewards.generate(gym.gym_id, REWARDS_PER_GYM)
@@ -184,14 +185,17 @@ def seed():
             all_plans[gym.gym_id],
             all_prices[gym.gym_id],
             all_discounts[gym.gym_id],
-            all_family_discounts[gym.gym_id],
+            all_linked_discounts[gym.gym_id],
         )
         all_memberships[gym.gym_id] = gym_memberships
 
         # Apply link pairs to profiles
         profile_map = {p.crm_user_id: p for p in all_profiles[gym.gym_id]}
+        gym_linked_discounts = all_linked_discounts[gym.gym_id]
         for linked_id, primary_id in link_pairs:
             profile_map[linked_id].account_linked_to_id = primary_id
+            if gym_linked_discounts and random.choice([True, False]):
+                profile_map[linked_id].linked_discount_id = random.choice(gym_linked_discounts).discount_id
 
     # Now insert profiles (without account_linked_to_id first, then update linked ones)
     print("Inserting profiles...")
@@ -202,14 +206,18 @@ def seed():
         for p in gym_profiles:
             d = p.to_insert_dict()
             d.pop("account_linked_to_id", None)
+            d.pop("linked_discount_id", None)
             insert_dicts.append(d)
         client.table("user_gym_profiles").insert(insert_dicts).execute()
 
         # Update linked profiles with their account_linked_to_id
         for p in gym_profiles:
             if p.account_linked_to_id is not None:
+                update_data = {"account_linked_to_id": str(p.account_linked_to_id)}
+                if p.linked_discount_id is not None:
+                    update_data["linked_discount_id"] = str(p.linked_discount_id)
                 client.table("user_gym_profiles").update(
-                    {"account_linked_to_id": str(p.account_linked_to_id)}
+                    update_data
                 ).eq("crm_user_id", str(p.crm_user_id)).execute()
     print(f"  Created {NUM_GYMS * MEMBERS_PER_GYM} profiles")
 

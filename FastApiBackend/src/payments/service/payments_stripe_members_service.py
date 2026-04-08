@@ -53,10 +53,10 @@ class PaymentsStripeMembersService:
             name=customer.name,
             email=customer.email,
             phone=customer.phone,
-            card_brand=pm.card.brand if pm.card else "unknown",
-            card_last_four=pm.card.last4 if pm.card else "0000",
-            card_exp_month=pm.card.exp_month if pm.card else 0,
-            card_exp_year=pm.card.exp_year if pm.card else 0,
+            card_brand=pm.card.brand if pm.card else None,
+            card_last_four=pm.card.last4 if pm.card else None,
+            card_exp_month=pm.card.exp_month if pm.card else None,
+            card_exp_year=pm.card.exp_year if pm.card else None,
         )
 
     async def retrieve_customer(
@@ -186,13 +186,62 @@ class PaymentsStripeMembersService:
         )
         return self._map_customer_response(customer, pm)
 
+    # ── Unlink ───────────────────────────────────────────────────
+
+    async def unlink_customer_card(
+        self,
+        stripe_customer_id: str,
+        stripe_account_id: str,
+    ) -> None:
+        """Detach the default payment method from a Stripe customer.
+
+        Retrieves the customer, detaches the default payment method
+        if one exists, and clears the default_payment_method on
+        invoice_settings.
+
+        Gracefully handles the case where the customer is already
+        deleted in Stripe (no-op).
+
+        Args:
+            stripe_customer_id: The Stripe customer ID.
+            stripe_account_id: The gym's Stripe Connect account ID.
+        """
+        opts = self._client.connect_opts(stripe_account_id)
+
+        try:
+            customer = await self.retrieve_customer(
+                stripe_customer_id,
+                opts,
+            )
+        except PaymentsResourceNotFoundError:
+            return
+
+        pm_id = None
+        if customer.invoice_settings and customer.invoice_settings.default_payment_method:
+            pm_id = customer.invoice_settings.default_payment_method
+
+        if pm_id:
+            await self._stripe.v1.customers.update_async(
+                stripe_customer_id,
+                params=CustomerUpdateParams(
+                    invoice_settings=CustomerUpdateParamsInvoiceSettings(
+                        default_payment_method="",
+                    ),
+                ),
+                options=opts,
+            )
+            await self._stripe.v1.payment_methods.detach_async(
+                pm_id,
+                options=opts,
+            )
+
     # ── Invoices ─────────────────────────────────────────────────
 
     async def list_invoices(
         self,
         stripe_customer_id: str,
         stripe_account_id: str,
-        limit: int = 10,
+        limit: int = 100,
         starting_after: str | None = None,
     ) -> list[PaymentsInvoiceResponse]:
         """List invoices for a customer.

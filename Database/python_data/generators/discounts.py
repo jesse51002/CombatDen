@@ -25,7 +25,6 @@ def generate(gym_id: uuid.UUID, count: int) -> list[GymDiscountCreate]:
                 gym_id=gym_id,
                 discount_name=name,
                 discount_type=discount_type,
-                discount_active=random.random() > 0.15,
                 percentage_off=round(random.uniform(5, 25), 1) if use_pct else None,
                 dollar_off=random.randint(500, 5000) if not use_pct else None,
                 duration=duration,
@@ -35,28 +34,27 @@ def generate(gym_id: uuid.UUID, count: int) -> list[GymDiscountCreate]:
     return discounts
 
 
-def generate_family_discounts(
+def generate_linked_discounts(
     gym_id: uuid.UUID, plans: list[MembershipPlanCreate]
 ) -> list[GymDiscountCreate]:
-    """Generate family discounts for recurring plans (1-3 tiers per plan)."""
+    """Generate linked discounts for recurring plans (1-3 tiers per plan)."""
     recurring_plans = [p for p in plans if p.plan_type == "recurring"]
-    family_discounts = []
+    linked_discounts = []
     for plan in recurring_plans:
         num_tiers = random.randint(1, 3)
         base_pct = random.uniform(5, 15)
         for i in range(1, num_tiers + 1):
             pct = round(base_pct + (i - 1) * 5, 1)
-            family_discounts.append(
+            linked_discounts.append(
                 GymDiscountCreate(
                     discount_id=uuid.uuid4(),
                     gym_id=gym_id,
-                    discount_name=f"{plan.plan_name} - Family Member #{i}",
-                    discount_type="family",
-                    discount_active=True,
+                    discount_name=f"{plan.plan_name} - Linked Member #{i}",
+                    discount_type="linked",
                     percentage_off=pct,
                     membership_plan_id=plan.plan_id,
-                    family_discount_num=i,
+                    linked_discount_num=i,
                     duration="forever",
                 )
             )
-    return family_discounts
+    return linked_discounts

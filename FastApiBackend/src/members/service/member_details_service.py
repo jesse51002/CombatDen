@@ -161,7 +161,7 @@ class MemberService:
         Returns:
             List of row mappings for the entire family.
         """
-        sql = load_sql(SQL_DIR / "member_details.sql")
+        sql = load_sql(SQL_DIR / "member_details" / "member_details.sql")
         params = {"crm_user_id": str(crm_user_id)}
 
         async with self._db_pool.session() as session:

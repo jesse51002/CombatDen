@@ -50,12 +50,12 @@ class MemberDetailsPriceRecalc:
             gym_id: The gym ID.
             family_ids: All crm_user_ids in the family group.
         """
-        recalc_sql = load_sql(SQL_DIR / "member_details_recalc.sql")
+        recalc_sql = load_sql(SQL_DIR / "member_details" / "member_details_recalc.sql")
         update_sql = load_sql(
             SHARED_SQL_DIR / "update_membership_price.sql",
         )
         discount_sql = load_sql(
-            SQL_DIR / "member_details_discounts.sql",
+            SQL_DIR / "member_details" / "member_details_discounts.sql",
         )
 
         async with self._db_pool.session() as session:
