@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from schema.membership_plan import DurationUnit
 
+import src.shared.db_schema_path  # noqa: F401
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionDesiredItem,
     SubscriptionItemDiscount,
@@ -44,6 +45,47 @@ class LinkedDiscountInfo(BaseModel):
     discount_id: UUID
     stripe_coupon_id: str
     dollar_off: int
+
+
+class MembershipInfo(BaseModel):
+    """Identifies a membership for include/exclude operations."""
+
+    crm_user_id: UUID
+    plan_id: UUID
+    has_linked_discount: bool = False
+
+
+class SyncItem(BaseModel):
+    """Enriched item for update_payments_recurring.
+
+    Carries both Stripe fields (for subscription sync) and
+    CRM fields (for linked discount calculation).
+    """
+
+    stripe_price_id: str
+    stripe_item_id: str | None = None
+    crm_user_id: UUID
+    plan_id: UUID
+    has_linked_discount: bool = False
+    quantity: int = 1
+    prorate: bool = True
+
+    def to_desired_item(self) -> PaymentsSubscriptionDesiredItem:
+        """Strip to PaymentsSubscriptionDesiredItem for Stripe."""
+        return PaymentsSubscriptionDesiredItem(
+            stripe_price_id=self.stripe_price_id,
+            stripe_item_id=self.stripe_item_id,
+            prorate=self.prorate,
+            quantity=self.quantity,
+        )
+
+    def to_membership_info(self) -> MembershipInfo:
+        """Extract MembershipInfo for linked discount calc."""
+        return MembershipInfo(
+            crm_user_id=self.crm_user_id,
+            plan_id=self.plan_id,
+            has_linked_discount=self.has_linked_discount,
+        )
 
 
 class IntervalDesiredItem(BaseModel):

@@ -250,6 +250,14 @@ src/
 - Good: Delete Stripe coupon → soft-delete CRM row
 - Bad: Soft-delete CRM row → delete Stripe coupon (CRM is dirty if Stripe fails)
 
+## Stripe Reconciliation Service
+
+**`StripeReconciliationService` must NEVER be a constructor dependency** — always pass it as a method parameter. This service sits at the bottom of the dependency graph and will grow to consume most other services for stale-reference cleanup. Injecting it into constructors creates circular dependencies.
+
+- Good: `async def bulk_payment_sync(self, crm_user_ids, reconciliation_service)` — caller passes it
+- Good: Router injects `reconciliation_service` via DI and passes it to the service method
+- Bad: `def __init__(self, reconciliation_service)` — creates circular dependency chains
+
 ## Stripe Resource Not Found Handling
 
 **`PaymentsResourceNotFoundError` must ALWAYS be explicitly caught** — never let it fall through to a generic `Exception` handler.

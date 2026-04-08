@@ -254,6 +254,6 @@ class CrmAllViewService(CrmBaseViewService):
             return "Frozen"
 
         if last_paid:
-            return f"Paid on {last_paid.month}/{last_paid.day}/{last_paid.year})"
+            return f"Paid on {last_paid.month}/{last_paid.day}/{last_paid.year}"
 
         return f"Active ({price_str})"

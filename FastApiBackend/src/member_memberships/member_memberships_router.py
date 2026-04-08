@@ -12,6 +12,7 @@ from src.core.dependencies import DependencyInjector
 from src.member_memberships.service.member_memberships_service import (
     MemberMembershipsService,
 )
+from src.payments.payments_exceptions import PaymentsStripeError
 from src.shared.auth import Auth, security
 
 logger = logging.getLogger(__name__)
@@ -28,9 +29,8 @@ member_memberships_router = APIRouter(
     summary="Cancel a membership",
     description=(
         "Cancels a specific active membership for a member. "
-        "Sets cancel_date and end_date to the membership's "
-        "next_due_date, or today if next_due_date is missing "
-        "or in the past."
+        "Sets cancel_date to the membership's next_due_date, "
+        "or today if next_due_date is missing or in the past."
     ),
     responses={
         204: {"description": "Membership cancelled successfully"},
@@ -51,6 +51,9 @@ async def cancel_membership(
 ) -> None:
     """Cancel a specific membership for a member.
 
+    Syncs the cancellation to Stripe first, then updates the
+    CRM database.
+
     Args:
         crm_user_id: The member.
         gym_id: The gym.
@@ -62,6 +65,7 @@ async def cancel_membership(
     Raises:
         HTTPException: 401 if not authenticated,
             403 if not authorized,
+            502 on Stripe errors,
             500 on unexpected errors.
     """
     user_payload = auth.get_current_user(credentials)
@@ -83,6 +87,11 @@ async def cancel_membership(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(

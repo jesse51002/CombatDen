@@ -7,6 +7,9 @@ from src.classes.service.classes_cycle_counts_service import (
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
+from src.member_memberships.service.linked_member_discount_service import (
+    LinkedMemberDiscountService,
+)
 from src.member_memberships.service.member_memberships_service import (
     MemberMembershipsService,
 )
@@ -143,10 +146,24 @@ class DependencyInjector(containers.DeclarativeContainer):
         price_service=payments_price_service,
     )
 
-    # ── Member Management (depends on payments) ─────────────────
+    # ── Payment Sync & Discounts ───────────────────────────────
+    linked_member_discount_service = providers.Factory(
+        LinkedMemberDiscountService,
+        db_pool=db_pool,
+    )
+    membership_payment_sync_service = providers.Factory(
+        MembershipPaymentSyncService,
+        db_pool=db_pool,
+        subscription_service=payments_subscription_service,
+        gym_stripe_service=gym_stripe_service,
+        linked_discount_service=linked_member_discount_service,
+    )
+
+    # ── Member Management ──────────────────────────────────────
     member_memberships_service = providers.Factory(
         MemberMembershipsService,
         db_pool=db_pool,
+        payment_sync_service=membership_payment_sync_service,
     )
     members_management_service = providers.Factory(
         MembersManagementService,
@@ -155,25 +172,18 @@ class DependencyInjector(containers.DeclarativeContainer):
         member_memberships_service=member_memberships_service,
     )
 
-    # ── Stripe Reconciliation ──────────────────────────────────
-    stripe_reconciliation_service = providers.Factory(
-        StripeReconciliationService,
-        db_pool=db_pool,
-        members_management_service=members_management_service,
-    )
-
-    # ── Payment Sync & Discounts ───────────────────────────────
-    membership_payment_sync_service = providers.Factory(
-        MembershipPaymentSyncService,
-        db_pool=db_pool,
-        subscription_service=payments_subscription_service,
-        gym_stripe_service=gym_stripe_service,
-        stripe_reconciliation_service=stripe_reconciliation_service,
-    )
     discounts_service = providers.Factory(
         DiscountsService,
         db_pool=db_pool,
         gym_stripe_service=gym_stripe_service,
         stripe_discount_service=payments_discount_service,
         membership_payment_sync_service=membership_payment_sync_service,
+    )
+
+    # ── Stripe Reconciliation (at bottom — will grow to
+    # ── consume most services for stale-reference cleanup) ─────
+    stripe_reconciliation_service = providers.Factory(
+        StripeReconciliationService,
+        db_pool=db_pool,
+        members_management_service=members_management_service,
     )

@@ -1,8 +1,16 @@
 """Service for managing gym discounts (CRM + Stripe)."""
 
+from __future__ import annotations
+
 import json
 import logging
+from typing import TYPE_CHECKING
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
+        StripeReconciliationService,
+    )
 
 from fastapi import BackgroundTasks
 from schema.gym_discount import DiscountType
@@ -222,6 +230,7 @@ class DiscountsService:
         self,
         request: DiscountUpdateRequest,
         background_tasks: BackgroundTasks,
+        reconciliation_service: StripeReconciliationService,
     ) -> DiscountResponse:
         """Update a non-linked discount in the CRM database and Stripe.
 
@@ -316,6 +325,7 @@ class DiscountsService:
                 background_tasks.add_task(
                     self._payment_sync.bulk_payment_sync,
                     affected,
+                    reconciliation_service,
                 )
 
         return DiscountResponse(**row)
@@ -327,6 +337,7 @@ class DiscountsService:
         discount_id: UUID,
         gym_id: UUID,
         background_tasks: BackgroundTasks,
+        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Soft-delete a non-linked discount.
 
@@ -383,4 +394,5 @@ class DiscountsService:
             background_tasks.add_task(
                 self._payment_sync.bulk_payment_sync,
                 affected,
+                reconciliation_service,
             )
