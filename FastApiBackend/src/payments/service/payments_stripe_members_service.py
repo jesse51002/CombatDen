@@ -77,7 +77,7 @@ class PaymentsStripeMembersService:
                 resource_type=StripeResourceType.customer,
             ) from exc
 
-        if customer.deleted:
+        if getattr(customer, "deleted", False):
             raise PaymentsResourceNotFoundError(
                 f"Customer {customer_id} not found",
                 resource_id=customer_id,

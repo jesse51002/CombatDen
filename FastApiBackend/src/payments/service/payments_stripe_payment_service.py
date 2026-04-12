@@ -75,14 +75,25 @@ class PaymentsStripePaymentService:
         """
         opts = self._client.connect_opts(stripe_account_id)
 
-        await self._members.retrieve_customer(
+        customer = await self._members.retrieve_customer(
             request.stripe_customer_id,
             opts,
         )
 
+        # Resolve the default payment method for off-session charges.
+        default_pm = None
+        if customer.invoice_settings and customer.invoice_settings.default_payment_method:
+            pm_ref = customer.invoice_settings.default_payment_method
+            default_pm = pm_ref if isinstance(pm_ref, str) else pm_ref.id
+        if not default_pm:
+            raise ValueError(
+                f"Customer {request.stripe_customer_id} has no default payment method"
+            )
+
         pi = await self._stripe.v1.payment_intents.create_async(
             params=PaymentIntentCreateParams(
                 customer=request.stripe_customer_id,
+                payment_method=default_pm,
                 amount=request.amount,
                 currency=request.currency,
                 confirm=True,
@@ -98,7 +109,7 @@ class PaymentsStripePaymentService:
             amount=pi.amount,
             currency=pi.currency,
             status=pi.status,
-            metadata=dict(pi.metadata) if pi.metadata else {},
+            metadata=pi.metadata.to_dict() if pi.metadata else {},
         )
 
     # ── Price-Based Invoice Payments ─────────────────────────────
@@ -132,20 +143,26 @@ class PaymentsStripePaymentService:
             stripe_account_id,
         )
 
-        await self._stripe.v1.invoice_items.create_async(
-            params=InvoiceItemCreateParams(
-                customer=request.stripe_customer_id,
-                price=request.stripe_price_id,
-            ),
-            options=opts,
-        )
-
         invoice = await self._stripe.v1.invoices.create_async(
             params=InvoiceCreateParams(
                 customer=request.stripe_customer_id,
                 metadata=request.metadata,
                 auto_advance=False,
             ),
+            options=opts,
+        )
+
+        await self._stripe.v1.invoice_items.create_async(
+            params=InvoiceItemCreateParams(
+                customer=request.stripe_customer_id,
+                invoice=invoice.id,
+                pricing={"price": request.stripe_price_id},
+            ),
+            options=opts,
+        )
+
+        invoice = await self._stripe.v1.invoices.finalize_invoice_async(
+            invoice.id,
             options=opts,
         )
 
@@ -161,7 +178,7 @@ class PaymentsStripePaymentService:
             amount_paid=invoice.amount_paid,
             currency=invoice.currency,
             status=invoice.status,
-            metadata=dict(invoice.metadata) if invoice.metadata else {},
+            metadata=invoice.metadata.to_dict() if invoice.metadata else {},
         )
 
     # ── Invoice Preview ───────────────────────────────────────────

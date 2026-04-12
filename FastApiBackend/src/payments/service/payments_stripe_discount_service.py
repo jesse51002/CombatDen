@@ -42,7 +42,7 @@ class PaymentsStripeDiscountService:
             duration=StripeCouponDuration(coupon.duration),
             duration_in_months=coupon.duration_in_months,
             valid=coupon.valid,
-            metadata=dict(coupon.metadata) if coupon.metadata else {},
+            metadata=coupon.metadata.to_dict() if coupon.metadata else {},
         )
 
     async def retrieve_discount(
@@ -74,7 +74,7 @@ class PaymentsStripeDiscountService:
                 resource_type=StripeResourceType.coupon,
             ) from exc
 
-        if coupon.deleted:
+        if getattr(coupon, "deleted", False):
             raise PaymentsResourceNotFoundError(
                 f"Coupon {coupon_id} not found",
                 resource_id=coupon_id,

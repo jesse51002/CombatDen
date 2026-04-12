@@ -98,6 +98,8 @@ class PaymentsSubscriptionItemResponse(BaseModel):
     stripe_subscription_item_id: str
     stripe_price_id: str
     quantity: int
+    current_period_start: int
+    current_period_end: int
     discounts: list[str] = []
 
 
@@ -131,8 +133,6 @@ class PaymentsSubscriptionResponse(BaseModel):
     stripe_customer_id: str
     items: list[PaymentsSubscriptionItemResponse]
     status: str
-    current_period_start: int | None = None
-    current_period_end: int | None = None
     cancel_at_period_end: bool = False
     discounts: list[str] = []
     metadata: dict[str, str] = {}

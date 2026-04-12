@@ -1,6 +1,5 @@
 """Request schemas for member membership lifecycle operations."""
 
-from datetime import date
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -28,7 +27,6 @@ class MemberMembershipsStartRequest(BaseModel):
     gym_id: UUID
     plan_id: UUID
     price_id: UUID
-    start_date: date
     discount_ids: list[UUID] | None = None
     include_linked_discount: bool = False
     prorate: bool = True

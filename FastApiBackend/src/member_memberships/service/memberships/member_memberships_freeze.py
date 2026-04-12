@@ -112,7 +112,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         params = {
             "crm_user_id": str(crm_user_id),
             "gym_id": str(gym_id),
-            "freeze_end_date": freeze_end_date.isoformat(),
+            "freeze_end_date": freeze_end_date,
         }
         async with self._db_pool.session() as session:
             await session.execute(text(sql), params)

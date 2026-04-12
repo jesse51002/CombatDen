@@ -101,7 +101,10 @@ class MembershipPlansPrice(MembershipPlansBase):
             request.gym_id,
         )
 
-        # ── Step 1: DB insert (NULL stripe_price_id) ──────────
+        # ── Step 1: Deactivate old price + insert new (single txn) ─
+        deactivate_all_sql = load_sql(
+            SQL_DIR / "membership_plans_price_deactivate_all.sql",
+        )
         insert_sql = load_sql(
             SQL_DIR / "membership_plans_price_insert.sql",
         )
@@ -113,6 +116,16 @@ class MembershipPlansPrice(MembershipPlansBase):
         }
 
         async with self._db_pool.session() as session:
+            deact_result = await session.execute(
+                text(deactivate_all_sql),
+                {
+                    "plan_id": str(request.plan_id),
+                    "gym_id": str(request.gym_id),
+                },
+            )
+            old_price_row = deact_result.mappings().fetchone()
+            old_price = dict(old_price_row) if old_price_row else None
+
             result = await session.execute(
                 text(insert_sql),
                 price_params,
@@ -167,13 +180,6 @@ class MembershipPlansPrice(MembershipPlansBase):
                 stripe_id=stripe_resp.stripe_price_id,
                 crm_pk=price_id,
             ) from exc
-
-        # ── CRM: deactivate old price ─────────────────────────
-        old_price = await self._deactivate_old_price(
-            plan_id=request.plan_id,
-            gym_id=request.gym_id,
-            exclude_price_id=new_price_row["price_id"],
-        )
 
         # ── Stripe: deactivate old price (best-effort) ────────
         if old_price and old_price.get("stripe_price_id"):

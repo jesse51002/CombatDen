@@ -59,7 +59,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
         gym_id: UUID,
         plan_id: UUID,
         price_id: UUID,
-        start_date: date,
         discount_ids: list[UUID] | None = None,
         include_linked_discount: bool = False,
         prorate: bool = True,
@@ -69,14 +68,15 @@ class MemberMembershipsStart(MemberMembershipsBase):
         Validates the plan/price, checks no duplicate active
         membership exists, ensures the account is not frozen,
         inserts the CRM row, syncs to Stripe, then sets the
-        stripe_item_id on the CRM row.
+        stripe_item_id on the CRM row. Memberships always begin
+        on the day this method is called — future start dates
+        are not supported.
 
         Args:
             crm_user_id: The member.
             gym_id: The gym.
             plan_id: The membership plan.
             price_id: The price tier.
-            start_date: When the membership begins.
             discount_ids: Optional gym discount UUIDs.
             include_linked_discount: Whether this member qualifies
                 for linked (family) account-level discounts.
@@ -88,6 +88,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
             StripeOrphanError: If Stripe succeeds but the DB
                 update fails after retries.
         """
+        start_date = date.today()
         plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
         await self._check_no_existing(crm_user_id, gym_id, plan_id)
 
@@ -148,8 +149,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
                         response,
                         plan_price["stripe_price_id"],
                     )
+                    first_item = response.items[0] if response.items else None
                     next_due_date = self._period_end_to_date(
-                        response.current_period_end,
+                        first_item.current_period_end if first_item else None,
                     )
             else:
                 stripe_item_id = await self._charge_one_time(
@@ -278,9 +280,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
             "gym_id": str(gym_id),
             "plan_id": str(plan_id),
             "price_id": str(price_id),
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat() if end_date else None,
-            "next_due_date": next_due_date.isoformat() if next_due_date else None,
+            "start_date": start_date,
+            "end_date": end_date,
+            "next_due_date": next_due_date,
             "discount_ids": json.dumps(
                 [str(d) for d in discount_ids],
             )
@@ -313,7 +315,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 {
                     "item_id": item_id,
                     "crm_user_id": crm_user_id,
-                    "next_due_date": next_due_date.isoformat(),
+                    "next_due_date": next_due_date,
                 },
             )
             await session.commit()

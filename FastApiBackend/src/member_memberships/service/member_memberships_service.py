@@ -6,7 +6,6 @@ the public API and constructor signature.
 
 from __future__ import annotations
 
-from datetime import date
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -95,7 +94,6 @@ class MemberMembershipsService:
         gym_id: UUID,
         plan_id: UUID,
         price_id: UUID,
-        start_date: date,
         discount_ids: list[UUID] | None = None,
         include_linked_discount: bool = False,
         prorate: bool = True,
@@ -106,7 +104,6 @@ class MemberMembershipsService:
             gym_id=gym_id,
             plan_id=plan_id,
             price_id=price_id,
-            start_date=start_date,
             discount_ids=discount_ids,
             include_linked_discount=include_linked_discount,
             prorate=prorate,

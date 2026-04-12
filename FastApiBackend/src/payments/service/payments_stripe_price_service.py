@@ -229,7 +229,7 @@ class PaymentsStripePriceService:
                 resource_type=StripeResourceType.product,
             ) from exc
 
-        if product.deleted:
+        if getattr(product, "deleted", False):
             raise PaymentsResourceNotFoundError(
                 f"Product {product.id} not found",
                 resource_id=product.id,

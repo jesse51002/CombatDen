@@ -1,5 +1,8 @@
 import stripe
 from schema.membership_plan import DurationUnit
+from stripe.params._invoice_create_preview_params import (
+    InvoiceCreatePreviewParams,
+)
 from stripe.params._subscription_create_params import (
     SubscriptionCreateParams,
     SubscriptionCreateParamsBillingCycleAnchorConfig,
@@ -49,7 +52,7 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
             customer=request.stripe_customer_id,
             items=items,
             metadata=request.metadata,
-            billing_mode={"type": "flexible"},
+            proration_behavior="none",
         )
 
         sub_discounts = self._build_subscription_discounts(
@@ -105,8 +108,19 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         """
         create_params, opts = await self._build_create_params(request, stripe_account_id)
 
+        preview_params = InvoiceCreatePreviewParams(
+            customer=request.stripe_customer_id,
+            subscription_details={
+                "items": create_params.get("items", []),
+                "proration_behavior": create_params.get("proration_behavior", "none"),
+            },
+        )
+        discounts = create_params.get("discounts")
+        if discounts:
+            preview_params["discounts"] = discounts
+
         invoice = await self._stripe.v1.invoices.create_preview_async(
-            params=create_params,
+            params=preview_params,
             options=opts,
         )
         return map_invoice_preview(invoice)

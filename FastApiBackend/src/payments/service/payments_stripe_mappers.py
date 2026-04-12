@@ -22,11 +22,20 @@ def map_invoice_preview(
     lines: list[PaymentsInvoicePreviewLineItem] = []
     if invoice.lines and invoice.lines.data:
         for line in invoice.lines.data:
+            # Resolve price ID from either legacy ``price`` or new ``pricing``.
+            price_id = None
+            if hasattr(line, "pricing") and line.pricing:
+                pd = getattr(line.pricing, "price_details", None)
+                if pd:
+                    price_ref = pd.price
+                    price_id = price_ref if isinstance(price_ref, str) else price_ref.id
+            if not price_id and hasattr(line, "price") and line.price:
+                price_id = line.price if isinstance(line.price, str) else line.price.id
             lines.append(
                 PaymentsInvoicePreviewLineItem(
                     amount=line.amount,
                     description=line.description,
-                    stripe_price_id=(line.price.id if line.price else None),
+                    stripe_price_id=price_id,
                     quantity=line.quantity,
                 )
             )

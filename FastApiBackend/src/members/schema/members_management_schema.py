@@ -1,8 +1,10 @@
 """Request and response schemas for member management operations."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 # ── Create ──────────────────────────────────────────────────────
 
@@ -22,6 +24,19 @@ class MembersManagementCreateRequest(BaseModel):
     account_linked_to_id: UUID | None = None
     payment_method_id: str | None = None
 
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _check_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("name cannot be empty")
+        return v
+
+    @model_validator(mode="after")
+    def _check_linked_account_no_payment(self) -> MembersManagementCreateRequest:
+        if self.account_linked_to_id is not None and self.payment_method_id is not None:
+            raise ValueError("Linked accounts cannot have a payment method")
+        return self
+
 
 # ── Update (personal info) ──────────────────────────────────────
 
@@ -38,6 +53,13 @@ class MembersManagementUpdateRequest(BaseModel):
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None
     account_linked_to_id: UUID | None = None
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _check_name(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("name cannot be empty")
+        return v
 
 
 # ── Update Card ─────────────────────────────────────────────────

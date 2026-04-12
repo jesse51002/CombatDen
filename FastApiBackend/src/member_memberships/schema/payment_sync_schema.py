@@ -73,7 +73,7 @@ class SyncItem(BaseModel):
     """
 
     stripe_price_id: str
-    stripe_item_id: str
+    stripe_item_id: str | None = None
     crm_user_id: UUID
     plan_id: UUID
     has_linked_discount: bool = False

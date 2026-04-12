@@ -63,5 +63,7 @@ class PaymentsSubscriptionItem(PaymentsSubscriptionBase):
             stripe_subscription_item_id=si.id,
             stripe_price_id=si.price.id,
             quantity=si.quantity or 1,
+            current_period_start=si.current_period_start,
+            current_period_end=si.current_period_end,
             discounts=discount_ids,
         )

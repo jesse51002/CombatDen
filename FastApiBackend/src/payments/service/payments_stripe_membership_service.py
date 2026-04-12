@@ -73,7 +73,7 @@ class PaymentsStripeMembershipService:
                 resource_type=StripeResourceType.product,
             ) from exc
 
-        if product.deleted:
+        if getattr(product, "deleted", False):
             raise PaymentsResourceNotFoundError(
                 f"Product {product_id} not found",
                 resource_id=product_id,
@@ -111,7 +111,7 @@ class PaymentsStripeMembershipService:
             active=product.active,
             name=product.name,
             prices=[self._map_price(p) for p in prices],
-            metadata=dict(product.metadata) if product.metadata else {},
+            metadata=product.metadata.to_dict() if product.metadata else {},
         )
 
     async def _list_prices(
@@ -245,20 +245,8 @@ class PaymentsStripeMembershipService:
                 if item.is_default:
                     default_price_id = price_resp.stripe_price_id
 
-        for price in existing_prices:
-            if price.id not in incoming_ids and price.active:
-                logger.warning(
-                    "Deactivating price %s on product %s — not present in update request",
-                    price.id,
-                    request.stripe_product_id,
-                )
-                await self._price_service.deactivate_price(
-                    PaymentsPriceDeactivateRequest(
-                        stripe_price_id=price.id,
-                    ),
-                    stripe_account_id,
-                )
-
+        # Update product (including default_price) BEFORE deactivating
+        # omitted prices — Stripe won't let you archive the default price.
         update_params = ProductUpdateParams(
             name=request.plan_name,
             metadata=request.metadata,
@@ -272,6 +260,20 @@ class PaymentsStripeMembershipService:
             params=update_params,
             options=opts,
         )
+
+        for price in existing_prices:
+            if price.id not in incoming_ids and price.active:
+                logger.warning(
+                    "Deactivating price %s on product %s — not present in update request",
+                    price.id,
+                    request.stripe_product_id,
+                )
+                await self._price_service.deactivate_price(
+                    PaymentsPriceDeactivateRequest(
+                        stripe_price_id=price.id,
+                    ),
+                    stripe_account_id,
+                )
 
         prices = await self._list_prices(product.id, opts)
         return self._map_product(product, prices)

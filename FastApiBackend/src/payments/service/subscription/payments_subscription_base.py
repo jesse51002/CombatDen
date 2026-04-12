@@ -78,6 +78,7 @@ class PaymentsSubscriptionBase:
     ) -> PaymentsSubscriptionResponse:
         """Map a Stripe Subscription to our response schema."""
         items: list[PaymentsSubscriptionItemResponse] = []
+
         if sub.items and sub.items.data:
             for si in sub.items.data:
                 item_discount_ids: list[str] = []
@@ -90,6 +91,8 @@ class PaymentsSubscriptionBase:
                         stripe_subscription_item_id=si.id,
                         stripe_price_id=si.price.id,
                         quantity=si.quantity or 1,
+                        current_period_start=si.current_period_start,
+                        current_period_end=si.current_period_end,
                         discounts=item_discount_ids,
                     )
                 )
@@ -97,7 +100,9 @@ class PaymentsSubscriptionBase:
         sub_discount_ids: list[str] = []
         if sub.discounts:
             for d in sub.discounts:
-                if hasattr(d, "coupon") and d.coupon:
+                if isinstance(d, str):
+                    sub_discount_ids.append(d)
+                elif hasattr(d, "coupon") and d.coupon:
                     sub_discount_ids.append(d.coupon.id)
 
         return PaymentsSubscriptionResponse(
@@ -105,11 +110,9 @@ class PaymentsSubscriptionBase:
             stripe_customer_id=sub.customer,
             items=items,
             status=sub.status,
-            current_period_start=sub.current_period_start,
-            current_period_end=sub.current_period_end,
             cancel_at_period_end=sub.cancel_at_period_end,
             discounts=sub_discount_ids,
-            metadata=dict(sub.metadata) if sub.metadata else {},
+            metadata=sub.metadata.to_dict() if sub.metadata else {},
         )
 
     # ── Item Builders ─────────────────────────────────────────────
@@ -128,7 +131,6 @@ class PaymentsSubscriptionBase:
             entry: dict[str, Any] = {
                 "price": item.stripe_price_id,
                 "quantity": item.quantity,
-                "proration_behavior": ("always_invoice" if item.prorate else "none"),
             }
             if item.discounts:
                 entry["discounts"] = [{"coupon": d.coupon} for d in item.discounts]
@@ -326,8 +328,6 @@ def _build_reconcile_entry(
         PaymentsResourceNotFoundError: If stripe_item_id is set
             but not found in the current subscription.
     """
-    proration = "always_invoice" if item.prorate else "none"
-
     if item.stripe_item_id:
         if item.stripe_item_id not in current_by_id:
             raise PaymentsResourceNotFoundError(
@@ -341,7 +341,6 @@ def _build_reconcile_entry(
             "id": item.stripe_item_id,
             "price": item.stripe_price_id,
             "quantity": item.quantity,
-            "proration_behavior": proration,
             "discounts": (
                 [{"coupon": d.coupon} for d in item.discounts] if item.discounts else ""
             ),
@@ -350,7 +349,6 @@ def _build_reconcile_entry(
         entry = {
             "price": item.stripe_price_id,
             "quantity": item.quantity,
-            "proration_behavior": proration,
         }
         if item.discounts:
             entry["discounts"] = [{"coupon": d.coupon} for d in item.discounts]

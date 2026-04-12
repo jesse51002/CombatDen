@@ -287,7 +287,6 @@ async def start_membership(
             gym_id=request.gym_id,
             plan_id=request.plan_id,
             price_id=request.price_id,
-            start_date=request.start_date,
             discount_ids=request.discount_ids,
             include_linked_discount=request.include_linked_discount,
             prorate=request.prorate,
