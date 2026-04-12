@@ -19,14 +19,14 @@ USER_GYM_PROFILES: frozenset[str] = frozenset(
         # Stripe columns — always set by backend, never by client
         "stripe_customer_id",  # trigger: trg_prevent_stripe_customer_id_overwrite
         "stripe_payment_method_id",
-        "stripe_sub_id_week",
         "stripe_sub_id_month",
-        "stripe_sub_id_year",
         "payment_type",
         "card_brand",
         "card_last_four",
         "card_exp_month",
         "card_exp_year",
+        "freeze_start_date",  # managed by backend freeze/unfreeze logic
+        "freeze_end_date",  # managed by backend freeze/unfreeze logic
         "account_linked_to_id",  # set by backend linking logic, not client
         "linked_discount_id",  # set by backend linking logic, not client
     }
@@ -34,12 +34,14 @@ USER_GYM_PROFILES: frozenset[str] = frozenset(
 
 MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
     {
-        "crm_user_id",  # composite PK
-        "gym_id",  # composite PK
-        "plan_id",  # composite PK
+        "item_id",  # PK, auto-generated UUID
+        "crm_user_id",  # identity FK
+        "gym_id",  # identity FK
+        "plan_id",  # immutable (trigger: trg_prevent_plan_id_overwrite)
         "created_at",  # auto-generated timestamp
         # Stripe columns — always set by backend
         "stripe_item_id",
+        "price_id"
     }
 )
 
@@ -158,6 +160,7 @@ GYM_CLASSES_LOG: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "class_id",  # identity FK
         "plan_id",  # identity FK
+        "item_id",  # identity FK, membership item
         "time",  # auto-generated timestamp
     }
 )

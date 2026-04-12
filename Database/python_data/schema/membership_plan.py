@@ -27,8 +27,8 @@ class MembershipPlanCreate(SeedModel):
     plan_name: str
     plan_type: PlanType
     class_count: Optional[int] = None
-    duration_amount: int
-    duration_unit: DurationUnit
+    duration_amount: Optional[int] = None
+    duration_unit: Optional[DurationUnit] = None
     is_public: bool = True
     is_deleted: bool = False
     stripe_product_id: Optional[str] = None

@@ -42,16 +42,16 @@ def generate_linked_discounts(
     linked_discounts = []
     for plan in recurring_plans:
         num_tiers = random.randint(1, 3)
-        base_pct = random.uniform(5, 15)
+        base_dollar_off = random.randint(500, 1500)
         for i in range(1, num_tiers + 1):
-            pct = round(base_pct + (i - 1) * 5, 1)
+            dollar_off = base_dollar_off + (i - 1) * 500
             linked_discounts.append(
                 GymDiscountCreate(
                     discount_id=uuid.uuid4(),
                     gym_id=gym_id,
                     discount_name=f"{plan.plan_name} - Linked Member #{i}",
                     discount_type="linked",
-                    percentage_off=pct,
+                    dollar_off=dollar_off,
                     membership_plan_id=plan.plan_id,
                     linked_discount_num=i,
                     duration="forever",

@@ -61,5 +61,6 @@ class GymClassLogCreate(SeedModel):
     gym_id: UUID
     class_id: UUID
     plan_id: UUID
+    item_id: UUID
     instructor_id: Optional[UUID] = None
     time: Optional[datetime] = None

@@ -49,7 +49,7 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
             customer=request.stripe_customer_id,
             items=items,
             metadata=request.metadata,
-            billing_mode={"type": "classic"},
+            billing_mode={"type": "flexible"},
         )
 
         sub_discounts = self._build_subscription_discounts(

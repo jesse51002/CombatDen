@@ -197,6 +197,10 @@ def seed():
             if gym_linked_discounts and random.choice([True, False]):
                 profile_map[linked_id].linked_discount_id = random.choice(gym_linked_discounts).discount_id
 
+    # Apply account-level freeze (after linking, so children are skipped)
+    for gym in gym_records:
+        profiles.apply_freeze(all_profiles[gym.gym_id])
+
     # Now insert profiles (without account_linked_to_id first, then update linked ones)
     print("Inserting profiles...")
     for gym in gym_records:

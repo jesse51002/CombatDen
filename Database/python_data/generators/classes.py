@@ -192,10 +192,19 @@ def generate_logs(
     for m in memberships:
         memberships_by_user.setdefault(m.crm_user_id, []).append(m)
 
+    # Index profiles for parent freeze lookup (linked accounts inherit freeze)
+    profile_by_id: dict[uuid.UUID, UserGymProfileCreate] = {p.crm_user_id: p for p in profiles}
+
     for profile in profiles:
         user_memberships = memberships_by_user.get(profile.crm_user_id)
         if not user_memberships:
             continue
+
+        # Linked accounts inherit freeze from their parent
+        if profile.account_linked_to_id and profile.account_linked_to_id in profile_by_id:
+            freeze_profile = profile_by_id[profile.account_linked_to_id]
+        else:
+            freeze_profile = profile
 
         for membership in user_memberships:
             # Determine the active window for this membership
@@ -211,9 +220,9 @@ def generate_logs(
             total_days = (window_end - window_start).days
 
             # Subtract frozen period if it overlaps the active window
-            if membership.freeze_start_date and membership.freeze_end_date:
-                freeze_start = max(membership.freeze_start_date, window_start)
-                freeze_end = min(membership.freeze_end_date, window_end)
+            if freeze_profile.freeze_start_date and freeze_profile.freeze_end_date:
+                freeze_start = max(freeze_profile.freeze_start_date, window_start)
+                freeze_end = min(freeze_profile.freeze_end_date, window_end)
                 if freeze_end > freeze_start:
                     total_days -= (freeze_end - freeze_start).days
 
@@ -232,9 +241,9 @@ def generate_logs(
                     log_date = window_start + timedelta(days=days_offset)
                     # Skip if inside frozen period
                     if (
-                        membership.freeze_start_date
-                        and membership.freeze_end_date
-                        and membership.freeze_start_date <= log_date <= membership.freeze_end_date
+                        freeze_profile.freeze_start_date
+                        and freeze_profile.freeze_end_date
+                        and freeze_profile.freeze_start_date <= log_date <= freeze_profile.freeze_end_date
                     ):
                         continue
                     break
@@ -263,6 +272,7 @@ def generate_logs(
                         gym_id=gym_id,
                         class_id=schedule.class_id,
                         plan_id=membership.plan_id,
+                        item_id=membership.item_id,
                         instructor_id=instructor_id,
                         time=log_time,
                     )

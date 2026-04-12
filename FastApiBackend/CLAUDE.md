@@ -96,6 +96,10 @@
 - Bad: `datetime.now()` (uses local timezone)
 - Use `default_factory=lambda: datetime.now(timezone.utc)` for Pydantic fields
 - Store all timestamps in UTC, convert to user's timezone only in the frontend
+- **NEVER do manual date arithmetic for months/years** — use `dateutil.relativedelta` instead. Manual calendar math has too many edge cases (leap years, month-end clamping, etc.)
+- Good: `start + relativedelta(months=3)`, `start + relativedelta(years=1)`
+- Bad: Manual modular arithmetic with `calendar.monthrange`, `date.replace(year=...)`
+- `timedelta` is fine for days/weeks only
 
 **Async/Await**
 - Always await coroutines

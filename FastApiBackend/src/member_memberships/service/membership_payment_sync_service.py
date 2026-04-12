@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import TYPE_CHECKING
 from uuid import UUID
-
-from schema.membership_plan import DurationUnit
 
 import src.shared.db_schema_path  # noqa: F401
 
@@ -16,16 +15,16 @@ if TYPE_CHECKING:
     )
 from src.member_memberships.schema.payment_sync_schema import (
     IntervalDesiredItem,
+    ParentProfile,
     SyncItem,
 )
 from src.member_memberships.service.linked_member_discount_service import (
     LinkedMemberDiscountService,
 )
 from src.member_memberships.service.payment_sync.payment_sync_builder import (
-    SUB_ID_FIELD,
     aggregate_plan_discounts,
     build_desired_items,
-    group_by_interval,
+    build_subscription_bucket,
     map_add_ids_to_intervals,
 )
 from src.member_memberships.service.payment_sync.payment_sync_discount_allocator import (
@@ -55,8 +54,8 @@ class MembershipPaymentSyncService:
     """Syncs membership payment state with Stripe.
 
     Orchestrates sub-services to resolve linked accounts,
-    group memberships by billing interval, allocate linked
-    discounts, and create/update/cancel Stripe subscriptions.
+    build the desired subscription state, allocate linked
+    discounts, and create/update/cancel the Stripe subscription.
     """
 
     def __init__(
@@ -76,26 +75,53 @@ class MembershipPaymentSyncService:
         crm_user_id: UUID,
         add_ids: list[SyncItem],
         cancel_ids: list[SyncItem],
-    ) -> list[PaymentsSubscriptionResponse]:
+        freeze_end_date: date | None = None,
+        unfreeze: bool = False,
+    ) -> PaymentsSubscriptionResponse | None:
         """Sync a member's recurring memberships with Stripe.
 
-        Resolves to the paying parent account, gathers all
-        family memberships, recalculates linked discounts,
-        and reconciles Stripe subscriptions per billing interval.
+        Resolves to the paying parent account, applies any
+        freeze/unfreeze action first, then gathers all family
+        memberships, recalculates linked discounts, and
+        reconciles the monthly Stripe subscription.
+
+        Explicit freeze/unfreeze cannot be combined with
+        membership changes — billing order matters on Stripe,
+        so these must be separate operations.
 
         Args:
             crm_user_id: Any family member's profile ID.
-            add_ids: New items to add to subscriptions.
-            cancel_ids: Items to remove from subscriptions.
+            add_ids: New items to add to the subscription.
+            cancel_ids: Items to remove from the subscription.
+            freeze_end_date: Explicitly freeze with this end date.
+            unfreeze: Explicitly unfreeze the subscription.
 
         Returns:
-            All resulting subscription responses (one per active
-            interval). Cancelled intervals are not included.
+            The resulting subscription response, or None if
+            the subscription was cancelled (no items remaining).
+
+        Raises:
+            ValueError: If membership changes are combined with
+                freeze/unfreeze, or if both freeze and unfreeze
+                are requested.
         """
+        self._validate_freeze_params(add_ids, cancel_ids, freeze_end_date, unfreeze)
+
         parent = await self._queries.resolve_parent(crm_user_id)
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(
             parent.gym_id,
         )
+
+        # ── Freeze/unfreeze first ─────────────────────────
+        await self._stripe.sync_freeze_state(
+            parent.stripe_sub_id_month,
+            parent,
+            stripe_account_id,
+            freeze_end_date=freeze_end_date,
+            unfreeze=unfreeze,
+        )
+
+        # ── Full membership sync ──────────────────────────
         family_ids = await self._queries.get_family_ids(parent)
         children_ids = [fid for fid in family_ids if fid != parent.crm_user_id]
 
@@ -129,16 +155,21 @@ class MembershipPaymentSyncService:
             plan_discounts,
         )
 
-        buckets = group_by_interval(desired, parent)
-        allocate_linked_discounts(buckets, discounts)
+        bucket = build_subscription_bucket(desired, parent.stripe_sub_id_month)
+        allocate_linked_discounts(bucket, discounts)
 
-        sub_results = await self._stripe.execute_sync(
-            buckets,
-            parent,
+        sub_result = await self._stripe.execute_sync(
+            bucket,
+            parent.stripe_customer_id,
             stripe_account_id,
         )
 
-        await self._write_back_sub_ids(sub_results, parent.crm_user_id)
+        # ── Write back subscription ID ─────────────────────
+        new_sub_id = sub_result.stripe_subscription_id if sub_result else None
+        await self._queries.update_profile_sub_id(
+            parent.crm_user_id,
+            new_sub_id,
+        )
 
         # ── Persist linked discount assignments ────────────
         await self._linked_discounts.persist_assignments(
@@ -147,7 +178,7 @@ class MembershipPaymentSyncService:
             parent.gym_id,
         )
 
-        return [r for r in sub_results.values() if r is not None]
+        return sub_result
 
     async def bulk_payment_sync(
         self,
@@ -186,7 +217,34 @@ class MembershipPaymentSyncService:
                     exc_info=True,
                 )
 
+    async def resolve_parent(self, crm_user_id: UUID) -> ParentProfile:
+        """Expose parent resolution for upstream validation.
+
+        Args:
+            crm_user_id: Any family member's profile ID.
+
+        Returns:
+            The paying parent's profile.
+        """
+        return await self._queries.resolve_parent(crm_user_id)
+
     # ── Private Helpers ─────────────────────────────────────────
+
+    @staticmethod
+    def _validate_freeze_params(
+        add_ids: list[SyncItem],
+        cancel_ids: list[SyncItem],
+        freeze_end_date: date | None,
+        unfreeze: bool,
+    ) -> None:
+        """Ensure freeze/unfreeze is not combined with membership changes."""
+        has_membership_changes = bool(add_ids or cancel_ids)
+        has_freeze_action = freeze_end_date is not None or unfreeze
+
+        if has_membership_changes and has_freeze_action:
+            raise ValueError("Cannot combine membership changes with freeze/unfreeze")
+        if freeze_end_date is not None and unfreeze:
+            raise ValueError("Cannot freeze and unfreeze in the same operation")
 
     async def _resolve_add_intervals(
         self,
@@ -198,18 +256,3 @@ class MembershipPaymentSyncService:
         price_ids = [item.stripe_price_id for item in add_ids]
         interval_map = await self._queries.get_price_intervals(price_ids)
         return map_add_ids_to_intervals(add_ids, interval_map)
-
-    async def _write_back_sub_ids(
-        self,
-        sub_results: dict[DurationUnit, PaymentsSubscriptionResponse | None],
-        crm_user_id: UUID,
-    ) -> None:
-        """Write Stripe subscription IDs back to the parent profile."""
-        if not sub_results:
-            return
-
-        updates = {
-            SUB_ID_FIELD[interval]: (resp.stripe_subscription_id if resp else None)
-            for interval, resp in sub_results.items()
-        }
-        await self._queries.update_profile_sub_ids(crm_user_id, updates)

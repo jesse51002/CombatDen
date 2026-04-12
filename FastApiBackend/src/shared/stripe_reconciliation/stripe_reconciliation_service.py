@@ -89,12 +89,8 @@ class StripeReconciliationService:
                 #    memberships at their next_due_date (end of
                 #    current billing period). Falls back to today
                 #    if next_due_date is NULL or in the past.
-                # 3. Clear the matching stripe_sub_id_week,
-                #    stripe_sub_id_month, or stripe_sub_id_year
-                #    on user_gym_profiles for that member —
-                #    match the interval by checking which
-                #    stripe_sub_id_* field equals the missing
-                #    subscription ID.
+                # 3. Clear stripe_sub_id_month on user_gym_profiles
+                #    for that member.
                 # 4. The Stripe subscription is already gone, so
                 #    no Stripe API call is needed.
                 pass
@@ -141,7 +137,19 @@ class StripeReconciliationService:
 
             case StripeResourceType.subscription_item:
                 # TODO: Build a CRM subscription item service
-                # (e.g. CrmSubscriptionItemService) that mirrors
+                # (When a Stripe price is not found:
+                # 1. Look up membership_plan_prices by
+                #    stripe_price_id to find the affected
+                #    CRM price record.
+                # 2. Deactivate the price: set is_active = false
+                #    on membership_plan_prices.
+                # 3. Any active memberships using this price_id
+                #    in member_memberships may need repricing —
+                #    the MembershipPricingService already handles
+                #    recalculation, but the trigger for it needs
+                #    to be wired up here.
+                # 4. No Stripe API call needed — the price is
+                #    already gone.e.g. CrmSubscriptionItemService) that mirrors
                 # PaymentsSubscriptionItem.
                 #
                 # When a Stripe subscription item is not found:
@@ -225,7 +233,7 @@ class StripeReconciliationService:
 
         Looks up the member by stripe_customer_id, then calls
         MembersManagementService.unlink_payment to clear card
-        fields and cancel recurring memberships.
+        fields.
 
         Args:
             stripe_customer_id: The Stripe customer ID that was

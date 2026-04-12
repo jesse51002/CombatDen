@@ -31,6 +31,9 @@ from src.members.service.members_crm_total_counts_service import (
 from src.members.service.members_management_service import (
     MembersManagementService,
 )
+from src.membership_plans.service.membership_plans_service import (
+    MembershipPlansService,
+)
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
     PaymentsStripeDiscountService,
@@ -78,6 +81,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.member_memberships.member_memberships_router",
             "src.classes.classes_router",
             "src.discounts.discounts_router",
+            "src.membership_plans.membership_plans_router",
         ],
     )
 
@@ -164,12 +168,13 @@ class DependencyInjector(containers.DeclarativeContainer):
         MemberMembershipsService,
         db_pool=db_pool,
         payment_sync_service=membership_payment_sync_service,
+        payment_service=payments_payment_service,
+        gym_stripe_service=gym_stripe_service,
     )
     members_management_service = providers.Factory(
         MembersManagementService,
         db_pool=db_pool,
         payments_members_service=payments_members_service,
-        member_memberships_service=member_memberships_service,
     )
 
     discounts_service = providers.Factory(
@@ -177,6 +182,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         gym_stripe_service=gym_stripe_service,
         stripe_discount_service=payments_discount_service,
+        membership_payment_sync_service=membership_payment_sync_service,
+    )
+
+    membership_plans_service = providers.Factory(
+        MembershipPlansService,
+        db_pool=db_pool,
+        gym_stripe_service=gym_stripe_service,
+        stripe_membership_service=payments_membership_service,
+        stripe_price_service=payments_price_service,
         membership_payment_sync_service=membership_payment_sync_service,
     )
 

@@ -13,44 +13,6 @@ CREATE TABLE gym_classes (
     UNIQUE (class_id, gym_id)
 );
 
--- Enable Row Level Security
-ALTER TABLE gym_classes ENABLE ROW LEVEL SECURITY;
-
--- Policy: All employees can view classes
-CREATE POLICY "Gym employees can view classes"
-    ON gym_classes
-    FOR SELECT
-    USING (is_gym_employee(gym_classes.gym_id));
-
--- Policy: Members can view classes for their gym
-CREATE POLICY "Members can view classes"
-    ON gym_classes
-    FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_gym_profiles
-            WHERE user_gym_profiles.gym_id = gym_classes.gym_id
-            AND user_gym_profiles.user_id = auth.uid()
-        )
-    );
-
--- Policy: Gym staff can insert classes
-CREATE POLICY "Gym staff can insert classes"
-    ON gym_classes
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (is_gym_admin_or_owner(gym_classes.gym_id));
-
--- Policy: Gym staff can update classes
-CREATE POLICY "Gym staff can update classes"
-    ON gym_classes
-    FOR UPDATE
-    USING (is_gym_admin_or_owner(gym_classes.gym_id))
-    WITH CHECK (is_gym_admin_or_owner(gym_classes.gym_id));
-
--- Column-level permissions: Revoke UPDATE on immutable columns
-REVOKE UPDATE (class_id, gym_id, created_at) ON TABLE gym_classes FROM authenticated;
-
 -- Trigger: validates that every UUID in allowed_plan_ids exists in membership_plans for the same gym
 CREATE OR REPLACE FUNCTION check_class_plan_ids_gym_match()
 RETURNS TRIGGER AS $$
@@ -63,7 +25,7 @@ BEGIN
         LOOP
             plan_uuid := plan_id_text::UUID;
             IF NOT EXISTS (
-                SELECT 1 FROM membership_plans
+                SELECT 1 FROM membership_plans_unfiltered
                 WHERE plan_id = plan_uuid
                 AND gym_id = NEW.gym_id
             ) THEN

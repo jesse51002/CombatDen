@@ -13,6 +13,9 @@ from src.member_memberships.member_memberships_router import (
     member_memberships_router,
 )
 from src.members.members_router import members_router
+from src.membership_plans.membership_plans_router import (
+    membership_plans_router,
+)
 
 
 @asynccontextmanager
@@ -48,6 +51,7 @@ def create_app() -> FastAPI:
     application.include_router(discounts_router)
     application.include_router(members_router)
     application.include_router(member_memberships_router)
+    application.include_router(membership_plans_router)
 
     return application
 

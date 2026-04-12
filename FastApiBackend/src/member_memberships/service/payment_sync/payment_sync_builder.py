@@ -10,18 +10,11 @@ from src.member_memberships.schema.payment_sync_schema import (
     ActiveMembershipRow,
     IntervalBucket,
     IntervalDesiredItem,
-    ParentProfile,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionDesiredItem,
     SubscriptionItemDiscount,
 )
-
-SUB_ID_FIELD = {
-    DurationUnit.week: "stripe_sub_id_week",
-    DurationUnit.month: "stripe_sub_id_month",
-    DurationUnit.year: "stripe_sub_id_year",
-}
 
 
 def aggregate_plan_discounts(
@@ -114,7 +107,7 @@ def _merge_group(group: list[IntervalDesiredItem]) -> IntervalDesiredItem:
     """Merge a group of items with the same stripe_price_id."""
     quantity = sum(e.item.quantity for e in group)
     total_price = sum(e.price for e in group)
-    stripe_item_id = _pick_stripe_item_id(group)
+    stripe_item_id = group[0].item.stripe_item_id
     prorate = _resolve_prorate(group)
     discounts = _union_discounts(group)
 
@@ -129,20 +122,6 @@ def _merge_group(group: list[IntervalDesiredItem]) -> IntervalDesiredItem:
         duration_unit=group[0].duration_unit,
         price=total_price,
     )
-
-
-def _pick_stripe_item_id(
-    group: list[IntervalDesiredItem],
-) -> str | None:
-    """Pick the stripe_item_id from the group.
-
-    Multiple memberships on the same price share the same
-    Stripe subscription item. Returns the first non-None ID.
-    """
-    for entry in group:
-        if entry.item.stripe_item_id:
-            return entry.item.stripe_item_id
-    return None
 
 
 def _resolve_prorate(group: list[IntervalDesiredItem]) -> bool:
@@ -204,33 +183,23 @@ def map_add_ids_to_intervals(
     return resolved
 
 
-def group_by_interval(
+def build_subscription_bucket(
     desired: list[IntervalDesiredItem],
-    parent: ParentProfile,
-) -> dict[DurationUnit, IntervalBucket]:
-    """Group desired items into interval buckets.
+    existing_sub_id: str | None,
+) -> IntervalBucket:
+    """Consolidate all desired items into a single subscription bucket.
 
-    Consolidates items by price within each bucket so each
-    stripe_price_id appears at most once with the correct quantity.
+    All recurring plans are monthly (enforced by DB constraint
+    recurring_must_be_monthly), so there is exactly one bucket.
+
+    Consolidates items by price so each stripe_price_id appears
+    at most once with the correct quantity.
     Pure logic, no DB calls.
     """
-    raw_buckets: dict[DurationUnit, list[IntervalDesiredItem]] = defaultdict(list)
-    for entry in desired:
-        raw_buckets[entry.duration_unit].append(entry)
-
-    buckets: dict[DurationUnit, IntervalBucket] = {}
-    for interval, entries in raw_buckets.items():
-        consolidated = consolidate_by_price(entries)
-        existing_sub_id = getattr(
-            parent,
-            SUB_ID_FIELD[interval],
-            None,
-        )
-        buckets[interval] = IntervalBucket(
-            interval=interval,
-            items=[e.item for e in consolidated],
-            existing_sub_id=existing_sub_id,
-            total_price=sum(e.price for e in consolidated),
-        )
-
-    return buckets
+    consolidated = consolidate_by_price(desired)
+    return IntervalBucket(
+        interval=DurationUnit.month,
+        items=[e.item for e in consolidated],
+        existing_sub_id=existing_sub_id,
+        total_price=sum(e.price for e in consolidated),
+    )

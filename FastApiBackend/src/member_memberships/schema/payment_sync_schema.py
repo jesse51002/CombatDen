@@ -1,5 +1,7 @@
 """Intermediate data models for the membership-to-Stripe sync flow."""
 
+from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -18,9 +20,17 @@ class ParentProfile(BaseModel):
     crm_user_id: UUID
     gym_id: UUID
     stripe_customer_id: str
-    stripe_sub_id_week: str | None = None
     stripe_sub_id_month: str | None = None
-    stripe_sub_id_year: str | None = None
+    freeze_start_date: date | None = None
+    freeze_end_date: date | None = None
+
+    @property
+    def is_frozen(self) -> bool:
+        """Whether the parent account is currently in a freeze window."""
+        if self.freeze_start_date is None or self.freeze_end_date is None:
+            return False
+        today = date.today()
+        return self.freeze_start_date <= today <= self.freeze_end_date
 
 
 class ActiveMembershipRow(BaseModel):
@@ -30,7 +40,7 @@ class ActiveMembershipRow(BaseModel):
     plan_id: UUID
     price_id: UUID
     stripe_price_id: str
-    stripe_item_id: str | None
+    stripe_item_id: str
     duration_unit: DurationUnit
     discount_ids: list[UUID]
     price: int
@@ -63,7 +73,7 @@ class SyncItem(BaseModel):
     """
 
     stripe_price_id: str
-    stripe_item_id: str | None = None
+    stripe_item_id: str
     crm_user_id: UUID
     plan_id: UUID
     has_linked_discount: bool = False
@@ -89,10 +99,15 @@ class SyncItem(BaseModel):
 
 
 class IntervalDesiredItem(BaseModel):
-    """A desired subscription item paired with its billing interval."""
+    """A desired subscription item paired with its billing interval.
+
+    duration_unit is a Literal — recurring plans are monthly-only
+    (enforced by DB constraint recurring_must_be_monthly). A non-month
+    value here indicates a data integrity issue.
+    """
 
     item: PaymentsSubscriptionDesiredItem
-    duration_unit: DurationUnit
+    duration_unit: Literal[DurationUnit.month]
     price: int
 
 

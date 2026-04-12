@@ -178,36 +178,25 @@ class PaymentSyncQueries:
 
     # ── Write Back ──────────────────────────────────────────────
 
-    async def update_profile_sub_ids(
+    async def update_profile_sub_id(
         self,
         crm_user_id: UUID,
-        sub_id_updates: dict[str, str | None],
+        stripe_sub_id_month: str | None,
     ) -> None:
-        """Write stripe_sub_id columns back to the parent profile.
+        """Write stripe_sub_id_month back to the parent profile.
 
         Args:
             crm_user_id: The parent profile to update.
-            sub_id_updates: Mapping of column_name -> new value.
+            stripe_sub_id_month: The Stripe subscription ID, or
+                None if cancelled.
         """
-        if not sub_id_updates:
-            return
-
-        set_parts = []
-        params: dict[str, str | None] = {
-            "crm_user_id": str(crm_user_id),
-        }
-
-        for column, sub_id in sub_id_updates.items():
-            param_name = f"val_{column}"
-            set_parts.append(f"{column} = :{param_name}")
-            params[param_name] = sub_id
-
-        set_clause = ", ".join(set_parts)
-        sql = load_sql(
-            SYNC_SQL_DIR / "update_profile_sub_ids.sql",
-            {"set_clause": set_clause},
-        )
-
+        sql = load_sql(SYNC_SQL_DIR / "update_profile_sub_ids.sql")
         async with self._db_pool.session() as session:
-            await session.execute(text(sql), params)
+            await session.execute(
+                text(sql),
+                {
+                    "crm_user_id": str(crm_user_id),
+                    "stripe_sub_id_month": stripe_sub_id_month,
+                },
+            )
             await session.commit()

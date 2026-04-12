@@ -1,7 +1,7 @@
 # Supabase Project
 
 ## Schema workflow
-- **Never edit migration files directly.** Only modify schema files in `schemas/`.
+- **Never edit migration files directly.** Only modify schema files in `schemas/` and access rules in `access_rules/`.
 - The user will run the Supabase migration command themselves.
 - **Never run the migration script** (`supabase db reset`, `supabase migration`, etc.) — the user always runs migrations manually because they need to reset the data. **Do not execute these commands under any circumstances.**
 - **Never run the seeding script** (`python python_data/main.py`, etc.) — the user will seed data manually. **Do not execute these commands under any circumstances.**
@@ -10,6 +10,7 @@
 - Always enable Row Level Security (RLS) on every table.
 - Always use `REVOKE UPDATE` on immutable columns (e.g. PKs, FKs, created_at) for the `authenticated` role.
 - Tables with any `stripe_*_id` column must NOT have INSERT or UPDATE RLS policies for the `authenticated` role — those operations go through `service_role` only. SELECT policies for `authenticated` are allowed.
+- **All access rules go in `access_rules/`, not in `schemas/`.** This includes `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`, `CREATE POLICY`, `REVOKE`, and `GRANT` statements. Each schema file in `schemas/` has a corresponding file in `access_rules/` with the same name. This separation exists to avoid circular dependencies (e.g. RLS policies that reference tables loaded later).
 
 ## Integrity constraints
 - Always name constraints with the `CONSTRAINT` keyword for readable error messages (e.g. `CONSTRAINT membership_must_match_gym`).
@@ -27,7 +28,8 @@
 - Used with `validate_mutable_columns()` in `src/shared/column_guard.py` to reject update requests that try to write immutable columns.
 
 ## Structure
-- `schemas/` — source-of-truth SQL for each table (DDL, RLS policies, column permissions, triggers)
+- `schemas/` — source-of-truth SQL for each table (DDL, constraints, indexes, triggers)
+- `access_rules/` — RLS policies, REVOKE/GRANT statements for each table (loaded after all schemas to avoid circular dependencies)
 - `migrations/` — generated migration files (do not touch)
 - `python_data/schema/` — shared Python enums, Pydantic models, and immutable column definitions used by both the seeding scripts and the FastAPI backend
 - `schema_db_diagram.io` — dbdiagram.io markup; always update this file when adding, removing, or renaming columns/tables

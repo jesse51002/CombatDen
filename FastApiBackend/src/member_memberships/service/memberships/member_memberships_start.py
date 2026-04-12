@@ -1,0 +1,302 @@
+"""Start (create) a new membership for a member."""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import date
+from typing import TYPE_CHECKING
+from uuid import UUID
+
+from dateutil.relativedelta import relativedelta
+from schema.membership_plan import PlanType
+from sqlalchemy import text
+
+import src.shared.db_schema_path  # noqa: F401
+from src.member_memberships import SQL_DIR
+from src.member_memberships.schema.payment_sync_schema import SyncItem
+from src.member_memberships.service.memberships.member_memberships_base import (
+    MemberMembershipsBase,
+)
+from src.payments.schema.payments_payment_schema import (
+    PaymentsInvoicePaymentCreateRequest,
+)
+from src.shared.database import DirectDatabasePool
+from src.shared.gym_stripe_service import GymStripeService
+from src.shared.sql_loader import load_sql
+
+if TYPE_CHECKING:
+    from src.member_memberships.service.membership_payment_sync_service import (
+        MembershipPaymentSyncService,
+    )
+    from src.payments.service.payments_stripe_payment_service import (
+        PaymentsStripePaymentService,
+    )
+
+logger = logging.getLogger(__name__)
+
+
+class MemberMembershipsStart(MemberMembershipsBase):
+    """Create a new membership."""
+
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        payment_sync_service: MembershipPaymentSyncService,
+        payment_service: PaymentsStripePaymentService,
+        gym_stripe_service: GymStripeService,
+    ) -> None:
+        super().__init__(db_pool, payment_sync_service)
+        self._payment_service = payment_service
+        self._gym_stripe = gym_stripe_service
+
+    async def start(
+        self,
+        crm_user_id: UUID,
+        gym_id: UUID,
+        plan_id: UUID,
+        price_id: UUID,
+        start_date: date,
+        discount_ids: list[UUID] | None = None,
+        include_linked_discount: bool = False,
+        prorate: bool = True,
+    ) -> None:
+        """Start a new membership for a member.
+
+        Validates the plan/price, checks no duplicate active
+        membership exists, ensures the account is not frozen,
+        syncs to Stripe, then inserts the CRM row.
+
+        Args:
+            crm_user_id: The member.
+            gym_id: The gym.
+            plan_id: The membership plan.
+            price_id: The price tier.
+            start_date: When the membership begins.
+            discount_ids: Optional gym discount UUIDs.
+            include_linked_discount: Whether this member qualifies
+                for linked (family) account-level discounts.
+            prorate: Whether to prorate the first charge.
+
+        Raises:
+            ValueError: If plan/price invalid, membership already
+                exists, or account is frozen.
+        """
+        plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
+        await self._check_no_existing(crm_user_id, gym_id, plan_id)
+
+        parent = await self._payment_sync.resolve_parent(crm_user_id)
+        if parent.is_frozen:
+            raise ValueError("Cannot start membership: account is frozen")
+
+        plan_type = PlanType(plan_price["plan_type"])
+        is_recurring = plan_type == PlanType.recurring
+
+        # ── Calculate dates ────────────────────────────────
+        end_date: date | None = None
+        if not is_recurring and plan_price["duration_amount"] and plan_price["duration_unit"]:
+            end_date = self._calculate_end_date(
+                start_date,
+                plan_price["duration_amount"],
+                plan_price["duration_unit"],
+            )
+
+        # ── Stripe first (recurring only) ──────────────────
+        if not plan_price["stripe_price_id"]:
+            raise ValueError(f"Plan price {plan_price['price_id']} missing stripe_price_id")
+
+        stripe_item_id: str | None = None
+        next_due_date: date | None = None
+
+        if is_recurring:
+            add_item = SyncItem(
+                stripe_price_id=plan_price["stripe_price_id"],
+                crm_user_id=crm_user_id,
+                plan_id=plan_id,
+                has_linked_discount=include_linked_discount,
+                prorate=prorate,
+            )
+            response = await self._payment_sync.update_payments_recurring(
+                crm_user_id,
+                add_ids=[add_item],
+                cancel_ids=[],
+            )
+            if response:
+                stripe_item_id = self._extract_stripe_item_id(
+                    response,
+                    plan_price["stripe_price_id"],
+                )
+                next_due_date = self._period_end_to_date(
+                    response.current_period_end,
+                )
+
+        # ── Stripe first (non-recurring one-time) ─────────
+        if not is_recurring:
+            stripe_item_id = await self._charge_one_time(
+                stripe_customer_id=parent.stripe_customer_id,
+                stripe_price_id=plan_price["stripe_price_id"],
+                gym_id=parent.gym_id,
+                crm_user_id=crm_user_id,
+                plan_id=plan_id,
+            )
+
+        # ── CRM insert ────────────────────────────────────
+        await self._crm_insert(
+            crm_user_id=crm_user_id,
+            gym_id=gym_id,
+            plan_id=plan_id,
+            price_id=price_id,
+            start_date=start_date,
+            end_date=end_date,
+            next_due_date=next_due_date,
+            discount_ids=discount_ids,
+            stripe_item_id=stripe_item_id,
+            prorate=prorate,
+            total_price=plan_price["price"],
+        )
+
+    # ── Private ────────────────────────────────────────────────
+
+    async def _get_plan_price(
+        self,
+        gym_id: UUID,
+        plan_id: UUID,
+        price_id: UUID,
+    ) -> dict:
+        """Validate plan+price exist and are usable.
+
+        Raises:
+            ValueError: If not found, plan deleted, or price inactive.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_get_plan_price.sql")
+        params = {
+            "gym_id": str(gym_id),
+            "plan_id": str(plan_id),
+            "price_id": str(price_id),
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            row = result.mappings().fetchone()
+
+        if not row:
+            raise ValueError(
+                f"Plan/price not found: plan_id={plan_id}, price_id={price_id}, gym_id={gym_id}"
+            )
+        if row["plan_is_deleted"]:
+            raise ValueError(f"Plan is deleted: plan_id={plan_id}")
+        if not row["price_is_active"]:
+            raise ValueError(f"Price is not active: price_id={price_id}")
+        return dict(row)
+
+    async def _check_no_existing(
+        self,
+        crm_user_id: UUID,
+        gym_id: UUID,
+        plan_id: UUID,
+    ) -> None:
+        """Ensure no active/frozen membership exists for this plan.
+
+        Raises:
+            ValueError: If an active or frozen membership already exists.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_check_existing.sql")
+        params = {
+            "crm_user_id": str(crm_user_id),
+            "gym_id": str(gym_id),
+            "plan_id": str(plan_id),
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            exists = result.fetchone()
+
+        if exists:
+            raise ValueError(
+                f"Active membership already exists: "
+                f"crm_user_id={crm_user_id}, gym_id={gym_id}, "
+                f"plan_id={plan_id}"
+            )
+
+    async def _crm_insert(
+        self,
+        crm_user_id: UUID,
+        gym_id: UUID,
+        plan_id: UUID,
+        price_id: UUID,
+        start_date: date,
+        end_date: date | None,
+        next_due_date: date | None,
+        discount_ids: list[UUID] | None,
+        stripe_item_id: str | None,
+        prorate: bool,
+        total_price: int,
+    ) -> None:
+        """Insert a new membership row into the CRM database."""
+        sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
+        params = {
+            "crm_user_id": str(crm_user_id),
+            "gym_id": str(gym_id),
+            "plan_id": str(plan_id),
+            "price_id": str(price_id),
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat() if end_date else None,
+            "next_due_date": next_due_date.isoformat() if next_due_date else None,
+            "discount_ids": json.dumps(
+                [str(d) for d in discount_ids],
+            )
+            if discount_ids
+            else None,
+            "stripe_item_id": stripe_item_id,
+            "prorate": prorate,
+            "total_price": total_price,
+        }
+        async with self._db_pool.session() as session:
+            await session.execute(text(sql), params)
+            await session.commit()
+
+    async def _charge_one_time(
+        self,
+        stripe_customer_id: str,
+        stripe_price_id: str,
+        gym_id: UUID,
+        crm_user_id: UUID,
+        plan_id: UUID,
+    ) -> str:
+        """Create and pay a one-time invoice for a non-recurring plan.
+
+        Returns:
+            The Stripe invoice ID (stored as stripe_item_id).
+
+        Raises:
+            PaymentsResourceNotFoundError: If the customer or
+                price is not found in Stripe.
+        """
+        stripe_account_id = await self._gym_stripe.get_stripe_account_id(gym_id)
+        request = PaymentsInvoicePaymentCreateRequest(
+            stripe_customer_id=stripe_customer_id,
+            stripe_price_id=stripe_price_id,
+            metadata={
+                "crm_user_id": str(crm_user_id),
+                "plan_id": str(plan_id),
+                "type": "membership_one_time",
+            },
+        )
+        response = await self._payment_service.create_invoice_payment(
+            request,
+            stripe_account_id,
+        )
+        return response.stripe_invoice_id
+
+    @staticmethod
+    def _calculate_end_date(
+        start: date,
+        duration_amount: int,
+        duration_unit: str,
+    ) -> date:
+        """Calculate membership end date from plan duration."""
+        if duration_unit == "week":
+            return start + relativedelta(weeks=duration_amount)
+        if duration_unit == "month":
+            return start + relativedelta(months=duration_amount)
+        if duration_unit == "year":
+            return start + relativedelta(years=duration_amount)
+        raise ValueError(f"Unknown duration_unit: {duration_unit}")

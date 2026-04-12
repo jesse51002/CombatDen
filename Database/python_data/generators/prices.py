@@ -11,6 +11,7 @@ def generate(
         price_id=uuid.uuid4(),
         plan_id=plan_id,
         gym_id=gym_id,
+        stripe_price_id=f"price_{uuid.uuid4().hex[:24]}",
         price=price_amount,
         is_active=True,
     )
