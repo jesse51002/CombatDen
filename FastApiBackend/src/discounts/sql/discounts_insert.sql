@@ -1,4 +1,4 @@
-INSERT INTO gym_discounts (
+INSERT INTO gym_discounts_unfiltered (
     gym_id,
     discount_name,
     discount_type,

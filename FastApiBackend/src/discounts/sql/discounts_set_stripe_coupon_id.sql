@@ -1,5 +1,4 @@
 UPDATE gym_discounts_unfiltered
-SET is_deleted = true
+SET stripe_coupon_id = :stripe_coupon_id
 WHERE discount_id = :discount_id
-  AND is_deleted = false
 RETURNING *

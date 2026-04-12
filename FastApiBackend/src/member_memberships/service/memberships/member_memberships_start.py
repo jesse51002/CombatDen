@@ -1,4 +1,4 @@
-"""Start (create) a new membership for a member."""
+"""Start (create) a new membership: DB first, then Stripe, then set stripe ID."""
 
 from __future__ import annotations
 
@@ -18,10 +18,13 @@ from src.member_memberships.schema.payment_sync_schema import SyncItem
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
+from src.payments.payments_exceptions import StripeOrphanError
+from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentCreateRequest,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.db_first_helpers import cleanup_pending_row
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.sql_loader import load_sql
 
@@ -37,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class MemberMembershipsStart(MemberMembershipsBase):
-    """Create a new membership."""
+    """Create a new membership using the DB-first pattern."""
 
     def __init__(
         self,
@@ -65,7 +68,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
         Validates the plan/price, checks no duplicate active
         membership exists, ensures the account is not frozen,
-        syncs to Stripe, then inserts the CRM row.
+        inserts the CRM row, syncs to Stripe, then sets the
+        stripe_item_id on the CRM row.
 
         Args:
             crm_user_id: The member.
@@ -81,6 +85,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         Raises:
             ValueError: If plan/price invalid, membership already
                 exists, or account is frozen.
+            StripeOrphanError: If Stripe succeeds but the DB
+                update fails after retries.
         """
         plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
         await self._check_no_existing(crm_user_id, gym_id, plan_id)
@@ -92,7 +98,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         plan_type = PlanType(plan_price["plan_type"])
         is_recurring = plan_type == PlanType.recurring
 
-        # ── Calculate dates ────────────────────────────────
+        # ── Calculate dates ────────────────────────────────────
         end_date: date | None = None
         if not is_recurring and plan_price["duration_amount"] and plan_price["duration_unit"]:
             end_date = self._calculate_end_date(
@@ -101,59 +107,94 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 plan_price["duration_unit"],
             )
 
-        # ── Stripe first (recurring only) ──────────────────
         if not plan_price["stripe_price_id"]:
             raise ValueError(f"Plan price {plan_price['price_id']} missing stripe_price_id")
 
-        stripe_item_id: str | None = None
-        next_due_date: date | None = None
-
-        if is_recurring:
-            add_item = SyncItem(
-                stripe_price_id=plan_price["stripe_price_id"],
-                crm_user_id=crm_user_id,
-                plan_id=plan_id,
-                has_linked_discount=include_linked_discount,
-                prorate=prorate,
-            )
-            response = await self._payment_sync.update_payments_recurring(
-                crm_user_id,
-                add_ids=[add_item],
-                cancel_ids=[],
-            )
-            if response:
-                stripe_item_id = self._extract_stripe_item_id(
-                    response,
-                    plan_price["stripe_price_id"],
-                )
-                next_due_date = self._period_end_to_date(
-                    response.current_period_end,
-                )
-
-        # ── Stripe first (non-recurring one-time) ─────────
-        if not is_recurring:
-            stripe_item_id = await self._charge_one_time(
-                stripe_customer_id=parent.stripe_customer_id,
-                stripe_price_id=plan_price["stripe_price_id"],
-                gym_id=parent.gym_id,
-                crm_user_id=crm_user_id,
-                plan_id=plan_id,
-            )
-
-        # ── CRM insert ────────────────────────────────────
-        await self._crm_insert(
+        # ── Step 1: DB insert (NULL stripe_item_id) ───────────
+        item_id = await self._crm_insert(
             crm_user_id=crm_user_id,
             gym_id=gym_id,
             plan_id=plan_id,
             price_id=price_id,
             start_date=start_date,
             end_date=end_date,
-            next_due_date=next_due_date,
+            next_due_date=None,
             discount_ids=discount_ids,
-            stripe_item_id=stripe_item_id,
+            stripe_item_id=None,
             prorate=prorate,
             total_price=plan_price["price"],
         )
+
+        # ── Step 2: Stripe ────────────────────────────────────
+        stripe_item_id: str | None = None
+        next_due_date: date | None = None
+
+        try:
+            if is_recurring:
+                add_item = SyncItem(
+                    stripe_price_id=plan_price["stripe_price_id"],
+                    crm_user_id=crm_user_id,
+                    plan_id=plan_id,
+                    has_linked_discount=include_linked_discount,
+                    prorate=prorate,
+                )
+                response = await self._payment_sync.update_payments_recurring(
+                    crm_user_id,
+                    add_ids=[add_item],
+                    cancel_ids=[],
+                )
+                if response:
+                    stripe_item_id = self._extract_stripe_item_id(
+                        response,
+                        plan_price["stripe_price_id"],
+                    )
+                    next_due_date = self._period_end_to_date(
+                        response.current_period_end,
+                    )
+            else:
+                stripe_item_id = await self._charge_one_time(
+                    stripe_customer_id=parent.stripe_customer_id,
+                    stripe_price_id=plan_price["stripe_price_id"],
+                    gym_id=parent.gym_id,
+                    crm_user_id=crm_user_id,
+                    plan_id=plan_id,
+                )
+        except Exception:
+            await cleanup_pending_row(
+                delete_fn=lambda: self._delete_pending(str(item_id)),
+                entity_name="member_membership",
+                crm_pk=str(item_id),
+            )
+            raise
+
+        # ── Step 3: Set stripe_item_id ────────────────────────
+        if stripe_item_id:
+            set_item_sql = load_sql(
+                SQL_DIR / "payment_sync" / "update_stripe_item_id.sql",
+            )
+            try:
+                await self._db_pool.execute_with_retry(
+                    set_item_sql,
+                    {
+                        "item_id": str(item_id),
+                        "crm_user_id": str(crm_user_id),
+                        "stripe_item_id": stripe_item_id,
+                    },
+                )
+            except Exception as exc:
+                raise StripeOrphanError(
+                    stripe_resource_type=StripeResourceType.subscription_item,
+                    stripe_id=stripe_item_id,
+                    crm_pk=str(item_id),
+                ) from exc
+
+        # ── Update next_due_date if we got one ────────────────
+        if next_due_date:
+            await self._update_next_due_date(
+                str(item_id),
+                str(crm_user_id),
+                next_due_date,
+            )
 
     # ── Private ────────────────────────────────────────────────
 
@@ -229,8 +270,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         stripe_item_id: str | None,
         prorate: bool,
         total_price: int,
-    ) -> None:
-        """Insert a new membership row into the CRM database."""
+    ) -> UUID:
+        """Insert a new membership row. Returns the generated item_id."""
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
             "crm_user_id": str(crm_user_id),
@@ -250,7 +291,38 @@ class MemberMembershipsStart(MemberMembershipsBase):
             "total_price": total_price,
         }
         async with self._db_pool.session() as session:
-            await session.execute(text(sql), params)
+            result = await session.execute(text(sql), params)
+            row = result.mappings().one()
+            await session.commit()
+        return row["item_id"]
+
+    async def _update_next_due_date(
+        self,
+        item_id: str,
+        crm_user_id: str,
+        next_due_date: date,
+    ) -> None:
+        """Set next_due_date on the membership row after Stripe sync."""
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(
+                    "UPDATE member_memberships_unfiltered "
+                    "SET next_due_date = :next_due_date "
+                    "WHERE item_id = :item_id AND crm_user_id = :crm_user_id"
+                ),
+                {
+                    "item_id": item_id,
+                    "crm_user_id": crm_user_id,
+                    "next_due_date": next_due_date.isoformat(),
+                },
+            )
+            await session.commit()
+
+    async def _delete_pending(self, item_id: str) -> None:
+        """Hard-delete a pending membership row (NULL stripe_item_id)."""
+        sql = load_sql(SQL_DIR / "member_memberships_delete_pending.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(text(sql), {"item_id": item_id})
             await session.commit()
 
     async def _charge_one_time(

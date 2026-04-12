@@ -8,12 +8,12 @@ from src.payments.schema.payments_enums import StripeResourceType
 
 
 class PaymentsCustomerCreateRequest(BaseModel):
-    """Create a Stripe Customer with mandatory payment method."""
+    """Create a Stripe Customer, optionally with a payment method."""
 
     name: str
     email: str | None = None
     phone: str | None = None
-    payment_method_id: str
+    payment_method_id: str | None = None
     metadata: dict[str, str] | None = None
 
 
@@ -29,10 +29,10 @@ class PaymentsCustomerUpdateRequest(BaseModel):
 
 
 class PaymentsCustomerResponse(BaseModel):
-    """Stripe Customer with default payment method card details."""
+    """Stripe Customer with optional payment method card details."""
 
     stripe_customer_id: str
-    stripe_payment_method_id: str
+    stripe_payment_method_id: str | None = None
     name: str | None = None
     email: str | None = None
     phone: str | None = None

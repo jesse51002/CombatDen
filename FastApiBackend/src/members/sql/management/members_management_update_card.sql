@@ -1,4 +1,4 @@
-UPDATE user_gym_profiles
+UPDATE user_gym_profiles_unfiltered
 SET
     stripe_customer_id    = :stripe_customer_id,
     stripe_payment_method_id = :stripe_payment_method_id,

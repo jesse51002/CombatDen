@@ -1,4 +1,4 @@
-INSERT INTO user_gym_profiles (
+INSERT INTO user_gym_profiles_unfiltered (
     gym_id,
     first_name,
     last_name,

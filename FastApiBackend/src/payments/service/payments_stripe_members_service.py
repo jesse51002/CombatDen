@@ -44,19 +44,19 @@ class PaymentsStripeMembersService:
     def _map_customer_response(
         self,
         customer: stripe.Customer,
-        pm: stripe.PaymentMethod,
+        pm: stripe.PaymentMethod | None = None,
     ) -> PaymentsCustomerResponse:
-        """Map a Stripe Customer + PaymentMethod to our response schema."""
+        """Map a Stripe Customer + optional PaymentMethod to our response schema."""
         return PaymentsCustomerResponse(
             stripe_customer_id=customer.id,
-            stripe_payment_method_id=pm.id,
+            stripe_payment_method_id=pm.id if pm else None,
             name=customer.name,
             email=customer.email,
             phone=customer.phone,
-            card_brand=pm.card.brand if pm.card else None,
-            card_last_four=pm.card.last4 if pm.card else None,
-            card_exp_month=pm.card.exp_month if pm.card else None,
-            card_exp_year=pm.card.exp_year if pm.card else None,
+            card_brand=pm.card.brand if pm and pm.card else None,
+            card_last_four=pm.card.last4 if pm and pm.card else None,
+            card_exp_month=pm.card.exp_month if pm and pm.card else None,
+            card_exp_year=pm.card.exp_year if pm and pm.card else None,
         )
 
     async def retrieve_customer(
@@ -92,35 +92,45 @@ class PaymentsStripeMembersService:
         request: PaymentsCustomerCreateRequest,
         stripe_account_id: str,
     ) -> PaymentsCustomerResponse:
-        """Create a Stripe Customer and attach a payment method as default.
+        """Create a Stripe Customer, optionally with a payment method.
+
+        If ``payment_method_id`` is provided, attaches it as the
+        default. Otherwise creates a customer with name/email only.
 
         Args:
-            request: Customer details with mandatory payment_method_id.
+            request: Customer details with optional payment_method_id.
             stripe_account_id: The gym's Stripe Connect account ID.
 
         Returns:
-            Customer response with card details.
+            Customer response with card details (if PM was provided).
         """
         opts = self._client.connect_opts(stripe_account_id)
 
+        params = CustomerCreateParams(
+            name=request.name,
+            email=request.email,
+            phone=request.phone,
+            metadata=request.metadata,
+        )
+
+        if request.payment_method_id:
+            params["payment_method"] = request.payment_method_id
+            params["invoice_settings"] = CustomerCreateParamsInvoiceSettings(
+                default_payment_method=request.payment_method_id,
+            )
+
         customer = await self._stripe.v1.customers.create_async(
-            params=CustomerCreateParams(
-                name=request.name,
-                email=request.email,
-                phone=request.phone,
-                payment_method=request.payment_method_id,
-                metadata=request.metadata,
-                invoice_settings=CustomerCreateParamsInvoiceSettings(
-                    default_payment_method=request.payment_method_id,
-                ),
-            ),
+            params=params,
             options=opts,
         )
 
-        pm = await self._stripe.v1.payment_methods.retrieve_async(
-            request.payment_method_id,
-            options=opts,
-        )
+        pm = None
+        if request.payment_method_id:
+            pm = await self._stripe.v1.payment_methods.retrieve_async(
+                request.payment_method_id,
+                options=opts,
+            )
+
         return self._map_customer_response(customer, pm)
 
     async def update_customer(

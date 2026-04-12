@@ -30,3 +30,28 @@ class PaymentsResourceNotFoundError(PaymentsStripeError):
 
 class PaymentsInvalidRequestError(PaymentsStripeError):
     """Invalid parameters sent to Stripe."""
+
+
+class StripeOrphanError(Exception):
+    """Stripe resource created but DB update failed after retries.
+
+    The Stripe resource exists but the CRM row still has a NULL
+    stripe ID. The stripe resource type and ID are included
+    prominently so operators can locate and clean up the orphan.
+    """
+
+    def __init__(
+        self,
+        stripe_resource_type: StripeResourceType,
+        stripe_id: str,
+        crm_pk: str,
+    ) -> None:
+        self.stripe_resource_type = stripe_resource_type
+        self.stripe_id = stripe_id
+        self.crm_pk = crm_pk
+        super().__init__(
+            f"ORPHANED STRIPE RESOURCE: "
+            f"type={stripe_resource_type.value}, "
+            f"stripe_id={stripe_id}, crm_pk={crm_pk}. "
+            f"Stripe resource exists but CRM row has NULL stripe ID."
+        )

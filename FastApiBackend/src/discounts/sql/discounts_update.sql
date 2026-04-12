@@ -1,4 +1,4 @@
-UPDATE gym_discounts
+UPDATE gym_discounts_unfiltered
 SET discount_name      = :discount_name,
     percentage_off     = :percentage_off,
     dollar_off         = :dollar_off,

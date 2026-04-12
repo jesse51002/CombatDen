@@ -13,6 +13,7 @@ class PaymentsPriceCreateRequest(BaseModel):
     plan_type: PlanType
     recurring_interval: DurationUnit
     recurring_interval_count: int
+    metadata: dict[str, str] | None = None
 
 
 class PaymentsPriceDeactivateRequest(BaseModel):

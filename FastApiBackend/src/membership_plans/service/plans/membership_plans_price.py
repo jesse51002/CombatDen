@@ -19,11 +19,14 @@ from src.membership_plans.membership_plans_schemas import (
 from src.membership_plans.service.plans.membership_plans_base import (
     MembershipPlansBase,
 )
+from src.payments.payments_exceptions import StripeOrphanError
+from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_price_schema import (
     PaymentsPriceCreateRequest,
     PaymentsPriceDeactivateRequest,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.db_first_helpers import cleanup_pending_row
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
@@ -69,7 +72,7 @@ class MembershipPlansPrice(MembershipPlansBase):
         self,
         request: MembershipPlanPriceRequest,
     ) -> MembershipPlanPriceResponse:
-        """Create a new Stripe Price then insert/deactivate in CRM.
+        """Insert CRM price row, create Stripe Price, then set stripe ID.
 
         Existing members keep their old price. Use migrate endpoints
         to move them to the new price.
@@ -82,6 +85,8 @@ class MembershipPlansPrice(MembershipPlansBase):
 
         Raises:
             ValueError: If the plan is not found or has no Stripe product.
+            StripeOrphanError: If Stripe succeeds but the DB
+                update fails after retries.
         """
         plan = await self._get_plan(request.plan_id, request.gym_id)
 
@@ -96,28 +101,14 @@ class MembershipPlansPrice(MembershipPlansBase):
             request.gym_id,
         )
 
-        # ── Stripe first: create new price ────────────────────
-        recurring_interval, recurring_interval_count = self._resolve_interval(plan)
-
-        stripe_resp = await self._stripe_prices.create_price(
-            PaymentsPriceCreateRequest(
-                stripe_product_id=stripe_product_id,
-                unit_amount=request.price,
-                plan_type=plan_type,
-                recurring_interval=recurring_interval,
-                recurring_interval_count=recurring_interval_count,
-            ),
-            stripe_account_id,
-        )
-
-        # ── CRM: insert new price row ─────────────────────────
+        # ── Step 1: DB insert (NULL stripe_price_id) ──────────
         insert_sql = load_sql(
             SQL_DIR / "membership_plans_price_insert.sql",
         )
         price_params = {
             "plan_id": str(request.plan_id),
             "gym_id": str(request.gym_id),
-            "stripe_price_id": stripe_resp.stripe_price_id,
+            "stripe_price_id": None,
             "price": request.price,
         }
 
@@ -128,6 +119,54 @@ class MembershipPlansPrice(MembershipPlansBase):
             )
             new_price_row = dict(result.mappings().one())
             await session.commit()
+
+        price_id = str(new_price_row["price_id"])
+
+        # ── Step 2: Stripe create ─────────────────────────────
+        recurring_interval, recurring_interval_count = self._resolve_interval(plan)
+
+        try:
+            stripe_resp = await self._stripe_prices.create_price(
+                PaymentsPriceCreateRequest(
+                    stripe_product_id=stripe_product_id,
+                    unit_amount=request.price,
+                    plan_type=plan_type,
+                    recurring_interval=recurring_interval,
+                    recurring_interval_count=recurring_interval_count,
+                    metadata={"crm_price_id": price_id},
+                ),
+                stripe_account_id,
+            )
+        except Exception:
+            await cleanup_pending_row(
+                delete_fn=lambda: self._delete_pending_price(
+                    price_id,
+                    str(request.plan_id),
+                ),
+                entity_name="membership_plan_price",
+                crm_pk=price_id,
+            )
+            raise
+
+        # ── Step 3: Set stripe_price_id ───────────────────────
+        set_price_sql = load_sql(
+            SQL_DIR / "membership_plans_price_set_stripe_price_id.sql",
+        )
+        try:
+            new_price_row = await self._db_pool.execute_with_retry(
+                set_price_sql,
+                {
+                    "price_id": price_id,
+                    "plan_id": str(request.plan_id),
+                    "stripe_price_id": stripe_resp.stripe_price_id,
+                },
+            )
+        except Exception as exc:
+            raise StripeOrphanError(
+                stripe_resource_type=StripeResourceType.price,
+                stripe_id=stripe_resp.stripe_price_id,
+                crm_pk=price_id,
+            ) from exc
 
         # ── CRM: deactivate old price ─────────────────────────
         old_price = await self._deactivate_old_price(
@@ -253,6 +292,22 @@ class MembershipPlansPrice(MembershipPlansBase):
             rows = result.mappings().fetchall()
 
         return [UUID(str(r["crm_user_id"])) for r in rows]
+
+    async def _delete_pending_price(
+        self,
+        price_id: str,
+        plan_id: str,
+    ) -> None:
+        """Hard-delete a pending price row (NULL stripe_price_id)."""
+        sql = load_sql(
+            SQL_DIR / "membership_plans_price_delete_pending.sql",
+        )
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {"price_id": price_id, "plan_id": plan_id},
+            )
+            await session.commit()
 
     async def _deactivate_old_price(
         self,

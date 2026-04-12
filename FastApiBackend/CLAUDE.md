@@ -246,13 +246,38 @@ src/
 - Repository handles data access
 - Never skip layers
 
-## Stripe-First Operation Order
+## Stripe Operation Order
 
-**ALWAYS perform Stripe operations before CRM database changes.** Stripe is the source of truth — if a Stripe call fails, the CRM should remain unchanged. Writing to the CRM first risks leaving the database in an inconsistent state if the subsequent Stripe call fails.
+Five tables use the `_unfiltered` / filtered-view pattern: `membership_plans`, `membership_plan_prices`, `gym_discounts`, `user_gym_profiles`, `member_memberships`. Each `_unfiltered` table has a view (the original name) that filters `WHERE stripe_*_id IS NOT NULL`.
 
-- Good: Create Stripe coupon → insert CRM row with `stripe_coupon_id`
-- Good: Delete Stripe coupon → soft-delete CRM row
+**Creates — DB-first (INSERT → Stripe → UPDATE)**
+
+New rows follow a three-step pattern:
+1. INSERT into `_unfiltered` with the Stripe column set to NULL. The row exists in the DB but is invisible through the filtered view.
+2. Call Stripe to create the resource. Pass `metadata={"crm_pk": "<uuid>"}` using the PK from step 1.
+3. UPDATE `_unfiltered` SET `stripe_*_id = <value>`. The row is now visible through the view.
+
+On Stripe failure (step 2): DELETE the pending row from `_unfiltered` (use the `*_delete_pending.sql` files which guard with `AND stripe_*_id IS NULL`), then re-raise.
+On UPDATE failure (step 3): Retry 3x with exponential backoff via `DirectDatabasePool.execute_with_retry()`. If exhausted, raise `StripeOrphanError` with the Stripe resource type and ID prominently.
+
+- Good: `INSERT plan (NULL) → create Stripe product → UPDATE plan (stripe_product_id)`
+- Bad: `Create Stripe product → INSERT plan (with stripe_product_id)` — orphaned Stripe resource if DB insert fails
+
+**Updates & Deletes — Stripe-first**
+
+When the row already exists and is synced (has a non-NULL Stripe ID), the Stripe operation runs first, then the DB update. There is no orphan risk because the row is already visible.
+
+- Good: Update Stripe product name → UPDATE `_unfiltered` row
+- Good: Delete Stripe coupon → soft-delete `_unfiltered` row
 - Bad: Soft-delete CRM row → delete Stripe coupon (CRM is dirty if Stripe fails)
+
+**Writes always target `_unfiltered`**
+
+All INSERT, UPDATE, and DELETE SQL must target the `_unfiltered` table directly. The filtered views are read-only (REVOKE INSERT/UPDATE on authenticated).
+
+**Atomicity — reads always use filtered views**
+
+A row is either fully synced or it doesn't exist. All SELECT queries use the original view names (e.g., `membership_plans`, not `membership_plans_unfiltered`). If a create fails mid-sync, the pending row is invisible to all reads — this is correct behavior, the same as a Postgres transaction that is committed all the way or not at all. Never query `_unfiltered` for reads.
 
 ## Stripe Reconciliation Service
 

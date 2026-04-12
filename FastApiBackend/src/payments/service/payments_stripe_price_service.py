@@ -77,6 +77,8 @@ class PaymentsStripePriceService:
             unit_amount=request.unit_amount,
             currency=request.currency,
         )
+        if request.metadata:
+            params["metadata"] = request.metadata
         if request.plan_type == PlanType.recurring:
             params["recurring"] = PriceCreateParamsRecurring(
                 interval=request.recurring_interval.value,

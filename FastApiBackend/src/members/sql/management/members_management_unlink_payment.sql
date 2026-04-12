@@ -1,4 +1,4 @@
-UPDATE user_gym_profiles
+UPDATE user_gym_profiles_unfiltered
 SET
     stripe_payment_method_id = NULL,
     card_brand               = NULL,

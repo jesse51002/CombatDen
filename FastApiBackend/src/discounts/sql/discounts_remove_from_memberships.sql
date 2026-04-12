@@ -1,4 +1,4 @@
-UPDATE member_memberships
+UPDATE member_memberships_unfiltered
 SET discount_ids = COALESCE(
     (SELECT jsonb_agg(elem)
      FROM jsonb_array_elements(discount_ids) AS elem

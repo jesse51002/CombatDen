@@ -1,4 +1,4 @@
-INSERT INTO membership_plans (
+INSERT INTO membership_plans_unfiltered (
     gym_id,
     plan_name,
     plan_type,

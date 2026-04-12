@@ -1,4 +1,4 @@
-UPDATE user_gym_profiles
+UPDATE user_gym_profiles_unfiltered
 SET {set_clause}
 WHERE crm_user_id = :crm_user_id
 RETURNING

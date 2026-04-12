@@ -1,4 +1,4 @@
-UPDATE member_memberships mm
+UPDATE member_memberships_unfiltered mm
 SET
     cancel_date = GREATEST(COALESCE(mm.next_due_date, CURRENT_DATE), CURRENT_DATE)
 WHERE mm.item_id     = :item_id
