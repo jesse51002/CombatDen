@@ -49,14 +49,17 @@ class ActiveMembershipRow(BaseModel):
 
 
 class LinkedDiscountInfo(BaseModel):
-    """A linked discount resolved from gym_discounts.
+    """A discount resolved from gym_discounts with its Stripe coupon.
 
-    Linked discounts are always dollar_off (enforced by DB constraint).
+    Reused for both linked (dollar_off, enforced by DB constraint)
+    and regular plan-level discounts (which may be percentage_off),
+    so ``dollar_off`` is optional — only populated for discounts
+    that actually store a dollar amount.
     """
 
     discount_id: UUID
     stripe_coupon_id: str
-    dollar_off: int
+    dollar_off: int | None = None
 
 
 class MembershipInfo(BaseModel):

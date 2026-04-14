@@ -1,5 +1,6 @@
 """Pure logic for building desired items and grouping by interval."""
 
+import logging
 from collections import defaultdict
 from uuid import UUID
 
@@ -16,28 +17,72 @@ from src.payments.schema.payments_members_schema import (
     SubscriptionItemDiscount,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def aggregate_plan_discounts(
     memberships: list[ActiveMembershipRow],
+    coupon_by_discount_id: dict[UUID, str],
 ) -> dict[UUID, list[SubscriptionItemDiscount]]:
-    """Union all discount_ids across members on the same plan.
+    """Union discounts across members on the same plan, keyed by Stripe coupon.
 
     Linked accounts sharing a plan get the union of all their
-    discounts applied to every item on that plan.
+    discounts applied to every item on that plan. CRM ``discount_id``
+    values are resolved to real Stripe coupon IDs via
+    ``coupon_by_discount_id``.
+
+    If a membership references a ``discount_id`` that is missing from
+    the lookup (discount was soft-deleted or its Stripe sync never
+    completed), a warning is logged and that discount is skipped.
+    The rest of the sync still proceeds — one stale discount should
+    not abort the whole subscription update.
+
+    Args:
+        memberships: Active recurring memberships for the family.
+        coupon_by_discount_id: CRM ``discount_id`` -> Stripe
+            ``stripe_coupon_id`` lookup, sourced from
+            ``PaymentSyncQueries.get_discount_details``.
 
     Returns:
-        Mapping of plan_id -> deduplicated list of item discounts.
+        Mapping of ``plan_id`` -> list of ``SubscriptionItemDiscount``,
+        deduplicated on the Stripe coupon string.
     """
     plan_discount_ids: dict[UUID, set[UUID]] = defaultdict(set)
+    membership_context: dict[UUID, tuple[UUID, UUID]] = {}
 
     for m in memberships:
         for d in m.discount_ids:
             plan_discount_ids[m.plan_id].add(d)
+            membership_context.setdefault(d, (m.plan_id, m.crm_user_id))
 
-    return {
-        plan_id: [SubscriptionItemDiscount(coupon=str(d)) for d in discount_ids]
-        for plan_id, discount_ids in plan_discount_ids.items()
-    }
+    plan_discounts: dict[UUID, list[SubscriptionItemDiscount]] = {}
+    for plan_id, discount_ids in plan_discount_ids.items():
+        seen_coupons: set[str] = set()
+        items: list[SubscriptionItemDiscount] = []
+        for discount_id in discount_ids:
+            coupon = coupon_by_discount_id.get(discount_id)
+            if coupon is None:
+                ctx_plan, ctx_user = membership_context.get(
+                    discount_id,
+                    (plan_id, None),
+                )
+                logger.warning(
+                    "Skipping unresolved discount_id %s on plan %s "
+                    "(crm_user_id=%s): no stripe_coupon_id found. "
+                    "Discount is likely soft-deleted or never synced "
+                    "to Stripe.",
+                    discount_id,
+                    ctx_plan,
+                    ctx_user,
+                )
+                continue
+            if coupon in seen_coupons:
+                continue
+            seen_coupons.add(coupon)
+            items.append(SubscriptionItemDiscount(coupon=coupon))
+        plan_discounts[plan_id] = items
+
+    return plan_discounts
 
 
 def build_desired_items(

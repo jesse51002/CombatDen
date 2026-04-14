@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     database_url: str
     db_pool_size: int = 10
     db_max_overflow: int = 10
+    db_echo: bool = False
 
     # App
     app_env: AppEnv = AppEnv.DEV

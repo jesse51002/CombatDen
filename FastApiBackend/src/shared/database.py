@@ -26,7 +26,7 @@ class DirectDatabasePool:
     def __init__(self) -> None:
         self.engine = create_async_engine(
             settings.database_url,
-            echo=settings.app_debug,
+            echo=settings.db_echo,
             pool_pre_ping=True,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,

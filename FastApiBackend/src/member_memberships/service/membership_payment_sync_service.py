@@ -137,9 +137,6 @@ class MembershipPaymentSyncService:
             exclude_memberships=exclude,
         )
 
-        non_none_ids = [d for d in discount_ids if d is not None]
-        discounts = await self._queries.get_discount_details(non_none_ids) if non_none_ids else []
-
         # ── Build desired items for Stripe ─────────────────
         stripped_add = [item.to_desired_item() for item in add_ids]
         stripped_cancel = [item.to_desired_item() for item in cancel_ids]
@@ -148,7 +145,25 @@ class MembershipPaymentSyncService:
             family_ids,
         )
         add_intervals = await self._resolve_add_intervals(stripped_add)
-        plan_discounts = aggregate_plan_discounts(memberships)
+
+        # Resolve every discount referenced by this sync — linked
+        # and plan-level — in one batched query. CRM UUIDs must be
+        # translated to real Stripe coupon IDs before hitting Stripe.
+        linked_ids = {d for d in discount_ids if d is not None}
+        plan_discount_ids: set[UUID] = {d for m in memberships for d in m.discount_ids}
+        all_discount_ids = sorted(linked_ids | plan_discount_ids)
+        details = (
+            await self._queries.get_discount_details(all_discount_ids) if all_discount_ids else []
+        )
+        discounts = [d for d in details if d.discount_id in linked_ids]
+        coupon_by_discount_id: dict[UUID, str] = {
+            d.discount_id: d.stripe_coupon_id for d in details
+        }
+
+        plan_discounts = aggregate_plan_discounts(
+            memberships,
+            coupon_by_discount_id,
+        )
         desired = build_desired_items(
             memberships,
             add_intervals,
