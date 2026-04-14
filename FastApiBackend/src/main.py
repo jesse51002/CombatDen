@@ -16,6 +16,7 @@ from src.members.members_router import members_router
 from src.membership_plans.membership_plans_router import (
     membership_plans_router,
 )
+from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
 
 
 @asynccontextmanager
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     application.include_router(members_router)
     application.include_router(member_memberships_router)
     application.include_router(membership_plans_router)
+    application.include_router(stripe_webhooks_router)
 
     return application
 

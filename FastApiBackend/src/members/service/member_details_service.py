@@ -2,8 +2,11 @@
 
 from uuid import UUID
 
+from schema.member_membership import MembershipDbStatus
+from schema.membership_plan import PlanType
 from sqlalchemy import text
 
+import src.shared.db_schema_path  # noqa: F401
 from src.classes.service.classes_cycle_counts_service import (
     ClassesCycleCountsService,
 )
@@ -20,9 +23,6 @@ from src.members.service.member_details.member_details_cycle_counts_bridge impor
 from src.members.service.member_details.member_details_membership_grouper import (
     MemberDetailsMembershipGrouper,
 )
-from src.members.service.member_details.member_details_pricing_bridge import (
-    MemberDetailsPricingBridge,
-)
 from src.members.service.member_details.member_details_streak_bridge import (
     MemberDetailsStreakBridge,
 )
@@ -30,33 +30,29 @@ from src.members.service.member_details.member_details_supplementary import (
     MemberDetailsSupplementary,
 )
 from src.shared.database import DirectDatabasePool
-from src.shared.membership_pricing.membership_pricing_service import (
-    MembershipPricingService,
-)
 from src.shared.sql_loader import load_sql
 
 
 class MemberService:
     """Service for member detail operations.
 
-    Orchestrates sub-services to fetch, price, group, and
+    Orchestrates sub-services to fetch, group, and
     assemble the full member detail response.
 
     Args:
         db_pool: Injected database connection pool.
-        pricing: Injected membership pricing service.
+        cycle_counts_service: Injected cycle counts service.
+        streak_service: Injected streak service.
     """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        pricing: MembershipPricingService,
         cycle_counts_service: ClassesCycleCountsService,
         streak_service: ClassesStreakService,
     ) -> None:
         self._db_pool = db_pool
         self._supplementary = MemberDetailsSupplementary(db_pool)
-        self._pricing_bridge = MemberDetailsPricingBridge(pricing)
         self._cycle_counts_bridge = MemberDetailsCycleCountsBridge(
             cycle_counts_service,
         )
@@ -101,14 +97,8 @@ class MemberService:
             list(family_ids),
         )
 
-        pricing_result = self._pricing_bridge.calculate_prices(
-            membership_rows,
-            self._supplementary.discounts_dict,
-        )
-
         all_grouped = self._grouper.group_by_plan(
             membership_rows,
-            pricing_result,
             self._supplementary,
             usage_lookup,
         )
@@ -122,13 +112,17 @@ class MemberService:
         else:
             grouped = all_grouped
 
+        active_total, frozen_total, has_trial, has_cancelled, paying_count = (
+            _compute_overview_totals(membership_rows)
+        )
+
         overview, linked_to_account = self._grouper.build_membership_overview(
             linked_to_id,
-            pricing_result.active_total,
-            pricing_result.frozen_total,
-            pricing_result.has_trial,
-            pricing_result.has_cancelled,
-            pricing_result.paying_count,
+            active_total,
+            frozen_total,
+            has_trial,
+            has_cancelled,
+            paying_count,
             self._supplementary,
         )
 
@@ -246,6 +240,46 @@ def _find_target_profile(rows: list, crm_user_id: UUID) -> dict:
         if row["crm_user_id"] == crm_user_id:
             return row
     raise ValueError(f"No profile found for crm_user_id={crm_user_id}")
+
+
+def _compute_overview_totals(
+    membership_rows: list,
+) -> tuple[float, float, bool, bool, int]:
+    """Compute overview totals from membership rows.
+
+    Args:
+        membership_rows: All membership rows with total_price.
+
+    Returns:
+        Tuple of (active_total, frozen_total, has_trial,
+        has_cancelled, paying_count).
+    """
+    active_total = 0.0
+    frozen_total = 0.0
+    has_trial = False
+    has_cancelled = False
+    paying_count = 0
+
+    for row in membership_rows:
+        row_status = row["membership_status"]
+        plan_type = row["plan_type"]
+
+        if row_status == MembershipDbStatus.cancelled:
+            has_cancelled = True
+            continue
+        if plan_type == PlanType.trial:
+            has_trial = True
+            continue
+
+        paying_count += 1
+        price = row["total_price"] or 0
+
+        if row_status == MembershipDbStatus.frozen:
+            frozen_total += price
+        else:
+            active_total += price
+
+    return active_total, frozen_total, has_trial, has_cancelled, paying_count
 
 
 def _derive_account_status(

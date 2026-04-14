@@ -36,9 +36,6 @@ if TYPE_CHECKING:
         PaymentsStripeDiscountService,
     )
     from src.shared.gym_stripe_service import GymStripeService
-    from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-        StripeReconciliationService,
-    )
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +66,6 @@ class DiscountsUpdate(DiscountsBase):
         self,
         request: DiscountUpdateRequest,
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> DiscountResponse:
         """Update a non-linked discount in the CRM database and Stripe.
 
@@ -80,7 +76,6 @@ class DiscountsUpdate(DiscountsBase):
         Args:
             request: Discount update data (partial).
             background_tasks: FastAPI background tasks.
-            reconciliation_service: Stripe reconciliation service.
 
         Returns:
             The updated discount.
@@ -165,7 +160,6 @@ class DiscountsUpdate(DiscountsBase):
                 background_tasks.add_task(
                     self._payment_sync.bulk_payment_sync,
                     affected,
-                    reconciliation_service,
                 )
 
         return DiscountResponse(**row)

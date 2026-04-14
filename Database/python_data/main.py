@@ -1,298 +1,252 @@
-import random
-import uuid
+"""Seed orchestrator.
 
-from faker import Faker
+Flow:
+  1. Pre-flight: assert backend is reachable.
+  2. bootstrap: direct-DB creation of gyms, auth users, employees.
+  3. Sign in as each gym owner (Supabase password auth) → JWTs.
+  4. api_creation: plans, prices, discounts, members, current memberships
+     — all via the FastAPI backend, so every Stripe-backed row has real IDs.
+  5. bootstrap: classes, rewards (no endpoints, direct DB).
+  6. generators: historical memberships, invoices, activities, reward
+     redemptions, class logs, gym history — all direct-DB synthetic data.
 
+Everything API-backed comes first so the real crm_user_id / plan_id /
+price_id / discount_id values are available to downstream generators.
+"""
+
+from __future__ import annotations
+
+from api_client import assert_backend_reachable, login_gym_owner
+from api_creation import (
+    discounts as api_discounts,
+    members as api_members,
+    memberships as api_memberships,
+    plans as api_plans,
+)
+from bootstrap import activities as bs_activities
+from bootstrap import classes as bs_classes
+from bootstrap import gyms as bs_gyms
+from bootstrap import history as bs_history
+from bootstrap import rewards as bs_rewards
 from config import get_supabase_client
-from utils import make_seeded_uuids
-from constants import (
-    ACTIVITIES_PER_MEMBER,
-    CLASSES_PER_GYM,
-    DISCOUNTS_PER_GYM,
-    EXTRA_EMPLOYEES_PER_GYM,
-    HISTORY_DAYS,
-    LINKED_MEMBERS_PER_GYM,
-    MEMBERS_PER_GYM,
-    NUM_GYMS,
-    PLANS_PER_GYM,
-    REWARDS_PER_GYM,
-    TRANSACTIONS_PER_MEMBER,
-)
-from generators import (
-    activities,
-    auth,
-    classes,
-    discounts,
-    employees,
-    gyms,
-    history,
-    memberships,
-    plans,
-    prices,
-    profiles,
-    rewards,
-    transactions,
-)
-from schema.gym import GymCreate
-from schema.gym_discount import GymDiscountCreate
-from schema.gym_employee import GymEmployeeCreate
-from schema.membership_plan import MembershipPlanCreate
-from schema.membership_plan_price import MembershipPlanPriceCreate
-from schema.user_gym_profile import UserGymProfileCreate
-
-fake = Faker()
+from constants import DEFAULT_PASSWORD, DISCOUNTS_PER_GYM, PLANS_PER_GYM
+from generators import invoices, memberships
+from generators.profiles import build_plans
 
 
-def seed():
+def seed() -> None:
+    assert_backend_reachable()
     client = get_supabase_client()
 
-    # Generate deterministic IDs (each category has its own seed so they're independent)
-    owner_ids = make_seeded_uuids(seed=1, count=NUM_GYMS)
-    member_auth_ids = make_seeded_uuids(seed=2, count=NUM_GYMS * LINKED_MEMBERS_PER_GYM)
-    gym_ids = make_seeded_uuids(seed=3, count=NUM_GYMS)
-    profile_ids = make_seeded_uuids(seed=4, count=NUM_GYMS * MEMBERS_PER_GYM)
+    # Phase 1: Bootstrap gyms, auth users, employees (direct DB).
+    bundles = bs_gyms.create_all(client)
 
-    # Phase 1: Create auth users
-    print("Creating auth users...")
-    owner_users = []
-    for i in range(NUM_GYMS):
-        user = auth.create_user(client, f"owner{i + 1}@test.com", user_id=owner_ids[i])
-        owner_users.append(user)
-        print(f"  Owner: {user['email']}")
+    # Phase 2: Per-gym API creations + remaining bootstrap + synthetic history.
+    for bundle in bundles:
+        print(f"\n=== {bundle.gym_name} ({bundle.gym_id}) ===")
 
-    member_auth_users = []
-    for i in range(NUM_GYMS * LINKED_MEMBERS_PER_GYM):
-        user = auth.create_user(client, fake.unique.email(), user_id=member_auth_ids[i])
-        member_auth_users.append(user)
-    print(f"  Created {len(member_auth_users)} member auth accounts")
+        # Sign in as the gym owner; this gym's API calls run through `api`.
+        with login_gym_owner(bundle.owner_email, DEFAULT_PASSWORD) as api:
+            # Plans + prices (real Stripe products + prices).
+            print("Creating plans...")
+            plan_records = api_plans.create_all(api, bundle.gym_id, PLANS_PER_GYM)
+            print(f"  {len(plan_records)} plans created")
 
-    # Phase 2: Create gyms
-    print("Creating gyms...")
-    gym_records: list[GymCreate] = []
-    for i in range(NUM_GYMS):
-        gym = gyms.generate(gym_id=gym_ids[i])
-        gym_records.append(gym)
-        print(f"  {gym.gym_name}")
-    client.table("gyms").insert([g.to_insert_dict() for g in gym_records]).execute()
-
-    # Phase 2.5: Create employees (owner + extra staff per gym)
-    print("Creating employees...")
-    all_employees_by_gym: dict[uuid.UUID, list[GymEmployeeCreate]] = {}
-    for i, gym in enumerate(gym_records):
-        owner_employee = employees.generate_owner(gym.gym_id, owner_users[i]["id"], owner_users[i]["email"])
-        staff = employees.generate_staff(gym.gym_id, EXTRA_EMPLOYEES_PER_GYM)
-        gym_employees = [owner_employee] + staff
-        all_employees_by_gym[gym.gym_id] = gym_employees
-        client.table("gym_employees").insert(
-            [e.to_insert_dict() for e in gym_employees]
-        ).execute()
-        print(f"  {gym.gym_name}: 1 owner + {len(staff)} staff")
-
-    # Phase 3: Generate profiles (insert deferred until after linking)
-    print("Generating member profiles...")
-    all_profiles: dict[uuid.UUID, list[UserGymProfileCreate]] = {}
-    auth_idx = 0
-    profile_idx = 0
-    for gym in gym_records:
-        gym_profiles = []
-        for j in range(MEMBERS_PER_GYM):
-            user_id = None
-            if j < LINKED_MEMBERS_PER_GYM:
-                user_id = member_auth_users[auth_idx]["id"]
-                auth_idx += 1
-            gym_profiles.append(
-                profiles.generate(gym.gym_id, crm_user_id=profile_ids[profile_idx], user_id=user_id)
+            # Discounts (real Stripe coupons).
+            print("Creating discounts...")
+            regular_discounts = api_discounts.create_regular(
+                api, bundle.gym_id, DISCOUNTS_PER_GYM
             )
-            profile_idx += 1
-        all_profiles[gym.gym_id] = gym_profiles
-    print(f"  Generated {NUM_GYMS * MEMBERS_PER_GYM} profiles")
-
-    # Phase 4: Plans, prices, discounts, rewards
-    print("Creating plans, prices, discounts, rewards...")
-    all_plans: dict[uuid.UUID, list[MembershipPlanCreate]] = {}
-    all_prices: dict[uuid.UUID, dict[uuid.UUID, MembershipPlanPriceCreate]] = {}
-    all_discounts: dict[uuid.UUID, list[GymDiscountCreate]] = {}
-    all_linked_discounts: dict[uuid.UUID, list[GymDiscountCreate]] = {}
-    for gym in gym_records:
-        gym_plans, plan_templates = plans.generate(gym.gym_id, PLANS_PER_GYM)
-        all_plans[gym.gym_id] = gym_plans
-        client.table("membership_plans").insert(
-            [p.to_insert_dict() for p in gym_plans]
-        ).execute()
-
-        # Generate one active price per plan
-        gym_prices: dict[uuid.UUID, MembershipPlanPriceCreate] = {}
-        price_records = []
-        for tmpl in plan_templates:
-            price_rec = prices.generate(tmpl["plan_id"], gym.gym_id, tmpl["base_cost"])
-            gym_prices[tmpl["plan_id"]] = price_rec
-            price_records.append(price_rec)
-        all_prices[gym.gym_id] = gym_prices
-        client.table("membership_plan_prices").insert(
-            [p.to_insert_dict() for p in price_records]
-        ).execute()
-
-        gym_discounts = discounts.generate(gym.gym_id, DISCOUNTS_PER_GYM)
-        all_discounts[gym.gym_id] = gym_discounts
-        client.table("gym_discounts").insert(
-            [d.to_insert_dict() for d in gym_discounts]
-        ).execute()
-
-        # Generate linked discounts for recurring plans
-        gym_linked_discounts = discounts.generate_linked_discounts(gym.gym_id, gym_plans)
-        all_linked_discounts[gym.gym_id] = gym_linked_discounts
-        if gym_linked_discounts:
-            client.table("gym_discounts").insert(
-                [d.to_insert_dict() for d in gym_linked_discounts]
-            ).execute()
-
-        gym_rewards = rewards.generate(gym.gym_id, REWARDS_PER_GYM)
-        client.table("gym_rewards").insert(
-            [r.to_insert_dict() for r in gym_rewards]
-        ).execute()
-
-    # Phase 4.5: Create gym classes (parent + schedules + exceptions)
-    print("Creating gym classes...")
-    all_class_parents: dict[uuid.UUID, list] = {}
-    all_schedules: dict[uuid.UUID, list] = {}
-    for gym in gym_records:
-        parents, gym_schedules, gym_exceptions = classes.generate(
-            gym.gym_id,
-            CLASSES_PER_GYM,
-            all_employees_by_gym[gym.gym_id],
-            all_plans[gym.gym_id],
-        )
-        all_class_parents[gym.gym_id] = parents
-        all_schedules[gym.gym_id] = gym_schedules
-        client.table("gym_classes").insert(
-            [p.to_insert_dict() for p in parents]
-        ).execute()
-        client.table("gym_class_schedules").insert(
-            [s.to_insert_dict() for s in gym_schedules]
-        ).execute()
-        if gym_exceptions:
-            client.table("gym_class_exceptions").insert(
-                [e.to_insert_dict() for e in gym_exceptions]
-            ).execute()
-        print(f"  {gym.gym_name}: {len(parents)} classes, {len(gym_schedules)} schedules, {len(gym_exceptions)} exceptions")
-
-    # Phase 5: Memberships + linked account assignment
-    print("Creating memberships and linking accounts...")
-    all_memberships: dict[uuid.UUID, list] = {}
-    for gym in gym_records:
-        gym_memberships, link_pairs = memberships.generate(
-            all_profiles[gym.gym_id],
-            all_plans[gym.gym_id],
-            all_prices[gym.gym_id],
-            all_discounts[gym.gym_id],
-            all_linked_discounts[gym.gym_id],
-        )
-        all_memberships[gym.gym_id] = gym_memberships
-
-        # Apply link pairs to profiles
-        profile_map = {p.crm_user_id: p for p in all_profiles[gym.gym_id]}
-        gym_linked_discounts = all_linked_discounts[gym.gym_id]
-        for linked_id, primary_id in link_pairs:
-            profile_map[linked_id].account_linked_to_id = primary_id
-            if gym_linked_discounts and random.choice([True, False]):
-                profile_map[linked_id].linked_discount_id = random.choice(gym_linked_discounts).discount_id
-
-    # Apply account-level freeze (after linking, so children are skipped)
-    for gym in gym_records:
-        profiles.apply_freeze(all_profiles[gym.gym_id])
-
-    # Now insert profiles (without account_linked_to_id first, then update linked ones)
-    print("Inserting profiles...")
-    for gym in gym_records:
-        gym_profiles = all_profiles[gym.gym_id]
-        # Insert all profiles without links
-        insert_dicts = []
-        for p in gym_profiles:
-            d = p.to_insert_dict()
-            d.pop("account_linked_to_id", None)
-            d.pop("linked_discount_id", None)
-            insert_dicts.append(d)
-        client.table("user_gym_profiles").insert(insert_dicts).execute()
-
-        # Update linked profiles with their account_linked_to_id
-        for p in gym_profiles:
-            if p.account_linked_to_id is not None:
-                update_data = {"account_linked_to_id": str(p.account_linked_to_id)}
-                if p.linked_discount_id is not None:
-                    update_data["linked_discount_id"] = str(p.linked_discount_id)
-                client.table("user_gym_profiles").update(
-                    update_data
-                ).eq("crm_user_id", str(p.crm_user_id)).execute()
-    print(f"  Created {NUM_GYMS * MEMBERS_PER_GYM} profiles")
-
-    # Insert memberships
-    print("Inserting memberships...")
-    for gym in gym_records:
-        client.table("member_memberships").insert(
-            [m.to_insert_dict() for m in all_memberships[gym.gym_id]]
-        ).execute()
-
-    # Phase 6: Activities and transactions
-    print("Creating activities and transactions...")
-    for gym in gym_records:
-        for profile in all_profiles[gym.gym_id]:
-            acts = activities.generate(
-                profile.crm_user_id, gym.gym_id, ACTIVITIES_PER_MEMBER
+            linked_discounts = api_discounts.create_linked(
+                api, bundle.gym_id, plan_records
             )
-            client.table("user_activities").insert(
-                [a.to_insert_dict() for a in acts]
-            ).execute()
+            print(f"  {len(regular_discounts)} regular, {len(linked_discounts)} linked")
 
-            txns = transactions.generate(
-                profile.crm_user_id, gym.gym_id, all_plans[gym.gym_id],
-                all_prices[gym.gym_id], TRANSACTIONS_PER_MEMBER,
+            # Classes + schedules (direct DB — no endpoint).
+            # Note: classes.generate still wants MembershipPlanCreate-shaped
+            # objects for its allowed-plans selection. We build a
+            # lightweight shim from PlanRecord.
+            print("Creating classes...")
+            class_plans_shim = _plan_records_to_shim(bundle.gym_id, plan_records)
+            parents, schedules = bs_classes.create(
+                client,
+                bundle.gym_id,
+                bundle.gym_name,
+                bundle.all_employees,
+                class_plans_shim,
             )
-            client.table("user_gym_transactions").insert(
-                [t.to_insert_dict() for t in txns]
+
+            # Rewards (direct DB — no endpoint).
+            print("Creating rewards...")
+            gym_rewards = bs_rewards.create(client, bundle.gym_id)
+
+            # Build the in-memory profile plan for every member of this gym.
+            print("Building profile plans...")
+            linked_auth_ids = [u["id"] for u in bundle.linked_auth_users]
+            profile_plans = build_plans(
+                gym_handle=f"gym-{bundle.gym_id}",
+                linked_auth_user_ids=linked_auth_ids,
+                plans=plan_records,
+                discounts=regular_discounts,
+                linked_discounts=linked_discounts,
+            )
+
+            # Create every member via POST /members → real cus_*.
+            print(f"Creating {len(profile_plans)} members via API...")
+            api_members.create_all(api, client, bundle.gym_id, profile_plans)
+            api_members.apply_links(client, profile_plans)
+
+            # Insert historical (closed) membership rows BEFORE starting any
+            # live ones. The `recurring_requires_no_active` trigger blocks
+            # historical recurring inserts if a live recurring row already
+            # exists for that user, so we get history in first.
+            print("Inserting historical memberships...")
+            history_rows = memberships.create_history(
+                client, bundle.gym_id, profile_plans
+            )
+            print(f"  {len(history_rows)} historical rows")
+
+            # Start a live membership for every profile that has one.
+            # Must run BEFORE apply_freezes — starting a membership on a
+            # frozen account is rejected by the backend.
+            print("Starting live memberships via API...")
+            current_records = api_memberships.create_current(
+                api, client, bundle.gym_id, profile_plans
+            )
+            print(f"  {len(current_records)} live memberships started")
+
+            # Apply account-level freeze windows now that memberships exist.
+            api_members.apply_freezes(client, profile_plans)
+
+        # --- direct-DB synthetic history (no JWT needed) ---
+
+        # Pseudo rows for current memberships so invoices have a past.
+        pseudo_current = memberships.pseudo_rows_for_current(
+            bundle.gym_id, current_records
+        )
+        all_membership_rows = history_rows + pseudo_current
+
+        # Invoices + line items + charges + applied discounts (direct DB, fake IDs).
+        print("Creating invoices and charges...")
+        inv_rows, li_rows, ch_rows, ad_rows = invoices.generate(
+            bundle.gym_id,
+            all_membership_rows,
+            plan_records,
+            regular_discounts,
+            linked_discounts,
+        )
+        if inv_rows:
+            client.table("user_gym_invoices").insert(
+                [i.to_insert_dict() for i in inv_rows]
             ).execute()
-
-    # Phase 6.5: Class attendance logs
-    print("Creating class attendance logs...")
-    for gym in gym_records:
-        gym_logs = classes.generate_logs(
-            gym.gym_id,
-            all_schedules[gym.gym_id],
-            all_profiles[gym.gym_id],
-            all_memberships[gym.gym_id],
+        if li_rows:
+            client.table("user_gym_invoice_line_items").insert(
+                [li.to_insert_dict() for li in li_rows]
+            ).execute()
+        if ad_rows:
+            client.table("user_gym_invoice_applied_discounts").insert(
+                [ad.to_insert_dict() for ad in ad_rows]
+            ).execute()
+        if ch_rows:
+            client.table("user_gym_charges").insert(
+                [c.to_insert_dict() for c in ch_rows]
+            ).execute()
+        print(
+            f"  {len(inv_rows)} invoices, "
+            f"{len(li_rows)} line items, {len(ch_rows)} charges"
         )
-        if gym_logs:
-            # Insert in batches to avoid payload limits
-            batch_size = 500
-            for i in range(0, len(gym_logs), batch_size):
-                batch = gym_logs[i : i + batch_size]
-                client.table("gym_classes_log").insert(
-                    [lg.to_insert_dict() for lg in batch]
-                ).execute()
-        print(f"  {gym.gym_name}: {len(gym_logs)} log entries")
 
-        # Compute last_class per profile from actual log entries
-        latest_by_user: dict[uuid.UUID, str] = {}
-        for lg in gym_logs:
-            uid = lg.crm_user_id
-            ts = lg.time.isoformat()
-            if uid not in latest_by_user or ts > latest_by_user[uid]:
-                latest_by_user[uid] = ts
-        for uid, last_ts in latest_by_user.items():
-            client.table("user_gym_profiles").update(
-                {"last_class": last_ts}
-            ).eq("crm_user_id", str(uid)).execute()
+        # User activities (direct DB).
+        print("Creating activities...")
+        profiles_for_db = _profiles_for_db(bundle.gym_id, profile_plans)
+        bs_activities.create(client, bundle.gym_id, profiles_for_db)
 
-    # Phase 7: Gym history
-    print("Creating gym history...")
-    for gym in gym_records:
-        gym_history = history.generate(
-            gym.gym_id, len(all_profiles[gym.gym_id]), HISTORY_DAYS
+        # Reward redemptions (direct DB).
+        print("Creating reward redemptions...")
+        bs_rewards.create_redemptions(
+            client, bundle.gym_id, profiles_for_db, gym_rewards
         )
-        client.table("gym_history").insert(
-            [h.to_insert_dict() for h in gym_history]
-        ).execute()
+
+        # Class attendance logs (direct DB). We pass both real + historical
+        # membership rows so every active window during the simulated past
+        # gets logs.
+        print("Creating class logs...")
+        bs_classes.create_logs(
+            client,
+            bundle.gym_id,
+            bundle.gym_name,
+            schedules,
+            profiles_for_db,
+            all_membership_rows,
+        )
+
+        # Gym history rollup (direct DB).
+        print("Creating gym history...")
+        bs_history.create(client, bundle.gym_id, member_count=len(profile_plans))
 
     print("\nSeeding complete!")
+
+
+def _plan_records_to_shim(gym_id, plan_records):
+    """Adapt PlanRecord to MembershipPlanCreate for generators that still need it.
+
+    classes.generate() reads plan_type on each plan to decide whether a class
+    is "short-term only". We only need enough of the shape for that check.
+    """
+    from schema.membership_plan import MembershipPlanCreate
+
+    return [
+        MembershipPlanCreate(
+            plan_id=p.plan_id,
+            gym_id=gym_id,
+            plan_name=p.plan_name,
+            plan_type=p.plan_type,
+            class_count=p.class_count,
+            duration_amount=p.duration_amount,
+            duration_unit=p.duration_unit,
+            is_public=True,
+        )
+        for p in plan_records
+    ]
+
+
+def _profiles_for_db(gym_id, profile_plans):
+    """Build UserGymProfileCreate shims for generators that still expect them.
+
+    activities, reward_redemptions, and classes.generate_logs all take
+    UserGymProfileCreate. We shim just the fields they read: crm_user_id,
+    gym_id, and (for classes) account_linked_to_id + freeze dates.
+    """
+    import uuid
+
+    from schema.user_gym_profile import UserGymProfileCreate
+
+    handle_to_crm: dict[str, uuid.UUID] = {
+        p.local_handle: p.crm_user_id  # type: ignore[assignment]
+        for p in profile_plans
+        if p.crm_user_id is not None
+    }
+    shims = []
+    for p in profile_plans:
+        if p.crm_user_id is None:
+            continue
+        linked_crm = None
+        if p.linked_primary_handle is not None:
+            linked_crm = handle_to_crm.get(p.linked_primary_handle)
+        shims.append(
+            UserGymProfileCreate(
+                crm_user_id=p.crm_user_id,
+                gym_id=gym_id,
+                first_name=p.demographics.first_name,
+                last_name=p.demographics.last_name,
+                email=p.demographics.email,
+                phone=p.demographics.phone,
+                account_linked_to_id=linked_crm,
+                freeze_start_date=p.account_freeze_start,
+                freeze_end_date=p.account_freeze_end,
+            )
+        )
+    return shims
 
 
 if __name__ == "__main__":

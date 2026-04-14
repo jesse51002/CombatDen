@@ -11,7 +11,12 @@ from sqlalchemy import text
 from src.shared.database import DirectDatabasePool
 
 # Tables in FK-safe deletion order (children before parents).
+# ``user_gym_charges`` cascades from ``user_gym_invoices`` but is listed
+# explicitly for defensive cleanup if a charge ever outlives its invoice.
 _GYM_TABLES = (
+    "stripe_webhook_events",
+    "user_gym_charges",
+    "user_gym_invoices",
     "member_memberships_unfiltered",
     "membership_plan_prices_unfiltered",
     "gym_discounts_unfiltered",

@@ -25,9 +25,6 @@ if TYPE_CHECKING:
         PaymentsStripeDiscountService,
     )
     from src.shared.gym_stripe_service import GymStripeService
-    from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-        StripeReconciliationService,
-    )
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +47,6 @@ class DiscountsDelete(DiscountsBase):
         discount_id: UUID,
         gym_id: UUID,
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Soft-delete a non-linked discount.
 
@@ -61,7 +57,6 @@ class DiscountsDelete(DiscountsBase):
             discount_id: The discount to delete.
             gym_id: The gym owning the discount.
             background_tasks: FastAPI background tasks.
-            reconciliation_service: Stripe reconciliation service.
 
         Raises:
             ValueError: If discount not found, is linked, or
@@ -108,7 +103,6 @@ class DiscountsDelete(DiscountsBase):
             background_tasks.add_task(
                 self._payment_sync.bulk_payment_sync,
                 affected,
-                reconciliation_service,
             )
 
     # ── Private ────────────────────────────────────────────────

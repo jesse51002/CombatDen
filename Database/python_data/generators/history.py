@@ -5,9 +5,7 @@ from datetime import date, timedelta
 from schema.gym_history import GymHistoryCreate
 
 
-def generate(
-    gym_id: uuid.UUID, member_count: int, days: int
-) -> list[GymHistoryCreate]:
+def generate(gym_id: uuid.UUID, member_count: int, days: int) -> list[GymHistoryCreate]:
     rows = []
     total = member_count
     for i in range(days):

@@ -23,9 +23,6 @@ from src.membership_plans.service.membership_plans_service import (
 )
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.shared.auth import Auth, security
-from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-    StripeReconciliationService,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -455,9 +452,6 @@ async def migrate_members(
     plans_service: MembershipPlansService = Depends(
         Provide[DependencyInjector.membership_plans_service]
     ),
-    reconciliation_service: StripeReconciliationService = Depends(
-        Provide[DependencyInjector.stripe_reconciliation_service]
-    ),
 ) -> None:
     """Migrate specific members to the current active price.
 
@@ -467,7 +461,6 @@ async def migrate_members(
         credentials: Bearer token credentials.
         auth: Injected auth service.
         plans_service: Injected plans service.
-        reconciliation_service: Passed to bulk_payment_sync.
 
     Raises:
         HTTPException: 400/401/403/404/500 on respective errors.
@@ -481,7 +474,6 @@ async def migrate_members(
             request.gym_id,
             request.crm_user_ids,
             background_tasks,
-            reconciliation_service,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -533,9 +525,6 @@ async def migrate_all_members(
     plans_service: MembershipPlansService = Depends(
         Provide[DependencyInjector.membership_plans_service]
     ),
-    reconciliation_service: StripeReconciliationService = Depends(
-        Provide[DependencyInjector.stripe_reconciliation_service]
-    ),
 ) -> None:
     """Migrate all active members on a plan to the current price.
 
@@ -545,7 +534,6 @@ async def migrate_all_members(
         credentials: Bearer token credentials.
         auth: Injected auth service.
         plans_service: Injected plans service.
-        reconciliation_service: Passed to bulk_payment_sync.
 
     Raises:
         HTTPException: 400/401/403/404/500 on respective errors.
@@ -558,7 +546,6 @@ async def migrate_all_members(
             request.plan_id,
             request.gym_id,
             background_tasks,
-            reconciliation_service,
         )
     except ValueError as exc:
         error_msg = str(exc)

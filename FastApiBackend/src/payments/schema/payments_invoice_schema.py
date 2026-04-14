@@ -22,6 +22,28 @@ class PaymentsInvoicePreviewResponse(BaseModel):
     lines: list[PaymentsInvoicePreviewLineItem] = []
 
 
+# ── Upcoming Invoice ────────────────────────────────────────────
+
+
+class UpcomingInvoiceLine(BaseModel):
+    """A single post-discount line item on an upcoming subscription invoice."""
+
+    stripe_subscription_item_id: str
+    stripe_price_id: str | None = None
+    quantity: int
+    amount: int  # post-discount line total in cents
+
+
+class UpcomingInvoiceResponse(BaseModel):
+    """Preview of the next invoice for an existing subscription."""
+
+    amount_due: int
+    subtotal: int
+    total: int
+    currency: str
+    lines: list[UpcomingInvoiceLine] = []
+
+
 # ── Invoice List ────────────────────────────────────────────────
 
 

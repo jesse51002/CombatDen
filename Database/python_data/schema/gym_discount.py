@@ -34,9 +34,7 @@ class GymDiscountCreate(SeedModel):
         has_pct = self.percentage_off is not None
         has_dollar = self.dollar_off is not None
         if has_pct == has_dollar:
-            raise ValueError(
-                "Exactly one of percentage_off or dollar_off must be set"
-            )
+            raise ValueError("Exactly one of percentage_off or dollar_off must be set")
         is_linked = self.discount_type == DiscountType.linked
         has_plan = self.membership_plan_id is not None
         has_num = self.linked_discount_num is not None

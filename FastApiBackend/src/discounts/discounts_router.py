@@ -17,9 +17,6 @@ from src.discounts.schema.discounts_schema import (
 from src.discounts.service.discounts_service import DiscountsService
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.shared.auth import Auth, security
-from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-    StripeReconciliationService,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -113,9 +110,6 @@ async def update_discount(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     discounts_service: DiscountsService = Depends(Provide[DependencyInjector.discounts_service]),
-    reconciliation_service: StripeReconciliationService = Depends(
-        Provide[DependencyInjector.stripe_reconciliation_service]
-    ),
 ) -> DiscountResponse:
     """Update an existing non-linked discount.
 
@@ -136,7 +130,6 @@ async def update_discount(
         return await discounts_service.update_discount(
             request,
             background_tasks,
-            reconciliation_service,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -191,9 +184,6 @@ async def delete_discount(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     discounts_service: DiscountsService = Depends(Provide[DependencyInjector.discounts_service]),
-    reconciliation_service: StripeReconciliationService = Depends(
-        Provide[DependencyInjector.stripe_reconciliation_service]
-    ),
 ) -> None:
     """Soft-delete a non-linked discount.
 
@@ -216,7 +206,6 @@ async def delete_discount(
             discount_id,
             gym_id,
             background_tasks,
-            reconciliation_service,
         )
     except ValueError as exc:
         error_msg = str(exc)

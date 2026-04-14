@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from src.member_memberships.service.membership_payment_sync_service import (
         MembershipPaymentSyncService,
     )
+    from src.member_memberships.service.payment_sync.price_writeback import (
+        PriceWriteback,
+    )
+    from src.shared.gym_stripe_service import GymStripeService
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +40,13 @@ class MemberMembershipsBase:
         self,
         db_pool: DirectDatabasePool,
         payment_sync_service: MembershipPaymentSyncService,
+        price_writeback: PriceWriteback,
+        gym_stripe_service: GymStripeService,
     ) -> None:
         self._db_pool = db_pool
         self._payment_sync = payment_sync_service
+        self._price_writeback = price_writeback
+        self._gym_stripe = gym_stripe_service
 
     # ── Shared Queries ─────────────────────────────────────────
 

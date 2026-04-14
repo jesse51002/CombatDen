@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.members import SQL_DIR
 from src.members.schema.member_details_schema import (
     DiscountInfo,
+    LineItemRecord,
     LinkedAccount,
     PaymentRecord,
     RewardCard,
-    TransactionItemType,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -66,12 +66,14 @@ class MemberDetailsSupplementary:
                 session,
                 gym_params,
             )
-            payments, redeemed = await self._fetch_transactions(
+            self._payment_history = await self._fetch_charges(
                 session,
                 member_params,
             )
-            self._payment_history = payments
-            self._redeemed_rewards = redeemed
+            self._redeemed_rewards = await self._fetch_reward_redemptions(
+                session,
+                member_params,
+            )
 
     def _reset(self) -> None:
         """Clear all internal lookup state."""
@@ -143,34 +145,75 @@ class MemberDetailsSupplementary:
             rewards[row["reward_id"]] = reward
         return rewards
 
-    async def _fetch_transactions(
+    async def _fetch_charges(
         self,
         session: AsyncSession,
         params: dict[str, str],
-    ) -> tuple[list[PaymentRecord], list[RewardCard]]:
-        """Load member transactions, split into payments/rewards."""
+    ) -> list[PaymentRecord]:
+        """Load member charges with aggregated line items and applied discounts."""
         sql = load_sql(
             SQL_DIR / "member_details" / "member_details_transactions.sql",
         )
         result = await session.execute(text(sql), params)
         payments: list[PaymentRecord] = []
+        for row in result.mappings().all():
+            line_items = [
+                LineItemRecord(
+                    line_item_id=li["line_item_id"],
+                    item_type=li["item_type"],
+                    name=li["name"],
+                    amount=li["amount"],
+                    stripe_product_id=li.get("stripe_product_id"),
+                    item_id=(UUID(li["item_id"]) if li.get("item_id") else None),
+                )
+                for li in (row["line_items"] or [])
+            ]
+
+            applied: list[DiscountInfo] = []
+            for ad in row["applied_discounts"] or []:
+                discount = self._discounts.get(UUID(ad["discount_id"]))
+                if discount:
+                    applied.append(discount)
+
+            payments.append(
+                PaymentRecord(
+                    charge_id=row["charge_id"],
+                    invoice_id=row["invoice_id"],
+                    kind=row["kind"],
+                    status=row["status"],
+                    amount=row["amount"],
+                    currency=row["currency"],
+                    payment_method_type=row["payment_method_type"],
+                    charge_time=row["charge_time"],
+                    refunds_charge_id=row["refunds_charge_id"],
+                    line_items=line_items,
+                    applied_discounts=applied,
+                )
+            )
+        return payments
+
+    async def _fetch_reward_redemptions(
+        self,
+        session: AsyncSession,
+        params: dict[str, str],
+    ) -> list[RewardCard]:
+        """Load member reward redemptions joined with gym_rewards."""
+        sql = load_sql(
+            SQL_DIR / "member_details" / "member_details_reward_redemptions.sql",
+        )
+        result = await session.execute(text(sql), params)
         redeemed: list[RewardCard] = []
         for row in result.mappings().all():
-            item_type = row["item_type"]
-
-            if item_type == TransactionItemType.reward_purchase:
-                reward = self._rewards.get(row["item_id"])
-                if reward:
-                    redeemed.append(reward)
-            else:
-                payment = PaymentRecord(
-                    transaction_id=row["transaction_id"],
-                    item_type=item_type,
-                    amount_paid=row["amount_paid"],
-                    time=row["time"],
+            redeemed.append(
+                RewardCard(
+                    reward_id=row["reward_id"],
+                    title=row["title"],
+                    amount_off=row["amount_off"],
+                    image_url=row["image_url"],
+                    point_cost=row["point_cost"],
                 )
-                payments.append(payment)
-        return payments, redeemed
+            )
+        return redeemed
 
     def get_discounts(
         self,

@@ -64,8 +64,12 @@ def generate_staff(
                 last_name=fake.last_name(),
                 phone=fake.phone_number(),
                 email=fake.email(),
-                employee_pic_url=random.choice(EMPLOYEE_PIC_URLS) if random.random() < 0.7 else None,
-                employee_public_description=random.choice(EMPLOYEE_DESCRIPTIONS) if random.random() < 0.7 else None,
+                employee_pic_url=random.choice(EMPLOYEE_PIC_URLS)
+                if random.random() < 0.7
+                else None,
+                employee_public_description=random.choice(EMPLOYEE_DESCRIPTIONS)
+                if random.random() < 0.7
+                else None,
             )
         )
     return staff

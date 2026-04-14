@@ -16,6 +16,7 @@ USER_GYM_PROFILES: frozenset[str] = frozenset(
         "created_at",  # auto-generated timestamp
         "last_class",  # set by checkin service, never by client
         "points_balance",  # managed by rewards system, never by client
+        "total_monthly_recurring_price",  # managed by backend membership logic, never by client
         # Stripe columns — always set by backend, never by client
         "stripe_customer_id",  # trigger: trg_prevent_stripe_customer_id_overwrite
         "stripe_payment_method_id",
@@ -41,7 +42,7 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "created_at",  # auto-generated timestamp
         # Stripe columns — always set by backend
         "stripe_item_id",
-        "price_id"
+        "price_id",
     }
 )
 
@@ -132,15 +133,65 @@ GYM_HISTORY: frozenset[str] = frozenset(
     }
 )
 
-USER_GYM_TRANSACTIONS: frozenset[str] = frozenset(
+USER_GYM_INVOICES: frozenset[str] = frozenset(
     {
-        "transaction_id",  # PK, auto-generated UUID
+        "invoice_id",  # PK, auto-generated UUID
         "crm_user_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
-        "time",  # auto-generated timestamp
+        "invoice_time",  # auto-generated timestamp
         # Stripe columns — always set by backend
-        "stripe_payment_intent_id",
         "stripe_invoice_id",
+        "stripe_payment_intent_id",
+        "stripe_event_payload",
+    }
+)
+
+USER_GYM_INVOICE_LINE_ITEMS: frozenset[str] = frozenset(
+    {
+        "line_item_id",  # PK, Stripe line item id
+        "invoice_id",  # identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "item_id",  # identity FK, membership item
+        "item_type",  # set at creation
+        # Stripe columns — always set by backend
+        "stripe_product_id",
+    }
+)
+
+USER_GYM_CHARGES: frozenset[str] = frozenset(
+    {
+        "charge_id",  # PK, auto-generated UUID
+        "invoice_id",  # identity FK
+        "crm_user_id",  # identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "kind",  # set at creation
+        "charge_time",  # auto-generated timestamp
+        "refunds_charge_id",  # set at creation for refund rows
+        # Stripe columns — always set by backend
+        "stripe_charge_id",
+        "stripe_refund_id",
+        "stripe_event_payload",
+    }
+)
+
+USER_GYM_INVOICE_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
+    {
+        "applied_discount_id",  # PK, auto-generated UUID
+        "invoice_id",  # identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "discount_id",  # identity FK
+        # Stripe columns — always set by backend
+        "stripe_coupon_id",
+    }
+)
+
+USER_GYM_REWARD_REDEMPTIONS: frozenset[str] = frozenset(
+    {
+        "redemption_id",  # PK, auto-generated UUID
+        "crm_user_id",  # identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "reward_id",  # identity FK
+        "redeemed_at",  # auto-generated timestamp
     }
 )
 

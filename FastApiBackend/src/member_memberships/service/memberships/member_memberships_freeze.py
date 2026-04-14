@@ -1,7 +1,10 @@
 """Freeze and unfreeze a member's account (account-level)."""
 
+from __future__ import annotations
+
 import logging
 from datetime import date
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
@@ -11,7 +14,14 @@ from src.member_memberships import SQL_DIR
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
+from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
+
+if TYPE_CHECKING:
+    from src.member_memberships.schema.payment_sync_schema import ParentProfile
+    from src.payments.schema.payments_members_schema import (
+        PaymentsSubscriptionResponse,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +53,11 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
             raise ValueError("freeze_months must be positive")
 
         parent = await self._payment_sync.resolve_parent(crm_user_id)
-        freeze_end_date = date.today() + relativedelta(months=freeze_months)
+        today = gym_today(parent.timezone)
+        freeze_end_date = today + relativedelta(months=freeze_months)
 
         # ── Stripe first ──────────────────────────────────
-        await self._payment_sync.update_payments_recurring(
+        response = await self._payment_sync.update_payments_recurring(
             crm_user_id,
             add_ids=[],
             cancel_ids=[],
@@ -57,8 +68,12 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         await self._crm_freeze_profile(
             parent.crm_user_id,
             parent.gym_id,
+            today,
             freeze_end_date,
         )
+
+        # ── Fan out post-discount prices to all siblings ──
+        await self._sync_prices(parent, response)
 
     async def unfreeze(
         self,
@@ -78,15 +93,16 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         parent = await self._payment_sync.resolve_parent(crm_user_id)
 
         if not parent.is_frozen:
-            await self._payment_sync.update_payments_recurring(
+            response = await self._payment_sync.update_payments_recurring(
                 crm_user_id,
                 add_ids=[],
                 cancel_ids=[],
             )
+            await self._sync_prices(parent, response)
             return
 
         # ── Stripe first ──────────────────────────────────
-        await self._payment_sync.update_payments_recurring(
+        response = await self._payment_sync.update_payments_recurring(
             crm_user_id,
             add_ids=[],
             cancel_ids=[],
@@ -99,12 +115,32 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
             parent.gym_id,
         )
 
+        # ── Fan out post-discount prices to all siblings ──
+        await self._sync_prices(parent, response)
+
     # ── Private ────────────────────────────────────────────────
+
+    async def _sync_prices(
+        self,
+        parent: ParentProfile,
+        response: PaymentsSubscriptionResponse | None,
+    ) -> None:
+        """Fan out post-discount prices after a freeze-state sync."""
+        stripe_sub_id = response.stripe_subscription_id if response else None
+        stripe_account_id = await self._gym_stripe.get_stripe_account_id(
+            parent.gym_id,
+        )
+        await self._price_writeback.sync_prices_from_stripe(
+            parent_crm_user_id=parent.crm_user_id,
+            stripe_sub_id=stripe_sub_id,
+            stripe_account_id=stripe_account_id,
+        )
 
     async def _crm_freeze_profile(
         self,
         crm_user_id: UUID,
         gym_id: UUID,
+        freeze_start_date: date,
         freeze_end_date: date,
     ) -> None:
         """Set freeze dates on the parent profile."""
@@ -112,6 +148,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         params = {
             "crm_user_id": str(crm_user_id),
             "gym_id": str(gym_id),
+            "freeze_start_date": freeze_start_date,
             "freeze_end_date": freeze_end_date,
         }
         async with self._db_pool.session() as session:

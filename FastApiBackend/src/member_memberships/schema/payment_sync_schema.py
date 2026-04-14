@@ -12,6 +12,7 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionDesiredItem,
     SubscriptionItemDiscount,
 )
+from src.shared.gym_timezone import gym_today
 
 
 class ParentProfile(BaseModel):
@@ -23,13 +24,14 @@ class ParentProfile(BaseModel):
     stripe_sub_id_month: str | None = None
     freeze_start_date: date | None = None
     freeze_end_date: date | None = None
+    timezone: str = "America/Chicago"
 
     @property
     def is_frozen(self) -> bool:
         """Whether the parent account is currently in a freeze window."""
         if self.freeze_start_date is None or self.freeze_end_date is None:
             return False
-        today = date.today()
+        today = gym_today(self.timezone)
         return self.freeze_start_date <= today <= self.freeze_end_date
 
 

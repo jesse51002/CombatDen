@@ -63,7 +63,6 @@ async def test_update_discount_name(discounts_service, gym_id):
             data=DiscountUpdateData(discount_name="New Name"),
         ),
         background_tasks=BackgroundTasks(),
-        reconciliation_service=None,
     )
 
     assert resp.discount_name == "New Name"
@@ -84,7 +83,6 @@ async def test_delete_discount(discounts_service, db_pool, gym_id):
         created.discount_id,
         gym_id,
         background_tasks=BackgroundTasks(),
-        reconciliation_service=None,
     )
 
     # Verify the discount is soft-deleted (is_deleted = true)

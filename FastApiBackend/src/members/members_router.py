@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -22,9 +22,6 @@ from src.members.schema.members_management_schema import (
     MembersManagementResponse,
     MembersManagementUpdateCardRequest,
     MembersManagementUpdateRequest,
-)
-from src.members.service.member_details.member_details_price_recalc import (
-    MemberDetailsPriceRecalc,
 )
 from src.members.service.member_details_service import (
     MemberService,
@@ -70,21 +67,17 @@ members_router = APIRouter(
 @inject
 async def get_member_details(
     crm_user_id: UUID,
-    background_tasks: BackgroundTasks,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     member_service: MemberService = Depends(Provide[DependencyInjector.member_service]),
-    price_recalc: MemberDetailsPriceRecalc = Depends(Provide[DependencyInjector.price_recalc]),
 ) -> MemberDetailResponse:
     """Get full details for a single member.
 
     Args:
         crm_user_id: The member's CRM user ID.
-        background_tasks: FastAPI background tasks.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         member_service: Injected member service.
-        price_recalc: Injected price recalculation service.
 
     Returns:
         MemberDetailResponse with all memberships and
@@ -117,13 +110,6 @@ async def get_member_details(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve member details",
         ) from None
-
-    family_ids = {response.crm_user_id} | {la.crm_user_id for la in response.linked_accounts}
-    background_tasks.add_task(
-        price_recalc.recalculate_family_prices,
-        response.gym_id,
-        family_ids,
-    )
 
     return response
 

@@ -4,7 +4,7 @@ start:
 	npx supabase migration up
 
 migration: start
-	npx supabase db diff -f $(name)
+	npx supabase db diff --use-pg-delta -f $(name)
 	npx supabase migration up
 
 push:
@@ -16,6 +16,9 @@ pull:
 
 reset:
 	npx supabase db reset
+
+squash:
+	npx supabase migration squash
 
 stop:
 	npx supabase stop --project-id GoApi

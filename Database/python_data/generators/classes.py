@@ -12,22 +12,63 @@ from schema.gym_employee import GymEmployeeCreate
 from schema.member_membership import MemberMembershipCreate
 from schema.membership_plan import MembershipPlanCreate
 from schema.user_gym_profile import UserGymProfileCreate
-from utils import random_past_date, random_past_datetime
+from utils import random_past_date
 
 CLASS_TEMPLATES = [
-    {"class_name": "Morning BJJ", "class_description": "Fundamentals and sparring for all levels.", "duration_minutes": 60},
-    {"class_name": "Evening MMA", "class_description": "Mixed martial arts striking and grappling.", "duration_minutes": 90},
-    {"class_name": "Kickboxing", "class_description": "High-energy kickboxing cardio and technique.", "duration_minutes": 60},
-    {"class_name": "Open Mat", "class_description": "Free training time with open sparring.", "duration_minutes": 120},
-    {"class_name": "Wrestling", "class_description": "Takedowns, control, and scrambles.", "duration_minutes": 60},
-    {"class_name": "Muay Thai", "class_description": "Traditional Thai boxing with pads and bags.", "duration_minutes": 75},
-    {"class_name": "No-Gi Grappling", "class_description": "Submission grappling without the gi.", "duration_minutes": 60},
-    {"class_name": "Kids Martial Arts", "class_description": "Fun and discipline-focused class for ages 6-12.", "duration_minutes": 45},
-    {"class_name": "Competition Team", "class_description": "Advanced training for competitors.", "duration_minutes": 90},
-    {"class_name": "Strength & Conditioning", "class_description": "Athletic performance training.", "duration_minutes": 60},
+    {
+        "class_name": "Morning BJJ",
+        "class_description": "Fundamentals and sparring for all levels.",
+        "duration_minutes": 60,
+    },
+    {
+        "class_name": "Evening MMA",
+        "class_description": "Mixed martial arts striking and grappling.",
+        "duration_minutes": 90,
+    },
+    {
+        "class_name": "Kickboxing",
+        "class_description": "High-energy kickboxing cardio and technique.",
+        "duration_minutes": 60,
+    },
+    {
+        "class_name": "Open Mat",
+        "class_description": "Free training time with open sparring.",
+        "duration_minutes": 120,
+    },
+    {
+        "class_name": "Wrestling",
+        "class_description": "Takedowns, control, and scrambles.",
+        "duration_minutes": 60,
+    },
+    {
+        "class_name": "Muay Thai",
+        "class_description": "Traditional Thai boxing with pads and bags.",
+        "duration_minutes": 75,
+    },
+    {
+        "class_name": "No-Gi Grappling",
+        "class_description": "Submission grappling without the gi.",
+        "duration_minutes": 60,
+    },
+    {
+        "class_name": "Kids Martial Arts",
+        "class_description": "Fun and discipline-focused class for ages 6-12.",
+        "duration_minutes": 45,
+    },
+    {
+        "class_name": "Competition Team",
+        "class_description": "Advanced training for competitors.",
+        "duration_minutes": 90,
+    },
+    {
+        "class_name": "Strength & Conditioning",
+        "class_description": "Athletic performance training.",
+        "duration_minutes": 60,
+    },
 ]
 
 DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+
 
 def _is_short_term_only(allowed_plans: list | None) -> bool:
     """True when every allowed plan is trial or one_time (no recurring)."""
@@ -93,9 +134,7 @@ def generate(
             max_capacity = random.choice([10, 15, 20, 25, 30])
 
         allowed_plans = (
-            [plan_by_id[pid] for pid in allowed_plan_ids]
-            if allowed_plan_ids
-            else None
+            [plan_by_id[pid] for pid in allowed_plan_ids] if allowed_plan_ids else None
         )
         short_term = _is_short_term_only(allowed_plans)
 
@@ -110,15 +149,17 @@ def generate(
         is_active = False if short_term else random.random() < 0.8
 
         # Parent record
-        parents.append(GymClassCreate(
-            class_id=class_id,
-            gym_id=gym_id,
-            class_name=tmpl["class_name"],
-            class_description=tmpl["class_description"],
-            allowed_plan_ids=allowed_plan_ids,
-            max_capacity=max_capacity,
-            is_active=is_active,
-        ))
+        parents.append(
+            GymClassCreate(
+                class_id=class_id,
+                gym_id=gym_id,
+                class_name=tmpl["class_name"],
+                class_description=tmpl["class_description"],
+                allowed_plan_ids=allowed_plan_ids,
+                max_capacity=max_capacity,
+                is_active=is_active,
+            )
+        )
 
         schedule_id = uuid.uuid4()
         schedules.append(
@@ -164,7 +205,9 @@ def generate(
                         ),
                         new_instructor_id=(
                             random.choice(trainer_ids)
-                            if not is_cancelled and trainer_ids and random.random() < 0.5
+                            if not is_cancelled
+                            and trainer_ids
+                            and random.random() < 0.5
                             else None
                         ),
                     )
@@ -193,7 +236,9 @@ def generate_logs(
         memberships_by_user.setdefault(m.crm_user_id, []).append(m)
 
     # Index profiles for parent freeze lookup (linked accounts inherit freeze)
-    profile_by_id: dict[uuid.UUID, UserGymProfileCreate] = {p.crm_user_id: p for p in profiles}
+    profile_by_id: dict[uuid.UUID, UserGymProfileCreate] = {
+        p.crm_user_id: p for p in profiles
+    }
 
     for profile in profiles:
         user_memberships = memberships_by_user.get(profile.crm_user_id)
@@ -201,7 +246,10 @@ def generate_logs(
             continue
 
         # Linked accounts inherit freeze from their parent
-        if profile.account_linked_to_id and profile.account_linked_to_id in profile_by_id:
+        if (
+            profile.account_linked_to_id
+            and profile.account_linked_to_id in profile_by_id
+        ):
             freeze_profile = profile_by_id[profile.account_linked_to_id]
         else:
             freeze_profile = profile
@@ -237,13 +285,17 @@ def generate_logs(
             for _ in range(num_logs):
                 # Pick a random day within the active window, avoiding frozen period
                 for _attempt in range(10):
-                    days_offset = random.randint(0, (window_end - window_start).days - 1)
+                    days_offset = random.randint(
+                        0, (window_end - window_start).days - 1
+                    )
                     log_date = window_start + timedelta(days=days_offset)
                     # Skip if inside frozen period
                     if (
                         freeze_profile.freeze_start_date
                         and freeze_profile.freeze_end_date
-                        and freeze_profile.freeze_start_date <= log_date <= freeze_profile.freeze_end_date
+                        and freeze_profile.freeze_start_date
+                        <= log_date
+                        <= freeze_profile.freeze_end_date
                     ):
                         continue
                     break
@@ -252,8 +304,11 @@ def generate_logs(
 
                 # Random time of day (6am-9pm)
                 log_time = datetime(
-                    log_date.year, log_date.month, log_date.day,
-                    random.randint(6, 21), random.randint(0, 59),
+                    log_date.year,
+                    log_date.month,
+                    log_date.day,
+                    random.randint(6, 21),
+                    random.randint(0, 59),
                 )
 
                 schedule = random.choice(schedules)

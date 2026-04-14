@@ -84,7 +84,7 @@ class CrmAllViewService(CrmBaseViewService):
         Returns:
             Deduplicated rows sorted by original query order.
         """
-        today = date.today()
+        today = rows[0]["gym_today"] if rows else date.today()
         grouped: dict[UUID, list[tuple[int, int, dict]]] = defaultdict(list)
 
         for idx, row in enumerate(rows):
@@ -154,7 +154,7 @@ class CrmAllViewService(CrmBaseViewService):
                 days_since_last_class=self._days_since_last_class(row),
             )
 
-        today = date.today()
+        today = row["gym_today"]
         status = CrmMemberStatus(row["status"])
         next_due = row.get("next_due_date")
 
@@ -216,7 +216,7 @@ class CrmAllViewService(CrmBaseViewService):
         last_paid = row.get("last_paid_date")
         next_due = row.get("next_due_date")
         end = row.get("end_date")
-        today = date.today()
+        today = row["gym_today"]
 
         if status == CrmMemberStatus.cancelled:
             cancel = row.get("cancel_date")

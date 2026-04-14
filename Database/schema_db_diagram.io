@@ -9,6 +9,7 @@ Table gyms {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_name varchar [not null]
   gym_description varchar
+  timezone text [not null, default: 'America/Chicago', note: 'IANA timezone name, used for local-day comparisons (e.g. membership expiry)']
   stripe_account_id varchar [note: 'Stripe Connect account ID, NULL until onboarded']
   stripe_onboarding_status varchar [not null, default: 'not_started', note: 'enum: not_started, pending, complete, disabled']
 }
@@ -41,6 +42,7 @@ Table user_gym_profiles_unfiltered {
   card_last_four varchar(4)
   card_exp_month integer
   card_exp_year integer
+  total_monthly_recurring_price integer [not null, default: 0, note: 'sum of active recurring memberships (cents)']
 
   indexes {
     (user_id, gym_id) [unique, note: 'partial index WHERE user_id IS NOT NULL']
@@ -70,18 +72,63 @@ Table gym_history {
   }
 }
 
-Table user_gym_transactions {
-  transaction_id uuid [primary key, default: `uuid_generate_v4()`]
-  crm_user_id uuid [not null]
+Table user_gym_invoices {
+  invoice_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
-  item_id uuid [not null]
-  amount_paid integer [not null]
-  item_type varchar
-  time timestamptz [not null, default: `now()`]
-  applied_discounts jsonb
-  stripe_payment_intent_id varchar [note: 'Stripe PaymentIntent ID']
-  stripe_invoice_id varchar [note: 'Stripe Invoice ID, for subscription payments']
-  extra_info jsonb [default: '{}']
+  crm_user_id uuid [not null, note: 'the payer']
+  status varchar [not null, default: 'open', note: 'enum: open, paid']
+  total_amount integer [not null]
+  currency char(3) [not null, default: 'usd']
+  stripe_invoice_id varchar [unique, note: 'Stripe Invoice ID, nullable for manual/cash']
+  stripe_payment_intent_id varchar [unique, note: 'Stripe PaymentIntent ID']
+  invoice_time timestamptz [not null, default: `now()`]
+  stripe_event_payload jsonb [note: 'raw webhook payload']
+}
+
+Table user_gym_invoice_line_items {
+  line_item_id varchar [primary key, note: 'Stripe line item id (il_xxx)']
+  invoice_id uuid [not null]
+  gym_id uuid [not null]
+  item_type varchar [not null, note: 'enum: membership, custom']
+  name varchar [not null, note: 'frozen historical label']
+  amount integer [not null]
+  stripe_product_id varchar [note: 'Stripe Product ID']
+  item_id uuid [note: 'FK to member_memberships when item_type = membership']
+}
+
+Table user_gym_charges {
+  charge_id uuid [primary key, default: `uuid_generate_v4()`]
+  invoice_id uuid [not null]
+  gym_id uuid [not null]
+  crm_user_id uuid [not null, note: 'denormalized from invoice for RLS/query speed']
+  kind varchar [not null, note: 'enum: payment, refund']
+  status varchar [not null, note: 'enum: pending, succeeded, failed']
+  amount integer [not null, note: 'signed: payment >= 0, refund <= 0']
+  currency char(3) [not null, default: 'usd']
+  payment_method_type varchar [note: 'card, us_bank_account, cash, ...']
+  stripe_charge_id varchar [unique, note: 'set for payment rows']
+  stripe_refund_id varchar [unique, note: 'set for refund rows']
+  refunds_charge_id uuid [note: 'set for refund rows, FK to user_gym_charges']
+  charge_time timestamptz [not null, default: `now()`]
+  stripe_event_payload jsonb [note: 'raw webhook payload']
+}
+
+Table user_gym_invoice_applied_discounts {
+  applied_discount_id uuid [primary key, default: `uuid_generate_v4()`]
+  invoice_id uuid [not null]
+  gym_id uuid [not null]
+  discount_id uuid [not null]
+  amount_off integer [not null, note: 'snapshot of dollar value applied']
+  stripe_coupon_id varchar
+}
+
+Table user_gym_reward_redemptions {
+  redemption_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null]
+  crm_user_id uuid [not null]
+  reward_id uuid [not null]
+  point_cost integer [not null, note: 'snapshot at redemption time']
+  redeemed_at timestamptz [not null, default: `now()`]
 }
 
 Table membership_plans_unfiltered {
@@ -276,9 +323,30 @@ Ref: gyms.gym_id < user_activities.gym_id
 // gym_history
 Ref: gyms.gym_id < gym_history.gym_id
 
-// user_gym_transactions
-Ref: user_gym_profiles_unfiltered.crm_user_id < user_gym_transactions.crm_user_id
-Ref: gyms.gym_id < user_gym_transactions.gym_id
+// user_gym_invoices
+Ref: user_gym_profiles_unfiltered.crm_user_id < user_gym_invoices.crm_user_id
+Ref: gyms.gym_id < user_gym_invoices.gym_id
+
+// user_gym_invoice_line_items
+Ref: user_gym_invoices.invoice_id < user_gym_invoice_line_items.invoice_id
+Ref: gyms.gym_id < user_gym_invoice_line_items.gym_id
+Ref: member_memberships_unfiltered.item_id < user_gym_invoice_line_items.item_id
+
+// user_gym_charges
+Ref: user_gym_invoices.invoice_id < user_gym_charges.invoice_id
+Ref: gyms.gym_id < user_gym_charges.gym_id
+Ref: user_gym_profiles_unfiltered.crm_user_id < user_gym_charges.crm_user_id
+Ref: user_gym_charges.charge_id < user_gym_charges.refunds_charge_id
+
+// user_gym_invoice_applied_discounts
+Ref: user_gym_invoices.invoice_id < user_gym_invoice_applied_discounts.invoice_id
+Ref: gyms.gym_id < user_gym_invoice_applied_discounts.gym_id
+Ref: gym_discounts_unfiltered.discount_id < user_gym_invoice_applied_discounts.discount_id
+
+// user_gym_reward_redemptions
+Ref: gyms.gym_id < user_gym_reward_redemptions.gym_id
+Ref: user_gym_profiles_unfiltered.crm_user_id < user_gym_reward_redemptions.crm_user_id
+Ref: gym_rewards.reward_id < user_gym_reward_redemptions.reward_id
 
 // membership_plans
 Ref: gyms.gym_id < membership_plans_unfiltered.gym_id

@@ -6,7 +6,6 @@ the public API and constructor signature.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import BackgroundTasks
@@ -27,11 +26,6 @@ from src.payments.service.payments_stripe_discount_service import (
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
-
-if TYPE_CHECKING:
-    from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-        StripeReconciliationService,
-    )
 
 
 class DiscountsService:
@@ -74,13 +68,11 @@ class DiscountsService:
         self,
         request: DiscountUpdateRequest,
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> DiscountResponse:
         """Update a non-linked discount in CRM and Stripe."""
         return await self._update.update_discount(
             request,
             background_tasks,
-            reconciliation_service,
         )
 
     # ── Delete ─────────────────────────────────────────────────
@@ -90,12 +82,10 @@ class DiscountsService:
         discount_id: UUID,
         gym_id: UUID,
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Soft-delete a non-linked discount."""
         await self._delete.delete_discount(
             discount_id,
             gym_id,
             background_tasks,
-            reconciliation_service,
         )

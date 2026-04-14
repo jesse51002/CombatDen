@@ -60,8 +60,9 @@ class DirectDatabasePool:
             max_retries: Maximum number of attempts (default 3).
 
         Returns:
-            The first row as a dict if the query has RETURNING,
-            otherwise None.
+            The first row as a dict if the query has RETURNING and
+            matched at least one row. None if the query has no
+            RETURNING clause, or if RETURNING matched zero rows.
 
         Raises:
             Exception: The last exception if all retries exhausted.
@@ -72,7 +73,7 @@ class DirectDatabasePool:
             try:
                 async with self.session() as session:
                     result = await session.execute(text(sql), params)
-                    row = result.mappings().fetchone()
+                    row = result.mappings().fetchone() if result.returns_rows else None
                     await session.commit()
                     return dict(row) if row else None
             except Exception as exc:

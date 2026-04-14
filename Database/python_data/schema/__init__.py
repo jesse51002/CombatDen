@@ -15,7 +15,5 @@ class SeedModel(BaseModel):
             elif isinstance(value, (date, datetime, time)):
                 data[key] = value.isoformat()
             elif isinstance(value, list):
-                data[key] = [
-                    str(v) if isinstance(v, UUID) else v for v in value
-                ]
+                data[key] = [str(v) if isinstance(v, UUID) else v for v in value]
         return data

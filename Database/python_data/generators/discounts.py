@@ -5,8 +5,12 @@ from schema.gym_discount import GymDiscountCreate
 from schema.membership_plan import MembershipPlanCreate
 
 DISCOUNT_NAMES = [
-    "Military Discount", "Student Discount", "Early Bird",
-    "Senior Discount", "Family Bundle", "Referral Bonus",
+    "Military Discount",
+    "Student Discount",
+    "Early Bird",
+    "Senior Discount",
+    "Family Bundle",
+    "Referral Bonus",
 ]
 
 
@@ -15,9 +19,7 @@ def generate(gym_id: uuid.UUID, count: int) -> list[GymDiscountCreate]:
     discounts = []
     for name in names:
         use_pct = random.choice([True, False])
-        discount_type = random.choices(
-            ["preset", "custom"], weights=[75, 25]
-        )[0]
+        discount_type = random.choices(["preset", "custom"], weights=[75, 25])[0]
         duration = random.choice(["once", "repeating", "forever"])
         discounts.append(
             GymDiscountCreate(
@@ -28,7 +30,9 @@ def generate(gym_id: uuid.UUID, count: int) -> list[GymDiscountCreate]:
                 percentage_off=round(random.uniform(5, 25), 1) if use_pct else None,
                 dollar_off=random.randint(500, 5000) if not use_pct else None,
                 duration=duration,
-                duration_in_months=random.randint(1, 12) if duration == "repeating" else None,
+                duration_in_months=random.randint(1, 12)
+                if duration == "repeating"
+                else None,
             )
         )
     return discounts

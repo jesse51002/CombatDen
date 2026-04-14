@@ -125,7 +125,7 @@ def build_member_memberships_service(
         db_pool, subscription_svc, gym_stripe_svc, linked_discount_svc,
     )
     return MemberMembershipsService(
-        db_pool, sync_svc, payment_svc, gym_stripe_svc,
+        db_pool, sync_svc, payment_svc, gym_stripe_svc, subscription_svc,
     )
 
 

@@ -4,15 +4,9 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 import src.shared.db_schema_path  # noqa: F401
-
-if TYPE_CHECKING:
-    from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-        StripeReconciliationService,
-    )
 from src.member_memberships.schema.payment_sync_schema import (
     IntervalDesiredItem,
     ParentProfile,
@@ -35,6 +29,9 @@ from src.member_memberships.service.payment_sync.payment_sync_queries import (
 )
 from src.member_memberships.service.payment_sync.payment_sync_stripe import (
     PaymentSyncStripe,
+)
+from src.member_memberships.service.payment_sync.price_writeback import (
+    PriceWriteback,
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_members_schema import (
@@ -69,6 +66,10 @@ class MembershipPaymentSyncService:
         self._stripe = PaymentSyncStripe(subscription_service)
         self._gym_stripe = gym_stripe_service
         self._linked_discounts = linked_discount_service
+        self._price_writeback = PriceWriteback(
+            db_pool=db_pool,
+            subscription_service=subscription_service,
+        )
 
     async def update_payments_recurring(
         self,
@@ -183,33 +184,35 @@ class MembershipPaymentSyncService:
     async def bulk_payment_sync(
         self,
         crm_user_ids: list[UUID],
-        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Re-sync payment state for multiple members.
 
         Args:
             crm_user_ids: Members whose memberships need sync.
-            reconciliation_service: StripeReconciliationService
-                for handling not-found errors.
         """
         for crm_user_id in crm_user_ids:
             try:
-                await self.update_payments_recurring(
+                response = await self.update_payments_recurring(
                     crm_user_id,
                     add_ids=[],
                     cancel_ids=[],
                 )
-            except PaymentsResourceNotFoundError as exc:
-                try:
-                    await reconciliation_service.handle_not_found(
-                        exc,
-                    )
-                except Exception:
-                    logger.error(
-                        "Reconciliation failed for %s",
-                        crm_user_id,
-                        exc_info=True,
-                    )
+                parent = await self._queries.resolve_parent(crm_user_id)
+                stripe_account_id = await self._gym_stripe.get_stripe_account_id(
+                    parent.gym_id,
+                )
+                stripe_sub_id = response.stripe_subscription_id if response else None
+                await self._price_writeback.sync_prices_from_stripe(
+                    parent_crm_user_id=parent.crm_user_id,
+                    stripe_sub_id=stripe_sub_id,
+                    stripe_account_id=stripe_account_id,
+                )
+            except PaymentsResourceNotFoundError:
+                logger.error(
+                    "Stripe resource not found during payment sync for %s",
+                    crm_user_id,
+                    exc_info=True,
+                )
             except Exception:
                 logger.error(
                     "Payment sync failed for %s",

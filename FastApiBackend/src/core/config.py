@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Stripe
     stripe_secret_key: str
     stripe_webhook_secret: str
+    stripe_connect_webhook_secret: str
 
     # Database (direct Postgres connection)
     database_url: str

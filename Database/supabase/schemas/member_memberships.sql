@@ -21,6 +21,7 @@ CREATE TABLE member_memberships_unfiltered (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (item_id),
     UNIQUE (item_id, crm_user_id),
+    UNIQUE (item_id, gym_id),
     CONSTRAINT fk_membership_profile_gym
         FOREIGN KEY (crm_user_id, gym_id)
         REFERENCES user_gym_profiles_unfiltered (crm_user_id, gym_id),
@@ -139,19 +140,23 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_plan_type VARCHAR;
     v_active_count INTEGER;
+    v_today DATE;
 BEGIN
     SELECT plan_type INTO v_plan_type
     FROM membership_plans_unfiltered
     WHERE plan_id = NEW.plan_id;
 
     IF v_plan_type = 'recurring' THEN
+        SELECT (now() AT TIME ZONE g.timezone)::date INTO v_today
+        FROM gyms g WHERE g.gym_id = NEW.gym_id;
+
         SELECT COUNT(*) INTO v_active_count
         FROM member_memberships_unfiltered mm
         WHERE mm.crm_user_id = NEW.crm_user_id
           AND mm.gym_id = NEW.gym_id
           AND mm.item_id <> NEW.item_id
-          AND (mm.cancel_date IS NULL OR mm.cancel_date > CURRENT_DATE)
-          AND (mm.end_date IS NULL OR mm.end_date > CURRENT_DATE);
+          AND (mm.cancel_date IS NULL OR mm.cancel_date > v_today)
+          AND (mm.end_date IS NULL OR mm.end_date > v_today);
 
         IF v_active_count > 0 THEN
             RAISE EXCEPTION 'cannot add recurring membership while active memberships exist'
@@ -250,15 +255,16 @@ SELECT mm.*,
     freeze_owner.freeze_start_date,
     freeze_owner.freeze_end_date,
     CASE
-        WHEN mm.cancel_date IS NOT NULL AND mm.cancel_date <= CURRENT_DATE THEN 'cancelled'
-        WHEN mm.end_date IS NOT NULL AND mm.end_date <= CURRENT_DATE THEN 'ended'
+        WHEN mm.cancel_date IS NOT NULL AND mm.cancel_date <= (now() AT TIME ZONE g.timezone)::date THEN 'cancelled'
+        WHEN mm.end_date IS NOT NULL AND mm.end_date <= (now() AT TIME ZONE g.timezone)::date THEN 'ended'
         WHEN freeze_owner.freeze_start_date IS NOT NULL
              AND freeze_owner.freeze_end_date IS NOT NULL
-             AND freeze_owner.freeze_start_date <= CURRENT_DATE
-             AND CURRENT_DATE <= freeze_owner.freeze_end_date THEN 'frozen'
+             AND freeze_owner.freeze_start_date <= (now() AT TIME ZONE g.timezone)::date
+             AND (now() AT TIME ZONE g.timezone)::date <= freeze_owner.freeze_end_date THEN 'frozen'
         ELSE 'active'
     END AS status
 FROM member_memberships mm
+JOIN gyms g ON g.gym_id = mm.gym_id
 JOIN user_gym_profiles_unfiltered ugp
     ON ugp.crm_user_id = mm.crm_user_id
 JOIN user_gym_profiles_unfiltered freeze_owner

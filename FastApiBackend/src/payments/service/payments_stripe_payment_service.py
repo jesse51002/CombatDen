@@ -166,10 +166,13 @@ class PaymentsStripePaymentService:
             options=opts,
         )
 
-        invoice = await self._stripe.v1.invoices.pay_async(
-            invoice.id,
-            options=opts,
-        )
+        # Zero-amount invoices are auto-marked as paid at finalization,
+        # so calling pay_async again raises "Invoice is already paid".
+        if invoice.status != "paid":
+            invoice = await self._stripe.v1.invoices.pay_async(
+                invoice.id,
+                options=opts,
+            )
 
         return PaymentsInvoicePaymentResponse(
             stripe_invoice_id=invoice.id,

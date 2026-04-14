@@ -105,7 +105,7 @@ class CrmBaseViewService:
                 params[f"status_{j}"] = v.value
 
         if CrmMemberStatus.overdue in statuses:
-            conditions.append("m.next_due_date < CURRENT_DATE")
+            conditions.append("m.next_due_date < (now() AT TIME ZONE g.timezone)::date")
 
         if CrmMemberStatus.trial in statuses:
             conditions.append("mp.plan_type = 'trial'")

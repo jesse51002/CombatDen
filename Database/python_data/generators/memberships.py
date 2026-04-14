@@ -1,295 +1,140 @@
-import random
-from datetime import date, timedelta
-from uuid import UUID, uuid4
+"""Historical (already-closed) membership rows — direct DB inserts with fake IDs.
 
-from schema.gym_discount import GymDiscountCreate
+Live memberships go through the backend API (see api_creation/memberships.py).
+This module only produces closed/ended/cancelled rows that represent past
+lifecycle for a member. Stripe IDs on these rows are synthesized because
+the real Stripe subscriptions don't exist and we're not time-travelling.
+
+This module also exposes `pseudo_rows_for_current()`, which builds
+non-inserted MemberMembershipCreate objects for *current* (real) memberships
+with simulated historical dates. Those pseudo rows are used by invoices.py
+to generate a synthetic billing history behind each real subscription.
+"""
+
+from __future__ import annotations
+
+import random
+import uuid
+from datetime import date, timedelta
+
+from supabase import Client
+
+from api_creation.memberships import CurrentMembershipRecord
+from generators.profiles import HistoricalMembership, ProfilePlan
 from schema.member_membership import MemberMembershipCreate
-from schema.membership_plan import MembershipPlanCreate
-from schema.membership_plan_price import MembershipPlanPriceCreate
-from schema.user_gym_profile import UserGymProfileCreate
-from utils import random_past_date, today_offset
+from utils import random_past_date
 
 UNIT_DAYS = {"week": 7, "month": 30, "year": 365}
-MAX_LINKED_MEMBERS = 5
 
 
-def _build_membership(
-    profile: UserGymProfileCreate,
-    plan: MembershipPlanCreate,
-    price: MembershipPlanPriceCreate,
-    discounts: list[GymDiscountCreate],
-    linked_discounts: list[GymDiscountCreate],
-    is_linked: bool = False,
-    expired_trial: bool = False,
-    start_after: date | None = None,
+def _to_row(
+    profile: ProfilePlan,
+    gym_id: uuid.UUID,
+    h: HistoricalMembership,
 ) -> MemberMembershipCreate:
-    if start_after is not None:
-        start = start_after + timedelta(days=random.randint(0, 7))
-    else:
-        start = random_past_date(180)
-
-    is_recurring = plan.plan_type == "recurring"
-
-    if is_recurring:
-        intent = random.choices(
-            ["active", "cancelled"], weights=[80, 20]
-        )[0]
-    else:
-        intent = random.choices(
-            ["active", "cancelled", "ended"], weights=[75, 15, 10]
-        )[0]
-
-    if plan.duration_amount is not None and plan.duration_unit is not None:
-        interval = UNIT_DAYS.get(plan.duration_unit, 30) * plan.duration_amount
-    else:
-        interval = 30
-
-    end_date = None
-    cancel_date = None
-    last_paid = None
-    next_due = None
-
-    if plan.plan_type == "trial":
-        if expired_trial:
-            end_date = today_offset(-random.randint(14, 120))
-        else:
-            end_date = today_offset(random.randint(-7, 7))
-        start = end_date - timedelta(days=interval)
-    elif intent == "cancelled":
-        cancel_date = start + timedelta(days=random.randint(14, 150))
-        if not is_recurring:
-            end_date = cancel_date + timedelta(days=random.randint(0, 30))
-        last_paid = start + timedelta(days=random.randint(0, interval * 3))
-    elif intent == "ended":
-        end_date = start + timedelta(days=random.randint(14, 150))
-        last_paid = start + timedelta(days=random.randint(0, interval * 3))
-    else:
-        last_paid = start + timedelta(days=random.randint(0, interval * 3))
-        next_due = last_paid + timedelta(days=interval)
-
-    prorate = random.random() >= 0.2
-
-    total_price = price.price
-    discount_ids = None
-
-    if is_linked and linked_discounts:
-        # Pick the first available linked discount for this plan
-        plan_linked = [
-            d for d in linked_discounts
-            if d.membership_plan_id == plan.plan_id
-        ]
-        if plan_linked:
-            disc = plan_linked[0]
-            total_price = max(0, total_price - disc.dollar_off)
-            discount_ids = [disc.discount_id]
-    elif discounts and random.random() < 0.3:
-        disc = random.choice(discounts)
-        discount_ids = [disc.discount_id]
-        total_price = round(total_price * 0.9)
-
-    stripe_item_id = f"si_{uuid4().hex[:24]}"
-
+    assert profile.crm_user_id is not None
     return MemberMembershipCreate(
-        item_id=uuid4(),
+        item_id=uuid.uuid4(),
         crm_user_id=profile.crm_user_id,
-        gym_id=profile.gym_id,
-        plan_id=plan.plan_id,
-        price_id=price.price_id,
-        start_date=start,
-        end_date=end_date,
-        cancel_date=cancel_date,
-        last_paid_date=last_paid,
-        next_due_date=next_due,
-        prorate=prorate,
-        total_price=total_price,
-        stripe_item_id=stripe_item_id,
-        discount_ids=discount_ids,
-    )
-
-
-def _build_cancelled_membership(
-    profile: UserGymProfileCreate,
-    plan: MembershipPlanCreate,
-    price: MembershipPlanPriceCreate,
-    discounts: list[GymDiscountCreate],
-    linked_discounts: list[GymDiscountCreate],
-    is_linked: bool,
-    start: date,
-    cancel_date: date,
-) -> MemberMembershipCreate:
-    """Build a membership that is definitively cancelled in the past."""
-    is_recurring = plan.plan_type == "recurring"
-
-    if plan.duration_amount is not None and plan.duration_unit is not None:
-        interval = UNIT_DAYS.get(plan.duration_unit, 30) * plan.duration_amount
-    else:
-        interval = 30
-
-    end_date = None if is_recurring else cancel_date + timedelta(days=random.randint(0, 14))
-    last_paid = start + timedelta(days=random.randint(0, interval * 2))
-
-    total_price = price.price
-    discount_ids = None
-
-    if is_linked and linked_discounts:
-        plan_linked = [
-            d for d in linked_discounts
-            if d.membership_plan_id == plan.plan_id
-        ]
-        if plan_linked:
-            disc = plan_linked[0]
-            total_price = max(0, total_price - disc.dollar_off)
-            discount_ids = [disc.discount_id]
-    elif discounts and random.random() < 0.3:
-        disc = random.choice(discounts)
-        discount_ids = [disc.discount_id]
-        total_price = round(total_price * 0.9)
-
-    return MemberMembershipCreate(
-        item_id=uuid4(),
-        crm_user_id=profile.crm_user_id,
-        gym_id=profile.gym_id,
-        plan_id=plan.plan_id,
-        price_id=price.price_id,
-        start_date=start,
-        end_date=end_date,
-        cancel_date=cancel_date,
-        last_paid_date=last_paid,
+        gym_id=gym_id,
+        plan_id=h.plan.plan_id,
+        price_id=h.plan.price_id,
+        start_date=h.start_date,
+        end_date=h.end_date,
+        cancel_date=h.cancel_date,
+        last_paid_date=h.last_paid_date,
         next_due_date=None,
-        prorate=random.random() >= 0.2,
-        total_price=total_price,
-        stripe_item_id=f"si_{uuid4().hex[:24]}",
-        discount_ids=discount_ids,
+        prorate=True,
+        total_price=h.total_price,
+        stripe_item_id=f"si_{uuid.uuid4().hex[:24]}",
+        discount_ids=list(h.discount_ids) if h.discount_ids else None,
     )
 
 
-def generate(
-    profiles: list[UserGymProfileCreate],
-    plans: list[MembershipPlanCreate],
-    prices: dict[UUID, MembershipPlanPriceCreate],
-    discounts: list[GymDiscountCreate],
-    linked_discounts: list[GymDiscountCreate],
-) -> tuple[list[MemberMembershipCreate], list[tuple[UUID, UUID]]]:
-    memberships: list[MemberMembershipCreate] = []
-    link_pairs: list[tuple[UUID, UUID]] = []
-
-    # Phase A: Partition into singles (~50%) and linked groups (~50%)
-    shuffled = list(profiles)
-    random.shuffle(shuffled)
-    split = len(shuffled) // 2
-    singles = shuffled[:split]
-    linkable = shuffled[split:]
-
-    # Build linked groups from the linkable pool
-    linked_set: set[UUID] = set()
-    while linkable:
-        root = linkable.pop()
-        num_linked = min(random.randint(1, MAX_LINKED_MEMBERS), len(linkable))
-        for _ in range(num_linked):
-            linked = linkable.pop()
-            link_pairs.append((linked.crm_user_id, root.crm_user_id))
-            linked_set.add(linked.crm_user_id)
-
-    # Phase B: Assign memberships based on member journey
-    # 25% trial → paid, 25% trial only, 20% direct purchase,
-    # 15% cancelled → re-signed, 10% trial → cancelled → re-signed, 5% no membership
-    trial_plans = [p for p in plans if p.plan_type == "trial"]
-    paid_plans = [p for p in plans if p.plan_type in ("recurring", "one_time")]
-
+def create_history(
+    client: Client,
+    gym_id: uuid.UUID,
+    profiles: list[ProfilePlan],
+) -> list[MemberMembershipCreate]:
+    """Insert historical membership rows for every profile that has history."""
+    rows: list[MemberMembershipCreate] = []
     for profile in profiles:
-        is_linked = profile.crm_user_id in linked_set
-        roll = random.random()
+        for h in profile.history:
+            rows.append(_to_row(profile, gym_id, h))
 
-        if roll < 0.05:
-            # 5%: no membership
+    if rows:
+        client.table("member_memberships").insert(
+            [r.to_insert_dict() for r in rows]
+        ).execute()
+    return rows
+
+
+def pseudo_rows_for_current(
+    gym_id: uuid.UUID,
+    current_records: list[CurrentMembershipRecord],
+) -> list[MemberMembershipCreate]:
+    """Build non-inserted MemberMembershipCreate rows for live memberships.
+
+    Used only for invoice generation — we want fake past invoices behind each
+    real subscription, spanning from a simulated signup date up through today.
+    The real item_id and stripe_item_id come from the CurrentMembershipRecord
+    (so line items can reference the real subscription); everything else is
+    synthesized.
+    """
+    today = date.today()
+    pseudo: list[MemberMembershipCreate] = []
+    for rec in current_records:
+        plan = rec.profile.current.plan if rec.profile.current else None
+        if plan is None:
             continue
-
-        elif roll < 0.30 and trial_plans:
-            # 25%: trial first, then converted to a paid membership
-            trial_plan = random.choice(trial_plans)
-            trial = _build_membership(
-                profile, trial_plan, prices[trial_plan.plan_id],
-                discounts, linked_discounts, is_linked,
-                expired_trial=True,
-            )
-            memberships.append(trial)
-            if paid_plans:
-                paid_plan = random.choice(paid_plans)
-                paid = _build_membership(
-                    profile, paid_plan, prices[paid_plan.plan_id],
-                    discounts, linked_discounts, is_linked,
-                    start_after=trial.end_date,
+        if plan.plan_type == "recurring":
+            # Simulate a signup 1-6 months in the past so we build a plausible
+            # recurring-invoice history.
+            start = random_past_date(180)
+            last_paid = start + timedelta(
+                days=random.randint(
+                    0,
+                    max(
+                        1,
+                        (_interval(plan) * ((today - start).days // _interval(plan)))
+                        if (today - start).days >= _interval(plan)
+                        else 1,
+                    ),
                 )
-                memberships.append(paid)
+            )
+            next_due = last_paid + timedelta(days=_interval(plan))
+        else:
+            # One-time / trial: started recently, one invoice.
+            start = random_past_date(30)
+            last_paid = start
+            next_due = None
 
-        elif roll < 0.55 and trial_plans:
-            # 25%: trial only (mix of active and expired, never converted)
-            trial_plan = random.choice(trial_plans)
-            trial = _build_membership(
-                profile, trial_plan, prices[trial_plan.plan_id],
-                discounts, linked_discounts, is_linked,
+        pseudo.append(
+            MemberMembershipCreate(
+                item_id=rec.item_id,
+                crm_user_id=rec.profile.crm_user_id,  # type: ignore[arg-type]
+                gym_id=gym_id,
+                plan_id=rec.plan_id,
+                price_id=rec.price_id,
+                start_date=start,
+                end_date=None,
+                cancel_date=None,
+                last_paid_date=last_paid,
+                next_due_date=next_due,
+                prorate=True,
+                total_price=rec.total_price,
+                stripe_item_id=rec.stripe_item_id,
+                discount_ids=(
+                    list(rec.profile.current.discount_ids)
+                    if rec.profile.current and rec.profile.current.discount_ids
+                    else None
+                ),
             )
-            memberships.append(trial)
+        )
+    return pseudo
 
-        elif roll < 0.75:
-            # 20%: direct purchase (or fallback when no trial plan)
-            if paid_plans:
-                paid_plan = random.choice(paid_plans)
-                memberships.append(
-                    _build_membership(
-                        profile, paid_plan, prices[paid_plan.plan_id],
-                        discounts, linked_discounts, is_linked,
-                    )
-                )
 
-        elif roll < 0.90 and paid_plans:
-            # 15%: cancelled membership, then re-signed with a new one
-            first_plan = random.choice(paid_plans)
-            first_start = date.today() - timedelta(days=random.randint(121, 300))
-            cancel_date = first_start + timedelta(days=random.randint(30, 120))
-            first = _build_cancelled_membership(
-                profile, first_plan, prices[first_plan.plan_id],
-                discounts, linked_discounts, is_linked,
-                start=first_start, cancel_date=cancel_date,
-            )
-            memberships.append(first)
-            second_plan = random.choice(paid_plans)
-            second = _build_membership(
-                profile, second_plan, prices[second_plan.plan_id],
-                discounts, linked_discounts, is_linked,
-                start_after=cancel_date,
-            )
-            memberships.append(second)
-
-        elif trial_plans and paid_plans:
-            # 10%: trial → cancelled paid → re-signed
-            trial_plan = random.choice(trial_plans)
-            trial = _build_membership(
-                profile, trial_plan, prices[trial_plan.plan_id],
-                discounts, linked_discounts, is_linked,
-                expired_trial=True,
-            )
-            memberships.append(trial)
-            first_plan = random.choice(paid_plans)
-            first_start = trial.end_date + timedelta(days=random.randint(0, 7))
-            cancel_days = random.randint(30, 120)
-            # Ensure cancel_date is in the past so the trigger doesn't
-            # consider this membership active when inserting the next one
-            if first_start + timedelta(days=cancel_days) >= date.today():
-                first_start = date.today() - timedelta(days=cancel_days + random.randint(1, 30))
-            cancel_date = first_start + timedelta(days=cancel_days)
-            first = _build_cancelled_membership(
-                profile, first_plan, prices[first_plan.plan_id],
-                discounts, linked_discounts, is_linked,
-                start=first_start, cancel_date=cancel_date,
-            )
-            memberships.append(first)
-            second_plan = random.choice(paid_plans)
-            second = _build_membership(
-                profile, second_plan, prices[second_plan.plan_id],
-                discounts, linked_discounts, is_linked,
-                start_after=cancel_date,
-            )
-            memberships.append(second)
-
-    return memberships, link_pairs
+def _interval(plan) -> int:
+    if plan.duration_amount is not None and plan.duration_unit is not None:
+        return UNIT_DAYS.get(plan.duration_unit, 30) * plan.duration_amount
+    return 30

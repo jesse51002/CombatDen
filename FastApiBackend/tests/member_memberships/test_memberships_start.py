@@ -90,6 +90,92 @@ async def test_start_one_time_membership(
         await delete_member_data(db_pool, member.crm_user_id)
 
 
+async def test_start_zero_dollar_one_time_membership(
+    memberships_service, db_pool, gym_id,
+    stripe_client, connect_opts,
+):
+    """Regression: $0 one-time plans must not crash on pay_async."""
+    pm_id = await create_payment_method(stripe_client, connect_opts)
+    member = await create_member(
+        db_pool, stripe_client, gym_id, connect_opts,
+        payment_method_id=pm_id,
+    )
+    plan = await create_plan(
+        db_pool, stripe_client, gym_id, connect_opts,
+        plan_type="one_time",
+        plan_name="Free Trial Test",
+        price_cents=0,
+    )
+
+    try:
+        await memberships_service.start(
+            crm_user_id=member.crm_user_id,
+            gym_id=gym_id,
+            plan_id=plan.plan_id,
+            price_id=plan.price_id,
+        )
+
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT item_id, stripe_item_id, total_price "
+                    "FROM member_memberships "
+                    "WHERE crm_user_id = :id AND plan_id = :plan_id"
+                ),
+                {"id": str(member.crm_user_id), "plan_id": str(plan.plan_id)},
+            )
+            row = result.mappings().fetchone()
+
+        assert row is not None
+        assert row["stripe_item_id"] is not None
+        assert row["total_price"] == 0
+    finally:
+        await delete_member_data(db_pool, member.crm_user_id)
+
+
+async def test_start_zero_dollar_recurring_membership(
+    memberships_service, db_pool, gym_id,
+    stripe_client, connect_opts,
+):
+    """Regression: $0 recurring plans must start cleanly as free subscriptions."""
+    pm_id = await create_payment_method(stripe_client, connect_opts)
+    member = await create_member(
+        db_pool, stripe_client, gym_id, connect_opts,
+        payment_method_id=pm_id,
+    )
+    plan = await create_plan(
+        db_pool, stripe_client, gym_id, connect_opts,
+        plan_type="recurring",
+        plan_name="Free Recurring Test",
+        price_cents=0,
+    )
+
+    try:
+        await memberships_service.start(
+            crm_user_id=member.crm_user_id,
+            gym_id=gym_id,
+            plan_id=plan.plan_id,
+            price_id=plan.price_id,
+        )
+
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT item_id, stripe_item_id, total_price "
+                    "FROM member_memberships "
+                    "WHERE crm_user_id = :id AND plan_id = :plan_id"
+                ),
+                {"id": str(member.crm_user_id), "plan_id": str(plan.plan_id)},
+            )
+            row = result.mappings().fetchone()
+
+        assert row is not None
+        assert row["stripe_item_id"] is not None
+        assert row["total_price"] == 0
+    finally:
+        await delete_member_data(db_pool, member.crm_user_id)
+
+
 async def test_start_validates_plan_price(
     memberships_service, db_pool, gym_id,
     stripe_client, connect_opts,

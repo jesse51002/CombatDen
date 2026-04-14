@@ -40,9 +40,6 @@ if TYPE_CHECKING:
         PaymentsStripePriceService,
     )
     from src.shared.gym_stripe_service import GymStripeService
-    from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-        StripeReconciliationService,
-    )
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +203,6 @@ class MembershipPlansPrice(MembershipPlansBase):
         plan_id: UUID,
         gym_id: UUID,
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Migrate all active members on a plan to the current price.
 
@@ -217,7 +213,6 @@ class MembershipPlansPrice(MembershipPlansBase):
             plan_id: The plan whose members to migrate.
             gym_id: The gym owning the plan.
             background_tasks: FastAPI background tasks.
-            reconciliation_service: Passed to bulk_payment_sync.
 
         Raises:
             ValueError: If the plan is not found.
@@ -231,7 +226,6 @@ class MembershipPlansPrice(MembershipPlansBase):
         self._run_migration(
             affected,
             background_tasks,
-            reconciliation_service,
         )
 
     # ── Migrate Specific Members ───────────────────────────────
@@ -242,7 +236,6 @@ class MembershipPlansPrice(MembershipPlansBase):
         gym_id: UUID,
         crm_user_ids: list[UUID],
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Migrate specific members to the current active price.
 
@@ -251,7 +244,6 @@ class MembershipPlansPrice(MembershipPlansBase):
             gym_id: The gym owning the plan.
             crm_user_ids: Explicit list of members to migrate.
             background_tasks: FastAPI background tasks.
-            reconciliation_service: Passed to bulk_payment_sync.
 
         Raises:
             ValueError: If the plan is not found.
@@ -264,7 +256,6 @@ class MembershipPlansPrice(MembershipPlansBase):
         self._run_migration(
             crm_user_ids,
             background_tasks,
-            reconciliation_service,
         )
 
     # ── Private ────────────────────────────────────────────────
@@ -273,13 +264,11 @@ class MembershipPlansPrice(MembershipPlansBase):
         self,
         crm_user_ids: list[UUID],
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Queue a bulk payment sync as a background task."""
         background_tasks.add_task(
             self._payment_sync.bulk_payment_sync,
             crm_user_ids,
-            reconciliation_service,
         )
 
     async def _get_affected_crm_user_ids(

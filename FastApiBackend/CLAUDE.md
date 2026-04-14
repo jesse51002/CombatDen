@@ -279,22 +279,15 @@ All INSERT, UPDATE, and DELETE SQL must target the `_unfiltered` table directly.
 
 A row is either fully synced or it doesn't exist. All SELECT queries use the original view names (e.g., `membership_plans`, not `membership_plans_unfiltered`). If a create fails mid-sync, the pending row is invisible to all reads — this is correct behavior, the same as a Postgres transaction that is committed all the way or not at all. Never query `_unfiltered` for reads.
 
-## Stripe Reconciliation Service
-
-**`StripeReconciliationService` must NEVER be a constructor dependency** — always pass it as a method parameter. This service sits at the bottom of the dependency graph and will grow to consume most other services for stale-reference cleanup. Injecting it into constructors creates circular dependencies.
-
-- Good: `async def bulk_payment_sync(self, crm_user_ids, reconciliation_service)` — caller passes it
-- Good: Router injects `reconciliation_service` via DI and passes it to the service method
-- Bad: `def __init__(self, reconciliation_service)` — creates circular dependency chains
-
 ## Stripe Resource Not Found Handling
 
 **`PaymentsResourceNotFoundError` must ALWAYS be explicitly caught** — never let it fall through to a generic `Exception` handler.
 
 Stripe is the source of truth. When a Stripe resource is not found:
 - **Write operations (create/update):** If the specific resource being edited is not found (check `exc.resource_type` against `StripeResourceType`), recreate it. The gym owner is explicitly performing this action, so re-creating is the correct behavior.
-- **Read operations (list/get):** If the resource is not found, remove the stale linkage on the CRM side (clear the Stripe ID from the database). A dedicated Stripe reconciliation service will handle this cleanup — **TODO: build this service**.
-- **Other resource types:** If the not-found resource is not the one being directly operated on, re-raise or delegate to the reconciliation service.
+- **Read operations (list/get):** If the resource is not found, remove the stale linkage on the CRM side (clear the Stripe ID from the database).
+- **Background tasks (bulk sync):** Log the error with `logger.error(... exc_info=True)` and continue iterating. Do not crash the background task.
+- **Other contexts:** Re-raise the error so the caller sees the failure.
 
 ## Security
 

@@ -6,7 +6,8 @@ from uuid import UUID
 from pydantic import BaseModel
 from schema.member_membership import MembershipDbStatus
 from schema.membership_plan import PlanType
-from schema.user_gym_transaction import TransactionItemType
+from schema.user_gym_charge import ChargeKind, ChargeStatus
+from schema.user_gym_invoice_line_item import LineItemType
 
 
 class PersonalInfo(BaseModel):
@@ -99,13 +100,31 @@ class RewardCard(BaseModel):
     point_cost: int
 
 
-class PaymentRecord(BaseModel):
-    """A single payment transaction."""
+class LineItemRecord(BaseModel):
+    """A single line item on an invoice."""
 
-    transaction_id: UUID
-    item_type: TransactionItemType | None = None
-    amount_paid: float
-    time: datetime
+    line_item_id: str
+    item_type: LineItemType
+    name: str
+    amount: int
+    stripe_product_id: str | None = None
+    item_id: UUID | None = None
+
+
+class PaymentRecord(BaseModel):
+    """A single charge (payment or refund) against an invoice."""
+
+    charge_id: UUID
+    invoice_id: UUID
+    kind: ChargeKind
+    status: ChargeStatus
+    amount: int  # signed: payment >= 0, refund <= 0
+    currency: str
+    payment_method_type: str | None = None
+    charge_time: datetime
+    refunds_charge_id: UUID | None = None
+    line_items: list[LineItemRecord] = []
+    applied_discounts: list[DiscountInfo] = []
 
 
 class MemberDetailResponse(BaseModel):

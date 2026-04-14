@@ -1,5 +1,6 @@
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
+    UpcomingInvoiceResponse,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCancelRequest,
@@ -40,6 +41,9 @@ from src.payments.service.subscription.payments_subscription_item import (
 from src.payments.service.subscription.payments_subscription_migration import (
     PaymentsSubscriptionMigration,
 )
+from src.payments.service.subscription.payments_subscription_upcoming import (
+    PaymentsSubscriptionUpcoming,
+)
 from src.payments.service.subscription.payments_subscription_update import (
     PaymentsSubscriptionUpdate,
 )
@@ -73,6 +77,7 @@ class PaymentsStripeSubscriptionService:
         self._freeze = PaymentsSubscriptionFreeze(*deps)
         self._migration = PaymentsSubscriptionMigration(*deps)
         self._item = PaymentsSubscriptionItem(*deps)
+        self._upcoming = PaymentsSubscriptionUpcoming(*deps)
 
     # ── Create ────────────────────────────────────────────────────
 
@@ -135,6 +140,19 @@ class PaymentsStripeSubscriptionService:
     ) -> PaymentsSubscriptionResponse:
         """Resume collection on a paused subscription (unfreeze)."""
         return await self._freeze.unfreeze_subscription(request, stripe_account_id)
+
+    # ── Upcoming Invoice ──────────────────────────────────────────
+
+    async def fetch_upcoming_invoice(
+        self,
+        stripe_subscription_id: str,
+        stripe_account_id: str,
+    ) -> UpcomingInvoiceResponse:
+        """Fetch the next invoice preview for an existing subscription."""
+        return await self._upcoming.fetch_upcoming(
+            stripe_subscription_id,
+            stripe_account_id,
+        )
 
     # ── Item ─────────────────────────────────────────────────────
 

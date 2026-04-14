@@ -14,7 +14,8 @@ SELECT
     m.cancel_date,
     mp.plan_type,
     mp.plan_name,
-    mp.duration_unit
+    mp.duration_unit,
+    (now() AT TIME ZONE g.timezone)::date AS gym_today
 FROM user_gym_profiles p
 LEFT JOIN member_memberships_status m
     ON p.crm_user_id = m.crm_user_id

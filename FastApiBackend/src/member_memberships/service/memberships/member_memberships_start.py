@@ -26,11 +26,15 @@ from src.payments.schema.payments_payment_schema import (
 from src.shared.database import DirectDatabasePool
 from src.shared.db_first_helpers import cleanup_pending_row
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
     from src.member_memberships.service.membership_payment_sync_service import (
         MembershipPaymentSyncService,
+    )
+    from src.member_memberships.service.payment_sync.price_writeback import (
+        PriceWriteback,
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
@@ -46,12 +50,17 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self,
         db_pool: DirectDatabasePool,
         payment_sync_service: MembershipPaymentSyncService,
-        payment_service: PaymentsStripePaymentService,
+        price_writeback: PriceWriteback,
         gym_stripe_service: GymStripeService,
+        payment_service: PaymentsStripePaymentService,
     ) -> None:
-        super().__init__(db_pool, payment_sync_service)
+        super().__init__(
+            db_pool,
+            payment_sync_service,
+            price_writeback,
+            gym_stripe_service,
+        )
         self._payment_service = payment_service
-        self._gym_stripe = gym_stripe_service
 
     async def start(
         self,
@@ -88,7 +97,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
             StripeOrphanError: If Stripe succeeds but the DB
                 update fails after retries.
         """
-        start_date = date.today()
         plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
         await self._check_no_existing(crm_user_id, gym_id, plan_id)
 
@@ -96,6 +104,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
         if parent.is_frozen:
             raise ValueError("Cannot start membership: account is frozen")
 
+        stripe_sub_id_after: str | None = None
+
+        start_date = gym_today(parent.timezone)
         plan_type = PlanType(plan_price["plan_type"])
         is_recurring = plan_type == PlanType.recurring
 
@@ -119,6 +130,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
             price_id=price_id,
             start_date=start_date,
             end_date=end_date,
+            last_paid_date=start_date,
             next_due_date=None,
             discount_ids=discount_ids,
             stripe_item_id=None,
@@ -149,6 +161,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                         response,
                         plan_price["stripe_price_id"],
                     )
+                    stripe_sub_id_after = response.stripe_subscription_id
                     first_item = response.items[0] if response.items else None
                     next_due_date = self._period_end_to_date(
                         first_item.current_period_end if first_item else None,
@@ -196,6 +209,17 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 str(item_id),
                 str(crm_user_id),
                 next_due_date,
+            )
+
+        # ── Fan out post-discount prices to all siblings ──────
+        if is_recurring:
+            stripe_account_id = await self._gym_stripe.get_stripe_account_id(
+                parent.gym_id,
+            )
+            await self._price_writeback.sync_prices_from_stripe(
+                parent_crm_user_id=parent.crm_user_id,
+                stripe_sub_id=stripe_sub_id_after,
+                stripe_account_id=stripe_account_id,
             )
 
     # ── Private ────────────────────────────────────────────────
@@ -267,6 +291,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         price_id: UUID,
         start_date: date,
         end_date: date | None,
+        last_paid_date: date | None,
         next_due_date: date | None,
         discount_ids: list[UUID] | None,
         stripe_item_id: str | None,
@@ -282,6 +307,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
             "price_id": str(price_id),
             "start_date": start_date,
             "end_date": end_date,
+            "last_paid_date": last_paid_date,
             "next_due_date": next_due_date,
             "discount_ids": json.dumps(
                 [str(d) for d in discount_ids],

@@ -16,9 +16,6 @@ from src.member_memberships.service.member_memberships_service import (
 from src.member_memberships.service.membership_payment_sync_service import (
     MembershipPaymentSyncService,
 )
-from src.members.service.member_details.member_details_price_recalc import (
-    MemberDetailsPriceRecalc,
-)
 from src.members.service.member_details_service import (
     MemberService,
 )
@@ -59,11 +56,18 @@ from src.shared.database import (
     SupabaseClient,
 )
 from src.shared.gym_stripe_service import GymStripeService
-from src.shared.membership_pricing.membership_pricing_service import (
-    MembershipPricingService,
+from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
+from src.stripe_webhooks.service.handlers.charge_refunded_handler import (
+    ChargeRefundedHandler,
 )
-from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-    StripeReconciliationService,
+from src.stripe_webhooks.service.handlers.invoice_paid_handler import (
+    InvoicePaidHandler,
+)
+from src.stripe_webhooks.service.handlers.invoice_payment_failed_handler import (
+    InvoicePaymentFailedHandler,
+)
+from src.stripe_webhooks.service.stripe_webhooks_service import (
+    StripeWebhooksService,
 )
 
 
@@ -82,26 +86,20 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.classes.classes_router",
             "src.discounts.discounts_router",
             "src.membership_plans.membership_plans_router",
+            "src.stripe_webhooks.stripe_webhooks_router",
         ],
     )
 
     db_pool = providers.Singleton(DirectDatabasePool)
     supabase = providers.Singleton(SupabaseClient)
     auth = providers.Singleton(Auth, supabase=supabase)
-    membership_pricing = providers.Singleton(MembershipPricingService)
     cycle_counts_service = providers.Factory(ClassesCycleCountsService, db_pool=db_pool)
     streak_service = providers.Factory(ClassesStreakService, db_pool=db_pool)
     member_service = providers.Factory(
         MemberService,
         db_pool=db_pool,
-        pricing=membership_pricing,
         cycle_counts_service=cycle_counts_service,
         streak_service=streak_service,
-    )
-    price_recalc = providers.Factory(
-        MemberDetailsPriceRecalc,
-        db_pool=db_pool,
-        pricing=membership_pricing,
     )
     crm_members_list_service = providers.Factory(CrmMembersListService, db_pool=db_pool)
     crm_total_counts_service = providers.Factory(CrmTotalCountsService, db_pool=db_pool)
@@ -170,6 +168,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_service=membership_payment_sync_service,
         payment_service=payments_payment_service,
         gym_stripe_service=gym_stripe_service,
+        subscription_service=payments_subscription_service,
     )
     members_management_service = providers.Factory(
         MembersManagementService,
@@ -194,10 +193,20 @@ class DependencyInjector(containers.DeclarativeContainer):
         membership_payment_sync_service=membership_payment_sync_service,
     )
 
-    # ── Stripe Reconciliation (at bottom — will grow to
-    # ── consume most services for stale-reference cleanup) ─────
-    stripe_reconciliation_service = providers.Factory(
-        StripeReconciliationService,
+    # ── Stripe Webhooks ────────────────────────────────────────
+    stripe_webhook_event_log = providers.Factory(StripeWebhookEventLog)
+    stripe_webhook_invoice_paid_handler = providers.Factory(InvoicePaidHandler)
+    stripe_webhook_invoice_payment_failed_handler = providers.Factory(
+        InvoicePaymentFailedHandler,
+    )
+    stripe_webhook_charge_refunded_handler = providers.Factory(
+        ChargeRefundedHandler,
+    )
+    stripe_webhooks_service = providers.Factory(
+        StripeWebhooksService,
         db_pool=db_pool,
-        members_management_service=members_management_service,
+        event_log=stripe_webhook_event_log,
+        invoice_paid_handler=stripe_webhook_invoice_paid_handler,
+        invoice_payment_failed_handler=stripe_webhook_invoice_payment_failed_handler,
+        charge_refunded_handler=stripe_webhook_charge_refunded_handler,
     )

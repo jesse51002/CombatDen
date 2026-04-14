@@ -56,7 +56,7 @@ class CrmTrialViewService(CrmBaseViewService):
         result = await session.execute(query, params)
         rows = result.mappings().all()
 
-        today = date.today()
+        today = rows[0]["gym_today"] if rows else date.today()
         return [self._map_row(r, today) for r in rows]
 
     def _map_row(self, row: dict, today: date) -> TrialViewRow:

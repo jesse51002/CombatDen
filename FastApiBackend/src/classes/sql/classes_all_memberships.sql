@@ -10,6 +10,7 @@ SELECT
     COALESCE(counts.classes_used, 0) AS classes_used
 FROM member_memberships_status ms
 JOIN membership_plans mp ON mp.plan_id = ms.plan_id
+JOIN gyms g ON g.gym_id = ms.gym_id
 LEFT JOIN (
     SELECT
         gl.crm_user_id,
@@ -21,10 +22,11 @@ LEFT JOIN (
         ON  mm.crm_user_id = gl.crm_user_id
         AND mm.gym_id      = gl.gym_id
         AND mm.plan_id     = gl.plan_id
+    JOIN gyms g2 ON g2.gym_id = gl.gym_id
     WHERE gl.gym_id = :gym_id
       AND gl.crm_user_id = ANY(CAST(:crm_user_ids AS uuid[]))
       AND gl.time >= COALESCE(mm.last_paid_date, mm.start_date)
-      AND gl.time <  COALESCE(mm.next_due_date, CURRENT_DATE + INTERVAL '1 day')
+      AND gl.time <  COALESCE(mm.next_due_date, (now() AT TIME ZONE g2.timezone)::date + INTERVAL '1 day')
     GROUP BY gl.crm_user_id, gl.plan_id, gl.gym_id
 ) counts
     ON  counts.crm_user_id = ms.crm_user_id

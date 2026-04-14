@@ -14,10 +14,6 @@ from src.members.schema.member_details_schema import (
 from src.members.service.member_details.member_details_supplementary import (
     MemberDetailsSupplementary,
 )
-from src.shared.membership_pricing.membership_pricing_schema import (
-    AccountPricingResult,
-    MembershipPriceResult,
-)
 
 
 class MemberDetailsMembershipGrouper:
@@ -30,7 +26,6 @@ class MemberDetailsMembershipGrouper:
     def group_by_plan(
         self,
         membership_rows: list,
-        pricing_result: AccountPricingResult,
         supplementary: MemberDetailsSupplementary,
         usage_lookup: dict[tuple[UUID, UUID], MembershipUsage] | None = None,
     ) -> list[MembershipInfo]:
@@ -38,17 +33,12 @@ class MemberDetailsMembershipGrouper:
 
         Args:
             membership_rows: Rows with membership data.
-            pricing_result: Calculated prices per membership.
             supplementary: For discount and profile lookups.
             usage_lookup: (crm_user_id, plan_id) -> MembershipUsage.
 
         Returns:
             List of MembershipInfo, one per unique plan.
         """
-        price_lookup: dict[tuple[UUID, UUID], MembershipPriceResult] = {
-            (p.crm_user_id, p.plan_id): p for p in pricing_result.membership_prices
-        }
-
         plan_rows: dict[UUID, list] = defaultdict(list)
         for row in membership_rows:
             plan_rows[row["plan_id"]].append(row)
@@ -64,15 +54,7 @@ class MemberDetailsMembershipGrouper:
                 plan_id,
             )
 
-            priced_rows = [r for r in rows if (r["crm_user_id"], plan_id) in price_lookup]
-
-            total_cost = sum(
-                price_lookup[(r["crm_user_id"], plan_id)].calculated_price for r in priced_rows
-            )
-
-            first_price = price_lookup.get((representative["crm_user_id"], plan_id)) or (
-                price_lookup[(priced_rows[0]["crm_user_id"], plan_id)] if priced_rows else None
-            )
+            total_cost = sum(r["total_price"] or 0 for r in rows)
 
             all_discounts = self._collect_plan_discounts(
                 rows,
@@ -89,7 +71,6 @@ class MemberDetailsMembershipGrouper:
                     duration_amount=representative["duration_amount"],
                     duration_unit=representative["duration_unit"],
                     total_cost=total_cost,
-                    cost_formula=first_price.cost_formula if first_price else None,
                     additional_member_discount=(representative["additional_member_discount"]),
                     last_paid_date=representative["last_paid_date"],
                     next_due_date=representative["next_due_date"],

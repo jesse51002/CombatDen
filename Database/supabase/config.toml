@@ -66,6 +66,7 @@ schema_paths = [
     "./schemas/user_gym_profiles.sql",
     "./schemas/member_memberships.sql",
     "./schemas/gym_classes_log.sql",
+    "./schemas/user_gym_invoices.sql",
     "./schemas/*.sql",
     "./access_rules/*.sql"
 ]

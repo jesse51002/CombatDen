@@ -32,3 +32,4 @@ class UserGymProfileCreate(SeedModel):
     card_last_four: Optional[str] = None
     card_exp_month: Optional[int] = None
     card_exp_year: Optional[int] = None
+    total_monthly_recurring_price: int = 0

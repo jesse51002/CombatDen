@@ -7,7 +7,8 @@ SELECT
     MAX(m.freeze_end_date) AS freeze_end_date,
     MIN(m.freeze_end_date) AS earliest_freeze_end,
     ARRAY_AGG(m.total_price) AS prices,
-    ARRAY_AGG(mp.duration_unit) AS duration_units
+    ARRAY_AGG(mp.duration_unit) AS duration_units,
+    (now() AT TIME ZONE g.timezone)::date AS gym_today
 FROM user_gym_profiles p
 JOIN member_memberships_status m
     ON p.crm_user_id = m.crm_user_id
@@ -17,7 +18,7 @@ JOIN membership_plans mp
     AND m.gym_id = mp.gym_id
 JOIN gyms g ON p.gym_id = g.gym_id
 {where_clause}
-GROUP BY p.crm_user_id
+GROUP BY p.crm_user_id, g.timezone
 ORDER BY
-    (CURRENT_DATE - MIN(m.freeze_end_date)) ASC
+    ((now() AT TIME ZONE g.timezone)::date - MIN(m.freeze_end_date)) ASC
 LIMIT :limit OFFSET :offset

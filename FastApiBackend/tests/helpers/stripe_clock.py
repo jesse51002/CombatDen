@@ -31,7 +31,7 @@ async def create_test_clock(
         The test clock ID.
     """
     ts = int(frozen_time.replace(tzinfo=timezone.utc).timestamp())
-    clock = await stripe_client.client.test_helpers.test_clocks.create_async(
+    clock = await stripe_client.client.v1.test_helpers.test_clocks.create_async(
         params={"frozen_time": ts, "name": "integration-test"},
         options=connect_opts,
     )
@@ -57,7 +57,7 @@ async def advance_clock(
         TimeoutError: If the clock does not become ready within the timeout.
     """
     ts = int(advance_to.replace(tzinfo=timezone.utc).timestamp())
-    await stripe_client.client.test_helpers.test_clocks.advance_async(
+    await stripe_client.client.v1.test_helpers.test_clocks.advance_async(
         clock_id,
         params={"frozen_time": ts},
         options=connect_opts,
@@ -65,7 +65,7 @@ async def advance_clock(
 
     elapsed = 0.0
     while elapsed < POLL_MAX_WAIT_S:
-        clock = await stripe_client.client.test_helpers.test_clocks.retrieve_async(
+        clock = await stripe_client.client.v1.test_helpers.test_clocks.retrieve_async(
             clock_id,
             options=connect_opts,
         )
@@ -87,7 +87,7 @@ async def delete_test_clock(
     connect_opts: stripe.RequestOptions,
 ) -> None:
     """Delete a test clock (cleans up all attached resources)."""
-    await stripe_client.client.test_helpers.test_clocks.delete_async(
+    await stripe_client.client.v1.test_helpers.test_clocks.delete_async(
         clock_id,
         options=connect_opts,
     )

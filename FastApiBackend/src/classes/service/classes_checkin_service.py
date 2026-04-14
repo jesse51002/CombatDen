@@ -20,6 +20,7 @@ from src.classes.service.classes_cycle_counts_service import (
     ClassesCycleCountsService,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 _PLAN_TYPE_PRIORITY: dict[PlanType, int] = {
@@ -312,12 +313,20 @@ class ClassesCheckinService:
         end_sql = load_sql(SQL_DIR / "classes_checkin_end_membership.sql")
 
         async with self._db_pool.session() as session:
+            tz_result = await session.execute(
+                text("SELECT timezone FROM gyms WHERE gym_id = :gym_id"),
+                {"gym_id": str(request.gym_id)},
+            )
+            tz_row = tz_result.mappings().fetchone()
+            end_date = gym_today(tz_row["timezone"]) if tz_row else gym_today("America/Chicago")
+
             await session.execute(
                 text(end_sql),
                 {
                     "crm_user_id": str(request.crm_user_id),
                     "gym_id": str(request.gym_id),
                     "plan_id": str(plan_id),
+                    "end_date": end_date,
                 },
             )
             await session.commit()

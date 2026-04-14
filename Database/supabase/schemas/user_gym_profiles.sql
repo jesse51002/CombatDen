@@ -31,6 +31,8 @@ CREATE TABLE user_gym_profiles_unfiltered (
     card_last_four VARCHAR(4),
     card_exp_month INTEGER,
     card_exp_year INTEGER,
+    total_monthly_recurring_price INTEGER NOT NULL DEFAULT 0
+        CHECK (total_monthly_recurring_price >= 0),
     PRIMARY KEY (crm_user_id),
     UNIQUE (crm_user_id, gym_id),
     CONSTRAINT linked_account_no_stripe

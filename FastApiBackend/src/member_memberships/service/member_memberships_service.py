@@ -21,6 +21,9 @@ from src.member_memberships.service.memberships.member_memberships_start import 
 from src.member_memberships.service.memberships.member_memberships_update_price import (
     MemberMembershipsUpdatePrice,
 )
+from src.member_memberships.service.payment_sync.price_writeback import (
+    PriceWriteback,
+)
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
@@ -29,6 +32,9 @@ if TYPE_CHECKING:
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
+    )
+    from src.payments.service.subscription import (
+        PaymentsStripeSubscriptionService,
     )
     from src.shared.gym_stripe_service import GymStripeService
 
@@ -46,14 +52,23 @@ class MemberMembershipsService:
         payment_sync_service: MembershipPaymentSyncService,
         payment_service: PaymentsStripePaymentService,
         gym_stripe_service: GymStripeService,
+        subscription_service: PaymentsStripeSubscriptionService,
     ) -> None:
-        deps = (db_pool, payment_sync_service)
+        price_writeback = PriceWriteback(
+            db_pool=db_pool,
+            subscription_service=subscription_service,
+        )
+        deps = (
+            db_pool,
+            payment_sync_service,
+            price_writeback,
+            gym_stripe_service,
+        )
         self._cancel = MemberMembershipsCancel(*deps)
         self._freeze = MemberMembershipsFreeze(*deps)
         self._start = MemberMembershipsStart(
             *deps,
             payment_service=payment_service,
-            gym_stripe_service=gym_stripe_service,
         )
         self._update_price = MemberMembershipsUpdatePrice(*deps)
 

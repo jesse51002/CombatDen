@@ -1,7 +1,6 @@
 """Update the price tier of an existing membership."""
 
 import logging
-from datetime import date
 from uuid import UUID
 
 from sqlalchemy import text
@@ -11,6 +10,7 @@ from src.member_memberships.schema.payment_sync_schema import SyncItem
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
+from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -72,11 +72,13 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
             add_ids=[add_item],
             cancel_ids=[cancel_item],
         )
+        stripe_sub_id_after: str | None = None
         if response:
             self._extract_stripe_item_id(
                 response,
                 new_price["stripe_price_id"],
             )
+            stripe_sub_id_after = response.stripe_subscription_id
 
         # ── CRM update ────────────────────────────────────
         await self._crm_update_price(
@@ -84,6 +86,17 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
             crm_user_id=crm_user_id,
             new_price_id=new_price_id,
             total_price=new_price["price"],
+        )
+
+        # ── Fan out post-discount prices to all siblings ──
+        parent = await self._payment_sync.resolve_parent(crm_user_id)
+        stripe_account_id = await self._gym_stripe.get_stripe_account_id(
+            parent.gym_id,
+        )
+        await self._price_writeback.sync_prices_from_stripe(
+            parent_crm_user_id=parent.crm_user_id,
+            stripe_sub_id=stripe_sub_id_after,
+            stripe_account_id=stripe_account_id,
         )
 
     # ── Private ────────────────────────────────────────────────
@@ -100,7 +113,7 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
                 f"Cannot update price on cancelled membership: "
                 f"item_id={item_id}, crm_user_id={crm_user_id}"
             )
-        if row["end_date"] is not None and row["end_date"] <= date.today():
+        if row["end_date"] is not None and row["end_date"] <= gym_today(row["timezone"]):
             raise ValueError(
                 f"Cannot update price on ended membership: "
                 f"item_id={item_id}, crm_user_id={crm_user_id}"

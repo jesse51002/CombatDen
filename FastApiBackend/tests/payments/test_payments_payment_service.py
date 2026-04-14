@@ -34,14 +34,14 @@ async def _customer_with_card(members_service, stripe_client, stripe_account_id,
     return resp.stripe_customer_id
 
 
-async def _one_time_price(membership_service, stripe_account_id):
+async def _one_time_price(membership_service, stripe_account_id, unit_amount: int = 2000):
     """Create a Stripe product with a one-time price."""
     resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
             plan_name="One-Time Payment Test",
             prices=[
                 PaymentsMembershipPriceItem(
-                    unit_amount=2000,
+                    unit_amount=unit_amount,
                     plan_type=PlanType.one_time,
                     recurring_interval=DurationUnit.month,
                     recurring_interval_count=1,
@@ -98,6 +98,31 @@ async def test_create_invoice_payment(
 
     assert resp.stripe_invoice_id.startswith("in_")
     assert resp.amount_paid == 2000
+    assert resp.status == "paid"
+
+
+async def test_create_invoice_payment_zero_amount(
+    payment_service, members_service, membership_service,
+    stripe_client, stripe_account_id, connect_opts,
+):
+    """$0 invoices must not re-invoke pay_async after finalize."""
+    customer_id = await _customer_with_card(
+        members_service, stripe_client, stripe_account_id, connect_opts,
+    )
+    price_id = await _one_time_price(
+        membership_service, stripe_account_id, unit_amount=0,
+    )
+
+    resp = await payment_service.create_invoice_payment(
+        PaymentsInvoicePaymentCreateRequest(
+            stripe_customer_id=customer_id,
+            stripe_price_id=price_id,
+        ),
+        stripe_account_id,
+    )
+
+    assert resp.stripe_invoice_id.startswith("in_")
+    assert resp.amount_paid == 0
     assert resp.status == "paid"
 
 

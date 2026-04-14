@@ -1,4 +1,4 @@
-.PHONY: run dev lint format token test test-payments test-members test-memberships test-plans test-discounts
+.PHONY: run dev lint format token webhook test test-payments test-members test-memberships test-plans test-discounts
 
 run:
 	poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
@@ -9,6 +9,9 @@ format:
 
 token:
 	poetry run python scripts/generate_token.py --email owner2@test.com --password abcd1234
+
+webhook:
+	stripe listen --forward-connect-to localhost:8000/api/v1/stripe/webhooks
 
 test:
 	poetry run pytest tests/ -v --tb=short

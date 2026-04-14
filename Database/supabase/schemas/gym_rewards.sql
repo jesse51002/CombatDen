@@ -7,5 +7,6 @@ CREATE TABLE gym_rewards (
     point_cost INTEGER NOT NULL CHECK (point_cost > 0),
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (reward_id)
+    PRIMARY KEY (reward_id),
+    UNIQUE (reward_id, gym_id)
 );

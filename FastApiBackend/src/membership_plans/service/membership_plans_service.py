@@ -6,7 +6,6 @@ the public API and constructor signature.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import BackgroundTasks
@@ -44,11 +43,6 @@ from src.payments.service.payments_stripe_price_service import (
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
-
-if TYPE_CHECKING:
-    from src.shared.stripe_reconciliation.stripe_reconciliation_service import (
-        StripeReconciliationService,
-    )
 
 
 class MembershipPlansService:
@@ -142,14 +136,12 @@ class MembershipPlansService:
         plan_id: UUID,
         gym_id: UUID,
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Migrate all active members on a plan to the current price."""
         await self._price.migrate_all_members(
             plan_id,
             gym_id,
             background_tasks,
-            reconciliation_service,
         )
 
     async def migrate_members(
@@ -158,7 +150,6 @@ class MembershipPlansService:
         gym_id: UUID,
         crm_user_ids: list[UUID],
         background_tasks: BackgroundTasks,
-        reconciliation_service: StripeReconciliationService,
     ) -> None:
         """Migrate specific members to the current active price."""
         await self._price.migrate_members(
@@ -166,5 +157,4 @@ class MembershipPlansService:
             gym_id,
             crm_user_ids,
             background_tasks,
-            reconciliation_service,
         )

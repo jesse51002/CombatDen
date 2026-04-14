@@ -3,6 +3,8 @@ CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
     gym_description VARCHAR,
+    timezone TEXT NOT NULL DEFAULT 'America/Chicago'
+        CONSTRAINT gyms_timezone_valid CHECK (now() AT TIME ZONE timezone IS NOT NULL),
     stripe_account_id VARCHAR,
     stripe_onboarding_status VARCHAR NOT NULL DEFAULT 'not_started'
         CHECK (stripe_onboarding_status IN ('not_started', 'pending', 'complete', 'disabled')),

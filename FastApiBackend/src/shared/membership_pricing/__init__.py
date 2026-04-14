@@ -1,1 +1,0 @@
-"""Membership pricing package."""
