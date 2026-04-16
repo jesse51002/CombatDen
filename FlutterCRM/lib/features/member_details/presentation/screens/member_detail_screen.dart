@@ -157,7 +157,7 @@ class _MemberDetailView extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
         horizontal:
             DesignConstants.screenHorizontalPadding,
-        vertical: DesignConstants.paddingBig
+        vertical: DesignConstants.paddingBig,
       ),
       child: Column(
         spacing: DesignConstants.spacingBig,

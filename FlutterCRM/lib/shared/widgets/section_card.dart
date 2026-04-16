@@ -24,26 +24,28 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: DesignConstants.card,
-        borderRadius: BorderRadius.circular(
-          DesignConstants.radiusSmall,
+    return SelectionArea(
+      child: Container(
+        width: double.infinity,
+        padding: padding,
+        decoration: BoxDecoration(
+          color: DesignConstants.card,
+          borderRadius: BorderRadius.circular(
+            DesignConstants.radiusSmall,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: crossAxisAlignment,
-        spacing: spacing,
-        children: [
-          if (title != null)
-            Text(
-              title!,
-              style: DesignConstants.h1,
-            ),
-          ...children,
-        ],
+        child: Column(
+          crossAxisAlignment: crossAxisAlignment,
+          spacing: spacing,
+          children: [
+            if (title != null)
+              Text(
+                title!,
+                style: DesignConstants.h1,
+              ),
+            ...children,
+          ],
+        ),
       ),
     );
   }
