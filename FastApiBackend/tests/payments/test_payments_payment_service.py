@@ -78,6 +78,14 @@ async def test_create_payment_intent(
     assert resp.amount == 1500
     assert resp.status == "succeeded"
 
+    pi = await stripe_client.client.v1.payment_intents.retrieve_async(
+        resp.stripe_payment_intent_id,
+        options=connect_opts,
+    )
+    assert pi.status == "succeeded"
+    assert pi.amount == 1500
+    assert pi.amount_received == 1500
+
 
 async def test_create_invoice_payment(
     payment_service, members_service, membership_service,
@@ -99,6 +107,13 @@ async def test_create_invoice_payment(
     assert resp.stripe_invoice_id.startswith("in_")
     assert resp.amount_paid == 2000
     assert resp.status == "paid"
+
+    inv = await stripe_client.client.v1.invoices.retrieve_async(
+        resp.stripe_invoice_id,
+        options=connect_opts,
+    )
+    assert inv.status == "paid"
+    assert inv.amount_paid == 2000
 
 
 async def test_create_invoice_payment_zero_amount(
@@ -124,6 +139,14 @@ async def test_create_invoice_payment_zero_amount(
     assert resp.stripe_invoice_id.startswith("in_")
     assert resp.amount_paid == 0
     assert resp.status == "paid"
+
+    inv = await stripe_client.client.v1.invoices.retrieve_async(
+        resp.stripe_invoice_id,
+        options=connect_opts,
+    )
+    assert inv.status == "paid"
+    assert inv.amount_paid == 0
+    assert inv.amount_due == 0
 
 
 async def test_preview_invoice_payment(
@@ -173,6 +196,14 @@ async def test_refund_full_payment(
     assert resp.amount == 3000
     assert resp.status == "succeeded"
 
+    refund = await stripe_client.client.v1.refunds.retrieve_async(
+        resp.stripe_refund_id,
+        options=connect_opts,
+    )
+    assert refund.status == "succeeded"
+    assert refund.amount == 3000
+    assert refund.payment_intent == payment.stripe_payment_intent_id
+
 
 async def test_refund_partial_payment(
     payment_service, members_service, stripe_client,
@@ -199,3 +230,10 @@ async def test_refund_partial_payment(
 
     assert resp.amount == 2000
     assert resp.status == "succeeded"
+
+    refund = await stripe_client.client.v1.refunds.retrieve_async(
+        resp.stripe_refund_id,
+        options=connect_opts,
+    )
+    assert refund.amount == 2000
+    assert refund.status == "succeeded"

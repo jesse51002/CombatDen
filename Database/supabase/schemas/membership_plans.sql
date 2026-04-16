@@ -1,6 +1,6 @@
 CREATE TABLE membership_plans_unfiltered (
     plan_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    gym_id UUID NOT NULL CONSTRAINT fk_plan_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_plan_gym REFERENCES gyms_unfiltered(gym_id),
     plan_name VARCHAR NOT NULL CHECK (plan_name <> ''),
     plan_type VARCHAR NOT NULL CHECK (plan_type IN ('trial', 'recurring', 'one_time')),
     class_count INTEGER CHECK (class_count > 0),

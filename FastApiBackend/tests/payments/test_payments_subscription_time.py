@@ -12,6 +12,10 @@ from src.payments.schema.payments_members_schema import (
 )
 
 from tests.helpers.data_factory import create_payment_method
+from tests.helpers.stripe_assertions import (
+    assert_no_unexpected_charges,
+    snapshot_billing_state,
+)
 from tests.helpers.stripe_clock import (
     advance_clock,
     create_test_clock,
@@ -128,6 +132,14 @@ async def test_cancel_at_period_end_completes(
         stripe_account_id,
     )
 
+    # Snapshot just before the clock advance — from this point on
+    # cancelling should prevent any new invoices.
+    before = await snapshot_billing_state(
+        stripe_client,
+        clock_customer,
+        connect_opts,
+    )
+
     # Advance past the period end (35 days should be enough for monthly)
     await advance_clock(
         stripe_client,
@@ -142,6 +154,14 @@ async def test_cancel_at_period_end_completes(
     )
 
     assert sub.status == "canceled"
+
+    # After cancel_at_period_end + clock advance past the end, no
+    # additional invoice should have been created.
+    await assert_no_unexpected_charges(
+        stripe_client,
+        before,
+        connect_opts,
+    )
 
 
 @pytest.mark.timeout(90)
@@ -170,6 +190,47 @@ async def test_freeze_resumes_at_date(
         stripe_account_id,
     )
     assert resp.resumes_at is not None
+
+    # Advance to a point still inside the freeze window. Stripe's
+    # pause_collection.behavior="void" still *creates* renewal
+    # invoices on schedule but voids them immediately, so we cannot
+    # use ``assert_no_unexpected_charges`` here. Instead we assert
+    # that no invoice during the pause was actually paid and that
+    # the customer's balance did not move.
+    before_balance = (
+        await stripe_client.client.v1.customers.retrieve_async(
+            clock_customer,
+            options=connect_opts,
+        )
+    ).balance
+    await advance_clock(
+        stripe_client,
+        test_clock,
+        datetime(2026, 2, 10, 0, 0, 0),
+        connect_opts,
+    )
+    mid_pause_invoices = await stripe_client.client.v1.invoices.list_async(
+        params={"customer": clock_customer, "limit": 100},
+        options=connect_opts,
+    )
+    paid_during_pause = [
+        inv for inv in mid_pause_invoices.data if inv.status == "paid"
+    ]
+    # The initial create may have produced a paid invoice — freeze
+    # started after that, so any *new* paid invoices would mean
+    # voiding didn't work.
+    assert len(paid_during_pause) <= 1, (
+        f"Unexpected paid invoices during freeze window: "
+        f"{[i.id for i in paid_during_pause]}"
+    )
+    mid_customer = await stripe_client.client.v1.customers.retrieve_async(
+        clock_customer,
+        options=connect_opts,
+    )
+    assert mid_customer.balance == before_balance, (
+        f"Customer balance shifted during freeze: {before_balance} -> "
+        f"{mid_customer.balance}"
+    )
 
     # Advance past the freeze end date
     await advance_clock(

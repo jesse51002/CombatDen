@@ -12,7 +12,7 @@ CREATE TABLE user_gym_charges (
     invoice_id UUID NOT NULL
         CONSTRAINT fk_charge_invoice
         REFERENCES user_gym_invoices(invoice_id) ON DELETE CASCADE,
-    gym_id UUID NOT NULL CONSTRAINT fk_charge_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_charge_gym REFERENCES gyms_unfiltered(gym_id),
     crm_user_id UUID NOT NULL,
 
     kind charge_kind NOT NULL,

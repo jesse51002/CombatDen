@@ -3,8 +3,7 @@ SELECT
     discount_name,
     discount_type,
     percentage_off,
-    dollar_off,
-    end_date
+    dollar_off
 FROM gym_discounts
 WHERE gym_id = :gym_id
-  AND discount_active = true
+  AND is_deleted = false

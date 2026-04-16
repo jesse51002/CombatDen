@@ -178,9 +178,17 @@ class MembershipPlansPrice(MembershipPlansBase):
                 crm_pk=price_id,
             ) from exc
 
-        # ── Stripe: deactivate old price (best-effort) ────────
+        # ── Stripe: point product at the new price, then archive old ─
+        # Stripe refuses to archive a price that is still a product's
+        # ``default_price``. Reassign the default to the new price
+        # before attempting to deactivate the old one.
         if old_price and old_price.get("stripe_price_id"):
             try:
+                await self._stripe_prices.set_product_default_price(
+                    stripe_product_id=stripe_product_id,
+                    stripe_price_id=stripe_resp.stripe_price_id,
+                    stripe_account_id=stripe_account_id,
+                )
                 await self._stripe_prices.deactivate_price(
                     PaymentsPriceDeactivateRequest(
                         stripe_price_id=old_price["stripe_price_id"],

@@ -32,6 +32,7 @@ class PaymentsInvoicePaymentCreateRequest(BaseModel):
     stripe_customer_id: str
     stripe_price_id: str
     metadata: dict[str, str] | None = None
+    paid_out_of_band: bool = False
 
 
 class PaymentsInvoicePaymentResponse(BaseModel):

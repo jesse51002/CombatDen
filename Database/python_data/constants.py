@@ -1,4 +1,9 @@
 DEFAULT_PASSWORD = "abcd1234"
+# Seed for Python's `random` and Faker, set once at the top of seed().
+# Keeping this constant means every run picks the same names, emails, plan
+# selections, and journey choices — which in turn lets the idempotency layer
+# look up records by stable keys (email, plan_name, discount_name).
+SEED = 42
 # Shared Stripe Connect test account — same one used by the backend's
 # integration tests (see FastApiBackend/tests/conftest.py). All seeded gyms
 # point at it so the backend can create real test-mode products/prices/

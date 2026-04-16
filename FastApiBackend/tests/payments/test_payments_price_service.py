@@ -42,7 +42,11 @@ async def _create_product(membership_service, stripe_account_id):
 
 
 async def test_create_recurring_price(
-    price_service, membership_service, stripe_account_id,
+    price_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     product_id = await _create_product(membership_service, stripe_account_id)
 
@@ -64,9 +68,24 @@ async def test_create_recurring_price(
     assert resp.recurring_interval == "month"
     assert resp.recurring_interval_count == 1
 
+    # Independent re-fetch: the service returned an active recurring
+    # price, so Stripe must agree.
+    price = await stripe_client.client.v1.prices.retrieve_async(
+        resp.stripe_price_id,
+        options=connect_opts,
+    )
+    assert price.active is True
+    assert price.unit_amount == 2500
+    assert price.recurring is not None
+    assert price.recurring.interval == "month"
+
 
 async def test_create_one_time_price(
-    price_service, membership_service, stripe_account_id,
+    price_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     product_id = await _create_product(membership_service, stripe_account_id)
 
@@ -85,9 +104,20 @@ async def test_create_one_time_price(
     assert resp.active is True
     assert resp.recurring_interval is None
 
+    price = await stripe_client.client.v1.prices.retrieve_async(
+        resp.stripe_price_id,
+        options=connect_opts,
+    )
+    assert price.unit_amount == 7500
+    assert price.recurring is None
+
 
 async def test_deactivate_price(
-    price_service, membership_service, stripe_account_id,
+    price_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     product_id = await _create_product(membership_service, stripe_account_id)
     created = await price_service.create_price(
@@ -109,9 +139,20 @@ async def test_deactivate_price(
     assert resp.active is False
     assert resp.stripe_price_id == created.stripe_price_id
 
+    # Independent verification: Stripe must agree the price is inactive.
+    price = await stripe_client.client.v1.prices.retrieve_async(
+        created.stripe_price_id,
+        options=connect_opts,
+    )
+    assert price.active is False
+
 
 async def test_activate_price(
-    price_service, membership_service, stripe_account_id,
+    price_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     product_id = await _create_product(membership_service, stripe_account_id)
     created = await price_service.create_price(
@@ -135,6 +176,12 @@ async def test_activate_price(
     )
 
     assert resp.active is True
+
+    price = await stripe_client.client.v1.prices.retrieve_async(
+        created.stripe_price_id,
+        options=connect_opts,
+    )
+    assert price.active is True
 
 
 async def test_get_price(
@@ -167,7 +214,11 @@ async def test_get_nonexistent_price_raises(price_service, stripe_account_id):
 
 
 async def test_validate_price_active_reactivates_archived(
-    price_service, membership_service, stripe_account_id,
+    price_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     product_id = await _create_product(membership_service, stripe_account_id)
     created = await price_service.create_price(
@@ -191,3 +242,15 @@ async def test_validate_price_active_reactivates_archived(
     )
 
     assert resp.active is True
+
+    # Both price and its parent product must be active on Stripe.
+    price = await stripe_client.client.v1.prices.retrieve_async(
+        created.stripe_price_id,
+        options=connect_opts,
+    )
+    assert price.active is True
+    product = await stripe_client.client.v1.products.retrieve_async(
+        price.product,
+        options=connect_opts,
+    )
+    assert product.active is True

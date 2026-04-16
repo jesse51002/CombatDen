@@ -1,9 +1,7 @@
 import random
 import uuid
-from typing import Optional
 
 from faker import Faker
-
 from schema.gym import GymCreate
 
 fake = Faker()
@@ -52,13 +50,11 @@ STYLES = [
 
 
 def generate(
-    gym_id: Optional[uuid.UUID] = None,
-    stripe_account_id: Optional[str] = None,
+    gym_id: uuid.UUID | None = None,
+    stripe_account_id: str | None = None,
 ) -> GymCreate:
     name = f"{random.choice(NAME_PREFIXES)} {random.choice(NAME_SUFFIXES)}"
-    description = random.choice(DESCRIPTION_TEMPLATES).format(
-        style=random.choice(STYLES)
-    )
+    description = random.choice(DESCRIPTION_TEMPLATES).format(style=random.choice(STYLES))
     return GymCreate(
         gym_id=gym_id or uuid.uuid4(),
         gym_name=name,

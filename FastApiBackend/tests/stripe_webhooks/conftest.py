@@ -5,13 +5,18 @@ the DB scaffolding (member, plan, price, synthetic membership row)
 needed to exercise the event handlers against real tables.
 """
 
+import uuid
 from dataclasses import dataclass
 from uuid import UUID
 
 import pytest
 from sqlalchemy import text
 
+from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
+from src.stripe_webhooks.service.handlers.account_updated_handler import (
+    AccountUpdatedHandler,
+)
 from src.stripe_webhooks.service.handlers.charge_refunded_handler import (
     ChargeRefundedHandler,
 )
@@ -25,7 +30,76 @@ from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
 )
 
+from tests.conftest import STRIPE_TEST_ACCOUNT_ID
+from tests.helpers.cleanup import delete_all_gym_data
 from tests.helpers.data_factory import create_member, create_plan
+
+# Synthetic stripe_account_id for webhook tests only. The seed script
+# inserts several gyms pointing at the real test account; if the
+# webhook handler's ``gym_by_stripe_account`` lookup resolves to one
+# of those seeded gyms instead of our freshly inserted test gym,
+# every ``invoice.paid`` event would hit "no membership matched".
+# We decouple by giving the webhook test gym a unique id here, while
+# ``connect_opts`` below continues to target the real Stripe Connect
+# account so ``create_member`` / ``create_plan`` still work.
+_WEBHOOK_STRIPE_ACCOUNT_ID = f"acct_webhook_test_{uuid.uuid4().hex[:16]}"
+
+
+# ── Overrides to isolate from seeded gyms sharing the real test account ──
+
+
+@pytest.fixture(scope="module")
+def stripe_account_id() -> str:
+    """Override the session-scoped fixture with a webhook-only id."""
+    return _WEBHOOK_STRIPE_ACCOUNT_ID
+
+
+@pytest.fixture(scope="module")
+def connect_opts(stripe_client):
+    """Override: use the REAL Stripe test account for actual API calls.
+
+    The gym row stores the synthetic ``_WEBHOOK_STRIPE_ACCOUNT_ID``
+    so the webhook resolver finds it uniquely, but anything that
+    hits the Stripe API (``create_member``, ``create_plan``) still
+    needs to target a real connected account.
+    """
+    return PaymentsStripeClient.connect_opts(STRIPE_TEST_ACCOUNT_ID)
+
+
+@pytest.fixture(scope="module")
+async def gym_id(db_pool, stripe_account_id):
+    """Override: insert a dedicated webhook test gym and tear it down.
+
+    Uses the synthetic ``stripe_account_id`` so the
+    ``gym_by_stripe_account`` resolver in ``StripeWebhooksService``
+    uniquely matches this row, ignoring any seed-data gyms.
+    """
+    insert_sql = """
+        INSERT INTO gyms (gym_name, stripe_account_id, stripe_onboarding_status)
+        VALUES (:name, :stripe_account_id, 'complete')
+        RETURNING gym_id
+    """
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(insert_sql),
+            {
+                "name": "Webhook Test Gym",
+                "stripe_account_id": stripe_account_id,
+            },
+        )
+        row = result.mappings().fetchone()
+        await session.commit()
+
+    gid = UUID(str(row["gym_id"]))
+    yield gid
+
+    await delete_all_gym_data(db_pool, gid)
+    async with db_pool.session() as session:
+        await session.execute(
+            text("DELETE FROM gyms WHERE gym_id = :gym_id"),
+            {"gym_id": str(gid)},
+        )
+        await session.commit()
 
 
 # ── Service wiring (plain constructors, no DI container) ─────────
@@ -52,12 +126,18 @@ def charge_refunded_handler() -> ChargeRefundedHandler:
 
 
 @pytest.fixture(scope="module")
+def account_updated_handler() -> AccountUpdatedHandler:
+    return AccountUpdatedHandler()
+
+
+@pytest.fixture(scope="module")
 def stripe_webhooks_service(
     db_pool,
     event_log,
     invoice_paid_handler,
     invoice_payment_failed_handler,
     charge_refunded_handler,
+    account_updated_handler,
 ) -> StripeWebhooksService:
     return StripeWebhooksService(
         db_pool=db_pool,
@@ -65,6 +145,7 @@ def stripe_webhooks_service(
         invoice_paid_handler=invoice_paid_handler,
         invoice_payment_failed_handler=invoice_payment_failed_handler,
         charge_refunded_handler=charge_refunded_handler,
+        account_updated_handler=account_updated_handler,
     )
 
 

@@ -12,13 +12,10 @@ MembershipInfo _$MembershipInfoFromJson(Map<String, dynamic> json) =>
       planName: json['plan_name'] as String,
       planType: json['plan_type'] as String?,
       status: MembershipStatus.fromJson(json['status'] as String),
-      baseCost: (json['base_cost'] as num).toDouble(),
+      baseCost: (json['base_cost'] as num).toInt(),
       durationAmount: (json['duration_amount'] as num).toInt(),
       durationUnit: json['duration_unit'] as String,
-      totalCost: (json['total_cost'] as num).toDouble(),
-      costFormula: json['cost_formula'] as String?,
-      additionalMemberDiscount: (json['additional_member_discount'] as num?)
-          ?.toDouble(),
+      totalPrice: (json['total_price'] as num).toInt(),
       lastPaidDate: json['last_paid_date'] == null
           ? null
           : DateTime.parse(json['last_paid_date'] as String),

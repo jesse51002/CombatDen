@@ -8,11 +8,18 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.payments.service.cash_constants import (
+    CRM_PAID_WITH_CASH_METADATA_KEY,
+    CRM_PAID_WITH_CASH_METADATA_VALUE,
+)
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.handlers.stripe_time import (
     stripe_ts_to_date,
     stripe_ts_to_datetime,
+)
+from src.stripe_webhooks.stripe_webhooks_exceptions import (
+    SubscriptionItemPendingError,
 )
 
 logger = logging.getLogger(__name__)
@@ -21,6 +28,7 @@ EVENT_TYPE = "invoice.paid"
 CHARGE_KIND_PAYMENT = "payment"
 CHARGE_STATUS_SUCCEEDED = "succeeded"
 INVOICE_STATUS_PAID = "paid"
+PAYMENT_METHOD_TYPE_CASH = "cash"
 
 
 class InvoicePaidHandler:
@@ -47,12 +55,17 @@ class InvoicePaidHandler:
 
         crm_user_id = await self._resolve_crm_user_id(session, invoice, gym_id)
         if crm_user_id is None:
-            logger.warning(
-                "invoice.paid: no membership matched any line item "
-                "(stripe_invoice_id=%s, gym_id=%s); skipping",
-                stripe_invoice_id,
-                gym_id,
-            )
+            subscription_item_ids = [
+                line["subscription_item"]
+                for line in self._lines(invoice)
+                if line.get("subscription_item")
+            ]
+            if subscription_item_ids:
+                raise SubscriptionItemPendingError(
+                    stripe_invoice_id=stripe_invoice_id,
+                    gym_id=str(gym_id),
+                    subscription_item_ids=subscription_item_ids,
+                )
             return
 
         invoice_row = await self._upsert_invoice(
@@ -183,17 +196,28 @@ class InvoicePaidHandler:
     ) -> None:
         stripe_charge_id = invoice.get("charge")
         amount_paid = int(invoice.get("amount_paid") or 0)
+        # Stripe does not persist the request-only
+        # ``paid_out_of_band`` flag on the Invoice object. The
+        # cash-payment code stamps a metadata key on the invoice
+        # before calling ``invoices.pay``, which we read here.
+        metadata = invoice.get("metadata") or {}
+        paid_with_cash = (
+            metadata.get(CRM_PAID_WITH_CASH_METADATA_KEY) == CRM_PAID_WITH_CASH_METADATA_VALUE
+        )
 
         # Schema requires payment rows to have a stripe_charge_id
-        # (unless cash). Skip the charge insert for zero-amount paid
-        # invoices with no underlying charge (e.g. 100%-off trials).
-        if not stripe_charge_id:
+        # UNLESS payment_method_type='cash' (paid out of band). Skip
+        # the charge insert for zero-amount paid invoices with no
+        # underlying charge (e.g. 100%-off trials).
+        if not stripe_charge_id and not paid_with_cash:
             if amount_paid == 0:
                 return
             raise ValueError(
                 f"invoice.paid has amount_paid={amount_paid} but no charge id "
                 f"(stripe_invoice_id={invoice.get('id')})"
             )
+
+        payment_method_type = PAYMENT_METHOD_TYPE_CASH if paid_with_cash else None
 
         insert_sql = load_sql(SQL_DIR / "user_gym_charge_insert.sql")
         paid_at_ts = invoice.get("status_transitions", {}).get("paid_at") or invoice.get("created")
@@ -205,7 +229,7 @@ class InvoicePaidHandler:
             "status": CHARGE_STATUS_SUCCEEDED,
             "amount": amount_paid,
             "currency": invoice.get("currency", "usd"),
-            "payment_method_type": None,
+            "payment_method_type": payment_method_type,
             "stripe_charge_id": stripe_charge_id,
             "stripe_refund_id": None,
             "refunds_charge_id": None,

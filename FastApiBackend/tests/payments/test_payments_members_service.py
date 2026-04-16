@@ -11,7 +11,12 @@ from src.payments.schema.payments_members_schema import (
 from tests.helpers.data_factory import create_payment_method
 
 
-async def test_create_customer_without_payment(members_service, stripe_account_id):
+async def test_create_customer_without_payment(
+    members_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+):
     resp = await members_service.create_customer(
         PaymentsCustomerCreateRequest(
             name="Jane Doe",
@@ -25,6 +30,14 @@ async def test_create_customer_without_payment(members_service, stripe_account_i
     assert resp.email == "jane@test.com"
     assert resp.stripe_payment_method_id is None
     assert resp.card_brand is None
+
+    customer = await stripe_client.client.v1.customers.retrieve_async(
+        resp.stripe_customer_id,
+        options=connect_opts,
+    )
+    assert customer.name == "Jane Doe"
+    assert customer.email == "jane@test.com"
+    assert getattr(customer, "deleted", False) is False
 
 
 async def test_create_customer_with_payment_method(
@@ -47,6 +60,21 @@ async def test_create_customer_with_payment_method(
     assert resp.card_last_four == "4242"
     assert resp.card_exp_month is not None
     assert resp.card_exp_year is not None
+
+    # Independent: the customer must actually have pm_id as its default.
+    customer = await stripe_client.client.v1.customers.retrieve_async(
+        resp.stripe_customer_id,
+        options=connect_opts,
+    )
+    default_pm = (
+        customer.invoice_settings.default_payment_method
+        if customer.invoice_settings is not None
+        else None
+    )
+    default_pm_id = (
+        default_pm if isinstance(default_pm, str) else getattr(default_pm, "id", None)
+    )
+    assert default_pm_id == pm_id
 
 
 async def test_update_customer_swap_payment_method(
@@ -72,6 +100,16 @@ async def test_update_customer_swap_payment_method(
     )
 
     assert resp.stripe_payment_method_id == pm2
+
+    customer = await stripe_client.client.v1.customers.retrieve_async(
+        created.stripe_customer_id,
+        options=connect_opts,
+    )
+    default_pm = customer.invoice_settings.default_payment_method
+    default_pm_id = (
+        default_pm if isinstance(default_pm, str) else getattr(default_pm, "id", None)
+    )
+    assert default_pm_id == pm2
 
 
 async def test_unlink_customer_card(

@@ -20,14 +20,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Optional
 
 import yaml
-from faker import Faker
-
 from api_creation.discounts import DiscountRecord
 from api_creation.plans import PlanRecord
 from constants import LINKED_MEMBERS_PER_GYM, MEMBERS_PER_GYM
+from faker import Faker
 from utils import today_offset
 
 _images_path = Path(__file__).parent / "sample_images.yaml"
@@ -53,7 +51,7 @@ class Demographics:
     emergency_contact_phone: str
     emergency_contact_email: str
     # When this profile is a linked auth account, the Supabase user ID.
-    auth_user_id: Optional[uuid.UUID] = None
+    auth_user_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -65,7 +63,7 @@ class CurrentMembership:
     include_linked_discount: bool = False
     prorate: bool = True
     # Post-creation modifiers
-    freeze_months: Optional[int] = None
+    freeze_months: int | None = None
     cancel_after_start: bool = False
 
 
@@ -75,9 +73,9 @@ class HistoricalMembership:
 
     plan: PlanRecord
     start_date: date
-    end_date: Optional[date]
-    cancel_date: Optional[date]
-    last_paid_date: Optional[date]
+    end_date: date | None
+    cancel_date: date | None
+    last_paid_date: date | None
     total_price: int
     discount_ids: list[uuid.UUID] = field(default_factory=list)
 
@@ -87,14 +85,14 @@ class ProfilePlan:
     local_handle: str  # e.g. "gym0/profile3"
     demographics: Demographics
     # Post-create DB tweaks (account_linked_to_id, freeze window)
-    linked_primary_handle: Optional[str] = None
-    linked_discount_id: Optional[uuid.UUID] = None
-    account_freeze_start: Optional[date] = None
-    account_freeze_end: Optional[date] = None
-    current: Optional[CurrentMembership] = None
+    linked_primary_handle: str | None = None
+    linked_discount_id: uuid.UUID | None = None
+    account_freeze_start: date | None = None
+    account_freeze_end: date | None = None
+    current: CurrentMembership | None = None
     history: list[HistoricalMembership] = field(default_factory=list)
     # Populated after the members API call returns
-    crm_user_id: Optional[uuid.UUID] = None
+    crm_user_id: uuid.UUID | None = None
 
 
 def _random_phone() -> str:
@@ -144,9 +142,7 @@ def _build_historical(
     discount_ids: list[uuid.UUID] = []
 
     if is_linked and linked_discounts:
-        plan_linked = [
-            d for d in linked_discounts if d.membership_plan_id == plan.plan_id
-        ]
+        plan_linked = [d for d in linked_discounts if d.membership_plan_id == plan.plan_id]
         if plan_linked:
             disc = plan_linked[0]
             total_price = max(0, total_price - (disc.dollar_off or 0))
@@ -175,9 +171,7 @@ def _pick_current_discounts(
 ) -> tuple[list[uuid.UUID], bool]:
     """Pick discount_ids + include_linked_discount flag for a live membership."""
     if is_linked and linked_discounts:
-        plan_linked = [
-            d for d in linked_discounts if d.membership_plan_id == plan.plan_id
-        ]
+        plan_linked = [d for d in linked_discounts if d.membership_plan_id == plan.plan_id]
         if plan_linked and random.choice([True, False]):
             return [], True  # backend auto-applies the linked tier
     if discounts and random.random() < 0.3:
@@ -335,9 +329,7 @@ def build_plans(
             first_start = trial_cancel + timedelta(days=random.randint(0, 7))
             cancel_days = random.randint(30, 120)
             if first_start + timedelta(days=cancel_days) >= date.today():
-                first_start = date.today() - timedelta(
-                    days=cancel_days + random.randint(1, 30)
-                )
+                first_start = date.today() - timedelta(days=cancel_days + random.randint(1, 30))
             cancel_date = first_start + timedelta(days=cancel_days)
             profile.history.append(
                 _build_historical(

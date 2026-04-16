@@ -16,11 +16,19 @@ price_id / discount_id values are available to downstream generators.
 
 from __future__ import annotations
 
+import random
+
 from api_client import assert_backend_reachable, login_gym_owner
 from api_creation import (
     discounts as api_discounts,
+)
+from api_creation import (
     members as api_members,
+)
+from api_creation import (
     memberships as api_memberships,
+)
+from api_creation import (
     plans as api_plans,
 )
 from bootstrap import activities as bs_activities
@@ -29,12 +37,27 @@ from bootstrap import gyms as bs_gyms
 from bootstrap import history as bs_history
 from bootstrap import rewards as bs_rewards
 from config import get_supabase_client
-from constants import DEFAULT_PASSWORD, DISCOUNTS_PER_GYM, PLANS_PER_GYM
+from constants import DEFAULT_PASSWORD, DISCOUNTS_PER_GYM, PLANS_PER_GYM, SEED
+from faker import Faker
 from generators import invoices, memberships
 from generators.profiles import build_plans
 
 
 def seed() -> None:
+    # Pin the PRNGs so every run picks the same names, emails, plans,
+    # discounts, and journey choices. The idempotency helpers in
+    # api_creation/upsert.py rely on these stable keys to find existing
+    # rows on re-run instead of POSTing to Stripe again.
+    random.seed(SEED)
+    Faker.seed(SEED)
+    # `fake.unique` memoizes previously-handed-out values at module scope.
+    # Clear it once at the start of each seed() call so the seeded RNG can
+    # reliably regenerate the same emails/phones when seed() runs twice
+    # inside a single Python process (e.g. from a test runner).
+    from generators import profiles as _profiles_mod
+
+    _profiles_mod.fake.unique.clear()
+
     assert_backend_reachable()
     client = get_supabase_client()
 
@@ -49,36 +72,45 @@ def seed() -> None:
         with login_gym_owner(bundle.owner_email, DEFAULT_PASSWORD) as api:
             # Plans + prices (real Stripe products + prices).
             print("Creating plans...")
-            plan_records = api_plans.create_all(api, bundle.gym_id, PLANS_PER_GYM)
+            plan_records = api_plans.create_all(api, client, bundle.gym_id, PLANS_PER_GYM)
             print(f"  {len(plan_records)} plans created")
 
             # Discounts (real Stripe coupons).
             print("Creating discounts...")
             regular_discounts = api_discounts.create_regular(
-                api, bundle.gym_id, DISCOUNTS_PER_GYM
+                api, client, bundle.gym_id, DISCOUNTS_PER_GYM
             )
             linked_discounts = api_discounts.create_linked(
-                api, bundle.gym_id, plan_records
+                api, client, bundle.gym_id, plan_records
             )
             print(f"  {len(regular_discounts)} regular, {len(linked_discounts)} linked")
 
             # Classes + schedules (direct DB — no endpoint).
-            # Note: classes.generate still wants MembershipPlanCreate-shaped
-            # objects for its allowed-plans selection. We build a
-            # lightweight shim from PlanRecord.
+            # Skip on re-runs: if any class row already exists for this gym
+            # we reuse what's there. The return values (parents, schedules)
+            # are only consumed by the direct-DB generators below, which
+            # are themselves gated on `had_any_new`.
             print("Creating classes...")
             class_plans_shim = _plan_records_to_shim(bundle.gym_id, plan_records)
-            parents, schedules = bs_classes.create(
-                client,
-                bundle.gym_id,
-                bundle.gym_name,
-                bundle.all_employees,
-                class_plans_shim,
-            )
+            if _gym_has_rows(client, "gym_classes", bundle.gym_id):
+                print("  already present, skipping")
+                parents, schedules = [], []
+            else:
+                parents, schedules = bs_classes.create(
+                    client,
+                    bundle.gym_id,
+                    bundle.gym_name,
+                    bundle.all_employees,
+                    class_plans_shim,
+                )
 
             # Rewards (direct DB — no endpoint).
             print("Creating rewards...")
-            gym_rewards = bs_rewards.create(client, bundle.gym_id)
+            if _gym_has_rows(client, "gym_rewards", bundle.gym_id):
+                print("  already present, skipping")
+                gym_rewards = []
+            else:
+                gym_rewards = bs_rewards.create(client, bundle.gym_id)
 
             # Build the in-memory profile plan for every member of this gym.
             print("Building profile plans...")
@@ -93,18 +125,23 @@ def seed() -> None:
 
             # Create every member via POST /members → real cus_*.
             print(f"Creating {len(profile_plans)} members via API...")
-            api_members.create_all(api, client, bundle.gym_id, profile_plans)
+            members_result = api_members.create_all(api, client, bundle.gym_id, profile_plans)
             api_members.apply_links(client, profile_plans)
 
             # Insert historical (closed) membership rows BEFORE starting any
             # live ones. The `recurring_requires_no_active` trigger blocks
             # historical recurring inserts if a live recurring row already
-            # exists for that user, so we get history in first.
-            print("Inserting historical memberships...")
-            history_rows = memberships.create_history(
-                client, bundle.gym_id, profile_plans
-            )
-            print(f"  {len(history_rows)} historical rows")
+            # exists for that user, so we get history in first. Only runs
+            # when at least one member was freshly created — re-running
+            # with existing data would duplicate history rows and crash on
+            # the chronological/overlap triggers.
+            history_rows: list = []
+            if members_result.had_any_new:
+                print("Inserting historical memberships...")
+                history_rows = memberships.create_history(client, bundle.gym_id, profile_plans)
+                print(f"  {len(history_rows)} historical rows")
+            else:
+                print("Skipping historical memberships (no new members)")
 
             # Start a live membership for every profile that has one.
             # Must run BEFORE apply_freezes — starting a membership on a
@@ -120,10 +157,17 @@ def seed() -> None:
 
         # --- direct-DB synthetic history (no JWT needed) ---
 
+        # Skip the entire direct-DB block on pure re-runs. These generators
+        # insert rows with auto-generated PKs, so running them a second
+        # time would duplicate every invoice, charge, activity, class log,
+        # and gym_history rollup for the gym. When any member was freshly
+        # created we run the whole block as before.
+        if not members_result.had_any_new:
+            print("Skipping direct-DB history (no new members)")
+            continue
+
         # Pseudo rows for current memberships so invoices have a past.
-        pseudo_current = memberships.pseudo_rows_for_current(
-            bundle.gym_id, current_records
-        )
+        pseudo_current = memberships.pseudo_rows_for_current(bundle.gym_id, current_records)
         all_membership_rows = history_rows + pseudo_current
 
         # Invoices + line items + charges + applied discounts (direct DB, fake IDs).
@@ -151,10 +195,7 @@ def seed() -> None:
             client.table("user_gym_charges").insert(
                 [c.to_insert_dict() for c in ch_rows]
             ).execute()
-        print(
-            f"  {len(inv_rows)} invoices, "
-            f"{len(li_rows)} line items, {len(ch_rows)} charges"
-        )
+        print(f"  {len(inv_rows)} invoices, {len(li_rows)} line items, {len(ch_rows)} charges")
 
         # User activities (direct DB).
         print("Creating activities...")
@@ -163,9 +204,7 @@ def seed() -> None:
 
         # Reward redemptions (direct DB).
         print("Creating reward redemptions...")
-        bs_rewards.create_redemptions(
-            client, bundle.gym_id, profiles_for_db, gym_rewards
-        )
+        bs_rewards.create_redemptions(client, bundle.gym_id, profiles_for_db, gym_rewards)
 
         # Class attendance logs (direct DB). We pass both real + historical
         # membership rows so every active window during the simulated past
@@ -185,6 +224,16 @@ def seed() -> None:
         bs_history.create(client, bundle.gym_id, member_count=len(profile_plans))
 
     print("\nSeeding complete!")
+
+
+def _gym_has_rows(client, table: str, gym_id) -> bool:
+    """True if `table` has at least one row for this gym.
+
+    Used to skip direct-DB bootstrap steps (classes, rewards) that were
+    already populated by a previous seed run.
+    """
+    resp = client.table(table).select("gym_id").eq("gym_id", str(gym_id)).limit(1).execute()
+    return bool(resp.data)
 
 
 def _plan_records_to_shim(gym_id, plan_records):

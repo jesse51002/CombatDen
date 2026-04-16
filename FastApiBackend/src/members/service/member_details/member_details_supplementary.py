@@ -99,7 +99,6 @@ class MemberDetailsSupplementary:
                 discount_type=row["discount_type"],
                 percentage_off=row["percentage_off"],
                 dollar_off=row["dollar_off"],
-                end_date=row["end_date"],
             )
             discounts[row["discount_id"]] = discount
         return discounts

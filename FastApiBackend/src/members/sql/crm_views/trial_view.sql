@@ -1,3 +1,9 @@
+WITH latest_memberships AS (
+    SELECT DISTINCT ON (crm_user_id, gym_id, plan_id) *
+    FROM member_memberships_status
+    ORDER BY crm_user_id, gym_id, plan_id,
+             start_date DESC, created_at DESC
+)
 SELECT
     p.crm_user_id,
     p.first_name,
@@ -7,7 +13,7 @@ SELECT
     MAX(m.end_date) AS end_date,
     (now() AT TIME ZONE g.timezone)::date AS gym_today
 FROM user_gym_profiles p
-JOIN member_memberships_status m
+JOIN latest_memberships m
     ON p.crm_user_id = m.crm_user_id
     AND p.gym_id = m.gym_id
 JOIN membership_plans mp
@@ -33,6 +39,6 @@ JOIN gyms g ON p.gym_id = g.gym_id
             )
         )
     )
-GROUP BY p.crm_user_id, g.timezone
+GROUP BY p.crm_user_id, p.first_name, p.last_name, p.photo_url, g.timezone
 ORDER BY (MAX(m.end_date) - (now() AT TIME ZONE g.timezone)::date) DESC
 LIMIT :limit OFFSET :offset

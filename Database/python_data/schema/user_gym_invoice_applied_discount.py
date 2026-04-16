@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from . import SeedModel
@@ -10,4 +9,4 @@ class UserGymInvoiceAppliedDiscountCreate(SeedModel):
     gym_id: UUID
     discount_id: UUID
     amount_off: int
-    stripe_coupon_id: Optional[str] = None
+    stripe_coupon_id: str | None = None

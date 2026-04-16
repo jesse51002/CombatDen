@@ -4,7 +4,7 @@ from datetime import date
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from schema.membership_plan import DurationUnit
 
 import src.shared.db_schema_path  # noqa: F401
@@ -84,15 +84,7 @@ class SyncItem(BaseModel):
     has_linked_discount: bool = False
     quantity: int = 1
     prorate: bool = True
-
-    def to_desired_item(self) -> PaymentsSubscriptionDesiredItem:
-        """Strip to PaymentsSubscriptionDesiredItem for Stripe."""
-        return PaymentsSubscriptionDesiredItem(
-            stripe_price_id=self.stripe_price_id,
-            stripe_item_id=self.stripe_item_id,
-            prorate=self.prorate,
-            quantity=self.quantity,
-        )
+    discount_ids: list[UUID] = Field(default_factory=list)
 
     def to_membership_info(self) -> MembershipInfo:
         """Extract MembershipInfo for linked discount calc."""

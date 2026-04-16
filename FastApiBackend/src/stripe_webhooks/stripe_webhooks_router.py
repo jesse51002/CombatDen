@@ -4,13 +4,16 @@ import logging
 
 import stripe
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 
 from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.stripe_webhooks.schema.stripe_webhooks_schema import StripeWebhookAck
 from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
+)
+from src.stripe_webhooks.stripe_webhooks_exceptions import (
+    SubscriptionItemPendingError,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,6 +44,7 @@ stripe_webhooks_router = APIRouter(
 @inject
 async def receive_stripe_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     service: StripeWebhooksService = Depends(Provide[DependencyInjector.stripe_webhooks_service]),
 ) -> StripeWebhookAck:
     """Verify a Stripe webhook signature and dispatch it to a handler.
@@ -84,6 +88,16 @@ async def receive_stripe_webhook(
 
     try:
         await service.handle_event(event_dict)
+    except SubscriptionItemPendingError:
+        logger.warning(
+            "Stripe webhook deferred to background retry "
+            "(subscription item not yet visible): "
+            "event_id=%s event_type=%s",
+            event_dict.get("id"),
+            event_dict.get("type"),
+        )
+        background_tasks.add_task(service.retry_pending_event, event_dict)
+        return StripeWebhookAck(received=True)
     except Exception:
         logger.error(
             "Stripe webhook handler failed: event_id=%s event_type=%s",

@@ -1,7 +1,7 @@
 CREATE TABLE membership_plan_prices_unfiltered (
     price_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     plan_id UUID NOT NULL CONSTRAINT fk_plan_price_plan REFERENCES membership_plans_unfiltered(plan_id),
-    gym_id UUID NOT NULL CONSTRAINT fk_plan_price_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_plan_price_gym REFERENCES gyms_unfiltered(gym_id),
     stripe_price_id VARCHAR,
     price INTEGER NOT NULL CHECK (price >= 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,

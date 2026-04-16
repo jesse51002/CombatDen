@@ -7,6 +7,19 @@
 - Don't assume intent — confirm with the user when the spec is unclear or has multiple valid interpretations
 - Better to ask upfront than to build the wrong thing
 
+**NEVER Write Tests Around Production Bugs**
+- If a test fails because production code is broken, **fix the production code** — do not reshape the test to pass against the broken path
+- If you cannot fix the production code in the same change (scope, unknowns, waiting on approval), **stop and surface the bug to the user**. Do not ship a test that silently accommodates a known defect
+- Tell-tale patterns that mean you are writing around a bug — never do any of these:
+  - Calling the same service method twice ("force a settle sync", "re-run so the writeback is visible") when the contract says once should be enough
+  - Writing directly to `_unfiltered` tables with raw SQL to set up state that a service call was supposed to produce
+  - Substituting a lower-level path for the documented flow (e.g. flipping a column via SQL because the real cancel/update path is broken)
+  - `pytest.mark.xfail` or `pytest.mark.skip` with a reason that points at a production line number instead of an external constraint
+  - Loosening an assertion ("either 7500 or 7600 is fine") when the actual root cause is a bug on our side, not genuine non-determinism from a third party
+  - Docstrings that say "since X doesn't actually Y, we do Z instead" — if you catch yourself writing that comment, file the bug instead
+- When a test discovers a production bug, the correct workflow is: (1) reproduce, (2) **write the test against the correct behavior so it fails loudly**, (3) fix production, (4) watch the test turn green. Not: (1) reproduce, (2) reshape the test until it passes.
+- Regression guards for *already-fixed* bugs are fine and encouraged — the distinction is that the production code is correct now and the test locks it in. A test shaped around a *live* bug is not a regression guard, it is camouflage.
+
 ## General Principles
 
 **SOLID Principles**

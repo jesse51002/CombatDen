@@ -24,6 +24,7 @@ from src.payments.schema.payments_members_schema import (
 from schema.membership_plan import DurationUnit, PlanType
 
 from tests.helpers.data_factory import create_payment_method
+from tests.helpers.stripe_assertions import _coerce_coupon_id
 
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -82,6 +83,14 @@ async def test_create_subscription_single_item(
     assert len(resp.items) == 1
     assert resp.items[0].stripe_price_id == price_id
 
+    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+        resp.stripe_subscription_id,
+        options=connect_opts,
+    )
+    assert sub.status == "active"
+    assert len(sub["items"].data) == 1
+    assert sub["items"].data[0].price.id == price_id
+
 
 async def test_create_subscription_with_discount(
     subscription_service, members_service, membership_service,
@@ -115,6 +124,25 @@ async def test_create_subscription_with_discount(
     assert resp.status == "active"
     assert len(resp.discounts) >= 1
 
+    # Independent: retrieve the subscription with discounts expanded
+    # and verify the coupon is attached. Stripe's `Subscription.discounts`
+    # is a list whose elements are either raw discount ids (strings)
+    # or expanded Discount objects with `.coupon` pointing at a Coupon.
+    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+        resp.stripe_subscription_id,
+        options=connect_opts,
+        params={"expand": ["discounts"]},
+    )
+    sub_coupon_ids: set[str] = set()
+    for disc in sub.discounts or []:
+        coupon_id = _coerce_coupon_id(disc)
+        if coupon_id is not None:
+            sub_coupon_ids.add(coupon_id)
+    assert coupon.stripe_coupon_id in sub_coupon_ids, (
+        f"Expected coupon {coupon.stripe_coupon_id} on subscription "
+        f"{resp.stripe_subscription_id}, got {sub_coupon_ids}"
+    )
+
 
 async def test_update_subscription_add_item(
     subscription_service, members_service, membership_service,
@@ -145,11 +173,18 @@ async def test_update_subscription_add_item(
                 ),
                 PaymentsSubscriptionDesiredItem(stripe_price_id=price2),
             ],
+            proration_behavior="none",
         ),
         stripe_account_id,
     )
 
     assert len(resp.items) == 2
+
+    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+        created.stripe_subscription_id,
+        options=connect_opts,
+    )
+    assert len(sub["items"].data) == 2
 
 
 async def test_update_subscription_remove_item(
@@ -185,12 +220,20 @@ async def test_update_subscription_remove_item(
                     stripe_item_id=keep_item.stripe_subscription_item_id,
                 ),
             ],
+            proration_behavior="none",
         ),
         stripe_account_id,
     )
 
     assert len(resp.items) == 1
     assert resp.items[0].stripe_price_id == keep_item.stripe_price_id
+
+    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+        created.stripe_subscription_id,
+        options=connect_opts,
+    )
+    assert len(sub["items"].data) == 1
+    assert sub["items"].data[0].price.id == keep_item.stripe_price_id
 
 
 async def test_cancel_subscription_immediately(
@@ -219,6 +262,12 @@ async def test_cancel_subscription_immediately(
     )
 
     assert resp.status == "canceled"
+
+    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+        created.stripe_subscription_id,
+        options=connect_opts,
+    )
+    assert sub.status == "canceled"
 
 
 async def test_cancel_at_period_end(
@@ -249,6 +298,13 @@ async def test_cancel_at_period_end(
     assert resp.status == "active"
     assert resp.cancel_at_period_end is True
 
+    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+        created.stripe_subscription_id,
+        options=connect_opts,
+    )
+    assert sub.status == "active"
+    assert sub.cancel_at_period_end is True
+
 
 async def test_freeze_subscription(
     subscription_service, members_service, membership_service,
@@ -276,6 +332,12 @@ async def test_freeze_subscription(
 
     assert resp.stripe_subscription_id == created.stripe_subscription_id
     assert resp.pause_collection_behavior is not None
+
+    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+        created.stripe_subscription_id,
+        options=connect_opts,
+    )
+    assert sub.pause_collection is not None
 
 
 async def test_unfreeze_subscription(
@@ -310,6 +372,13 @@ async def test_unfreeze_subscription(
 
     assert resp.status == "active"
 
+    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+        created.stripe_subscription_id,
+        options=connect_opts,
+    )
+    assert sub.status == "active"
+    assert sub.pause_collection is None
+
 
 async def test_preview_create_subscription(
     subscription_service, members_service, membership_service,
@@ -320,10 +389,20 @@ async def test_preview_create_subscription(
     )
     price_id = await _setup_price(membership_service, stripe_account_id)
 
+    # prorate=False so the preview reflects a plain full-cycle
+    # invoice at the anchor date (no partial-period proration).
+    # Default prorate=True would trigger ``always_invoice`` and
+    # return the prorated partial-period amount instead, which
+    # depends on wall-clock time and is not deterministic here.
     resp = await subscription_service.preview_create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
-            items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
+            items=[
+                PaymentsSubscriptionDesiredItem(
+                    stripe_price_id=price_id,
+                    prorate=False,
+                ),
+            ],
         ),
         stripe_account_id,
     )

@@ -14,6 +14,12 @@ family_group AS (
     CROSS JOIN primary_id pi
     WHERE p.crm_user_id = pi.id
        OR p.account_linked_to_id = pi.id
+),
+latest_memberships AS (
+    SELECT DISTINCT ON (crm_user_id, gym_id, plan_id) *
+    FROM member_memberships_status
+    ORDER BY crm_user_id, gym_id, plan_id,
+             start_date DESC, created_at DESC
 )
 SELECT
     p.crm_user_id,
@@ -30,6 +36,7 @@ SELECT
     p.last_class,
     p.points_balance,
     p.account_linked_to_id,
+    p.total_monthly_recurring_price,
     m.plan_id,
     m.discount_ids,
     m.status       AS membership_status,
@@ -42,22 +49,23 @@ SELECT
     m.total_price,
     mp.plan_name,
     mp.plan_type,
-    mp.base_cost,
+    mpp.price     AS base_cost,
     mp.duration_amount,
-    mp.duration_unit,
-    mp.additional_member_discount
+    mp.duration_unit
 FROM user_gym_profiles p
-LEFT JOIN member_memberships_status m
+LEFT JOIN latest_memberships m
     ON p.crm_user_id = m.crm_user_id
     AND p.gym_id = m.gym_id
 LEFT JOIN membership_plans mp
     ON m.plan_id = mp.plan_id
     AND m.gym_id = mp.gym_id
+LEFT JOIN membership_plan_prices mpp
+    ON m.price_id = mpp.price_id
+    AND m.gym_id = mpp.gym_id
 JOIN gyms g ON p.gym_id = g.gym_id
 WHERE p.crm_user_id IN (SELECT crm_user_id FROM family_group)
 ORDER BY
-    p.crm_user_id = :crm_user_id DESC,
-    CASE m.status 
+    CASE m.status
         WHEN 'active' THEN 1
         WHEN 'frozen' THEN 2
         WHEN 'ended' THEN 3 

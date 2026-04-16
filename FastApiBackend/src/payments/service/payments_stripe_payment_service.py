@@ -1,16 +1,22 @@
 import logging
 
+import stripe
 from stripe.params._invoice_create_params import InvoiceCreateParams
 from stripe.params._invoice_create_preview_params import (
     InvoiceCreatePreviewParams,
     InvoiceCreatePreviewParamsInvoiceItem,
 )
 from stripe.params._invoice_item_create_params import InvoiceItemCreateParams
+from stripe.params._invoice_list_params import InvoiceListParams
+from stripe.params._invoice_pay_params import InvoicePayParams
+from stripe.params._invoice_update_params import InvoiceUpdateParams
 from stripe.params._payment_intent_create_params import (
     PaymentIntentCreateParams,
 )
 from stripe.params._refund_create_params import RefundCreateParams
 
+from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
@@ -22,6 +28,10 @@ from src.payments.schema.payments_payment_schema import (
     PaymentsRefundRequest,
     PaymentsRefundResponse,
 )
+from src.payments.service.cash_constants import (
+    CRM_PAID_WITH_CASH_METADATA_KEY,
+    CRM_PAID_WITH_CASH_METADATA_VALUE,
+)
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_mappers import map_invoice_preview
 from src.payments.service.payments_stripe_members_service import (
@@ -30,6 +40,9 @@ from src.payments.service.payments_stripe_members_service import (
 from src.payments.service.payments_stripe_price_service import (
     PaymentsStripePriceService,
 )
+
+INVOICE_STATUS_OPEN = "open"
+SUBSCRIPTION_OPEN_INVOICE_LIMIT = 1
 
 logger = logging.getLogger(__name__)
 
@@ -143,10 +156,14 @@ class PaymentsStripePaymentService:
             stripe_account_id,
         )
 
+        invoice_metadata: dict[str, str] = dict(request.metadata or {})
+        if request.paid_out_of_band:
+            invoice_metadata[CRM_PAID_WITH_CASH_METADATA_KEY] = CRM_PAID_WITH_CASH_METADATA_VALUE
+
         invoice = await self._stripe.v1.invoices.create_async(
             params=InvoiceCreateParams(
                 customer=request.stripe_customer_id,
-                metadata=request.metadata,
+                metadata=invoice_metadata,
                 auto_advance=False,
             ),
             options=opts,
@@ -169,8 +186,12 @@ class PaymentsStripePaymentService:
         # Zero-amount invoices are auto-marked as paid at finalization,
         # so calling pay_async again raises "Invoice is already paid".
         if invoice.status != "paid":
+            pay_params = InvoicePayParams()
+            if request.paid_out_of_band:
+                pay_params["paid_out_of_band"] = True
             invoice = await self._stripe.v1.invoices.pay_async(
                 invoice.id,
+                params=pay_params,
                 options=opts,
             )
 
@@ -268,3 +289,86 @@ class PaymentsStripePaymentService:
             amount=refund.amount,
             status=refund.status,
         )
+
+    # ── Pay Out of Band ──────────────────────────────────────────
+
+    async def pay_open_subscription_invoice_out_of_band(
+        self,
+        stripe_subscription_id: str,
+        stripe_account_id: str,
+    ) -> str:
+        """Mark a subscription's currently-open invoice as paid via cash.
+
+        Finds the single open invoice belonging to the subscription
+        and calls ``invoices.pay`` with ``paid_out_of_band=True``.
+        Stripe fires the normal ``invoice.paid`` webhook, which
+        handles the CRM write.
+
+        Args:
+            stripe_subscription_id: The subscription whose open
+                invoice should be marked paid.
+            stripe_account_id: The gym's Stripe Connect account ID.
+
+        Returns:
+            The Stripe invoice id that was marked paid.
+
+        Raises:
+            PaymentsResourceNotFoundError: If the subscription or
+                open invoice cannot be found in Stripe.
+            ValueError: If the subscription has no open invoice.
+        """
+        opts = self._client.connect_opts(stripe_account_id)
+
+        list_params = InvoiceListParams(
+            subscription=stripe_subscription_id,
+            status=INVOICE_STATUS_OPEN,
+            limit=SUBSCRIPTION_OPEN_INVOICE_LIMIT,
+        )
+        try:
+            invoice_list = await self._stripe.v1.invoices.list_async(
+                params=list_params,
+                options=opts,
+            )
+        except stripe.InvalidRequestError as exc:
+            raise PaymentsResourceNotFoundError(
+                f"Subscription {stripe_subscription_id} not found",
+                resource_id=stripe_subscription_id,
+                resource_type=StripeResourceType.subscription,
+            ) from exc
+
+        invoices = invoice_list.data or []
+        if not invoices:
+            raise ValueError(f"No open invoice for subscription {stripe_subscription_id}")
+
+        invoice = invoices[0]
+
+        # Tag the invoice as cash so the ``invoice.paid`` webhook
+        # can write ``payment_method_type='cash'`` on the CRM
+        # charge row. Stripe merges metadata on update, so any
+        # pre-existing keys (e.g. crm_user_id) are preserved.
+        await self._stripe.v1.invoices.update_async(
+            invoice.id,
+            params=InvoiceUpdateParams(
+                metadata={
+                    CRM_PAID_WITH_CASH_METADATA_KEY: (CRM_PAID_WITH_CASH_METADATA_VALUE),
+                },
+            ),
+            options=opts,
+        )
+
+        pay_params = InvoicePayParams()
+        pay_params["paid_out_of_band"] = True
+        try:
+            await self._stripe.v1.invoices.pay_async(
+                invoice.id,
+                params=pay_params,
+                options=opts,
+            )
+        except stripe.InvalidRequestError as exc:
+            raise PaymentsResourceNotFoundError(
+                f"Invoice {invoice.id} not found",
+                resource_id=invoice.id,
+                resource_type=StripeResourceType.invoice,
+            ) from exc
+
+        return invoice.id

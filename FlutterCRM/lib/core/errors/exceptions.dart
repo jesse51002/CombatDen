@@ -34,10 +34,28 @@ class EmailNotConfirmedException extends AuthException {
 /// Thrown when backend returns an error
 class ServerException implements Exception {
   final String message;
-  const ServerException(this.message);
+  final int? statusCode;
+  final String? detail;
+  const ServerException(
+    this.message, {
+    this.statusCode,
+    this.detail,
+  });
 
   @override
   String toString() => message;
+}
+
+/// Thrown by the gym repository when the backend
+/// returns a `409 Conflict` on gym creation. The
+/// `detail` string is part of the API contract and
+/// must be switched on by the caller to decide UX.
+class GymConflictException implements Exception {
+  final String detail;
+  const GymConflictException(this.detail);
+
+  @override
+  String toString() => 'GymConflictException: $detail';
 }
 
 /// Thrown when network request fails

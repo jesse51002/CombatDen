@@ -21,6 +21,9 @@ from src.members.service.management.members_management_create import (
 from src.members.service.management.members_management_invoices import (
     MembersManagementInvoices,
 )
+from src.members.service.management.members_management_linked import (
+    MembersManagementLinked,
+)
 from src.members.service.management.members_management_update import (
     MembersManagementUpdate,
 )
@@ -30,6 +33,9 @@ from src.payments.schema.payments_invoice_schema import (
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
+    from src.member_memberships.service.membership_payment_sync_service import (
+        MembershipPaymentSyncService,
+    )
     from src.payments.service.payments_stripe_members_service import (
         PaymentsStripeMembersService,
     )
@@ -39,18 +45,24 @@ class MembersManagementService:
     """Member management operations (facade).
 
     Delegates to focused sub-services for create, update,
-    and invoices operations.
+    linked-account, and invoices operations.
     """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
         payments_members_service: PaymentsStripeMembersService,
+        payment_sync_service: MembershipPaymentSyncService,
     ) -> None:
         deps = (db_pool, payments_members_service)
         self._create = MembersManagementCreate(*deps)
         self._update = MembersManagementUpdate(*deps)
         self._invoices = MembersManagementInvoices(*deps)
+        self._linked = MembersManagementLinked(
+            db_pool,
+            payments_members_service,
+            payment_sync_service,
+        )
 
     # ── Create ─────────────────────────────────────────────────
 
@@ -85,6 +97,26 @@ class MembersManagementService:
     ) -> MembersManagementResponse:
         """Remove a member's payment card."""
         return await self._update.unlink_payment(crm_user_id)
+
+    # ── Linked Account ─────────────────────────────────────────
+
+    async def link_account(
+        self,
+        crm_user_id: UUID,
+        parent_crm_user_id: UUID,
+    ) -> MembersManagementResponse:
+        """Link an existing member to a paying parent account."""
+        return await self._linked.link_account(
+            crm_user_id,
+            parent_crm_user_id,
+        )
+
+    async def unlink_account(
+        self,
+        crm_user_id: UUID,
+    ) -> MembersManagementResponse:
+        """Unlink a member from their paying parent account."""
+        return await self._linked.unlink_account(crm_user_id)
 
     # ── Invoices ───────────────────────────────────────────────
 

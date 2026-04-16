@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.handlers.stripe_time import stripe_ts_to_datetime
+from src.stripe_webhooks.stripe_webhooks_exceptions import (
+    SubscriptionItemPendingError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +46,17 @@ class InvoicePaymentFailedHandler:
 
         crm_user_id = await self._resolve_crm_user_id(session, invoice, gym_id)
         if crm_user_id is None:
-            logger.warning(
-                "invoice.payment_failed: no membership matched any line item "
-                "(stripe_invoice_id=%s, gym_id=%s); skipping",
-                stripe_invoice_id,
-                gym_id,
-            )
+            subscription_item_ids = [
+                line["subscription_item"]
+                for line in self._lines(invoice)
+                if line.get("subscription_item")
+            ]
+            if subscription_item_ids:
+                raise SubscriptionItemPendingError(
+                    stripe_invoice_id=stripe_invoice_id,
+                    gym_id=str(gym_id),
+                    subscription_item_ids=subscription_item_ids,
+                )
             return
 
         invoice_row = await self._upsert_invoice(

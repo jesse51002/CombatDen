@@ -1,7 +1,7 @@
 CREATE TABLE gym_class_exceptions (
     exception_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     schedule_id UUID NOT NULL CONSTRAINT fk_exception_schedule_id REFERENCES gym_class_schedules(schedule_id),
-    gym_id UUID NOT NULL CONSTRAINT fk_exception_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_exception_gym REFERENCES gyms_unfiltered(gym_id),
     original_date DATE NOT NULL,
     is_cancelled BOOLEAN,
     new_class_time TIME,

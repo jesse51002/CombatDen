@@ -4,7 +4,7 @@
 -- current point_cost may change later).
 CREATE TABLE user_gym_reward_redemptions (
     redemption_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    gym_id UUID NOT NULL CONSTRAINT fk_redemption_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_redemption_gym REFERENCES gyms_unfiltered(gym_id),
     crm_user_id UUID NOT NULL,
     reward_id UUID NOT NULL CONSTRAINT fk_redemption_reward REFERENCES gym_rewards(reward_id),
     point_cost INTEGER NOT NULL CHECK (point_cost >= 0),

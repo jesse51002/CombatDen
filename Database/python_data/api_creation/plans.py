@@ -14,6 +14,7 @@ import uuid
 from dataclasses import dataclass
 
 from api_client import GymApiClient
+from supabase import Client
 
 
 @dataclass
@@ -89,16 +90,28 @@ PLAN_TEMPLATES = [
 
 def create_all(
     api: GymApiClient,
+    client: Client,
     gym_id: uuid.UUID,
     count: int,
 ) -> list[PlanRecord]:
     """Create `count` plans for one gym via the backend API.
 
-    Returns one PlanRecord per plan, in the order created.
+    Returns one PlanRecord per plan, in the order created. Idempotent:
+    if a plan with the template's name already exists for this gym, we
+    reuse it instead of POSTing again (which would call Stripe).
     """
+    # Import here to avoid a circular import (upsert imports PlanRecord).
+    from api_creation.upsert import find_plan
+
     selected = random.sample(PLAN_TEMPLATES, min(count, len(PLAN_TEMPLATES)))
     records: list[PlanRecord] = []
     for idx, tmpl in enumerate(selected):
+        existing = find_plan(client, gym_id, tmpl["plan_name"])
+        if existing is not None:
+            existing.handle = f"plan{idx}"
+            records.append(existing)
+            continue
+
         payload: dict = {
             "gym_id": str(gym_id),
             "plan_name": tmpl["plan_name"],

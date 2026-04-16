@@ -1,6 +1,11 @@
-"""Integration tests for PaymentsStripeDiscountService."""
+"""Integration tests for PaymentsStripeDiscountService.
+
+Every success path independently re-fetches the coupon from Stripe
+to catch response-mapper drift (service claims X, Stripe says Y).
+"""
 
 import pytest
+import stripe
 
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_discount_schema import (
@@ -10,7 +15,12 @@ from src.payments.schema.payments_discount_schema import (
 from src.payments.schema.payments_enums import StripeCouponDuration
 
 
-async def test_create_percentage_discount(discount_service, stripe_account_id):
+async def test_create_percentage_discount(
+    discount_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+):
     resp = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
             discount_name="10% Off",
@@ -27,8 +37,22 @@ async def test_create_percentage_discount(discount_service, stripe_account_id):
     assert resp.valid is True
     assert resp.duration == StripeCouponDuration.forever
 
+    coupon = await stripe_client.client.v1.coupons.retrieve_async(
+        resp.stripe_coupon_id,
+        options=connect_opts,
+    )
+    assert coupon.valid is True
+    assert coupon.percent_off == 10.0
+    assert coupon.amount_off is None
+    assert coupon.duration == "forever"
 
-async def test_create_amount_discount(discount_service, stripe_account_id):
+
+async def test_create_amount_discount(
+    discount_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+):
     resp = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
             discount_name="$5 Off",
@@ -44,8 +68,22 @@ async def test_create_amount_discount(discount_service, stripe_account_id):
     assert resp.currency == "usd"
     assert resp.duration == StripeCouponDuration.once
 
+    coupon = await stripe_client.client.v1.coupons.retrieve_async(
+        resp.stripe_coupon_id,
+        options=connect_opts,
+    )
+    assert coupon.amount_off == 500
+    assert coupon.percent_off is None
+    assert coupon.currency == "usd"
+    assert coupon.duration == "once"
 
-async def test_update_discount_name(discount_service, stripe_account_id):
+
+async def test_update_discount_name(
+    discount_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+):
     created = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
             discount_name="Original Name",
@@ -66,8 +104,21 @@ async def test_update_discount_name(discount_service, stripe_account_id):
     assert resp.name == "Updated Name"
     assert resp.percentage_off == 15.0
 
+    # Stripe allows updating the name in place on a coupon — verify.
+    coupon = await stripe_client.client.v1.coupons.retrieve_async(
+        created.stripe_coupon_id,
+        options=connect_opts,
+    )
+    assert coupon.name == "Updated Name"
+    assert coupon.percent_off == 15.0
 
-async def test_delete_discount(discount_service, stripe_account_id):
+
+async def test_delete_discount(
+    discount_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+):
     created = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
             discount_name="Delete Me",
@@ -82,10 +133,18 @@ async def test_delete_discount(discount_service, stripe_account_id):
         stripe_account_id,
     )
 
+    # Service layer must see it as gone.
     with pytest.raises(PaymentsResourceNotFoundError):
         opts = discount_service._client.connect_opts(stripe_account_id)
         await discount_service.retrieve_discount(
             created.stripe_coupon_id, opts,
+        )
+
+    # Independent: raw Stripe client must also 404.
+    with pytest.raises(stripe.InvalidRequestError):
+        await stripe_client.client.v1.coupons.retrieve_async(
+            created.stripe_coupon_id,
+            options=connect_opts,
         )
 
 

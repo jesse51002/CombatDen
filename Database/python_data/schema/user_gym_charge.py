@@ -1,6 +1,5 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Optional
 from uuid import UUID
 
 from . import SeedModel
@@ -26,9 +25,9 @@ class UserGymChargeCreate(SeedModel):
     status: ChargeStatus
     amount: int  # signed: payment >= 0, refund <= 0
     currency: str = "usd"
-    payment_method_type: Optional[str] = None
-    stripe_charge_id: Optional[str] = None
-    stripe_refund_id: Optional[str] = None
-    refunds_charge_id: Optional[UUID] = None
-    charge_time: Optional[datetime] = None
-    stripe_event_payload: Optional[dict] = None
+    payment_method_type: str | None = None
+    stripe_charge_id: str | None = None
+    stripe_refund_id: str | None = None
+    refunds_charge_id: UUID | None = None
+    charge_time: datetime | None = None
+    stripe_event_payload: dict | None = None

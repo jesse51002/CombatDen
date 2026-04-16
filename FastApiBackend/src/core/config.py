@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str
     stripe_connect_webhook_secret: str
 
+    # Stripe Connect Express onboarding
+    stripe_connect_refresh_url: str
+    stripe_connect_return_url: str
+    stripe_connect_express_country: str = "US"
+
     # Database (direct Postgres connection)
     database_url: str
     db_pool_size: int = 10

@@ -5,7 +5,7 @@
 CREATE TABLE member_memberships_unfiltered (
     item_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     crm_user_id UUID NOT NULL,
-    gym_id UUID NOT NULL CONSTRAINT fk_membership_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_membership_gym REFERENCES gyms_unfiltered(gym_id),
     plan_id UUID NOT NULL,
     price_id UUID NOT NULL CONSTRAINT fk_membership_price REFERENCES membership_plan_prices_unfiltered(price_id),
     start_date DATE NOT NULL,

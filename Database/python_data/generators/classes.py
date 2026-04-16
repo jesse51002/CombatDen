@@ -104,9 +104,7 @@ def generate(
         minute = random.choice([0, 15, 30, 45])
 
         # Pick recurring unit
-        recurring_unit = random.choices(
-            ["weekly", "daily", "monthly"], weights=[80, 10, 10]
-        )[0]
+        recurring_unit = random.choices(["weekly", "daily", "monthly"], weights=[80, 10, 10])[0]
 
         day_flags = {d: False for d in DAYS}
         if recurring_unit == "daily":
@@ -133,9 +131,7 @@ def generate(
         if random.random() < 0.7:
             max_capacity = random.choice([10, 15, 20, 25, 30])
 
-        allowed_plans = (
-            [plan_by_id[pid] for pid in allowed_plan_ids] if allowed_plan_ids else None
-        )
+        allowed_plans = [plan_by_id[pid] for pid in allowed_plan_ids] if allowed_plan_ids else None
         short_term = _is_short_term_only(allowed_plans)
 
         # Schedule start goes back 200 days to cover membership window (180 days).
@@ -205,9 +201,7 @@ def generate(
                         ),
                         new_instructor_id=(
                             random.choice(trainer_ids)
-                            if not is_cancelled
-                            and trainer_ids
-                            and random.random() < 0.5
+                            if not is_cancelled and trainer_ids and random.random() < 0.5
                             else None
                         ),
                     )
@@ -236,9 +230,7 @@ def generate_logs(
         memberships_by_user.setdefault(m.crm_user_id, []).append(m)
 
     # Index profiles for parent freeze lookup (linked accounts inherit freeze)
-    profile_by_id: dict[uuid.UUID, UserGymProfileCreate] = {
-        p.crm_user_id: p for p in profiles
-    }
+    profile_by_id: dict[uuid.UUID, UserGymProfileCreate] = {p.crm_user_id: p for p in profiles}
 
     for profile in profiles:
         user_memberships = memberships_by_user.get(profile.crm_user_id)
@@ -246,10 +238,7 @@ def generate_logs(
             continue
 
         # Linked accounts inherit freeze from their parent
-        if (
-            profile.account_linked_to_id
-            and profile.account_linked_to_id in profile_by_id
-        ):
+        if profile.account_linked_to_id and profile.account_linked_to_id in profile_by_id:
             freeze_profile = profile_by_id[profile.account_linked_to_id]
         else:
             freeze_profile = profile
@@ -285,9 +274,7 @@ def generate_logs(
             for _ in range(num_logs):
                 # Pick a random day within the active window, avoiding frozen period
                 for _attempt in range(10):
-                    days_offset = random.randint(
-                        0, (window_end - window_start).days - 1
-                    )
+                    days_offset = random.randint(0, (window_end - window_start).days - 1)
                     log_date = window_start + timedelta(days=days_offset)
                     # Skip if inside frozen period
                     if (

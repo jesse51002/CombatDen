@@ -50,7 +50,7 @@ class DiscountInfo(BaseModel):
     discount_name: str
     discount_type: str
     percentage_off: float | None = None
-    dollar_off: float | None = None
+    dollar_off: int | None = None
     end_date: date | None = None
 
 
@@ -65,12 +65,10 @@ class MembershipInfo(BaseModel):
     plan_name: str
     plan_type: PlanType | None = None
     status: MembershipDbStatus
-    base_cost: float
+    base_cost: int
     duration_amount: int
     duration_unit: str
-    total_cost: float
-    cost_formula: str | None = None
-    additional_member_discount: float | None = None
+    total_price: int
     last_paid_date: date | None = None
     next_due_date: date | None = None
     start_date: date
@@ -138,6 +136,7 @@ class MemberDetailResponse(BaseModel):
     account_status: str | None = None
     membership_overview: str
     linked_to_account: UUID | None = None
+    total_monthly_recurring_price: int
     total_membership_count: int
     personal_info: PersonalInfo
     linked_accounts: list[LinkedAccount] = []

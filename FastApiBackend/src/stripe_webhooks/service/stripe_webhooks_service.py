@@ -1,5 +1,6 @@
 """Dispatcher for Stripe webhook events."""
 
+import asyncio
 import logging
 from typing import Any
 from uuid import UUID
@@ -10,6 +11,9 @@ from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
+from src.stripe_webhooks.service.handlers.account_updated_handler import (
+    AccountUpdatedHandler,
+)
 from src.stripe_webhooks.service.handlers.charge_refunded_handler import (
     ChargeRefundedHandler,
 )
@@ -19,12 +23,16 @@ from src.stripe_webhooks.service.handlers.invoice_paid_handler import (
 from src.stripe_webhooks.service.handlers.invoice_payment_failed_handler import (
     InvoicePaymentFailedHandler,
 )
+from src.stripe_webhooks.stripe_webhooks_exceptions import (
+    SubscriptionItemPendingError,
+)
 
 logger = logging.getLogger(__name__)
 
 EVENT_INVOICE_PAID = "invoice.paid"
 EVENT_INVOICE_PAYMENT_FAILED = "invoice.payment_failed"
 EVENT_CHARGE_REFUNDED = "charge.refunded"
+EVENT_ACCOUNT_UPDATED = "account.updated"
 
 
 class StripeWebhooksService:
@@ -43,12 +51,14 @@ class StripeWebhooksService:
         invoice_paid_handler: InvoicePaidHandler,
         invoice_payment_failed_handler: InvoicePaymentFailedHandler,
         charge_refunded_handler: ChargeRefundedHandler,
+        account_updated_handler: AccountUpdatedHandler,
     ) -> None:
         self._db_pool = db_pool
         self._event_log = event_log
         self._invoice_paid = invoice_paid_handler
         self._invoice_payment_failed = invoice_payment_failed_handler
         self._charge_refunded = charge_refunded_handler
+        self._account_updated = account_updated_handler
 
     async def handle_event(self, event: dict[str, Any]) -> None:
         """Dispatch a verified Stripe event.
@@ -95,6 +105,47 @@ class StripeWebhooksService:
 
             await self._dispatch(session, event, event_type, gym_id)
 
+    async def retry_pending_event(
+        self,
+        event: dict[str, Any],
+        max_attempts: int = 3,
+        delay: float = 10.0,
+    ) -> None:
+        """Retry processing a webhook event whose subscription item was not yet visible.
+
+        Called as a background task after the router returns 200 to Stripe.
+        Retries ``handle_event`` up to *max_attempts* times with *delay*
+        seconds between each attempt.  On success the event is logged in the
+        idempotency table normally.  If all retries are exhausted the Stripe
+        write genuinely failed and we log an error.
+        """
+        event_id = event.get("id")
+        for attempt in range(1, max_attempts + 1):
+            await asyncio.sleep(delay)
+            try:
+                await self.handle_event(event)
+                logger.info(
+                    "Background retry succeeded on attempt %d/%d: event_id=%s",
+                    attempt,
+                    max_attempts,
+                    event_id,
+                )
+                return
+            except SubscriptionItemPendingError:
+                logger.info(
+                    "Background retry %d/%d still pending: event_id=%s",
+                    attempt,
+                    max_attempts,
+                    event_id,
+                )
+        logger.error(
+            "Background retry exhausted after %d attempts: event_id=%s. "
+            "Subscription item was never written — possible StripeOrphanError "
+            "or create-flow failure.",
+            max_attempts,
+            event_id,
+        )
+
     # ── Internals ──────────────────────────────────────────────
 
     async def _resolve_gym(self, stripe_account_id: str) -> UUID | None:
@@ -122,10 +173,7 @@ class StripeWebhooksService:
             await self._invoice_payment_failed.handle(session, event, gym_id)
         elif event_type == EVENT_CHARGE_REFUNDED:
             await self._charge_refunded.handle(session, event, gym_id)
+        elif event_type == EVENT_ACCOUNT_UPDATED:
+            await self._account_updated.handle(session, event, gym_id)
         else:
-            logger.info(
-                "Unhandled Stripe event type: %s (event_id=%s, gym_id=%s)",
-                event_type,
-                event.get("id"),
-                gym_id,
-            )
+            return

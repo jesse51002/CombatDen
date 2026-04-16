@@ -8,8 +8,12 @@ Verifies that a failed renewal:
     ``next_due_date`` (Stripe handles dunning, not us)
 """
 
+import pytest
 from sqlalchemy import text
 
+from src.stripe_webhooks.stripe_webhooks_exceptions import (
+    SubscriptionItemPendingError,
+)
 from tests.stripe_webhooks.event_builders import make_invoice_payment_failed_event
 
 
@@ -116,23 +120,24 @@ async def test_invoice_payment_failed_does_not_touch_membership_dates(
     assert dates["next_due_date"] is None
 
 
-async def test_invoice_payment_failed_skips_when_no_matching_membership(
+async def test_invoice_payment_failed_raises_when_subscription_items_unresolved(
     stripe_webhooks_service,
     db_pool,
     stripe_account_id,
     gym_id,
     webhook_fixture,  # gym must exist
 ):
-    """An unknown subscription_item must not explode — just skip."""
+    """Unresolved subscription items raise so a background retry is scheduled."""
     event = make_invoice_payment_failed_event(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=["si_test_unknown_failed_1"],
         amount_due=5000,
     )
 
-    await stripe_webhooks_service.handle_event(event)
+    with pytest.raises(SubscriptionItemPendingError):
+        await stripe_webhooks_service.handle_event(event)
 
-    # No invoice row — we never resolved a crm_user_id.
+    # No invoice row (transaction rolled back).
     invoice = await _fetch_invoice(db_pool, event["data"]["object"]["id"])
     assert invoice is None
 
@@ -140,7 +145,7 @@ async def test_invoice_payment_failed_skips_when_no_matching_membership(
     charges = await _fetch_failed_charges(db_pool, gym_id)
     assert charges == []
 
-    # But the event IS logged, so Stripe retries are deduped.
+    # Webhook event NOT recorded (transaction rolled back).
     async with db_pool.session() as session:
         result = await session.execute(
             text(
@@ -150,7 +155,7 @@ async def test_invoice_payment_failed_skips_when_no_matching_membership(
             {"id": event["id"]},
         )
         row = result.mappings().fetchone()
-    assert int(row["n"]) == 1
+    assert int(row["n"]) == 0
 
 
 async def test_invoice_payment_failed_is_idempotent_on_repeat(

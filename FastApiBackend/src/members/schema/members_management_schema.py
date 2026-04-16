@@ -71,6 +71,15 @@ class MembersManagementUpdateCardRequest(BaseModel):
     payment_method_id: str
 
 
+# ── Linked Account ──────────────────────────────────────────────
+
+
+class MembersManagementLinkRequest(BaseModel):
+    """Link an existing member to a paying parent account."""
+
+    parent_crm_user_id: UUID
+
+
 # ── Response ────────────────────────────────────────────────────
 
 

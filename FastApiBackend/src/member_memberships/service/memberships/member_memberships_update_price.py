@@ -61,24 +61,23 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
             crm_user_id=crm_user_id,
             plan_id=row["plan_id"],
         )
+        # Preserve the existing row's discounts across the price
+        # swap. The service-layer cancel filter drops this row out
+        # of ``memberships`` before ``aggregate_plan_discounts``
+        # runs, so the only way for its coupons to reach Stripe is
+        # to thread them explicitly through the add_item.
         add_item = SyncItem(
             stripe_price_id=new_price["stripe_price_id"],
             crm_user_id=crm_user_id,
             plan_id=row["plan_id"],
             prorate=prorate,
+            discount_ids=list(row["discount_ids"] or []),
         )
-        response = await self._payment_sync.update_payments_recurring(
+        await self._payment_sync.update_payments_recurring(
             crm_user_id,
             add_ids=[add_item],
             cancel_ids=[cancel_item],
         )
-        stripe_sub_id_after: str | None = None
-        if response:
-            self._extract_stripe_item_id(
-                response,
-                new_price["stripe_price_id"],
-            )
-            stripe_sub_id_after = response.stripe_subscription_id
 
         # ── CRM update ────────────────────────────────────
         await self._crm_update_price(
@@ -86,17 +85,6 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
             crm_user_id=crm_user_id,
             new_price_id=new_price_id,
             total_price=new_price["price"],
-        )
-
-        # ── Fan out post-discount prices to all siblings ──
-        parent = await self._payment_sync.resolve_parent(crm_user_id)
-        stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-            parent.gym_id,
-        )
-        await self._price_writeback.sync_prices_from_stripe(
-            parent_crm_user_id=parent.crm_user_id,
-            stripe_sub_id=stripe_sub_id_after,
-            stripe_account_id=stripe_account_id,
         )
 
     # ── Private ────────────────────────────────────────────────

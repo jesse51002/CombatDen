@@ -1,6 +1,5 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Optional
 from uuid import UUID
 
 from . import SeedModel
@@ -18,7 +17,7 @@ class UserGymInvoiceCreate(SeedModel):
     status: InvoiceStatus = InvoiceStatus.open
     total_amount: int
     currency: str = "usd"
-    stripe_invoice_id: Optional[str] = None
-    stripe_payment_intent_id: Optional[str] = None
-    invoice_time: Optional[datetime] = None
-    stripe_event_payload: Optional[dict] = None
+    stripe_invoice_id: str | None = None
+    stripe_payment_intent_id: str | None = None
+    invoice_time: datetime | None = None
+    stripe_event_payload: dict | None = None

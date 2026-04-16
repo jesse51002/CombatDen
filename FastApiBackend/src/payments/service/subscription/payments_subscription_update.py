@@ -43,7 +43,7 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
 
         update_params = SubscriptionUpdateParams(
             items=items,
-            proration_behavior="none",
+            proration_behavior=request.proration_behavior,
         )
         update_params["discounts"] = self._build_subscription_discounts(
             request.subscription_discounts,

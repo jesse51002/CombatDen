@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import uuid
 
-from supabase import Client
-
 from constants import HISTORY_DAYS
 from generators import history as history_generator
+from supabase import Client
 
 
 def create(client: Client, gym_id: uuid.UUID, member_count: int) -> None:

@@ -33,9 +33,6 @@ if TYPE_CHECKING:
     from src.member_memberships.service.membership_payment_sync_service import (
         MembershipPaymentSyncService,
     )
-    from src.member_memberships.service.payment_sync.price_writeback import (
-        PriceWriteback,
-    )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
@@ -50,14 +47,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self,
         db_pool: DirectDatabasePool,
         payment_sync_service: MembershipPaymentSyncService,
-        price_writeback: PriceWriteback,
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
     ) -> None:
         super().__init__(
             db_pool,
             payment_sync_service,
-            price_writeback,
             gym_stripe_service,
         )
         self._payment_service = payment_service
@@ -71,6 +66,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         discount_ids: list[UUID] | None = None,
         include_linked_discount: bool = False,
         prorate: bool = True,
+        paid_with_cash: bool = False,
     ) -> None:
         """Start a new membership for a member.
 
@@ -90,6 +86,11 @@ class MemberMembershipsStart(MemberMembershipsBase):
             include_linked_discount: Whether this member qualifies
                 for linked (family) account-level discounts.
             prorate: Whether to prorate the first charge.
+            paid_with_cash: If True, the first invoice is marked
+                paid out of band in Stripe instead of charging the
+                customer's default payment method. Cash is a
+                backup — future billing cycles still auto-charge
+                the card as normal.
 
         Raises:
             ValueError: If plan/price invalid, membership already
@@ -103,8 +104,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
         parent = await self._payment_sync.resolve_parent(crm_user_id)
         if parent.is_frozen:
             raise ValueError("Cannot start membership: account is frozen")
-
-        stripe_sub_id_after: str | None = None
 
         start_date = gym_today(parent.timezone)
         plan_type = PlanType(plan_price["plan_type"])
@@ -150,18 +149,19 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     plan_id=plan_id,
                     has_linked_discount=include_linked_discount,
                     prorate=prorate,
+                    discount_ids=discount_ids or [],
                 )
                 response = await self._payment_sync.update_payments_recurring(
                     crm_user_id,
                     add_ids=[add_item],
                     cancel_ids=[],
+                    pay_first_invoice_out_of_band=paid_with_cash,
                 )
                 if response:
                     stripe_item_id = self._extract_stripe_item_id(
                         response,
                         plan_price["stripe_price_id"],
                     )
-                    stripe_sub_id_after = response.stripe_subscription_id
                     first_item = response.items[0] if response.items else None
                     next_due_date = self._period_end_to_date(
                         first_item.current_period_end if first_item else None,
@@ -173,6 +173,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     gym_id=parent.gym_id,
                     crm_user_id=crm_user_id,
                     plan_id=plan_id,
+                    paid_with_cash=paid_with_cash,
                 )
         except Exception:
             await cleanup_pending_row(
@@ -209,17 +210,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 str(item_id),
                 str(crm_user_id),
                 next_due_date,
-            )
-
-        # ── Fan out post-discount prices to all siblings ──────
-        if is_recurring:
-            stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-                parent.gym_id,
-            )
-            await self._price_writeback.sync_prices_from_stripe(
-                parent_crm_user_id=parent.crm_user_id,
-                stripe_sub_id=stripe_sub_id_after,
-                stripe_account_id=stripe_account_id,
             )
 
     # ── Private ────────────────────────────────────────────────
@@ -360,6 +350,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         gym_id: UUID,
         crm_user_id: UUID,
         plan_id: UUID,
+        paid_with_cash: bool = False,
     ) -> str:
         """Create and pay a one-time invoice for a non-recurring plan.
 
@@ -379,6 +370,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 "plan_id": str(plan_id),
                 "type": "membership_one_time",
             },
+            paid_out_of_band=paid_with_cash,
         )
         response = await self._payment_service.create_invoice_payment(
             request,

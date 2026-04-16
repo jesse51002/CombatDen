@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 
@@ -44,33 +45,11 @@ Widget statusValue(MembershipStatus status) {
   );
 }
 
-/// Builds a cost display, optionally showing a formula.
+/// Builds a cost display from the membership's total price
+/// (stored as minor currency units).
 Widget costValue(MembershipInfo membership) {
-  if (membership.costFormula != null) {
-    return RichText(
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: '${membership.costFormula} = ',
-            style: DesignConstants.pSmall.copyWith(
-              color: DesignConstants.text2nd,
-            ),
-          ),
-          TextSpan(
-            text:
-                '\$${membership.totalCost.toStringAsFixed(0)}',
-            style: DesignConstants.h2.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
   return Text(
-    '\$${membership.totalCost.toStringAsFixed(0)}',
+    formatMinorUnits(membership.totalPrice),
     style: DesignConstants.h2.copyWith(
       fontWeight: FontWeight.w700,
     ),

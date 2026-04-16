@@ -11,6 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from src.core.dependencies import DependencyInjector
 from src.member_memberships.schema.member_memberships_schema import (
     MemberMembershipsFreezeRequest,
+    MemberMembershipsMarkPaidCashRequest,
     MemberMembershipsStartRequest,
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
@@ -290,6 +291,7 @@ async def start_membership(
             discount_ids=request.discount_ids,
             include_linked_discount=request.include_linked_discount,
             prorate=request.prorate,
+            paid_with_cash=request.paid_with_cash,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -389,4 +391,70 @@ async def update_membership_price(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update membership price",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/mark-paid-cash",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Mark a recurring membership's open invoice as paid via cash",
+    description=(
+        "Finds the currently-open Stripe invoice for the "
+        "subscription this membership belongs to and marks it as "
+        "paid out of band. No card is charged. Only applies to "
+        "recurring memberships. The existing invoice.paid webhook "
+        "writes the CRM invoice and charge rows."
+    ),
+    responses={
+        204: {"description": "Invoice marked paid successfully"},
+        400: {"description": "Not recurring, no open invoice, or invalid state"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Membership not found"},
+    },
+)
+@inject
+async def mark_membership_paid_cash(
+    request: MemberMembershipsMarkPaidCashRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> None:
+    """Mark a recurring membership's open invoice as paid via cash."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.crm_user_id, user_payload)
+
+    try:
+        await memberships_service.mark_paid_cash(
+            item_id=request.item_id,
+            crm_user_id=request.crm_user_id,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to mark membership paid via cash: item_id=%s, crm_user_id=%s",
+            request.item_id,
+            request.crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to mark membership paid via cash",
         ) from None

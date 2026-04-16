@@ -8,7 +8,7 @@ CREATE TABLE user_gym_invoice_applied_discounts (
         CONSTRAINT fk_applied_discount_invoice
         REFERENCES user_gym_invoices(invoice_id) ON DELETE CASCADE,
     gym_id UUID NOT NULL
-        CONSTRAINT fk_applied_discount_gym REFERENCES gyms(gym_id),
+        CONSTRAINT fk_applied_discount_gym REFERENCES gyms_unfiltered(gym_id),
     discount_id UUID NOT NULL,
     amount_off INTEGER NOT NULL CHECK (amount_off >= 0),
     stripe_coupon_id VARCHAR,

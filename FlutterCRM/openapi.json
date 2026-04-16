@@ -58,6 +58,324 @@
         ]
       }
     },
+    "/api/v1/discounts/": {
+      "post": {
+        "tags": [
+          "discounts"
+        ],
+        "summary": "Create a discount",
+        "description": "Creates a gym discount with a corresponding Stripe coupon.",
+        "operationId": "create_discount_api_v1_discounts__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscountCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Discount created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "502": {
+            "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "discounts"
+        ],
+        "summary": "Update a discount",
+        "description": "Updates a non-linked gym discount. If value fields changed, creates a new Stripe coupon and syncs affected memberships.",
+        "operationId": "update_discount_api_v1_discounts__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscountUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Discount updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or linked discount"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Discount not found"
+          },
+          "502": {
+            "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "discounts"
+        ],
+        "summary": "Delete a discount",
+        "description": "Soft-deletes a non-linked discount, deletes the Stripe coupon, removes it from all memberships, and syncs payments.",
+        "operationId": "delete_discount_api_v1_discounts__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "discount_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Discount Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Discount deleted successfully"
+          },
+          "400": {
+            "description": "Linked discount or invalid request"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Discount not found"
+          },
+          "502": {
+            "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/gyms/": {
+      "post": {
+        "tags": [
+          "gyms"
+        ],
+        "summary": "Create a gym + begin Stripe Connect Express onboarding",
+        "description": "Creates a gym row and its owner ``gym_employees`` record, mints a Stripe Express Connect account for the gym, and returns a short-lived (~5 minute) hosted onboarding URL. The gym row is invisible through the ``gyms`` filtered view until the Stripe account id has been attached.",
+        "operationId": "create_gym_api_v1_gyms__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GymCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Gym + Stripe account created, onboarding pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GymCreateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "409": {
+            "description": "User already owns a gym"
+          },
+          "502": {
+            "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gyms/me/onboarding": {
+      "get": {
+        "tags": [
+          "gyms"
+        ],
+        "summary": "Refresh the caller's Stripe onboarding status",
+        "description": "Looks up the caller's in-progress gym via ``gym_employees``, retrieves the connected account from Stripe, maps it to a ``pending``/``complete``/``disabled`` status, and writes back to the CRM. If the resulting status is still ``pending``, a fresh AccountLink is minted and returned so the client can re-open the hosted flow.",
+        "operationId": "get_onboarding_status_api_v1_gyms_me_onboarding_get",
+        "responses": {
+          "200": {
+            "description": "Status refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GymOnboardingStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "No gym owned by this user, or Stripe account missing"
+          },
+          "502": {
+            "description": "Stripe error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gyms/me/onboarding/link": {
+      "post": {
+        "tags": [
+          "gyms"
+        ],
+        "summary": "Mint a fresh Stripe onboarding link for the caller's gym",
+        "description": "Cheap path for the Flutter app to get a new hosted URL when the previous one expired. Only valid while the gym is in the ``pending`` state.",
+        "operationId": "new_onboarding_link_api_v1_gyms_me_onboarding_link_post",
+        "responses": {
+          "200": {
+            "description": "New onboarding link minted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GymOnboardingLinkResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "No gym owned by this user"
+          },
+          "409": {
+            "description": "Gym is not in a pending state"
+          },
+          "502": {
+            "description": "Stripe error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/members/member_details": {
       "get": {
         "tags": [
@@ -224,6 +542,1157 @@
         }
       }
     },
+    "/api/v1/members/": {
+      "post": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Create a new member",
+        "description": "Creates a new gym member. If a payment_method_id is provided, a Stripe customer is also created.",
+        "operationId": "create_member_api_v1_members__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembersManagementCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Member created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersManagementResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/members/{crm_user_id}": {
+      "put": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Update member personal info",
+        "description": "Updates a member's personal information. Does not affect card or Stripe data.",
+        "operationId": "update_member_api_v1_members__crm_user_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "crm_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Crm User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembersManagementUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Member updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersManagementResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Attempted to update immutable columns"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "404": {
+            "description": "Member not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/members/{crm_user_id}/card": {
+      "put": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Update member payment card",
+        "description": "Updates a member's payment card. Overwrites card data in the database and updates Stripe. Creates a Stripe customer if the member doesn't have one yet.",
+        "operationId": "update_member_card_api_v1_members__crm_user_id__card_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "crm_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Crm User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembersManagementUpdateCardRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Card updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersManagementResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "404": {
+            "description": "Member not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/members/{crm_user_id}/payment": {
+      "delete": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Unlink member payment",
+        "description": "Removes a member's payment card from the CRM and immediately cancels all active recurring memberships. The Stripe customer link is preserved.",
+        "operationId": "unlink_member_payment_api_v1_members__crm_user_id__payment_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "crm_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Crm User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment unlinked successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersManagementResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "404": {
+            "description": "Member not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/members/{crm_user_id}/invoices": {
+      "get": {
+        "tags": [
+          "members"
+        ],
+        "summary": "List member invoices",
+        "description": "Returns a paginated list of Stripe invoices for a member.",
+        "operationId": "list_member_invoices_api_v1_members__crm_user_id__invoices_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "crm_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Crm User Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "starting_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starting After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invoices retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentsInvoiceResponse"
+                  },
+                  "title": "Response List Member Invoices Api V1 Members  Crm User Id  Invoices Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Member has no Stripe customer"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to view this member"
+          },
+          "404": {
+            "description": "Member not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/member_memberships/": {
+      "delete": {
+        "tags": [
+          "member_memberships"
+        ],
+        "summary": "Cancel a membership",
+        "description": "Cancels a specific active membership for a member. Sets cancel_date to the membership's next_due_date, or today if next_due_date is missing or in the past.",
+        "operationId": "cancel_membership_api_v1_member_memberships__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "crm_user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Crm User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Membership cancelled successfully"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "member_memberships"
+        ],
+        "summary": "Start a new membership",
+        "description": "Creates a new membership for a member. Validates the plan/price, checks for duplicates and frozen accounts, syncs to Stripe, then inserts the CRM row.",
+        "operationId": "start_membership_api_v1_member_memberships__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberMembershipsStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Membership created successfully",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/member_memberships/freeze": {
+      "post": {
+        "tags": [
+          "member_memberships"
+        ],
+        "summary": "Freeze a member's account",
+        "description": "Freezes billing for a member's account (account-level). Accepts any family member's crm_user_id and resolves to the paying parent. Idempotent \u2014 re-freezing updates the freeze end date.",
+        "operationId": "freeze_membership_api_v1_member_memberships_freeze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberMembershipsFreezeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Account frozen successfully"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/member_memberships/unfreeze": {
+      "post": {
+        "tags": [
+          "member_memberships"
+        ],
+        "summary": "Unfreeze a member's account",
+        "description": "Resumes billing for a member's account (account-level). If not frozen, performs a no-op sync for consistency.",
+        "operationId": "unfreeze_membership_api_v1_member_memberships_unfreeze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberMembershipsUnfreezeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Account unfrozen successfully"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/member_memberships/price": {
+      "put": {
+        "tags": [
+          "member_memberships"
+        ],
+        "summary": "Update membership price",
+        "description": "Switches a membership to a different price tier. Swaps the old price for the new one in Stripe, then updates the CRM row.",
+        "operationId": "update_membership_price_api_v1_member_memberships_price_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberMembershipsUpdatePriceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Price updated successfully"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/member_memberships/mark-paid-cash": {
+      "post": {
+        "tags": [
+          "member_memberships"
+        ],
+        "summary": "Mark a recurring membership's open invoice as paid via cash",
+        "description": "Finds the currently-open Stripe invoice for the subscription this membership belongs to and marks it as paid out of band. No card is charged. Only applies to recurring memberships. The existing invoice.paid webhook writes the CRM invoice and charge rows.",
+        "operationId": "mark_membership_paid_cash_api_v1_member_memberships_mark_paid_cash_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberMembershipsMarkPaidCashRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Invoice marked paid successfully"
+          },
+          "400": {
+            "description": "Not recurring, no open invoice, or invalid state"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized to update this member"
+          },
+          "404": {
+            "description": "Membership not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/membership_plans/": {
+      "post": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "Create a membership plan",
+        "description": "Creates a membership plan with an initial price in Stripe and CRM.",
+        "operationId": "create_plan_api_v1_membership_plans__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipPlanCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Plan created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipPlanResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "502": {
+            "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "Update a membership plan",
+        "description": "Updates plan metadata in Stripe and CRM.",
+        "operationId": "update_plan_api_v1_membership_plans__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipPlanUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Plan updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipPlanResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Plan not found"
+          },
+          "502": {
+            "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "Delete a membership plan",
+        "description": "Soft-deletes a membership plan and deactivates its Stripe product.",
+        "operationId": "delete_plan_api_v1_membership_plans__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Plan deleted successfully"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Plan not found"
+          },
+          "502": {
+            "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "List membership plans",
+        "description": "Lists all non-deleted plans for a gym with their active prices.",
+        "operationId": "list_plans_api_v1_membership_plans__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plans listed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MembershipPlanResponse"
+                  },
+                  "title": "Response List Plans Api V1 Membership Plans  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/membership_plans/{plan_id}": {
+      "get": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "Get a membership plan",
+        "description": "Fetches a single plan with its active price.",
+        "operationId": "get_plan_api_v1_membership_plans__plan_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plan fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipPlanResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Plan not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/membership_plans/price": {
+      "post": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "Set plan price",
+        "description": "Creates a new price for a plan. Existing members keep their old price \u2014 use the migrate endpoints to move them.",
+        "operationId": "set_price_api_v1_membership_plans_price_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipPlanPriceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Price set successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipPlanPriceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Plan not found"
+          },
+          "502": {
+            "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/membership_plans/migrate": {
+      "post": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "Migrate specific members",
+        "description": "Re-syncs payment state for the specified members on a plan. Runs as a background task.",
+        "operationId": "migrate_members_api_v1_membership_plans_migrate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipPlanMigrateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Migration queued",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Plan not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/membership_plans/migrate-all": {
+      "post": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "Migrate all members on a plan",
+        "description": "Re-syncs payment state for ALL active members on a plan. Runs as a background task.",
+        "operationId": "migrate_all_members_api_v1_membership_plans_migrate_all_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipPlanMigrateAllRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Migration queued",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Plan not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/stripe/webhooks": {
+      "post": {
+        "tags": [
+          "stripe-webhooks"
+        ],
+        "summary": "Receive Stripe Connect webhook",
+        "description": "Receives Stripe Connect webhook events. The endpoint is unauthenticated at the HTTP layer \u2014 Stripe is authenticated via the Stripe-Signature header, verified against ``stripe_connect_webhook_secret``.",
+        "operationId": "receive_stripe_webhook_api_v1_stripe_webhooks_post",
+        "responses": {
+          "200": {
+            "description": "Event received (or deduplicated)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StripeWebhookAck"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or missing Stripe signature"
+          },
+          "500": {
+            "description": "Handler failed \u2014 Stripe should retry"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -315,6 +1784,23 @@
         ],
         "title": "AllViewRow",
         "description": "Row for the All view.\n\nIncludes contact, membership badge, and last class."
+      },
+      "ChargeKind": {
+        "type": "string",
+        "enum": [
+          "payment",
+          "refund"
+        ],
+        "title": "ChargeKind"
+      },
+      "ChargeStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "succeeded",
+          "failed"
+        ],
+        "title": "ChargeStatus"
       },
       "CheckinMembershipBreakdown": {
         "properties": {
@@ -570,6 +2056,90 @@
         "title": "DateRangeFilter",
         "description": "Filter by date range (membership start date).\n\nAttributes:\n    start_date: Start of the date range.\n    end_date: End of the date range."
       },
+      "DiscountCreateRequest": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "discount_name": {
+            "type": "string",
+            "title": "Discount Name"
+          },
+          "discount_type": {
+            "$ref": "#/components/schemas/DiscountType"
+          },
+          "percentage_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage Off"
+          },
+          "dollar_off": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dollar Off"
+          },
+          "membership_plan_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Plan Id"
+          },
+          "linked_discount_num": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Discount Num"
+          },
+          "duration": {
+            "$ref": "#/components/schemas/StripeCouponDuration"
+          },
+          "duration_in_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration In Months"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "discount_name",
+          "discount_type",
+          "duration"
+        ],
+        "title": "DiscountCreateRequest",
+        "description": "Create a new gym discount with a Stripe coupon."
+      },
       "DiscountInfo": {
         "properties": {
           "discount_id": {
@@ -599,7 +2169,7 @@
           "dollar_off": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "integer"
               },
               {
                 "type": "null"
@@ -628,6 +2198,219 @@
         ],
         "title": "DiscountInfo",
         "description": "An active discount applied to a membership."
+      },
+      "DiscountResponse": {
+        "properties": {
+          "discount_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Discount Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "discount_name": {
+            "type": "string",
+            "title": "Discount Name"
+          },
+          "discount_type": {
+            "$ref": "#/components/schemas/DiscountType"
+          },
+          "percentage_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage Off"
+          },
+          "dollar_off": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dollar Off"
+          },
+          "membership_plan_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Plan Id"
+          },
+          "linked_discount_num": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Discount Num"
+          },
+          "duration": {
+            "$ref": "#/components/schemas/StripeCouponDuration"
+          },
+          "duration_in_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration In Months"
+          },
+          "stripe_coupon_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Coupon Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "discount_id",
+          "gym_id",
+          "discount_name",
+          "discount_type",
+          "duration",
+          "created_at"
+        ],
+        "title": "DiscountResponse",
+        "description": "Response after creating, updating, or fetching a discount."
+      },
+      "DiscountType": {
+        "type": "string",
+        "enum": [
+          "preset",
+          "custom",
+          "linked"
+        ],
+        "title": "DiscountType",
+        "description": "Gym discount type."
+      },
+      "DiscountUpdateData": {
+        "properties": {
+          "discount_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Name"
+          },
+          "percentage_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage Off"
+          },
+          "dollar_off": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dollar Off"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StripeCouponDuration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duration_in_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration In Months"
+          }
+        },
+        "type": "object",
+        "title": "DiscountUpdateData",
+        "description": "Mutable discount fields. All optional \u2014 only send what changed."
+      },
+      "DiscountUpdateRequest": {
+        "properties": {
+          "discount_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Discount Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DiscountUpdateData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "discount_id",
+          "gym_id",
+          "data"
+        ],
+        "title": "DiscountUpdateRequest",
+        "description": "Update a non-linked gym discount.\n\nLinked discounts cannot be updated via this endpoint."
+      },
+      "DurationUnit": {
+        "type": "string",
+        "enum": [
+          "week",
+          "month",
+          "year"
+        ],
+        "title": "DurationUnit",
+        "description": "Billing cycle duration unit."
       },
       "FrozenViewRow": {
         "properties": {
@@ -686,6 +2469,181 @@
         "title": "FrozenViewRow",
         "description": "Row for the Frozen view.\n\nIncludes freeze period and membership price."
       },
+      "GymCreateRequest": {
+        "properties": {
+          "gym_name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Gym Name"
+          },
+          "owner_first_name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Owner First Name"
+          },
+          "owner_last_name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Owner Last Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_name",
+          "owner_first_name",
+          "owner_last_name"
+        ],
+        "title": "GymCreateRequest",
+        "description": "Payload for ``POST /api/v1/gyms/``."
+      },
+      "GymCreateResponse": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "stripe_account_id": {
+            "type": "string",
+            "title": "Stripe Account Id"
+          },
+          "stripe_onboarding_status": {
+            "type": "string",
+            "const": "pending",
+            "title": "Stripe Onboarding Status"
+          },
+          "onboarding_url": {
+            "type": "string",
+            "title": "Onboarding Url"
+          },
+          "onboarding_url_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Onboarding Url Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "stripe_account_id",
+          "stripe_onboarding_status",
+          "onboarding_url",
+          "onboarding_url_expires_at"
+        ],
+        "title": "GymCreateResponse",
+        "description": "Response for ``POST /api/v1/gyms/``."
+      },
+      "GymOnboardingLinkResponse": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "onboarding_url": {
+            "type": "string",
+            "title": "Onboarding Url"
+          },
+          "onboarding_url_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Onboarding Url Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "onboarding_url",
+          "onboarding_url_expires_at"
+        ],
+        "title": "GymOnboardingLinkResponse",
+        "description": "Response for ``POST /api/v1/gyms/me/onboarding/link``."
+      },
+      "GymOnboardingStatusResponse": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "stripe_onboarding_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "complete",
+              "disabled"
+            ],
+            "title": "Stripe Onboarding Status"
+          },
+          "onboarding_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onboarding Url"
+          },
+          "onboarding_url_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onboarding Url Expires At"
+          },
+          "details_submitted": {
+            "type": "boolean",
+            "title": "Details Submitted"
+          },
+          "charges_enabled": {
+            "type": "boolean",
+            "title": "Charges Enabled"
+          },
+          "payouts_enabled": {
+            "type": "boolean",
+            "title": "Payouts Enabled"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Reason"
+          },
+          "requirements_currently_due": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requirements Currently Due",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "stripe_onboarding_status",
+          "details_submitted",
+          "charges_enabled",
+          "payouts_enabled"
+        ],
+        "title": "GymOnboardingStatusResponse",
+        "description": "Response for ``GET /api/v1/gyms/me/onboarding``."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -698,6 +2656,65 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "LineItemRecord": {
+        "properties": {
+          "line_item_id": {
+            "type": "string",
+            "title": "Line Item Id"
+          },
+          "item_type": {
+            "$ref": "#/components/schemas/LineItemType"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          },
+          "stripe_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Product Id"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line_item_id",
+          "item_type",
+          "name",
+          "amount"
+        ],
+        "title": "LineItemRecord",
+        "description": "A single line item on an invoice."
+      },
+      "LineItemType": {
+        "type": "string",
+        "enum": [
+          "membership",
+          "custom"
+        ],
+        "title": "LineItemType"
       },
       "LinkedAccount": {
         "properties": {
@@ -793,6 +2810,10 @@
             ],
             "title": "Linked To Account"
           },
+          "total_monthly_recurring_price": {
+            "type": "integer",
+            "title": "Total Monthly Recurring Price"
+          },
           "total_membership_count": {
             "type": "integer",
             "title": "Total Membership Count"
@@ -842,6 +2863,7 @@
           "first_name",
           "last_name",
           "membership_overview",
+          "total_monthly_recurring_price",
           "total_membership_count",
           "personal_info",
           "memberships",
@@ -849,6 +2871,170 @@
         ],
         "title": "MemberDetailResponse",
         "description": "Full member detail response for the Specific Member screen."
+      },
+      "MemberMembershipsFreezeRequest": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "freeze_months": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Freeze Months"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "gym_id",
+          "freeze_months"
+        ],
+        "title": "MemberMembershipsFreezeRequest",
+        "description": "Freeze a member's account (account-level)."
+      },
+      "MemberMembershipsMarkPaidCashRequest": {
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Item Id"
+          },
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id",
+          "crm_user_id"
+        ],
+        "title": "MemberMembershipsMarkPaidCashRequest",
+        "description": "Mark a recurring membership's open invoice as paid via cash."
+      },
+      "MemberMembershipsStartRequest": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "price_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Price Id"
+          },
+          "discount_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Ids"
+          },
+          "include_linked_discount": {
+            "type": "boolean",
+            "title": "Include Linked Discount",
+            "default": false
+          },
+          "prorate": {
+            "type": "boolean",
+            "title": "Prorate",
+            "default": true
+          },
+          "paid_with_cash": {
+            "type": "boolean",
+            "title": "Paid With Cash",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "gym_id",
+          "plan_id",
+          "price_id"
+        ],
+        "title": "MemberMembershipsStartRequest",
+        "description": "Start a new membership for a member."
+      },
+      "MemberMembershipsUnfreezeRequest": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "gym_id"
+        ],
+        "title": "MemberMembershipsUnfreezeRequest",
+        "description": "Unfreeze a member's account (account-level)."
+      },
+      "MemberMembershipsUpdatePriceRequest": {
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Item Id"
+          },
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "new_price_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "New Price Id"
+          },
+          "prorate": {
+            "type": "boolean",
+            "title": "Prorate",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id",
+          "crm_user_id",
+          "new_price_id"
+        ],
+        "title": "MemberMembershipsUpdatePriceRequest",
+        "description": "Update the price of an existing membership."
       },
       "MembersListFilters": {
         "properties": {
@@ -926,6 +3112,416 @@
         "title": "MembersListView",
         "description": "Available views for the members list screen."
       },
+      "MembersManagementCreateRequest": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "emergency_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Name"
+          },
+          "emergency_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Phone"
+          },
+          "emergency_contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Email"
+          },
+          "account_linked_to_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Linked To Id"
+          },
+          "payment_method_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "first_name",
+          "last_name"
+        ],
+        "title": "MembersManagementCreateRequest",
+        "description": "Create a new gym member. Card info is optional."
+      },
+      "MembersManagementResponse": {
+        "properties": {
+          "crm_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Crm User Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "emergency_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Name"
+          },
+          "emergency_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Phone"
+          },
+          "emergency_contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Email"
+          },
+          "account_linked_to_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Linked To Id"
+          },
+          "stripe_customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Customer Id"
+          },
+          "stripe_payment_method_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Payment Method Id"
+          },
+          "card_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Brand"
+          },
+          "card_last_four": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Last Four"
+          },
+          "card_exp_month": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Exp Month"
+          },
+          "card_exp_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Exp Year"
+          }
+        },
+        "type": "object",
+        "required": [
+          "crm_user_id",
+          "gym_id",
+          "first_name",
+          "last_name"
+        ],
+        "title": "MembersManagementResponse",
+        "description": "Shared response for create, update, and update card."
+      },
+      "MembersManagementUpdateCardRequest": {
+        "properties": {
+          "payment_method_id": {
+            "type": "string",
+            "title": "Payment Method Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "payment_method_id"
+        ],
+        "title": "MembersManagementUpdateCardRequest",
+        "description": "Update a member's payment card. Overwrites DB and Stripe."
+      },
+      "MembersManagementUpdateRequest": {
+        "properties": {
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "emergency_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Name"
+          },
+          "emergency_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Phone"
+          },
+          "emergency_contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Email"
+          },
+          "account_linked_to_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Linked To Id"
+          }
+        },
+        "type": "object",
+        "title": "MembersManagementUpdateRequest",
+        "description": "Update a member's personal information. All fields optional."
+      },
       "MembershipDbStatus": {
         "type": "string",
         "enum": [
@@ -962,7 +3558,7 @@
             "$ref": "#/components/schemas/MembershipDbStatus"
           },
           "base_cost": {
-            "type": "number",
+            "type": "integer",
             "title": "Base Cost"
           },
           "duration_amount": {
@@ -973,31 +3569,9 @@
             "type": "string",
             "title": "Duration Unit"
           },
-          "total_cost": {
-            "type": "number",
-            "title": "Total Cost"
-          },
-          "cost_formula": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cost Formula"
-          },
-          "additional_member_discount": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Additional Member Discount"
+          "total_price": {
+            "type": "integer",
+            "title": "Total Price"
           },
           "last_paid_date": {
             "anyOf": [
@@ -1089,11 +3663,392 @@
           "base_cost",
           "duration_amount",
           "duration_unit",
-          "total_cost",
+          "total_price",
           "start_date"
         ],
         "title": "MembershipInfo",
         "description": "A grouped plan in the membership carousel.\n\nRepresents one unique plan across the family group,\nwith a list of which members are covered by this plan."
+      },
+      "MembershipPlanCreateRequest": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "plan_type": {
+            "$ref": "#/components/schemas/PlanType"
+          },
+          "class_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Count"
+          },
+          "duration_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Amount"
+          },
+          "duration_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public",
+            "default": true
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "plan_name",
+          "plan_type",
+          "price"
+        ],
+        "title": "MembershipPlanCreateRequest",
+        "description": "Create a membership plan with an initial price."
+      },
+      "MembershipPlanMigrateAllRequest": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "gym_id"
+        ],
+        "title": "MembershipPlanMigrateAllRequest",
+        "description": "Migrate ALL active members on a plan to the current price."
+      },
+      "MembershipPlanMigrateRequest": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "crm_user_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Crm User Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "gym_id",
+          "crm_user_ids"
+        ],
+        "title": "MembershipPlanMigrateRequest",
+        "description": "Migrate specific members to the current active price."
+      },
+      "MembershipPlanPriceRequest": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "gym_id",
+          "price"
+        ],
+        "title": "MembershipPlanPriceRequest",
+        "description": "Set / update the active price on a plan."
+      },
+      "MembershipPlanPriceResponse": {
+        "properties": {
+          "price_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Price Id"
+          },
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "stripe_price_id": {
+            "type": "string",
+            "title": "Stripe Price Id"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_id",
+          "plan_id",
+          "gym_id",
+          "stripe_price_id",
+          "price",
+          "is_active",
+          "created_at"
+        ],
+        "title": "MembershipPlanPriceResponse",
+        "description": "Price details for a membership plan."
+      },
+      "MembershipPlanResponse": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "plan_type": {
+            "$ref": "#/components/schemas/PlanType"
+          },
+          "class_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Count"
+          },
+          "duration_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Amount"
+          },
+          "duration_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "stripe_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Product Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "active_price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MembershipPlanPriceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "gym_id",
+          "plan_name",
+          "plan_type",
+          "is_public",
+          "created_at"
+        ],
+        "title": "MembershipPlanResponse",
+        "description": "Membership plan with its active price."
+      },
+      "MembershipPlanUpdateData": {
+        "properties": {
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "plan_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "class_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Count"
+          },
+          "duration_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Amount"
+          },
+          "duration_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DurationUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_public": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Public"
+          }
+        },
+        "type": "object",
+        "title": "MembershipPlanUpdateData",
+        "description": "Mutable plan fields. All optional \u2014 only send what changed."
+      },
+      "MembershipPlanUpdateRequest": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "data": {
+            "$ref": "#/components/schemas/MembershipPlanUpdateData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "gym_id",
+          "data"
+        ],
+        "title": "MembershipPlanUpdateRequest",
+        "description": "Update a membership plan. Separates IDs from mutable data."
       },
       "OverdueViewRow": {
         "properties": {
@@ -1233,39 +4188,170 @@
       },
       "PaymentRecord": {
         "properties": {
-          "transaction_id": {
+          "charge_id": {
             "type": "string",
             "format": "uuid",
-            "title": "Transaction Id"
+            "title": "Charge Id"
           },
-          "item_type": {
+          "invoice_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Invoice Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ChargeKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChargeStatus"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "payment_method_type": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TransactionItemType"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Payment Method Type"
           },
-          "amount_paid": {
-            "type": "number",
-            "title": "Amount Paid"
-          },
-          "time": {
+          "charge_time": {
             "type": "string",
             "format": "date-time",
-            "title": "Time"
+            "title": "Charge Time"
+          },
+          "refunds_charge_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refunds Charge Id"
+          },
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/LineItemRecord"
+            },
+            "type": "array",
+            "title": "Line Items",
+            "default": []
+          },
+          "applied_discounts": {
+            "items": {
+              "$ref": "#/components/schemas/DiscountInfo"
+            },
+            "type": "array",
+            "title": "Applied Discounts",
+            "default": []
           }
         },
         "type": "object",
         "required": [
-          "transaction_id",
-          "amount_paid",
-          "time"
+          "charge_id",
+          "invoice_id",
+          "kind",
+          "status",
+          "amount",
+          "currency",
+          "charge_time"
         ],
         "title": "PaymentRecord",
-        "description": "A single payment transaction."
+        "description": "A single charge (payment or refund) against an invoice."
+      },
+      "PaymentsInvoiceResponse": {
+        "properties": {
+          "stripe_invoice_id": {
+            "type": "string",
+            "title": "Stripe Invoice Id"
+          },
+          "stripe_subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Subscription Id"
+          },
+          "amount_due": {
+            "type": "integer",
+            "title": "Amount Due"
+          },
+          "amount_paid": {
+            "type": "integer",
+            "title": "Amount Paid"
+          },
+          "amount_remaining": {
+            "type": "integer",
+            "title": "Amount Remaining"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created"
+          },
+          "hosted_invoice_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hosted Invoice Url"
+          },
+          "invoice_pdf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Pdf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stripe_invoice_id",
+          "amount_due",
+          "amount_paid",
+          "amount_remaining",
+          "currency",
+          "created"
+        ],
+        "title": "PaymentsInvoiceResponse",
+        "description": "A finalized Stripe Invoice."
       },
       "PersonalInfo": {
         "properties": {
@@ -1444,15 +4530,27 @@
         "title": "RewardCard",
         "description": "A recently redeemed reward."
       },
-      "TransactionItemType": {
+      "StripeCouponDuration": {
         "type": "string",
         "enum": [
-          "membership_payment",
-          "reward_purchase",
-          "merchandise"
+          "once",
+          "repeating",
+          "forever"
         ],
-        "title": "TransactionItemType",
-        "description": "Known transaction item types."
+        "title": "StripeCouponDuration",
+        "description": "Stripe coupon duration type."
+      },
+      "StripeWebhookAck": {
+        "properties": {
+          "received": {
+            "type": "boolean",
+            "title": "Received",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "StripeWebhookAck",
+        "description": "Acknowledgement response for a received webhook."
       },
       "TrialViewRow": {
         "properties": {

@@ -19,12 +19,10 @@ class MembershipInfo extends Equatable {
   final String? planType;
   @JsonKey(fromJson: MembershipStatus.fromJson)
   final MembershipStatus status;
-  final double baseCost;
+  final int baseCost;
   final int durationAmount;
   final String durationUnit;
-  final double totalCost;
-  final String? costFormula;
-  final double? additionalMemberDiscount;
+  final int totalPrice;
   final DateTime? lastPaidDate;
   final DateTime? nextDueDate;
   final DateTime startDate;
@@ -44,9 +42,7 @@ class MembershipInfo extends Equatable {
     required this.baseCost,
     required this.durationAmount,
     required this.durationUnit,
-    required this.totalCost,
-    this.costFormula,
-    this.additionalMemberDiscount,
+    required this.totalPrice,
     this.lastPaidDate,
     this.nextDueDate,
     required this.startDate,
@@ -74,9 +70,7 @@ class MembershipInfo extends Equatable {
         baseCost,
         durationAmount,
         durationUnit,
-        totalCost,
-        costFormula,
-        additionalMemberDiscount,
+        totalPrice,
         lastPaidDate,
         nextDueDate,
         startDate,

@@ -11,7 +11,10 @@ from schema.membership_plan import DurationUnit, PlanType
 
 
 async def test_create_membership_with_default_price(
-    membership_service, stripe_account_id,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -34,6 +37,20 @@ async def test_create_membership_with_default_price(
     assert resp.name == "Basic Monthly"
     assert len(resp.prices) == 1
     assert resp.prices[0].unit_amount == 5000
+
+    product = await stripe_client.client.v1.products.retrieve_async(
+        resp.stripe_product_id,
+        options=connect_opts,
+    )
+    assert product.active is True
+    assert product.name == "Basic Monthly"
+
+    price = await stripe_client.client.v1.prices.retrieve_async(
+        resp.prices[0].stripe_price_id,
+        options=connect_opts,
+    )
+    assert price.active is True
+    assert price.unit_amount == 5000
 
 
 async def test_create_membership_multiple_prices(
@@ -158,7 +175,10 @@ async def test_update_membership_deactivate_omitted_prices(
 
 
 async def test_deactivate_membership(
-    membership_service, stripe_account_id,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     created = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -184,3 +204,9 @@ async def test_deactivate_membership(
     )
 
     assert resp.active is False
+
+    product = await stripe_client.client.v1.products.retrieve_async(
+        created.stripe_product_id,
+        options=connect_opts,
+    )
+    assert product.active is False

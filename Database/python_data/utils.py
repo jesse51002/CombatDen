@@ -1,6 +1,6 @@
 import random
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 
 def make_seeded_uuids(seed: int, count: int) -> list[uuid.UUID]:
@@ -14,7 +14,7 @@ def random_past_datetime(days_back: int) -> datetime:
         hours=random.randint(6, 21),
         minutes=random.randint(0, 59),
     )
-    return datetime.now(timezone.utc) - delta
+    return datetime.now(UTC) - delta
 
 
 def random_past_date(days_back: int) -> date:

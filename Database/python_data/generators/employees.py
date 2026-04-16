@@ -1,9 +1,7 @@
 import random
 import uuid
-from typing import Optional
 
 from faker import Faker
-
 from schema.gym_employee import GymEmployeeCreate
 
 fake = Faker()
@@ -31,7 +29,7 @@ def generate_owner(
     gym_id: uuid.UUID,
     user_id: uuid.UUID,
     email: str,
-    employee_id: Optional[uuid.UUID] = None,
+    employee_id: uuid.UUID | None = None,
 ) -> GymEmployeeCreate:
     return GymEmployeeCreate(
         employee_id=employee_id or uuid.uuid4(),
@@ -50,7 +48,7 @@ def generate_owner(
 def generate_staff(
     gym_id: uuid.UUID,
     count: int,
-    user_id: Optional[uuid.UUID] = None,
+    user_id: uuid.UUID | None = None,
 ) -> list[GymEmployeeCreate]:
     staff = []
     for _ in range(count):

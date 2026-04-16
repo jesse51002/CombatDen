@@ -18,3 +18,5 @@ class StripeResourceType(StrEnum):
     price = "price"
     product = "product"
     coupon = "coupon"
+    invoice = "invoice"
+    account = "account"

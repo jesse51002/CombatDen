@@ -63,6 +63,53 @@ def _extract_price_id(line: stripe.InvoiceLineItem) -> str | None:
     return None
 
 
+def _post_discount_amount(line: stripe.InvoiceLineItem) -> int:
+    """Return the post-discount amount for an invoice line item.
+
+    Computed explicitly as ``subtotal - sum(discount_amounts)``
+    instead of trusting ``line.amount``. Stripe's field semantics:
+
+    * ``line.subtotal`` — pre-discount, pre-tax line amount.
+    * ``line.discount_amounts[].amount`` — the portion of each
+      applied discount that landed on this line. Subscription-level
+      discounts (what this codebase uses via ``subscription.discounts``)
+      are distributed into these per-line entries by Stripe.
+
+    Doing the math ourselves makes the intent obvious and avoids
+    relying on the ambiguous ``line.amount`` docstring.
+    """
+    subtotal = getattr(line, "subtotal", None)
+    if subtotal is None:
+        # Older API responses may not expose subtotal; fall back to
+        # amount, which for line-level discounts is already net.
+        subtotal = line.amount
+    discount_total = 0
+    discount_amounts = getattr(line, "discount_amounts", None) or []
+    for da in discount_amounts:
+        discount_total += getattr(da, "amount", 0) or 0
+    return subtotal - discount_total
+
+
+def _is_proration(line: stripe.InvoiceLineItem) -> bool:
+    """Return True if this line represents a mid-cycle proration.
+
+    Newer Stripe API versions expose the ``proration`` flag under
+    ``line.parent.subscription_item_details`` or
+    ``line.parent.invoice_item_details`` rather than on the line
+    directly. Check both, plus the legacy top-level attribute as a
+    safety net.
+    """
+    parent = getattr(line, "parent", None)
+    if parent:
+        sid = getattr(parent, "subscription_item_details", None)
+        if sid and getattr(sid, "proration", False):
+            return True
+        iid = getattr(parent, "invoice_item_details", None)
+        if iid and getattr(iid, "proration", False):
+            return True
+    return bool(getattr(line, "proration", False))
+
+
 def _extract_subscription_item_id(
     line: stripe.InvoiceLineItem,
 ) -> str | None:
@@ -91,7 +138,10 @@ def map_upcoming_invoice(
     """Map a Stripe upcoming/preview invoice to the upcoming-invoice schema.
 
     Only recurring subscription lines (those tied to a subscription
-    item) are included — one-off invoice items are ignored.
+    item) are included — one-off invoice items are ignored. Mid-cycle
+    proration lines (``line.proration is True``) are also skipped so
+    the result reflects the steady-state recurring cost, not one-time
+    adjustments that inflate the next invoice after an add/change.
 
     Args:
         invoice: Stripe Invoice object from ``create_preview_async``
@@ -104,6 +154,8 @@ def map_upcoming_invoice(
     lines: list[UpcomingInvoiceLine] = []
     if invoice.lines and invoice.lines.data:
         for line in invoice.lines.data:
+            if _is_proration(line):
+                continue
             si_id = _extract_subscription_item_id(line)
             if not si_id:
                 continue
@@ -113,7 +165,7 @@ def map_upcoming_invoice(
                     stripe_subscription_item_id=si_id,
                     stripe_price_id=_extract_price_id(line),
                     quantity=quantity,
-                    amount=line.amount,
+                    amount=_post_discount_amount(line),
                 )
             )
 

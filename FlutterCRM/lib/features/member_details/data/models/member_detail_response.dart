@@ -25,6 +25,7 @@ class MemberDetailResponse extends Equatable {
   final String? accountStatus;
   final String membershipOverview;
   final String? linkedToAccount;
+  final int totalMonthlyRecurringPrice;
   final int totalMembershipCount;
   final PersonalInfo personalInfo;
   @JsonKey(defaultValue: [])
@@ -46,6 +47,7 @@ class MemberDetailResponse extends Equatable {
     this.accountStatus,
     required this.membershipOverview,
     this.linkedToAccount,
+    required this.totalMonthlyRecurringPrice,
     required this.totalMembershipCount,
     required this.personalInfo,
     this.linkedAccounts = const [],
@@ -76,6 +78,7 @@ class MemberDetailResponse extends Equatable {
         accountStatus,
         membershipOverview,
         linkedToAccount,
+        totalMonthlyRecurringPrice,
         totalMembershipCount,
         personalInfo,
         linkedAccounts,

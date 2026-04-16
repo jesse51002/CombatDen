@@ -20,9 +20,7 @@ def _make_info(activity_type: str) -> dict:
     return {}
 
 
-def generate(
-    crm_user_id: uuid.UUID, gym_id: uuid.UUID, count: int
-) -> list[UserActivityCreate]:
+def generate(crm_user_id: uuid.UUID, gym_id: uuid.UUID, count: int) -> list[UserActivityCreate]:
     activities = []
     for _ in range(count):
         act_type = random.choice(ACTIVITY_TYPES)

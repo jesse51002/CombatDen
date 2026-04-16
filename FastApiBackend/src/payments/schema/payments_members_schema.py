@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
@@ -75,6 +76,7 @@ class PaymentsSubscriptionCreateRequest(BaseModel):
     items: list[PaymentsSubscriptionDesiredItem]
     subscription_discounts: list[SubscriptionItemDiscount] = []
     metadata: dict[str, str] | None = None
+    pay_first_invoice_out_of_band: bool = False
 
     @field_validator("items")
     @classmethod
@@ -90,6 +92,7 @@ class PaymentsSubscriptionCreateRequest(BaseModel):
 
 class PaymentsSubscriptionUpdateRequest(PaymentsSubscriptionCreateRequest):
     stripe_subscription_id: str
+    proration_behavior: Literal["none", "always_invoice"]
 
 
 class PaymentsSubscriptionItemResponse(BaseModel):
@@ -155,7 +158,7 @@ class PaymentsSubscriptionPriceMigrationRequest(BaseModel):
     subscription_ids: list[str]
     old_stripe_price_id: str
     new_stripe_price_id: str
-    proration_behavior: str = "none"
+    proration_behavior: Literal["none", "always_invoice"] = "none"
 
 
 class PaymentsResourceNotFoundDetail(BaseModel):

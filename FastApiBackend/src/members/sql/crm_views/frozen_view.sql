@@ -1,3 +1,9 @@
+WITH latest_memberships AS (
+    SELECT DISTINCT ON (crm_user_id, gym_id, plan_id) *
+    FROM member_memberships_status
+    ORDER BY crm_user_id, gym_id, plan_id,
+             start_date DESC, created_at DESC
+)
 SELECT
     p.crm_user_id,
     p.first_name,
@@ -10,7 +16,7 @@ SELECT
     ARRAY_AGG(mp.duration_unit) AS duration_units,
     (now() AT TIME ZONE g.timezone)::date AS gym_today
 FROM user_gym_profiles p
-JOIN member_memberships_status m
+JOIN latest_memberships m
     ON p.crm_user_id = m.crm_user_id
     AND p.gym_id = m.gym_id
 JOIN membership_plans mp
@@ -18,7 +24,7 @@ JOIN membership_plans mp
     AND m.gym_id = mp.gym_id
 JOIN gyms g ON p.gym_id = g.gym_id
 {where_clause}
-GROUP BY p.crm_user_id, g.timezone
+GROUP BY p.crm_user_id, p.first_name, p.last_name, p.photo_url, g.timezone
 ORDER BY
     ((now() AT TIME ZONE g.timezone)::date - MIN(m.freeze_end_date)) ASC
 LIMIT :limit OFFSET :offset

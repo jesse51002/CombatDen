@@ -1,5 +1,4 @@
 from datetime import date, datetime, time
-from typing import Optional
 from uuid import UUID
 
 from . import SeedModel
@@ -9,9 +8,9 @@ class GymClassCreate(SeedModel):
     class_id: UUID
     gym_id: UUID
     class_name: str
-    class_description: Optional[str] = None
-    allowed_plan_ids: Optional[list[UUID]] = None
-    max_capacity: Optional[int] = None
+    class_description: str | None = None
+    allowed_plan_ids: list[UUID] | None = None
+    max_capacity: int | None = None
     is_active: bool = True
     is_deleted: bool = False
 
@@ -31,16 +30,16 @@ class GymClassScheduleCreate(SeedModel):
     thu: bool = False
     fri: bool = False
     sat: bool = False
-    sun_instructor_id: Optional[UUID] = None
-    mon_instructor_id: Optional[UUID] = None
-    tue_instructor_id: Optional[UUID] = None
-    wed_instructor_id: Optional[UUID] = None
-    thu_instructor_id: Optional[UUID] = None
-    fri_instructor_id: Optional[UUID] = None
-    sat_instructor_id: Optional[UUID] = None
+    sun_instructor_id: UUID | None = None
+    mon_instructor_id: UUID | None = None
+    tue_instructor_id: UUID | None = None
+    wed_instructor_id: UUID | None = None
+    thu_instructor_id: UUID | None = None
+    fri_instructor_id: UUID | None = None
+    sat_instructor_id: UUID | None = None
     is_cancelled: bool = False
     start_date: date
-    end_date: Optional[date] = None
+    end_date: date | None = None
 
 
 class GymClassExceptionCreate(SeedModel):
@@ -48,11 +47,11 @@ class GymClassExceptionCreate(SeedModel):
     schedule_id: UUID
     gym_id: UUID
     original_date: date
-    is_cancelled: Optional[bool] = None
-    new_class_time: Optional[time] = None
-    new_duration_minutes: Optional[int] = None
-    new_max_capacity: Optional[int] = None
-    new_instructor_id: Optional[UUID] = None
+    is_cancelled: bool | None = None
+    new_class_time: time | None = None
+    new_duration_minutes: int | None = None
+    new_max_capacity: int | None = None
+    new_instructor_id: UUID | None = None
 
 
 class GymClassLogCreate(SeedModel):
@@ -62,5 +61,5 @@ class GymClassLogCreate(SeedModel):
     class_id: UUID
     plan_id: UUID
     item_id: UUID
-    instructor_id: Optional[UUID] = None
-    time: Optional[datetime] = None
+    instructor_id: UUID | None = None
+    time: datetime | None = None

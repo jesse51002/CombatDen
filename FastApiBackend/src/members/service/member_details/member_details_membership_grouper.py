@@ -14,6 +14,7 @@ from src.members.schema.member_details_schema import (
 from src.members.service.member_details.member_details_supplementary import (
     MemberDetailsSupplementary,
 )
+from src.shared.formatters import format_minor_units
 
 
 class MemberDetailsMembershipGrouper:
@@ -27,7 +28,8 @@ class MemberDetailsMembershipGrouper:
         self,
         membership_rows: list,
         supplementary: MemberDetailsSupplementary,
-        usage_lookup: dict[tuple[UUID, UUID], MembershipUsage] | None = None,
+        usage_lookup: dict[tuple[UUID, UUID], MembershipUsage] | None,
+        target_crm_user_id: UUID,
     ) -> list[MembershipInfo]:
         """Group membership rows by plan_id.
 
@@ -35,6 +37,9 @@ class MemberDetailsMembershipGrouper:
             membership_rows: Rows with membership data.
             supplementary: For discount and profile lookups.
             usage_lookup: (crm_user_id, plan_id) -> MembershipUsage.
+            target_crm_user_id: The member whose profile is being
+                viewed, used to pin them to the top of each card's
+                paying_for list.
 
         Returns:
             List of MembershipInfo, one per unique plan.
@@ -52,9 +57,10 @@ class MemberDetailsMembershipGrouper:
                 supplementary,
                 usage_lookup,
                 plan_id,
+                target_crm_user_id,
             )
 
-            total_cost = sum(r["total_price"] or 0 for r in rows)
+            total_price = representative["total_price"] or 0
 
             all_discounts = self._collect_plan_discounts(
                 rows,
@@ -70,8 +76,7 @@ class MemberDetailsMembershipGrouper:
                     base_cost=representative["base_cost"],
                     duration_amount=representative["duration_amount"],
                     duration_unit=representative["duration_unit"],
-                    total_cost=total_cost,
-                    additional_member_discount=(representative["additional_member_discount"]),
+                    total_price=total_price,
                     last_paid_date=representative["last_paid_date"],
                     next_due_date=representative["next_due_date"],
                     start_date=representative["membership_start_date"],
@@ -107,10 +112,10 @@ class MemberDetailsMembershipGrouper:
     def build_membership_overview(
         self,
         linked_to_id: UUID | None,
-        active_total: float,
-        frozen_total: float,
+        monthly_total: int,
         has_trial: bool,
         has_cancelled: bool,
+        has_frozen: bool,
         paying_count: int,
         supplementary: MemberDetailsSupplementary,
     ) -> tuple[str, UUID | None]:
@@ -118,21 +123,22 @@ class MemberDetailsMembershipGrouper:
 
         Args:
             linked_to_id: Primary account ID if linked, else None.
-            active_total: Total price of active memberships.
-            frozen_total: Total price of frozen memberships.
+            monthly_total: Parent's total_monthly_recurring_price
+                from the DB (already set by Stripe writeback).
             has_trial: Whether any membership is a trial.
             has_cancelled: Whether any membership is cancelled.
-            paying_count: Count of paying memberships (excl trial/cancelled).
+            has_frozen: Whether any membership is frozen.
+            paying_count: Count of active recurring memberships.
             supplementary: For profile name lookups.
 
         Returns:
             Tuple of (overview_string, linked_to_account_uuid).
         """
         summary = _build_price_summary(
-            active_total,
-            frozen_total,
+            monthly_total,
             has_trial,
             has_cancelled,
+            has_frozen,
         )
 
         if linked_to_id is None:
@@ -152,6 +158,7 @@ class MemberDetailsMembershipGrouper:
         supplementary: MemberDetailsSupplementary,
         usage_lookup: dict[tuple[UUID, UUID], MembershipUsage] | None,
         plan_id: UUID,
+        target_crm_user_id: UUID,
     ) -> list[PayingForMember]:
         """Build the paying_for list with class usage for a plan group.
 
@@ -160,9 +167,11 @@ class MemberDetailsMembershipGrouper:
             supplementary: For profile lookups.
             usage_lookup: (crm_user_id, plan_id) -> MembershipUsage.
             plan_id: The plan to look up usage for.
+            target_crm_user_id: The queried member, pinned to index 0.
 
         Returns:
-            PayingForMember list for each member on this plan.
+            PayingForMember list for each member on this plan, with
+            the queried member first.
         """
         paying_for: list[PayingForMember] = []
         for row in rows:
@@ -184,6 +193,8 @@ class MemberDetailsMembershipGrouper:
                 fields["classes_remaining"] = usage.classes_remaining
 
             paying_for.append(PayingForMember(**fields))
+
+        paying_for.sort(key=lambda p: p.crm_user_id != target_crm_user_id)
         return paying_for
 
     def _collect_plan_discounts(
@@ -213,52 +224,35 @@ class MemberDetailsMembershipGrouper:
 
 
 def _build_price_summary(
-    active_total: float,
-    frozen_total: float,
+    monthly_total: int,
     has_trial: bool,
     has_cancelled: bool,
+    has_frozen: bool,
 ) -> str:
-    """Build a price summary string from active/frozen totals.
+    """Build a price summary string.
 
     Returns strings like:
-    - "Paying $320/mo" (only active)
-    - "Frozen $100/mo" (only frozen)
-    - "Paying $320/mo, Frozen $100/mo" (both)
-    - "Member is on Trial" (only trial, no paying/frozen)
-    - "Membership is Cancelled" (only cancelled, no paying/frozen/trial)
+    - "Account is Frozen"
+    - "Paying $320/mo"
+    - "Member is on Trial"
+    - "Membership is Cancelled"
 
     Args:
-        active_total: Total price of active memberships.
-        frozen_total: Total price of frozen memberships.
+        monthly_total: Parent's total_monthly_recurring_price
+            in minor units.
         has_trial: Whether any membership is a trial.
         has_cancelled: Whether any membership is cancelled.
+        has_frozen: Whether any membership is frozen.
 
     Returns:
         Summary string.
     """
-    parts: list[str] = []
-    if active_total > 0:
-        parts.append(f"Paying {_format_dollar(active_total)}/mo")
-    if frozen_total > 0:
-        parts.append(f"Frozen {_format_dollar(frozen_total)}/mo")
-    if not parts:
-        if has_trial:
-            return "Member is on Trial"
-        if has_cancelled:
-            return "Membership is Cancelled"
-        return "No active memberships"
-    return ", ".join(parts)
-
-
-def _format_dollar(amount: float) -> str:
-    """Format a dollar amount as '$165' or '$165.50'.
-
-    Args:
-        amount: Dollar amount.
-
-    Returns:
-        Formatted dollar string.
-    """
-    if amount == int(amount):
-        return f"${int(amount)}"
-    return f"${amount:.2f}"
+    if has_frozen:
+        return "Account is Frozen"
+    if monthly_total > 0:
+        return f"Paying {format_minor_units(monthly_total)}/mo"
+    if has_trial:
+        return "Member is on Trial"
+    if has_cancelled:
+        return "Membership is Cancelled"
+    return "No active memberships"

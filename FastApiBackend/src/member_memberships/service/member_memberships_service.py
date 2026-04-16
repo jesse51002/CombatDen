@@ -15,14 +15,14 @@ from src.member_memberships.service.memberships.member_memberships_cancel import
 from src.member_memberships.service.memberships.member_memberships_freeze import (
     MemberMembershipsFreeze,
 )
+from src.member_memberships.service.memberships.member_memberships_mark_paid_cash import (
+    MemberMembershipsMarkPaidCash,
+)
 from src.member_memberships.service.memberships.member_memberships_start import (
     MemberMembershipsStart,
 )
 from src.member_memberships.service.memberships.member_memberships_update_price import (
     MemberMembershipsUpdatePrice,
-)
-from src.member_memberships.service.payment_sync.price_writeback import (
-    PriceWriteback,
 )
 from src.shared.database import DirectDatabasePool
 
@@ -32,9 +32,6 @@ if TYPE_CHECKING:
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
-    )
-    from src.payments.service.subscription import (
-        PaymentsStripeSubscriptionService,
     )
     from src.shared.gym_stripe_service import GymStripeService
 
@@ -52,16 +49,10 @@ class MemberMembershipsService:
         payment_sync_service: MembershipPaymentSyncService,
         payment_service: PaymentsStripePaymentService,
         gym_stripe_service: GymStripeService,
-        subscription_service: PaymentsStripeSubscriptionService,
     ) -> None:
-        price_writeback = PriceWriteback(
-            db_pool=db_pool,
-            subscription_service=subscription_service,
-        )
         deps = (
             db_pool,
             payment_sync_service,
-            price_writeback,
             gym_stripe_service,
         )
         self._cancel = MemberMembershipsCancel(*deps)
@@ -71,6 +62,10 @@ class MemberMembershipsService:
             payment_service=payment_service,
         )
         self._update_price = MemberMembershipsUpdatePrice(*deps)
+        self._mark_paid_cash = MemberMembershipsMarkPaidCash(
+            *deps,
+            payment_service=payment_service,
+        )
 
     # ── Cancel ─────────────────────────────────────────────────
 
@@ -112,6 +107,7 @@ class MemberMembershipsService:
         discount_ids: list[UUID] | None = None,
         include_linked_discount: bool = False,
         prorate: bool = True,
+        paid_with_cash: bool = False,
     ) -> None:
         """Start a new membership for a member."""
         await self._start.start(
@@ -122,7 +118,18 @@ class MemberMembershipsService:
             discount_ids=discount_ids,
             include_linked_discount=include_linked_discount,
             prorate=prorate,
+            paid_with_cash=paid_with_cash,
         )
+
+    # ── Mark Paid (Cash) ───────────────────────────────────────
+
+    async def mark_paid_cash(
+        self,
+        item_id: UUID,
+        crm_user_id: UUID,
+    ) -> None:
+        """Mark a recurring membership's open Stripe invoice as paid via cash."""
+        await self._mark_paid_cash.mark_paid_cash(item_id, crm_user_id)
 
     # ── Update Price ───────────────────────────────────────────
 

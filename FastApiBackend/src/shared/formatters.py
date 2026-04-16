@@ -44,19 +44,33 @@ def format_duration(days: int) -> str:
     return f"{months} month{'s' if months != 1 else ''}"
 
 
-def format_price(amount: float, duration_unit: str) -> str:
-    """Format a price as '$165/month'.
+def format_minor_units(amount_minor: int) -> str:
+    """Format an integer minor-units amount as '$165' or '$165.50'.
 
     Args:
-        amount: Dollar amount.
+        amount_minor: Amount in minor units (cents).
+
+    Returns:
+        Formatted dollar string.
+    """
+    dollars, cents = divmod(amount_minor, 100)
+    if cents == 0:
+        return f"${dollars}"
+    return f"${dollars}.{cents:02d}"
+
+
+def format_price(amount_minor: int, duration_unit: str) -> str:
+    """Format a minor-units price as '$165/month'.
+
+    Args:
+        amount_minor: Price in minor units (cents).
         duration_unit: Billing cycle unit.
 
     Returns:
         Formatted price string.
     """
-    amount_str = f"${int(amount)}" if amount == int(amount) else f"${amount:.2f}"
     label = DURATION_UNIT_LABELS.get(duration_unit, duration_unit)
-    return f"{amount_str}/{label}"
+    return f"{format_minor_units(amount_minor)}/{label}"
 
 
 def format_time_ago(dt: datetime) -> str:

@@ -22,6 +22,7 @@ from src.payments.service.subscription import (
 )
 from src.shared.gym_stripe_service import GymStripeService
 from tests.helpers.service_factory import (
+    build_member_management_service,
     build_member_memberships_service,
     build_membership_plans_service,
     build_payment_services,
@@ -42,18 +43,30 @@ def payment_sync_service(db_pool, stripe_client):
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client, members_svc, price_svc, discount_svc,
+        stripe_client,
+        members_svc,
+        price_svc,
+        discount_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
     linked_discount_svc = LinkedMemberDiscountService(db_pool)
     return MembershipPaymentSyncService(
-        db_pool, subscription_svc, gym_stripe_svc, linked_discount_svc,
+        db_pool,
+        subscription_svc,
+        gym_stripe_svc,
+        linked_discount_svc,
     )
 
 
 @pytest.fixture(scope="module")
 def plans_service(db_pool, stripe_client):
     return build_membership_plans_service(db_pool, stripe_client)
+
+
+@pytest.fixture(scope="module")
+def management_service(db_pool, stripe_client):
+    """Member management service — used by linked-family writeback tests."""
+    return build_member_management_service(db_pool, stripe_client)
 
 
 @pytest.fixture(scope="module")

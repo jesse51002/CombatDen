@@ -59,9 +59,7 @@ PLAN_TEMPLATES = [
 ]
 
 
-def generate(
-    gym_id: uuid.UUID, count: int
-) -> tuple[list[MembershipPlanCreate], list[dict]]:
+def generate(gym_id: uuid.UUID, count: int) -> tuple[list[MembershipPlanCreate], list[dict]]:
     """Returns (plans, template_dicts) so the prices generator can access base_cost."""
     templates = random.sample(PLAN_TEMPLATES, min(count, len(PLAN_TEMPLATES)))
     plans = []

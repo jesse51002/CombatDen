@@ -17,11 +17,10 @@ import random
 import uuid
 from datetime import date, timedelta
 
-from supabase import Client
-
 from api_creation.memberships import CurrentMembershipRecord
 from generators.profiles import HistoricalMembership, ProfilePlan
 from schema.member_membership import MemberMembershipCreate
+from supabase import Client
 from utils import random_past_date
 
 UNIT_DAYS = {"week": 7, "month": 30, "year": 365}
@@ -63,9 +62,7 @@ def create_history(
             rows.append(_to_row(profile, gym_id, h))
 
     if rows:
-        client.table("member_memberships").insert(
-            [r.to_insert_dict() for r in rows]
-        ).execute()
+        client.table("member_memberships").insert([r.to_insert_dict() for r in rows]).execute()
     return rows
 
 

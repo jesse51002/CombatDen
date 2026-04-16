@@ -179,6 +179,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Good: `cycle[0].toUpperCase() + cycle.substring(1)` or a formatter function
 - Bad: Displaying raw `'recurring'`, `'year'`, `'active'` directly in the UI
 
+**Money Handling**
+- **ALWAYS store money amounts as signed integers in minor currency units** (e.g. cents for USD). Never store dollars as `double` / `float` — the backend returns minor units and the frontend must preserve them end-to-end.
+- Model fields for money must be `int` (or `int?`). Signed — negatives represent refunds / credits.
+- **Only convert to a display string at the render layer**, via the shared helper `formatMinorUnits` in `lib/core/utils/money.dart`. Do not hand-roll `amount / 100` + `toStringAsFixed` at call sites, and do not re-implement the formatter in feature folders.
+- Good: `Text(formatMinorUnits(payment.amount, currency: payment.currency))`
+- Bad: `Text('\$${(payment.amount / 100).toStringAsFixed(0)}')`
+- Bad: `final double totalCost;` on a model
+
 **DateTime Handling**
 - Use local timezone for UI display and local operations
 - **Convert to UTC when sending to backend**

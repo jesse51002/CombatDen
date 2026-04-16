@@ -7,6 +7,10 @@ from src.classes.service.classes_cycle_counts_service import (
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.core.config import settings
 from src.discounts.service.discounts_service import DiscountsService
+from src.gyms.service.gyms_service import GymsService
+from src.gyms.service.payments_stripe_connect_service import (
+    PaymentsStripeConnectService,
+)
 from src.member_memberships.service.linked_member_discount_service import (
     LinkedMemberDiscountService,
 )
@@ -57,6 +61,9 @@ from src.shared.database import (
 )
 from src.shared.gym_stripe_service import GymStripeService
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
+from src.stripe_webhooks.service.handlers.account_updated_handler import (
+    AccountUpdatedHandler,
+)
 from src.stripe_webhooks.service.handlers.charge_refunded_handler import (
     ChargeRefundedHandler,
 )
@@ -86,6 +93,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.classes.classes_router",
             "src.discounts.discounts_router",
             "src.membership_plans.membership_plans_router",
+            "src.gyms.gyms_router",
             "src.stripe_webhooks.stripe_webhooks_router",
         ],
     )
@@ -147,6 +155,10 @@ class DependencyInjector(containers.DeclarativeContainer):
         members_service=payments_members_service,
         price_service=payments_price_service,
     )
+    payments_stripe_connect_service = providers.Factory(
+        PaymentsStripeConnectService,
+        stripe_client=stripe_client,
+    )
 
     # ── Payment Sync & Discounts ───────────────────────────────
     linked_member_discount_service = providers.Factory(
@@ -168,12 +180,12 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_service=membership_payment_sync_service,
         payment_service=payments_payment_service,
         gym_stripe_service=gym_stripe_service,
-        subscription_service=payments_subscription_service,
     )
     members_management_service = providers.Factory(
         MembersManagementService,
         db_pool=db_pool,
         payments_members_service=payments_members_service,
+        payment_sync_service=membership_payment_sync_service,
     )
 
     discounts_service = providers.Factory(
@@ -193,6 +205,13 @@ class DependencyInjector(containers.DeclarativeContainer):
         membership_payment_sync_service=membership_payment_sync_service,
     )
 
+    # ── Gyms ───────────────────────────────────────────────────
+    gyms_service = providers.Factory(
+        GymsService,
+        db_pool=db_pool,
+        stripe_connect_service=payments_stripe_connect_service,
+    )
+
     # ── Stripe Webhooks ────────────────────────────────────────
     stripe_webhook_event_log = providers.Factory(StripeWebhookEventLog)
     stripe_webhook_invoice_paid_handler = providers.Factory(InvoicePaidHandler)
@@ -202,6 +221,9 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_webhook_charge_refunded_handler = providers.Factory(
         ChargeRefundedHandler,
     )
+    stripe_webhook_account_updated_handler = providers.Factory(
+        AccountUpdatedHandler,
+    )
     stripe_webhooks_service = providers.Factory(
         StripeWebhooksService,
         db_pool=db_pool,
@@ -209,4 +231,5 @@ class DependencyInjector(containers.DeclarativeContainer):
         invoice_paid_handler=stripe_webhook_invoice_paid_handler,
         invoice_payment_failed_handler=stripe_webhook_invoice_payment_failed_handler,
         charge_refunded_handler=stripe_webhook_charge_refunded_handler,
+        account_updated_handler=stripe_webhook_account_updated_handler,
     )

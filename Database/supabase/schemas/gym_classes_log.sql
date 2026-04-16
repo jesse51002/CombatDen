@@ -1,7 +1,7 @@
 CREATE TABLE gym_classes_log (
     log_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     crm_user_id UUID NOT NULL,
-    gym_id UUID NOT NULL CONSTRAINT fk_class_log_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_class_log_gym REFERENCES gyms_unfiltered(gym_id),
     class_id UUID NOT NULL CONSTRAINT fk_class_log_class_id REFERENCES gym_classes(class_id),
     plan_id UUID NOT NULL CONSTRAINT fk_class_log_plan_id REFERENCES membership_plans_unfiltered(plan_id),
     item_id UUID NOT NULL,

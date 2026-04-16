@@ -1,5 +1,5 @@
 CREATE TABLE gym_history (
-    gym_id UUID NOT NULL CONSTRAINT fk_history_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_history_gym REFERENCES gyms_unfiltered(gym_id),
     date DATE NOT NULL,
     members_total INTEGER NOT NULL CHECK (members_total >= 0),
     members_churned INTEGER NOT NULL CHECK (members_churned >= 0),

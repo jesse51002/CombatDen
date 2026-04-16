@@ -1,5 +1,4 @@
 from enum import StrEnum
-from typing import Optional
 from uuid import UUID
 
 from . import SeedModel
@@ -17,5 +16,5 @@ class UserGymInvoiceLineItemCreate(SeedModel):
     item_type: LineItemType
     name: str
     amount: int
-    stripe_product_id: Optional[str] = None
-    item_id: Optional[UUID] = None  # required when item_type == membership
+    stripe_product_id: str | None = None
+    item_id: UUID | None = None  # required when item_type == membership

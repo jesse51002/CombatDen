@@ -5,7 +5,7 @@ Table auth_users {
   created_at timestamp
 }
 
-Table gyms {
+Table gyms_unfiltered {
   gym_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_name varchar [not null]
   gym_description varchar
@@ -13,6 +13,8 @@ Table gyms {
   stripe_account_id varchar [note: 'Stripe Connect account ID, NULL until onboarded']
   stripe_onboarding_status varchar [not null, default: 'not_started', note: 'enum: not_started, pending, complete, disabled']
 }
+
+// View: gyms — SELECT * FROM gyms_unfiltered WHERE stripe_account_id IS NOT NULL; SECURITY INVOKER, so RLS on gyms_unfiltered propagates through
 
 Table user_gym_profiles_unfiltered {
   crm_user_id uuid [primary key, default: `uuid_generate_v4()`]
@@ -310,69 +312,69 @@ Table stripe_webhook_events {
 
 // gym_employees
 Ref: auth_users.id < gym_employees.user_id
-Ref: gyms.gym_id < gym_employees.gym_id
+Ref: gyms_unfiltered.gym_id < gym_employees.gym_id
 
 // user_gym_profiles
 Ref: auth_users.id < user_gym_profiles_unfiltered.user_id
-Ref: gyms.gym_id < user_gym_profiles_unfiltered.gym_id
+Ref: gyms_unfiltered.gym_id < user_gym_profiles_unfiltered.gym_id
 
 // user_activities
 Ref: user_gym_profiles_unfiltered.crm_user_id < user_activities.crm_user_id
-Ref: gyms.gym_id < user_activities.gym_id
+Ref: gyms_unfiltered.gym_id < user_activities.gym_id
 
 // gym_history
-Ref: gyms.gym_id < gym_history.gym_id
+Ref: gyms_unfiltered.gym_id < gym_history.gym_id
 
 // user_gym_invoices
 Ref: user_gym_profiles_unfiltered.crm_user_id < user_gym_invoices.crm_user_id
-Ref: gyms.gym_id < user_gym_invoices.gym_id
+Ref: gyms_unfiltered.gym_id < user_gym_invoices.gym_id
 
 // user_gym_invoice_line_items
 Ref: user_gym_invoices.invoice_id < user_gym_invoice_line_items.invoice_id
-Ref: gyms.gym_id < user_gym_invoice_line_items.gym_id
+Ref: gyms_unfiltered.gym_id < user_gym_invoice_line_items.gym_id
 Ref: member_memberships_unfiltered.item_id < user_gym_invoice_line_items.item_id
 
 // user_gym_charges
 Ref: user_gym_invoices.invoice_id < user_gym_charges.invoice_id
-Ref: gyms.gym_id < user_gym_charges.gym_id
+Ref: gyms_unfiltered.gym_id < user_gym_charges.gym_id
 Ref: user_gym_profiles_unfiltered.crm_user_id < user_gym_charges.crm_user_id
 Ref: user_gym_charges.charge_id < user_gym_charges.refunds_charge_id
 
 // user_gym_invoice_applied_discounts
 Ref: user_gym_invoices.invoice_id < user_gym_invoice_applied_discounts.invoice_id
-Ref: gyms.gym_id < user_gym_invoice_applied_discounts.gym_id
+Ref: gyms_unfiltered.gym_id < user_gym_invoice_applied_discounts.gym_id
 Ref: gym_discounts_unfiltered.discount_id < user_gym_invoice_applied_discounts.discount_id
 
 // user_gym_reward_redemptions
-Ref: gyms.gym_id < user_gym_reward_redemptions.gym_id
+Ref: gyms_unfiltered.gym_id < user_gym_reward_redemptions.gym_id
 Ref: user_gym_profiles_unfiltered.crm_user_id < user_gym_reward_redemptions.crm_user_id
 Ref: gym_rewards.reward_id < user_gym_reward_redemptions.reward_id
 
 // membership_plans
-Ref: gyms.gym_id < membership_plans_unfiltered.gym_id
+Ref: gyms_unfiltered.gym_id < membership_plans_unfiltered.gym_id
 
 // membership_plan_prices
 Ref: membership_plans_unfiltered.plan_id < membership_plan_prices_unfiltered.plan_id
-Ref: gyms.gym_id < membership_plan_prices_unfiltered.gym_id
+Ref: gyms_unfiltered.gym_id < membership_plan_prices_unfiltered.gym_id
 
 // member_memberships
 Ref: user_gym_profiles_unfiltered.crm_user_id < member_memberships_unfiltered.crm_user_id
-Ref: gyms.gym_id < member_memberships_unfiltered.gym_id
+Ref: gyms_unfiltered.gym_id < member_memberships_unfiltered.gym_id
 Ref: membership_plans_unfiltered.plan_id < member_memberships_unfiltered.plan_id
 Ref: membership_plan_prices_unfiltered.price_id < member_memberships_unfiltered.price_id
 // user_gym_profiles (self-ref for linked accounts)
 Ref: user_gym_profiles_unfiltered.crm_user_id < user_gym_profiles_unfiltered.account_linked_to_id
 
 // gym_discounts
-Ref: gyms.gym_id < gym_discounts_unfiltered.gym_id
+Ref: gyms_unfiltered.gym_id < gym_discounts_unfiltered.gym_id
 Ref: membership_plans_unfiltered.plan_id < gym_discounts_unfiltered.membership_plan_id
 
 // gym_classes
-Ref: gyms.gym_id < gym_classes.gym_id
+Ref: gyms_unfiltered.gym_id < gym_classes.gym_id
 
 // gym_class_schedules
 Ref: gym_classes.class_id < gym_class_schedules.class_id
-Ref: gyms.gym_id < gym_class_schedules.gym_id
+Ref: gyms_unfiltered.gym_id < gym_class_schedules.gym_id
 Ref: gym_employees.employee_id < gym_class_schedules.sun_instructor_id
 Ref: gym_employees.employee_id < gym_class_schedules.mon_instructor_id
 Ref: gym_employees.employee_id < gym_class_schedules.tue_instructor_id
@@ -383,18 +385,18 @@ Ref: gym_employees.employee_id < gym_class_schedules.sat_instructor_id
 
 // gym_class_exceptions
 Ref: gym_class_schedules.schedule_id < gym_class_exceptions.schedule_id
-Ref: gyms.gym_id < gym_class_exceptions.gym_id
+Ref: gyms_unfiltered.gym_id < gym_class_exceptions.gym_id
 Ref: gym_employees.employee_id < gym_class_exceptions.new_instructor_id
 
 // gym_classes_log
 Ref: user_gym_profiles_unfiltered.crm_user_id < gym_classes_log.crm_user_id
-Ref: gyms.gym_id < gym_classes_log.gym_id
+Ref: gyms_unfiltered.gym_id < gym_classes_log.gym_id
 Ref: gym_classes.class_id < gym_classes_log.class_id
 Ref: membership_plans_unfiltered.plan_id < gym_classes_log.plan_id
 Ref: gym_employees.employee_id < gym_classes_log.instructor_id
 
 // stripe_webhook_events
-Ref: gyms.gym_id < stripe_webhook_events.gym_id
+Ref: gyms_unfiltered.gym_id < stripe_webhook_events.gym_id
 
 // gym_rewards
-Ref: gyms.gym_id < gym_rewards.gym_id
+Ref: gyms_unfiltered.gym_id < gym_rewards.gym_id

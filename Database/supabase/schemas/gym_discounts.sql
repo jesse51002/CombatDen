@@ -1,6 +1,6 @@
 CREATE TABLE gym_discounts_unfiltered (
     discount_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    gym_id UUID NOT NULL CONSTRAINT fk_discount_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_discount_gym REFERENCES gyms_unfiltered(gym_id),
     discount_name VARCHAR NOT NULL CHECK (discount_name <> ''),
     discount_type VARCHAR NOT NULL CHECK (discount_type IN ('preset', 'custom', 'linked')),
     percentage_off FLOAT CHECK (percentage_off > 0 AND percentage_off <= 100),

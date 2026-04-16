@@ -12,7 +12,7 @@ realistic sample.
 
 import random
 import uuid
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 
 from api_creation.discounts import DiscountRecord
 from api_creation.plans import PlanRecord
@@ -52,7 +52,7 @@ def _stripe_id(prefix: str) -> str:
 
 
 def _as_dt(d) -> datetime:
-    return datetime.combine(d, time(12, 0), tzinfo=timezone.utc)
+    return datetime.combine(d, time(12, 0), tzinfo=UTC)
 
 
 def _billing_dates(
@@ -60,7 +60,7 @@ def _billing_dates(
     plan: PlanRecord,
 ) -> list[datetime]:
     """Payment dates for a membership, capped at today."""
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     interval = _interval_days(plan)
 
     if plan.plan_type == "trial":
@@ -233,8 +233,7 @@ def generate(
                         payment_method_type="card",
                         stripe_refund_id=_stripe_id("re"),
                         refunds_charge_id=success_charge_id,
-                        charge_time=billing_time
-                        + timedelta(days=random.randint(1, 14)),
+                        charge_time=billing_time + timedelta(days=random.randint(1, 14)),
                     )
                 )
 

@@ -19,6 +19,7 @@ from src.members.schema.members_crm_members_list_schema import (
 )
 from src.members.schema.members_management_schema import (
     MembersManagementCreateRequest,
+    MembersManagementLinkRequest,
     MembersManagementResponse,
     MembersManagementUpdateCardRequest,
     MembersManagementUpdateRequest,
@@ -519,6 +520,184 @@ async def unlink_member_payment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to unlink payment",
+        ) from None
+
+
+@members_router.put(
+    "/{crm_user_id}/link",
+    response_model=MembersManagementResponse,
+    summary="Link member to a parent account",
+    description=(
+        "Links an existing member to a paying parent account. "
+        "The child must have zero active recurring memberships. "
+        "Clears any stripe subscription, card, and freeze state "
+        "on the child (required by the linked_account_no_stripe "
+        "DB constraint) and re-syncs the parent's subscription "
+        "so linked-discount assignments are recalculated. No "
+        "proration or mid-cycle charges are issued."
+    ),
+    responses={
+        200: {"description": "Member linked successfully"},
+        400: {
+            "description": (
+                "Child is already linked, has active recurring "
+                "memberships, or the relationship is invalid"
+            )
+        },
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def link_member_account(
+    crm_user_id: UUID,
+    request: MembersManagementLinkRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> MembersManagementResponse:
+    """Link a member to a paying parent account.
+
+    Args:
+        crm_user_id: The child member to link.
+        request: Body containing the parent_crm_user_id.
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        management_service: Injected management service.
+
+    Returns:
+        MembersManagementResponse with updated linked-account state.
+
+    Raises:
+        HTTPException: 400 on validation errors, 401 if not
+            authenticated, 403 if not authorized, 404 if the
+            member is not found, 500 on unexpected errors.
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(crm_user_id, user_payload)
+
+    try:
+        return await management_service.link_account(
+            crm_user_id,
+            request.parent_crm_user_id,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        logger.error(
+            "Stripe error linking member: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to link member: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to link member",
+        ) from None
+
+
+@members_router.delete(
+    "/{crm_user_id}/link",
+    response_model=MembersManagementResponse,
+    summary="Unlink member from a parent account",
+    description=(
+        "Unlinks a member from their paying parent account. "
+        "Clears account_linked_to_id and linked_discount_id on "
+        "the child, then re-syncs the old parent's subscription "
+        "so linked-discount assignments are recalculated for "
+        "the remaining children. The child must have zero "
+        "active recurring memberships. No proration or "
+        "mid-cycle charges are issued."
+    ),
+    responses={
+        200: {"description": "Member unlinked successfully"},
+        400: {"description": ("Child is not linked or has active recurring memberships")},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def unlink_member_account(
+    crm_user_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> MembersManagementResponse:
+    """Unlink a member from their paying parent account.
+
+    Args:
+        crm_user_id: The child member to unlink.
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        management_service: Injected management service.
+
+    Returns:
+        MembersManagementResponse with account_linked_to_id cleared.
+
+    Raises:
+        HTTPException: 400 on validation errors, 401 if not
+            authenticated, 403 if not authorized, 404 if the
+            member is not found, 500 on unexpected errors.
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(crm_user_id, user_payload)
+
+    try:
+        return await management_service.unlink_account(crm_user_id)
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        logger.error(
+            "Stripe error unlinking member: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to unlink member: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to unlink member",
         ) from None
 
 

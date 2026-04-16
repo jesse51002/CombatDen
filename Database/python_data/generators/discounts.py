@@ -30,9 +30,7 @@ def generate(gym_id: uuid.UUID, count: int) -> list[GymDiscountCreate]:
                 percentage_off=round(random.uniform(5, 25), 1) if use_pct else None,
                 dollar_off=random.randint(500, 5000) if not use_pct else None,
                 duration=duration,
-                duration_in_months=random.randint(1, 12)
-                if duration == "repeating"
-                else None,
+                duration_in_months=random.randint(1, 12) if duration == "repeating" else None,
             )
         )
     return discounts

@@ -1,5 +1,4 @@
 from enum import StrEnum
-from typing import Optional
 from uuid import UUID
 
 from . import SeedModel
@@ -26,9 +25,9 @@ class MembershipPlanCreate(SeedModel):
     gym_id: UUID
     plan_name: str
     plan_type: PlanType
-    class_count: Optional[int] = None
-    duration_amount: Optional[int] = None
-    duration_unit: Optional[DurationUnit] = None
+    class_count: int | None = None
+    duration_amount: int | None = None
+    duration_unit: DurationUnit | None = None
     is_public: bool = True
     is_deleted: bool = False
-    stripe_product_id: Optional[str] = None
+    stripe_product_id: str | None = None

@@ -30,6 +30,14 @@ class MemberMembershipsStartRequest(BaseModel):
     discount_ids: list[UUID] | None = None
     include_linked_discount: bool = False
     prorate: bool = True
+    paid_with_cash: bool = False
+
+
+class MemberMembershipsMarkPaidCashRequest(BaseModel):
+    """Mark a recurring membership's open invoice as paid via cash."""
+
+    item_id: UUID
+    crm_user_id: UUID
 
 
 class MemberMembershipsUpdatePriceRequest(BaseModel):

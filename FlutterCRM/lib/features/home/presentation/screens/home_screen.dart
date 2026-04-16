@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/gym_setup/data/models/gym_onboarding_status.dart';
+import 'package:crm/features/gym_setup/data/repositories/gym_repository.dart';
+import 'package:crm/features/gym_setup/presentation/screens/gym_setup_screen.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
 import 'package:crm/features/login/bloc/login_event.dart';
 import 'package:crm/features/login/bloc/login_state.dart';
 import 'package:crm/features/login/presentation/screens/login_screen.dart';
-import 'package:crm/features/gym_setup/data/repositories/gym_repository.dart';
-import 'package:crm/features/gym_setup/presentation/screens/gym_setup_screen.dart';
 import 'package:crm/features/members_list/presentation/screens/members_list_screen.dart';
 
 /// Home screen that checks gym setup status on load
@@ -33,17 +34,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkGymSetup() async {
-    final userId = Supabase
-        .instance.client.auth.currentUser?.id;
-    if (userId == null) return;
-
     try {
-      final gymRepo = GymRepository();
-      final employee =
-          await gymRepo.getOwnerEmployee(userId);
+      final repo = GymRepository(apiClient: ApiClient());
+      final status = await repo.getOnboardingStatus();
+      if (!mounted) return;
 
-      if (employee == null) {
-        if (!mounted) return;
+      // null (404) or any non-complete status → route
+      // through the setup screen, which handles the
+      // resume / disabled / wizard branches internally.
+      if (status == null ||
+          status.stripeOnboardingStatus !=
+              GymOnboardingStatus.complete) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
             builder: (_) => const GymSetupScreen(),
@@ -52,12 +53,10 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      if (!mounted) return;
-      final gymId = employee['gym_id'] as String;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
           builder: (_) =>
-              MembersListScreen(gymId: gymId),
+              MembersListScreen(gymId: status.gymId),
         ),
       );
     } on Exception catch (e) {

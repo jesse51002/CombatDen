@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:crm/core/utils/money.dart';
+
 part 'discount_info.g.dart';
 
 /// An active discount applied to a membership.
@@ -13,7 +15,7 @@ class DiscountInfo extends Equatable {
   final String discountName;
   final String discountType;
   final double? percentageOff;
-  final double? dollarOff;
+  final int? dollarOff;
   final DateTime? endDate;
 
   const DiscountInfo({
@@ -36,7 +38,7 @@ class DiscountInfo extends Equatable {
       return '${percentageOff!.toStringAsFixed(0)}% off';
     }
     if (dollarOff != null) {
-      return '\$${dollarOff!.toStringAsFixed(0)} off';
+      return '${formatMinorUnits(dollarOff!)} off';
     }
     return '';
   }

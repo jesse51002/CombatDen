@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE TABLE gym_class_schedules (
     schedule_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     class_id UUID NOT NULL CONSTRAINT fk_schedule_class_id REFERENCES gym_classes(class_id),
-    gym_id UUID NOT NULL CONSTRAINT fk_schedule_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_schedule_gym REFERENCES gyms_unfiltered(gym_id),
     class_time TIME NOT NULL,
     duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
     recurring_unit VARCHAR NOT NULL CHECK (recurring_unit IN ('daily', 'weekly', 'monthly')),

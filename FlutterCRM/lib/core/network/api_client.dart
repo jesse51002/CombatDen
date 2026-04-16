@@ -104,12 +104,25 @@ class ApiClient {
           'Server error '
           '${e.response?.statusCode}: '
           '${e.response?.statusMessage}',
+          statusCode: e.response?.statusCode,
+          detail: _extractDetail(e.response?.data),
         );
       }
       throw NetworkException(
         'Unexpected error: ${e.message}',
       );
     }
+  }
+
+  /// Extracts the `detail` string from a FastAPI-style
+  /// error body (`{"detail": "..."}`). Returns null
+  /// when the body is missing, non-JSON, or has no
+  /// string `detail` field.
+  String? _extractDetail(Object? data) {
+    if (data is Map && data['detail'] is String) {
+      return data['detail'] as String;
+    }
+    return null;
   }
 }
 

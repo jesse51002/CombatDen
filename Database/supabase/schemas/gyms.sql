@@ -1,5 +1,5 @@
 
-CREATE TABLE gyms (
+CREATE TABLE gyms_unfiltered (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
     gym_description VARCHAR,
@@ -11,6 +11,15 @@ CREATE TABLE gyms (
     PRIMARY KEY (gym_id)
 );
 
+-- View: only exposes gyms with a completed Stripe account link
+CREATE VIEW gyms
+WITH (security_invoker = true)
+AS
+SELECT * FROM gyms_unfiltered
+WHERE stripe_account_id IS NOT NULL;
+
+ALTER VIEW gyms SET (security_invoker = true);
+
 -- ============================================================
 -- gym_employees (co-located to avoid circular RLS dependency)
 -- ============================================================
@@ -18,7 +27,7 @@ CREATE TABLE gyms (
 CREATE TABLE gym_employees (
     employee_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     user_id UUID CONSTRAINT fk_employee_user REFERENCES auth.users(id),
-    gym_id UUID NOT NULL CONSTRAINT fk_employee_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_employee_gym REFERENCES gyms_unfiltered(gym_id),
     employee_type VARCHAR NOT NULL CHECK (employee_type IN ('owner', 'admin', 'trainer')),
     first_name VARCHAR NOT NULL CHECK (first_name <> ''),
     last_name VARCHAR NOT NULL CHECK (last_name <> ''),

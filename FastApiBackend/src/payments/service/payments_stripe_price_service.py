@@ -91,6 +91,31 @@ class PaymentsStripePriceService:
         )
         return self._map_price(price)
 
+    async def set_product_default_price(
+        self,
+        stripe_product_id: str,
+        stripe_price_id: str,
+        stripe_account_id: str,
+    ) -> None:
+        """Set a product's default_price to the given price.
+
+        Must be called before archiving the previous default price —
+        Stripe rejects ``active=False`` on a price that is still a
+        product's ``default_price``.
+
+        Args:
+            stripe_product_id: The Stripe product ID.
+            stripe_price_id: The new default price ID.
+            stripe_account_id: The gym's Stripe Connect account ID.
+        """
+        opts = self._client.connect_opts(stripe_account_id)
+
+        await self._stripe.v1.products.update_async(
+            stripe_product_id,
+            params={"default_price": stripe_price_id},
+            options=opts,
+        )
+
     async def deactivate_price(
         self,
         request: PaymentsPriceDeactivateRequest,

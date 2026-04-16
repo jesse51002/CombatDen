@@ -17,6 +17,8 @@ MemberDetailResponse _$MemberDetailResponseFromJson(
   accountStatus: json['account_status'] as String?,
   membershipOverview: json['membership_overview'] as String,
   linkedToAccount: json['linked_to_account'] as String?,
+  totalMonthlyRecurringPrice: (json['total_monthly_recurring_price'] as num)
+      .toInt(),
   totalMembershipCount: (json['total_membership_count'] as num).toInt(),
   personalInfo: PersonalInfo.fromJson(
     json['personal_info'] as Map<String, dynamic>,

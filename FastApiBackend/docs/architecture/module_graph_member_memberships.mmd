@@ -1,0 +1,50 @@
+---
+config:
+  theme: dark
+---
+graph TB
+    router[member_memberships_router.py]
+
+    subgraph memberships["service/memberships/ (lifecycle ops)"]
+        mm_svc[member_memberships_service.py<br/>facade]
+        mm_base[member_memberships_base]
+        mm_cancel[member_memberships_cancel]
+        mm_freeze[member_memberships_freeze]
+        mm_start[member_memberships_start]
+        mm_update[member_memberships_update_price]
+        mm_cash[member_memberships_mark_paid_cash]
+    end
+
+    subgraph sync["service/payment_sync/"]
+        sync_svc[membership_payment_sync_service.py<br/>hub]
+        sync_builder[payment_sync_builder]
+        sync_alloc[payment_sync_discount_allocator]
+        sync_queries[payment_sync_queries]
+        sync_stripe[payment_sync_stripe]
+        sync_wb[price_writeback]
+    end
+
+    linked[linked_member_discount_service.py]
+
+    router --> mm_svc
+    mm_svc --> mm_cancel
+    mm_svc --> mm_freeze
+    mm_svc --> mm_start
+    mm_svc --> mm_update
+    mm_svc --> mm_cash
+    mm_cancel --> mm_base
+    mm_freeze --> mm_base
+    mm_start --> mm_base
+    mm_update --> mm_base
+    mm_cash --> mm_base
+
+    sync_svc --> sync_builder
+    sync_svc --> sync_alloc
+    sync_svc --> sync_queries
+    sync_svc --> sync_stripe
+    sync_svc --> sync_wb
+    sync_svc --> linked
+
+    sync_svc -.->|called by| discounts_ext[(src.discounts)]
+    sync_svc -.->|called by| plans_ext[(src.membership_plans)]
+    mm_start -.->|Stripe ops| payments_ext[(src.payments)]

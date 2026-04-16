@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-
 from config import BACKEND_URL, fetch_access_token
 
 
@@ -86,6 +85,4 @@ def assert_backend_reachable() -> None:
             f"`make run` in the FastApiBackend dir. ({e})"
         ) from e
     if resp.status_code != 200:
-        raise RuntimeError(
-            f"Backend /health returned {resp.status_code}. Expected 200."
-        )
+        raise RuntimeError(f"Backend /health returned {resp.status_code}. Expected 200.")

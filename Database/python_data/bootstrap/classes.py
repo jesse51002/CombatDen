@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import uuid
 
-from supabase import Client
-
 from constants import CLASSES_PER_GYM
 from generators import classes as classes_generator
 from schema.gym_class import (
@@ -17,6 +15,7 @@ from schema.gym_employee import GymEmployeeCreate
 from schema.member_membership import MemberMembershipCreate
 from schema.membership_plan import MembershipPlanCreate
 from schema.user_gym_profile import UserGymProfileCreate
+from supabase import Client
 
 
 def create(
@@ -31,9 +30,7 @@ def create(
         gym_id, CLASSES_PER_GYM, employees, plans
     )
     client.table("gym_classes").insert([p.to_insert_dict() for p in parents]).execute()
-    client.table("gym_class_schedules").insert(
-        [s.to_insert_dict() for s in schedules]
-    ).execute()
+    client.table("gym_class_schedules").insert([s.to_insert_dict() for s in schedules]).execute()
     if exceptions:
         client.table("gym_class_exceptions").insert(
             [e.to_insert_dict() for e in exceptions]
@@ -59,9 +56,7 @@ def create_logs(
         batch_size = 500
         for i in range(0, len(logs), batch_size):
             batch = logs[i : i + batch_size]
-            client.table("gym_classes_log").insert(
-                [lg.to_insert_dict() for lg in batch]
-            ).execute()
+            client.table("gym_classes_log").insert([lg.to_insert_dict() for lg in batch]).execute()
     print(f"  {gym_name}: {len(logs)} log entries")
 
     # Compute last_class per profile from actual log entries

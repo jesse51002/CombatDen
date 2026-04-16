@@ -25,6 +25,7 @@ def make_invoice_paid_event(
     paid_at: int | None = None,
     period_end: int | None = None,
     event_id: str | None = None,
+    metadata: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build an ``invoice.paid`` event payload.
 
@@ -61,6 +62,7 @@ def make_invoice_paid_event(
         "status_transitions": {"paid_at": paid_at},
         "created": now,
         "lines": {"data": lines, "object": "list"},
+        "metadata": metadata or {},
     }
     return {
         "id": event_id or _evt_id("evt_test_paid"),

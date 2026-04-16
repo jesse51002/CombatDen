@@ -1,0 +1,60 @@
+---
+config:
+  theme: dark
+---
+graph LR
+    main[main.py<br/>FastAPI app]
+
+    subgraph domains["Business domains"]
+        direction LR
+        members
+        classes
+        member_memberships
+        membership_plans
+        discounts
+        gyms
+        stripe_webhooks
+        payments
+    end
+
+    subgraph infra["Infrastructure"]
+        direction TB
+        core[core<br/>config + DI container]
+        shared[shared<br/>auth, db, sql_loader,<br/>gym_stripe, formatters,<br/>column_guard, db_first_helpers,<br/>gym_timezone]
+    end
+
+    main --> members
+    main --> classes
+    main --> member_memberships
+    main --> membership_plans
+    main --> discounts
+    main --> gyms
+    main --> stripe_webhooks
+
+    members --> classes
+    members --> payments
+    member_memberships --> payments
+    discounts --> member_memberships
+    discounts --> payments
+    membership_plans --> member_memberships
+    membership_plans --> payments
+    gyms --> payments
+    stripe_webhooks --> gyms
+    stripe_webhooks --> payments
+
+    members --> shared
+    classes --> shared
+    member_memberships --> shared
+    membership_plans --> shared
+    discounts --> shared
+    gyms --> shared
+    stripe_webhooks --> shared
+    payments --> shared
+    core --> shared
+
+    classDef foundational fill:#e8f4fd,stroke:#1c6ea4,stroke-width:2px;
+    classDef hub fill:#fff4e6,stroke:#d97706,stroke-width:2px;
+    classDef leaf fill:#f0f0f0,stroke:#888;
+    class payments foundational;
+    class member_memberships hub;
+    class classes leaf;

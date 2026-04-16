@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from . import SeedModel
@@ -7,6 +6,6 @@ from . import SeedModel
 class GymCreate(SeedModel):
     gym_id: UUID
     gym_name: str
-    gym_description: Optional[str] = None
-    stripe_account_id: Optional[str] = None
+    gym_description: str | None = None
+    stripe_account_id: str | None = None
     stripe_onboarding_status: str = "not_started"

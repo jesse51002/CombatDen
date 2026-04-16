@@ -8,7 +8,7 @@ CREATE TABLE user_gym_invoice_line_items (
     invoice_id UUID NOT NULL
         CONSTRAINT fk_line_item_invoice
         REFERENCES user_gym_invoices(invoice_id) ON DELETE CASCADE,
-    gym_id UUID NOT NULL CONSTRAINT fk_line_item_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_line_item_gym REFERENCES gyms_unfiltered(gym_id),
 
     item_type line_item_type NOT NULL,
     name VARCHAR NOT NULL CHECK (name <> ''),  -- frozen historical label

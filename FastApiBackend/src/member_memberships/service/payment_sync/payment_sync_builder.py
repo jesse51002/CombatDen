@@ -11,6 +11,7 @@ from src.member_memberships.schema.payment_sync_schema import (
     ActiveMembershipRow,
     IntervalBucket,
     IntervalDesiredItem,
+    SyncItem,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionDesiredItem,
@@ -88,10 +89,15 @@ def aggregate_plan_discounts(
 def build_desired_items(
     memberships: list[ActiveMembershipRow],
     add_intervals: list[IntervalDesiredItem],
-    cancel_ids: list[PaymentsSubscriptionDesiredItem],
     plan_discounts: dict[UUID, list[SubscriptionItemDiscount]],
 ) -> list[IntervalDesiredItem]:
-    """Convert current memberships + adds - cancels into desired items.
+    """Convert current memberships + adds into desired items.
+
+    Cancellations must be applied upstream by filtering
+    ``memberships`` on the full ``(crm_user_id, plan_id)`` key
+    before calling this function — filtering by
+    ``stripe_price_id`` alone is unsafe on shared family plans
+    where every member row shares the same price.
 
     Existing memberships get prorate=False (old items).
     New add_ids keep whatever prorate the caller set.
@@ -102,8 +108,6 @@ def build_desired_items(
 
     Pure logic, no DB calls.
     """
-    cancel_price_ids = {c.stripe_price_id for c in cancel_ids}
-
     current = [
         IntervalDesiredItem(
             item=PaymentsSubscriptionDesiredItem(
@@ -116,7 +120,6 @@ def build_desired_items(
             price=m.price,
         )
         for m in memberships
-        if m.stripe_price_id not in cancel_price_ids
     ]
 
     return current + add_intervals
@@ -203,10 +206,15 @@ def _union_discounts(
 
 
 def map_add_ids_to_intervals(
-    add_ids: list[PaymentsSubscriptionDesiredItem],
+    add_ids: list[SyncItem],
     interval_map: dict[str, tuple[DurationUnit, int]],
+    coupon_by_discount_id: dict[UUID, str],
 ) -> list[IntervalDesiredItem]:
     """Map add_ids to IntervalDesiredItems using the interval lookup.
+
+    Each new item arrives with its CRM ``discount_ids`` resolved
+    to Stripe coupon references on the very first sync — no
+    dependency on a filtered-view writeback race.
 
     Raises:
         ValueError: If a stripe_price_id is not found.
@@ -218,13 +226,44 @@ def map_add_ids_to_intervals(
                 f"Price not found: {item.stripe_price_id}",
             )
         duration_unit, price = interval_map[item.stripe_price_id]
+        discounts = _resolve_item_discounts(
+            item.discount_ids,
+            coupon_by_discount_id,
+        )
         resolved.append(
             IntervalDesiredItem(
-                item=item,
+                item=PaymentsSubscriptionDesiredItem(
+                    stripe_price_id=item.stripe_price_id,
+                    stripe_item_id=item.stripe_item_id,
+                    prorate=item.prorate,
+                    quantity=item.quantity,
+                    discounts=discounts,
+                ),
                 duration_unit=duration_unit,
                 price=price,
             )
         )
+    return resolved
+
+
+def _resolve_item_discounts(
+    discount_ids: list[UUID],
+    coupon_by_discount_id: dict[UUID, str],
+) -> list[SubscriptionItemDiscount]:
+    """Resolve CRM discount UUIDs to Stripe coupon references.
+
+    Skips any discount_id missing from the lookup (soft-deleted
+    or never synced to Stripe) — one stale discount should not
+    abort the whole item.
+    """
+    seen: set[str] = set()
+    resolved: list[SubscriptionItemDiscount] = []
+    for discount_id in discount_ids:
+        coupon = coupon_by_discount_id.get(discount_id)
+        if coupon is None or coupon in seen:
+            continue
+        seen.add(coupon)
+        resolved.append(SubscriptionItemDiscount(coupon=coupon))
     return resolved
 
 

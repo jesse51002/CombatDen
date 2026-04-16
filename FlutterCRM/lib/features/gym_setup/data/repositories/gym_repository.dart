@@ -1,78 +1,132 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/gym_setup/data/models/gym_create_request.dart';
+import 'package:crm/features/gym_setup/data/models/gym_create_response.dart';
+import 'package:crm/features/gym_setup/data/models/gym_onboarding_link_response.dart';
+import 'package:crm/features/gym_setup/data/models/gym_onboarding_status_response.dart';
+import 'package:dio/dio.dart';
 
-/// Repository for gym setup data access
+/// Repository mediating all gym-creation traffic
+/// through the FastAPI backend.
+///
+/// Supabase writes to `gyms` and `gym_employees` are
+/// RLS-revoked; every mutation must go through these
+/// endpoints. See `FastApiBackend/src/gyms/notes/` for
+/// the full contract.
 class GymRepository {
-  final SupabaseClient _supabase;
+  final ApiClient _apiClient;
 
-  GymRepository({SupabaseClient? supabaseClient})
-      : _supabase =
-            supabaseClient ?? Supabase.instance.client;
+  GymRepository({required ApiClient apiClient})
+      : _apiClient = apiClient;
 
-  /// Returns the owner employee record for [userId],
-  /// or null if the user doesn't own any gym.
-  Future<Map<String, dynamic>?> getOwnerEmployee(
-    String userId,
-  ) async {
-    try {
-      final response = await _supabase
-          .from('gym_employees')
-          .select('*, gyms(*)')
-          .eq('user_id', userId)
-          .eq('employee_type', 'owner')
-          .maybeSingle();
-      return response;
-    } on PostgrestException catch (e) {
-      throw DatabaseException(e.message);
-    }
-  }
-
-  /// Returns the gym by [gymId], or null.
-  Future<Map<String, dynamic>?> getGymById(
-    String gymId,
-  ) async {
-    try {
-      final response = await _supabase
-          .from('gyms')
-          .select()
-          .eq('gym_id', gymId)
-          .maybeSingle();
-      return response;
-    } on PostgrestException catch (e) {
-      throw DatabaseException(e.message);
-    }
-  }
-
-  /// Creates a gym and its owner employee in one flow.
-  /// Returns the created gym row.
-  Future<Map<String, dynamic>> setupGym({
+  /// `POST /api/v1/gyms/` — create a gym and mint the
+  /// first Stripe onboarding URL.
+  ///
+  /// Throws [GymConflictException] on `409`, preserving
+  /// the `detail` string so the caller can switch on
+  /// the three contract values. Throws
+  /// [DatabaseException] for every other failure mode
+  /// with a user-facing message.
+  Future<GymCreateResponse> createGym({
     required String gymName,
-    required String userId,
     required String firstName,
     required String lastName,
   }) async {
+    final request = GymCreateRequest(
+      gymName: gymName,
+      ownerFirstName: firstName,
+      ownerLastName: lastName,
+    );
     try {
-      final gym = await _supabase
-          .from('gyms')
-          .insert({
-            'gym_name': gymName,
-          })
-          .select()
-          .single();
-
-      final gymId = gym['gym_id'] as String;
-
-      await _supabase.from('gym_employees').insert({
-        'user_id': userId,
-        'gym_id': gymId,
-        'employee_type': 'owner',
-        'first_name': firstName,
-        'last_name': lastName,
-      });
-
-      return gym;
-    } on PostgrestException catch (e) {
+      final response = await _apiClient.post<dynamic>(
+        '/api/v1/gyms/',
+        data: request.toJson(),
+      );
+      return GymCreateResponse.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409 && e.detail != null) {
+        throw GymConflictException(e.detail!);
+      }
+      throw DatabaseException(_userFacingMessage(e));
+    } on NetworkException catch (e) {
       throw DatabaseException(e.message);
+    } on DioException catch (e) {
+      throw DatabaseException(
+        'Unexpected error: ${e.message}',
+      );
+    }
+  }
+
+  /// `GET /api/v1/gyms/me/onboarding` — refresh the
+  /// gym's Stripe onboarding status.
+  ///
+  /// Returns `null` when the backend returns `404`
+  /// (no gym owned by this user, or the Stripe account
+  /// vanished). Throws [DatabaseException] on any
+  /// other failure.
+  Future<GymOnboardingStatusResponse?>
+      getOnboardingStatus() async {
+    try {
+      final response = await _apiClient.get<dynamic>(
+        '/api/v1/gyms/me/onboarding',
+      );
+      return GymOnboardingStatusResponse.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 404) {
+        return null;
+      }
+      throw DatabaseException(_userFacingMessage(e));
+    } on NetworkException catch (e) {
+      throw DatabaseException(e.message);
+    }
+  }
+
+  /// `POST /api/v1/gyms/me/onboarding/link` — mint a
+  /// fresh hosted URL without re-reading Stripe.
+  ///
+  /// Valid only while the gym is still `pending`. A
+  /// `409` here means the status has flipped; the
+  /// caller should re-fetch via [getOnboardingStatus].
+  Future<GymOnboardingLinkResponse>
+      refreshOnboardingLink() async {
+    try {
+      final response = await _apiClient.post<dynamic>(
+        '/api/v1/gyms/me/onboarding/link',
+      );
+      return GymOnboardingLinkResponse.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      throw DatabaseException(_userFacingMessage(e));
+    } on NetworkException catch (e) {
+      throw DatabaseException(e.message);
+    }
+  }
+
+  /// Maps a backend [ServerException] to copy suitable
+  /// for showing to the end user. Mirrors the HTTP
+  /// status → UX mapping in
+  /// `05_error_handling.md`.
+  String _userFacingMessage(ServerException e) {
+    switch (e.statusCode) {
+      case 400:
+        return 'Please check your info and try again.';
+      case 401:
+        return 'Your session has expired. '
+            'Please sign in again.';
+      case 502:
+        return 'Stripe is unavailable right now. '
+            'Please try again.';
+      case 500:
+        return 'Something went wrong. '
+            'Please try again.';
+      default:
+        return 'Something went wrong. '
+            'Please try again.';
     }
   }
 }

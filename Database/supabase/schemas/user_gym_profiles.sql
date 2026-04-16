@@ -1,7 +1,7 @@
 CREATE TABLE user_gym_profiles_unfiltered (
     crm_user_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     user_id UUID CONSTRAINT fk_profile_user REFERENCES auth.users(id),
-    gym_id UUID NOT NULL CONSTRAINT fk_profile_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_profile_gym REFERENCES gyms_unfiltered(gym_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_class TIMESTAMPTZ,
     first_name VARCHAR NOT NULL CHECK (first_name <> ''),

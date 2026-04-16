@@ -105,20 +105,20 @@ class CrmFrozenViewService(CrmBaseViewService):
 
     def _normalize_prices_to_monthly(
         self,
-        prices: list[float],
+        prices: list[int],
         duration_units: list[str],
-    ) -> float:
+    ) -> int:
         """Normalize and sum prices to a monthly equivalent.
 
         Converts weekly prices (x 52/12) and yearly prices
         (/ 12) to monthly, then sums them.
 
         Args:
-            prices: List of raw prices from ARRAY_AGG.
+            prices: List of raw prices (minor units) from ARRAY_AGG.
             duration_units: Matching duration units.
 
         Returns:
-            Total monthly price.
+            Total monthly price in minor units.
         """
         total = 0.0
         for price, unit in zip(prices, duration_units, strict=False):
@@ -128,4 +128,4 @@ class CrmFrozenViewService(CrmBaseViewService):
                 multiplier = 1
                 logger.warning(f"Duration unit isnt in dictionary {unit}")
             total += price * multiplier
-        return round(total, 2)
+        return round(total)

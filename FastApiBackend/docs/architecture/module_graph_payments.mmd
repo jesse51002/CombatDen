@@ -1,0 +1,67 @@
+---
+config:
+  theme: dark
+---
+graph TB
+    subgraph base["service/ (Stripe clients)"]
+        client[payments_stripe_client.py]
+        mappers[payments_stripe_mappers.py]
+        cash[cash_constants.py]
+        price[payments_stripe_price_service]
+        members[payments_stripe_members_service]
+        discount[payments_stripe_discount_service]
+        membership[payments_stripe_membership_service]
+        payment[payments_stripe_payment_service]
+    end
+
+    subgraph sub["service/subscription/"]
+        facade[payments_subscription_facade.py<br/>orchestrator]
+        sub_base[payments_subscription_base]
+        sub_cancel[payments_subscription_cancel]
+        sub_create[payments_subscription_create]
+        sub_freeze[payments_subscription_freeze]
+        sub_item[payments_subscription_item]
+        sub_migration[payments_subscription_migration]
+        sub_update[payments_subscription_update]
+        sub_upcoming[payments_subscription_upcoming]
+    end
+
+    price --> client
+    members --> client
+    discount --> client
+    membership --> client
+    membership --> price
+    payment --> client
+    payment --> mappers
+    payment --> members
+    payment --> price
+    payment --> cash
+
+    sub_base --> client
+    sub_base --> discount
+    sub_base --> members
+    sub_base --> price
+
+    sub_cancel --> sub_base
+    sub_freeze --> sub_base
+    sub_item --> sub_base
+    sub_migration --> sub_base
+    sub_upcoming --> sub_base
+    sub_upcoming --> mappers
+    sub_update --> sub_base
+    sub_update --> mappers
+    sub_create --> sub_base
+    sub_create --> mappers
+    sub_create --> cash
+
+    facade --> client
+    facade --> discount
+    facade --> members
+    facade --> price
+    facade --> sub_cancel
+    facade --> sub_create
+    facade --> sub_freeze
+    facade --> sub_item
+    facade --> sub_migration
+    facade --> sub_update
+    facade --> sub_upcoming

@@ -1,3 +1,9 @@
+WITH latest_memberships AS (
+    SELECT DISTINCT ON (crm_user_id, gym_id, plan_id) *
+    FROM member_memberships_status
+    ORDER BY crm_user_id, gym_id, plan_id,
+             start_date DESC, created_at DESC
+)
 SELECT
     p.crm_user_id,
     p.first_name,
@@ -17,7 +23,7 @@ SELECT
     mp.duration_unit,
     (now() AT TIME ZONE g.timezone)::date AS gym_today
 FROM user_gym_profiles p
-LEFT JOIN member_memberships_status m
+LEFT JOIN latest_memberships m
     ON p.crm_user_id = m.crm_user_id
     AND p.gym_id = m.gym_id
 LEFT JOIN membership_plans mp

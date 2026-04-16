@@ -98,8 +98,18 @@ def build_member_management_service(
 
     Mirrors ``src/core/dependencies.py`` lines 174-178.
     """
+    price_svc = PaymentsStripePriceService(stripe_client)
     members_svc = PaymentsStripeMembersService(stripe_client)
-    return MembersManagementService(db_pool, members_svc)
+    discount_svc = PaymentsStripeDiscountService(stripe_client)
+    subscription_svc = PaymentsStripeSubscriptionService(
+        stripe_client, members_svc, price_svc, discount_svc,
+    )
+    gym_stripe_svc = GymStripeService(db_pool)
+    linked_discount_svc = LinkedMemberDiscountService(db_pool)
+    sync_svc = MembershipPaymentSyncService(
+        db_pool, subscription_svc, gym_stripe_svc, linked_discount_svc,
+    )
+    return MembersManagementService(db_pool, members_svc, sync_svc)
 
 
 def build_member_memberships_service(
@@ -125,7 +135,7 @@ def build_member_memberships_service(
         db_pool, subscription_svc, gym_stripe_svc, linked_discount_svc,
     )
     return MemberMembershipsService(
-        db_pool, sync_svc, payment_svc, gym_stripe_svc, subscription_svc,
+        db_pool, sync_svc, payment_svc, gym_stripe_svc,
     )
 
 

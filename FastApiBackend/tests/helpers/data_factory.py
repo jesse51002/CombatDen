@@ -75,6 +75,7 @@ async def create_member(
     first_name: str = "Test",
     last_name: str = "Member",
     payment_method_id: str | None = None,
+    test_clock_id: str | None = None,
 ) -> TestMember:
     """Create a member profile with a Stripe customer (DB-first).
 
@@ -105,6 +106,8 @@ async def create_member(
         "name": f"{first_name} {last_name}",
         "metadata": {"crm_pk": str(crm_user_id)},
     }
+    if test_clock_id:
+        customer_params["test_clock"] = test_clock_id
     if payment_method_id:
         customer_params["payment_method"] = payment_method_id
         customer_params["invoice_settings"] = {

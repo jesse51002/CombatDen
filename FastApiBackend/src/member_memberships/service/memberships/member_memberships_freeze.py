@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
@@ -16,12 +15,6 @@ from src.member_memberships.service.memberships.member_memberships_base import (
 )
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
-
-if TYPE_CHECKING:
-    from src.member_memberships.schema.payment_sync_schema import ParentProfile
-    from src.payments.schema.payments_members_schema import (
-        PaymentsSubscriptionResponse,
-    )
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +50,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         freeze_end_date = today + relativedelta(months=freeze_months)
 
         # ── Stripe first ──────────────────────────────────
-        response = await self._payment_sync.update_payments_recurring(
+        await self._payment_sync.update_payments_recurring(
             crm_user_id,
             add_ids=[],
             cancel_ids=[],
@@ -71,9 +64,6 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
             today,
             freeze_end_date,
         )
-
-        # ── Fan out post-discount prices to all siblings ──
-        await self._sync_prices(parent, response)
 
     async def unfreeze(
         self,
@@ -93,16 +83,15 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         parent = await self._payment_sync.resolve_parent(crm_user_id)
 
         if not parent.is_frozen:
-            response = await self._payment_sync.update_payments_recurring(
+            await self._payment_sync.update_payments_recurring(
                 crm_user_id,
                 add_ids=[],
                 cancel_ids=[],
             )
-            await self._sync_prices(parent, response)
             return
 
         # ── Stripe first ──────────────────────────────────
-        response = await self._payment_sync.update_payments_recurring(
+        await self._payment_sync.update_payments_recurring(
             crm_user_id,
             add_ids=[],
             cancel_ids=[],
@@ -115,26 +104,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
             parent.gym_id,
         )
 
-        # ── Fan out post-discount prices to all siblings ──
-        await self._sync_prices(parent, response)
-
     # ── Private ────────────────────────────────────────────────
-
-    async def _sync_prices(
-        self,
-        parent: ParentProfile,
-        response: PaymentsSubscriptionResponse | None,
-    ) -> None:
-        """Fan out post-discount prices after a freeze-state sync."""
-        stripe_sub_id = response.stripe_subscription_id if response else None
-        stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-            parent.gym_id,
-        )
-        await self._price_writeback.sync_prices_from_stripe(
-            parent_crm_user_id=parent.crm_user_id,
-            stripe_sub_id=stripe_sub_id,
-            stripe_account_id=stripe_account_id,
-        )
 
     async def _crm_freeze_profile(
         self,

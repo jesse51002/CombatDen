@@ -57,17 +57,13 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             crm_user_id=crm_user_id,
             plan_id=row["plan_id"],
         )
-        stripe_sub_id_after: str | None = None
-        sync_succeeded = True
         try:
-            sync_response = await self._payment_sync.update_payments_recurring(
+            await self._payment_sync.update_payments_recurring(
                 crm_user_id,
                 add_ids=[],
                 cancel_ids=[cancel_item],
             )
-            stripe_sub_id_after = sync_response.stripe_subscription_id if sync_response else None
         except PaymentsResourceNotFoundError:
-            sync_succeeded = False
             logger.warning(
                 "Stripe resource not found during cancel "
                 "(proceeding with CRM cancel): "
@@ -78,18 +74,6 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         # ── CRM cancel ────────────────────────────────────
         await self._crm_cancel(item_id, crm_user_id, gym_today(row["timezone"]))
-
-        # ── Fan out post-discount prices to all siblings ──
-        if sync_succeeded:
-            parent = await self._payment_sync.resolve_parent(crm_user_id)
-            stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-                parent.gym_id,
-            )
-            await self._price_writeback.sync_prices_from_stripe(
-                parent_crm_user_id=parent.crm_user_id,
-                stripe_sub_id=stripe_sub_id_after,
-                stripe_account_id=stripe_account_id,
-            )
 
     # ── Private ────────────────────────────────────────────────
 

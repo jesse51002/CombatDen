@@ -1,8 +1,15 @@
-"""Integration tests for DiscountsService (lighter coverage)."""
+"""Integration tests for DiscountsService.
 
-from starlette.background import BackgroundTasks
+Every CRUD path also retrieves the Stripe coupon and asserts the
+final state matches. This is the contract: if the service reports
+success, the coupon on Stripe must be in the expected shape.
+"""
 
+import pytest
+import stripe
 from schema.gym_discount import DiscountType
+from sqlalchemy import text
+from starlette.background import BackgroundTasks
 
 from src.discounts.schema.discounts_schema import (
     DiscountCreateRequest,
@@ -12,7 +19,19 @@ from src.discounts.schema.discounts_schema import (
 from src.payments.schema.payments_enums import StripeCouponDuration
 
 
-async def test_create_percentage_discount(discounts_service, gym_id):
+async def _fetch_coupon(stripe_client, coupon_id, connect_opts):
+    return await stripe_client.client.v1.coupons.retrieve_async(
+        coupon_id,
+        options=connect_opts,
+    )
+
+
+async def test_create_percentage_discount(
+    discounts_service,
+    gym_id,
+    stripe_client,
+    connect_opts,
+):
     resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
@@ -29,8 +48,24 @@ async def test_create_percentage_discount(discounts_service, gym_id):
     assert resp.dollar_off is None
     assert resp.stripe_coupon_id is not None
 
+    # Stripe side: coupon must exist with the expected percent_off.
+    coupon = await _fetch_coupon(
+        stripe_client,
+        resp.stripe_coupon_id,
+        connect_opts,
+    )
+    assert coupon.valid is True
+    assert coupon.percent_off == 20.0
+    assert coupon.amount_off is None
+    assert coupon.duration == StripeCouponDuration.forever.value
 
-async def test_create_dollar_discount(discounts_service, gym_id):
+
+async def test_create_dollar_discount(
+    discounts_service,
+    gym_id,
+    stripe_client,
+    connect_opts,
+):
     resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
@@ -44,8 +79,23 @@ async def test_create_dollar_discount(discounts_service, gym_id):
     assert resp.dollar_off == 1000
     assert resp.percentage_off is None
 
+    coupon = await _fetch_coupon(
+        stripe_client,
+        resp.stripe_coupon_id,
+        connect_opts,
+    )
+    assert coupon.valid is True
+    assert coupon.amount_off == 1000
+    assert coupon.percent_off is None
+    assert coupon.duration == StripeCouponDuration.once.value
 
-async def test_update_discount_name(discounts_service, gym_id):
+
+async def test_update_discount_name(
+    discounts_service,
+    gym_id,
+    stripe_client,
+    connect_opts,
+):
     created = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
@@ -67,8 +117,38 @@ async def test_update_discount_name(discounts_service, gym_id):
 
     assert resp.discount_name == "New Name"
 
+    # Stripe side: the service creates a fresh coupon on every update
+    # (Stripe coupons are mostly immutable), so the stripe_coupon_id
+    # on the response should differ from the original and the old
+    # coupon should have been deleted.
+    assert resp.stripe_coupon_id != created.stripe_coupon_id, (
+        "update_discount should have swapped in a fresh Stripe coupon"
+    )
+    new_coupon = await _fetch_coupon(
+        stripe_client,
+        resp.stripe_coupon_id,
+        connect_opts,
+    )
+    assert new_coupon.name == "New Name", (
+        f"Stripe coupon {new_coupon.id} name={new_coupon.name!r} not updated"
+    )
+    assert new_coupon.valid is True
 
-async def test_delete_discount(discounts_service, db_pool, gym_id):
+    with pytest.raises(stripe.InvalidRequestError):
+        await _fetch_coupon(
+            stripe_client,
+            created.stripe_coupon_id,
+            connect_opts,
+        )
+
+
+async def test_delete_discount(
+    discounts_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+):
     created = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
@@ -85,9 +165,7 @@ async def test_delete_discount(discounts_service, db_pool, gym_id):
         background_tasks=BackgroundTasks(),
     )
 
-    # Verify the discount is soft-deleted (is_deleted = true)
-    from sqlalchemy import text
-
+    # CRM side: row is soft-deleted (is_deleted = true).
     async with db_pool.session() as session:
         result = await session.execute(
             text(
@@ -99,3 +177,12 @@ async def test_delete_discount(discounts_service, db_pool, gym_id):
         row = result.mappings().fetchone()
 
     assert row["is_deleted"] is True
+
+    # Stripe side: coupon must be gone. Stripe ``coupons.retrieve`` on
+    # a deleted coupon raises InvalidRequestError (404).
+    with pytest.raises(stripe.InvalidRequestError):
+        await _fetch_coupon(
+            stripe_client,
+            created.stripe_coupon_id,
+            connect_opts,
+        )

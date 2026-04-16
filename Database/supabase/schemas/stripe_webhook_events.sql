@@ -1,6 +1,6 @@
 CREATE TABLE stripe_webhook_events (
     event_id VARCHAR NOT NULL,
-    gym_id UUID NOT NULL CONSTRAINT fk_webhook_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_webhook_gym REFERENCES gyms_unfiltered(gym_id),
     event_type VARCHAR NOT NULL,
     processed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (event_id)

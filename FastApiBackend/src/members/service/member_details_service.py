@@ -81,6 +81,7 @@ class MemberService:
             raise ValueError(f"No profile found for crm_user_id={crm_user_id}")
 
         target_row = _find_target_profile(rows, crm_user_id)
+        parent_row = _find_parent_profile(rows, target_row)
         gym_id = target_row["gym_id"]
 
         await self._supplementary.fetch_all(gym_id, crm_user_id)
@@ -101,6 +102,7 @@ class MemberService:
             membership_rows,
             self._supplementary,
             usage_lookup,
+            crm_user_id,
         )
 
         linked_to_id = target_row["account_linked_to_id"]
@@ -112,16 +114,17 @@ class MemberService:
         else:
             grouped = all_grouped
 
-        active_total, frozen_total, has_trial, has_cancelled, paying_count = (
-            _compute_overview_totals(membership_rows)
+        has_trial, has_cancelled, has_frozen, paying_count = _scan_membership_flags(
+            membership_rows
         )
+        monthly_total = parent_row["total_monthly_recurring_price"] or 0
 
         overview, linked_to_account = self._grouper.build_membership_overview(
             linked_to_id,
-            active_total,
-            frozen_total,
+            monthly_total,
             has_trial,
             has_cancelled,
+            has_frozen,
             paying_count,
             self._supplementary,
         )
@@ -141,6 +144,7 @@ class MemberService:
             linked_to_account=linked_to_account,
             linked_accounts=linked_accounts,
             streak_weeks=streak_weeks,
+            total_monthly_recurring_price=(parent_row["total_monthly_recurring_price"]),
         )
 
     async def _fetch_family_rows(
@@ -173,6 +177,7 @@ class MemberService:
         linked_to_account: UUID | None,
         linked_accounts: list,
         streak_weeks: int,
+        total_monthly_recurring_price: int,
     ) -> MemberDetailResponse:
         """Assemble the final MemberDetailResponse.
 
@@ -185,6 +190,9 @@ class MemberService:
             overview: Membership overview string.
             linked_to_account: Primary account ID or None.
             linked_accounts: LinkedAccount list.
+            streak_weeks: Class streak in weeks.
+            total_monthly_recurring_price: Parent account's monthly
+                recurring total.
 
         Returns:
             Fully assembled MemberDetailResponse.
@@ -201,6 +209,7 @@ class MemberService:
             ),
             membership_overview=overview,
             linked_to_account=linked_to_account,
+            total_monthly_recurring_price=total_monthly_recurring_price,
             total_membership_count=len(membership_rows),
             personal_info=PersonalInfo(
                 phone=target_row["phone"],
@@ -242,44 +251,63 @@ def _find_target_profile(rows: list, crm_user_id: UUID) -> dict:
     raise ValueError(f"No profile found for crm_user_id={crm_user_id}")
 
 
-def _compute_overview_totals(
-    membership_rows: list,
-) -> tuple[float, float, bool, bool, int]:
-    """Compute overview totals from membership rows.
+def _find_parent_profile(rows: list, target_row: dict) -> dict:
+    """Find the parent account row for the queried user.
+
+    If the target is a linked (child) account, returns the row for
+    its parent; otherwise returns the target row itself.
 
     Args:
-        membership_rows: All membership rows with total_price.
+        rows: All query result rows (the full family group).
+        target_row: The queried user's profile row.
 
     Returns:
-        Tuple of (active_total, frozen_total, has_trial,
-        has_cancelled, paying_count).
+        The parent account's profile row.
+
+    Raises:
+        ValueError: If the target is linked but no parent row is
+            present in the family rows.
     """
-    active_total = 0.0
-    frozen_total = 0.0
+    linked_to_id = target_row["account_linked_to_id"]
+    if linked_to_id is None:
+        return target_row
+    for row in rows:
+        if row["crm_user_id"] == linked_to_id:
+            return row
+    raise ValueError(f"No parent profile found for linked_to_id={linked_to_id}")
+
+
+def _scan_membership_flags(
+    membership_rows: list,
+) -> tuple[bool, bool, bool, int]:
+    """Scan membership rows for status flags.
+
+    Args:
+        membership_rows: All membership rows in the family.
+
+    Returns:
+        Tuple of (has_trial, has_cancelled, has_frozen, paying_count).
+        paying_count only includes active recurring memberships.
+    """
     has_trial = False
     has_cancelled = False
+    has_frozen = False
     paying_count = 0
 
     for row in membership_rows:
         row_status = row["membership_status"]
         plan_type = row["plan_type"]
 
-        if row_status == MembershipDbStatus.cancelled:
-            has_cancelled = True
-            continue
-        if plan_type == PlanType.trial:
-            has_trial = True
-            continue
-
-        paying_count += 1
-        price = row["total_price"] or 0
-
         if row_status == MembershipDbStatus.frozen:
-            frozen_total += price
-        else:
-            active_total += price
+            has_frozen = True
+        elif row_status == MembershipDbStatus.cancelled:
+            has_cancelled = True
+        elif plan_type == PlanType.trial:
+            has_trial = True
+        elif plan_type == PlanType.recurring and row_status == MembershipDbStatus.active:
+            paying_count += 1
 
-    return active_total, frozen_total, has_trial, has_cancelled, paying_count
+    return has_trial, has_cancelled, has_frozen, paying_count
 
 
 def _derive_account_status(

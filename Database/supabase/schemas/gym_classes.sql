@@ -1,6 +1,6 @@
 CREATE TABLE gym_classes (
     class_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    gym_id UUID NOT NULL CONSTRAINT fk_class_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_class_gym REFERENCES gyms_unfiltered(gym_id),
     class_name VARCHAR NOT NULL CHECK (class_name <> ''),
     class_description VARCHAR,
     allowed_plan_ids JSONB,

@@ -284,11 +284,7 @@ class PaymentsStripeMembersService:
         return [
             PaymentsInvoiceResponse(
                 stripe_invoice_id=inv.id,
-                stripe_subscription_id=(
-                    inv.subscription
-                    if isinstance(inv.subscription, str)
-                    else (inv.subscription.id if inv.subscription else None)
-                ),
+                stripe_subscription_id=_extract_subscription_id(inv),
                 amount_due=inv.amount_due,
                 amount_paid=inv.amount_paid,
                 amount_remaining=inv.amount_remaining,
@@ -300,3 +296,37 @@ class PaymentsStripeMembersService:
             )
             for inv in result.data
         ]
+
+
+def _extract_subscription_id(invoice) -> str | None:
+    """Return the subscription id tied to an invoice, or None.
+
+    Newer Stripe API versions removed the top-level ``subscription``
+    attribute on Invoice. The subscription id now lives under
+    ``parent.subscription_details.subscription``. Older versions
+    still expose the legacy attribute. Handle both so the listing
+    endpoint keeps working across API version bumps.
+    """
+    # New shape: parent.subscription_details.subscription
+    parent = getattr(invoice, "parent", None)
+    if parent is not None:
+        details = getattr(parent, "subscription_details", None)
+        if details is not None:
+            sub = getattr(details, "subscription", None)
+            if isinstance(sub, str):
+                return sub
+            if sub is not None:
+                return getattr(sub, "id", None)
+
+    # Legacy shape: top-level ``subscription``. Use ``in`` rather
+    # than ``getattr`` because ``Invoice.__getattr__`` raises
+    # AttributeError for missing keys instead of returning ``None``.
+    try:
+        legacy = invoice["subscription"]  # type: ignore[index]
+    except KeyError, TypeError:
+        return None
+    if isinstance(legacy, str):
+        return legacy
+    if legacy is None:
+        return None
+    return getattr(legacy, "id", None)

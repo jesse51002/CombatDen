@@ -1,6 +1,5 @@
 from datetime import date
 from enum import StrEnum
-from typing import Optional
 from uuid import UUID
 
 from pydantic import computed_field
@@ -24,15 +23,15 @@ class MemberMembershipCreate(SeedModel):
     plan_id: UUID
     price_id: UUID
     start_date: date
-    end_date: Optional[date] = None
-    cancel_date: Optional[date] = None
-    last_paid_date: Optional[date] = None
-    next_due_date: Optional[date] = None
+    end_date: date | None = None
+    cancel_date: date | None = None
+    last_paid_date: date | None = None
+    next_due_date: date | None = None
     prorate: bool = True
     total_price: int
 
-    discount_ids: Optional[list[UUID]] = None
-    stripe_item_id: Optional[str] = None
+    discount_ids: list[UUID] | None = None
+    stripe_item_id: str | None = None
 
     def to_insert_dict(self) -> dict:
         data = super().to_insert_dict()

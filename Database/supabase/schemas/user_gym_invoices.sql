@@ -6,7 +6,7 @@ CREATE TYPE invoice_status AS ENUM ('open', 'paid');
 
 CREATE TABLE user_gym_invoices (
     invoice_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    gym_id UUID NOT NULL CONSTRAINT fk_invoice_gym REFERENCES gyms(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_invoice_gym REFERENCES gyms_unfiltered(gym_id),
     crm_user_id UUID NOT NULL,
 
     status invoice_status NOT NULL DEFAULT 'open',

@@ -35,7 +35,6 @@ from src.member_memberships.service.payment_sync.price_writeback import (
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_members_schema import (
-    PaymentsSubscriptionDesiredItem,
     PaymentsSubscriptionResponse,
 )
 from src.payments.service.subscription import (
@@ -78,6 +77,7 @@ class MembershipPaymentSyncService:
         cancel_ids: list[SyncItem],
         freeze_end_date: date | None = None,
         unfreeze: bool = False,
+        pay_first_invoice_out_of_band: bool = False,
     ) -> PaymentsSubscriptionResponse | None:
         """Sync a member's recurring memberships with Stripe.
 
@@ -138,20 +138,27 @@ class MembershipPaymentSyncService:
         )
 
         # ── Build desired items for Stripe ─────────────────
-        stripped_add = [item.to_desired_item() for item in add_ids]
-        stripped_cancel = [item.to_desired_item() for item in cancel_ids]
-
         memberships = await self._queries.get_active_memberships(
             family_ids,
         )
-        add_intervals = await self._resolve_add_intervals(stripped_add)
 
-        # Resolve every discount referenced by this sync — linked
-        # and plan-level — in one batched query. CRM UUIDs must be
-        # translated to real Stripe coupon IDs before hitting Stripe.
+        # Filter cancelled memberships by full identity, not by
+        # stripe_price_id — on a shared family plan every row
+        # shares the same price, so price-only filtering would
+        # drop every sibling when one child cancels.
+        cancel_keys = {(item.crm_user_id, item.plan_id) for item in cancel_ids}
+        memberships = [m for m in memberships if (m.crm_user_id, m.plan_id) not in cancel_keys]
+
+        # Resolve every discount referenced by this sync — linked,
+        # plan-level, and newly-added — in one batched query. CRM
+        # UUIDs must be translated to real Stripe coupon IDs before
+        # hitting Stripe. Add-item discounts are folded in here so
+        # they can be attached to the new items on the first pass
+        # (no dependency on the filtered-view writeback race).
         linked_ids = {d for d in discount_ids if d is not None}
         plan_discount_ids: set[UUID] = {d for m in memberships for d in m.discount_ids}
-        all_discount_ids = sorted(linked_ids | plan_discount_ids)
+        add_discount_ids: set[UUID] = {d for item in add_ids for d in item.discount_ids}
+        all_discount_ids = sorted(linked_ids | plan_discount_ids | add_discount_ids)
         details = (
             await self._queries.get_discount_details(all_discount_ids) if all_discount_ids else []
         )
@@ -160,6 +167,11 @@ class MembershipPaymentSyncService:
             d.discount_id: d.stripe_coupon_id for d in details
         }
 
+        add_intervals = await self._resolve_add_intervals(
+            add_ids,
+            coupon_by_discount_id,
+        )
+
         plan_discounts = aggregate_plan_discounts(
             memberships,
             coupon_by_discount_id,
@@ -167,7 +179,6 @@ class MembershipPaymentSyncService:
         desired = build_desired_items(
             memberships,
             add_intervals,
-            stripped_cancel,
             plan_discounts,
         )
 
@@ -178,6 +189,7 @@ class MembershipPaymentSyncService:
             bucket,
             parent.stripe_customer_id,
             stripe_account_id,
+            pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
         )
 
         # ── Write back subscription ID ─────────────────────
@@ -194,6 +206,14 @@ class MembershipPaymentSyncService:
             parent.gym_id,
         )
 
+        # ── Mirror post-discount totals back onto CRM ──────
+        await self._price_writeback.sync_prices_from_stripe(
+            parent_crm_user_id=parent.crm_user_id,
+            gym_id=parent.gym_id,
+            stripe_sub_id=new_sub_id,
+            stripe_account_id=stripe_account_id,
+        )
+
         return sub_result
 
     async def bulk_payment_sync(
@@ -207,20 +227,10 @@ class MembershipPaymentSyncService:
         """
         for crm_user_id in crm_user_ids:
             try:
-                response = await self.update_payments_recurring(
+                await self.update_payments_recurring(
                     crm_user_id,
                     add_ids=[],
                     cancel_ids=[],
-                )
-                parent = await self._queries.resolve_parent(crm_user_id)
-                stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-                    parent.gym_id,
-                )
-                stripe_sub_id = response.stripe_subscription_id if response else None
-                await self._price_writeback.sync_prices_from_stripe(
-                    parent_crm_user_id=parent.crm_user_id,
-                    stripe_sub_id=stripe_sub_id,
-                    stripe_account_id=stripe_account_id,
                 )
             except PaymentsResourceNotFoundError:
                 logger.error(
@@ -266,11 +276,21 @@ class MembershipPaymentSyncService:
 
     async def _resolve_add_intervals(
         self,
-        add_ids: list[PaymentsSubscriptionDesiredItem],
+        add_ids: list[SyncItem],
+        coupon_by_discount_id: dict[UUID, str],
     ) -> list[IntervalDesiredItem]:
-        """Resolve duration_unit and price for new add_ids items."""
+        """Resolve duration_unit, price, and discounts for new add_ids.
+
+        Takes enriched ``SyncItem`` directly (not the stripped
+        desired-item) so each item's ``discount_ids`` can be
+        resolved to Stripe coupons on the first pass.
+        """
         if not add_ids:
             return []
         price_ids = [item.stripe_price_id for item in add_ids]
         interval_map = await self._queries.get_price_intervals(price_ids)
-        return map_add_ids_to_intervals(add_ids, interval_map)
+        return map_add_ids_to_intervals(
+            add_ids,
+            interval_map,
+            coupon_by_discount_id,
+        )
