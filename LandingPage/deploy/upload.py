@@ -3,11 +3,10 @@ import time
 from pathlib import Path
 
 import boto3
-
 from config import BUCKET, REGION, SITE_DIR, content_type_for, load_state
 
 INCLUDE_GLOBS = [
-    "index.html",
+    "*.html",
     "hifi/**/*",
     "assets/**/*",
 ]
@@ -63,7 +62,9 @@ def main() -> int:
     state = load_state()
     dist_id = state.get("distribution_id")
     if not dist_id:
-        raise SystemExit("No distribution_id in state. Run `make deploy-finalize` first.")
+        raise SystemExit(
+            "No distribution_id in state. Run `make deploy-finalize` first."
+        )
 
     session = boto3.Session(region_name=REGION)
     s3 = session.client("s3")
