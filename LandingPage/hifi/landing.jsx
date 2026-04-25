@@ -576,6 +576,16 @@ function Nav() {
               Why it matters
             </a>
             <a
+              href="pricing.html"
+              style={{
+                color: "inherit",
+                textDecoration: "none",
+                cursor: "pointer",
+              }}
+            >
+              Pricing
+            </a>
+            <a
               href="#faq"
               style={{
                 color: "inherit",
@@ -4079,7 +4089,7 @@ function Footer() {
             >
               See it live.
               <br />
-              Book a 15-min demo at your gym.
+              Book a 15-min demo.
             </h2>
             <p
               style={{
@@ -4350,6 +4360,14 @@ function Faq() {
 
 // ---------- Root ----------
 function App() {
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "auto", block: "start" });
+    });
+  }, []);
   return (
     <div
       style={{
