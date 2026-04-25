@@ -44,7 +44,7 @@ class PaymentsSubscriptionUpcoming(PaymentsSubscriptionBase):
             PaymentsResourceNotFoundError: If the subscription cannot
                 be previewed (deleted, invalid, no upcoming invoice).
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        opts = self._client.connect_opts_readonly(stripe_account_id)
 
         try:
             invoice = await self._stripe.v1.invoices.create_preview_async(

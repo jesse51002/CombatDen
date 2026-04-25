@@ -8,10 +8,6 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.payments.service.cash_constants import (
-    CRM_PAID_WITH_CASH_METADATA_KEY,
-    CRM_PAID_WITH_CASH_METADATA_VALUE,
-)
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.handlers.stripe_time import (
@@ -30,6 +26,9 @@ CHARGE_STATUS_SUCCEEDED = "succeeded"
 INVOICE_STATUS_PAID = "paid"
 PAYMENT_METHOD_TYPE_CASH = "cash"
 
+# Stripe serializes bool metadata values as string "true" / "false".
+STRIPE_METADATA_TRUE = "true"
+
 
 class InvoicePaidHandler:
     """Apply an ``invoice.paid`` event to the CRM database.
@@ -40,6 +39,12 @@ class InvoicePaidHandler:
         (``last_paid_date``, ``next_due_date``).
       - Insert a ``user_gym_charges`` row representing the successful
         payment.
+
+    Metadata is read directly from the raw invoice envelope — the
+    webhook is a pure reader at the Stripe boundary. The typed
+    ``StripeSubscriptionMetadata`` / ``StripeMembershipOneTimeMetadata``
+    / ``StripeAdHocInvoiceMetadata`` models guard the *write* side;
+    here we only pull out a small set of flow-control fields.
     """
 
     async def handle(
@@ -53,7 +58,17 @@ class InvoicePaidHandler:
         if not stripe_invoice_id:
             raise ValueError("invoice.paid event is missing invoice id")
 
-        crm_user_id = await self._resolve_crm_user_id(session, invoice, gym_id)
+        raw_metadata = invoice.get("metadata") or {}
+        is_one_time = raw_metadata.get("crm_one_time_payment") == STRIPE_METADATA_TRUE
+        paid_with_cash = raw_metadata.get("crm_paid_with_cash") == STRIPE_METADATA_TRUE
+
+        crm_user_id = await self._resolve_crm_user_id(
+            session,
+            invoice,
+            gym_id,
+            raw_metadata=raw_metadata,
+            is_one_time=is_one_time,
+        )
         if crm_user_id is None:
             subscription_item_ids = [
                 line["subscription_item"]
@@ -76,13 +91,15 @@ class InvoicePaidHandler:
         )
         invoice_id: UUID = invoice_row["invoice_id"]
 
-        await self._update_memberships(session, invoice, gym_id)
+        if not is_one_time:
+            await self._update_memberships(session, invoice, gym_id)
         await self._insert_payment_charge(
             session,
             invoice,
             gym_id,
             crm_user_id,
             invoice_id,
+            paid_with_cash=paid_with_cash,
         )
 
     # ── Helpers ────────────────────────────────────────────────
@@ -92,12 +109,26 @@ class InvoicePaidHandler:
         session: AsyncSession,
         invoice: dict[str, Any],
         gym_id: UUID,
+        *,
+        raw_metadata: dict[str, str],
+        is_one_time: bool,
     ) -> UUID | None:
-        """Find a crm_user_id by matching any line's subscription_item.
+        """Find a crm_user_id for this invoice.
 
-        An invoice can have multiple lines, all belonging to the same
-        customer; we only need one hit to know the crm_user_id.
+        One-time invoices carry ``crm_user_id`` directly in metadata
+        (they have no subscription item to look up). Subscription
+        invoices are resolved by matching any line's
+        ``subscription_item`` against ``member_memberships``.
         """
+        if is_one_time:
+            user_id_str = raw_metadata.get("crm_user_id")
+            if not user_id_str:
+                raise ValueError(
+                    "invoice.paid one-time invoice is missing crm_user_id "
+                    f"in metadata (stripe_invoice_id={invoice.get('id')})"
+                )
+            return UUID(user_id_str)
+
         membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
         for line in self._lines(invoice):
             stripe_item_id = line.get("subscription_item")
@@ -193,17 +224,11 @@ class InvoicePaidHandler:
         gym_id: UUID,
         crm_user_id: UUID,
         invoice_id: UUID,
+        *,
+        paid_with_cash: bool,
     ) -> None:
         stripe_charge_id = invoice.get("charge")
         amount_paid = int(invoice.get("amount_paid") or 0)
-        # Stripe does not persist the request-only
-        # ``paid_out_of_band`` flag on the Invoice object. The
-        # cash-payment code stamps a metadata key on the invoice
-        # before calling ``invoices.pay``, which we read here.
-        metadata = invoice.get("metadata") or {}
-        paid_with_cash = (
-            metadata.get(CRM_PAID_WITH_CASH_METADATA_KEY) == CRM_PAID_WITH_CASH_METADATA_VALUE
-        )
 
         # Schema requires payment rows to have a stripe_charge_id
         # UNLESS payment_method_type='cash' (paid out of band). Skip

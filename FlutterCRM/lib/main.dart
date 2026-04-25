@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 
+import 'package:crm/core/config/environment.dart';
 import 'package:crm/core/config/supabase_config.dart';
 import 'package:crm/core/constants/app_theme.dart';
+import 'package:crm/core/constants/env_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/home/presentation/screens/home_screen.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
@@ -21,6 +24,17 @@ Future<void> main() async {
   } catch (e, stackTrace) {
     // Log error but continue - app might work in offline mode
     debugPrint('Supabase initialization failed: $e');
+    debugPrint('Stack trace: $stackTrace');
+  }
+
+  try {
+    Stripe.publishableKey = EnvironmentConfig.get(
+      EnvConstants.stripePublishable,
+    );
+    await Stripe.instance.applySettings();
+    debugPrint('Stripe initialized successfully');
+  } catch (e, stackTrace) {
+    debugPrint('Stripe initialization failed: $e');
     debugPrint('Stack trace: $stackTrace');
   }
 

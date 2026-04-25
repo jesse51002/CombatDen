@@ -11,6 +11,7 @@ from uuid import UUID
 
 from src.members.schema.members_management_schema import (
     MembersManagementCreateRequest,
+    MembersManagementLinkCheckResponse,
     MembersManagementResponse,
     MembersManagementUpdateCardRequest,
     MembersManagementUpdateRequest,
@@ -28,6 +29,7 @@ from src.members.service.management.members_management_update import (
     MembersManagementUpdate,
 )
 from src.payments.schema.payments_invoice_schema import (
+    PaymentsInvoicePreviewResponse,
     PaymentsInvoiceResponse,
 )
 from src.shared.database import DirectDatabasePool
@@ -111,12 +113,41 @@ class MembersManagementService:
             parent_crm_user_id,
         )
 
+    async def check_link_account(
+        self,
+        crm_user_id: UUID,
+        parent_crm_user_id: UUID,
+    ) -> MembersManagementLinkCheckResponse:
+        """Check whether a member can be linked to a parent account."""
+        return await self._linked.check_link_account(
+            crm_user_id,
+            parent_crm_user_id,
+        )
+
+    async def preview_link_account(
+        self,
+        crm_user_id: UUID,
+        parent_crm_user_id: UUID,
+    ) -> PaymentsInvoicePreviewResponse | None:
+        """Preview what linking to a parent account would charge."""
+        return await self._linked.preview_link_account(
+            crm_user_id,
+            parent_crm_user_id,
+        )
+
     async def unlink_account(
         self,
         crm_user_id: UUID,
     ) -> MembersManagementResponse:
         """Unlink a member from their paying parent account."""
         return await self._linked.unlink_account(crm_user_id)
+
+    async def preview_unlink_account(
+        self,
+        crm_user_id: UUID,
+    ) -> PaymentsInvoicePreviewResponse | None:
+        """Preview what unlinking from a parent account would charge."""
+        return await self._linked.preview_unlink_account(crm_user_id)
 
     # ── Invoices ───────────────────────────────────────────────
 

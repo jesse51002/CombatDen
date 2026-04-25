@@ -92,25 +92,14 @@ class PaymentsStripeMembersService:
         request: PaymentsCustomerCreateRequest,
         stripe_account_id: str,
     ) -> PaymentsCustomerResponse:
-        """Create a Stripe Customer, optionally with a payment method.
-
-        If ``payment_method_id`` is provided, attaches it as the
-        default. Otherwise creates a customer with name/email only.
-
-        Args:
-            request: Customer details with optional payment_method_id.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Customer response with card details (if PM was provided).
-        """
+        """Create a Stripe Customer, optionally with a payment method."""
         opts = self._client.connect_opts(stripe_account_id)
 
         params = CustomerCreateParams(
             name=request.name,
             email=request.email,
             phone=request.phone,
-            metadata=request.metadata,
+            metadata=request.metadata.to_stripe_metadata(),
         )
 
         if request.payment_method_id:
@@ -138,19 +127,7 @@ class PaymentsStripeMembersService:
         request: PaymentsCustomerUpdateRequest,
         stripe_account_id: str,
     ) -> PaymentsCustomerResponse:
-        """Update a Stripe Customer's details and swap payment method.
-
-        Verifies the customer exists, attaches the new payment method,
-        updates customer details, sets new PM as default, and detaches
-        the old payment method.
-
-        Args:
-            request: Customer ID, updated details, and new payment_method_id.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Updated customer response with card details.
-        """
+        """Update a Stripe Customer's details and swap payment method."""
         opts = self._client.connect_opts(stripe_account_id)
 
         customer = await self.retrieve_customer(
@@ -176,7 +153,7 @@ class PaymentsStripeMembersService:
                 name=request.name,
                 email=request.email,
                 phone=request.phone,
-                metadata=request.metadata,
+                metadata=request.metadata.to_stripe_metadata(),
                 invoice_settings=CustomerUpdateParamsInvoiceSettings(
                     default_payment_method=request.payment_method_id,
                 ),
@@ -203,25 +180,14 @@ class PaymentsStripeMembersService:
         stripe_customer_id: str,
         stripe_account_id: str,
     ) -> None:
-        """Detach the default payment method from a Stripe customer.
-
-        Retrieves the customer, detaches the default payment method
-        if one exists, and clears the default_payment_method on
-        invoice_settings.
-
-        Gracefully handles the case where the customer is already
-        deleted in Stripe (no-op).
-
-        Args:
-            stripe_customer_id: The Stripe customer ID.
-            stripe_account_id: The gym's Stripe Connect account ID.
-        """
-        opts = self._client.connect_opts(stripe_account_id)
+        """Detach the default payment method from a Stripe customer."""
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        write_opts = self._client.connect_opts(stripe_account_id)
 
         try:
             customer = await self.retrieve_customer(
                 stripe_customer_id,
-                opts,
+                read_opts,
             )
         except PaymentsResourceNotFoundError:
             return
@@ -238,11 +204,11 @@ class PaymentsStripeMembersService:
                         default_payment_method="",
                     ),
                 ),
-                options=opts,
+                options=write_opts,
             )
             await self._stripe.v1.payment_methods.detach_async(
                 pm_id,
-                options=opts,
+                options=write_opts,
             )
 
     # ── Invoices ─────────────────────────────────────────────────
@@ -254,18 +220,8 @@ class PaymentsStripeMembersService:
         limit: int = 100,
         starting_after: str | None = None,
     ) -> list[PaymentsInvoiceResponse]:
-        """List invoices for a customer.
-
-        Args:
-            stripe_customer_id: The Stripe customer ID.
-            stripe_account_id: The gym's Stripe Connect account ID.
-            limit: Max invoices to return (1-100, default 10).
-            starting_after: Cursor for pagination (invoice ID).
-
-        Returns:
-            List of invoice details.
-        """
-        opts = self._client.connect_opts(stripe_account_id)
+        """List invoices for a customer."""
+        opts = self._client.connect_opts_readonly(stripe_account_id)
 
         await self.retrieve_customer(stripe_customer_id, opts)
 

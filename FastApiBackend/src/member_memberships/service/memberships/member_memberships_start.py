@@ -19,9 +19,16 @@ from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
 from src.payments.payments_exceptions import StripeOrphanError
+from src.payments.schema.metadata.stripe_membership_one_time_metadata import (
+    StripeMembershipOneTimeMetadata,
+)
 from src.payments.schema.payments_enums import StripeResourceType
+from src.payments.schema.payments_invoice_schema import (
+    PaymentsInvoicePreviewResponse,
+)
 from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentCreateRequest,
+    PaymentsInvoicePaymentPreviewRequest,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.db_first_helpers import cleanup_pending_row
@@ -63,6 +70,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         gym_id: UUID,
         plan_id: UUID,
         price_id: UUID,
+        idempotency_key: UUID,
         discount_ids: list[UUID] | None = None,
         include_linked_discount: bool = False,
         prorate: bool = True,
@@ -155,6 +163,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     crm_user_id,
                     add_ids=[add_item],
                     cancel_ids=[],
+                    idempotency_key=idempotency_key,
                     pay_first_invoice_out_of_band=paid_with_cash,
                 )
                 if response:
@@ -173,6 +182,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     gym_id=parent.gym_id,
                     crm_user_id=crm_user_id,
                     plan_id=plan_id,
+                    idempotency_key=idempotency_key,
                     paid_with_cash=paid_with_cash,
                 )
         except Exception:
@@ -211,6 +221,70 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 str(crm_user_id),
                 next_due_date,
             )
+
+    async def preview(
+        self,
+        crm_user_id: UUID,
+        gym_id: UUID,
+        plan_id: UUID,
+        price_id: UUID,
+        discount_ids: list[UUID] | None = None,
+        include_linked_discount: bool = False,
+        prorate: bool = True,
+        paid_with_cash: bool = False,
+    ) -> PaymentsInvoicePreviewResponse | None:
+        """Preview what starting a membership would charge.
+
+        Runs every validation ``start`` runs (plan/price lookup,
+        duplicate check, frozen-account check) and then calls the
+        corresponding Stripe invoice preview instead of creating
+        rows or subscriptions.
+
+        Args:
+            Identical to ``start``. ``paid_with_cash`` is accepted
+            for signature parity but has no effect — preview
+            performs no charge.
+
+        Returns:
+            Invoice preview, or ``None`` for a recurring plan whose
+            resulting bucket produces no upcoming invoice.
+
+        Raises:
+            ValueError: Same conditions as ``start``.
+        """
+        plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
+        await self._check_no_existing(crm_user_id, gym_id, plan_id)
+
+        parent = await self._payment_sync.resolve_parent(crm_user_id)
+        if parent.is_frozen:
+            raise ValueError("Cannot start membership: account is frozen")
+
+        if not plan_price["stripe_price_id"]:
+            raise ValueError(f"Plan price {plan_price['price_id']} missing stripe_price_id")
+
+        plan_type = PlanType(plan_price["plan_type"])
+        is_recurring = plan_type == PlanType.recurring
+
+        if is_recurring:
+            add_item = SyncItem(
+                stripe_price_id=plan_price["stripe_price_id"],
+                crm_user_id=crm_user_id,
+                plan_id=plan_id,
+                has_linked_discount=include_linked_discount,
+                prorate=prorate,
+                discount_ids=discount_ids or [],
+            )
+            return await self._payment_sync.preview_update_payments_recurring(
+                crm_user_id,
+                add_ids=[add_item],
+                cancel_ids=[],
+            )
+
+        return await self._preview_one_time(
+            stripe_customer_id=parent.stripe_customer_id,
+            stripe_price_id=plan_price["stripe_price_id"],
+            gym_id=parent.gym_id,
+        )
 
     # ── Private ────────────────────────────────────────────────
 
@@ -343,6 +417,23 @@ class MemberMembershipsStart(MemberMembershipsBase):
             await session.execute(text(sql), {"item_id": item_id})
             await session.commit()
 
+    async def _preview_one_time(
+        self,
+        stripe_customer_id: str,
+        stripe_price_id: str,
+        gym_id: UUID,
+    ) -> PaymentsInvoicePreviewResponse:
+        """Preview the invoice for a non-recurring plan."""
+        stripe_account_id = await self._gym_stripe.get_stripe_account_id(gym_id)
+        request = PaymentsInvoicePaymentPreviewRequest(
+            stripe_customer_id=stripe_customer_id,
+            stripe_price_id=stripe_price_id,
+        )
+        return await self._payment_service.preview_invoice_payment(
+            request,
+            stripe_account_id,
+        )
+
     async def _charge_one_time(
         self,
         stripe_customer_id: str,
@@ -350,6 +441,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         gym_id: UUID,
         crm_user_id: UUID,
         plan_id: UUID,
+        idempotency_key: UUID,
         paid_with_cash: bool = False,
     ) -> str:
         """Create and pay a one-time invoice for a non-recurring plan.
@@ -362,15 +454,17 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 price is not found in Stripe.
         """
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(gym_id)
+        metadata = StripeMembershipOneTimeMetadata(
+            crm_user_id=crm_user_id,
+            gym_id=gym_id,
+            plan_id=plan_id,
+        )
         request = PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=stripe_customer_id,
             stripe_price_id=stripe_price_id,
-            metadata={
-                "crm_user_id": str(crm_user_id),
-                "plan_id": str(plan_id),
-                "type": "membership_one_time",
-            },
+            metadata=metadata,
             paid_out_of_band=paid_with_cash,
+            idempotency_key=str(idempotency_key),
         )
         response = await self._payment_service.create_invoice_payment(
             request,

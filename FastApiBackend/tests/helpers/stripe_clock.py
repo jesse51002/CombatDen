@@ -5,7 +5,7 @@ Every function accepts its dependencies as parameters.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import stripe
 
@@ -30,7 +30,7 @@ async def create_test_clock(
     Returns:
         The test clock ID.
     """
-    ts = int(frozen_time.replace(tzinfo=timezone.utc).timestamp())
+    ts = int(frozen_time.replace(tzinfo=UTC).timestamp())
     clock = await stripe_client.client.v1.test_helpers.test_clocks.create_async(
         params={"frozen_time": ts, "name": "integration-test"},
         options=connect_opts,
@@ -56,7 +56,7 @@ async def advance_clock(
         RuntimeError: If the clock enters ``internal_failure``.
         TimeoutError: If the clock does not become ready within the timeout.
     """
-    ts = int(advance_to.replace(tzinfo=timezone.utc).timestamp())
+    ts = int(advance_to.replace(tzinfo=UTC).timestamp())
     await stripe_client.client.v1.test_helpers.test_clocks.advance_async(
         clock_id,
         params={"frozen_time": ts},
@@ -76,9 +76,7 @@ async def advance_clock(
         await asyncio.sleep(POLL_INTERVAL_S)
         elapsed += POLL_INTERVAL_S
 
-    raise TimeoutError(
-        f"Test clock {clock_id} did not become ready within {POLL_MAX_WAIT_S}s"
-    )
+    raise TimeoutError(f"Test clock {clock_id} did not become ready within {POLL_MAX_WAIT_S}s")
 
 
 async def delete_test_clock(

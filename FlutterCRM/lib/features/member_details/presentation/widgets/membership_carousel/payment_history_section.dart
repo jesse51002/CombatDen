@@ -5,6 +5,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
+import 'package:crm/features/member_details/presentation/widgets/dialogs/invoice/payment_invoice_dialog.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 
@@ -56,7 +57,7 @@ class PaymentHistorySection extends StatelessWidget {
                     ),
                   ],
                   rows: payments
-                      .map((p) => _buildRow(p))
+                      .map((p) => _buildRow(context, p))
                       .toList(),
                 ),
         ),
@@ -64,7 +65,10 @@ class PaymentHistorySection extends StatelessWidget {
     );
   }
 
-  AppDataTableRow _buildRow(PaymentRecord payment) {
+  AppDataTableRow _buildRow(
+    BuildContext context,
+    PaymentRecord payment,
+  ) {
     final dateFmt = DateFormat('M/dd/yyyy');
     final label = _paymentLabel(payment);
 
@@ -88,9 +92,11 @@ class PaymentHistorySection extends StatelessWidget {
                 '${dateFmt.format(payment.chargeTime.toLocal())}',
             child: AppOutlineButton(
               text: 'Invoice',
-              onPressed: () {
-                // TODO: View/download invoice
-              },
+              onPressed: () =>
+                  PaymentInvoiceDialog.show(
+                context: context,
+                payment: payment,
+              ),
               textStyle: DesignConstants.pSmall,
               padding: const EdgeInsets.symmetric(
                 horizontal:

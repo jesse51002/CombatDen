@@ -20,12 +20,10 @@ Three scenarios:
    it by paying that open invoice out of band via cash.
 """
 
+from uuid import uuid4
+
 from sqlalchemy import text
 
-from src.payments.service.cash_constants import (
-    CRM_PAID_WITH_CASH_METADATA_KEY,
-    CRM_PAID_WITH_CASH_METADATA_VALUE,
-)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.data_factory import (
     create_member,
@@ -67,6 +65,7 @@ async def test_start_one_time_with_cash(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
             paid_with_cash=True,
         )
 
@@ -99,9 +98,7 @@ async def test_start_one_time_with_cash(
         assert invoice.status == "paid"
         assert invoice.amount_paid == plan.price_cents
         # Cash marker is stamped on the invoice for the webhook.
-        assert (
-            invoice.metadata[CRM_PAID_WITH_CASH_METADATA_KEY] == CRM_PAID_WITH_CASH_METADATA_VALUE
-        )
+        assert invoice.metadata.to_dict().get("crm_paid_with_cash") == "true"
     finally:
         await delete_member_data(db_pool, member.crm_user_id)
 
@@ -140,6 +137,7 @@ async def test_start_recurring_with_cash(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
             paid_with_cash=True,
         )
 
@@ -196,9 +194,7 @@ async def test_start_recurring_with_cash(
             options=connect_opts,
         )
         assert invoice.status == "paid"
-        assert (
-            invoice.metadata[CRM_PAID_WITH_CASH_METADATA_KEY] == CRM_PAID_WITH_CASH_METADATA_VALUE
-        )
+        assert invoice.metadata.to_dict().get("crm_paid_with_cash") == "true"
     finally:
         await delete_member_data(db_pool, member.crm_user_id)
 
@@ -244,6 +240,7 @@ async def test_mark_paid_cash_pays_open_invoice(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         async with db_pool.session() as session:
@@ -328,6 +325,7 @@ async def test_mark_paid_cash_pays_open_invoice(
         await memberships_service.mark_paid_cash(
             item_id=mm_row["item_id"],
             crm_user_id=member.crm_user_id,
+            idempotency_key=uuid4(),
         )
 
         # Verify the previously open invoice is now paid out of
@@ -337,9 +335,7 @@ async def test_mark_paid_cash_pays_open_invoice(
             options=connect_opts,
         )
         assert invoice.status == "paid"
-        assert (
-            invoice.metadata[CRM_PAID_WITH_CASH_METADATA_KEY] == CRM_PAID_WITH_CASH_METADATA_VALUE
-        )
+        assert invoice.metadata.to_dict().get("crm_paid_with_cash") == "true"
 
         # No additional invoice may have been created, and the
         # customer balance must be untouched (cash payments must

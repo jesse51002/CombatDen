@@ -42,25 +42,12 @@ class PaymentsStripeMembershipService:
         self._stripe = stripe_client.client
         self._price_service = price_service
 
-    # ── helpers ───────────────────────────────────────────────────
-
     async def retrieve_product(
         self,
         product_id: str,
         opts: stripe.RequestOptions,
     ) -> stripe.Product:
-        """Retrieve a Stripe Product, raising if not found.
-
-        Args:
-            product_id: The Stripe product ID.
-            opts: Stripe Connect request options.
-
-        Returns:
-            The Stripe Product object.
-
-        Raises:
-            PaymentsResourceNotFoundError: If the product does not exist.
-        """
+        """Retrieve a Stripe Product, raising if not found."""
         try:
             product = await self._stripe.v1.products.retrieve_async(
                 product_id,
@@ -144,35 +131,30 @@ class PaymentsStripeMembershipService:
             stripe_account_id,
         )
 
-    # ── CRUD ─────────────────────────────────────────────────────
-
     async def create_membership(
         self,
         request: PaymentsMembershipCreateRequest,
         stripe_account_id: str,
     ) -> PaymentsMembershipResponse:
-        """Create a Stripe Product with one or more Prices.
-
-        Args:
-            request: Plan details with a list of prices.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Created product and price details.
-        """
+        """Create a Stripe Product with one or more Prices."""
         opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
 
         product = await self._stripe.v1.products.create_async(
             params=ProductCreateParams(
                 name=request.plan_name,
-                metadata=request.metadata,
+                metadata=request.metadata.to_stripe_metadata(),
             ),
             options=opts,
         )
 
         default_price_id: str | None = None
         for item in request.prices:
-            price_resp = await self._create_price_from_item(item, product.id, stripe_account_id)
+            price_resp = await self._create_price_from_item(
+                item,
+                product.id,
+                stripe_account_id,
+            )
             if item.is_default:
                 default_price_id = price_resp.stripe_price_id
 
@@ -185,7 +167,7 @@ class PaymentsStripeMembershipService:
                 options=opts,
             )
 
-        prices = await self._list_prices(product.id, opts)
+        prices = await self._list_prices(product.id, read_opts)
         return self._map_product(product, prices)
 
     async def update_membership(
@@ -200,18 +182,12 @@ class PaymentsStripeMembershipService:
         - New (no stripe_price_id): create a new Stripe Price.
 
         Any existing active prices not in the request list are deactivated.
-
-        Args:
-            request: Product ID, updated plan details, and price list.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Updated product and price details.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        product_opts = self._client.connect_opts(stripe_account_id)
 
-        await self.retrieve_product(request.stripe_product_id, opts)
-        existing_prices = await self._list_prices(request.stripe_product_id, opts)
+        await self.retrieve_product(request.stripe_product_id, read_opts)
+        existing_prices = await self._list_prices(request.stripe_product_id, read_opts)
         existing_by_id = {p.id: p for p in existing_prices}
 
         incoming_ids: set[str] = set()
@@ -224,7 +200,8 @@ class PaymentsStripeMembershipService:
                 if existing and existing.active != item.active:
                     if item.active:
                         await self._price_service.activate_price(
-                            item.stripe_price_id, stripe_account_id
+                            item.stripe_price_id,
+                            stripe_account_id,
                         )
                     else:
                         await self._price_service.deactivate_price(
@@ -245,11 +222,9 @@ class PaymentsStripeMembershipService:
                 if item.is_default:
                     default_price_id = price_resp.stripe_price_id
 
-        # Update product (including default_price) BEFORE deactivating
-        # omitted prices — Stripe won't let you archive the default price.
         update_params = ProductUpdateParams(
             name=request.plan_name,
-            metadata=request.metadata,
+            metadata=request.metadata.to_stripe_metadata(),
             active=True,
         )
         if default_price_id:
@@ -258,7 +233,7 @@ class PaymentsStripeMembershipService:
         product = await self._stripe.v1.products.update_async(
             request.stripe_product_id,
             params=update_params,
-            options=opts,
+            options=product_opts,
         )
 
         for price in existing_prices:
@@ -275,7 +250,7 @@ class PaymentsStripeMembershipService:
                     stripe_account_id,
                 )
 
-        prices = await self._list_prices(product.id, opts)
+        prices = await self._list_prices(product.id, read_opts)
         return self._map_product(product, prices)
 
     async def deactivate_membership(
@@ -287,23 +262,17 @@ class PaymentsStripeMembershipService:
 
         Sets the product's ``active`` flag to False. This does NOT
         cancel existing subscriptions.
-
-        Args:
-            request: Product ID to deactivate.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Deactivated product details.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        write_opts = self._client.connect_opts(stripe_account_id)
 
-        await self.retrieve_product(request.stripe_product_id, opts)
+        await self.retrieve_product(request.stripe_product_id, read_opts)
 
         product = await self._stripe.v1.products.update_async(
             request.stripe_product_id,
             params=ProductUpdateParams(active=False),
-            options=opts,
+            options=write_opts,
         )
 
-        prices = await self._list_prices(product.id, opts)
+        prices = await self._list_prices(product.id, read_opts)
         return self._map_product(product, prices)

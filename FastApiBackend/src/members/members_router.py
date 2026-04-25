@@ -19,6 +19,7 @@ from src.members.schema.members_crm_members_list_schema import (
 )
 from src.members.schema.members_management_schema import (
     MembersManagementCreateRequest,
+    MembersManagementLinkCheckResponse,
     MembersManagementLinkRequest,
     MembersManagementResponse,
     MembersManagementUpdateCardRequest,
@@ -38,6 +39,7 @@ from src.members.service.members_management_service import (
 )
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (
+    PaymentsInvoicePreviewResponse,
     PaymentsInvoiceResponse,
 )
 from src.shared.auth import Auth, security
@@ -698,6 +700,206 @@ async def unlink_member_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to unlink member",
+        ) from None
+
+
+@members_router.post(
+    "/{crm_user_id}/link/check",
+    response_model=MembersManagementLinkCheckResponse,
+    summary="Check if a member can be linked to a parent account",
+    description=(
+        "Read-only validation. Returns can_link + a "
+        "pre-formatted, user-facing error string when linking "
+        "is blocked. The error explains what the user should "
+        "do to fix it and is safe to render as-is in the UI."
+    ),
+    responses={
+        200: {"description": "Check completed"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def check_link_member_account(
+    crm_user_id: UUID,
+    request: MembersManagementLinkRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> MembersManagementLinkCheckResponse:
+    """Check whether a member can be linked to a parent account."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(crm_user_id, user_payload)
+
+    try:
+        return await management_service.check_link_account(
+            crm_user_id,
+            request.parent_crm_user_id,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to check member link: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check member link",
+        ) from None
+
+
+@members_router.post(
+    "/{crm_user_id}/link/preview",
+    response_model=PaymentsInvoicePreviewResponse | None,
+    summary="Preview linking a member to a parent account",
+    description=(
+        "Dry-run of the link endpoint: runs every validation and "
+        "returns the Stripe invoice preview for the parent's "
+        "resulting subscription. Returns null if the parent has "
+        "no recurring subscription to preview."
+    ),
+    responses={
+        200: {"description": "Preview retrieved successfully"},
+        400: {
+            "description": (
+                "Child is already linked, has active recurring "
+                "memberships, or the relationship is invalid"
+            )
+        },
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def preview_link_member_account(
+    crm_user_id: UUID,
+    request: MembersManagementLinkRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> PaymentsInvoicePreviewResponse | None:
+    """Preview what linking a member to a parent would charge."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(crm_user_id, user_payload)
+
+    try:
+        return await management_service.preview_link_account(
+            crm_user_id,
+            request.parent_crm_user_id,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        logger.error(
+            "Stripe error previewing link: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to preview link member: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview member link",
+        ) from None
+
+
+@members_router.post(
+    "/{crm_user_id}/unlink/preview",
+    response_model=PaymentsInvoicePreviewResponse | None,
+    summary="Preview unlinking a member from a parent account",
+    description=(
+        "Dry-run of the unlink endpoint: runs every validation "
+        "and returns the Stripe invoice preview for the old "
+        "parent's resulting subscription. Returns null if the "
+        "old parent has no recurring subscription to preview."
+    ),
+    responses={
+        200: {"description": "Preview retrieved successfully"},
+        400: {"description": ("Child is not linked or has active recurring memberships")},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def preview_unlink_member_account(
+    crm_user_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> PaymentsInvoicePreviewResponse | None:
+    """Preview what unlinking a member from a parent would charge."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(crm_user_id, user_payload)
+
+    try:
+        return await management_service.preview_unlink_account(crm_user_id)
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        logger.error(
+            "Stripe error previewing unlink: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to preview unlink member: crm_user_id=%s",
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview member unlink",
         ) from None
 
 

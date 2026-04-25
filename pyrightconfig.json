@@ -1,0 +1,9 @@
+{
+  "executionEnvironments": {
+    "root": ".",
+    "extraPaths": ["./FastApiBackend"],
+  },
+  "venvPath": ".",
+  "venv": "FastApiBackend/.venv",
+  "typeCheckingMode": "off",
+}

@@ -11,9 +11,11 @@ from fastapi import BackgroundTasks
 from schema.gym_discount import DiscountType
 from sqlalchemy import text
 
-import src.shared.db_schema_path  # noqa: F401
 from src.discounts import SQL_DIR
 from src.discounts.service.discounts.discounts_base import DiscountsBase
+from src.payments.schema.payments_discount_schema import (
+    PaymentsDiscountDeleteRequest,
+)
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
@@ -75,7 +77,9 @@ class DiscountsDelete(DiscountsBase):
                     gym_id,
                 )
                 await self._stripe_discounts.delete_discount(
-                    existing["stripe_coupon_id"],
+                    PaymentsDiscountDeleteRequest(
+                        stripe_coupon_id=existing["stripe_coupon_id"],
+                    ),
                     stripe_account_id,
                 )
             except Exception:

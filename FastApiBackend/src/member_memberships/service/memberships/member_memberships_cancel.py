@@ -14,6 +14,9 @@ from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.payments_invoice_schema import (
+    PaymentsInvoicePreviewResponse,
+)
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
@@ -27,7 +30,8 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         self,
         item_id: UUID,
         crm_user_id: UUID,
-    ) -> None:
+        idempotency_key: UUID,
+    ) -> date:
         """Cancel a specific active recurring membership.
 
         Syncs the cancellation to Stripe first (including linked
@@ -38,6 +42,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         Args:
             item_id: The membership item.
             crm_user_id: The member.
+            idempotency_key: Caller-supplied key scoped to this cancel.
 
         Raises:
             ValueError: If the membership is not found, has already
@@ -46,7 +51,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         row = await self._get_membership(item_id, crm_user_id)
 
         if row["cancel_date"] is not None:
-            return
+            return row["cancel_date"]
 
         self._validate_cancel(row, item_id, crm_user_id)
 
@@ -62,6 +67,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 crm_user_id,
                 add_ids=[],
                 cancel_ids=[cancel_item],
+                idempotency_key=idempotency_key,
             )
         except PaymentsResourceNotFoundError:
             logger.warning(
@@ -73,7 +79,43 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             )
 
         # ── CRM cancel ────────────────────────────────────
-        await self._crm_cancel(item_id, crm_user_id, gym_today(row["timezone"]))
+        return await self._crm_cancel(item_id, crm_user_id, gym_today(row["timezone"]))
+
+    async def preview_cancel(
+        self,
+        item_id: UUID,
+        crm_user_id: UUID,
+    ) -> PaymentsInvoicePreviewResponse | None:
+        """Preview what cancelling a membership would charge.
+
+        Runs every validation ``cancel`` runs (membership lookup,
+        already-cancelled short-circuit, recurring-plan guard) and
+        then calls the Stripe invoice preview. Returns ``None`` if
+        the membership is already cancelled or if cancellation
+        would drop the subscription to zero items (pure
+        cancellations have no upcoming invoice).
+
+        Raises:
+            ValueError: Same conditions as ``cancel``.
+        """
+        row = await self._get_membership(item_id, crm_user_id)
+
+        if row["cancel_date"] is not None:
+            return None
+
+        self._validate_cancel(row, item_id, crm_user_id)
+
+        cancel_item = SyncItem(
+            stripe_price_id=row["stripe_price_id"],
+            stripe_item_id=row["stripe_item_id"],
+            crm_user_id=crm_user_id,
+            plan_id=row["plan_id"],
+        )
+        return await self._payment_sync.preview_update_payments_recurring(
+            crm_user_id,
+            add_ids=[],
+            cancel_ids=[cancel_item],
+        )
 
     # ── Private ────────────────────────────────────────────────
 
@@ -104,8 +146,12 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         item_id: UUID,
         crm_user_id: UUID,
         today: date,
-    ) -> None:
-        """Mark membership as cancelled in the CRM database."""
+    ) -> date:
+        """Mark membership as cancelled in the CRM database.
+
+        Returns the resolved ``cancel_date`` (the date through which
+        the membership remains active).
+        """
         cancel_sql = load_sql(SQL_DIR / "member_memberships_cancel.sql")
         params = {
             "item_id": str(item_id),
@@ -113,5 +159,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             "gym_today": today,
         }
         async with self._db_pool.session() as session:
-            await session.execute(text(cancel_sql), params)
+            result = await session.execute(text(cancel_sql), params)
+            cancel_date = result.scalar_one()
             await session.commit()
+        return cancel_date

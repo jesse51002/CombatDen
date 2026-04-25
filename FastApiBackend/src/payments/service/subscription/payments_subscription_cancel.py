@@ -27,19 +27,15 @@ class PaymentsSubscriptionCancel(PaymentsSubscriptionBase):
 
         If the subscription is already cancelled, logs a warning
         and returns the current state.
-
-        Args:
-            request: Subscription ID and whether to cancel at period end.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Updated subscription details.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        write_opts = self._client.connect_opts(
+            stripe_account_id, idempotency_key=request.idempotency_key
+        )
 
         sub = await self._retrieve_subscription(
             request.stripe_subscription_id,
-            opts,
+            read_opts,
         )
 
         if sub.status == "canceled":
@@ -53,11 +49,11 @@ class PaymentsSubscriptionCancel(PaymentsSubscriptionBase):
             sub = await self._stripe.v1.subscriptions.update_async(
                 request.stripe_subscription_id,
                 params=SubscriptionUpdateParams(cancel_at_period_end=True),
-                options=opts,
+                options=write_opts,
             )
         else:
             sub = await self._stripe.v1.subscriptions.cancel_async(
                 request.stripe_subscription_id,
-                options=opts,
+                options=write_opts,
             )
         return self._map_subscription(sub)

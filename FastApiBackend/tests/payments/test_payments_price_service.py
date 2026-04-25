@@ -1,8 +1,14 @@
 """Integration tests for PaymentsStripePriceService."""
 
+from uuid import uuid4
+
 import pytest
+from schema.membership_plan import DurationUnit, PlanType
 
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.metadata.stripe_product_metadata import (
+    StripeProductMetadata,
+)
 from src.payments.schema.payments_membership_schema import (
     PaymentsMembershipCreateRequest,
     PaymentsMembershipPriceItem,
@@ -11,9 +17,6 @@ from src.payments.schema.payments_price_schema import (
     PaymentsPriceCreateRequest,
     PaymentsPriceDeactivateRequest,
 )
-
-from schema.membership_plan import DurationUnit, PlanType
-
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -32,6 +35,7 @@ async def _create_product(membership_service, stripe_account_id):
                     is_default=True,
                 ),
             ],
+            metadata=StripeProductMetadata(plan_id=uuid4(), gym_id=uuid4()),
         ),
         stripe_account_id,
     )
@@ -132,7 +136,9 @@ async def test_deactivate_price(
     )
 
     resp = await price_service.deactivate_price(
-        PaymentsPriceDeactivateRequest(stripe_price_id=created.stripe_price_id),
+        PaymentsPriceDeactivateRequest(
+            stripe_price_id=created.stripe_price_id,
+        ),
         stripe_account_id,
     )
 
@@ -166,7 +172,9 @@ async def test_activate_price(
         stripe_account_id,
     )
     await price_service.deactivate_price(
-        PaymentsPriceDeactivateRequest(stripe_price_id=created.stripe_price_id),
+        PaymentsPriceDeactivateRequest(
+            stripe_price_id=created.stripe_price_id,
+        ),
         stripe_account_id,
     )
 
@@ -185,7 +193,9 @@ async def test_activate_price(
 
 
 async def test_get_price(
-    price_service, membership_service, stripe_account_id,
+    price_service,
+    membership_service,
+    stripe_account_id,
 ):
     product_id = await _create_product(membership_service, stripe_account_id)
     created = await price_service.create_price(
@@ -232,7 +242,9 @@ async def test_validate_price_active_reactivates_archived(
         stripe_account_id,
     )
     await price_service.deactivate_price(
-        PaymentsPriceDeactivateRequest(stripe_price_id=created.stripe_price_id),
+        PaymentsPriceDeactivateRequest(
+            stripe_price_id=created.stripe_price_id,
+        ),
         stripe_account_id,
     )
 

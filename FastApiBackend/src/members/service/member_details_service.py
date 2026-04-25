@@ -13,6 +13,7 @@ from src.classes.service.classes_cycle_counts_service import (
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.members import SQL_DIR
 from src.members.schema.member_details_schema import (
+    CardOnFile,
     MemberDetailResponse,
     PersonalInfo,
     Retention,
@@ -138,6 +139,7 @@ class MemberService:
             crm_user_id=crm_user_id,
             gym_id=gym_id,
             target_row=target_row,
+            parent_row=parent_row,
             membership_rows=membership_rows,
             grouped=grouped,
             overview=overview,
@@ -171,6 +173,7 @@ class MemberService:
         crm_user_id: UUID,
         gym_id: UUID,
         target_row: dict,
+        parent_row: dict,
         membership_rows: list,
         grouped: list,
         overview: str,
@@ -185,6 +188,9 @@ class MemberService:
             crm_user_id: The queried user's ID.
             gym_id: The gym ID.
             target_row: The queried user's profile row.
+            parent_row: The paying account's profile row
+                (the target itself if the target is not
+                linked). Source of card-on-file fields.
             membership_rows: All family membership rows.
             grouped: Grouped MembershipInfo list.
             overview: Membership overview string.
@@ -229,6 +235,7 @@ class MemberService:
             ),
             recently_redeemed_rewards=(self._supplementary.redeemed_rewards),
             payment_history=(self._supplementary.payment_history),
+            card_on_file=_build_card_on_file(parent_row),
         )
 
 
@@ -308,6 +315,32 @@ def _scan_membership_flags(
             paying_count += 1
 
     return has_trial, has_cancelled, has_frozen, paying_count
+
+
+def _build_card_on_file(parent_row: dict) -> CardOnFile | None:
+    """Build the CardOnFile for the paying account.
+
+    Args:
+        parent_row: The paying account's profile row.
+
+    Returns:
+        CardOnFile when the parent has a saved card, otherwise
+        None. All four fields must be populated — the schema
+        stores them together and the Stripe sync path always
+        writes them as a set.
+    """
+    brand = parent_row["card_brand"]
+    last_four = parent_row["card_last_four"]
+    exp_month = parent_row["card_exp_month"]
+    exp_year = parent_row["card_exp_year"]
+    if brand is None or last_four is None or exp_month is None or exp_year is None:
+        return None
+    return CardOnFile(
+        brand=brand,
+        last_four=last_four,
+        exp_month=exp_month,
+        exp_year=exp_year,
+    )
 
 
 def _derive_account_status(

@@ -29,7 +29,6 @@ from src.stripe_webhooks.service.handlers.invoice_payment_failed_handler import 
 from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
 )
-
 from tests.conftest import STRIPE_TEST_ACCOUNT_ID
 from tests.helpers.cleanup import delete_all_gym_data
 from tests.helpers.data_factory import create_member, create_plan
@@ -63,7 +62,7 @@ def connect_opts(stripe_client):
     hits the Stripe API (``create_member``, ``create_plan``) still
     needs to target a real connected account.
     """
-    return PaymentsStripeClient.connect_opts(STRIPE_TEST_ACCOUNT_ID)
+    return PaymentsStripeClient.connect_opts_readonly(STRIPE_TEST_ACCOUNT_ID)
 
 
 @pytest.fixture(scope="module")

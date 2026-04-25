@@ -48,7 +48,6 @@ from src.payments.service.subscription import (
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
 
-
 # ── Payment services namespace ──────────────────────────────────
 
 
@@ -77,7 +76,10 @@ def build_payment_services(stripe_client: PaymentsStripeClient) -> PaymentServic
     discount = PaymentsStripeDiscountService(stripe_client)
     members = PaymentsStripeMembersService(stripe_client)
     subscription = PaymentsStripeSubscriptionService(
-        stripe_client, members, price, discount,
+        stripe_client,
+        members,
+        price,
+        discount,
     )
     payment = PaymentsStripePaymentService(stripe_client, members, price)
     return PaymentServices(
@@ -102,12 +104,18 @@ def build_member_management_service(
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client, members_svc, price_svc, discount_svc,
+        stripe_client,
+        members_svc,
+        price_svc,
+        discount_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
     linked_discount_svc = LinkedMemberDiscountService(db_pool)
     sync_svc = MembershipPaymentSyncService(
-        db_pool, subscription_svc, gym_stripe_svc, linked_discount_svc,
+        db_pool,
+        subscription_svc,
+        gym_stripe_svc,
+        linked_discount_svc,
     )
     return MembersManagementService(db_pool, members_svc, sync_svc)
 
@@ -124,18 +132,29 @@ def build_member_memberships_service(
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client, members_svc, price_svc, discount_svc,
+        stripe_client,
+        members_svc,
+        price_svc,
+        discount_svc,
     )
     payment_svc = PaymentsStripePaymentService(
-        stripe_client, members_svc, price_svc,
+        stripe_client,
+        members_svc,
+        price_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
     linked_discount_svc = LinkedMemberDiscountService(db_pool)
     sync_svc = MembershipPaymentSyncService(
-        db_pool, subscription_svc, gym_stripe_svc, linked_discount_svc,
+        db_pool,
+        subscription_svc,
+        gym_stripe_svc,
+        linked_discount_svc,
     )
     return MemberMembershipsService(
-        db_pool, sync_svc, payment_svc, gym_stripe_svc,
+        db_pool,
+        sync_svc,
+        payment_svc,
+        gym_stripe_svc,
     )
 
 
@@ -151,12 +170,18 @@ def build_discounts_service(
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client, members_svc, price_svc, discount_svc,
+        stripe_client,
+        members_svc,
+        price_svc,
+        discount_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
     linked_discount_svc = LinkedMemberDiscountService(db_pool)
     sync_svc = MembershipPaymentSyncService(
-        db_pool, subscription_svc, gym_stripe_svc, linked_discount_svc,
+        db_pool,
+        subscription_svc,
+        gym_stripe_svc,
+        linked_discount_svc,
     )
     return DiscountsService(db_pool, gym_stripe_svc, discount_svc, sync_svc)
 
@@ -174,13 +199,23 @@ def build_membership_plans_service(
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     membership_svc = PaymentsStripeMembershipService(stripe_client, price_svc)
     subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client, members_svc, price_svc, discount_svc,
+        stripe_client,
+        members_svc,
+        price_svc,
+        discount_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
     linked_discount_svc = LinkedMemberDiscountService(db_pool)
     sync_svc = MembershipPaymentSyncService(
-        db_pool, subscription_svc, gym_stripe_svc, linked_discount_svc,
+        db_pool,
+        subscription_svc,
+        gym_stripe_svc,
+        linked_discount_svc,
     )
     return MembershipPlansService(
-        db_pool, gym_stripe_svc, membership_svc, price_svc, sync_svc,
+        db_pool,
+        gym_stripe_svc,
+        membership_svc,
+        price_svc,
+        sync_svc,
     )

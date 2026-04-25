@@ -148,10 +148,7 @@ async def test_invoice_payment_failed_raises_when_subscription_items_unresolved(
     # Webhook event NOT recorded (transaction rolled back).
     async with db_pool.session() as session:
         result = await session.execute(
-            text(
-                "SELECT COUNT(*) AS n FROM stripe_webhook_events "
-                "WHERE event_id = :id"
-            ),
+            text("SELECT COUNT(*) AS n FROM stripe_webhook_events WHERE event_id = :id"),
             {"id": event["id"]},
         )
         row = result.mappings().fetchone()
@@ -215,10 +212,7 @@ async def test_invoice_payment_failed_then_new_attempt_creates_separate_row(
     # Exactly one invoice row — upsert collapsed both events.
     async with db_pool.session() as session:
         result = await session.execute(
-            text(
-                "SELECT COUNT(*) AS n FROM user_gym_invoices "
-                "WHERE stripe_invoice_id = :id"
-            ),
+            text("SELECT COUNT(*) AS n FROM user_gym_invoices WHERE stripe_invoice_id = :id"),
             {"id": "in_test_failed_retry"},
         )
         row = result.mappings().fetchone()

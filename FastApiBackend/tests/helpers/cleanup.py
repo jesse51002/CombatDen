@@ -50,10 +50,7 @@ async def delete_all_gym_data(db_pool: DirectDatabasePool, gym_id: UUID) -> None
         linked_ids = [row[0] for row in linked_rows.fetchall()]
         for linked_id in linked_ids:
             await session.execute(
-                text(
-                    "DELETE FROM gym_discounts_unfiltered "
-                    "WHERE discount_id = :id"
-                ),
+                text("DELETE FROM gym_discounts_unfiltered WHERE discount_id = :id"),
                 {"id": str(linked_id)},
             )
 

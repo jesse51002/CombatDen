@@ -11,11 +11,9 @@ import pytest
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401  — enables ``from schema.*`` imports
-
 from src.core.config import settings
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.database import DirectDatabasePool
-
 from tests.helpers.cleanup import delete_all_gym_data
 
 # Persistent Stripe Custom Connect account for integration tests.
@@ -54,8 +52,15 @@ def stripe_account_id():
 
 @pytest.fixture(scope="session")
 def connect_opts(stripe_client, stripe_account_id):
-    """Stripe Connect request options for the test account."""
-    return PaymentsStripeClient.connect_opts(stripe_account_id)
+    """Stripe Connect request options for the test account.
+
+    Uses the read-only variant (no ``idempotency_key``) because test
+    helpers that call Stripe directly (``create_member`` / ``create_plan``
+    / retrievals) do not need dedup semantics and reuse the same opts
+    across many calls. Production code paths always go through
+    ``connect_opts`` with a per-request idempotency key.
+    """
+    return PaymentsStripeClient.connect_opts_readonly(stripe_account_id)
 
 
 # ── Test gym ────────────────────────────────────────────────────

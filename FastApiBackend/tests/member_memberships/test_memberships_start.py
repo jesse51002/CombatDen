@@ -11,10 +11,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
-from src.payments.service.cash_constants import (
-    CRM_PAID_WITH_CASH_METADATA_KEY,
-    CRM_PAID_WITH_CASH_METADATA_VALUE,
-)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.data_factory import (
     create_discount,
@@ -84,6 +80,7 @@ async def test_start_recurring_membership(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         # Verify DB row exists with stripe_item_id set
@@ -165,6 +162,7 @@ async def test_start_one_time_membership(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         async with db_pool.session() as session:
@@ -231,6 +229,7 @@ async def test_start_zero_dollar_one_time_membership(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         async with db_pool.session() as session:
@@ -301,6 +300,7 @@ async def test_start_zero_dollar_recurring_membership(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         async with db_pool.session() as session:
@@ -341,13 +341,10 @@ async def test_start_zero_dollar_recurring_membership(
             params={"customer": member.stripe_customer_id, "limit": 10},
             options=connect_opts,
         )
-        new_invoices = [
-            inv for inv in after_invoices.data if inv.id not in before.invoice_ids
-        ]
+        new_invoices = [inv for inv in after_invoices.data if inv.id not in before.invoice_ids]
         for inv in new_invoices:
             assert inv.amount_paid == 0, (
-                f"$0 recurring plan produced invoice {inv.id} with "
-                f"amount_paid={inv.amount_paid}"
+                f"$0 recurring plan produced invoice {inv.id} with amount_paid={inv.amount_paid}"
             )
     finally:
         await delete_member_data(db_pool, member.crm_user_id)
@@ -383,6 +380,7 @@ async def test_start_validates_plan_price(
                 gym_id=gym_id,
                 plan_id=uuid4(),
                 price_id=uuid4(),
+                idempotency_key=uuid4(),
             )
 
         await assert_no_unexpected_charges(
@@ -417,6 +415,7 @@ async def test_start_duplicate_raises(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         # Snapshot after the first successful start — the duplicate
@@ -433,6 +432,7 @@ async def test_start_duplicate_raises(
                 gym_id=gym_id,
                 plan_id=plan.plan_id,
                 price_id=plan.price_id,
+                idempotency_key=uuid4(),
             )
 
         await assert_no_unexpected_charges(
@@ -440,6 +440,80 @@ async def test_start_duplicate_raises(
             before,
             connect_opts,
         )
+    finally:
+        await delete_member_data(db_pool, member.crm_user_id)
+
+
+async def test_start_two_different_recurring_plans(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+):
+    """A member can hold multiple recurring memberships at the same
+    gym as long as each is on a distinct plan. Regression guard for
+    the over-broad ``check_recurring_no_active_memberships`` trigger
+    that used to block any second recurring start, even on a
+    different plan.
+    """
+    pm_id = await create_payment_method(stripe_client, connect_opts)
+    member = await create_member(
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        payment_method_id=pm_id,
+    )
+    plan_a = await create_plan(
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        plan_name="Recurring A",
+    )
+    plan_b = await create_plan(
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        plan_name="Recurring B",
+    )
+
+    try:
+        await memberships_service.start(
+            crm_user_id=member.crm_user_id,
+            gym_id=gym_id,
+            plan_id=plan_a.plan_id,
+            price_id=plan_a.price_id,
+            idempotency_key=uuid4(),
+        )
+        await memberships_service.start(
+            crm_user_id=member.crm_user_id,
+            gym_id=gym_id,
+            plan_id=plan_b.plan_id,
+            price_id=plan_b.price_id,
+            idempotency_key=uuid4(),
+        )
+
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT plan_id, stripe_item_id FROM member_memberships "
+                    "WHERE crm_user_id = :id"
+                ),
+                {"id": str(member.crm_user_id)},
+            )
+            rows = result.mappings().all()
+
+        plan_ids = {row["plan_id"] for row in rows}
+        assert plan_ids == {plan_a.plan_id, plan_b.plan_id}, (
+            f"Expected memberships on both plans, got {plan_ids}"
+        )
+        for row in rows:
+            assert row["stripe_item_id"] is not None, (
+                f"Membership on plan {row['plan_id']} missing stripe_item_id"
+            )
     finally:
         await delete_member_data(db_pool, member.crm_user_id)
 
@@ -491,6 +565,7 @@ async def test_start_with_discount(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
             discount_ids=[discount.discount_id],
         )
 
@@ -585,6 +660,7 @@ async def test_start_recurring_prorate_false_no_immediate_invoice(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
             prorate=False,
         )
 
@@ -648,6 +724,7 @@ async def test_start_recurring_cash_prorate_true_pays_out_of_band(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
             prorate=True,
             paid_with_cash=True,
         )
@@ -675,13 +752,9 @@ async def test_start_recurring_cash_prorate_true_pays_out_of_band(
             min_amount=1,
             max_amount=plan.price_cents,
         )
-        assert (
-            invoice.metadata[CRM_PAID_WITH_CASH_METADATA_KEY]
-            == CRM_PAID_WITH_CASH_METADATA_VALUE
-        ), (
+        assert invoice.metadata.to_dict().get("crm_paid_with_cash") == "true", (
             f"Cash invoice {invoice.id} missing metadata "
-            f"{CRM_PAID_WITH_CASH_METADATA_KEY}="
-            f"{CRM_PAID_WITH_CASH_METADATA_VALUE}: {dict(invoice.metadata)}"
+            f"crm_paid_with_cash=true: {dict(invoice.metadata)}"
         )
     finally:
         await delete_member_data(db_pool, member.crm_user_id)
@@ -722,6 +795,7 @@ async def test_start_recurring_cash_prorate_false_no_invoice(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
             prorate=False,
             paid_with_cash=True,
         )

@@ -43,7 +43,8 @@ class ServerException implements Exception {
   });
 
   @override
-  String toString() => message;
+  String toString() =>
+      detail != null ? '$message — $detail' : message;
 }
 
 /// Thrown by the gym repository when the backend

@@ -6,6 +6,8 @@ that no surprise charges landed on the member while the freeze was
 in effect.
 """
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import text
 
@@ -46,6 +48,7 @@ async def test_freeze_account(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
         profile = await get_profile_stripe_ids(
             db_pool,
@@ -60,7 +63,7 @@ async def test_freeze_account(
             connect_opts,
         )
 
-        await memberships_service.freeze(member.crm_user_id, gym_id, 2)
+        await memberships_service.freeze(member.crm_user_id, gym_id, 2, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -118,6 +121,7 @@ async def test_freeze_updates_end_date(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
         profile = await get_profile_stripe_ids(
             db_pool,
@@ -126,7 +130,7 @@ async def test_freeze_updates_end_date(
         )
         assert profile.stripe_sub_id_month is not None
 
-        await memberships_service.freeze(member.crm_user_id, gym_id, 1)
+        await memberships_service.freeze(member.crm_user_id, gym_id, 1, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -147,7 +151,7 @@ async def test_freeze_updates_end_date(
         )
 
         # Re-freeze with different duration
-        await memberships_service.freeze(member.crm_user_id, gym_id, 3)
+        await memberships_service.freeze(member.crm_user_id, gym_id, 3, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -201,6 +205,7 @@ async def test_unfreeze_account(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
         profile = await get_profile_stripe_ids(
             db_pool,
@@ -209,7 +214,7 @@ async def test_unfreeze_account(
         )
         assert profile.stripe_sub_id_month is not None
 
-        await memberships_service.freeze(member.crm_user_id, gym_id, 2)
+        await memberships_service.freeze(member.crm_user_id, gym_id, 2, idempotency_key=uuid4())
 
         # Snapshot while frozen — the unfreeze itself must not
         # invoice the member, it only clears pause_collection.
@@ -219,7 +224,7 @@ async def test_unfreeze_account(
             connect_opts,
         )
 
-        await memberships_service.unfreeze(member.crm_user_id, gym_id)
+        await memberships_service.unfreeze(member.crm_user_id, gym_id, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -276,6 +281,7 @@ async def test_freeze_zero_months_raises(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
         profile = await get_profile_stripe_ids(
             db_pool,
@@ -291,7 +297,9 @@ async def test_freeze_zero_months_raises(
         )
 
         with pytest.raises(ValueError):
-            await memberships_service.freeze(member.crm_user_id, gym_id, 0)
+            await memberships_service.freeze(
+                member.crm_user_id, gym_id, 0, idempotency_key=uuid4()
+            )
 
         await assert_no_unexpected_charges(
             stripe_client,

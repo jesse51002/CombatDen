@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:intl/intl.dart';
+
 import 'package:crm/features/member_details/data/models/paying_for_member.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
-import 'package:crm/features/member_details/presentation/widgets/membership_carousel/freeze_cancel_modal.dart';
+import 'package:crm/features/member_details/data/models/membership_member_info.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
-import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
 /// Section showing linked accounts the member pays for.
 class PayingForSection extends StatelessWidget {
   final MembershipInfo membership;
-  final List<MembershipInfo> memberships;
   final void Function(String crmUserId)?
       onLinkedAccountTap;
 
   const PayingForSection({
     super.key,
     required this.membership,
-    required this.memberships,
     this.onLinkedAccountTap,
   });
 
@@ -82,22 +81,6 @@ class PayingForSection extends StatelessWidget {
                   ),
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal:
-                    DesignConstants.paddingSmall,
-              ),
-              child: AppOutlineButton(
-                fullWidth: true,
-                text: 'Manage Their Membership',
-                onPressed: () {
-                  FreezeCancelModal.show(
-                    context: context,
-                    memberships: memberships,
-                  );
-                },
-              ),
-            ),
           ],
         ),
       ),
@@ -150,11 +133,29 @@ class PayingForSection extends StatelessWidget {
   }
 
   String _displayName(PayingForMember account) {
-    if (account.status == MembershipStatus.active) {
-      return account.fullName;
+    final buffer = StringBuffer(account.fullName);
+    if (account.status != MembershipStatus.active) {
+      buffer.write(' (${account.status.displayLabel})');
     }
-    return '${account.fullName}'
-        ' (${account.status.displayLabel})';
+    final terminal =
+        membership.status == MembershipStatus.cancelled ||
+            membership.status == MembershipStatus.ended;
+    if (!terminal) {
+      final exit =
+          membership.exitDateFor(account.crmUserId);
+      if (exit != null) {
+        buffer.write(' ${_exitLabel(exit)}');
+      }
+    }
+    return buffer.toString();
+  }
+
+  String _exitLabel(MembershipExitDate exit) {
+    final fmt = DateFormat('M/d');
+    final verb = exit.kind == MembershipExitKind.cancelling
+        ? 'cancelling'
+        : 'ending';
+    return '($verb ${fmt.format(exit.date.toLocal())})';
   }
 
   TextStyle _nameStyle(MembershipStatus status) {

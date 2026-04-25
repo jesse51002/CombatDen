@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.helpers.service_factory import PaymentServices, build_payment_services
+from tests.helpers.service_factory import build_payment_services
 
 
 @pytest.fixture(scope="module")

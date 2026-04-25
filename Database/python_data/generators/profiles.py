@@ -130,12 +130,23 @@ def _build_historical(
     is_linked: bool,
     discounts: list[DiscountRecord],
     linked_discounts: list[DiscountRecord],
+    natural_end: bool = False,
 ) -> HistoricalMembership:
-    """Build a historical (already-cancelled) membership row."""
+    """Build a historical membership row.
+
+    When ``natural_end`` is True, the membership ended on its own (e.g. a trial
+    expiring) and only ``end_date`` is set — ``cancel_date`` stays None because
+    nobody cancelled it.
+    """
     is_recurring = plan.plan_type == "recurring"
     interval = _interval_days(plan)
 
-    end_date = None if is_recurring else cancel + timedelta(days=random.randint(0, 14))
+    if natural_end:
+        end_date = cancel
+        cancel_date: date | None = None
+    else:
+        end_date = None if is_recurring else cancel + timedelta(days=random.randint(0, 14))
+        cancel_date = cancel
     last_paid = start + timedelta(days=random.randint(0, interval * 2))
 
     total_price = plan.base_cost
@@ -156,7 +167,7 @@ def _build_historical(
         plan=plan,
         start_date=start,
         end_date=end_date,
-        cancel_date=cancel,
+        cancel_date=cancel_date,
         last_paid_date=last_paid,
         total_price=total_price,
         discount_ids=discount_ids,
@@ -240,19 +251,41 @@ def build_plans(
             # 5%: no membership at all
             continue
 
-        elif roll < 0.30 and trial_plans and paid_plans:
-            # 25%: finished trial, now on a paid plan (current is paid)
+        elif roll < 0.12 and paid_plans:
+            # 7%: former member — 1-3 cancelled/ended memberships, no current.
+            num_past = random.randint(1, 3)
+            cursor = today_offset(-random.randint(30, 120))
+            for _ in range(num_past):
+                past_plan = random.choice(paid_plans)
+                duration = random.randint(30, 240)
+                start = cursor - timedelta(days=duration)
+                profile.history.append(
+                    _build_historical(
+                        past_plan,
+                        start=start,
+                        cancel=cursor,
+                        is_linked=is_linked,
+                        discounts=discounts,
+                        linked_discounts=linked_discounts,
+                    )
+                )
+                cursor = start - timedelta(days=random.randint(7, 90))
+            continue
+
+        elif roll < 0.35 and trial_plans and paid_plans:
+            # 23%: finished trial, now on a paid plan (current is paid)
             trial_plan = random.choice(trial_plans)
-            trial_cancel = today_offset(-random.randint(14, 120))
-            trial_start = trial_cancel - timedelta(days=_interval_days(trial_plan))
+            trial_end = today_offset(-random.randint(14, 120))
+            trial_start = trial_end - timedelta(days=_interval_days(trial_plan))
             profile.history.append(
                 _build_historical(
                     trial_plan,
                     start=trial_start,
-                    cancel=trial_cancel,
+                    cancel=trial_end,
                     is_linked=is_linked,
                     discounts=discounts,
                     linked_discounts=linked_discounts,
+                    natural_end=True,
                 )
             )
             paid_plan = random.choice(paid_plans)
@@ -265,16 +298,16 @@ def build_plans(
                 include_linked_discount=use_linked,
             )
 
-        elif roll < 0.55 and trial_plans:
-            # 25%: trial only — current is the trial (active or expiring)
+        elif roll < 0.58 and trial_plans:
+            # 23%: trial only — current is the trial (active or expiring)
             trial_plan = random.choice(trial_plans)
             profile.current = CurrentMembership(
                 plan=trial_plan,
                 prorate=False,
             )
 
-        elif roll < 0.75 and paid_plans:
-            # 20%: direct purchase, currently active
+        elif roll < 0.76 and paid_plans:
+            # 18%: direct purchase, currently active
             paid_plan = random.choice(paid_plans)
             d_ids, use_linked = _pick_current_discounts(
                 paid_plan, is_linked, discounts, linked_discounts
@@ -286,7 +319,7 @@ def build_plans(
             )
 
         elif roll < 0.90 and paid_plans:
-            # 15%: cancelled in the past, re-signed recently
+            # 14%: cancelled in the past, re-signed recently
             first_plan = random.choice(paid_plans)
             first_start = date.today() - timedelta(days=random.randint(121, 300))
             cancel_date = first_start + timedelta(days=random.randint(30, 120))
@@ -313,20 +346,21 @@ def build_plans(
         elif trial_plans and paid_plans:
             # 10%: trial → cancelled paid → re-signed (two historical + one current)
             trial_plan = random.choice(trial_plans)
-            trial_cancel = date.today() - timedelta(days=random.randint(180, 260))
-            trial_start = trial_cancel - timedelta(days=_interval_days(trial_plan))
+            trial_end = date.today() - timedelta(days=random.randint(180, 260))
+            trial_start = trial_end - timedelta(days=_interval_days(trial_plan))
             profile.history.append(
                 _build_historical(
                     trial_plan,
                     start=trial_start,
-                    cancel=trial_cancel,
+                    cancel=trial_end,
                     is_linked=is_linked,
                     discounts=discounts,
                     linked_discounts=linked_discounts,
+                    natural_end=True,
                 )
             )
             first_plan = random.choice(paid_plans)
-            first_start = trial_cancel + timedelta(days=random.randint(0, 7))
+            first_start = trial_end + timedelta(days=random.randint(0, 7))
             cancel_days = random.randint(30, 120)
             if first_start + timedelta(days=cancel_days) >= date.today():
                 first_start = date.today() - timedelta(days=cancel_days + random.randint(1, 30))

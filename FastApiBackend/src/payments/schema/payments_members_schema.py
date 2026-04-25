@@ -3,6 +3,12 @@ from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
+from src.payments.schema.metadata.stripe_customer_metadata import (
+    StripeCustomerMetadata,
+)
+from src.payments.schema.metadata.stripe_subscription_metadata import (
+    StripeSubscriptionMetadata,
+)
 from src.payments.schema.payments_enums import StripeResourceType
 
 # ── Customer & Card ──────────────────────────────────────────────
@@ -15,7 +21,7 @@ class PaymentsCustomerCreateRequest(BaseModel):
     email: str | None = None
     phone: str | None = None
     payment_method_id: str | None = None
-    metadata: dict[str, str] | None = None
+    metadata: StripeCustomerMetadata
 
 
 class PaymentsCustomerUpdateRequest(BaseModel):
@@ -26,7 +32,7 @@ class PaymentsCustomerUpdateRequest(BaseModel):
     email: str | None = None
     phone: str | None = None
     payment_method_id: str
-    metadata: dict[str, str] | None = None
+    metadata: StripeCustomerMetadata
 
 
 class PaymentsCustomerResponse(BaseModel):
@@ -75,8 +81,10 @@ class PaymentsSubscriptionCreateRequest(BaseModel):
     stripe_customer_id: str
     items: list[PaymentsSubscriptionDesiredItem]
     subscription_discounts: list[SubscriptionItemDiscount] = []
-    metadata: dict[str, str] | None = None
+    metadata: StripeSubscriptionMetadata
     pay_first_invoice_out_of_band: bool = False
+    idempotency_key: str
+    gym_timezone: str
 
     @field_validator("items")
     @classmethod
@@ -114,12 +122,14 @@ class PaymentsSubscriptionFreezeRequest(BaseModel):
 
     stripe_subscription_id: str
     freeze_end_date: date | None = None
+    idempotency_key: str
 
 
 class PaymentsSubscriptionUnfreezeRequest(BaseModel):
     """Resume (unfreeze) a paused subscription."""
 
     stripe_subscription_id: str
+    idempotency_key: str
 
 
 class PaymentsSubscriptionCancelRequest(BaseModel):
@@ -127,6 +137,7 @@ class PaymentsSubscriptionCancelRequest(BaseModel):
 
     stripe_subscription_id: str
     cancel_at_period_end: bool = False
+    idempotency_key: str
 
 
 class PaymentsSubscriptionResponse(BaseModel):

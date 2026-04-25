@@ -76,6 +76,7 @@ def _post_current(
         "price_id": str(current.plan.price_id),
         "prorate": current.prorate,
         "include_linked_discount": current.include_linked_discount,
+        "idempotency_key": str(uuid.uuid4()),
     }
     if current.discount_ids:
         payload["discount_ids"] = [str(d) for d in current.discount_ids]
@@ -141,6 +142,7 @@ def create_current(
                 params={
                     "item_id": existing["item_id"],
                     "crm_user_id": str(profile.crm_user_id),
+                    "idempotency_key": str(uuid.uuid4()),
                 },
             )
 
@@ -158,6 +160,7 @@ def create_current(
                     "crm_user_id": str(profile.crm_user_id),
                     "gym_id": str(gym_id),
                     "freeze_months": current.freeze_months,
+                    "idempotency_key": str(uuid.uuid4()),
                 },
             )
         if current.cancel_after_start:
@@ -166,6 +169,7 @@ def create_current(
                 params={
                     "item_id": str(records[-1].item_id),
                     "crm_user_id": str(profile.crm_user_id),
+                    "idempotency_key": str(uuid.uuid4()),
                 },
             )
 

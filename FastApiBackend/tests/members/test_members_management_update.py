@@ -111,7 +111,9 @@ async def test_update_card_existing_customer(
 
         resp = await management_service.update_card(
             created.crm_user_id,
-            MembersManagementUpdateCardRequest(payment_method_id=pm2),
+            MembersManagementUpdateCardRequest(
+                payment_method_id=pm2,
+            ),
         )
 
         assert resp.stripe_payment_method_id == pm2
@@ -161,7 +163,9 @@ async def test_update_card_creates_customer_if_needed(
 
         resp = await management_service.update_card(
             created.crm_user_id,
-            MembersManagementUpdateCardRequest(payment_method_id=pm_id),
+            MembersManagementUpdateCardRequest(
+                payment_method_id=pm_id,
+            ),
         )
 
         assert resp.stripe_payment_method_id == pm_id
@@ -205,7 +209,9 @@ async def test_unlink_payment(
             connect_opts,
         )
 
-        resp = await management_service.unlink_payment(created.crm_user_id)
+        resp = await management_service.unlink_payment(
+            created.crm_user_id,
+        )
 
         assert resp.stripe_payment_method_id is None
         assert resp.card_brand is None

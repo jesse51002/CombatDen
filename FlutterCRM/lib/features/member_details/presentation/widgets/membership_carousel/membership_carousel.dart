@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/presentation/widgets/membership_carousel/membership_actions_row.dart';
@@ -14,7 +15,7 @@ import 'package:crm/shared/widgets/section_card.dart';
 /// Paginated membership card showing one membership at a
 /// time with left/right navigation arrows.
 class MembershipCarousel extends StatelessWidget {
-  final List<MembershipInfo> memberships;
+  final MemberDetailResponse member;
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
   final void Function(String crmUserId)?
@@ -23,12 +24,14 @@ class MembershipCarousel extends StatelessWidget {
 
   const MembershipCarousel({
     super.key,
-    required this.memberships,
+    required this.member,
     required this.currentIndex,
     required this.onPageChanged,
     this.onLinkedAccountTap,
     this.payments = const [],
   });
+
+  List<MembershipInfo> get memberships => member.memberships;
 
   @override
   Widget build(BuildContext context) {
@@ -65,15 +68,16 @@ class MembershipCarousel extends StatelessWidget {
               : null,
         ),
         MembershipDetailsTable(
+          member: member,
           membership: membership,
         ),
         if (membership.payingFor.isNotEmpty)
           PayingForSection(
             membership: membership,
-            memberships: memberships,
             onLinkedAccountTap: onLinkedAccountTap,
           ),
         DiscountsSection(
+          member: member,
           membership: membership,
         ),
         Expanded(
@@ -82,7 +86,8 @@ class MembershipCarousel extends StatelessWidget {
           ),
         ),
         MembershipActionsRow(
-          memberships: memberships,
+          member: member,
+          currentMembership: membership,
         ),
       ],
     );

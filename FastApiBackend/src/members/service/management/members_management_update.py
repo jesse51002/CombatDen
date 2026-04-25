@@ -19,6 +19,9 @@ from src.members.service.management.members_management_base import (
     MembersManagementBase,
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.metadata.stripe_customer_metadata import (
+    StripeCustomerMetadata,
+)
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_members_schema import (
     PaymentsCustomerResponse,
@@ -127,6 +130,8 @@ class MembersManagementUpdate(MembersManagementBase):
             email=email,
             phone=phone,
             payment_method_id=request.payment_method_id,
+            crm_user_id=crm_user_id,
+            gym_id=info["gym_id"],
         )
 
         stripe_resp: PaymentsCustomerResponse
@@ -139,6 +144,10 @@ class MembersManagementUpdate(MembersManagementBase):
                         email=email,
                         phone=phone,
                         payment_method_id=request.payment_method_id,
+                        metadata=StripeCustomerMetadata(
+                            crm_user_id=crm_user_id,
+                            gym_id=info["gym_id"],
+                        ),
                     ),
                     stripe_account_id,
                 )

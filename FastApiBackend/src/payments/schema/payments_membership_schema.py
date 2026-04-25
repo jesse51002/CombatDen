@@ -2,6 +2,9 @@ from pydantic import BaseModel, model_validator
 from schema.membership_plan import DurationUnit, PlanType
 
 import src.shared.db_schema_path  # noqa: F401
+from src.payments.schema.metadata.stripe_product_metadata import (
+    StripeProductMetadata,
+)
 from src.payments.schema.payments_price_schema import PaymentsPriceResponse
 
 
@@ -48,7 +51,7 @@ class PaymentsMembershipCreateRequest(BaseModel):
     plan_name: str
     prices: list[PaymentsMembershipPriceItem]
     class_count: int | None = None
-    metadata: dict[str, str] = {}
+    metadata: StripeProductMetadata
 
     @model_validator(mode="after")
     def validate_prices(self) -> PaymentsMembershipCreateRequest:

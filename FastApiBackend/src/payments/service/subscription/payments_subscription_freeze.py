@@ -26,19 +26,15 @@ class PaymentsSubscriptionFreeze(PaymentsSubscriptionBase):
 
         If ``freeze_end_date`` is provided, the subscription will
         automatically resume on that date.
-
-        Args:
-            request: Subscription ID and optional freeze end date.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Freeze details including resumes_at timestamp.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        write_opts = self._client.connect_opts(
+            stripe_account_id, idempotency_key=request.idempotency_key
+        )
 
         await self._retrieve_subscription(
             request.stripe_subscription_id,
-            opts,
+            read_opts,
         )
 
         pause_params = SubscriptionUpdateParamsPauseCollection(
@@ -52,7 +48,7 @@ class PaymentsSubscriptionFreeze(PaymentsSubscriptionBase):
         sub = await self._stripe.v1.subscriptions.update_async(
             request.stripe_subscription_id,
             params=SubscriptionUpdateParams(pause_collection=pause_params),
-            options=opts,
+            options=write_opts,
         )
 
         actual_resumes_at = None
@@ -74,19 +70,15 @@ class PaymentsSubscriptionFreeze(PaymentsSubscriptionBase):
 
         Clears pause_collection and preserves the original billing
         cycle alignment by passing billing_cycle_anchor="unchanged".
-
-        Args:
-            request: Subscription ID to unfreeze.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Subscription details after resuming.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        write_opts = self._client.connect_opts(
+            stripe_account_id, idempotency_key=request.idempotency_key
+        )
 
         await self._retrieve_subscription(
             request.stripe_subscription_id,
-            opts,
+            read_opts,
         )
 
         sub = await self._stripe.v1.subscriptions.update_async(
@@ -95,6 +87,6 @@ class PaymentsSubscriptionFreeze(PaymentsSubscriptionBase):
                 pause_collection="",
                 billing_cycle_anchor="unchanged",
             ),
-            options=opts,
+            options=write_opts,
         )
         return self._map_subscription(sub)

@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from schema.member_membership import MembershipDbStatus
 from schema.membership_plan import PlanType
 from schema.user_gym_charge import ChargeKind, ChargeStatus
@@ -54,6 +54,15 @@ class DiscountInfo(BaseModel):
     end_date: date | None = None
 
 
+class MembershipMemberInfo(BaseModel):
+    """Per-member membership details within a grouped plan."""
+
+    item_id: UUID
+    end_date: date | None = None
+    cancel_date: date | None = None
+    on_outdated_price: bool = False
+
+
 class MembershipInfo(BaseModel):
     """A grouped plan in the membership carousel.
 
@@ -72,11 +81,11 @@ class MembershipInfo(BaseModel):
     last_paid_date: date | None = None
     next_due_date: date | None = None
     start_date: date
-    end_date: date | None = None
     freeze_start_date: date | None = None
     freeze_end_date: date | None = None
     paying_for: list[PayingForMember] = []
     discounts: list[DiscountInfo] = []
+    members: dict[UUID, MembershipMemberInfo] = Field(default_factory=dict)
 
 
 class Retention(BaseModel):
@@ -125,6 +134,22 @@ class PaymentRecord(BaseModel):
     applied_discounts: list[DiscountInfo] = []
 
 
+class CardOnFile(BaseModel):
+    """Saved card details for the paying account.
+
+    Only the parent account in a linked family can hold a
+    card (enforced by the `linked_account_no_stripe` check
+    constraint on `user_gym_profiles`), so these fields are
+    surfaced once at the response root rather than per
+    membership.
+    """
+
+    brand: str
+    last_four: str
+    exp_month: int
+    exp_year: int
+
+
 class MemberDetailResponse(BaseModel):
     """Full member detail response for the Specific Member screen."""
 
@@ -144,3 +169,4 @@ class MemberDetailResponse(BaseModel):
     retention: Retention
     recently_redeemed_rewards: list[RewardCard] = []
     payment_history: list[PaymentRecord] = []
+    card_on_file: CardOnFile | None = None

@@ -1,19 +1,19 @@
 """Integration tests for linked-account management."""
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import text
 
 from src.members.schema.members_management_schema import (
     MembersManagementCreateRequest,
 )
-
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.data_factory import (
     create_member,
     create_payment_method,
     create_plan,
 )
-
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -60,16 +60,27 @@ async def _retrieve_sub(stripe_client, connect_opts, sub_id):
 
 
 async def test_link_happy_path(
-    management_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     parent = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="Parent", last_name="One",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="Parent",
+        last_name="One",
     )
     child = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="Child", last_name="One",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="Child",
+        last_name="One",
     )
 
     try:
@@ -98,18 +109,29 @@ async def test_link_happy_path(
 
 
 async def test_link_clears_existing_card_fields(
-    management_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     """A child with an existing card should have card fields nulled on link."""
     parent = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="Parent", last_name="Card",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="Parent",
+        last_name="Card",
     )
     pm_id = await create_payment_method(stripe_client, connect_opts)
     child = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="Child", last_name="Card",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="Child",
+        last_name="Card",
         payment_method_id=pm_id,
     )
 
@@ -136,11 +158,17 @@ async def test_link_clears_existing_card_fields(
 
 
 async def test_link_self_raises(
-    management_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     member = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
     )
 
     try:
@@ -154,25 +182,38 @@ async def test_link_self_raises(
 
 
 async def test_link_already_linked_raises(
-    management_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     parent = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="P", last_name="A",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="P",
+        last_name="A",
     )
     child = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="C", last_name="A",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="C",
+        last_name="A",
     )
 
     try:
         await management_service.link_account(
-            child.crm_user_id, parent.crm_user_id,
+            child.crm_user_id,
+            parent.crm_user_id,
         )
         with pytest.raises(ValueError, match="already linked"):
             await management_service.link_account(
-                child.crm_user_id, parent.crm_user_id,
+                child.crm_user_id,
+                parent.crm_user_id,
             )
     finally:
         await delete_member_data(db_pool, child.crm_user_id)
@@ -180,18 +221,30 @@ async def test_link_already_linked_raises(
 
 
 async def test_link_with_active_recurring_raises(
-    management_service, memberships_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     """A member with active recurring memberships cannot be linked."""
     parent = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="P", last_name="Recur",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="P",
+        last_name="Recur",
     )
     pm_id = await create_payment_method(stripe_client, connect_opts)
     child = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="C", last_name="Recur",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="C",
+        last_name="Recur",
         payment_method_id=pm_id,
     )
     plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
@@ -202,11 +255,13 @@ async def test_link_with_active_recurring_raises(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         with pytest.raises(ValueError, match="active recurring"):
             await management_service.link_account(
-                child.crm_user_id, parent.crm_user_id,
+                child.crm_user_id,
+                parent.crm_user_id,
             )
 
         # Child is unchanged
@@ -221,24 +276,38 @@ async def test_link_with_active_recurring_raises(
 
 
 async def test_unlink_happy_path(
-    management_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     parent = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="Parent", last_name="Unlink",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="Parent",
+        last_name="Unlink",
     )
     child = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="Child", last_name="Unlink",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="Child",
+        last_name="Unlink",
     )
 
     try:
         await management_service.link_account(
-            child.crm_user_id, parent.crm_user_id,
+            child.crm_user_id,
+            parent.crm_user_id,
         )
 
-        resp = await management_service.unlink_account(child.crm_user_id)
+        resp = await management_service.unlink_account(
+            child.crm_user_id,
+        )
         assert resp.account_linked_to_id is None
 
         row = await _fetch_profile(db_pool, child.crm_user_id)
@@ -253,29 +322,45 @@ async def test_unlink_happy_path(
 
 
 async def test_unlink_not_linked_raises(
-    management_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     member = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
     )
 
     try:
         with pytest.raises(ValueError, match="not linked"):
-            await management_service.unlink_account(member.crm_user_id)
+            await management_service.unlink_account(
+                member.crm_user_id,
+            )
     finally:
         await delete_member_data(db_pool, member.crm_user_id)
 
 
 async def test_unlink_with_active_recurring_raises(
-    management_service, memberships_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     """A linked child with active recurring memberships cannot be unlinked."""
     pm_id = await create_payment_method(stripe_client, connect_opts)
     parent = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="P", last_name="UnlinkRecur",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="P",
+        last_name="UnlinkRecur",
         payment_method_id=pm_id,
     )
     # Create child already linked to parent — linked accounts can
@@ -295,10 +380,13 @@ async def test_unlink_with_active_recurring_raises(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         with pytest.raises(ValueError, match="active recurring"):
-            await management_service.unlink_account(child.crm_user_id)
+            await management_service.unlink_account(
+                child.crm_user_id,
+            )
 
         # Child is still linked
         row = await _fetch_profile(db_pool, child.crm_user_id)
@@ -312,8 +400,12 @@ async def test_unlink_with_active_recurring_raises(
 
 
 async def test_link_unlink_issues_no_charges(
-    management_service, memberships_service, db_pool, gym_id,
-    stripe_client, connect_opts,
+    management_service,
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
 ):
     """Link + unlink must not create new invoices or proration items on
     the parent's Stripe subscription. The parent has an active recurring
@@ -322,14 +414,22 @@ async def test_link_unlink_issues_no_charges(
     """
     pm_id = await create_payment_method(stripe_client, connect_opts)
     parent = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="P", last_name="NoCharge",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="P",
+        last_name="NoCharge",
         payment_method_id=pm_id,
     )
     plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
     child = await create_member(
-        db_pool, stripe_client, gym_id, connect_opts,
-        first_name="C", last_name="NoCharge",
+        db_pool,
+        stripe_client,
+        gym_id,
+        connect_opts,
+        first_name="C",
+        last_name="NoCharge",
     )
 
     try:
@@ -340,6 +440,7 @@ async def test_link_unlink_issues_no_charges(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         sub_id = await _fetch_parent_sub_id(db_pool, parent.crm_user_id)
@@ -347,8 +448,7 @@ async def test_link_unlink_issues_no_charges(
 
         sub_before = await _retrieve_sub(stripe_client, connect_opts, sub_id)
         items_before = sorted(
-            (item.id, item.price.id, item.quantity)
-            for item in sub_before["items"].data
+            (item.id, item.price.id, item.quantity) for item in sub_before["items"].data
         )
         invoice_before = sub_before.latest_invoice
 
@@ -359,11 +459,12 @@ async def test_link_unlink_issues_no_charges(
         )
 
         sub_after_link = await _retrieve_sub(
-            stripe_client, connect_opts, sub_id,
+            stripe_client,
+            connect_opts,
+            sub_id,
         )
         items_after_link = sorted(
-            (item.id, item.price.id, item.quantity)
-            for item in sub_after_link["items"].data
+            (item.id, item.price.id, item.quantity) for item in sub_after_link["items"].data
         )
         assert items_after_link == items_before, (
             "link_account must not add or remove Stripe subscription items"
@@ -373,14 +474,17 @@ async def test_link_unlink_issues_no_charges(
         )
 
         # ── Unlink the child ─────────────────────────────────────
-        await management_service.unlink_account(child.crm_user_id)
+        await management_service.unlink_account(
+            child.crm_user_id,
+        )
 
         sub_after_unlink = await _retrieve_sub(
-            stripe_client, connect_opts, sub_id,
+            stripe_client,
+            connect_opts,
+            sub_id,
         )
         items_after_unlink = sorted(
-            (item.id, item.price.id, item.quantity)
-            for item in sub_after_unlink["items"].data
+            (item.id, item.price.id, item.quantity) for item in sub_after_unlink["items"].data
         )
         assert items_after_unlink == items_before, (
             "unlink_account must not add or remove Stripe subscription items"

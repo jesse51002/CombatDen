@@ -185,13 +185,11 @@ async def assert_immediate_prorated_invoice(
     )
 
     assert invoice.amount_due >= min_amount, (
-        f"Invoice {invoice.id} amount_due={invoice.amount_due} "
-        f"below min_amount={min_amount}"
+        f"Invoice {invoice.id} amount_due={invoice.amount_due} below min_amount={min_amount}"
     )
     if max_amount is not None:
         assert invoice.amount_due <= max_amount, (
-            f"Invoice {invoice.id} amount_due={invoice.amount_due} "
-            f"above max_amount={max_amount}"
+            f"Invoice {invoice.id} amount_due={invoice.amount_due} above max_amount={max_amount}"
         )
 
     if expect_paid:

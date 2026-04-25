@@ -17,6 +17,9 @@ from src.membership_plans.service.plans.membership_plans_base import (
     MembershipPlansBase,
 )
 from src.payments.payments_exceptions import StripeOrphanError
+from src.payments.schema.metadata.stripe_product_metadata import (
+    StripeProductMetadata,
+)
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_membership_schema import (
     PaymentsMembershipCreateRequest,
@@ -79,9 +82,10 @@ class MembershipPlansCreate(MembershipPlansBase):
                             is_default=True,
                         ),
                     ],
-                    metadata={
-                        "crm_plan_id": plan_id,
-                    },
+                    metadata=StripeProductMetadata(
+                        plan_id=plan_row["plan_id"],
+                        gym_id=request.gym_id,
+                    ),
                 ),
                 stripe_account_id,
             )

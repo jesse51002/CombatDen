@@ -173,10 +173,7 @@ async def test_charge_refunded_orphan_is_logged_and_acked(
     # Event log row exists — Stripe retries are short-circuited.
     async with db_pool.session() as session:
         result = await session.execute(
-            text(
-                "SELECT COUNT(*) AS n FROM stripe_webhook_events "
-                "WHERE event_id = :id"
-            ),
+            text("SELECT COUNT(*) AS n FROM stripe_webhook_events WHERE event_id = :id"),
             {"id": event["id"]},
         )
         row = result.mappings().fetchone()

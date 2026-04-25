@@ -3,19 +3,28 @@ import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/discount_info.dart';
+import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
+import 'package:crm/features/member_details/presentation/widgets/dialogs/manage_discounts/manage_discounts_dialog.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
 /// Section listing active discounts on a membership.
 class DiscountsSection extends StatelessWidget {
+  final MemberDetailResponse member;
   final MembershipInfo membership;
 
   const DiscountsSection({
     super.key,
+    required this.member,
     required this.membership,
   });
+
+  bool get _isTerminal =>
+      membership.status == MembershipStatus.cancelled ||
+      membership.status == MembershipStatus.ended;
 
   double get _tableHeight {
     if (membership.discounts.isEmpty) return 100;
@@ -89,9 +98,14 @@ class DiscountsSection extends StatelessWidget {
               child: AppOutlineButton(
                 fullWidth: true,
                 text: 'Manage Discounts',
-                onPressed: () {
-                  // TODO: Navigate to discounts management
-                },
+                onPressed: _isTerminal
+                    ? null
+                    : () => ManageDiscountsDialog.show(
+                          context: context,
+                          crmUserId: member.crmUserId,
+                          gymId: member.gymId,
+                          membership: membership,
+                        ),
               ),
             ),
           ],

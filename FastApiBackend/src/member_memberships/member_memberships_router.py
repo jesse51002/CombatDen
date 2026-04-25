@@ -10,16 +10,22 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
 from src.member_memberships.schema.member_memberships_schema import (
+    MemberMembershipsCancelResponse,
+    MemberMembershipsChargeCardRequest,
     MemberMembershipsFreezeRequest,
     MemberMembershipsMarkPaidCashRequest,
     MemberMembershipsStartRequest,
     MemberMembershipsUnfreezeRequest,
+    MemberMembershipsUpdateDiscountsRequest,
     MemberMembershipsUpdatePriceRequest,
 )
 from src.member_memberships.service.member_memberships_service import (
     MemberMembershipsService,
 )
 from src.payments.payments_exceptions import PaymentsStripeError
+from src.payments.schema.payments_invoice_schema import (
+    PaymentsInvoicePreviewResponse,
+)
 from src.shared.auth import Auth, security
 
 logger = logging.getLogger(__name__)
@@ -32,15 +38,17 @@ member_memberships_router = APIRouter(
 
 @member_memberships_router.delete(
     "/",
-    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=MemberMembershipsCancelResponse,
     summary="Cancel a membership",
     description=(
         "Cancels a specific active membership for a member. "
         "Sets cancel_date to the membership's next_due_date, "
-        "or today if next_due_date is missing or in the past."
+        "or today if next_due_date is missing or in the past. "
+        "Returns the resolved cancel_date (the date through "
+        "which the membership remains active)."
     ),
     responses={
-        204: {"description": "Membership cancelled successfully"},
+        200: {"description": "Membership cancelled successfully"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
     },
@@ -49,12 +57,13 @@ member_memberships_router = APIRouter(
 async def cancel_membership(
     item_id: UUID,
     crm_user_id: UUID,
+    idempotency_key: UUID,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> None:
+) -> MemberMembershipsCancelResponse:
     """Cancel a specific membership for a member.
 
     Syncs the cancellation to Stripe first, then updates the
@@ -78,7 +87,8 @@ async def cancel_membership(
     await auth.verify_can_view_member(crm_user_id, user_payload)
 
     try:
-        await memberships_service.cancel(item_id, crm_user_id)
+        cancel_date = await memberships_service.cancel(item_id, crm_user_id, idempotency_key)
+        return MemberMembershipsCancelResponse(cancel_date=cancel_date)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -149,6 +159,7 @@ async def freeze_membership(
             request.crm_user_id,
             request.gym_id,
             request.freeze_months,
+            request.idempotency_key,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -217,6 +228,7 @@ async def unfreeze_membership(
         await memberships_service.unfreeze(
             request.crm_user_id,
             request.gym_id,
+            request.idempotency_key,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -288,6 +300,7 @@ async def start_membership(
             gym_id=request.gym_id,
             plan_id=request.plan_id,
             price_id=request.price_id,
+            idempotency_key=request.idempotency_key,
             discount_ids=request.discount_ids,
             include_linked_discount=request.include_linked_discount,
             prorate=request.prorate,
@@ -326,11 +339,13 @@ async def start_membership(
 @member_memberships_router.put(
     "/price",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Update membership price",
+    summary="Upgrade membership to the plan's current price",
     description=(
-        "Switches a membership to a different price tier. "
-        "Swaps the old price for the new one in Stripe, "
-        "then updates the CRM row."
+        "Moves a membership onto its plan's currently active "
+        "price. Swaps the old price for the active one in "
+        "Stripe, then updates the CRM row. If the membership "
+        "is already on the active price, no CRM update occurs "
+        "but Stripe is still re-synced defensively."
     ),
     responses={
         204: {"description": "Price updated successfully"},
@@ -347,10 +362,10 @@ async def update_membership_price(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> None:
-    """Update the price of an existing membership.
+    """Upgrade a membership to its plan's currently active price.
 
     Args:
-        request: Update price request with new price ID and prorate flag.
+        request: Update price request with prorate flag.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
@@ -362,7 +377,7 @@ async def update_membership_price(
         await memberships_service.update_price(
             item_id=request.item_id,
             crm_user_id=request.crm_user_id,
-            new_price_id=request.new_price_id,
+            idempotency_key=request.idempotency_key,
             prorate=request.prorate,
         )
     except ValueError as exc:
@@ -391,6 +406,336 @@ async def update_membership_price(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update membership price",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/preview",
+    response_model=PaymentsInvoicePreviewResponse | None,
+    summary="Preview starting a membership",
+    description=(
+        "Dry-run of the start endpoint: runs every validation "
+        "and returns the Stripe invoice preview without "
+        "creating any CRM rows or Stripe resources."
+    ),
+    responses={
+        200: {"description": "Preview retrieved successfully"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+    },
+)
+@inject
+async def preview_start_membership(
+    request: MemberMembershipsStartRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> PaymentsInvoicePreviewResponse | None:
+    """Preview what starting a membership would charge."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.crm_user_id, user_payload)
+
+    try:
+        return await memberships_service.preview_start(
+            crm_user_id=request.crm_user_id,
+            gym_id=request.gym_id,
+            plan_id=request.plan_id,
+            price_id=request.price_id,
+            discount_ids=request.discount_ids,
+            include_linked_discount=request.include_linked_discount,
+            prorate=request.prorate,
+            paid_with_cash=request.paid_with_cash,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to preview start membership: crm_user_id=%s, plan_id=%s",
+            request.crm_user_id,
+            request.plan_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview membership start",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/cancel/preview",
+    response_model=PaymentsInvoicePreviewResponse | None,
+    summary="Preview cancelling a membership",
+    description=(
+        "Dry-run of the cancel endpoint: runs every validation "
+        "and returns the Stripe invoice preview for the "
+        "post-cancel subscription state. Returns null for the "
+        "last active membership (pure cancellation has no "
+        "upcoming invoice)."
+    ),
+    responses={
+        200: {"description": "Preview retrieved successfully"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+    },
+)
+@inject
+async def preview_cancel_membership(
+    item_id: UUID,
+    crm_user_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> PaymentsInvoicePreviewResponse | None:
+    """Preview what cancelling a membership would charge."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(crm_user_id, user_payload)
+
+    try:
+        return await memberships_service.preview_cancel(item_id, crm_user_id)
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to preview cancel membership: item_id=%s, crm_user_id=%s",
+            item_id,
+            crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview membership cancel",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/price/preview",
+    response_model=PaymentsInvoicePreviewResponse | None,
+    summary="Preview updating a membership's price",
+    description=(
+        "Dry-run of the update-price endpoint: runs every "
+        "validation and returns the Stripe invoice preview for "
+        "the post-swap subscription state."
+    ),
+    responses={
+        200: {"description": "Preview retrieved successfully"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+    },
+)
+@inject
+async def preview_update_membership_price(
+    request: MemberMembershipsUpdatePriceRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> PaymentsInvoicePreviewResponse | None:
+    """Preview what updating a membership's price would charge."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.crm_user_id, user_payload)
+
+    try:
+        return await memberships_service.preview_update_price(
+            item_id=request.item_id,
+            crm_user_id=request.crm_user_id,
+            prorate=request.prorate,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to preview update membership price: item_id=%s, crm_user_id=%s",
+            request.item_id,
+            request.crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview membership price update",
+        ) from None
+
+
+@member_memberships_router.put(
+    "/discounts",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Replace a membership's discount set",
+    description=(
+        "Replaces the discount_ids array on an existing "
+        "membership with the supplied list. Empty list "
+        "detaches every discount. Re-syncs the Stripe "
+        "subscription — no mid-cycle invoice is cut."
+    ),
+    responses={
+        204: {"description": "Discounts updated successfully"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+    },
+)
+@inject
+async def update_membership_discounts(
+    request: MemberMembershipsUpdateDiscountsRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> None:
+    """Replace the discount set on an existing membership.
+
+    Args:
+        request: Update discounts request with the full desired
+            discount_ids list.
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        memberships_service: Injected memberships service.
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.crm_user_id, user_payload)
+
+    try:
+        await memberships_service.update_discounts(
+            item_id=request.item_id,
+            crm_user_id=request.crm_user_id,
+            discount_ids=request.discount_ids,
+            idempotency_key=request.idempotency_key,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to update membership discounts: item_id=%s, crm_user_id=%s",
+            request.item_id,
+            request.crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update membership discounts",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/discounts/preview",
+    response_model=PaymentsInvoicePreviewResponse | None,
+    summary="Preview replacing a membership's discount set",
+    description=(
+        "Dry-run of the update-discounts endpoint: runs every "
+        "validation and returns the Stripe invoice preview for "
+        "the proposed discount set without writing to the CRM "
+        "or mutating the Stripe subscription."
+    ),
+    responses={
+        200: {"description": "Preview retrieved successfully"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+    },
+)
+@inject
+async def preview_update_membership_discounts(
+    request: MemberMembershipsUpdateDiscountsRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> PaymentsInvoicePreviewResponse | None:
+    """Preview replacing the discount set on an existing membership."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.crm_user_id, user_payload)
+
+    try:
+        return await memberships_service.preview_update_discounts(
+            item_id=request.item_id,
+            crm_user_id=request.crm_user_id,
+            discount_ids=request.discount_ids,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to preview update membership discounts: item_id=%s, crm_user_id=%s",
+            request.item_id,
+            request.crm_user_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview membership discounts update",
         ) from None
 
 
@@ -430,6 +775,7 @@ async def mark_membership_paid_cash(
         await memberships_service.mark_paid_cash(
             item_id=request.item_id,
             crm_user_id=request.crm_user_id,
+            idempotency_key=request.idempotency_key,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -457,4 +803,70 @@ async def mark_membership_paid_cash(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to mark membership paid via cash",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/charge-card",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Charge a member's card for an ad-hoc amount",
+    description=(
+        "Creates a one-off Stripe invoice for ``amount_cents`` "
+        "with ``reason`` as the description and line-item name, "
+        "then pays it. If ``paid_cash`` is true the invoice is "
+        "marked paid out of band instead of charging the card. "
+        "The existing ``invoice.paid`` webhook writes the CRM "
+        "invoice and charge rows."
+    ),
+    responses={
+        204: {"description": "Card charged successfully"},
+        400: {"description": "Invalid request or gym mismatch"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Member profile not found"},
+        502: {"description": "Stripe error"},
+    },
+)
+@inject
+async def charge_member_card(
+    request: MemberMembershipsChargeCardRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> None:
+    """Charge a member's card (or mark as cash) for an ad-hoc amount."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.crm_user_id, user_payload)
+
+    try:
+        await memberships_service.charge_card(request)
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to charge member card: crm_user_id=%s, gym_id=%s, amount_cents=%s",
+            request.crm_user_id,
+            request.gym_id,
+            request.amount_cents,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to charge member card",
         ) from None

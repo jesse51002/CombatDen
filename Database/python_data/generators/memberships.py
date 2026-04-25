@@ -61,6 +61,11 @@ def create_history(
         for h in profile.history:
             rows.append(_to_row(profile, gym_id, h))
 
+    # A DB trigger requires each insert's start_date > the latest existing
+    # start_date for the same plan. Sort ascending so chronological order is
+    # preserved regardless of the order profiles/history were built in.
+    rows.sort(key=lambda r: r.start_date)
+
     if rows:
         client.table("member_memberships").insert([r.to_insert_dict() for r in rows]).execute()
     return rows

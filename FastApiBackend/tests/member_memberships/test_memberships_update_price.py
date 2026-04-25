@@ -35,6 +35,7 @@ async def _start_and_get_item_id(memberships_service, db_pool, member, gym_id, p
         gym_id=gym_id,
         plan_id=plan.plan_id,
         price_id=plan.price_id,
+        idempotency_key=uuid4(),
     )
     async with db_pool.session() as session:
         result = await session.execute(
@@ -110,7 +111,7 @@ async def test_update_price_tier(
         await memberships_service.update_price(
             item_id=item_id,
             crm_user_id=member.crm_user_id,
-            new_price_id=new_price.price_id,
+            idempotency_key=uuid4(),
             prorate=False,
         )
 
@@ -160,7 +161,6 @@ async def test_update_price_tier(
 
 async def test_update_cancelled_raises(
     memberships_service,
-    plans_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -190,14 +190,7 @@ async def test_update_cancelled_raises(
             gym_id,
         )
 
-        new_price = await plans_service.set_price(
-            MembershipPlanPriceRequest(
-                plan_id=plan.plan_id,
-                gym_id=gym_id,
-                price=8000,
-            ),
-        )
-        await memberships_service.cancel(item_id, member.crm_user_id)
+        await memberships_service.cancel(item_id, member.crm_user_id, idempotency_key=uuid4())
 
         # Snapshot after cancel — the failed update_price below must
         # not create any invoice or leave a partially-mutated Stripe
@@ -212,76 +205,9 @@ async def test_update_cancelled_raises(
             await memberships_service.update_price(
                 item_id=item_id,
                 crm_user_id=member.crm_user_id,
-                new_price_id=new_price.price_id,
+                idempotency_key=uuid4(),
             )
 
-        await assert_no_unexpected_charges(
-            stripe_client,
-            before,
-            connect_opts,
-        )
-    finally:
-        await delete_member_data(db_pool, member.crm_user_id)
-
-
-async def test_update_invalid_price_raises(
-    memberships_service,
-    db_pool,
-    gym_id,
-    stripe_client,
-    connect_opts,
-):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
-
-    try:
-        item_id = await _start_and_get_item_id(
-            memberships_service,
-            db_pool,
-            member,
-            gym_id,
-            plan,
-        )
-        profile = await get_profile_stripe_ids(
-            db_pool,
-            member.crm_user_id,
-            gym_id,
-        )
-        assert profile.stripe_sub_id_month is not None
-
-        before = await snapshot_billing_state(
-            stripe_client,
-            profile.stripe_customer_id,
-            connect_opts,
-        )
-
-        with pytest.raises((ValueError, Exception)):
-            await memberships_service.update_price(
-                item_id=item_id,
-                crm_user_id=member.crm_user_id,
-                new_price_id=uuid4(),
-            )
-
-        # Sub must still point at the original price and no charges
-        # may have been generated.
-        sub = await fetch_subscription(
-            stripe_client,
-            profile.stripe_sub_id_month,
-            connect_opts,
-        )
-        remaining_prices = {item.price.id for item in sub.items.data}
-        assert plan.stripe_price_id in remaining_prices, (
-            f"Original price {plan.stripe_price_id} missing from "
-            f"subscription {profile.stripe_sub_id_month} after failed "
-            f"update (items={sorted(remaining_prices)})"
-        )
         await assert_no_unexpected_charges(
             stripe_client,
             before,

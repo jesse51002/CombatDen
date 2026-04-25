@@ -6,8 +6,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator, model_validator
 
-# ── Create ──────────────────────────────────────────────────────
-
 
 class MembersManagementCreateRequest(BaseModel):
     """Create a new gym member. Card info is optional."""
@@ -38,11 +36,11 @@ class MembersManagementCreateRequest(BaseModel):
         return self
 
 
-# ── Update (personal info) ──────────────────────────────────────
-
-
 class MembersManagementUpdateRequest(BaseModel):
-    """Update a member's personal information. All fields optional."""
+    """Update a member's personal information. All fields optional.
+
+    Does not touch Stripe — no idempotency key required.
+    """
 
     first_name: str | None = None
     last_name: str | None = None
@@ -62,16 +60,10 @@ class MembersManagementUpdateRequest(BaseModel):
         return v
 
 
-# ── Update Card ─────────────────────────────────────────────────
-
-
 class MembersManagementUpdateCardRequest(BaseModel):
     """Update a member's payment card. Overwrites DB and Stripe."""
 
     payment_method_id: str
-
-
-# ── Linked Account ──────────────────────────────────────────────
 
 
 class MembersManagementLinkRequest(BaseModel):
@@ -80,7 +72,15 @@ class MembersManagementLinkRequest(BaseModel):
     parent_crm_user_id: UUID
 
 
-# ── Response ────────────────────────────────────────────────────
+class MembersManagementLinkCheckResponse(BaseModel):
+    """Result of checking whether a member can be linked to a payer.
+
+    ``error`` is a pre-formatted, user-facing string and should be
+    rendered as-is in the UI when ``can_link`` is ``False``.
+    """
+
+    can_link: bool
+    error: str | None = None
 
 
 class MembersManagementResponse(BaseModel):

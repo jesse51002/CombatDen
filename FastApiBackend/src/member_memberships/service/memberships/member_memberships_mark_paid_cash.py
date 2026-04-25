@@ -53,6 +53,7 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
         self,
         item_id: UUID,
         crm_user_id: UUID,
+        idempotency_key: UUID,
     ) -> None:
         """Mark the membership's subscription's open invoice paid via cash.
 
@@ -91,4 +92,5 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
         await self._payment_service.pay_open_subscription_invoice_out_of_band(
             stripe_subscription_id=parent.stripe_sub_id_month,
             stripe_account_id=stripe_account_id,
+            idempotency_key=str(idempotency_key),
         )

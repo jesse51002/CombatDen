@@ -2,7 +2,7 @@ PORT ?= 4173
 
 .PHONY: serve
 serve:
-	python3 -m http.server $(PORT)
+	python3 serve.py $(PORT)
 
 .PHONY: deploy-install deploy-provision deploy-finalize deploy-upload deploy
 deploy-install:

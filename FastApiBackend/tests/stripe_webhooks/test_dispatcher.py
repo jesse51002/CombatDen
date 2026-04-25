@@ -16,10 +16,7 @@ from tests.stripe_webhooks.event_builders import (
 async def _event_log_count(db_pool, event_id: str) -> int:
     async with db_pool.session() as session:
         result = await session.execute(
-            text(
-                "SELECT COUNT(*) AS n FROM stripe_webhook_events "
-                "WHERE event_id = :id"
-            ),
+            text("SELECT COUNT(*) AS n FROM stripe_webhook_events WHERE event_id = :id"),
             {"id": event_id},
         )
         row = result.mappings().fetchone()
@@ -29,10 +26,7 @@ async def _event_log_count(db_pool, event_id: str) -> int:
 async def _charges_count(db_pool, gym_id) -> int:
     async with db_pool.session() as session:
         result = await session.execute(
-            text(
-                "SELECT COUNT(*) AS n FROM user_gym_charges "
-                "WHERE gym_id = :gym_id"
-            ),
+            text("SELECT COUNT(*) AS n FROM user_gym_charges WHERE gym_id = :gym_id"),
             {"gym_id": str(gym_id)},
         )
         row = result.mappings().fetchone()

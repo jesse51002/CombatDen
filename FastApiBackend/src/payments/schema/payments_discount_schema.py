@@ -1,5 +1,8 @@
 from pydantic import BaseModel, model_validator
 
+from src.payments.schema.metadata.stripe_coupon_metadata import (
+    StripeCouponMetadata,
+)
 from src.payments.schema.payments_enums import StripeCouponDuration
 
 
@@ -12,7 +15,7 @@ class PaymentsDiscountCreateRequest(BaseModel):
     currency: str = "usd"
     duration: StripeCouponDuration
     duration_in_months: int | None = None
-    metadata: dict[str, str] | None = None
+    metadata: StripeCouponMetadata
 
     @model_validator(mode="after")
     def exactly_one_discount_value(self) -> PaymentsDiscountCreateRequest:
@@ -31,7 +34,13 @@ class PaymentsDiscountUpdateRequest(BaseModel):
 
     stripe_coupon_id: str
     discount_name: str
-    metadata: dict[str, str] | None = None
+    metadata: StripeCouponMetadata
+
+
+class PaymentsDiscountDeleteRequest(BaseModel):
+    """Delete a Stripe Coupon."""
+
+    stripe_coupon_id: str
 
 
 class PaymentsDiscountResponse(BaseModel):

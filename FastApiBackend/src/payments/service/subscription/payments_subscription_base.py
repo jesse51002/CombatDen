@@ -285,7 +285,7 @@ class PaymentsSubscriptionBase:
 
         Returns the recurring interval shared by all items.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
 
         interval: str | None = None
         for item in request.items:
@@ -309,7 +309,7 @@ class PaymentsSubscriptionBase:
             all_coupon_ids.extend(d.coupon for d in item.discounts)
         all_coupon_ids.extend(d.coupon for d in request.subscription_discounts)
         if all_coupon_ids:
-            await self._validate_coupon_ids(all_coupon_ids, opts)
+            await self._validate_coupon_ids(all_coupon_ids, read_opts)
 
         return interval
 

@@ -8,33 +8,35 @@ active membership:
    queues ``bulk_payment_sync`` on a ``BackgroundTasks`` instance —
    the test runs the queued tasks inline so assertions can fire
    synchronously.
-2. The payment sync is called directly with the discount already
-   removed from ``discount_ids`` on the CRM row.
+2. The gym detaches the discount from a specific active membership
+   via the first-class ``PUT /member_memberships/discounts``
+   endpoint (``memberships_service.update_discounts(discount_ids=[])``).
+   The discount itself still exists in the gym's catalog.
 
 Both paths must: (a) scrub the coupon off the Stripe subscription
 item, (b) leave no mid-cycle invoice, (c) bill the next cycle at
 the full undiscounted price.
 """
 
-import json
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from schema.gym_discount import DiscountType
-from sqlalchemy import text
 from starlette.background import BackgroundTasks
 
 from src.discounts.schema.discounts_schema import DiscountCreateRequest
 from src.payments.schema.payments_enums import StripeCouponDuration
-
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.data_factory import (
     create_member,
     create_payment_method,
     create_plan,
 )
-from tests.helpers.db_reads import get_profile_stripe_ids
+from tests.helpers.db_reads import (
+    get_active_membership_item_id,
+    get_profile_stripe_ids,
+)
 from tests.helpers.stripe_assertions import (
     advance_to_next_cycle_and_fetch_invoice,
     assert_invoice_matches,
@@ -47,7 +49,6 @@ from tests.helpers.stripe_clock import (
     create_test_clock,
     delete_test_clock,
 )
-
 
 CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 NEXT_CYCLE = CLOCK_START + timedelta(days=35)
@@ -66,27 +67,9 @@ async def _start_membership_with_discount(
         gym_id=gym_id,
         plan_id=plan.plan_id,
         price_id=plan.price_id,
+        idempotency_key=uuid4(),
         discount_ids=[discount_id],
     )
-
-
-async def _set_discount_ids(db_pool, member, plan, discount_ids: list[UUID]) -> None:
-    """Rewrite the JSONB discount_ids column on an active membership."""
-    payload = json.dumps([str(d) for d in discount_ids]) if discount_ids else None
-    async with db_pool.session() as session:
-        await session.execute(
-            text(
-                "UPDATE member_memberships_unfiltered "
-                "SET discount_ids = CAST(:ids AS jsonb) "
-                "WHERE crm_user_id = :crm_user_id AND plan_id = :plan_id"
-            ),
-            {
-                "ids": payload,
-                "crm_user_id": str(member.crm_user_id),
-                "plan_id": str(plan.plan_id),
-            },
-        )
-        await session.commit()
 
 
 def _find_item_index_by_price(sub, stripe_price_id: str) -> int:
@@ -156,7 +139,9 @@ async def test_delete_discount_cascades_to_active_member_next_invoice_full_price
             discount.discount_id,
         )
         profile = await get_profile_stripe_ids(
-            db_pool, member.crm_user_id, gym_id,
+            db_pool,
+            member.crm_user_id,
+            gym_id,
         )
 
         # First-pass guarantee: ``start(discount_ids=[...])`` must
@@ -165,13 +150,17 @@ async def test_delete_discount_cascades_to_active_member_next_invoice_full_price
         # production callers use, and anything less means we are
         # shipping an undiscounted first invoice.
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx = _find_item_index_by_price(sub, plan.stripe_price_id)
         assert_item_discounts(sub, {discount.stripe_coupon_id}, index=idx)
 
         before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
 
         # Fire the delete. The service queues ``bulk_payment_sync``
@@ -188,12 +177,16 @@ async def test_delete_discount_cascades_to_active_member_next_invoice_full_price
 
         # Stripe side: coupon scrubbed and no extra invoice.
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx = _find_item_index_by_price(sub, plan.stripe_price_id)
         assert_item_discounts(sub, set(), index=idx)
         await assert_no_unexpected_charges(
-            stripe_client, before, connect_opts,
+            stripe_client,
+            before,
+            connect_opts,
         )
 
         invoice = await advance_to_next_cycle_and_fetch_invoice(
@@ -212,19 +205,18 @@ async def test_delete_discount_cascades_to_active_member_next_invoice_full_price
 
 
 @pytest.mark.timeout(240)
-async def test_remove_discount_from_sub_via_payment_sync_override(
+async def test_remove_discount_from_sub_via_update_discounts_endpoint(
     memberships_service,
-    payment_sync_service,
     discounts_service,
     db_pool,
     gym_id,
     stripe_client,
     connect_opts,
 ):
-    """Direct payment-sync path: the discount is still registered in
-    the gym, but we strip it off the active membership by clearing
-    ``discount_ids`` and re-syncing. The Stripe item must lose the
-    coupon and the next invoice must bill the full price, even
+    """First-class detach path: the discount is still registered in
+    the gym, but we strip it off the active membership by calling
+    ``update_discounts(discount_ids=[])``. The Stripe item must lose
+    the coupon and the next invoice must bill the full price, even
     though the discount itself still exists.
     """
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
@@ -264,34 +256,48 @@ async def test_remove_discount_from_sub_via_payment_sync_override(
             discount.discount_id,
         )
         profile = await get_profile_stripe_ids(
-            db_pool, member.crm_user_id, gym_id,
+            db_pool,
+            member.crm_user_id,
+            gym_id,
+        )
+        item_id = await get_active_membership_item_id(
+            db_pool,
+            member.crm_user_id,
+            gym_id,
         )
 
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx = _find_item_index_by_price(sub, plan.stripe_price_id)
         assert_item_discounts(sub, {discount.stripe_coupon_id}, index=idx)
 
         before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
 
-        # Clear the discount off the row and force a re-sync.
-        await _set_discount_ids(db_pool, member, plan, [])
-        await payment_sync_service.update_payments_recurring(
-            member.crm_user_id,
-            add_ids=[],
-            cancel_ids=[],
+        await memberships_service.update_discounts(
+            item_id=item_id,
+            crm_user_id=member.crm_user_id,
+            discount_ids=[],
+            idempotency_key=uuid4(),
         )
 
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx = _find_item_index_by_price(sub, plan.stripe_price_id)
         assert_item_discounts(sub, set(), index=idx)
         await assert_no_unexpected_charges(
-            stripe_client, before, connect_opts,
+            stripe_client,
+            before,
+            connect_opts,
         )
 
         invoice = await advance_to_next_cycle_and_fetch_invoice(

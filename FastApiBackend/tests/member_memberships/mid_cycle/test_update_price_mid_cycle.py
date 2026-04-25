@@ -17,13 +17,12 @@ Three flows are covered:
 """
 
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
 
 from src.membership_plans.membership_plans_schemas import MembershipPlanPriceRequest
-
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.data_factory import (
     create_member,
@@ -45,7 +44,6 @@ from tests.helpers.stripe_clock import (
     delete_test_clock,
 )
 
-
 CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 NEXT_CYCLE = CLOCK_START + timedelta(days=35)
 
@@ -57,6 +55,7 @@ async def _start_and_get_item_id(memberships_service, db_pool, member, gym_id, p
         gym_id=gym_id,
         plan_id=plan.plan_id,
         price_id=plan.price_id,
+        idempotency_key=uuid4(),
     )
     async with db_pool.session() as session:
         result = await session.execute(
@@ -92,7 +91,9 @@ def _line_price_id(line) -> str | None:
     if legacy is not None:
         if isinstance(legacy, str):
             return legacy
-        maybe_id = getattr(legacy, "id", None) if not isinstance(legacy, dict) else legacy.get("id")
+        maybe_id = (
+            getattr(legacy, "id", None) if not isinstance(legacy, dict) else legacy.get("id")
+        )
         if maybe_id:
             return maybe_id
 
@@ -159,10 +160,16 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
         )
 
         item_id = await _start_and_get_item_id(
-            memberships_service, db_pool, member, gym_id, plan,
+            memberships_service,
+            db_pool,
+            member,
+            gym_id,
+            plan,
         )
         profile = await get_profile_stripe_ids(
-            db_pool, member.crm_user_id, gym_id,
+            db_pool,
+            member.crm_user_id,
+            gym_id,
         )
         assert profile.stripe_sub_id_month is not None
 
@@ -176,26 +183,34 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
         )
 
         before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
 
         await memberships_service.update_price(
             item_id=item_id,
             crm_user_id=member.crm_user_id,
-            new_price_id=new_price.price_id,
+            idempotency_key=uuid4(),
             prorate=False,
         )
 
         # Stripe side: item points at new price, no mid-cycle invoice.
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx, _ = _find_item_by_price(sub, new_price.stripe_price_id)
         assert_subscription_item_price(
-            sub, new_price.stripe_price_id, index=idx,
+            sub,
+            new_price.stripe_price_id,
+            index=idx,
         )
         await assert_no_unexpected_charges(
-            stripe_client, before, connect_opts,
+            stripe_client,
+            before,
+            connect_opts,
         )
 
         # Advance past period end — next invoice must be at the new price
@@ -261,10 +276,16 @@ async def test_update_price_mid_cycle_with_prorate_true(
             price_cents=5000,
         )
         item_id = await _start_and_get_item_id(
-            memberships_service, db_pool, member, gym_id, plan,
+            memberships_service,
+            db_pool,
+            member,
+            gym_id,
+            plan,
         )
         profile = await get_profile_stripe_ids(
-            db_pool, member.crm_user_id, gym_id,
+            db_pool,
+            member.crm_user_id,
+            gym_id,
         )
 
         new_price = await plans_service.set_price(
@@ -276,23 +297,29 @@ async def test_update_price_mid_cycle_with_prorate_true(
         )
 
         before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
 
         await memberships_service.update_price(
             item_id=item_id,
             crm_user_id=member.crm_user_id,
-            new_price_id=new_price.price_id,
+            idempotency_key=uuid4(),
             prorate=True,
         )
 
         # Stripe side: item swapped to new price.
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx, _ = _find_item_by_price(sub, new_price.stripe_price_id)
         assert_subscription_item_price(
-            sub, new_price.stripe_price_id, index=idx,
+            sub,
+            new_price.stripe_price_id,
+            index=idx,
         )
 
         # With proration_behavior="always_invoice", Stripe cuts a
@@ -316,7 +343,9 @@ async def test_update_price_mid_cycle_with_prorate_true(
         # can distinguish the renewal invoice from the immediate
         # proration invoice we just asserted on.
         before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
 
         # Advance the clock — the renewal invoice is now a plain
@@ -376,10 +405,16 @@ async def test_update_price_to_cheaper_tier_mid_cycle(
             price_cents=8000,
         )
         item_id = await _start_and_get_item_id(
-            memberships_service, db_pool, member, gym_id, plan,
+            memberships_service,
+            db_pool,
+            member,
+            gym_id,
+            plan,
         )
         profile = await get_profile_stripe_ids(
-            db_pool, member.crm_user_id, gym_id,
+            db_pool,
+            member.crm_user_id,
+            gym_id,
         )
 
         cheaper_price = await plans_service.set_price(
@@ -391,25 +426,33 @@ async def test_update_price_to_cheaper_tier_mid_cycle(
         )
 
         before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
 
         await memberships_service.update_price(
             item_id=item_id,
             crm_user_id=member.crm_user_id,
-            new_price_id=cheaper_price.price_id,
+            idempotency_key=uuid4(),
             prorate=False,
         )
 
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx, _ = _find_item_by_price(sub, cheaper_price.stripe_price_id)
         assert_subscription_item_price(
-            sub, cheaper_price.stripe_price_id, index=idx,
+            sub,
+            cheaper_price.stripe_price_id,
+            index=idx,
         )
         await assert_no_unexpected_charges(
-            stripe_client, before, connect_opts,
+            stripe_client,
+            before,
+            connect_opts,
         )
 
         invoice = await advance_to_next_cycle_and_fetch_invoice(

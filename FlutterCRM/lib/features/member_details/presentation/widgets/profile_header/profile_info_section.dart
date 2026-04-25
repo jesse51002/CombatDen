@@ -3,6 +3,11 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
+import 'package:crm/features/member_details/presentation/widgets/dialogs/charge_card/charge_card_dialog.dart';
+import 'package:crm/features/member_details/presentation/widgets/dialogs/coming_soon_dialog.dart';
+import 'package:crm/features/member_details/presentation/widgets/dialogs/edit_member/edit_member_dialog.dart';
+import 'package:crm/features/member_details/presentation/widgets/dialogs/start_membership/start_membership_dialog.dart';
+import 'package:crm/features/member_details/presentation/widgets/dialogs/update_card/update_card_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 
 /// Avatar, name, membership overview, and action buttons.
@@ -44,7 +49,7 @@ class ProfileInfoSection extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         _MembershipLabelRow(member: member),
-        _ActionButtonsRow(),
+        _ActionButtonsRow(member: member),
       ],
     );
   }
@@ -107,6 +112,10 @@ class _MembershipLabelRow extends StatelessWidget {
 }
 
 class _ActionButtonsRow extends StatelessWidget {
+  final MemberDetailResponse member;
+
+  const _ActionButtonsRow({required this.member});
+
   @override
   Widget build(BuildContext context) {
     return Wrap(
@@ -114,9 +123,45 @@ class _ActionButtonsRow extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       runSpacing: DesignConstants.spacingMedium,
       children: [
-        _actionButton('Check In', onPressed: () {}),
-        _actionButton('Charge Card', onPressed: () {}),
-        _actionButton('Edit', onPressed: () {}),
+        _actionButton(
+          'Check In',
+          onPressed: () => ComingSoonDialog.show(
+            context: context,
+            title: 'Check In',
+            message:
+                'Class check-in is pending a classes feature.',
+          ),
+        ),
+        _actionButton(
+          'Charge Card',
+          onPressed: () => ChargeCardDialog.show(
+            context: context,
+            member: member,
+          ),
+        ),
+        _actionButton(
+          member.cardOnFile == null
+              ? 'Add Card'
+              : 'Update Card',
+          onPressed: () => UpdateCardDialog.show(
+            context: context,
+            existingCard: member.cardOnFile,
+          ),
+        ),
+        _actionButton(
+          'Start Membership',
+          onPressed: () => StartMembershipDialog.show(
+            context: context,
+            member: member,
+          ),
+        ),
+        _actionButton(
+          'Edit',
+          onPressed: () => EditMemberDialog.show(
+            context: context,
+            member: member,
+          ),
+        ),
       ],
     );
   }

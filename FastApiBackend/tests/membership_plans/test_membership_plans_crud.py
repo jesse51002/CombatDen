@@ -167,7 +167,10 @@ async def test_delete_plan(
         ),
     )
 
-    await plans_service.delete_plan(created.plan_id, gym_id)
+    await plans_service.delete_plan(
+        created.plan_id,
+        gym_id,
+    )
 
     # Plan should not appear in the list anymore
     plans = await plans_service.list_plans(gym_id)

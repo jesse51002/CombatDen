@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
@@ -37,6 +38,7 @@ class MemberDetailResponse extends Equatable {
   final List<RewardCardModel> recentlyRedeemedRewards;
   @JsonKey(defaultValue: [])
   final List<PaymentRecord> paymentHistory;
+  final CardOnFile? cardOnFile;
 
   const MemberDetailResponse({
     required this.crmUserId,
@@ -55,6 +57,7 @@ class MemberDetailResponse extends Equatable {
     required this.retention,
     this.recentlyRedeemedRewards = const [],
     this.paymentHistory = const [],
+    this.cardOnFile,
   });
 
   factory MemberDetailResponse.fromJson(
@@ -86,5 +89,6 @@ class MemberDetailResponse extends Equatable {
         retention,
         recentlyRedeemedRewards,
         paymentHistory,
+        cardOnFile,
       ];
 }

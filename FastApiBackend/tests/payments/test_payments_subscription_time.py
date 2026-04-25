@@ -1,15 +1,24 @@
 """Time-simulation tests for subscriptions using Stripe Test Clocks."""
 
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 import pytest
 
+from src.payments.schema.metadata.stripe_subscription_metadata import (
+    StripeSubscriptionMetadata,
+)
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCancelRequest,
     PaymentsSubscriptionCreateRequest,
     PaymentsSubscriptionDesiredItem,
     PaymentsSubscriptionFreezeRequest,
 )
+
+
+def _subscription_metadata() -> StripeSubscriptionMetadata:
+    return StripeSubscriptionMetadata(crm_user_id=uuid4(), gym_id=uuid4())
+
 
 from tests.helpers.data_factory import create_payment_method
 from tests.helpers.stripe_assertions import (
@@ -21,7 +30,6 @@ from tests.helpers.stripe_clock import (
     create_test_clock,
     delete_test_clock,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────��─
 
@@ -76,15 +84,21 @@ async def clock_price(stripe_client, connect_opts):
 
 @pytest.mark.timeout(90)
 async def test_subscription_renewal_advances_period(
-    subscription_service, stripe_client,
-    stripe_account_id, connect_opts,
-    test_clock, clock_customer, clock_price,
+    subscription_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+    test_clock,
+    clock_customer,
+    clock_price,
 ):
     """Create a subscription, advance 1 month, verify the billing period moved."""
     created = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=clock_customer,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=clock_price)],
+            idempotency_key=str(uuid4()),
+            metadata=_subscription_metadata(),
         ),
         stripe_account_id,
     )
@@ -111,15 +125,21 @@ async def test_subscription_renewal_advances_period(
 
 @pytest.mark.timeout(90)
 async def test_cancel_at_period_end_completes(
-    subscription_service, stripe_client,
-    stripe_account_id, connect_opts,
-    test_clock, clock_customer, clock_price,
+    subscription_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+    test_clock,
+    clock_customer,
+    clock_price,
 ):
     """Set cancel_at_period_end, advance past period end, verify canceled."""
     created = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=clock_customer,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=clock_price)],
+            idempotency_key=str(uuid4()),
+            metadata=_subscription_metadata(),
         ),
         stripe_account_id,
     )
@@ -128,6 +148,7 @@ async def test_cancel_at_period_end_completes(
         PaymentsSubscriptionCancelRequest(
             stripe_subscription_id=created.stripe_subscription_id,
             cancel_at_period_end=True,
+            idempotency_key=str(uuid4()),
         ),
         stripe_account_id,
     )
@@ -166,9 +187,13 @@ async def test_cancel_at_period_end_completes(
 
 @pytest.mark.timeout(90)
 async def test_freeze_resumes_at_date(
-    subscription_service, stripe_client,
-    stripe_account_id, connect_opts,
-    test_clock, clock_customer, clock_price,
+    subscription_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+    test_clock,
+    clock_customer,
+    clock_price,
 ):
     """Freeze with a resumes_at date, advance past it, verify collection resumes."""
     from datetime import date
@@ -177,6 +202,8 @@ async def test_freeze_resumes_at_date(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=clock_customer,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=clock_price)],
+            idempotency_key=str(uuid4()),
+            metadata=_subscription_metadata(),
         ),
         stripe_account_id,
     )
@@ -186,6 +213,7 @@ async def test_freeze_resumes_at_date(
         PaymentsSubscriptionFreezeRequest(
             stripe_subscription_id=created.stripe_subscription_id,
             freeze_end_date=freeze_end,
+            idempotency_key=str(uuid4()),
         ),
         stripe_account_id,
     )
@@ -213,23 +241,19 @@ async def test_freeze_resumes_at_date(
         params={"customer": clock_customer, "limit": 100},
         options=connect_opts,
     )
-    paid_during_pause = [
-        inv for inv in mid_pause_invoices.data if inv.status == "paid"
-    ]
+    paid_during_pause = [inv for inv in mid_pause_invoices.data if inv.status == "paid"]
     # The initial create may have produced a paid invoice — freeze
     # started after that, so any *new* paid invoices would mean
     # voiding didn't work.
     assert len(paid_during_pause) <= 1, (
-        f"Unexpected paid invoices during freeze window: "
-        f"{[i.id for i in paid_during_pause]}"
+        f"Unexpected paid invoices during freeze window: {[i.id for i in paid_during_pause]}"
     )
     mid_customer = await stripe_client.client.v1.customers.retrieve_async(
         clock_customer,
         options=connect_opts,
     )
     assert mid_customer.balance == before_balance, (
-        f"Customer balance shifted during freeze: {before_balance} -> "
-        f"{mid_customer.balance}"
+        f"Customer balance shifted during freeze: {before_balance} -> {mid_customer.balance}"
     )
 
     # Advance past the freeze end date

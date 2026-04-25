@@ -12,7 +12,6 @@ from schema.gym_discount import DiscountType
 from schema.immutable_columns import GYM_DISCOUNTS
 from sqlalchemy import text
 
-import src.shared.db_schema_path  # noqa: F401
 from src.discounts import SQL_DIR
 from src.discounts.schema.discounts_schema import (
     DiscountResponse,
@@ -20,8 +19,12 @@ from src.discounts.schema.discounts_schema import (
     DiscountUpdateRequest,
 )
 from src.discounts.service.discounts.discounts_base import DiscountsBase
+from src.payments.schema.metadata.stripe_coupon_metadata import (
+    StripeCouponMetadata,
+)
 from src.payments.schema.payments_discount_schema import (
     PaymentsDiscountCreateRequest,
+    PaymentsDiscountDeleteRequest,
 )
 from src.payments.schema.payments_enums import StripeCouponDuration
 from src.shared.column_guard import validate_mutable_columns
@@ -114,6 +117,10 @@ class DiscountsUpdate(DiscountsBase):
                 currency="usd",
                 duration=StripeCouponDuration(merged["duration"]),
                 duration_in_months=merged["duration_in_months"],
+                metadata=StripeCouponMetadata(
+                    crm_discount_id=request.discount_id,
+                    gym_id=request.gym_id,
+                ),
             ),
             stripe_account_id,
         )
@@ -122,7 +129,9 @@ class DiscountsUpdate(DiscountsBase):
         if existing["stripe_coupon_id"]:
             try:
                 await self._stripe_discounts.delete_discount(
-                    existing["stripe_coupon_id"],
+                    PaymentsDiscountDeleteRequest(
+                        stripe_coupon_id=existing["stripe_coupon_id"],
+                    ),
                     stripe_account_id,
                 )
             except Exception:

@@ -11,4 +11,5 @@ class EnvConstants {
   static const String supabaseUrl = 'SUPABASE_URL';
   static const String supabaseAnonKey = 'SUPABASE_ANON_KEY';
   static const String apiBaseUrl = 'API_BASE_URL';
+  static const String stripePublishable = 'STRIPE_PUBLISHABLE';
 }

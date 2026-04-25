@@ -15,10 +15,6 @@ from sqlalchemy import text
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
     SubscriptionItemPendingError,
 )
-from src.payments.service.cash_constants import (
-    CRM_PAID_WITH_CASH_METADATA_KEY,
-    CRM_PAID_WITH_CASH_METADATA_VALUE,
-)
 from tests.stripe_webhooks.event_builders import make_invoice_paid_event
 
 
@@ -302,9 +298,7 @@ async def test_invoice_paid_with_cash_metadata_inserts_cash_charge(
         stripe_charge_id=None,
         paid_at=paid_at,
         period_end=period_end,
-        metadata={
-            CRM_PAID_WITH_CASH_METADATA_KEY: CRM_PAID_WITH_CASH_METADATA_VALUE,
-        },
+        metadata={"crm_paid_with_cash": "true"},
     )
 
     await stripe_webhooks_service.handle_event(event)
@@ -348,3 +342,98 @@ async def test_invoice_paid_no_charge_and_not_cash_raises(
 
     with pytest.raises(ValueError, match="no charge id"):
         await stripe_webhooks_service.handle_event(event)
+
+
+async def test_invoice_paid_one_time_payment_writes_invoice_and_charge(
+    stripe_webhooks_service,
+    db_pool,
+    stripe_account_id,
+    gym_id,
+    webhook_fixture,
+):
+    """A one-time-payment invoice (no subscription item, carries
+    ``crm_one_time_payment`` + ``crm_user_id`` + ``gym_id`` in metadata)
+    must upsert the invoice + insert a charge row, WITHOUT touching
+    membership dates.
+    """
+    paid_at = int(datetime(2026, 4, 10, 12, 0, tzinfo=UTC).timestamp())
+    event = make_invoice_paid_event(
+        stripe_account_id=stripe_account_id,
+        stripe_item_ids=[],
+        amount_paid=2500,
+        stripe_charge_id="ch_test_one_time_1",
+        paid_at=paid_at,
+        metadata={
+            "crm_one_time_payment": "true",
+            "crm_user_id": str(webhook_fixture.crm_user_id),
+            "gym_id": str(gym_id),
+        },
+    )
+
+    await stripe_webhooks_service.handle_event(event)
+
+    invoice = await _fetch_invoice(db_pool, event["data"]["object"]["id"])
+    assert invoice is not None
+    assert invoice["status"] == "paid"
+    assert invoice["total_amount"] == 2500
+    assert str(invoice["crm_user_id"]) == str(webhook_fixture.crm_user_id)
+
+    charge = await _fetch_charge(db_pool, "ch_test_one_time_1")
+    assert charge is not None
+    assert charge["kind"] == "payment"
+    assert charge["status"] == "succeeded"
+    assert charge["amount"] == 2500
+
+    # The one-time branch must NOT advance membership dates.
+    dates = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
+    assert dates is not None
+    assert dates["last_paid_date"] is None
+    assert dates["next_due_date"] is None
+
+
+async def test_invoice_paid_one_time_payment_cash(
+    stripe_webhooks_service,
+    db_pool,
+    stripe_account_id,
+    gym_id,
+    webhook_fixture,
+):
+    """A one-time cash payment writes a charge row with
+    ``payment_method_type='cash'`` and ``stripe_charge_id IS NULL``,
+    and still does not touch membership dates.
+    """
+    paid_at = int(datetime(2026, 4, 12, 12, 0, tzinfo=UTC).timestamp())
+    event = make_invoice_paid_event(
+        stripe_account_id=stripe_account_id,
+        stripe_item_ids=[],
+        amount_paid=1500,
+        stripe_charge_id=None,
+        paid_at=paid_at,
+        metadata={
+            "crm_one_time_payment": "true",
+            "crm_paid_with_cash": "true",
+            "crm_user_id": str(webhook_fixture.crm_user_id),
+            "gym_id": str(gym_id),
+        },
+    )
+
+    await stripe_webhooks_service.handle_event(event)
+
+    stripe_invoice_id = event["data"]["object"]["id"]
+    invoice = await _fetch_invoice(db_pool, stripe_invoice_id)
+    assert invoice is not None
+    assert invoice["status"] == "paid"
+    assert invoice["total_amount"] == 1500
+
+    charge = await _fetch_charge_for_invoice(db_pool, stripe_invoice_id)
+    assert charge is not None
+    assert charge["kind"] == "payment"
+    assert charge["status"] == "succeeded"
+    assert charge["amount"] == 1500
+    assert charge["payment_method_type"] == "cash"
+    assert charge["stripe_charge_id"] is None
+
+    dates = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
+    assert dates is not None
+    assert dates["last_paid_date"] is None
+    assert dates["next_due_date"] is None

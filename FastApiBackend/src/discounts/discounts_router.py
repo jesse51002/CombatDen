@@ -26,6 +26,55 @@ discounts_router = APIRouter(
 )
 
 
+@discounts_router.get(
+    "/",
+    response_model=list[DiscountResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List preset discounts for a gym",
+    description=(
+        "Lists non-deleted preset discounts for the gym. Custom and linked discounts are excluded."
+    ),
+    responses={
+        200: {"description": "Discounts listed successfully"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+    },
+)
+@inject
+async def list_discounts(
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    discounts_service: DiscountsService = Depends(Provide[DependencyInjector.discounts_service]),
+) -> list[DiscountResponse]:
+    """List preset discounts for a gym.
+
+    Args:
+        gym_id: The gym whose discounts to list.
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        discounts_service: Injected discounts service.
+
+    Raises:
+        HTTPException: 401/403/500 on respective errors.
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        return await discounts_service.list_discounts(gym_id)
+    except Exception:
+        logger.error(
+            "Failed to list discounts for gym_id=%s",
+            gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list discounts",
+        ) from None
+
+
 @discounts_router.post(
     "/",
     response_model=DiscountResponse,

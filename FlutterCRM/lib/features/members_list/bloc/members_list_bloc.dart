@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:stream_transform/stream_transform.dart';
 
 import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/features/members_list/bloc/members_list_event.dart';
@@ -14,13 +16,20 @@ import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 
+EventTransformer<E> _debounce<E>(Duration duration) {
+  return (events, mapper) =>
+      events.debounce(duration).switchMap(mapper);
+}
+
 /// BLoC for the Members List screen.
 ///
 /// Manages view switching, filtering, pagination,
-/// and client-side search.
+/// and server-side search.
 class MembersListBloc
     extends Bloc<MembersListEvent, MembersListState> {
   final MembersListRepository _repository;
+
+  int _searchSeq = 0;
 
   MembersListBloc({
     required MembersListRepository repository,
@@ -44,7 +53,12 @@ class MembersListBloc
     on<MembersListNextPageRequested>(
       _onNextPageRequested,
     );
-    on<MembersListSearchChanged>(_onSearchChanged);
+    on<MembersListSearchChanged>(
+      _onSearchChanged,
+      transformer: _debounce(
+        const Duration(milliseconds: 300),
+      ),
+    );
   }
 
   Future<void> _onInitRequested(
@@ -118,6 +132,7 @@ class MembersListBloc
       requestedView: event.newView,
       filters: newFilters,
       totalCounts: currentState.totalCounts,
+      searchQuery: currentState.searchQuery,
     );
   }
 
@@ -147,6 +162,7 @@ class MembersListBloc
       requestedView: targetView,
       filters: newFilters,
       totalCounts: currentState.totalCounts,
+      searchQuery: currentState.searchQuery,
     );
   }
 
@@ -175,6 +191,7 @@ class MembersListBloc
       requestedView: targetView,
       filters: newFilters,
       totalCounts: currentState.totalCounts,
+      searchQuery: currentState.searchQuery,
     );
   }
 
@@ -196,6 +213,7 @@ class MembersListBloc
       requestedView: currentState.activeView,
       filters: newFilters,
       totalCounts: currentState.totalCounts,
+      searchQuery: currentState.searchQuery,
     );
   }
 
@@ -217,6 +235,7 @@ class MembersListBloc
       requestedView: targetView,
       filters: event.filters,
       totalCounts: currentState.totalCounts,
+      searchQuery: currentState.searchQuery,
     );
   }
 
@@ -238,6 +257,7 @@ class MembersListBloc
       requestedView: currentState.activeView,
       filters: newFilters,
       totalCounts: currentState.totalCounts,
+      searchQuery: currentState.searchQuery,
     );
   }
 
@@ -282,10 +302,7 @@ class MembersListBloc
 
       emit(currentState.copyWith(
         allRows: allRows,
-        displayedRows: _applySearch(
-          allRows,
-          currentState.searchQuery,
-        ),
+        displayedRows: allRows,
         startIndex: nextIndex,
         hasReachedEnd: response.data.length <
             AppConstants.defaultPageSize,
@@ -305,20 +322,69 @@ class MembersListBloc
     }
   }
 
-  void _onSearchChanged(
+  Future<void> _onSearchChanged(
     MembersListSearchChanged event,
     Emitter<MembersListState> emit,
-  ) {
+  ) async {
     final currentState = state;
     if (currentState is! MembersListLoaded) return;
 
+    final trimmed = event.query.trim();
+    final isEmpty = trimmed.isEmpty;
+
+    final newFilters = currentState.filters.copyWith(
+      name: isEmpty ? null : trimmed,
+      clearName: isEmpty,
+    );
+
+    final seq = ++_searchSeq;
+
     emit(currentState.copyWith(
       searchQuery: event.query,
-      displayedRows: _applySearch(
-        currentState.allRows,
-        event.query,
-      ),
+      isLoadingMore: true,
     ));
+
+    try {
+      final request = CrmMembersListRequest(
+        gymId: currentState.gymId,
+        prevView: currentState.activeView,
+        requestedView: currentState.activeView,
+        filters: newFilters,
+      );
+
+      final response =
+          await _repository.getMembersList(request);
+
+      if (seq != _searchSeq) return;
+
+      final afterState = state;
+      if (afterState is! MembersListLoaded) return;
+
+      final rows =
+          List<MemberRow>.from(response.data);
+
+      emit(afterState.copyWith(
+        filters: response.filters,
+        allRows: rows,
+        displayedRows: rows,
+        searchQuery: event.query,
+        startIndex: 0,
+        hasReachedEnd: response.data.length <
+            AppConstants.defaultPageSize,
+        isLoadingMore: false,
+      ));
+    } catch (e, stackTrace) {
+      log(
+        'Failed to search members',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (seq != _searchSeq) return;
+      final afterState = state;
+      if (afterState is MembersListLoaded) {
+        emit(afterState.copyWith(isLoadingMore: false));
+      }
+    }
   }
 
   /// Fetches a fresh first page after view/filter
@@ -330,6 +396,7 @@ class MembersListBloc
     required MembersListView requestedView,
     required MembersListFilters filters,
     required dynamic totalCounts,
+    String searchQuery = '',
   }) async {
     emit(const MembersListLoading());
 
@@ -354,6 +421,7 @@ class MembersListBloc
         filters: response.filters,
         allRows: rows,
         displayedRows: rows,
+        searchQuery: searchQuery,
         totalCounts: totalCounts,
         hasReachedEnd: response.data.length <
             AppConstants.defaultPageSize,
@@ -387,20 +455,5 @@ class MembersListBloc
         MembersListView.overdue,
       _ => MembersListView.all,
     };
-  }
-
-  /// Filters rows by name (client-side).
-  List<MemberRow> _applySearch(
-    List<MemberRow> rows,
-    String query,
-  ) {
-    final trimmed = query.toLowerCase().trim();
-    if (trimmed.isEmpty) return rows;
-
-    return rows
-        .where(
-          (r) => r.name.toLowerCase().contains(trimmed),
-        )
-        .toList();
   }
 }

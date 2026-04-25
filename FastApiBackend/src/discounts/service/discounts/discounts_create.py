@@ -13,6 +13,9 @@ from src.discounts.schema.discounts_schema import (
 )
 from src.discounts.service.discounts.discounts_base import DiscountsBase
 from src.payments.payments_exceptions import StripeOrphanError
+from src.payments.schema.metadata.stripe_coupon_metadata import (
+    StripeCouponMetadata,
+)
 from src.payments.schema.payments_discount_schema import (
     PaymentsDiscountCreateRequest,
 )
@@ -61,7 +64,10 @@ class DiscountsCreate(DiscountsBase):
                     currency="usd",
                     duration=request.duration,
                     duration_in_months=request.duration_in_months,
-                    metadata={"crm_discount_id": discount_id},
+                    metadata=StripeCouponMetadata(
+                        crm_discount_id=row["discount_id"],
+                        gym_id=request.gym_id,
+                    ),
                 ),
                 stripe_account_id,
             )

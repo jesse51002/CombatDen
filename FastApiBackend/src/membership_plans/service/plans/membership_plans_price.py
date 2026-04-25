@@ -20,6 +20,9 @@ from src.membership_plans.service.plans.membership_plans_base import (
     MembershipPlansBase,
 )
 from src.payments.payments_exceptions import StripeOrphanError
+from src.payments.schema.metadata.stripe_price_metadata import (
+    StripePriceMetadata,
+)
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_price_schema import (
     PaymentsPriceCreateRequest,
@@ -143,7 +146,11 @@ class MembershipPlansPrice(MembershipPlansBase):
                     plan_type=plan_type,
                     recurring_interval=recurring_interval,
                     recurring_interval_count=recurring_interval_count,
-                    metadata={"crm_price_id": price_id},
+                    metadata=StripePriceMetadata(
+                        crm_price_id=new_price_row["price_id"],
+                        plan_id=request.plan_id,
+                        gym_id=request.gym_id,
+                    ),
                 ),
                 stripe_account_id,
             )

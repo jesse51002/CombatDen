@@ -168,10 +168,7 @@ async def test_delete_discount(
     # CRM side: row is soft-deleted (is_deleted = true).
     async with db_pool.session() as session:
         result = await session.execute(
-            text(
-                "SELECT is_deleted FROM gym_discounts_unfiltered "
-                "WHERE discount_id = :id"
-            ),
+            text("SELECT is_deleted FROM gym_discounts_unfiltered WHERE discount_id = :id"),
             {"id": str(created.discount_id)},
         )
         row = result.mappings().fetchone()

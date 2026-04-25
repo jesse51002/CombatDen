@@ -16,7 +16,7 @@ go back to trusting ``line.amount`` if someone else refactors the
 mapper later.
 """
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 from stripe.params._invoice_create_preview_params import (
@@ -98,6 +98,7 @@ async def test_line_amount_vs_subtotal_with_discount(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
             discount_ids=[discount.discount_id],
         )
 
@@ -209,12 +210,14 @@ async def test_line_amount_is_total_for_quantity_not_per_unit(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
         await memberships_service.start(
             crm_user_id=child.crm_user_id,
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         profile = await get_profile_stripe_ids(

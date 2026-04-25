@@ -15,6 +15,9 @@ from src.members.service.management.members_management_base import (
     MembersManagementBase,
 )
 from src.payments.payments_exceptions import StripeOrphanError
+from src.payments.schema.metadata.stripe_customer_metadata import (
+    StripeCustomerMetadata,
+)
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_members_schema import (
     PaymentsCustomerCreateRequest,
@@ -64,7 +67,10 @@ class MembersManagementCreate(MembersManagementBase):
                     email=request.email,
                     phone=request.phone,
                     payment_method_id=request.payment_method_id,
-                    metadata={"crm_user_id": crm_user_id},
+                    metadata=StripeCustomerMetadata(
+                        crm_user_id=row["crm_user_id"],
+                        gym_id=request.gym_id,
+                    ),
                 ),
                 stripe_account_id,
             )

@@ -83,13 +83,10 @@ async def get_active_membership_item_id(
         )
         rows = result.mappings().fetchall()
     if not rows:
-        raise AssertionError(
-            f"No active membership for crm_user_id={crm_user_id} gym_id={gym_id}"
-        )
+        raise AssertionError(f"No active membership for crm_user_id={crm_user_id} gym_id={gym_id}")
     if len(rows) > 1:
         raise AssertionError(
-            f"Expected 1 active membership for crm_user_id={crm_user_id}, "
-            f"got {len(rows)}"
+            f"Expected 1 active membership for crm_user_id={crm_user_id}, got {len(rows)}"
         )
     return rows[0]["item_id"]
 

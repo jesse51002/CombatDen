@@ -27,6 +27,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         crm_user_id: UUID,
         gym_id: UUID,
         freeze_months: int,
+        idempotency_key: UUID,
     ) -> None:
         """Freeze a member's account (account-level).
 
@@ -38,6 +39,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
             crm_user_id: Any family member's profile ID.
             gym_id: The gym.
             freeze_months: Number of months to freeze.
+            idempotency_key: Caller-supplied key scoped to this freeze.
 
         Raises:
             ValueError: If freeze_months is not positive.
@@ -54,6 +56,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
             crm_user_id,
             add_ids=[],
             cancel_ids=[],
+            idempotency_key=idempotency_key,
             freeze_end_date=freeze_end_date,
         )
 
@@ -69,6 +72,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         self,
         crm_user_id: UUID,
         gym_id: UUID,
+        idempotency_key: UUID,
     ) -> None:
         """Unfreeze a member's account (account-level).
 
@@ -79,6 +83,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         Args:
             crm_user_id: Any family member's profile ID.
             gym_id: The gym.
+            idempotency_key: Caller-supplied key scoped to this unfreeze.
         """
         parent = await self._payment_sync.resolve_parent(crm_user_id)
 
@@ -87,6 +92,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
                 crm_user_id,
                 add_ids=[],
                 cancel_ids=[],
+                idempotency_key=idempotency_key,
             )
             return
 
@@ -95,6 +101,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
             crm_user_id,
             add_ids=[],
             cancel_ids=[],
+            idempotency_key=idempotency_key,
             unfreeze=True,
         )
 

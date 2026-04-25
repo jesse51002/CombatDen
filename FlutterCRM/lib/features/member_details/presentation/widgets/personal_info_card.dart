@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/personal_info.dart';
+import 'package:crm/features/member_details/presentation/widgets/dialogs/coming_soon_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/info_table.dart';
 import 'package:crm/shared/widgets/section_card.dart';
@@ -119,11 +120,13 @@ class _WaiverSection extends StatelessWidget {
     return AppOutlineButton(
       fullWidth: true,
       text: 'View Waiver',
-      onPressed: personalInfo.waiverId != null
-          ? () {
-              // TODO: Navigate to waiver screen
-            }
-          : null,
+      onPressed: () => ComingSoonDialog.show(
+        context: context,
+        title: 'View Waiver',
+        message:
+            'Waiver viewing is pending — the storage '
+            'shape for waivers is not finalised yet.',
+      ),
     );
   }
 }

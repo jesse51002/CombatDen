@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
@@ -11,6 +12,7 @@ class CustomTextField extends StatefulWidget {
   final bool enabled;
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   const CustomTextField({
     super.key,
@@ -21,6 +23,7 @@ class CustomTextField extends StatefulWidget {
     this.enabled = true,
     this.validator,
     this.keyboardType,
+    this.inputFormatters,
   });
 
   @override
@@ -46,6 +49,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
           obscureText: widget.isPassword && _obscureText,
           validator: widget.validator,
           keyboardType: widget.keyboardType,
+          inputFormatters: widget.inputFormatters,
           style: DesignConstants.p.copyWith(color: DesignConstants.text),
           decoration: InputDecoration(
             hintText: widget.hintText,

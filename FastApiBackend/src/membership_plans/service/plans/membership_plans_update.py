@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from schema.immutable_columns import MEMBERSHIP_PLANS
 from schema.membership_plan import DurationUnit, PlanType
@@ -21,6 +22,9 @@ from src.membership_plans.service.plans.membership_plans_base import (
     MembershipPlansBase,
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.metadata.stripe_product_metadata import (
+    StripeProductMetadata,
+)
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_membership_schema import (
     PaymentsMembershipCreateRequest,
@@ -84,6 +88,8 @@ class MembershipPlansUpdate(MembershipPlansBase):
                 stripe_product_id=stripe_product_id,
                 merged=merged,
                 stripe_account_id=stripe_account_id,
+                plan_id=request.plan_id,
+                gym_id=request.gym_id,
             )
 
         # ── CRM update ───────────────────────────────────────
@@ -121,12 +127,16 @@ class MembershipPlansUpdate(MembershipPlansBase):
         stripe_product_id: str,
         merged: dict,
         stripe_account_id: str,
+        *,
+        plan_id: UUID,
+        gym_id: UUID,
     ) -> str:
         """Update the Stripe product, recreating if not found.
 
         Returns:
             The (possibly new) stripe_product_id.
         """
+        metadata = StripeProductMetadata(plan_id=plan_id, gym_id=gym_id)
         try:
             await self._stripe_memberships.update_membership(
                 PaymentsMembershipUpdateRequest(
@@ -149,6 +159,7 @@ class MembershipPlansUpdate(MembershipPlansBase):
                             is_default=True,
                         ),
                     ],
+                    metadata=metadata,
                 ),
                 stripe_account_id,
             )
@@ -172,6 +183,7 @@ class MembershipPlansUpdate(MembershipPlansBase):
                             is_default=True,
                         ),
                     ],
+                    metadata=metadata,
                 ),
                 stripe_account_id,
             )

@@ -5,7 +5,7 @@ deleted) after the cancel and asserts that no surprise charges
 landed on the member's customer balance.
 """
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import stripe
@@ -38,6 +38,7 @@ async def _start_and_get_item_id(
         gym_id=gym_id,
         plan_id=plan.plan_id,
         price_id=plan.price_id,
+        idempotency_key=uuid4(),
     )
     async with db_pool.session() as session:
         result = await session.execute(
@@ -126,7 +127,7 @@ async def test_cancel_active_membership(
             connect_opts,
         )
 
-        await memberships_service.cancel(item_id, member.crm_user_id)
+        await memberships_service.cancel(item_id, member.crm_user_id, idempotency_key=uuid4())
 
         async with db_pool.session() as session:
             result = await session.execute(
@@ -187,7 +188,7 @@ async def test_cancel_already_cancelled_noop(
             gym_id,
         )
 
-        await memberships_service.cancel(item_id, member.crm_user_id)
+        await memberships_service.cancel(item_id, member.crm_user_id, idempotency_key=uuid4())
 
         # Snapshot after the first cancel completes — the second
         # cancel is a pure CRM no-op and must not reach Stripe at all.
@@ -197,7 +198,7 @@ async def test_cancel_already_cancelled_noop(
             connect_opts,
         )
 
-        await memberships_service.cancel(item_id, member.crm_user_id)
+        await memberships_service.cancel(item_id, member.crm_user_id, idempotency_key=uuid4())
 
         await assert_no_unexpected_charges(
             stripe_client,
@@ -239,6 +240,7 @@ async def test_cancel_one_time_raises(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         async with db_pool.session() as session:
@@ -266,7 +268,7 @@ async def test_cancel_one_time_raises(
         )
 
         with pytest.raises((ValueError, Exception)):
-            await memberships_service.cancel(item_id, member.crm_user_id)
+            await memberships_service.cancel(item_id, member.crm_user_id, idempotency_key=uuid4())
 
         await assert_no_unexpected_charges(
             stripe_client,

@@ -31,8 +31,6 @@ class PaymentsStripePriceService:
         self._client = stripe_client
         self._stripe = stripe_client.client
 
-    # ── helpers ───────────────────────────────────────────────────
-
     def _map_price(self, price: stripe.Price) -> PaymentsPriceResponse:
         """Map a Stripe Price to our response schema."""
         recurring_interval = None
@@ -51,25 +49,12 @@ class PaymentsStripePriceService:
             recurring_interval_count=recurring_interval_count,
         )
 
-    # ── CRUD ─────────────────────────────────────────────────────
-
     async def create_price(
         self,
         request: PaymentsPriceCreateRequest,
         stripe_account_id: str,
     ) -> PaymentsPriceResponse:
-        """Create a Stripe Price on a product.
-
-        Recurring plans get recurring pricing; one_time and trial
-        plans get one-time pricing.
-
-        Args:
-            request: Price details (product, amount, interval).
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Created price details.
-        """
+        """Create a Stripe Price on a product."""
         opts = self._client.connect_opts(stripe_account_id)
 
         params = PriceCreateParams(
@@ -77,8 +62,8 @@ class PaymentsStripePriceService:
             unit_amount=request.unit_amount,
             currency=request.currency,
         )
-        if request.metadata:
-            params["metadata"] = request.metadata
+        if request.metadata is not None:
+            params["metadata"] = request.metadata.to_stripe_metadata()
         if request.plan_type == PlanType.recurring:
             params["recurring"] = PriceCreateParamsRecurring(
                 interval=request.recurring_interval.value,
@@ -102,11 +87,6 @@ class PaymentsStripePriceService:
         Must be called before archiving the previous default price —
         Stripe rejects ``active=False`` on a price that is still a
         product's ``default_price``.
-
-        Args:
-            stripe_product_id: The Stripe product ID.
-            stripe_price_id: The new default price ID.
-            stripe_account_id: The gym's Stripe Connect account ID.
         """
         opts = self._client.connect_opts(stripe_account_id)
 
@@ -121,15 +101,7 @@ class PaymentsStripePriceService:
         request: PaymentsPriceDeactivateRequest,
         stripe_account_id: str,
     ) -> PaymentsPriceResponse:
-        """Archive (deactivate) a Stripe Price.
-
-        Args:
-            request: Price ID to deactivate.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Deactivated price details.
-        """
+        """Archive (deactivate) a Stripe Price."""
         await self.get_price(request.stripe_price_id, stripe_account_id)
 
         opts = self._client.connect_opts(stripe_account_id)
@@ -146,15 +118,7 @@ class PaymentsStripePriceService:
         price_id: str,
         stripe_account_id: str,
     ) -> PaymentsPriceResponse:
-        """Reactivate a Stripe Price.
-
-        Args:
-            price_id: The Stripe price ID to reactivate.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Reactivated price details.
-        """
+        """Reactivate a Stripe Price."""
         await self.get_price(price_id, stripe_account_id)
 
         opts = self._client.connect_opts(stripe_account_id)
@@ -173,17 +137,10 @@ class PaymentsStripePriceService:
     ) -> PaymentsPriceResponse:
         """Retrieve a Stripe Price.
 
-        Args:
-            price_id: The Stripe price ID.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Price details.
-
         Raises:
             PaymentsResourceNotFoundError: If the price does not exist.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        opts = self._client.connect_opts_readonly(stripe_account_id)
 
         try:
             price = await self._stripe.v1.prices.retrieve_async(
@@ -210,23 +167,17 @@ class PaymentsStripePriceService:
         inactive (archived), it is reactivated on Stripe — the gym
         owner is explicitly trying to use this resource.
 
-        Args:
-            price_id: The Stripe price ID.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Price details.
-
         Raises:
             PaymentsResourceNotFoundError: If the price or product
                 does not exist or is deleted.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        write_opts = self._client.connect_opts(stripe_account_id)
 
         try:
             price = await self._stripe.v1.prices.retrieve_async(
                 price_id,
-                options=opts,
+                options=read_opts,
             )
         except stripe.InvalidRequestError as exc:
             raise PaymentsResourceNotFoundError(
@@ -239,13 +190,13 @@ class PaymentsStripePriceService:
             price = await self._stripe.v1.prices.update_async(
                 price_id,
                 params=PriceUpdateParams(active=True),
-                options=opts,
+                options=write_opts,
             )
 
         try:
             product = await self._stripe.v1.products.retrieve_async(
                 price.product,
-                options=opts,
+                options=read_opts,
             )
         except stripe.InvalidRequestError as exc:
             raise PaymentsResourceNotFoundError(
@@ -264,7 +215,7 @@ class PaymentsStripePriceService:
             await self._stripe.v1.products.update_async(
                 product.id,
                 params={"active": True},
-                options=opts,
+                options=write_opts,
             )
 
         return self._map_price(price)

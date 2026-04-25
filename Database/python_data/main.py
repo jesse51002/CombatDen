@@ -29,6 +29,9 @@ from api_creation import (
     memberships as api_memberships,
 )
 from api_creation import (
+    overdue_members as api_overdue,
+)
+from api_creation import (
     plans as api_plans,
 )
 from bootstrap import activities as bs_activities
@@ -154,6 +157,13 @@ def seed() -> None:
 
             # Apply account-level freeze windows now that memberships exist.
             api_members.apply_freezes(client, profile_plans)
+
+            # A couple of overdue members per gym (direct Stripe + DB).
+            # Idempotent guard: skip on re-runs where overdue seed rows
+            # already exist for this gym.
+            if members_result.had_any_new:
+                print("Creating overdue members via Stripe test clocks...")
+                api_overdue.create_overdue(client, bundle.gym_id, plan_records)
 
         # --- direct-DB synthetic history (no JWT needed) ---
 

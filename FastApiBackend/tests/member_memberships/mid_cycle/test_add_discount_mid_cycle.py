@@ -1,19 +1,16 @@
 """Mid-cycle add-discount tests using Stripe Test Clocks.
 
-There is no first-class "attach discount to an active membership"
-router today — discount changes flow through the payment-sync layer.
-These tests mirror that reality: they set ``discount_ids`` on the
-CRM row directly and trigger ``update_payments_recurring`` to drive
-the Stripe-side mutation, then assert both the immediate subscription
-state and the next renewal invoice.
+Exercises the first-class ``PUT /member_memberships/discounts``
+endpoint (surfaced here via ``memberships_service.update_discounts``).
+Each test replaces the discount set on an active recurring
+membership and asserts both the immediate subscription state and
+the next renewal invoice.
 """
 
-import json
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
 
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.data_factory import (
@@ -22,7 +19,10 @@ from tests.helpers.data_factory import (
     create_payment_method,
     create_plan,
 )
-from tests.helpers.db_reads import get_profile_stripe_ids
+from tests.helpers.db_reads import (
+    get_active_membership_item_id,
+    get_profile_stripe_ids,
+)
 from tests.helpers.stripe_assertions import (
     advance_to_next_cycle_and_fetch_invoice,
     assert_item_discounts,
@@ -35,7 +35,6 @@ from tests.helpers.stripe_clock import (
     delete_test_clock,
 )
 
-
 CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 NEXT_CYCLE = CLOCK_START + timedelta(days=35)
 
@@ -47,31 +46,8 @@ async def _start_membership(memberships_service, member, gym_id, plan):
         gym_id=gym_id,
         plan_id=plan.plan_id,
         price_id=plan.price_id,
+        idempotency_key=uuid4(),
     )
-
-
-async def _set_discount_ids(db_pool, member, plan, discount_ids: list[UUID]) -> None:
-    """Write the JSONB ``discount_ids`` array on an active membership row.
-
-    Emulates the only path that currently exists for changing the
-    discount set on a live membership — production code only writes
-    this column during ``start`` or via the discount-cascade removal.
-    """
-    payload = json.dumps([str(d) for d in discount_ids]) if discount_ids else None
-    async with db_pool.session() as session:
-        await session.execute(
-            text(
-                "UPDATE member_memberships_unfiltered "
-                "SET discount_ids = CAST(:ids AS jsonb) "
-                "WHERE crm_user_id = :crm_user_id AND plan_id = :plan_id"
-            ),
-            {
-                "ids": payload,
-                "crm_user_id": str(member.crm_user_id),
-                "plan_id": str(plan.plan_id),
-            },
-        )
-        await session.commit()
 
 
 def _find_item_index_by_price(sub, stripe_price_id: str) -> int:
@@ -90,7 +66,6 @@ def _find_item_index_by_price(sub, stripe_price_id: str) -> int:
 @pytest.mark.timeout(180)
 async def test_add_discount_to_active_sub_next_invoice_discounted(
     memberships_service,
-    payment_sync_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -130,30 +105,43 @@ async def test_add_discount_to_active_sub_next_invoice_discounted(
 
         await _start_membership(memberships_service, member, gym_id, plan)
         profile = await get_profile_stripe_ids(
-            db_pool, member.crm_user_id, gym_id,
+            db_pool,
+            member.crm_user_id,
+            gym_id,
         )
         assert profile.stripe_sub_id_month is not None
-
-        before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+        item_id = await get_active_membership_item_id(
+            db_pool,
+            member.crm_user_id,
+            gym_id,
         )
 
-        await _set_discount_ids(db_pool, member, plan, [discount.discount_id])
-        await payment_sync_service.update_payments_recurring(
-            member.crm_user_id,
-            add_ids=[],
-            cancel_ids=[],
+        before = await snapshot_billing_state(
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
+        )
+
+        await memberships_service.update_discounts(
+            item_id=item_id,
+            crm_user_id=member.crm_user_id,
+            discount_ids=[discount.discount_id],
+            idempotency_key=uuid4(),
         )
 
         # Stripe side: coupon is on the correct subscription item and
         # the edit itself did not charge the customer.
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx = _find_item_index_by_price(sub, plan.stripe_price_id)
         assert_item_discounts(sub, {discount.stripe_coupon_id}, index=idx)
         await assert_no_unexpected_charges(
-            stripe_client, before, connect_opts,
+            stripe_client,
+            before,
+            connect_opts,
         )
 
         # Next cycle: invoice total should reflect the percent-off
@@ -180,7 +168,6 @@ async def test_add_discount_to_active_sub_next_invoice_discounted(
 @pytest.mark.timeout(240)
 async def test_add_percentage_discount_then_amount_discount(
     memberships_service,
-    payment_sync_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -229,48 +216,64 @@ async def test_add_percentage_discount_then_amount_discount(
 
         await _start_membership(memberships_service, member, gym_id, plan)
         profile = await get_profile_stripe_ids(
-            db_pool, member.crm_user_id, gym_id,
+            db_pool,
+            member.crm_user_id,
+            gym_id,
+        )
+        item_id = await get_active_membership_item_id(
+            db_pool,
+            member.crm_user_id,
+            gym_id,
         )
 
         # Step 1 — attach percent coupon.
         before_step1 = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
-        await _set_discount_ids(
-            db_pool, member, plan, [pct_discount.discount_id],
-        )
-        await payment_sync_service.update_payments_recurring(
-            member.crm_user_id, add_ids=[], cancel_ids=[],
+        await memberships_service.update_discounts(
+            item_id=item_id,
+            crm_user_id=member.crm_user_id,
+            discount_ids=[pct_discount.discount_id],
+            idempotency_key=uuid4(),
         )
         await assert_no_unexpected_charges(
-            stripe_client, before_step1, connect_opts,
+            stripe_client,
+            before_step1,
+            connect_opts,
         )
 
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx = _find_item_index_by_price(sub, plan.stripe_price_id)
         assert_item_discounts(sub, {pct_discount.stripe_coupon_id}, index=idx)
 
         # Step 2 — stack the flat-dollar coupon alongside it.
         before_step2 = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
-        await _set_discount_ids(
-            db_pool,
-            member,
-            plan,
-            [pct_discount.discount_id, flat_discount.discount_id],
-        )
-        await payment_sync_service.update_payments_recurring(
-            member.crm_user_id, add_ids=[], cancel_ids=[],
+        await memberships_service.update_discounts(
+            item_id=item_id,
+            crm_user_id=member.crm_user_id,
+            discount_ids=[pct_discount.discount_id, flat_discount.discount_id],
+            idempotency_key=uuid4(),
         )
         await assert_no_unexpected_charges(
-            stripe_client, before_step2, connect_opts,
+            stripe_client,
+            before_step2,
+            connect_opts,
         )
 
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
         )
         idx = _find_item_index_by_price(sub, plan.stripe_price_id)
         assert_item_discounts(

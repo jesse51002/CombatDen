@@ -18,6 +18,7 @@ import 'package:crm/features/member_details/presentation/widgets/responsive_grid
 import 'package:crm/features/member_details/presentation/widgets/right_member_sidebar.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
+import 'package:crm/shared/widgets/billing_error_dialog.dart';
 
 /// The Specific Member Detail screen.
 ///
@@ -34,14 +35,17 @@ class MemberDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => MemberDetailBloc(
-        repository: MemberRepository(
-          apiClient: ApiClient(),
-          supabase: Supabase.instance.client,
-        ),
-      )..add(MemberDetailRequested(crmUserId)),
-      child: const _MemberDetailView(),
+    return RepositoryProvider<MemberRepository>(
+      create: (_) => MemberRepository(
+        apiClient: ApiClient(),
+        supabase: Supabase.instance.client,
+      ),
+      child: BlocProvider(
+        create: (ctx) => MemberDetailBloc(
+          repository: ctx.read<MemberRepository>(),
+        )..add(MemberDetailRequested(crmUserId)),
+        child: const _MemberDetailView(),
+      ),
     );
   }
 }
@@ -51,26 +55,45 @@ class _MemberDetailView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<MemberDetailBloc,
-        MemberDetailState>(
-      builder: (context, state) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isDesktop = constraints.maxWidth >=
-                AppConstants.breakpointDesktop;
-
-            return AppShell(
-              activeRoute: 'members',
-              rightBar: _rightBar(
-                context,
-                state,
-                isDesktop,
-              ),
-              child: _mainContent(context, state),
-            );
-          },
+    return BlocListener<MemberDetailBloc, MemberDetailState>(
+      listenWhen: (prev, curr) =>
+          curr is MemberDetailLoaded &&
+          curr.actionError != null &&
+          (prev is! MemberDetailLoaded ||
+              prev.actionError != curr.actionError),
+      listener: (context, state) {
+        if (state is! MemberDetailLoaded) return;
+        final error = state.actionError;
+        if (error == null) return;
+        BillingErrorDialog.show(
+          context: context,
+          message: error,
         );
+        context
+            .read<MemberDetailBloc>()
+            .add(const MemberActionErrorCleared());
       },
+      child: BlocBuilder<MemberDetailBloc,
+          MemberDetailState>(
+        builder: (context, state) {
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth >=
+                  AppConstants.breakpointDesktop;
+
+              return AppShell(
+                activeRoute: 'members',
+                rightBar: _rightBar(
+                  context,
+                  state,
+                  isDesktop,
+                ),
+                child: _mainContent(context, state),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -84,10 +107,7 @@ class _MemberDetailView extends StatelessWidget {
     }
 
     return RightMemberSidebar(
-      members: state.filteredMembers,
-      onSearchChanged: (query) => context
-          .read<MemberDetailBloc>()
-          .add(MemberSearchChanged(query)),
+      gymId: state.member.gymId,
       onMemberTap: (id) =>
           _navigateToMember(context, id),
     );
@@ -177,7 +197,7 @@ class _MemberDetailView extends StatelessWidget {
               rewards: member.recentlyRedeemedRewards,
             ),
             membershipCard: MembershipCarousel(
-              memberships: member.memberships,
+              member: member,
               currentIndex:
                   state.currentMembershipIndex,
               onPageChanged: (index) => context

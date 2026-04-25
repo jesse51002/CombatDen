@@ -13,10 +13,8 @@ from uuid import UUID
 import stripe
 from sqlalchemy import text
 
-from src.payments.schema.payments_enums import StripeCouponDuration
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.database import DirectDatabasePool
-
 
 # ── Return types ────────────────────────────────────────────────
 

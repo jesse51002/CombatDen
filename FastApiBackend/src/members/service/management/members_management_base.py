@@ -12,6 +12,9 @@ from src.members import SQL_DIR
 from src.members.schema.members_management_schema import (
     MembersManagementResponse,
 )
+from src.payments.schema.metadata.stripe_customer_metadata import (
+    StripeCustomerMetadata,
+)
 from src.payments.schema.payments_members_schema import (
     PaymentsCustomerCreateRequest,
 )
@@ -134,6 +137,9 @@ class MembersManagementBase:
         email: str | None,
         phone: str | None,
         payment_method_id: str,
+        *,
+        crm_user_id: UUID,
+        gym_id: UUID,
     ) -> PaymentsCustomerCreateRequest:
         """Build a Stripe customer create request from member data."""
         return PaymentsCustomerCreateRequest(
@@ -141,4 +147,8 @@ class MembersManagementBase:
             email=email,
             phone=phone,
             payment_method_id=payment_method_id,
+            metadata=StripeCustomerMetadata(
+                crm_user_id=crm_user_id,
+                gym_id=gym_id,
+            ),
         )

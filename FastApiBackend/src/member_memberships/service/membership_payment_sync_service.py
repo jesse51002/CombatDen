@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from uuid import UUID
+from typing import NamedTuple
+from uuid import UUID, uuid4
 
 import src.shared.db_schema_path  # noqa: F401
 from src.member_memberships.schema.payment_sync_schema import (
+    IntervalBucket,
     IntervalDesiredItem,
     ParentProfile,
     SyncItem,
@@ -34,6 +36,9 @@ from src.member_memberships.service.payment_sync.price_writeback import (
     PriceWriteback,
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.payments_invoice_schema import (
+    PaymentsInvoicePreviewResponse,
+)
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionResponse,
 )
@@ -44,6 +49,16 @@ from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
 
 logger = logging.getLogger(__name__)
+
+
+class _SyncParams(NamedTuple):
+    """Resolved inputs shared by the real and preview sync paths."""
+
+    bucket: IntervalBucket
+    parent: ParentProfile
+    stripe_account_id: str
+    members: list[UUID]
+    discount_ids: list[UUID]
 
 
 class MembershipPaymentSyncService:
@@ -75,6 +90,7 @@ class MembershipPaymentSyncService:
         crm_user_id: UUID,
         add_ids: list[SyncItem],
         cancel_ids: list[SyncItem],
+        idempotency_key: UUID,
         freeze_end_date: date | None = None,
         unfreeze: bool = False,
         pay_first_invoice_out_of_band: bool = False,
@@ -108,21 +124,178 @@ class MembershipPaymentSyncService:
         """
         self._validate_freeze_params(add_ids, cancel_ids, freeze_end_date, unfreeze)
 
-        parent = await self._queries.resolve_parent(crm_user_id)
-        stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-            parent.gym_id,
-        )
+        params = await self._build_sync_params(crm_user_id, add_ids, cancel_ids)
+        parent = params.parent
+        stripe_account_id = params.stripe_account_id
 
         # ── Freeze/unfreeze first ─────────────────────────
         await self._stripe.sync_freeze_state(
             parent.stripe_sub_id_month,
             parent,
             stripe_account_id,
+            idempotency_key=idempotency_key,
             freeze_end_date=freeze_end_date,
             unfreeze=unfreeze,
         )
 
-        # ── Full membership sync ──────────────────────────
+        sub_result = await self._stripe.execute_sync(
+            params.bucket,
+            parent,
+            stripe_account_id,
+            idempotency_key=idempotency_key,
+            pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
+        )
+
+        # ── Write back subscription ID ─────────────────────
+        new_sub_id = sub_result.stripe_subscription_id if sub_result else None
+        await self._queries.update_profile_sub_id(
+            parent.crm_user_id,
+            new_sub_id,
+        )
+
+        # ── Persist linked discount assignments ────────────
+        await self._linked_discounts.persist_assignments(
+            params.members,
+            params.discount_ids,
+            parent.gym_id,
+        )
+
+        # ── Mirror post-discount totals back onto CRM ──────
+        await self._price_writeback.sync_prices_from_stripe(
+            parent_crm_user_id=parent.crm_user_id,
+            gym_id=parent.gym_id,
+            stripe_sub_id=new_sub_id,
+            stripe_account_id=stripe_account_id,
+        )
+
+        return sub_result
+
+    async def preview_update_payments_recurring(
+        self,
+        crm_user_id: UUID,
+        add_ids: list[SyncItem],
+        cancel_ids: list[SyncItem],
+        override_plan_id: UUID | None = None,
+        override_discount_ids: list[UUID] | None = None,
+    ) -> PaymentsInvoicePreviewResponse | None:
+        """Preview what a recurring sync would charge, with no writes.
+
+        Runs the exact same resolution, validation, and
+        subscription-bucket building as
+        ``update_payments_recurring``, then calls Stripe's invoice
+        preview endpoint instead of mutating the subscription. No
+        CRM rows are written, no Stripe resources are created,
+        updated, or cancelled.
+
+        Freeze/unfreeze is intentionally unsupported here — a
+        pause_collection change produces no invoice to preview.
+
+        ``override_plan_id`` / ``override_discount_ids`` let the
+        caller simulate a proposed discount-set change on the
+        ``(crm_user_id, override_plan_id)`` membership without
+        first writing to the CRM. Both must be supplied together
+        or both left None.
+
+        Returns:
+            An invoice preview, or ``None`` if the resulting bucket
+            would cancel the subscription (no items remaining) —
+            a cancellation has no upcoming invoice.
+        """
+        self._validate_freeze_params(add_ids, cancel_ids, None, False)
+        if (override_plan_id is None) != (override_discount_ids is None):
+            raise ValueError(
+                "override_plan_id and override_discount_ids must be provided together"
+            )
+
+        override = (
+            (crm_user_id, override_plan_id, override_discount_ids)
+            if override_plan_id is not None
+            else None
+        )
+        params = await self._build_sync_params(
+            crm_user_id,
+            add_ids,
+            cancel_ids,
+            discount_override=override,
+        )
+        return await self._stripe.preview_execute_sync(
+            params.bucket,
+            params.parent,
+            params.stripe_account_id,
+        )
+
+    async def bulk_payment_sync(
+        self,
+        crm_user_ids: list[UUID],
+    ) -> None:
+        """Re-sync payment state for multiple members.
+
+        A fresh idempotency key is generated per member since bulk
+        sync is a background re-sync — there is no client-supplied
+        key, and each member's sync is an independent operation.
+
+        Args:
+            crm_user_ids: Members whose memberships need sync.
+        """
+        for crm_user_id in crm_user_ids:
+            try:
+                await self.update_payments_recurring(
+                    crm_user_id,
+                    add_ids=[],
+                    cancel_ids=[],
+                    idempotency_key=uuid4(),
+                )
+            except PaymentsResourceNotFoundError:
+                logger.error(
+                    "Stripe resource not found during payment sync for %s",
+                    crm_user_id,
+                    exc_info=True,
+                )
+            except Exception:
+                logger.error(
+                    "Payment sync failed for %s",
+                    crm_user_id,
+                    exc_info=True,
+                )
+
+    async def resolve_parent(self, crm_user_id: UUID) -> ParentProfile:
+        """Expose parent resolution for upstream validation.
+
+        Args:
+            crm_user_id: Any family member's profile ID.
+
+        Returns:
+            The paying parent's profile.
+        """
+        return await self._queries.resolve_parent(crm_user_id)
+
+    # ── Private Helpers ─────────────────────────────────────────
+
+    async def _build_sync_params(
+        self,
+        crm_user_id: UUID,
+        add_ids: list[SyncItem],
+        cancel_ids: list[SyncItem],
+        discount_override: tuple[UUID, UUID, list[UUID]] | None = None,
+    ) -> _SyncParams:
+        """Resolve parent, family, discounts, and the desired bucket.
+
+        Pure read-path: this helper runs every query, Stripe
+        account lookup, and discount recalculation needed to build
+        an ``IntervalBucket``, but performs no writes to the CRM
+        or Stripe. Shared by ``update_payments_recurring`` (real)
+        and ``preview_update_payments_recurring`` (dry run).
+
+        ``discount_override`` — ``(crm_user_id, plan_id, discount_ids)``
+        — swaps the fetched ``discount_ids`` on the matching active
+        membership row in-memory. Used by the preview path so a
+        dry run can reflect a proposed change without mutating CRM.
+        """
+        parent = await self._queries.resolve_parent(crm_user_id)
+        stripe_account_id = await self._gym_stripe.get_stripe_account_id(
+            parent.gym_id,
+        )
+
         family_ids = await self._queries.get_family_ids(parent)
         children_ids = [fid for fid in family_ids if fid != parent.crm_user_id]
 
@@ -137,7 +310,6 @@ class MembershipPaymentSyncService:
             exclude_memberships=exclude,
         )
 
-        # ── Build desired items for Stripe ─────────────────
         memberships = await self._queries.get_active_memberships(
             family_ids,
         )
@@ -148,6 +320,15 @@ class MembershipPaymentSyncService:
         # drop every sibling when one child cancels.
         cancel_keys = {(item.crm_user_id, item.plan_id) for item in cancel_ids}
         memberships = [m for m in memberships if (m.crm_user_id, m.plan_id) not in cancel_keys]
+
+        if discount_override is not None:
+            target_user, target_plan, new_discount_ids = discount_override
+            memberships = [
+                m.model_copy(update={"discount_ids": list(new_discount_ids)})
+                if (m.crm_user_id, m.plan_id) == (target_user, target_plan)
+                else m
+                for m in memberships
+            ]
 
         # Resolve every discount referenced by this sync — linked,
         # plan-level, and newly-added — in one batched query. CRM
@@ -185,78 +366,13 @@ class MembershipPaymentSyncService:
         bucket = build_subscription_bucket(desired, parent.stripe_sub_id_month)
         allocate_linked_discounts(bucket, discounts)
 
-        sub_result = await self._stripe.execute_sync(
-            bucket,
-            parent.stripe_customer_id,
-            stripe_account_id,
-            pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
-        )
-
-        # ── Write back subscription ID ─────────────────────
-        new_sub_id = sub_result.stripe_subscription_id if sub_result else None
-        await self._queries.update_profile_sub_id(
-            parent.crm_user_id,
-            new_sub_id,
-        )
-
-        # ── Persist linked discount assignments ────────────
-        await self._linked_discounts.persist_assignments(
-            members,
-            discount_ids,
-            parent.gym_id,
-        )
-
-        # ── Mirror post-discount totals back onto CRM ──────
-        await self._price_writeback.sync_prices_from_stripe(
-            parent_crm_user_id=parent.crm_user_id,
-            gym_id=parent.gym_id,
-            stripe_sub_id=new_sub_id,
+        return _SyncParams(
+            bucket=bucket,
+            parent=parent,
             stripe_account_id=stripe_account_id,
+            members=members,
+            discount_ids=discount_ids,
         )
-
-        return sub_result
-
-    async def bulk_payment_sync(
-        self,
-        crm_user_ids: list[UUID],
-    ) -> None:
-        """Re-sync payment state for multiple members.
-
-        Args:
-            crm_user_ids: Members whose memberships need sync.
-        """
-        for crm_user_id in crm_user_ids:
-            try:
-                await self.update_payments_recurring(
-                    crm_user_id,
-                    add_ids=[],
-                    cancel_ids=[],
-                )
-            except PaymentsResourceNotFoundError:
-                logger.error(
-                    "Stripe resource not found during payment sync for %s",
-                    crm_user_id,
-                    exc_info=True,
-                )
-            except Exception:
-                logger.error(
-                    "Payment sync failed for %s",
-                    crm_user_id,
-                    exc_info=True,
-                )
-
-    async def resolve_parent(self, crm_user_id: UUID) -> ParentProfile:
-        """Expose parent resolution for upstream validation.
-
-        Args:
-            crm_user_id: Any family member's profile ID.
-
-        Returns:
-            The paying parent's profile.
-        """
-        return await self._queries.resolve_parent(crm_user_id)
-
-    # ── Private Helpers ─────────────────────────────────────────
 
     @staticmethod
     def _validate_freeze_params(

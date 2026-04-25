@@ -16,7 +16,7 @@ children). Scenarios covered:
    monthly total is zeroed and no plan writes happen.
 """
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
@@ -143,6 +143,7 @@ async def test_family_same_plan_both_rows_sum_to_plan_total(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         parent_only = await _fetch_total_price(
@@ -160,6 +161,7 @@ async def test_family_same_plan_both_rows_sum_to_plan_total(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         parent_total = await _fetch_total_price(
@@ -258,12 +260,14 @@ async def test_family_different_plans_per_row_totals(
             gym_id=gym_id,
             plan_id=plan_a.plan_id,
             price_id=plan_a.price_id,
+            idempotency_key=uuid4(),
         )
         await memberships_service.start(
             crm_user_id=child.crm_user_id,
             gym_id=gym_id,
             plan_id=plan_b.plan_id,
             price_id=plan_b.price_id,
+            idempotency_key=uuid4(),
         )
 
         parent_a = await _fetch_total_price(
@@ -339,12 +343,14 @@ async def test_cross_family_isolation(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
         await memberships_service.start(
             crm_user_id=family_b.crm_user_id,
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         # Both families should have independent 5000 totals.
@@ -371,6 +377,7 @@ async def test_cross_family_isolation(
         await memberships_service.cancel(
             item_a,
             family_a.crm_user_id,
+            idempotency_key=uuid4(),
         )
 
         b_after = await _fetch_total_price(
@@ -431,6 +438,7 @@ async def test_full_cancel_zeroes_parent_monthly_total(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
         before = await _fetch_profile_monthly(db_pool, member.crm_user_id)
         assert before == 4500
@@ -440,7 +448,7 @@ async def test_full_cancel_zeroes_parent_monthly_total(
             member.crm_user_id,
             plan.plan_id,
         )
-        await memberships_service.cancel(item_id, member.crm_user_id)
+        await memberships_service.cancel(item_id, member.crm_user_id, idempotency_key=uuid4())
 
         after = await _fetch_profile_monthly(db_pool, member.crm_user_id)
         assert after == 0, f"Profile monthly should be zeroed after full cancel, got {after}"

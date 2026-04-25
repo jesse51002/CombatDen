@@ -154,12 +154,13 @@ BEGIN
         FROM member_memberships_unfiltered mm
         WHERE mm.crm_user_id = NEW.crm_user_id
           AND mm.gym_id = NEW.gym_id
+          AND mm.plan_id = NEW.plan_id
           AND mm.item_id <> NEW.item_id
           AND (mm.cancel_date IS NULL OR mm.cancel_date > v_today)
           AND (mm.end_date IS NULL OR mm.end_date > v_today);
 
         IF v_active_count > 0 THEN
-            RAISE EXCEPTION 'cannot add recurring membership while active memberships exist'
+            RAISE EXCEPTION 'cannot add recurring membership while an active membership on the same plan exists'
                 USING CONSTRAINT = 'recurring_requires_no_active';
         END IF;
     END IF;

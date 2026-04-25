@@ -17,6 +17,7 @@ from src.discounts.schema.discounts_schema import (
 )
 from src.discounts.service.discounts.discounts_create import DiscountsCreate
 from src.discounts.service.discounts.discounts_delete import DiscountsDelete
+from src.discounts.service.discounts.discounts_list import DiscountsList
 from src.discounts.service.discounts.discounts_update import DiscountsUpdate
 from src.member_memberships.service.membership_payment_sync_service import (
     MembershipPaymentSyncService,
@@ -52,6 +53,16 @@ class DiscountsService:
             *deps,
             membership_payment_sync_service=membership_payment_sync_service,
         )
+        self._list = DiscountsList(*deps)
+
+    # ── List ───────────────────────────────────────────────────
+
+    async def list_discounts(
+        self,
+        gym_id: UUID,
+    ) -> list[DiscountResponse]:
+        """List preset discounts for a gym."""
+        return await self._list.list_discounts(gym_id)
 
     # ── Create ─────────────────────────────────────────────────
 

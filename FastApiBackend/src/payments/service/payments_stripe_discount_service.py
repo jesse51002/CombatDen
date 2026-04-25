@@ -7,6 +7,7 @@ from stripe.params._coupon_update_params import CouponUpdateParams
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_discount_schema import (
     PaymentsDiscountCreateRequest,
+    PaymentsDiscountDeleteRequest,
     PaymentsDiscountResponse,
     PaymentsDiscountUpdateRequest,
 )
@@ -25,8 +26,6 @@ class PaymentsStripeDiscountService:
     def __init__(self, stripe_client: PaymentsStripeClient) -> None:
         self._client = stripe_client
         self._stripe = stripe_client.client
-
-    # ── helpers ───────────────────────────────────────────────────
 
     def _map_coupon(
         self,
@@ -50,18 +49,7 @@ class PaymentsStripeDiscountService:
         coupon_id: str,
         opts: stripe.RequestOptions,
     ) -> stripe.Coupon:
-        """Retrieve a Stripe Coupon, raising if not found.
-
-        Args:
-            coupon_id: The Stripe coupon ID.
-            opts: Stripe Connect request options.
-
-        Returns:
-            The Stripe Coupon object.
-
-        Raises:
-            PaymentsResourceNotFoundError: If the coupon does not exist.
-        """
+        """Retrieve a Stripe Coupon, raising if not found."""
         try:
             coupon = await self._stripe.v1.coupons.retrieve_async(
                 coupon_id,
@@ -82,22 +70,12 @@ class PaymentsStripeDiscountService:
             )
         return coupon
 
-    # ── CRUD ─────────────────────────────────────────────────────
-
     async def create_discount(
         self,
         request: PaymentsDiscountCreateRequest,
         stripe_account_id: str,
     ) -> PaymentsDiscountResponse:
-        """Create a Stripe Coupon.
-
-        Args:
-            request: Coupon details (percentage_off or amount_off).
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Created coupon details.
-        """
+        """Create a Stripe Coupon."""
         opts = self._client.connect_opts(stripe_account_id)
 
         coupon = await self._stripe.v1.coupons.create_async(
@@ -108,7 +86,7 @@ class PaymentsStripeDiscountService:
                 amount_off=request.amount_off,
                 currency=request.currency,
                 duration_in_months=request.duration_in_months,
-                metadata=request.metadata,
+                metadata=request.metadata.to_stripe_metadata(),
             ),
             options=opts,
         )
@@ -119,41 +97,28 @@ class PaymentsStripeDiscountService:
         request: PaymentsDiscountUpdateRequest,
         stripe_account_id: str,
     ) -> PaymentsDiscountResponse:
-        """Update a Stripe Coupon (name and metadata only).
+        """Update a Stripe Coupon (name and metadata only)."""
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        write_opts = self._client.connect_opts(stripe_account_id)
 
-        Verifies the coupon exists before updating.
-
-        Args:
-            request: Coupon ID with new name and optional metadata.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Updated coupon details.
-        """
-        opts = self._client.connect_opts(stripe_account_id)
-
-        await self.retrieve_discount(request.stripe_coupon_id, opts)
+        await self.retrieve_discount(request.stripe_coupon_id, read_opts)
 
         coupon = await self._stripe.v1.coupons.update_async(
             request.stripe_coupon_id,
             params=CouponUpdateParams(
                 name=request.discount_name,
-                metadata=request.metadata,
+                metadata=request.metadata.to_stripe_metadata(),
             ),
-            options=opts,
+            options=write_opts,
         )
         return self._map_coupon(coupon)
 
     async def delete_discount(
         self,
-        coupon_id: str,
+        request: PaymentsDiscountDeleteRequest,
         stripe_account_id: str,
     ) -> None:
         """Delete a Stripe Coupon.
-
-        Args:
-            coupon_id: The Stripe coupon ID to delete.
-            stripe_account_id: The gym's Stripe Connect account ID.
 
         Raises:
             PaymentsResourceNotFoundError: If the coupon does not exist.
@@ -162,12 +127,12 @@ class PaymentsStripeDiscountService:
 
         try:
             await self._stripe.v1.coupons.delete_async(
-                coupon_id,
+                request.stripe_coupon_id,
                 options=opts,
             )
         except stripe.InvalidRequestError as exc:
             raise PaymentsResourceNotFoundError(
-                f"Coupon {coupon_id} not found",
-                resource_id=coupon_id,
+                f"Coupon {request.stripe_coupon_id} not found",
+                resource_id=request.stripe_coupon_id,
                 resource_type=StripeResourceType.coupon,
             ) from exc

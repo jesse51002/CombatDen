@@ -9,6 +9,7 @@ from src.classes.schema.classes_cycle_counts_schema import (
 from src.members.schema.member_details_schema import (
     DiscountInfo,
     MembershipInfo,
+    MembershipMemberInfo,
     PayingForMember,
 )
 from src.members.service.member_details.member_details_supplementary import (
@@ -67,6 +68,16 @@ class MemberDetailsMembershipGrouper:
                 supplementary,
             )
 
+            members = {
+                row["crm_user_id"]: MembershipMemberInfo(
+                    item_id=row["item_id"],
+                    end_date=row["membership_end_date"],
+                    cancel_date=row["membership_cancel_date"],
+                    on_outdated_price=bool(row["on_outdated_price"]),
+                )
+                for row in rows
+            }
+
             grouped.append(
                 MembershipInfo(
                     plan_id=plan_id,
@@ -80,11 +91,11 @@ class MemberDetailsMembershipGrouper:
                     last_paid_date=representative["last_paid_date"],
                     next_due_date=representative["next_due_date"],
                     start_date=representative["membership_start_date"],
-                    end_date=representative["membership_end_date"],
                     freeze_start_date=representative["freeze_start_date"],
                     freeze_end_date=representative["freeze_end_date"],
                     paying_for=paying_for,
                     discounts=all_discounts,
+                    members=members,
                 )
             )
 

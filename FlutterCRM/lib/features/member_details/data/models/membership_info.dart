@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/discount_info.dart';
+import 'package:crm/features/member_details/data/models/membership_member_info.dart';
 import 'package:crm/features/member_details/data/models/paying_for_member.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 
@@ -14,6 +15,15 @@ part 'membership_info.g.dart';
   createToJson: false,
 )
 class MembershipInfo extends Equatable {
+  /// Map of `crm_user_id` → per-member row info (item id,
+  /// end date, cancel date) for every covered family
+  /// member on this plan. Use [itemIdFor] to resolve the
+  /// `member_memberships.item_id` for a given member, and
+  /// [exitDateFor] to surface a scheduled ending /
+  /// cancellation date.
+  @JsonKey(defaultValue: <String, MembershipMemberInfo>{})
+  final Map<String, MembershipMemberInfo> members;
+
   final String planId;
   final String planName;
   final String? planType;
@@ -26,7 +36,6 @@ class MembershipInfo extends Equatable {
   final DateTime? lastPaidDate;
   final DateTime? nextDueDate;
   final DateTime startDate;
-  final DateTime? endDate;
   final DateTime? freezeStartDate;
   final DateTime? freezeEndDate;
   @JsonKey(defaultValue: [])
@@ -35,6 +44,7 @@ class MembershipInfo extends Equatable {
   final List<DiscountInfo> discounts;
 
   const MembershipInfo({
+    this.members = const {},
     required this.planId,
     required this.planName,
     this.planType,
@@ -46,7 +56,6 @@ class MembershipInfo extends Equatable {
     this.lastPaidDate,
     this.nextDueDate,
     required this.startDate,
-    this.endDate,
     this.freezeStartDate,
     this.freezeEndDate,
     this.payingFor = const [],
@@ -61,8 +70,26 @@ class MembershipInfo extends Equatable {
   /// Display name for the membership plan.
   String get displayName => planName;
 
+  /// Resolve the `member_memberships.item_id` for the
+  /// given member on this plan. Returns null when the
+  /// member is not covered, or when the backend has not
+  /// populated [members].
+  String? itemIdFor(String crmUserId) =>
+      members[crmUserId]?.itemId;
+
+  /// Scheduled cancel/end date for the given member, or
+  /// null when the membership has no scheduled exit.
+  MembershipExitDate? exitDateFor(String crmUserId) =>
+      members[crmUserId]?.exitDate;
+
+  /// True when the given member is still billed at a
+  /// price that no longer matches the current plan cost.
+  bool isOnOutdatedPriceFor(String crmUserId) =>
+      members[crmUserId]?.onOutdatedPrice ?? false;
+
   @override
   List<Object?> get props => [
+        members,
         planId,
         planName,
         planType,
@@ -74,7 +101,6 @@ class MembershipInfo extends Equatable {
         lastPaidDate,
         nextDueDate,
         startDate,
-        endDate,
         freezeStartDate,
         freezeEndDate,
         payingFor,

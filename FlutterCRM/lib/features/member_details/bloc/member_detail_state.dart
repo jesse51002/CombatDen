@@ -12,23 +12,34 @@ sealed class MemberDetailState extends Equatable {
   List<Object?> get props => [];
 }
 
-/// Initial state before any data is loaded.
 class MemberDetailInitial extends MemberDetailState {
   const MemberDetailInitial();
 }
 
-/// Loading state while fetching member data.
 class MemberDetailLoading extends MemberDetailState {
   const MemberDetailLoading();
 }
 
-/// Successfully loaded member detail and sidebar list.
+/// Successfully loaded. `isMutating` is true while a
+/// background mutation (freeze, cancel, update, etc.) is
+/// in flight; `actionError` holds the most recent
+/// mutation failure — the UI is expected to surface it
+/// (e.g. via SnackBar) and then dispatch
+/// [MemberActionErrorCleared].
 class MemberDetailLoaded extends MemberDetailState {
   final MemberDetailResponse member;
   final List<MemberSummary> allMembers;
   final List<MemberSummary> filteredMembers;
   final String searchQuery;
   final int currentMembershipIndex;
+  final bool isMutating;
+  final String? actionError;
+
+  /// Monotonic counter bumped on every successful mutation
+  /// refresh so BlocBuilder rebuilds even when the refreshed
+  /// [MemberDetailResponse] is deep-equal to the previous one
+  /// (e.g. backend eventual consistency returns stale data).
+  final int refreshToken;
 
   const MemberDetailLoaded({
     required this.member,
@@ -36,12 +47,17 @@ class MemberDetailLoaded extends MemberDetailState {
     required this.filteredMembers,
     this.searchQuery = '',
     this.currentMembershipIndex = 0,
+    this.isMutating = false,
+    this.actionError,
+    this.refreshToken = 0,
   });
 
-  /// The currently visible membership in the carousel,
-  /// or null if no memberships exist.
   MembershipInfo? get currentMembership {
     if (member.memberships.isEmpty) return null;
+    if (currentMembershipIndex >=
+        member.memberships.length) {
+      return member.memberships.first;
+    }
     return member.memberships[currentMembershipIndex];
   }
 
@@ -51,6 +67,10 @@ class MemberDetailLoaded extends MemberDetailState {
     List<MemberSummary>? filteredMembers,
     String? searchQuery,
     int? currentMembershipIndex,
+    bool? isMutating,
+    String? actionError,
+    bool clearActionError = false,
+    int? refreshToken,
   }) {
     return MemberDetailLoaded(
       member: member ?? this.member,
@@ -60,6 +80,11 @@ class MemberDetailLoaded extends MemberDetailState {
       searchQuery: searchQuery ?? this.searchQuery,
       currentMembershipIndex: currentMembershipIndex ??
           this.currentMembershipIndex,
+      isMutating: isMutating ?? this.isMutating,
+      actionError: clearActionError
+          ? null
+          : (actionError ?? this.actionError),
+      refreshToken: refreshToken ?? this.refreshToken,
     );
   }
 
@@ -70,10 +95,12 @@ class MemberDetailLoaded extends MemberDetailState {
         filteredMembers,
         searchQuery,
         currentMembershipIndex,
+        isMutating,
+        actionError,
+        refreshToken,
       ];
 }
 
-/// Error state when loading fails.
 class MemberDetailError extends MemberDetailState {
   final String message;
   final String crmUserId;

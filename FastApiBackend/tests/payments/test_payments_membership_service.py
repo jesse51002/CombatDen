@@ -1,5 +1,12 @@
 """Integration tests for PaymentsStripeMembershipService."""
 
+from uuid import uuid4
+
+from schema.membership_plan import DurationUnit, PlanType
+
+from src.payments.schema.metadata.stripe_product_metadata import (
+    StripeProductMetadata,
+)
 from src.payments.schema.payments_membership_schema import (
     PaymentsMembershipCreateRequest,
     PaymentsMembershipDeactivateRequest,
@@ -7,7 +14,12 @@ from src.payments.schema.payments_membership_schema import (
     PaymentsMembershipUpdateRequest,
 )
 
-from schema.membership_plan import DurationUnit, PlanType
+
+def _product_metadata() -> StripeProductMetadata:
+    return StripeProductMetadata(
+        plan_id=uuid4(),
+        gym_id=uuid4(),
+    )
 
 
 async def test_create_membership_with_default_price(
@@ -28,6 +40,7 @@ async def test_create_membership_with_default_price(
                     is_default=True,
                 ),
             ],
+            metadata=_product_metadata(),
         ),
         stripe_account_id,
     )
@@ -54,7 +67,8 @@ async def test_create_membership_with_default_price(
 
 
 async def test_create_membership_multiple_prices(
-    membership_service, stripe_account_id,
+    membership_service,
+    stripe_account_id,
 ):
     resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -74,6 +88,7 @@ async def test_create_membership_multiple_prices(
                     recurring_interval_count=1,
                 ),
             ],
+            metadata=_product_metadata(),
         ),
         stripe_account_id,
     )
@@ -84,7 +99,8 @@ async def test_create_membership_multiple_prices(
 
 
 async def test_update_membership_add_price(
-    membership_service, stripe_account_id,
+    membership_service,
+    stripe_account_id,
 ):
     created = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -98,6 +114,7 @@ async def test_update_membership_add_price(
                     is_default=True,
                 ),
             ],
+            metadata=_product_metadata(),
         ),
         stripe_account_id,
     )
@@ -118,6 +135,7 @@ async def test_update_membership_add_price(
                     recurring_interval_count=1,
                 ),
             ],
+            metadata=_product_metadata(),
         ),
         stripe_account_id,
     )
@@ -128,7 +146,8 @@ async def test_update_membership_add_price(
 
 
 async def test_update_membership_deactivate_omitted_prices(
-    membership_service, stripe_account_id,
+    membership_service,
+    stripe_account_id,
 ):
     created = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -148,6 +167,7 @@ async def test_update_membership_deactivate_omitted_prices(
                     recurring_interval_count=1,
                 ),
             ],
+            metadata=_product_metadata(),
         ),
         stripe_account_id,
     )
@@ -163,6 +183,7 @@ async def test_update_membership_deactivate_omitted_prices(
                     is_default=True,
                 ),
             ],
+            metadata=_product_metadata(),
         ),
         stripe_account_id,
     )
@@ -192,6 +213,7 @@ async def test_deactivate_membership(
                     is_default=True,
                 ),
             ],
+            metadata=_product_metadata(),
         ),
         stripe_account_id,
     )

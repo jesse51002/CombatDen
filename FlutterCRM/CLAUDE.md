@@ -214,6 +214,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - If children need different spacing, restructure into nested Column/Row groups with uniform `spacing` on each — do not fall back to SizedBox
 - **Never use `margin`** on Container/DecoratedBox for spacing between widgets — use the `spacing` parameter on the parent Column/Row instead
 - If a repeated spacing pattern emerges that doesn't match existing constants, extract it into a helper function or a dedicated file — do not scatter magic numbers
+- **How to pick which constant goes where** is covered in **Section Structure & Gap Hierarchy** below — spacing choices are not arbitrary, they follow a visual-hierarchy rule that also drives where you split widgets.
 
 ## Screen Architecture & Widget Separation
 
@@ -238,6 +239,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Item widgets: `[Item]Card`, `[Item]Tile`, `[Item]Item` (e.g., `TechniqueCard`, `RecipeListTile`, `IngredientCheckboxItem`)
 - Grid/List widgets: `[Content]Grid`, `[Content]List` (e.g., `InfoBadgesGrid`, `RecipesList`)
 - Avoid generic names like `CustomWidget`, `MyWidget`, `WidgetOne`
+
+**Section Structure & Gap Hierarchy**
+- A screen is usually a stack of **Sections**. Each Section is a `Column` with a Title and its Content, using `spacing: DesignConstants.spacingLarge` between them.
+- The Content is itself a `Column` (or similar) with `spacing: DesignConstants.spacingMedium` between its grouped pieces (subtitles, rows, cards).
+- Inside those pieces, the innermost groups use `spacing: DesignConstants.spacingSmall` (or `spacingTiny`) for tightly related elements — a label and its value, icon + text, chips in a row.
+- **Why the cascade**: gap size communicates relationship. Elements that belong together the most get the smallest gap; unrelated things get the biggest. A Title and its Content are *less* tightly related than the items *within* the Content, so the Title→Content gap must be larger than the gaps inside the Content. The same logic applies one level down: a Subtitle is less related to its sub-content than the sub-content items are to each other.
+- The default cascade as you descend is `spacingLarge → spacingMedium → spacingSmall`. This holds ~90% of the time; it is a default, not a strict rule — skip a level when the design actually calls for it.
+- **Split widgets at the Title/Content boundary** — the spot where the gap jumps to `spacingLarge` is also the natural boundary for a new widget *class*. A Section's `build` typically returns `Column(spacing: spacingLarge, children: [Text(title, ...), _Content(...)])` and nothing else, with `_Content` handling the medium-gap layer. Whether any of these become their own **files** follows the usual rules (see **Widget Separation Guidelines** above) — small, tightly-coupled sub-widgets can stay private in the parent file.
+- **`SubtitleSection` (`lib/shared/widgets/subtitle_section.dart`) is one concrete example of this pattern**, not the canonical wrapper. Build case-specific variants with the title style, padding, and content wrapper the design calls for. The structural rule (big gap between title and content, cascade below) is what matters; the exact wrapper is free to vary.
+- Good:
+  ```dart
+  class ProfileSection extends StatelessWidget {
+    @override
+    Widget build(BuildContext context) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingLarge, // title -> content
+        children: [
+          Text('Profile', style: DesignConstants.h1),
+          _ProfileContent(member: member),
+        ],
+      );
+    }
+  }
+
+  class _ProfileContent extends StatelessWidget {
+    @override
+    Widget build(BuildContext context) {
+      return Column(
+        spacing: DesignConstants.spacingMedium, // between content groups
+        children: [
+          _NameRow(member: member),       // internally: spacingSmall
+          _MembershipRow(member: member), // internally: spacingSmall
+          _ActionButtonsRow(),
+        ],
+      );
+    }
+  }
+  ```
+- Bad: one flat `Column(spacing: spacingMedium, children: [title, subtitle, row1, row2, row3])` — the title gets the same gap as unrelated rows, flattening the visual hierarchy.
+- Bad: `spacingSmall` between title and content and `spacingLarge` between rows — inverted cascade, makes unrelated things look more related than tightly-grouped ones.
+- Bad: nesting the cascade but cramming it all into one giant `build` method — the cascade reveals the split points, so honor them by extracting each level into its own widget class.
 
 **BLoC Integration in Widgets**
 - **Widgets dispatch events to BLoC** - never call methods directly

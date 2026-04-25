@@ -36,14 +36,12 @@ class PaymentsSubscriptionMigration(PaymentsSubscriptionBase):
         it to the new price. Processes one at a time to stay within
         Stripe's rate limits.
 
-        Args:
-            request: Subscription IDs, old/new price IDs, proration behavior.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Lists of migrated IDs and errors.
+        Idempotency keys are derived deterministically from the
+        (old_price, new_price, subscription_id) tuple so retries of
+        the same batch dedup against Stripe.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        key_prefix = f"migration:{request.old_stripe_price_id}:{request.new_stripe_price_id}"
 
         await self._prices.validate_price_active(
             request.new_stripe_price_id,
@@ -55,7 +53,7 @@ class PaymentsSubscriptionMigration(PaymentsSubscriptionBase):
 
         for sub_id in request.subscription_ids:
             try:
-                sub = await self._retrieve_subscription(sub_id, opts)
+                sub = await self._retrieve_subscription(sub_id, read_opts)
             except PaymentsResourceNotFoundError:
                 errors.append(
                     PaymentsSubscriptionPriceMigrationError(
@@ -104,6 +102,10 @@ class PaymentsSubscriptionMigration(PaymentsSubscriptionBase):
                     )
                     continue
 
+                write_opts = self._client.connect_opts(
+                    stripe_account_id,
+                    idempotency_key=f"{key_prefix}:{sub_id}",
+                )
                 await self._stripe.v1.subscriptions.update_async(
                     sub_id,
                     params=SubscriptionUpdateParams(
@@ -115,7 +117,7 @@ class PaymentsSubscriptionMigration(PaymentsSubscriptionBase):
                         ],
                         proration_behavior=request.proration_behavior,
                     ),
-                    options=opts,
+                    options=write_opts,
                 )
                 migrated.append(sub_id)
             except Exception as exc:

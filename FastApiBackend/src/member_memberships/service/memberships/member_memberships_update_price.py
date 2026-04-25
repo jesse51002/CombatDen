@@ -1,4 +1,4 @@
-"""Update the price tier of an existing membership."""
+"""Upgrade a membership to its plan's currently active price."""
 
 import logging
 from uuid import UUID
@@ -10,6 +10,9 @@ from src.member_memberships.schema.payment_sync_schema import SyncItem
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
+from src.payments.schema.payments_invoice_schema import (
+    PaymentsInvoicePreviewResponse,
+)
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
@@ -17,44 +20,134 @@ logger = logging.getLogger(__name__)
 
 
 class MemberMembershipsUpdatePrice(MemberMembershipsBase):
-    """Switch a membership to a different price tier."""
+    """Move a membership onto its plan's active price tier."""
 
     async def update_price(
         self,
         item_id: UUID,
         crm_user_id: UUID,
-        new_price_id: UUID,
+        idempotency_key: UUID,
         prorate: bool = False,
     ) -> None:
-        """Update the price tier of an existing membership.
+        """Upgrade a membership to its plan's active price.
 
-        Swaps the old price for the new one in Stripe, then
-        updates the CRM row.
+        The caller does not choose the target price — the
+        service always targets the one ``membership_plan_prices``
+        row with ``is_active = true`` for the plan. If the
+        membership is already on that price the CRM row is left
+        alone, but Stripe is still re-synced defensively.
 
         Args:
             item_id: The membership item.
             crm_user_id: The member.
-            new_price_id: The new price tier.
+            idempotency_key: Stripe idempotency key.
             prorate: Whether to prorate the change.
 
         Raises:
             ValueError: If membership not found, cancelled, ended,
-                or new price invalid.
+                or no active price exists for the plan.
         """
         row = await self._get_membership(item_id, crm_user_id)
         self._validate_update_price(row, item_id, crm_user_id)
 
-        new_price = await self._get_price_for_plan(
+        active_price = await self._get_active_price_for_plan(
             row["gym_id"],
             row["plan_id"],
-            new_price_id,
         )
 
-        # ── Stripe first ──────────────────────────────────
+        already_active = row["price_id"] == active_price["price_id"]
+
+        await self._sync_to_active_price(
+            row=row,
+            crm_user_id=crm_user_id,
+            active_price=active_price,
+            prorate=prorate,
+            idempotency_key=idempotency_key,
+        )
+
+        if already_active:
+            return
+
+        await self._crm_update_price(
+            item_id=item_id,
+            crm_user_id=crm_user_id,
+            new_price_id=active_price["price_id"],
+            total_price=active_price["price"],
+        )
+
+    async def preview_update_price(
+        self,
+        item_id: UUID,
+        crm_user_id: UUID,
+        prorate: bool = False,
+    ) -> PaymentsInvoicePreviewResponse | None:
+        """Preview upgrading a membership to the plan's active price.
+
+        Runs every validation ``update_price`` runs and returns
+        the Stripe invoice preview for the swap — or a zero-delta
+        preview when the membership is already on the active price.
+
+        Raises:
+            ValueError: Same conditions as ``update_price``.
+        """
+        row = await self._get_membership(item_id, crm_user_id)
+        self._validate_update_price(row, item_id, crm_user_id)
+
+        active_price = await self._get_active_price_for_plan(
+            row["gym_id"],
+            row["plan_id"],
+        )
+
+        cancel_item, add_item = self._build_sync_items(
+            row=row,
+            crm_user_id=crm_user_id,
+            active_price=active_price,
+            prorate=prorate,
+        )
+        return await self._payment_sync.preview_update_payments_recurring(
+            crm_user_id,
+            add_ids=[add_item],
+            cancel_ids=[cancel_item],
+        )
+
+    # ── Private ────────────────────────────────────────────────
+
+    async def _sync_to_active_price(
+        self,
+        row: dict,
+        crm_user_id: UUID,
+        active_price: dict,
+        prorate: bool,
+        idempotency_key: UUID,
+    ) -> None:
+        """Run the Stripe re-sync for the active price."""
+        cancel_item, add_item = self._build_sync_items(
+            row=row,
+            crm_user_id=crm_user_id,
+            active_price=active_price,
+            prorate=prorate,
+        )
+        await self._payment_sync.update_payments_recurring(
+            crm_user_id,
+            add_ids=[add_item],
+            cancel_ids=[cancel_item],
+            idempotency_key=idempotency_key,
+        )
+
+    @staticmethod
+    def _build_sync_items(
+        row: dict,
+        crm_user_id: UUID,
+        active_price: dict,
+        prorate: bool,
+    ) -> tuple[SyncItem, SyncItem]:
+        """Build (cancel_item, add_item) for the payment sync call."""
         if not row["stripe_price_id"]:
-            raise ValueError(f"Membership missing stripe_price_id for item_id={item_id}")
+            raise ValueError(
+                f"Membership missing stripe_price_id for item_id={row.get('item_id')}"
+            )
         if not row["stripe_item_id"]:
-            raise ValueError(f"Membership missing stripe_item_id for item_id={item_id}")
+            raise ValueError(f"Membership missing stripe_item_id for item_id={row.get('item_id')}")
         cancel_item = SyncItem(
             stripe_price_id=row["stripe_price_id"],
             stripe_item_id=row["stripe_item_id"],
@@ -67,27 +160,13 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         # runs, so the only way for its coupons to reach Stripe is
         # to thread them explicitly through the add_item.
         add_item = SyncItem(
-            stripe_price_id=new_price["stripe_price_id"],
+            stripe_price_id=active_price["stripe_price_id"],
             crm_user_id=crm_user_id,
             plan_id=row["plan_id"],
             prorate=prorate,
             discount_ids=list(row["discount_ids"] or []),
         )
-        await self._payment_sync.update_payments_recurring(
-            crm_user_id,
-            add_ids=[add_item],
-            cancel_ids=[cancel_item],
-        )
-
-        # ── CRM update ────────────────────────────────────
-        await self._crm_update_price(
-            item_id=item_id,
-            crm_user_id=crm_user_id,
-            new_price_id=new_price_id,
-            total_price=new_price["price"],
-        )
-
-    # ── Private ────────────────────────────────────────────────
+        return cancel_item, add_item
 
     @staticmethod
     def _validate_update_price(
@@ -107,34 +186,27 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
                 f"item_id={item_id}, crm_user_id={crm_user_id}"
             )
 
-    async def _get_price_for_plan(
+    async def _get_active_price_for_plan(
         self,
         gym_id: UUID,
         plan_id: UUID,
-        price_id: UUID,
     ) -> dict:
-        """Validate a new price exists and is active for the plan.
+        """Fetch the plan's currently active price row.
 
         Raises:
-            ValueError: If not found or not active.
+            ValueError: If no active price exists for the plan.
         """
-        sql = load_sql(SQL_DIR / "member_memberships_get_price.sql")
+        sql = load_sql(SQL_DIR / "member_memberships_get_active_price.sql")
         params = {
             "gym_id": str(gym_id),
             "plan_id": str(plan_id),
-            "price_id": str(price_id),
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
             row = result.mappings().fetchone()
 
         if not row:
-            raise ValueError(
-                f"Price not found for plan: price_id={price_id}, "
-                f"plan_id={plan_id}, gym_id={gym_id}"
-            )
-        if not row["is_active"]:
-            raise ValueError(f"Price is not active: price_id={price_id}")
+            raise ValueError(f"No active price for plan: plan_id={plan_id}, gym_id={gym_id}")
         return dict(row)
 
     async def _crm_update_price(

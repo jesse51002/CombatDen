@@ -36,7 +36,7 @@ class PaymentsSubscriptionItem(PaymentsSubscriptionBase):
             PaymentsResourceNotFoundError: If the item is not found
                 or its parent subscription is canceled.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        opts = self._client.connect_opts_readonly(stripe_account_id)
 
         try:
             si = await self._stripe.v1.subscription_items.retrieve_async(

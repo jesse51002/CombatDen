@@ -20,7 +20,7 @@ production:
 """
 
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from schema.gym_discount import DiscountType
@@ -29,7 +29,6 @@ from starlette.background import BackgroundTasks
 
 from src.discounts.schema.discounts_schema import DiscountCreateRequest
 from src.payments.schema.payments_enums import StripeCouponDuration
-
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.data_factory import (
     create_member,
@@ -52,7 +51,6 @@ from tests.helpers.stripe_clock import (
     create_test_clock,
     delete_test_clock,
 )
-
 
 CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 NEXT_CYCLE = CLOCK_START + timedelta(days=35)
@@ -102,7 +100,10 @@ async def _create_linked_child(
 
 
 async def _start_child_membership(
-    memberships_service, crm_user_id: UUID, gym_id: UUID, plan,
+    memberships_service,
+    crm_user_id: UUID,
+    gym_id: UUID,
+    plan,
 ) -> None:
     """Start a recurring membership on a linked child with the
     linked-discount flag on.
@@ -112,6 +113,7 @@ async def _start_child_membership(
         gym_id=gym_id,
         plan_id=plan.plan_id,
         price_id=plan.price_id,
+        idempotency_key=uuid4(),
         include_linked_discount=True,
     )
 
@@ -206,16 +208,28 @@ async def test_linked_discount_child_loses_qualification_tiers_shift_up(
         # dollar amounts are chosen so the allocator's "largest
         # discount wins" ranking has a clean ordering.
         tier_1 = await _create_linked_discount(
-            discounts_service, gym_id, plan.plan_id,
-            name="Linked Tier 1", linked_num=1, dollar_off=3000,
+            discounts_service,
+            gym_id,
+            plan.plan_id,
+            name="Linked Tier 1",
+            linked_num=1,
+            dollar_off=3000,
         )
         tier_2 = await _create_linked_discount(
-            discounts_service, gym_id, plan.plan_id,
-            name="Linked Tier 2", linked_num=2, dollar_off=2000,
+            discounts_service,
+            gym_id,
+            plan.plan_id,
+            name="Linked Tier 2",
+            linked_num=2,
+            dollar_off=2000,
         )
         tier_3 = await _create_linked_discount(
-            discounts_service, gym_id, plan.plan_id,
-            name="Linked Tier 3", linked_num=3, dollar_off=1000,
+            discounts_service,
+            gym_id,
+            plan.plan_id,
+            name="Linked Tier 3",
+            linked_num=3,
+            dollar_off=1000,
         )
         tier_coupon_ids = {
             tier_1.stripe_coupon_id,
@@ -230,6 +244,7 @@ async def test_linked_discount_child_loses_qualification_tiers_shift_up(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
 
         # Three linked children — each starts a membership on the
@@ -237,21 +252,32 @@ async def test_linked_discount_child_loses_qualification_tiers_shift_up(
         # allocator assigns them a linked coupon.
         for label in ("Alpha", "Bravo", "Charlie"):
             child_id = await _create_linked_child(
-                db_pool, stripe_client, connect_opts,
-                parent.crm_user_id, gym_id, label,
+                db_pool,
+                stripe_client,
+                connect_opts,
+                parent.crm_user_id,
+                gym_id,
+                label,
             )
             child_ids.append(child_id)
             await _start_child_membership(
-                memberships_service, child_id, gym_id, plan,
+                memberships_service,
+                child_id,
+                gym_id,
+                plan,
             )
 
         profile = await get_profile_stripe_ids(
-            db_pool, parent.crm_user_id, gym_id,
+            db_pool,
+            parent.crm_user_id,
+            gym_id,
         )
         assert profile.stripe_sub_id_month is not None
 
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
             expand=(
                 "items.data.price",
                 "items.data.discounts.coupon",
@@ -263,12 +289,10 @@ async def test_linked_discount_child_loses_qualification_tiers_shift_up(
         # qualifying child — and every one must come from the
         # pool we created.
         assert len(live_coupons_before) == 3, (
-            f"Expected 3 linked coupons on {sub.id}, got "
-            f"{sorted(live_coupons_before)}"
+            f"Expected 3 linked coupons on {sub.id}, got {sorted(live_coupons_before)}"
         )
         assert live_coupons_before.issubset(tier_coupon_ids), (
-            f"Unexpected coupon ids on {sub.id}: "
-            f"{sorted(live_coupons_before - tier_coupon_ids)}"
+            f"Unexpected coupon ids on {sub.id}: {sorted(live_coupons_before - tier_coupon_ids)}"
         )
 
         plan_price = 10000
@@ -283,7 +307,9 @@ async def test_linked_discount_child_loses_qualification_tiers_shift_up(
         # it cares about is the *next* invoice after the cancel
         # being clean.
         before_first_cycle = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
         first_cycle_invoice = await advance_to_next_cycle_and_fetch_invoice(
             stripe_client,
@@ -304,7 +330,9 @@ async def test_linked_discount_child_loses_qualification_tiers_shift_up(
         )
 
         before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
 
         # Drop one child out of the qualifying set by cancelling
@@ -313,19 +341,26 @@ async def test_linked_discount_child_loses_qualification_tiers_shift_up(
         # at the service layer, which must NOT drop the parent's
         # or the other siblings' rows on this shared family plan.
         dropped_item_id = await get_active_membership_item_id(
-            db_pool, child_ids[0], gym_id,
+            db_pool,
+            child_ids[0],
+            gym_id,
         )
         await memberships_service.cancel(
             item_id=dropped_item_id,
             crm_user_id=child_ids[0],
+            idempotency_key=uuid4(),
         )
 
         await assert_no_unexpected_charges(
-            stripe_client, before, connect_opts,
+            stripe_client,
+            before,
+            connect_opts,
         )
 
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
             expand=(
                 "items.data.price",
                 "items.data.discounts.coupon",
@@ -429,8 +464,12 @@ async def test_delete_linked_discount_is_blocked_and_stripe_untouched(
             price_cents=6000,
         )
         tier = await _create_linked_discount(
-            discounts_service, gym_id, plan.plan_id,
-            name="Linked Delete Guard", linked_num=1, dollar_off=2000,
+            discounts_service,
+            gym_id,
+            plan.plan_id,
+            name="Linked Delete Guard",
+            linked_num=1,
+            dollar_off=2000,
         )
 
         await memberships_service.start(
@@ -438,20 +477,32 @@ async def test_delete_linked_discount_is_blocked_and_stripe_untouched(
             gym_id=gym_id,
             plan_id=plan.plan_id,
             price_id=plan.price_id,
+            idempotency_key=uuid4(),
         )
         child_id = await _create_linked_child(
-            db_pool, stripe_client, connect_opts,
-            parent.crm_user_id, gym_id, "Solo",
+            db_pool,
+            stripe_client,
+            connect_opts,
+            parent.crm_user_id,
+            gym_id,
+            "Solo",
         )
         await _start_child_membership(
-            memberships_service, child_id, gym_id, plan,
+            memberships_service,
+            child_id,
+            gym_id,
+            plan,
         )
 
         profile = await get_profile_stripe_ids(
-            db_pool, parent.crm_user_id, gym_id,
+            db_pool,
+            parent.crm_user_id,
+            gym_id,
         )
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
             expand=(
                 "items.data.price",
                 "items.data.discounts.coupon",
@@ -464,7 +515,9 @@ async def test_delete_linked_discount_is_blocked_and_stripe_untouched(
         )
 
         before = await snapshot_billing_state(
-            stripe_client, profile.stripe_customer_id, connect_opts,
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
         )
 
         with pytest.raises(ValueError, match="linked"):
@@ -478,10 +531,14 @@ async def test_delete_linked_discount_is_blocked_and_stripe_untouched(
         # still be attached, no invoice churn, no customer balance
         # movement.
         await assert_no_unexpected_charges(
-            stripe_client, before, connect_opts,
+            stripe_client,
+            before,
+            connect_opts,
         )
         sub = await fetch_subscription(
-            stripe_client, profile.stripe_sub_id_month, connect_opts,
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
             expand=(
                 "items.data.price",
                 "items.data.discounts.coupon",
@@ -497,10 +554,7 @@ async def test_delete_linked_discount_is_blocked_and_stripe_untouched(
         # flipped ``is_deleted`` before the guard fired.
         async with db_pool.session() as session:
             result = await session.execute(
-                text(
-                    "SELECT is_deleted FROM gym_discounts_unfiltered "
-                    "WHERE discount_id = :id"
-                ),
+                text("SELECT is_deleted FROM gym_discounts_unfiltered WHERE discount_id = :id"),
                 {"id": str(tier.discount_id)},
             )
             row = result.mappings().fetchone()

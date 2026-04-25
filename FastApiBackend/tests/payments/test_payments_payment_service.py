@@ -1,22 +1,31 @@
 """Integration tests for PaymentsStripePaymentService."""
 
-from src.payments.schema.payments_membership_schema import (
-    PaymentsMembershipCreateRequest,
-    PaymentsMembershipPriceItem,
+from uuid import uuid4
+
+from schema.membership_plan import DurationUnit, PlanType
+
+from src.payments.schema.metadata.stripe_customer_metadata import (
+    StripeCustomerMetadata,
+)
+from src.payments.schema.metadata.stripe_membership_one_time_metadata import (
+    StripeMembershipOneTimeMetadata,
+)
+from src.payments.schema.metadata.stripe_product_metadata import (
+    StripeProductMetadata,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsCustomerCreateRequest,
 )
+from src.payments.schema.payments_membership_schema import (
+    PaymentsMembershipCreateRequest,
+    PaymentsMembershipPriceItem,
+)
 from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentCreateRequest,
-    PaymentsPaymentCreateRequest,
+    PaymentsInvoicePaymentPreviewRequest,
     PaymentsRefundRequest,
 )
-
-from schema.membership_plan import DurationUnit, PlanType
-
 from tests.helpers.data_factory import create_payment_method
-
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -28,6 +37,10 @@ async def _customer_with_card(members_service, stripe_client, stripe_account_id,
         PaymentsCustomerCreateRequest(
             name="Payment Test",
             payment_method_id=pm_id,
+            metadata=StripeCustomerMetadata(
+                crm_user_id=uuid4(),
+                gym_id=uuid4(),
+            ),
         ),
         stripe_account_id,
     )
@@ -48,6 +61,10 @@ async def _one_time_price(membership_service, stripe_account_id, unit_amount: in
                     is_default=True,
                 ),
             ],
+            metadata=StripeProductMetadata(
+                plan_id=uuid4(),
+                gym_id=uuid4(),
+            ),
         ),
         stripe_account_id,
     )
@@ -57,42 +74,51 @@ async def _one_time_price(membership_service, stripe_account_id, unit_amount: in
 # ── Tests ───────────────────────────────────────────────────────
 
 
-async def test_create_payment_intent(
-    payment_service, members_service, stripe_client,
-    stripe_account_id, connect_opts,
+async def _paid_invoice_pi(
+    payment_service,
+    customer_id,
+    price_id,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
-    customer_id = await _customer_with_card(
-        members_service, stripe_client, stripe_account_id, connect_opts,
-    )
-
-    resp = await payment_service.create_payment(
-        PaymentsPaymentCreateRequest(
+    """Pay an invoice and return its PaymentIntent id."""
+    resp = await payment_service.create_invoice_payment(
+        PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=customer_id,
-            amount=1500,
-            currency="usd",
+            stripe_price_id=price_id,
+            idempotency_key=str(uuid4()),
+            metadata=StripeMembershipOneTimeMetadata(
+                crm_user_id=uuid4(),
+                gym_id=uuid4(),
+                plan_id=uuid4(),
+            ),
         ),
         stripe_account_id,
     )
-
-    assert resp.stripe_payment_intent_id.startswith("pi_")
-    assert resp.amount == 1500
-    assert resp.status == "succeeded"
-
-    pi = await stripe_client.client.v1.payment_intents.retrieve_async(
-        resp.stripe_payment_intent_id,
+    invoice = await stripe_client.client.v1.invoices.retrieve_async(
+        resp.stripe_invoice_id,
+        params={"expand": ["payments"]},
         options=connect_opts,
     )
-    assert pi.status == "succeeded"
-    assert pi.amount == 1500
-    assert pi.amount_received == 1500
+    payments = invoice.payments.data if invoice.payments else []
+    assert payments, f"Invoice {invoice.id} has no payments"
+    return payments[0].payment.payment_intent
 
 
 async def test_create_invoice_payment(
-    payment_service, members_service, membership_service,
-    stripe_client, stripe_account_id, connect_opts,
+    payment_service,
+    members_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     customer_id = await _customer_with_card(
-        members_service, stripe_client, stripe_account_id, connect_opts,
+        members_service,
+        stripe_client,
+        stripe_account_id,
+        connect_opts,
     )
     price_id = await _one_time_price(membership_service, stripe_account_id)
 
@@ -100,6 +126,12 @@ async def test_create_invoice_payment(
         PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=customer_id,
             stripe_price_id=price_id,
+            idempotency_key=str(uuid4()),
+            metadata=StripeMembershipOneTimeMetadata(
+                crm_user_id=uuid4(),
+                gym_id=uuid4(),
+                plan_id=uuid4(),
+            ),
         ),
         stripe_account_id,
     )
@@ -117,21 +149,36 @@ async def test_create_invoice_payment(
 
 
 async def test_create_invoice_payment_zero_amount(
-    payment_service, members_service, membership_service,
-    stripe_client, stripe_account_id, connect_opts,
+    payment_service,
+    members_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     """$0 invoices must not re-invoke pay_async after finalize."""
     customer_id = await _customer_with_card(
-        members_service, stripe_client, stripe_account_id, connect_opts,
+        members_service,
+        stripe_client,
+        stripe_account_id,
+        connect_opts,
     )
     price_id = await _one_time_price(
-        membership_service, stripe_account_id, unit_amount=0,
+        membership_service,
+        stripe_account_id,
+        unit_amount=0,
     )
 
     resp = await payment_service.create_invoice_payment(
         PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=customer_id,
             stripe_price_id=price_id,
+            idempotency_key=str(uuid4()),
+            metadata=StripeMembershipOneTimeMetadata(
+                crm_user_id=uuid4(),
+                gym_id=uuid4(),
+                plan_id=uuid4(),
+            ),
         ),
         stripe_account_id,
     )
@@ -150,16 +197,23 @@ async def test_create_invoice_payment_zero_amount(
 
 
 async def test_preview_invoice_payment(
-    payment_service, members_service, membership_service,
-    stripe_client, stripe_account_id, connect_opts,
+    payment_service,
+    members_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     customer_id = await _customer_with_card(
-        members_service, stripe_client, stripe_account_id, connect_opts,
+        members_service,
+        stripe_client,
+        stripe_account_id,
+        connect_opts,
     )
     price_id = await _one_time_price(membership_service, stripe_account_id)
 
     resp = await payment_service.preview_invoice_payment(
-        PaymentsInvoicePaymentCreateRequest(
+        PaymentsInvoicePaymentPreviewRequest(
             stripe_customer_id=customer_id,
             stripe_price_id=price_id,
         ),
@@ -171,23 +225,37 @@ async def test_preview_invoice_payment(
 
 
 async def test_refund_full_payment(
-    payment_service, members_service, stripe_client,
-    stripe_account_id, connect_opts,
+    payment_service,
+    members_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     customer_id = await _customer_with_card(
-        members_service, stripe_client, stripe_account_id, connect_opts,
-    )
-    payment = await payment_service.create_payment(
-        PaymentsPaymentCreateRequest(
-            stripe_customer_id=customer_id,
-            amount=3000,
-        ),
+        members_service,
+        stripe_client,
         stripe_account_id,
+        connect_opts,
+    )
+    price_id = await _one_time_price(
+        membership_service,
+        stripe_account_id,
+        unit_amount=3000,
+    )
+    pi_id = await _paid_invoice_pi(
+        payment_service,
+        customer_id,
+        price_id,
+        stripe_client,
+        stripe_account_id,
+        connect_opts,
     )
 
     resp = await payment_service.refund_payment(
         PaymentsRefundRequest(
-            stripe_payment_intent_id=payment.stripe_payment_intent_id,
+            stripe_payment_intent_id=pi_id,
+            idempotency_key=str(uuid4()),
         ),
         stripe_account_id,
     )
@@ -202,28 +270,42 @@ async def test_refund_full_payment(
     )
     assert refund.status == "succeeded"
     assert refund.amount == 3000
-    assert refund.payment_intent == payment.stripe_payment_intent_id
+    assert refund.payment_intent == pi_id
 
 
 async def test_refund_partial_payment(
-    payment_service, members_service, stripe_client,
-    stripe_account_id, connect_opts,
+    payment_service,
+    members_service,
+    membership_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
 ):
     customer_id = await _customer_with_card(
-        members_service, stripe_client, stripe_account_id, connect_opts,
-    )
-    payment = await payment_service.create_payment(
-        PaymentsPaymentCreateRequest(
-            stripe_customer_id=customer_id,
-            amount=5000,
-        ),
+        members_service,
+        stripe_client,
         stripe_account_id,
+        connect_opts,
+    )
+    price_id = await _one_time_price(
+        membership_service,
+        stripe_account_id,
+        unit_amount=5000,
+    )
+    pi_id = await _paid_invoice_pi(
+        payment_service,
+        customer_id,
+        price_id,
+        stripe_client,
+        stripe_account_id,
+        connect_opts,
     )
 
     resp = await payment_service.refund_payment(
         PaymentsRefundRequest(
-            stripe_payment_intent_id=payment.stripe_payment_intent_id,
+            stripe_payment_intent_id=pi_id,
             amount=2000,
+            idempotency_key=str(uuid4()),
         ),
         stripe_account_id,
     )

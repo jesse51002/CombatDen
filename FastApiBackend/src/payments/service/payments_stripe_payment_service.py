@@ -10,9 +10,6 @@ from stripe.params._invoice_item_create_params import InvoiceItemCreateParams
 from stripe.params._invoice_list_params import InvoiceListParams
 from stripe.params._invoice_pay_params import InvoicePayParams
 from stripe.params._invoice_update_params import InvoiceUpdateParams
-from stripe.params._payment_intent_create_params import (
-    PaymentIntentCreateParams,
-)
 from stripe.params._refund_create_params import RefundCreateParams
 
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
@@ -21,16 +18,13 @@ from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
 from src.payments.schema.payments_payment_schema import (
+    PaymentsInvoicePaymentByAmountRequest,
+    PaymentsInvoicePaymentByAmountResponse,
     PaymentsInvoicePaymentCreateRequest,
+    PaymentsInvoicePaymentPreviewRequest,
     PaymentsInvoicePaymentResponse,
-    PaymentsPaymentCreateRequest,
-    PaymentsPaymentResponse,
     PaymentsRefundRequest,
     PaymentsRefundResponse,
-)
-from src.payments.service.cash_constants import (
-    CRM_PAID_WITH_CASH_METADATA_KEY,
-    CRM_PAID_WITH_CASH_METADATA_VALUE,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_mappers import map_invoice_preview
@@ -50,8 +44,8 @@ logger = logging.getLogger(__name__)
 class PaymentsStripePaymentService:
     """Stripe one-time payment operations.
 
-    Supports direct-amount charges via PaymentIntents
-    and price-based charges via Invoices.
+    Supports direct-amount charges via PaymentIntents and invoice
+    charges (price-based or ad-hoc-amount) via Invoices.
 
     All methods accept ``stripe_account_id`` for Stripe Connect.
     """
@@ -67,64 +61,6 @@ class PaymentsStripePaymentService:
         self._members = members_service
         self._prices = price_service
 
-    # ── Direct Amount Payments ───────────────────────────────────
-
-    async def create_payment(
-        self,
-        request: PaymentsPaymentCreateRequest,
-        stripe_account_id: str,
-    ) -> PaymentsPaymentResponse:
-        """Create and confirm a one-time PaymentIntent.
-
-        Uses the customer's default payment method with
-        ``off_session=True`` for server-initiated charges.
-
-        Args:
-            request: Customer ID, amount, currency, optional metadata.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            PaymentIntent details.
-        """
-        opts = self._client.connect_opts(stripe_account_id)
-
-        customer = await self._members.retrieve_customer(
-            request.stripe_customer_id,
-            opts,
-        )
-
-        # Resolve the default payment method for off-session charges.
-        default_pm = None
-        if customer.invoice_settings and customer.invoice_settings.default_payment_method:
-            pm_ref = customer.invoice_settings.default_payment_method
-            default_pm = pm_ref if isinstance(pm_ref, str) else pm_ref.id
-        if not default_pm:
-            raise ValueError(
-                f"Customer {request.stripe_customer_id} has no default payment method"
-            )
-
-        pi = await self._stripe.v1.payment_intents.create_async(
-            params=PaymentIntentCreateParams(
-                customer=request.stripe_customer_id,
-                payment_method=default_pm,
-                amount=request.amount,
-                currency=request.currency,
-                confirm=True,
-                off_session=True,
-                metadata=request.metadata,
-            ),
-            options=opts,
-        )
-
-        return PaymentsPaymentResponse(
-            stripe_payment_intent_id=pi.id,
-            stripe_customer_id=pi.customer,
-            amount=pi.amount,
-            currency=pi.currency,
-            status=pi.status,
-            metadata=pi.metadata.to_dict() if pi.metadata else {},
-        )
-
     # ── Price-Based Invoice Payments ─────────────────────────────
 
     async def create_invoice_payment(
@@ -132,41 +68,33 @@ class PaymentsStripePaymentService:
         request: PaymentsInvoicePaymentCreateRequest,
         stripe_account_id: str,
     ) -> PaymentsInvoicePaymentResponse:
-        """Create and pay an invoice from a Stripe Price.
-
-        Creates an InvoiceItem referencing the price, then creates
-        and pays the invoice. The price already knows the product,
-        amount, and currency.
-
-        Args:
-            request: Customer ID, price ID, optional metadata.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Invoice payment details.
-        """
-        opts = self._client.connect_opts(stripe_account_id)
+        """Create and pay an invoice from a Stripe Price."""
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        base_key = request.idempotency_key
 
         await self._members.retrieve_customer(
             request.stripe_customer_id,
-            opts,
+            read_opts,
         )
         await self._prices.validate_price_active(
             request.stripe_price_id,
             stripe_account_id,
         )
 
-        invoice_metadata: dict[str, str] = dict(request.metadata or {})
-        if request.paid_out_of_band:
-            invoice_metadata[CRM_PAID_WITH_CASH_METADATA_KEY] = CRM_PAID_WITH_CASH_METADATA_VALUE
+        metadata = request.metadata.model_copy(
+            update={"crm_paid_with_cash": True} if request.paid_out_of_band else {},
+        )
 
         invoice = await self._stripe.v1.invoices.create_async(
             params=InvoiceCreateParams(
                 customer=request.stripe_customer_id,
-                metadata=invoice_metadata,
+                metadata=metadata.to_stripe_metadata(),
                 auto_advance=False,
             ),
-            options=opts,
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{base_key}:invoice",
+            ),
         )
 
         await self._stripe.v1.invoice_items.create_async(
@@ -175,12 +103,18 @@ class PaymentsStripePaymentService:
                 invoice=invoice.id,
                 pricing={"price": request.stripe_price_id},
             ),
-            options=opts,
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{base_key}:invoice_item",
+            ),
         )
 
         invoice = await self._stripe.v1.invoices.finalize_invoice_async(
             invoice.id,
-            options=opts,
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{base_key}:finalize",
+            ),
         )
 
         # Zero-amount invoices are auto-marked as paid at finalization,
@@ -192,7 +126,10 @@ class PaymentsStripePaymentService:
             invoice = await self._stripe.v1.invoices.pay_async(
                 invoice.id,
                 params=pay_params,
-                options=opts,
+                options=self._client.connect_opts(
+                    stripe_account_id,
+                    idempotency_key=f"{base_key}:pay",
+                ),
             )
 
         return PaymentsInvoicePaymentResponse(
@@ -205,26 +142,103 @@ class PaymentsStripePaymentService:
             metadata=invoice.metadata.to_dict() if invoice.metadata else {},
         )
 
+    # ── Ad-Hoc Amount Invoice Payments ───────────────────────────
+
+    async def create_invoice_payment_by_amount(
+        self,
+        request: PaymentsInvoicePaymentByAmountRequest,
+        stripe_account_id: str,
+    ) -> PaymentsInvoicePaymentByAmountResponse:
+        """Create and pay an invoice for an ad-hoc amount.
+
+        Unlike :meth:`create_invoice_payment`, no Stripe Price is used —
+        the amount is set directly on an InvoiceItem. Used for one-off
+        charges (late fees, pro-shop items, etc.). ``description`` is
+        applied both to the invoice and the invoice line item so it
+        appears as the line-item name on the Stripe invoice.
+        """
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        base_key = request.idempotency_key
+
+        await self._members.retrieve_customer(
+            request.stripe_customer_id,
+            read_opts,
+        )
+
+        metadata = request.metadata.model_copy(
+            update={"crm_paid_with_cash": True} if request.paid_out_of_band else {},
+        )
+
+        invoice = await self._stripe.v1.invoices.create_async(
+            params=InvoiceCreateParams(
+                customer=request.stripe_customer_id,
+                description=request.description,
+                metadata=metadata.to_stripe_metadata(),
+                auto_advance=False,
+            ),
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{base_key}:invoice",
+            ),
+        )
+
+        await self._stripe.v1.invoice_items.create_async(
+            params=InvoiceItemCreateParams(
+                customer=request.stripe_customer_id,
+                invoice=invoice.id,
+                amount=request.amount,
+                currency=request.currency,
+                description=request.description,
+            ),
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{base_key}:invoice_item",
+            ),
+        )
+
+        invoice = await self._stripe.v1.invoices.finalize_invoice_async(
+            invoice.id,
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{base_key}:finalize",
+            ),
+        )
+
+        if invoice.status != "paid":
+            pay_params = InvoicePayParams()
+            if request.paid_out_of_band:
+                pay_params["paid_out_of_band"] = True
+            invoice = await self._stripe.v1.invoices.pay_async(
+                invoice.id,
+                params=pay_params,
+                options=self._client.connect_opts(
+                    stripe_account_id,
+                    idempotency_key=f"{base_key}:pay",
+                ),
+            )
+
+        return PaymentsInvoicePaymentByAmountResponse(
+            stripe_invoice_id=invoice.id,
+            stripe_customer_id=invoice.customer,
+            amount_paid=invoice.amount_paid,
+            currency=invoice.currency,
+            status=invoice.status,
+            metadata=invoice.metadata.to_dict() if invoice.metadata else {},
+        )
+
     # ── Invoice Preview ───────────────────────────────────────────
 
     async def preview_invoice_payment(
         self,
-        request: PaymentsInvoicePaymentCreateRequest,
+        request: PaymentsInvoicePaymentPreviewRequest,
         stripe_account_id: str,
     ) -> PaymentsInvoicePreviewResponse:
         """Preview a one-time invoice charge without paying.
 
-        Same validation as ``create_invoice_payment`` but no invoice
-        is created — uses Stripe's ``invoices.create_preview``.
-
-        Args:
-            request: Customer ID, price ID, optional metadata.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Invoice preview with amount due and line items.
+        Stateless preview, but ``validate_price_active`` may
+        defensively reactivate an archived price.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        opts = self._client.connect_opts_readonly(stripe_account_id)
 
         await self._members.retrieve_customer(
             request.stripe_customer_id,
@@ -256,21 +270,10 @@ class PaymentsStripePaymentService:
         request: PaymentsRefundRequest,
         stripe_account_id: str,
     ) -> PaymentsRefundResponse:
-        """Refund a PaymentIntent (full or partial).
-
-        Works for both direct-amount and invoice-based payments,
-        since invoices create a PaymentIntent under the hood.
-
-        If ``amount`` is None, a full refund is issued.
-
-        Args:
-            request: PaymentIntent ID and optional partial amount.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            Refund details.
-        """
-        opts = self._client.connect_opts(stripe_account_id)
+        """Refund a PaymentIntent (full or partial)."""
+        opts = self._client.connect_opts(
+            stripe_account_id, idempotency_key=request.idempotency_key
+        )
 
         params = RefundCreateParams(
             payment_intent=request.stripe_payment_intent_id,
@@ -296,6 +299,8 @@ class PaymentsStripePaymentService:
         self,
         stripe_subscription_id: str,
         stripe_account_id: str,
+        *,
+        idempotency_key: str,
     ) -> str:
         """Mark a subscription's currently-open invoice as paid via cash.
 
@@ -303,21 +308,8 @@ class PaymentsStripePaymentService:
         and calls ``invoices.pay`` with ``paid_out_of_band=True``.
         Stripe fires the normal ``invoice.paid`` webhook, which
         handles the CRM write.
-
-        Args:
-            stripe_subscription_id: The subscription whose open
-                invoice should be marked paid.
-            stripe_account_id: The gym's Stripe Connect account ID.
-
-        Returns:
-            The Stripe invoice id that was marked paid.
-
-        Raises:
-            PaymentsResourceNotFoundError: If the subscription or
-                open invoice cannot be found in Stripe.
-            ValueError: If the subscription has no open invoice.
         """
-        opts = self._client.connect_opts(stripe_account_id)
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
 
         list_params = InvoiceListParams(
             subscription=stripe_subscription_id,
@@ -327,7 +319,7 @@ class PaymentsStripePaymentService:
         try:
             invoice_list = await self._stripe.v1.invoices.list_async(
                 params=list_params,
-                options=opts,
+                options=read_opts,
             )
         except stripe.InvalidRequestError as exc:
             raise PaymentsResourceNotFoundError(
@@ -342,18 +334,23 @@ class PaymentsStripePaymentService:
 
         invoice = invoices[0]
 
-        # Tag the invoice as cash so the ``invoice.paid`` webhook
-        # can write ``payment_method_type='cash'`` on the CRM
-        # charge row. Stripe merges metadata on update, so any
-        # pre-existing keys (e.g. crm_user_id) are preserved.
+        # Stripe does not propagate subscription metadata to its
+        # generated invoices, so we cannot round-trip this through
+        # StripeSubscriptionMetadata — the invoice lacks the required
+        # crm_user_id/gym_id. The webhook recovers crm_user_id for
+        # subscription invoices via sub-item lookup; only the cash
+        # flag needs to land on the invoice itself.
+        existing = invoice.metadata.to_dict() if invoice.metadata else {}
+        merged = {**existing, "crm_paid_with_cash": "true"}
         await self._stripe.v1.invoices.update_async(
             invoice.id,
             params=InvoiceUpdateParams(
-                metadata={
-                    CRM_PAID_WITH_CASH_METADATA_KEY: (CRM_PAID_WITH_CASH_METADATA_VALUE),
-                },
+                metadata=merged,
             ),
-            options=opts,
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{idempotency_key}:update",
+            ),
         )
 
         pay_params = InvoicePayParams()
@@ -362,7 +359,10 @@ class PaymentsStripePaymentService:
             await self._stripe.v1.invoices.pay_async(
                 invoice.id,
                 params=pay_params,
-                options=opts,
+                options=self._client.connect_opts(
+                    stripe_account_id,
+                    idempotency_key=f"{idempotency_key}:pay",
+                ),
             )
         except stripe.InvalidRequestError as exc:
             raise PaymentsResourceNotFoundError(
