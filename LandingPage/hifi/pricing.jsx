@@ -46,7 +46,7 @@ const COPY = {
     headlineLead: "Pricing that scales ",
     headlineEmphasis: "with your gym.",
     tagline:
-      "Flat monthly rate based on member count. No setup fees. Cancel anytime.",
+      "Flat monthly rate based on member count.\nNo setup fees. Cancel anytime.",
   },
   plans: {
     cadence: "/mo",
@@ -68,6 +68,11 @@ const COPY = {
       "Loyalty Program",
       "Class Management",
     ],
+    trialNote: {
+      lead: "",
+      emphasis: "30-day free trial",
+      tail: " · no card required",
+    },
     benefits: [
       ["No setup fees", "Onboarding and import included."],
       ["No card migration", "Works alongside your current software."],
@@ -233,7 +238,9 @@ function Nav() {
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              aria-label={menuOpen ? COPY.nav.menuCloseAria : COPY.nav.menuOpenAria}
+              aria-label={
+                menuOpen ? COPY.nav.menuCloseAria : COPY.nav.menuOpenAria
+              }
               aria-expanded={menuOpen}
               style={{
                 width: 40,
@@ -250,12 +257,34 @@ function Nav() {
               }}
             >
               {menuOpen ? (
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
-                  <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M5 5l10 10M15 5L5 15"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
                 </svg>
               ) : (
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-                  <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path
+                    d="M3 6h14M3 10h14M3 14h14"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
                 </svg>
               )}
             </button>
@@ -570,6 +599,23 @@ function PlanCard({ plan, bp }) {
         >
           {plan.cadence}
         </span>
+      </div>
+
+      <div
+        style={{
+          marginTop: 14,
+          fontFamily: "Inter, sans-serif",
+          fontSize: 13,
+          fontWeight: 500,
+          color: C.fg2,
+          letterSpacing: "0.01em",
+        }}
+      >
+        {COPY.plans.trialNote.lead}
+        <span style={{ color: C.orange, fontWeight: 700 }}>
+          {COPY.plans.trialNote.emphasis}
+        </span>
+        {COPY.plans.trialNote.tail}
       </div>
 
       <div
