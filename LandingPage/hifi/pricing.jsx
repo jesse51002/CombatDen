@@ -53,14 +53,14 @@ const COPY = {
     cta: "Book a demo",
     featuresLabel: "All features included",
     items: [
-      { name: "Starter", range: "0 – 100 members", price: "69.99" },
+      { name: "Starter", range: "0 – 50 members", price: "50.00" },
+      { name: "Growth", range: "50 – 100 members", price: "70.00" },
       {
-        name: "Growth",
-        range: "100 – 200 members",
-        price: "99.99",
+        name: "Scale",
+        range: "100+ members",
+        price: "100.00",
         featured: true,
       },
-      { name: "Scale", range: "200+ members", price: "149.99" },
     ],
     features: [
       "Member App (iOS & Android)",
