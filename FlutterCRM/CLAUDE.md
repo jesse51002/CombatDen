@@ -17,6 +17,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - YAGNI (You Aren't Gonna Need It): Don't add features until needed
 - Separation of Concerns: Separate UI, business logic, and data layers
 
+## Search the web for conventions before designing
+
+When the UX question is "how do good apps usually present X?" — login flows, empty states, error states, onboarding, pull-to-refresh, list/detail patterns, settings screens, paywalls, billing screens, permission prompts, password reset, account deletion, etc. — **search the web first.** Look at what proven mobile apps actually ship (Stripe, Linear, Notion, Cash App, Robinhood, Airbnb, etc.). Don't guess.
+
+Why: convention is a usability shortcut. Users pattern-match to flows and components they've seen in other apps. Inventing a novel treatment for a normalized interaction makes the app feel wrong even if it's "creative." Worse, guessing at conventions wastes iteration cycles when the right answer is already publicly documented across the App Store and Material/HIG guidelines.
+
+How to apply:
+- If the work is a normalized/conventional pattern, run a WebSearch + WebFetch a few real apps' screenshots or design write-ups before proposing a layout.
+- Reference the platform guidelines (Apple HIG, Material 3) when applicable.
+- Quote the convention you found ("Stripe Dashboard handles empty state with X; Linear uses Y for confirmation dialogs").
+- Then make the call — sometimes the convention is wrong for this product, but you can only know that after seeing it.
+- Skip the search for genuinely project-specific work (this product's unique mechanic, our brand voice, internal logic). Convention search is for the parts every app has.
+
 ## API Reference
 
 **OpenAPI Specification**

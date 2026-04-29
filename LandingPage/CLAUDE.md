@@ -16,6 +16,18 @@ How to apply:
 
 If you find yourself typing a string literal inside JSX, stop and put it in `COPY` first.
 
+## Search the web for conventions before designing
+
+When the design question is "how do good sites usually present X?" — pricing tiers, free trial messaging, plan badges, FAQ layouts, footer structures, signup flows, error states, empty states, billing copy, onboarding patterns — **search the web first.** Look at what proven SaaS companies actually ship (Vercel, Linear, Notion, Stripe, Dropbox, Slack, etc.). Don't guess.
+
+Why: convention is a usability shortcut. Buyers pattern-match to layouts and copy they've seen elsewhere. Inventing a novel treatment for a normalized thing makes the page feel wrong even if it's "creative." Worse, guessing at conventions wastes iteration cycles when the right answer is already publicly documented across a dozen pricing pages.
+
+How to apply:
+- If the work is a normalized/conventional pattern, run a WebSearch + WebFetch a couple of real pricing pages before proposing a design.
+- Quote the convention you found ("Vercel uses 'Free forever' embedded in the card description; Dropbox uses 'Try for free' as the CTA").
+- Then make the call — sometimes the convention is wrong for this product, but you can only know that after seeing it.
+- Skip the search for genuinely project-specific work (this product's unique mechanic, our brand voice, internal copy decisions). Convention search is for the parts every SaaS has.
+
 ## Line breaks in copy (\n)
 
 The App root in both `hifi/landing.jsx` and `hifi/pricing.jsx` sets `whiteSpace: "pre-line"`. Because CSS `white-space` is inherited, every `\n` inside a `COPY` string renders as a real line break, while runs of regular spaces still collapse normally. To force a line break in copy, just put `\n` in the string — no `<br />`, no extra wrapper element, no per-element `whiteSpace` override.
