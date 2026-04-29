@@ -1,0 +1,42 @@
+# CombatDen
+
+> CombatDen is a member retention app for combat sports gyms — Brazilian Jiu-Jitsu (BJJ), MMA, Muay Thai, boxing, and kickboxing. It runs alongside the gym's existing management software (no card migration required) and stops members from quitting through engagement, rank tracking, and a built-in loyalty program.
+
+## What it does
+
+- **Member app (iOS & Android)** branded with the gym's logo, colors, and name.
+- **Engagement engine**: booking a class triggers content matched to the member's level. Beginners show up less nervous and stay longer.
+- **Loyalty program**: members earn points per class attended and redeem them for gym-configured rewards (branded shirts, guest passes, discounted private training). Drives attendance, brings in friends, generates word-of-mouth.
+- **Class management**: schedule, attendance, rank tracking, class streaks.
+- **Works with your current software**: no payment-info migration required. Imports member names, emails, ranks, and class schedule.
+
+## Why it matters
+
+- It costs roughly 5× more to acquire a new combat-sports gym member than to retain one.
+- Keeping just 5% more members in a 100-member gym is worth tens of thousands of dollars per year.
+- A retained member is worth $150+/month. A $20 branded T-shirt that keeps them one extra month is 7× ROI before factoring in word-of-mouth.
+
+## Pages
+
+- [Home](https://www.combatden.net/): Product overview, how it works, loyalty mechanics, why retention matters, FAQ.
+- [Pricing](https://www.combatden.net/pricing.html): Three plans (Starter $50/mo, Growth $70/mo, Scale $100/mo), 30-day free trial, no setup fees, cancel anytime, no card required to start.
+
+## Pricing
+
+| Plan    | Members      | Price    |
+|---------|--------------|----------|
+| Starter | 0 – 50       | $50/mo   |
+| Growth  | 50 – 100     | $70/mo   |
+| Scale   | 100+         | $100/mo  |
+
+White-labeled apps available on request.
+
+## Audience
+
+Combat sports gym owners and managers — BJJ, MMA, Muay Thai, boxing, kickboxing — who currently use software like Mindbody, Kicksite, Spark Membership, ZenPlanner, Gymdesk, or similar, and want to improve member retention without switching their core gym management system.
+
+## Contact
+
+- Email: jesse@combatden.net
+- Phone: 832-871-2702
+- Demo: 15-minute call, booked via the home page or pricing page.

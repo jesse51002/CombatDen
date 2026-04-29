@@ -3333,6 +3333,8 @@ function Faq() {
 // ---------- Root ----------
 function App() {
   useEffect(() => {
+    const fallback = document.getElementById("seo-fallback");
+    if (fallback) fallback.remove();
     const id = window.location.hash.slice(1);
     if (!id) return;
     requestAnimationFrame(() => {

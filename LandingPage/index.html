@@ -4,10 +4,67 @@
 <meta charset="utf-8"/>
 <title>CombatDen — A member app that stops fighters from quitting</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+<meta name="description" content="CombatDen is a member retention app for combat sports gyms. Loyalty, engagement, and rank tracking that works alongside your current software — no card migration."/>
+<link rel="canonical" href="https://www.combatden.net/"/>
+<meta name="google-site-verification" content="REPLACE_WITH_GSC_TOKEN"/>
+
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://www.combatden.net/"/>
+<meta property="og:title" content="CombatDen — A member app that stops fighters from quitting"/>
+<meta property="og:description" content="A member retention app for combat sports gyms. Works alongside your current software — no card migration required."/>
+<meta property="og:image" content="https://www.combatden.net/assets/mockups/3d_branded.png"/>
+<meta property="og:site_name" content="CombatDen"/>
+
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="CombatDen — A member app that stops fighters from quitting"/>
+<meta name="twitter:description" content="A member retention app for combat sports gyms. Works alongside your current software — no card migration required."/>
+<meta name="twitter:image" content="https://www.combatden.net/assets/mockups/3d_branded.png"/>
+
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23121619'/%3E%3Ctext x='32' y='44' font-family='Jura,sans-serif' font-weight='700' font-size='36' text-anchor='middle' fill='%23FF6C2D' letter-spacing='-0.03em'%3ECD%3C/text%3E%3C/svg%3E"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Jura:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://www.combatden.net/#org",
+      "name": "CombatDen",
+      "url": "https://www.combatden.net/",
+      "logo": "https://www.combatden.net/assets/images/LogoTransparent.png",
+      "email": "jesse@combatden.net",
+      "telephone": "+1-832-871-2702"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://www.combatden.net/#website",
+      "url": "https://www.combatden.net/",
+      "name": "CombatDen",
+      "publisher": { "@id": "https://www.combatden.net/#org" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "CombatDen",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "iOS, Android",
+      "description": "Member retention app for combat sports gyms. Loyalty programs, engagement, and rank tracking that work alongside your current gym management software.",
+      "offers": {
+        "@type": "AggregateOffer",
+        "priceCurrency": "USD",
+        "lowPrice": "50",
+        "highPrice": "100",
+        "offerCount": "3",
+        "url": "https://www.combatden.net/pricing.html"
+      }
+    }
+  ]
+}
+</script>
+
 <style>
   html, body { margin: 0; padding: 0; background: #121619; scroll-behavior: smooth; overflow-x: clip; }
   body { font-family: "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; color: #F4F3EE; }
@@ -15,9 +72,42 @@
   ::-webkit-scrollbar-track { background: #0B0E10; }
   ::-webkit-scrollbar-thumb { background: rgba(244,243,238,0.15); border-radius: 5px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(244,243,238,0.3); }
+  /* SEO fallback — visible to crawlers and to users if React fails to mount.
+     Removed from the DOM by App's useEffect once React mounts. */
+  #seo-fallback { max-width: 880px; margin: 0 auto; padding: 48px 24px; }
+  #seo-fallback h1, #seo-fallback h2 { font-family: "Jura", sans-serif; }
+  #seo-fallback a { color: #FF6C2D; }
 </style>
 </head>
 <body>
+
+<div id="seo-fallback">
+  <header>
+    <p><strong>CombatDen</strong></p>
+    <nav>
+      <a href="/">Home</a> · <a href="/pricing.html">Pricing</a>
+    </nav>
+  </header>
+  <main>
+    <h1>A member app that stops fighters from quitting.</h1>
+    <p>CombatDen is a member retention platform for combat sports gyms — BJJ, MMA, Muay Thai, boxing, kickboxing. Works alongside your current gym management software. No card migration required.</p>
+
+    <h2>Engagement keeps members</h2>
+    <p>Booking a class triggers content matched to the member's level, so beginners show up less nervous and stay longer. Between classes, the app delivers martial arts content, rank tracking, and class streaks designed to keep members engaged with your gym.</p>
+
+    <h2>Loyalty program that pays for itself</h2>
+    <p>Members earn points for attending class and redeem them for rewards you configure — branded gym shirts, guest passes, discounted private training. Every reward is structured to drive attendance, bring in new members, and grow long-term revenue.</p>
+
+    <h2>Branded for your gym</h2>
+    <p>The app ships with your logo, colors, and gym name baked in. When members open it, they see your brand — not ours.</p>
+
+    <h2>Why retention matters</h2>
+    <p>It costs roughly 5× more to acquire a new member than to keep an existing one. Keeping just 5% more members in a 100-member gym is worth tens of thousands of dollars a year.</p>
+
+    <p><a href="/pricing.html">See pricing</a> · <a href="mailto:jesse@combatden.net">Book a 15-minute demo</a></p>
+  </main>
+</div>
+
 <div id="root"></div>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>

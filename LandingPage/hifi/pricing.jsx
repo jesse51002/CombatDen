@@ -1031,6 +1031,10 @@ function Footer() {
 
 // ---------- App ----------
 function App() {
+  useEffect(() => {
+    const fallback = document.getElementById("seo-fallback");
+    if (fallback) fallback.remove();
+  }, []);
   return (
     <div
       style={{

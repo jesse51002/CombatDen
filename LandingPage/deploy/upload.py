@@ -1,5 +1,7 @@
+import re
 import sys
 import time
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import boto3
@@ -7,6 +9,9 @@ from config import BUCKET, REGION, SITE_DIR, content_type_for, load_state
 
 INCLUDE_GLOBS = [
     "*.html",
+    "robots.txt",
+    "sitemap.xml",
+    "llms.txt",
     "hifi/**/*",
     "assets/**/*",
 ]
@@ -26,7 +31,51 @@ def iter_site_files():
 
 
 def cache_control_for(rel: Path) -> str:
+    name = rel.name.lower()
+    if name.endswith(".html"):
+        return "no-cache, must-revalidate"
+    if name in ("sitemap.xml", "robots.txt", "llms.txt"):
+        return "public, max-age=300"
+    if rel.parts and rel.parts[0] == "assets":
+        return "public, max-age=86400"
     return "no-cache"
+
+
+def refresh_sitemap_lastmod() -> None:
+    """Rewrite <lastmod> in sitemap.xml to the mtime of the matching HTML file.
+
+    Loose mapping by URL suffix:
+      */              -> index.html
+      */pricing.html  -> pricing.html
+    """
+    sitemap = SITE_DIR / "sitemap.xml"
+    if not sitemap.exists():
+        return
+    text = sitemap.read_text()
+
+    def mtime_date(filename: str) -> str:
+        p = SITE_DIR / filename
+        if not p.exists():
+            return date.today().isoformat()
+        ts = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+        return ts.date().isoformat()
+
+    def replace_lastmod(loc_suffix: str, html_file: str) -> None:
+        nonlocal text
+        # Match a <url> block whose <loc> ends with loc_suffix, then replace the
+        # first <lastmod> inside that block.
+        pattern = re.compile(
+            r"(<url>\s*<loc>[^<]*"
+            + re.escape(loc_suffix)
+            + r"</loc>\s*<lastmod>)[^<]*(</lastmod>)",
+            re.DOTALL,
+        )
+        text = pattern.sub(r"\g<1>" + mtime_date(html_file) + r"\g<2>", text)
+
+    replace_lastmod(".combatden.net/", "index.html")
+    replace_lastmod("/pricing.html", "pricing.html")
+    sitemap.write_text(text)
+    print("[sitemap] refreshed lastmod from local file mtimes")
 
 
 def upload_all(s3) -> int:
@@ -65,6 +114,8 @@ def main() -> int:
         raise SystemExit(
             "No distribution_id in state. Run `make deploy-finalize` first."
         )
+
+    refresh_sitemap_lastmod()
 
     session = boto3.Session(region_name=REGION)
     s3 = session.client("s3")
