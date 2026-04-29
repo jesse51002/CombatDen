@@ -1,5 +1,5 @@
 // CombatDen — Hi-Fi landing page (Manifesto direction)
-// Hero uses Glow A (programmatic pulsing bottom gradient, stays large).
+// Hero uses Orbital Arcs — concentric rotating arc segments with a soft central glow.
 
 const { useEffect, useRef, useState } = React;
 
@@ -18,6 +18,164 @@ const C = {
   paperInk2: "#2E2E2E",
   paperInk3: "#6B6B6B",
   paperHairline: "rgba(18,22,25,0.12)",
+};
+
+// ---------- Copy ----------
+// Single source of truth for every user-visible string on the page. Edit copy
+// here, never inline in JSX. Rule (also in CLAUDE.md): no hardcoded text in
+// this file — anything rendered to the user lives in COPY.
+const COPY = {
+  brand: {
+    name: "CombatDen",
+    homeAria: "CombatDen home",
+    contact: "jesse@combatden.net · 832-871-2702",
+  },
+  nav: {
+    bookDemoLong: "Book a demo →",
+    bookDemoShort: "Book demo",
+    menuOpenAria: "Open menu",
+    menuCloseAria: "Close menu",
+    links: {
+      howItWorks: "How it works",
+      whyItMatters: "Why it matters",
+      pricing: "Pricing",
+      faq: "FAQ",
+    },
+  },
+  hero: {
+    eyebrow: "For combat sports gyms",
+    headline: "A member app that stops fighters from quitting.",
+    tagline:
+      "Works alongside your current software — no card migration required.",
+    cta: "Book a 15-minute demo",
+  },
+  howItWorks: {
+    eyebrow: "Retention Booster",
+    headline: "Engagement keeps members.",
+    steps: [
+      {
+        n: "01",
+        title: "Book a class.",
+        copy: "Booking triggers content matched to their level. Beginners show up less nervous, and stay longer.",
+      },
+      {
+        n: "02",
+        title: "Between classes.",
+        copy: "Martial arts content, rank tracking, class streaks.\nApp designed to keep members longer.",
+      },
+    ],
+  },
+  loyalty: {
+    eyebrow: "Loyalty Program",
+    headline: "Make loyal members.",
+    blurb:
+      "We enable your gym to run a loyalty program that rewards consistency, keeps members longer, and grows your gym.",
+    disclaimer:
+      "Points-per-class and reward tiers are fully configurable by the gym.",
+    ptsLabel: "PTS",
+    items: [
+      { label: "Attends class", desc: "Drives attendance." },
+      {
+        text: "+160",
+        label: "Earn points",
+        desc: "Promotes class consistency.",
+      },
+      {
+        label: "Redeem rewards",
+        desc: "Creates loyal and profitable members.",
+      },
+    ],
+    rewardsEyebrow: "Reward Examples",
+    // Small uppercase label that sits above the per-slide benefit copy.
+    rewardBenefitLabel: "Reward Benefit",
+    rewardsPrevAria: "Previous reward",
+    rewardsNextAria: "Next reward",
+    // How long each slide stays in focus before the auto-advance moves on (ms).
+    // Lives here so it's editable alongside the slide content, not buried in SIZES.
+    rewardSlideAutoMs: 7000,
+    // Rewards shown in the slideshow. Each entry now carries its own benefit
+    // line — leads with why the member will love it, then closes with the
+    // payoff for the gym. Image paths live inline (per request — exception
+    // to the usual "image paths in a sibling array" rule).
+    rewards: [
+      {
+        name: "Free Gym Shirt",
+        cost: "1500",
+        classes: "~15 classes",
+        img: "assets/images/ShirtReward.webp",
+        benefit:
+          "Members love wearing gear from your gym and every shirt becomes a walking ad for your gym.",
+      },
+      {
+        name: "Bring a friend to class for free",
+        cost: "1000",
+        classes: "~10 classes",
+        img: "assets/images/FriendPass.jpg",
+        benefit:
+          "Members love training with their friends and every guest pass brings a new potential customer to the gym for free.",
+      },
+      {
+        name: "Discounted Private Training",
+        cost: "2500",
+        classes: "~25 classes",
+        img: "assets/images/Privates.webp",
+        benefit:
+          "Members love affordable 1-on-1 time, and it's how new high-value private training relationships start.",
+      },
+    ],
+  },
+  branded: {
+    eyebrow: "Truly Yours",
+    headline: "App branded for your gym.",
+    body: "The app ships with your logo, colors, and gym name baked in. When members open it, they see your brand. This keeps members at your gym for longer.",
+    // Real 3D-rendered phone PNG/WebP. Drop your asset at this path and it
+    // appears immediately. Recommended: a transparent-background render at
+    // 2x resolution (e.g. 1200×1800px) so it stays crisp on retina displays.
+    phoneImg: "assets/mockups/3d_branded.png",
+    phoneAlt: "Gym-branded mobile app rendered in 3D",
+  },
+  whyItMatters: {
+    headline: "Why it matters",
+    stats: [
+      { suffix: "×", text: "cheaper to keep a member than acquire a new one." },
+      {
+        prefix: "$",
+        suffix: "k",
+        text: "more a year from keeping 5% more members in a 100-member gym.",
+      },
+    ],
+  },
+  faq: {
+    eyebrow: "FAQ",
+    headline: "Questions, answered.",
+    items: [
+      {
+        q: "Do I need to migrate data?",
+        a: "No payment information migration is needed. All we need is member names, emails, rank (optional), and your class schedule. Everything else stays where it is. We work alongside your current gym management software / payment processor.",
+      },
+      {
+        q: "Can I customize the content?",
+        a: "Yes — add YouTube videos of your own, and yours will be prioritized.",
+      },
+      {
+        q: "Is a loyalty program actually worth it?",
+        a: "Yes. The math: a retained member is $150+/mo. A $20 branded T-shirt that keeps them for one extra month is 7× ROI. That's before you factor in word-of-mouth and friend passes.",
+      },
+    ],
+  },
+  footer: {
+    headlineLine1: "See it live.",
+    headlineLine2: "Book a 15-min demo.",
+    tagline:
+      "Works alongside your current software — no card migration required.",
+    placeholders: { name: "Your name", email: "Email", gym: "Gym name" },
+    btnIdle: "Book a demo →",
+    btnSubmitting: "Sending…",
+    btnSubmitted: "✓ Thanks — Calendly opened in a new tab",
+    errorMessage:
+      "Couldn't record your details — but Calendly opened anyway. Feel free to book.",
+  },
+  glyphs: { arrow: "→", plus: "+" },
 };
 
 // Shared typographic scale
@@ -55,7 +213,7 @@ const SIZES = {
     navLogoH: 40,
     navBtnPad: "12px 22px",
     navShowLinks: true,
-    navBookLabel: "Book a demo →",
+    navBookKey: "bookDemoLong",
     // Hero
     heroMinH: 820,
     heroPad: "160px 64px 200px",
@@ -71,27 +229,6 @@ const SIZES = {
     heroCtaDir: "row",
     heroCtaPad: "18px 32px",
     heroCtaFont: 15,
-    // Problem
-    problemPad: "280px 64px",
-    problemMaxW: 1200,
-    problemEyebrow: 18,
-    problemEyebrowMB: 32,
-    problemNumGap: 40,
-    problemNum: 280,
-    problemH2: 48,
-    problemH2MaxW: 720,
-    problemSourceMT: 56,
-    problemAlign: "center",
-    problemInnerDir: "column",
-    problemInnerAlign: "center",
-    problemInnerJustify: "center",
-    // Solution
-    solutionPad: "140px 64px",
-    solutionMaxW: 1100,
-    solutionEyebrow: 18,
-    solutionEyebrowMB: 32,
-    solutionH2: 88,
-    solutionH2MaxW: 1000,
     // HowItWorks
     howPad: "120px 64px 180px",
     howMaxW: 1280,
@@ -112,7 +249,11 @@ const SIZES = {
     howSticky: true,
     howTitlePad: "48px 0 32px",
     howAlign: "left",
-    loopPinned: true,
+    loopPinned: false,
+    loopAutoplay: true,
+    loopAutoplayPeriodMs: 11000,
+    loopAutoplayHoldMs: 1500,
+    loopFocusBump: 0.15,
     loopItemGap: 40,
     loopDiscrete: false,
     footerAlign: "left",
@@ -131,18 +272,51 @@ const SIZES = {
     loopPtsLabelFont: 12,
     loopLabelMT: 36,
     loopEyebrowMB: 16,
-    loopTitleMB: 40,
+    loopTitleMB: 24,
+    loopBlurb: 20,
+    loopBlurbMaxW: 720,
+    loopBlurbMB: 40,
     loopDisclaimerMB: 56,
     loopPinVhPerStep: 100,
     loopDir: "row",
-    // DualBenefit
-    rewardsPad: "160px 64px",
-    rewardsMaxW: 1280,
-    rewardsEyebrow: 18,
-    rewardsEyebrowMB: 24,
-    rewardsH2: 48,
-    rewardsH2MB: 140,
-    rewardsH2MaxW: 900,
+    // Reward carousel
+    rewardSectionMT: 96,
+    rewardSectionTitleSize: 36,
+    rewardEyebrowMB: 36,
+    rewardCardW: 400,
+    rewardCardGap: 32,
+    rewardImgR: 24,
+    rewardCardPad: 28,
+    rewardNameSize: 22,
+    rewardCostSize: 36,
+    rewardCostLabelSize: 12,
+    rewardClassesSize: 13,
+    rewardSideOffset: 0.62,
+    rewardSideScale: 0.86,
+    rewardSideOpacity: 0.32,
+    rewardBenefitLabelSize: 22,
+    rewardBenefitSize: 17,
+    rewardBenefitMaxW: 640,
+    rewardBenefitMT: 56,
+    rewardBenefitLabelMB: 12,
+    rewardNavBtn: 48,
+    rewardNavGlyph: 22,
+    rewardNavOffset: 24,
+    // Branded section
+    brandedPad: "160px 64px",
+    brandedMaxW: 1280,
+    brandedGrid: "1fr 1fr",
+    brandedGap: 96,
+    brandedTextOrder: 1,
+    brandedPhoneOrder: 2,
+    brandedEyebrow: 18,
+    brandedEyebrowMB: 24,
+    brandedH2: 56,
+    brandedH2MaxW: 520,
+    brandedH2MB: 28,
+    brandedBody: 18,
+    brandedBodyMaxW: 480,
+    brandedPhoneW: 520,
     // WhyItMatters
     whyPad: "120px 64px",
     whyMaxW: 1280,
@@ -200,7 +374,7 @@ const SIZES = {
     navLogoH: 36,
     navBtnPad: "10px 18px",
     navShowLinks: true,
-    navBookLabel: "Book a demo →",
+    navBookKey: "bookDemoLong",
 
     heroMinH: 720,
     heroPad: "120px 40px 140px",
@@ -216,27 +390,6 @@ const SIZES = {
     heroCtaDir: "row",
     heroCtaPad: "16px 28px",
     heroCtaFont: 15,
-
-    problemPad: "180px 40px",
-    problemMaxW: 1200,
-    problemEyebrow: 16,
-    problemEyebrowMB: 24,
-    problemNumGap: 28,
-    problemNum: 180,
-    problemH2: 40,
-    problemH2MaxW: 640,
-    problemSourceMT: 40,
-    problemAlign: "center",
-    problemInnerDir: "column",
-    problemInnerAlign: "center",
-    problemInnerJustify: "center",
-
-    solutionPad: "100px 40px",
-    solutionMaxW: 1100,
-    solutionEyebrow: 16,
-    solutionEyebrowMB: 24,
-    solutionH2: 64,
-    solutionH2MaxW: 820,
 
     howPad: "96px 40px 140px",
     howMaxW: 1280,
@@ -276,18 +429,50 @@ const SIZES = {
     loopPtsLabelFont: 11,
     loopLabelMT: 24,
     loopEyebrowMB: 14,
-    loopTitleMB: 32,
+    loopTitleMB: 20,
+    loopBlurb: 17,
+    loopBlurbMaxW: 600,
+    loopBlurbMB: 32,
     loopDisclaimerMB: 40,
     loopPinVhPerStep: 100,
     loopDir: "column",
+    rewardSectionMT: 72,
+    rewardSectionTitleSize: 28,
+    rewardEyebrowMB: 28,
+    rewardCardW: 300,
+    rewardCardGap: 24,
+    rewardImgR: 22,
+    rewardCardPad: 24,
+    rewardNameSize: 20,
+    rewardCostSize: 32,
+    rewardCostLabelSize: 12,
+    rewardClassesSize: 13,
+    rewardSideOffset: 0.6,
+    rewardSideScale: 0.85,
+    rewardSideOpacity: 0.32,
+    rewardBenefitLabelSize: 18,
+    rewardBenefitSize: 15,
+    rewardBenefitMaxW: 540,
+    rewardBenefitMT: 44,
+    rewardBenefitLabelMB: 10,
+    rewardNavBtn: 42,
+    rewardNavGlyph: 20,
+    rewardNavOffset: 16,
 
-    rewardsPad: "120px 40px",
-    rewardsMaxW: 1280,
-    rewardsEyebrow: 16,
-    rewardsEyebrowMB: 20,
-    rewardsH2: 48,
-    rewardsH2MB: 80,
-    rewardsH2MaxW: 720,
+    brandedPad: "120px 40px",
+    brandedMaxW: 1280,
+    brandedGrid: "1fr 1fr",
+    brandedGap: 56,
+    brandedTextOrder: 1,
+    brandedPhoneOrder: 2,
+    brandedEyebrow: 16,
+    brandedEyebrowMB: 20,
+    brandedH2: 44,
+    brandedH2MaxW: 420,
+    brandedH2MB: 22,
+    brandedBody: 17,
+    brandedBodyMaxW: 420,
+    brandedPhoneW: 380,
 
     whyPad: "96px 40px",
     whyMaxW: 1280,
@@ -345,7 +530,7 @@ const SIZES = {
     navLogoH: 32,
     navBtnPad: "10px 16px",
     navShowLinks: false,
-    navBookLabel: "Book demo",
+    navBookKey: "bookDemoShort",
 
     heroMinH: 640,
     heroPad: "80px 20px 96px",
@@ -361,27 +546,6 @@ const SIZES = {
     heroCtaDir: "column",
     heroCtaPad: "16px 24px",
     heroCtaFont: 15,
-
-    problemPad: "120px 20px",
-    problemMaxW: "100%",
-    problemEyebrow: 14,
-    problemEyebrowMB: 20,
-    problemNumGap: 16,
-    problemNum: 104,
-    problemH2: 28,
-    problemH2MaxW: "100%",
-    problemSourceMT: 32,
-    problemAlign: "center",
-    problemInnerDir: "column",
-    problemInnerAlign: "center",
-    problemInnerJustify: "center",
-
-    solutionPad: "72px 20px",
-    solutionMaxW: "100%",
-    solutionEyebrow: 14,
-    solutionEyebrowMB: 20,
-    solutionH2: 36,
-    solutionH2MaxW: "100%",
 
     howPad: "64px 20px 96px",
     howMaxW: "100%",
@@ -421,18 +585,51 @@ const SIZES = {
     loopPtsLabelFont: 11,
     loopLabelMT: 16,
     loopEyebrowMB: 12,
-    loopTitleMB: 24,
+    loopTitleMB: 16,
+    loopBlurb: 15,
+    loopBlurbMaxW: "100%",
+    loopBlurbMB: 24,
     loopDisclaimerMB: 32,
     loopPinVhPerStep: 80,
     loopDir: "column",
+    rewardSectionMT: 56,
+    rewardSectionTitleSize: 22,
+    rewardEyebrowMB: 22,
+    rewardCardW: 200,
+    rewardCardGap: 14,
+    rewardImgR: 16,
+    rewardCardPad: 16,
+    rewardNameSize: 16,
+    rewardCostSize: 24,
+    rewardCostLabelSize: 10,
+    rewardClassesSize: 11,
+    rewardSideOffset: 0.55,
+    rewardSideScale: 0.8,
+    rewardSideOpacity: 0.28,
+    rewardBenefitLabelSize: 15,
+    rewardBenefitSize: 14,
+    rewardBenefitMaxW: "100%",
+    rewardBenefitMT: 32,
+    rewardBenefitLabelMB: 8,
+    rewardNavBtn: 36,
+    rewardNavGlyph: 18,
+    rewardNavOffset: 8,
 
-    rewardsPad: "80px 20px",
-    rewardsMaxW: "100%",
-    rewardsEyebrow: 14,
-    rewardsEyebrowMB: 16,
-    rewardsH2: 32,
-    rewardsH2MB: 48,
-    rewardsH2MaxW: "100%",
+    brandedPad: "80px 20px",
+    brandedMaxW: "100%",
+    brandedGrid: "1fr",
+    brandedGap: 40,
+    // Phone first on mobile so the visual sets the tone before the body copy.
+    brandedTextOrder: 2,
+    brandedPhoneOrder: 1,
+    brandedEyebrow: 14,
+    brandedEyebrowMB: 16,
+    brandedH2: 32,
+    brandedH2MaxW: "100%",
+    brandedH2MB: 18,
+    brandedBody: 16,
+    brandedBodyMaxW: "100%",
+    brandedPhoneW: 320,
 
     whyPad: "72px 20px",
     whyMaxW: "100%",
@@ -503,139 +700,288 @@ function useRaf(cb) {
 
 // ---------- Shared Nav ----------
 function Nav() {
-  const S = SIZES[useBreakpoint()];
+  const bp = useBreakpoint();
+  const S = SIZES[bp];
+  const isPhone = bp === "phone";
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!isPhone && menuOpen) setMenuOpen(false);
+  }, [isPhone, menuOpen]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [menuOpen]);
+  const closeMenu = () => setMenuOpen(false);
+  const linkStyle = {
+    color: "inherit",
+    textDecoration: "none",
+    cursor: "pointer",
+  };
+  const renderWhyClick = (e) => {
+    const el = document.getElementById("why");
+    if (!el) return;
+    e.preventDefault();
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    closeMenu();
+  };
+  const links = (
+    <>
+      <a href="#how-it-works" style={linkStyle} onClick={closeMenu}>
+        {COPY.nav.links.howItWorks}
+      </a>
+      <a href="#why" onClick={renderWhyClick} style={linkStyle}>
+        {COPY.nav.links.whyItMatters}
+      </a>
+      <a href="pricing.html" style={linkStyle} onClick={closeMenu}>
+        {COPY.nav.links.pricing}
+      </a>
+      <a href="#faq" style={linkStyle} onClick={closeMenu}>
+        {COPY.nav.links.faq}
+      </a>
+    </>
+  );
   return (
-    <div
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-        height: S.navHeight,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: `0 ${S.navPadX}px`,
-        background: "rgba(18,22,25,0.82)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        borderBottom: `1px solid ${C.divider}`,
-      }}
-    >
+    <>
       <div
-        style={{ display: "flex", alignItems: "center", gap: S.navGapOuter }}
-      >
-        <a
-          href="#top"
-          aria-label="CombatDen home"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            lineHeight: 0,
-          }}
-        >
-          <img
-            src="assets/images/LogoTransparent.png"
-            alt="CombatDen"
-            style={{ height: S.navLogoH, width: "auto", display: "block" }}
-          />
-        </a>
-        {S.navShowLinks && (
-          <div
-            style={{
-              display: "flex",
-              gap: S.navGapInner,
-              fontFamily: "Inter, sans-serif",
-              fontSize: 14,
-              color: "rgba(244,243,238,0.7)",
-            }}
-          >
-            <a
-              href="#how-it-works"
-              style={{
-                color: "inherit",
-                textDecoration: "none",
-                cursor: "pointer",
-              }}
-            >
-              How it works
-            </a>
-            <a
-              href="#why"
-              onClick={(e) => {
-                const el = document.getElementById("why");
-                if (!el) return;
-                e.preventDefault();
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
-              }}
-              style={{
-                color: "inherit",
-                textDecoration: "none",
-                cursor: "pointer",
-              }}
-            >
-              Why it matters
-            </a>
-            <a
-              href="pricing.html"
-              style={{
-                color: "inherit",
-                textDecoration: "none",
-                cursor: "pointer",
-              }}
-            >
-              Pricing
-            </a>
-            <a
-              href="#faq"
-              style={{
-                color: "inherit",
-                textDecoration: "none",
-                cursor: "pointer",
-              }}
-            >
-              FAQ
-            </a>
-          </div>
-        )}
-      </div>
-      <a
-        href="#book"
         style={{
-          background: C.orange,
-          color: C.bone,
-          border: "none",
-          padding: S.navBtnPad,
-          borderRadius: 999,
-          fontFamily: "Inter, sans-serif",
-          fontWeight: 600,
-          fontSize: 13,
-          cursor: "pointer",
-          letterSpacing: "0.01em",
-          textDecoration: "none",
-          display: "inline-block",
-          whiteSpace: "nowrap",
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          height: S.navHeight,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: `0 ${S.navPadX}px`,
+          background: "rgba(18,22,25,0.82)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: `1px solid ${C.divider}`,
         }}
       >
-        {S.navBookLabel}
-      </a>
-    </div>
+        <div
+          style={{ display: "flex", alignItems: "center", gap: S.navGapOuter }}
+        >
+          <a
+            href="#top"
+            aria-label={COPY.brand.homeAria}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              lineHeight: 0,
+            }}
+          >
+            <img
+              src="assets/images/LogoTransparent.png"
+              alt={COPY.brand.name}
+              style={{ height: S.navLogoH, width: "auto", display: "block" }}
+            />
+          </a>
+          {S.navShowLinks && (
+            <div
+              style={{
+                display: "flex",
+                gap: S.navGapInner,
+                fontFamily: "Inter, sans-serif",
+                fontSize: 14,
+                color: "rgba(244,243,238,0.7)",
+              }}
+            >
+              {links}
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <a
+            href="#book"
+            onClick={closeMenu}
+            style={{
+              background: C.orange,
+              color: C.bone,
+              border: "none",
+              padding: S.navBtnPad,
+              borderRadius: 999,
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              letterSpacing: "0.01em",
+              textDecoration: "none",
+              display: "inline-block",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {COPY.nav[S.navBookKey]}
+          </a>
+          {isPhone && (
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={
+                menuOpen ? COPY.nav.menuCloseAria : COPY.nav.menuOpenAria
+              }
+              aria-expanded={menuOpen}
+              style={{
+                width: 40,
+                height: 40,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                border: `1px solid ${C.divider}`,
+                borderRadius: 10,
+                color: C.bone,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              {menuOpen ? (
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+                  <path
+                    d="M5 5l10 10M15 5L5 15"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+                  <path
+                    d="M3 6h14M3 10h14M3 14h14"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+      {/* Mobile menu — full-width dropdown panel beneath the nav. */}
+      {isPhone && menuOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: S.navHeight,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 49,
+            background: "rgba(18,22,25,0.96)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            display: "flex",
+            flexDirection: "column",
+            padding: "24px 20px",
+            gap: 20,
+            fontFamily: "Inter, sans-serif",
+            fontSize: 22,
+            color: "rgba(244,243,238,0.85)",
+          }}
+        >
+          {links}
+        </div>
+      )}
+    </>
   );
 }
 
-// ---------- Hero (Glow A — bottom gradient pulsating bigger/smaller, always large) ----------
+// ---------- Hero background: Orbital Arcs ----------
+// Concentric rotating arc segments + a soft orange central glow. Each arc has
+// its own radius, span, rotation speed, starting offset, line width, and
+// opacity — together they read as a slow, layered orbit.
+const ORBITAL_ARCS = [
+  { rRel: 0.18, span: 1.2, speed: 0.10, off: 0, width: 1.5, alpha: 0.55 },
+  { rRel: 0.28, span: 0.8, speed: -0.08, off: 1.2, width: 1, alpha: 0.4 },
+  { rRel: 0.38, span: 1.6, speed: 0.06, off: 2.4, width: 1, alpha: 0.35 },
+  { rRel: 0.50, span: 0.6, speed: -0.05, off: 0.8, width: 1, alpha: 0.3 },
+  { rRel: 0.64, span: 1.0, speed: 0.04, off: 3.1, width: 1, alpha: 0.22 },
+  { rRel: 0.80, span: 0.5, speed: -0.03, off: 1.9, width: 1, alpha: 0.18 },
+];
+
+function HeroOrbitalArcs() {
+  const canvasRef = useRef(null);
+  const sizeRef = useRef({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    function resize() {
+      const parent = canvas.parentElement;
+      const w = parent.clientWidth;
+      const h = parent.clientHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      sizeRef.current = { w, h };
+    }
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  useRaf((t) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const { w, h } = sizeRef.current;
+    if (!w || !h) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, w, h);
+    const cx = w / 2;
+    const cy = h / 2 + h * 0.06;
+    // Radius scales with the longer viewport dim so arcs fill the space.
+    const base = Math.max(w, h);
+
+    for (const a of ORBITAL_ARCS) {
+      const r = base * a.rRel;
+      const start = a.off + t * a.speed * Math.PI * 2;
+      const end = start + a.span;
+      // Hard line.
+      ctx.strokeStyle = `rgba(255,108,45,${a.alpha})`;
+      ctx.lineWidth = a.width;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, start, end);
+      ctx.stroke();
+      // Soft halo behind the line for the orange-glow feel.
+      ctx.strokeStyle = `rgba(255,108,45,${a.alpha * 0.2})`;
+      ctx.lineWidth = a.width * 8;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, start, end);
+      ctx.stroke();
+    }
+    // Central radial glow.
+    const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, base * 0.18);
+    grd.addColorStop(0, "rgba(255,108,45,0.25)");
+    grd.addColorStop(1, "rgba(255,108,45,0)");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, w, h);
+  });
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
+// ---------- Hero (Orbital Arcs background) ----------
 function Hero() {
   const S = SIZES[useBreakpoint()];
-  const ref = useRef(null);
-  useRaf((t) => {
-    const el = ref.current;
-    if (!el) return;
-    // stays large; scale floats 1.1 → ~1.26; opacity 0.55 → 0.95
-    const base =
-      0.72 + 0.18 * Math.sin(t * 0.55) + 0.08 * Math.sin(t * 1.7 + 0.8);
-    const scale = 1.1 + 0.12 * Math.sin(t * 0.55) + 0.04 * Math.sin(t * 2.3);
-    el.style.opacity = String(Math.max(0.55, Math.min(0.95, base)));
-    el.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
-  });
   return (
     <section
       style={{
@@ -651,23 +997,8 @@ function Hero() {
         background: C.ink,
       }}
     >
-      {/* Pulsing bottom glow */}
-      <div
-        ref={ref}
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          width: S.heroGlowW,
-          height: S.heroGlowH,
-          transform: "translate(-50%, -50%) scale(1.1)",
-          transformOrigin: "50% 50%",
-          background: `radial-gradient(ellipse 50% 50% at 50% 50%, rgba(255,108,45,0.55) 0%, rgba(255,108,45,0.18) 40%, transparent 70%)`,
-          filter: "blur(10px)",
-          willChange: "transform, opacity",
-          pointerEvents: "none",
-        }}
-      />
+      {/* Orbital arcs canvas — concentric rotating arc segments. */}
+      <HeroOrbitalArcs />
       {/* Content */}
       <div style={{ position: "relative", zIndex: 2 }}>
         <div
@@ -680,7 +1011,7 @@ function Hero() {
             textTransform: "uppercase",
           }}
         >
-          For combat sports gyms
+          {COPY.hero.eyebrow}
         </div>
         <h1
           style={{
@@ -695,7 +1026,7 @@ function Hero() {
             textWrap: "balance",
           }}
         >
-          A member app that stops fighters from quitting.
+          {COPY.hero.headline}
         </h1>
         <p
           style={{
@@ -707,7 +1038,7 @@ function Hero() {
             margin: "36px auto 0",
           }}
         >
-          Works alongside your current software — no card migration required.
+          {COPY.hero.tagline}
         </p>
         <div
           style={{
@@ -735,307 +1066,10 @@ function Hero() {
               display: "inline-block",
             }}
           >
-            Book a 15-minute demo
+            {COPY.hero.cta}
           </a>
         </div>
       </div>
-    </section>
-  );
-}
-
-// ---------- 02 · Problem (dark, giant stat) ----------
-// Slide-in mirrors ResultBlock: the section is 150vh so there is scroll room
-// for a bottom-to-centre animation. Content is absolutely positioned with its
-// natural centre anchored at (50%, 100vh) within the section — so when the
-// section's bottom touches the viewport bottom (rect.top = -50vh, progress
-// = 1) the natural viewport centre is already at 50vh (screen centre) with
-// zero transform. Before that point slideY lifts the block up from offscreen.
-function Problem() {
-  const S = SIZES[useBreakpoint()];
-  const sectionRef = useRef(null);
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    function onScroll() {
-      const el = sectionRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-      const start = vh;
-      const end = vh - rect.height;
-      const raw = (start - rect.top) / (start - end);
-      setProgress(Math.max(0, Math.min(1, raw)));
-    }
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, []);
-
-  const eased = progress * progress * (3 - 2 * progress);
-  const countEased = 1 - Math.pow(1 - progress, 3);
-  const count = Math.round(50 * countEased);
-  const slideY = (1 - eased) * -100; // vh — lifts from the viewport bottom up to centre
-  const wrapperOpacity = Math.min(1, 0.1 + eased * 1.1);
-  const textReveal = Math.max(0, (eased - 0.55) / 0.45);
-  const textShift = (1 - textReveal) * 16;
-
-  return (
-    <section
-      ref={sectionRef}
-      style={{
-        background: C.ink,
-        color: C.bone,
-        borderTop: `1px solid ${C.divider}`,
-        minHeight: "150vh",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: "100vh",
-          left: "50%",
-          width: "100%",
-          maxWidth: S.problemMaxW,
-          textAlign: S.problemAlign,
-          padding: S.problemPad,
-          boxSizing: "border-box",
-          transform: `translate(-50%, -50%) translate3d(0, ${slideY.toFixed(2)}vh, 0)`,
-          transformOrigin: "center center",
-          opacity: wrapperOpacity,
-          willChange: "transform, opacity",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontSize: S.problemEyebrow,
-            fontWeight: 700,
-            letterSpacing: "0.22em",
-            color: C.orange,
-            textTransform: "uppercase",
-            marginBottom: S.problemEyebrowMB,
-          }}
-        >
-          The problem
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: S.problemInnerDir,
-            alignItems: S.problemInnerAlign,
-            justifyContent: S.problemInnerJustify,
-            gap: S.problemNumGap,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "'Jura', sans-serif",
-              fontWeight: 700,
-              fontSize: S.problemNum,
-              lineHeight: 0.85,
-              letterSpacing: "-0.04em",
-              color: C.bone,
-              display: "inline-block",
-            }}
-          >
-            {count}%
-          </span>
-          <h2
-            style={{
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 600,
-              fontSize: S.problemH2,
-              lineHeight: 1.05,
-              letterSpacing: "-0.02em",
-              maxWidth: S.problemH2MaxW,
-              margin: 0,
-              color: C.bone,
-              opacity: textReveal,
-              transform: `translateY(${textShift.toFixed(2)}px)`,
-              willChange: "transform, opacity",
-            }}
-          >
-            of new members quit within 6 months.
-          </h2>
-        </div>
-        <div
-          style={{
-            marginTop: S.problemSourceMT,
-            fontFamily: "Inter, sans-serif",
-            fontSize: 14,
-            color: C.fg3,
-            letterSpacing: "0.04em",
-            opacity: textReveal * 0.9,
-          }}
-        >
-          Source: IHRSA gym retention research
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ---------- 03 · Solution (paper, sentence completes on scroll) ----------
-function Solution() {
-  const S = SIZES[useBreakpoint()];
-  const sectionRef = useRef(null);
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    function onScroll() {
-      const el = sectionRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-      // Drive progress off the section's center (where the content sits, since it's flex-centered).
-      const center = rect.top + rect.height / 2;
-      const start = vh * 1; // content center near bottom of viewport → 0
-      const end = vh * 0.6; // content center just past middle → 1
-      const raw = (start - center) / (start - end);
-      setProgress(Math.max(0, Math.min(1, raw)));
-    }
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, []);
-
-  const head = "Keeps your members engaged ";
-  const tail = "between classes.";
-  const eased = 1 - Math.pow(1 - progress, 3);
-  const totalChars = head.length + tail.length;
-  const charsShown = Math.round(totalChars * eased);
-
-  // Blinking caret (inline, zero-width so layout never shifts).
-  const Caret = () => (
-    <span
-      style={{
-        display: "inline-block",
-        width: 0,
-        position: "relative",
-        verticalAlign: "baseline",
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          left: 0,
-          bottom: "-0.02em",
-          width: "0.06em",
-          height: "0.72em",
-          background: C.orange,
-          animation: "solution-caret 0.9s steps(2) infinite",
-        }}
-      />
-    </span>
-  );
-
-  // Render text grouped by word (wrap-safe — words never split) with per-char
-  // opacity and the caret inserted at the current typing position.
-  const renderText = (text, offset, color) => {
-    const tokens = text.split(/(\s+)/); // keep spaces as separate tokens
-    let idx = offset;
-    return tokens.map((tok, ti) => {
-      if (tok.length === 0) return null;
-      const tokStart = idx;
-      idx += tok.length;
-      if (/^\s+$/.test(tok)) {
-        // Breakable whitespace between words. Caret can sit at this boundary.
-        return (
-          <React.Fragment key={`s${ti}`}>
-            {tokStart === charsShown && <Caret />}
-            <span style={{ opacity: tokStart < charsShown ? 1 : 0, color }}>
-              {tok}
-            </span>
-          </React.Fragment>
-        );
-      }
-      // Word: wrap in nowrap inline-block so it never splits; caret can sit between chars.
-      return (
-        <span
-          key={`w${ti}`}
-          style={{ display: "inline-block", whiteSpace: "nowrap", color }}
-        >
-          {Array.from(tok).map((ch, i) => {
-            const cIdx = tokStart + i;
-            return (
-              <React.Fragment key={cIdx}>
-                {cIdx === charsShown && <Caret />}
-                <span
-                  style={{
-                    opacity: cIdx < charsShown ? 1 : 0,
-                    transition: "opacity 80ms linear",
-                  }}
-                >
-                  {ch}
-                </span>
-              </React.Fragment>
-            );
-          })}
-        </span>
-      );
-    });
-  };
-
-  return (
-    <section
-      ref={sectionRef}
-      style={{
-        background: C.paper,
-        color: C.paperInk,
-        padding: S.solutionPad,
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-      }}
-    >
-      <div style={{ maxWidth: S.solutionMaxW, margin: "0 auto" }}>
-        <div
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontSize: S.solutionEyebrow,
-            fontWeight: 700,
-            letterSpacing: "0.22em",
-            color: C.orange,
-            textTransform: "uppercase",
-            marginBottom: S.solutionEyebrowMB,
-          }}
-        >
-          Our solution
-        </div>
-        <h2
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 600,
-            fontSize: S.solutionH2,
-            lineHeight: 0.98,
-            letterSpacing: "-0.035em",
-            margin: 0,
-            maxWidth: S.solutionH2MaxW,
-            textWrap: "balance",
-          }}
-        >
-          {renderText(head, 0, "inherit")}
-          {renderText(tail, head.length, C.orange)}
-          {charsShown >= totalChars && <Caret />}
-        </h2>
-      </div>
-      <style>{`
-        @keyframes solution-caret { 50% { opacity: 0; } }
-      `}</style>
     </section>
   );
 }
@@ -1046,7 +1080,6 @@ function Solution() {
 const PHONE_IMAGES = {
   class: "assets/mockups/Class Screen.png",
   book: "assets/mockups/BeforeClass.png",
-  after: "assets/mockups/AfterClass.png",
   between: "assets/mockups/BetweenClass.png",
 };
 
@@ -1164,7 +1197,7 @@ function PhoneMock({
         />
         {children ? (
           children
-        ) : imgSrc ? (
+        ) : (
           <img
             src={imgSrc}
             alt=""
@@ -1176,813 +1209,33 @@ function PhoneMock({
               display: "block",
             }}
           />
-        ) : (
-          <>
-            <div
-              style={{
-                height: 44,
-                padding: "0 24px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                fontFamily: "Inter, sans-serif",
-                fontSize: 14,
-                fontWeight: 600,
-                color: C.bone,
-              }}
-            >
-              <span>9:41</span>
-              <span style={{ fontSize: 12 }}>●●● ▸</span>
-            </div>
-            <PhoneScreen variant={variant} />
-          </>
         )}
       </div>
     </div>
   );
 }
 
-function PhoneScreen({ variant }) {
-  if (variant === "book") {
-    return (
-      <div style={{ padding: "12px 20px 20px", color: C.bone }}>
-        <div
-          style={{
-            fontFamily: "'Jura', sans-serif",
-            fontSize: 11,
-            letterSpacing: "0.2em",
-            color: C.fg3,
-            textTransform: "uppercase",
-          }}
-        >
-          Tonight · 7:00 PM
-        </div>
-        <h3
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 700,
-            fontSize: 26,
-            margin: "8px 0 4px",
-            letterSpacing: "-0.015em",
-          }}
-        >
-          Muay Thai
-        </h3>
-        <div style={{ fontSize: 13, color: C.fg2 }}>
-          Coach Ramon · 21 students
-        </div>
-        <button
-          style={{
-            marginTop: 18,
-            width: "100%",
-            padding: "14px",
-            background: C.orange,
-            color: C.bone,
-            border: "none",
-            borderRadius: 14,
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 700,
-            fontSize: 14,
-            letterSpacing: "0.01em",
-          }}
-        >
-          Book class
-        </button>
-
-        <div
-          style={{
-            marginTop: 24,
-            padding: 16,
-            background: "rgba(255,108,45,0.12)",
-            border: `1px solid ${C.orange}`,
-            borderRadius: 14,
-          }}
-        >
-          <div
-            style={{
-              fontFamily: "'Jura', sans-serif",
-              fontSize: 10,
-              letterSpacing: "0.18em",
-              color: C.orange,
-              textTransform: "uppercase",
-              fontWeight: 700,
-            }}
-          >
-            Recommended for you
-          </div>
-          <div
-            style={{
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 600,
-              fontSize: 15,
-              marginTop: 6,
-              lineHeight: 1.25,
-            }}
-          >
-            Teep kick fundamentals
-          </div>
-          <div style={{ fontSize: 12, color: C.fg2, marginTop: 4 }}>
-            3 min technique video · warm up for tonight
-          </div>
-          <div
-            style={{
-              marginTop: 12,
-              aspectRatio: "16/9",
-              borderRadius: 8,
-              background:
-                "linear-gradient(135deg, rgba(255,108,45,0.45), rgba(255,108,45,0.12))",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 22,
-              color: C.bone,
-            }}
-          >
-            ▶
-          </div>
-        </div>
-
-        <div style={{ marginTop: 18 }}>
-          <div
-            style={{
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 600,
-              fontSize: 12,
-              color: C.fg3,
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-            }}
-          >
-            This week
-          </div>
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
-            {[
-              ["Mon", "BJJ Fundamentals", "6:30p"],
-              ["Wed", "Muay Thai", "7:00p"],
-              ["Fri", "Open mat", "5:00p"],
-            ].map(([d, n, t], i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "10px 12px",
-                  background: "rgba(244,243,238,0.06)",
-                  borderRadius: 10,
-                  fontSize: 13,
-                }}
-              >
-                <span style={{ color: C.fg2, width: 36 }}>{d}</span>
-                <span style={{ flex: 1, color: C.bone }}>{n}</span>
-                <span style={{ color: C.fg3 }}>{t}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (variant === "after") {
-    return (
-      <div style={{ padding: "12px 20px 20px", color: C.bone }}>
-        <div
-          style={{
-            fontFamily: "'Jura', sans-serif",
-            fontSize: 11,
-            letterSpacing: "0.2em",
-            color: C.fg3,
-            textTransform: "uppercase",
-          }}
-        >
-          Class finished · 8:02 PM
-        </div>
-        <h3
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 700,
-            fontSize: 22,
-            margin: "8px 0 14px",
-            letterSpacing: "-0.01em",
-          }}
-        >
-          Muay Thai · Coach Ramon
-        </h3>
-
-        <div
-          style={{
-            padding: 16,
-            background: "rgba(244,243,238,0.06)",
-            borderRadius: 14,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: C.orange,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 14,
-              }}
-            >
-              🎙
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>
-                Coach feedback
-              </div>
-              <div style={{ fontSize: 11, color: C.fg3 }}>
-                Voice note · 0:34
-              </div>
-            </div>
-          </div>
-          {/* Waveform */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-              height: 32,
-              marginTop: 14,
-            }}
-          >
-            {Array.from({ length: 42 }).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  height: `${20 + Math.sin(i * 0.7) * 14 + Math.cos(i * 0.3) * 6}%`,
-                  background: i < 18 ? C.orange : "rgba(244,243,238,0.3)",
-                  borderRadius: 2,
-                  minHeight: 3,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 18,
-            padding: 16,
-            background: "rgba(255,108,45,0.1)",
-            border: `1px solid rgba(255,108,45,0.35)`,
-            borderRadius: 14,
-          }}
-        >
-          <div
-            style={{
-              fontFamily: "'Jura', sans-serif",
-              fontSize: 10,
-              letterSpacing: "0.18em",
-              color: C.orange,
-              textTransform: "uppercase",
-              fontWeight: 700,
-            }}
-          >
-            Your next drill
-          </div>
-          <div
-            style={{
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 600,
-              fontSize: 15,
-              marginTop: 6,
-              lineHeight: 1.3,
-            }}
-          >
-            Keep your guard up when stepping out of the clinch
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: C.fg2,
-              marginTop: 6,
-              lineHeight: 1.4,
-            }}
-          >
-            Ramon flagged this in your voice note. We matched it to a 4-min
-            drill.
-          </div>
-          <button
-            style={{
-              marginTop: 12,
-              width: "100%",
-              padding: "10px",
-              background: C.orange,
-              color: C.bone,
-              border: "none",
-              borderRadius: 10,
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 600,
-              fontSize: 13,
-            }}
-          >
-            Watch 4-min drill
-          </button>
-        </div>
-
-        <div
-          style={{
-            marginTop: 16,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 8,
-          }}
-        >
-          <div
-            style={{
-              padding: 12,
-              background: "rgba(244,243,238,0.05)",
-              borderRadius: 10,
-            }}
-          >
-            <div
-              style={{
-                fontFamily: "'Jura', sans-serif",
-                fontSize: 20,
-                fontWeight: 700,
-              }}
-            >
-              +50
-            </div>
-            <div
-              style={{
-                fontSize: 10,
-                color: C.fg3,
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-              }}
-            >
-              Points earned
-            </div>
-          </div>
-          <div
-            style={{
-              padding: 12,
-              background: "rgba(244,243,238,0.05)",
-              borderRadius: 10,
-            }}
-          >
-            <div
-              style={{
-                fontFamily: "'Jura', sans-serif",
-                fontSize: 20,
-                fontWeight: 700,
-              }}
-            >
-              14
-            </div>
-            <div
-              style={{
-                fontSize: 10,
-                color: C.fg3,
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-              }}
-            >
-              Day streak
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (variant === "between") {
-    return (
-      <div style={{ padding: "12px 20px 20px", color: C.bone }}>
-        <div
-          style={{
-            fontFamily: "'Jura', sans-serif",
-            fontSize: 11,
-            letterSpacing: "0.2em",
-            color: C.fg3,
-            textTransform: "uppercase",
-          }}
-        >
-          Your progress
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "baseline",
-            gap: 8,
-            marginTop: 6,
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "'Jura', sans-serif",
-              fontWeight: 700,
-              fontSize: 54,
-              lineHeight: 1,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            47
-          </span>
-          <span style={{ fontSize: 13, color: C.fg2 }}>
-            classes this quarter
-          </span>
-        </div>
-
-        <div
-          style={{
-            marginTop: 20,
-            padding: 14,
-            background: "rgba(244,243,238,0.06)",
-            borderRadius: 14,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div
-              style={{
-                fontFamily: "'Jura', sans-serif",
-                fontSize: 11,
-                letterSpacing: "0.18em",
-                color: C.fg3,
-                textTransform: "uppercase",
-                fontWeight: 700,
-              }}
-            >
-              Blue belt · stripe 2
-            </div>
-            <div style={{ fontSize: 11, color: C.fg3 }}>63%</div>
-          </div>
-          <div
-            style={{
-              marginTop: 8,
-              height: 6,
-              borderRadius: 3,
-              background: "rgba(244,243,238,0.12)",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{ width: "63%", height: "100%", background: C.orange }}
-            />
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 18,
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 600,
-            fontSize: 12,
-            color: C.fg3,
-            textTransform: "uppercase",
-            letterSpacing: "0.12em",
-          }}
-        >
-          Matched to your rank
-        </div>
-        <div
-          style={{
-            marginTop: 10,
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          {[
-            ["Half-guard sweep chains", "Blue belt · 6 min", true],
-            ["Closed-guard breaks", "Blue belt · 4 min", false],
-            ["Leg drag passing", "Blue belt · 8 min", false],
-          ].map(([t, meta, featured], i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                padding: 10,
-                background: featured
-                  ? "rgba(255,108,45,0.12)"
-                  : "rgba(244,243,238,0.05)",
-                border: featured
-                  ? `1px solid rgba(255,108,45,0.35)`
-                  : "1px solid transparent",
-                borderRadius: 10,
-              }}
-            >
-              <div
-                style={{
-                  width: 56,
-                  aspectRatio: "4/3",
-                  borderRadius: 6,
-                  background: featured
-                    ? "linear-gradient(135deg, rgba(255,108,45,0.5), rgba(255,108,45,0.15))"
-                    : "rgba(244,243,238,0.1)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 14,
-                }}
-              >
-                ▶
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.2 }}>
-                  {t}
-                </div>
-                <div style={{ fontSize: 11, color: C.fg3, marginTop: 2 }}>
-                  {meta}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  if (variant === "beginner") {
-    return (
-      <div style={{ padding: "12px 20px 20px", color: C.bone }}>
-        <div
-          style={{
-            fontFamily: "'Jura', sans-serif",
-            fontSize: 11,
-            letterSpacing: "0.2em",
-            color: C.fg3,
-            textTransform: "uppercase",
-          }}
-        >
-          Welcome · first class
-        </div>
-        <h3
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 700,
-            fontSize: 22,
-            margin: "8px 0 14px",
-          }}
-        >
-          What to expect tonight
-        </h3>
-        <div
-          style={{
-            aspectRatio: "16/9",
-            borderRadius: 12,
-            background:
-              "linear-gradient(135deg, rgba(255,108,45,0.35), rgba(255,108,45,0.1))",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 28,
-          }}
-        >
-          ▶
-        </div>
-        <div
-          style={{
-            marginTop: 16,
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          {[
-            ["👕", "What to wear", "Shorts + t-shirt is fine"],
-            ["⏰", "Arrive 15 min early", "Coach will walk you through"],
-            ["🥋", "No belt yet", "That's totally okay"],
-          ].map(([ico, t, s], i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                gap: 12,
-                alignItems: "center",
-                padding: 12,
-                background: "rgba(244,243,238,0.05)",
-                borderRadius: 10,
-              }}
-            >
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 8,
-                  background: "rgba(255,108,45,0.18)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 16,
-                }}
-              >
-                {ico}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{t}</div>
-                <div style={{ fontSize: 11, color: C.fg3, marginTop: 2 }}>
-                  {s}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  // advanced
-  return (
-    <div style={{ padding: "12px 20px 20px", color: C.bone }}>
-      <div
-        style={{
-          fontFamily: "'Jura', sans-serif",
-          fontSize: 11,
-          letterSpacing: "0.2em",
-          color: C.fg3,
-          textTransform: "uppercase",
-        }}
-      >
-        Drill matched to you
-      </div>
-      <h3
-        style={{
-          fontFamily: "Inter, sans-serif",
-          fontWeight: 700,
-          fontSize: 20,
-          margin: "8px 0 4px",
-          lineHeight: 1.2,
-        }}
-      >
-        De la Riva → berimbolo entries
-      </h3>
-      <div style={{ fontSize: 12, color: C.fg2 }}>
-        Based on Ramon's feedback last Thursday
-      </div>
-
-      <div
-        style={{
-          marginTop: 14,
-          aspectRatio: "16/9",
-          borderRadius: 12,
-          background:
-            "linear-gradient(135deg, rgba(255,108,45,0.4), rgba(255,108,45,0.12))",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          position: "relative",
-        }}
-      >
-        <div style={{ fontSize: 28 }}>▶</div>
-        <div
-          style={{
-            position: "absolute",
-            bottom: 8,
-            right: 10,
-            fontFamily: "'Jura', sans-serif",
-            fontSize: 11,
-            color: C.bone,
-            fontWeight: 700,
-            letterSpacing: "0.05em",
-          }}
-        >
-          6:42
-        </div>
-      </div>
-
-      <div
-        style={{
-          marginTop: 16,
-          padding: 12,
-          background: "rgba(244,243,238,0.06)",
-          borderRadius: 10,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "'Jura', sans-serif",
-            fontSize: 10,
-            letterSpacing: "0.18em",
-            color: C.orange,
-            fontWeight: 700,
-            textTransform: "uppercase",
-          }}
-        >
-          Why this drill
-        </div>
-        <div
-          style={{ fontSize: 12, color: C.fg2, marginTop: 6, lineHeight: 1.4 }}
-        >
-          You've been stalling at DLR guard against stronger passers. This
-          addresses your weak off-hand grip.
-        </div>
-      </div>
-
-      <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
-        <div
-          style={{
-            flex: 1,
-            padding: 10,
-            background: "rgba(244,243,238,0.05)",
-            borderRadius: 10,
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: "'Jura', sans-serif",
-              fontSize: 18,
-              fontWeight: 700,
-            }}
-          >
-            142
-          </div>
-          <div
-            style={{
-              fontSize: 10,
-              color: C.fg3,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
-            Classes
-          </div>
-        </div>
-        <div
-          style={{
-            flex: 1,
-            padding: 10,
-            background: "rgba(244,243,238,0.05)",
-            borderRadius: 10,
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: "'Jura', sans-serif",
-              fontSize: 18,
-              fontWeight: 700,
-              color: C.orange,
-            }}
-          >
-            🟤
-          </div>
-          <div
-            style={{
-              fontSize: 10,
-              color: C.fg3,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
-            Brown · 2 stripes
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ---------- 04 · How It Works (sticky phone, text scrolls on the right) ----------
+// Visual config for each HowItWorks step. Copy lives in COPY.howItWorks.steps;
+// these arrays are zipped by index at render time.
+const HOW_STEP_VISUALS = [
+  {
+    variant: "book",
+    focus: 0,
+    images: [
+      { variant: "class", focus: 0 },
+      { variant: "book", focus: 0 },
+    ],
+  },
+  { variant: "between", focus: 0 },
+];
+
 function HowItWorks() {
   const S = SIZES[useBreakpoint()];
-  const steps = [
-    {
-      n: "01",
-      title: "Book a class.",
-      copy: "Engagement after booking with content based on the class and skill level.",
-      variant: "book",
-      focus: 0,
-      images: [
-        { variant: "class", focus: 0 },
-        { variant: "book", focus: 0 },
-      ],
-    },
-    {
-      n: "02",
-      title: "After class.",
-      copy: "Engagement after class with personalized coach feedback and content.",
-      disclaimer: "Takes 5 minutes to give feedback to a class.",
-      variant: "after",
-      focus: 0,
-    },
-    {
-      n: "03",
-      title: "Between classes.",
-      copy: "Every part of the app keeps members engaged.",
-      variant: "between",
-      focus: 0,
-    },
-  ];
+  const steps = COPY.howItWorks.steps.map((s, i) => ({
+    ...s,
+    ...HOW_STEP_VISUALS[i],
+  }));
 
   const [active, setActive] = useState(0);
   const titleRef = useRef(null);
@@ -2008,7 +1261,7 @@ function HowItWorks() {
   const [opacities, setOpacities] = useState(() =>
     steps.map((_, i) => (i === 0 ? 1 : 0)),
   );
-  const stepRefs = [useRef(null), useRef(null), useRef(null)];
+  const stepRefs = [useRef(null), useRef(null)];
 
   useEffect(() => {
     function onScroll() {
@@ -2095,7 +1348,7 @@ function HowItWorks() {
                 marginBottom: S.howEyebrowMB,
               }}
             >
-              How it works
+              {COPY.howItWorks.eyebrow}
             </div>
             <h2
               style={{
@@ -2110,7 +1363,7 @@ function HowItWorks() {
                 color: C.bone,
               }}
             >
-              Make every interaction engaging.
+              {COPY.howItWorks.headline}
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 56 }}>
               {steps.map((s, i) => (
@@ -2207,7 +1460,7 @@ function HowItWorks() {
                                   userSelect: "none",
                                 }}
                               >
-                                →
+                                {COPY.glyphs.arrow}
                               </div>
                             )}
                           </React.Fragment>
@@ -2226,7 +1479,6 @@ function HowItWorks() {
             </div>
           </div>
         </section>
-        <ResultBlock />
       </>
     );
   }
@@ -2283,7 +1535,7 @@ function HowItWorks() {
                     marginBottom: S.howEyebrowMB,
                   }}
                 >
-                  Constant Engagement
+                  {COPY.howItWorks.eyebrow}
                 </div>
                 <h2
                   style={{
@@ -2298,7 +1550,7 @@ function HowItWorks() {
                     color: C.bone,
                   }}
                 >
-                  Make every interaction engaging.
+                  {COPY.howItWorks.headline}
                 </h2>
               </div>
               {/* Phone + right spacer, occupying full sticky with paddingTop reserving space for the title */}
@@ -2373,7 +1625,7 @@ function HowItWorks() {
                                         userSelect: "none",
                                       }}
                                     >
-                                      →
+                                      {COPY.glyphs.arrow}
                                     </div>
                                   )}
                                 </React.Fragment>
@@ -2482,766 +1734,25 @@ function HowItWorks() {
           </div>
         </div>
       </section>
-      <ResultBlock />
     </>
   );
 }
 
-// ---------- The Result block (shared by HowItWorks layouts) ----------
-// Top-right slide-in: the section is taller than the viewport so there's
-// scroll room. When the section's top edge enters the viewport the text
-// starts offscreen to the top-right, then slides down-and-left into its
-// resting center position as the user scrolls. Once it lands, the transform
-// clamps so the text scrolls away naturally with the page.
-//
-// The animated variant only runs when the preceding LoopSequence is pinned
-// (desktop). On tablet/phone the loop is a normal scroll, so the result is
-// rendered as a plain static block at natural content height.
-function ResultBlock() {
-  const S = SIZES[useBreakpoint()];
-  if (!S.loopPinned) return <StaticResult S={S} />;
-  return <AnimatedResult S={S} />;
-}
+// Image assets per loop item — copy lives in COPY.loyalty.items; zipped by index.
+// Middle item is text-only (the +160 PTS circle), so its slot is null.
+const LOYALTY_LOOP_IMAGES = [
+  "assets/images/BJJClass.webp",
+  null,
+  "assets/images/ShirtReward.webp",
+];
 
-function StaticResult({ S }) {
-  const headingSize = Math.round((S.solutionH2 || 72) * 0.7);
-  return (
-    <div
-      style={{
-        background: C.ink,
-        padding: S.loyaltyPad || "96px 24px",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: S.solutionH2MaxW || 1100,
-          margin: "0 auto",
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontSize: S.solutionEyebrow || 18,
-            fontWeight: 700,
-            letterSpacing: "0.22em",
-            color: C.orange,
-            textTransform: "uppercase",
-            marginBottom: S.solutionEyebrowMB || 16,
-          }}
-        >
-          The Result
-        </div>
-        <h2
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 600,
-            fontSize: headingSize,
-            lineHeight: 0.98,
-            letterSpacing: "-0.035em",
-            margin: 0,
-            color: C.bone,
-            textWrap: "balance",
-          }}
-        >
-          Members keep thinking about{" "}
-          <span style={{ color: C.orange }}>your </span>gym.
-        </h2>
-      </div>
-    </div>
-  );
-}
-
-// Scroll length (in vh) reserved for the result slide-in. Everything else
-// — the content's anchor position and the starting slide offset — is
-// derived from this, so tweaking the feel is a one-line change.
-const RESULT_SECTION_VH = 75;
-// Content center anchor within the section, measured from section top.
-// Half of the section height so content sits at the section's visual
-// midpoint when it comes to rest.
-const RESULT_ANCHOR_VH = RESULT_SECTION_VH / 2;
-// Starting vertical slide offset so content enters from the viewport
-// bottom at progress=0 (before smoothstep easing pulls it up to rest).
-const RESULT_SLIDE_Y_VH = -RESULT_ANCHOR_VH;
-
-function AnimatedResult({ S }) {
-  const wrapRef = useRef(null);
-  const contentRef = useRef(null);
-  const [progress, setProgress] = useState(0);
-  useEffect(() => {
-    function onScroll() {
-      const el = wrapRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-      // Progress from the section top touching the viewport bottom (0) to
-      // the section bottom touching the viewport bottom (1) — i.e. the
-      // animation plays exactly while the section is filling the screen
-      // from the bottom up.
-      const start = vh;
-      const end = vh - rect.height;
-      const raw = (start - rect.top) / (start - end);
-      setProgress(Math.max(0, Math.min(1, raw)));
-    }
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, []);
-  // Compress the scroll range so the slide-in finishes early — animation
-  // reaches its rest state at 60% of the section's scroll, then the title
-  // sits still while the user scrolls the remaining 40%.
-  const compressed = Math.min(1, progress / 0.8);
-  // Smoothstep easing — symmetric ease-in-out for a clean linear-feeling glide.
-  const eased = compressed * compressed * (3 - 2 * compressed);
-  // Slide from the bottom-right of the viewport to the centre. Anchor and
-  // slide values come from the RESULT_* constants above so the whole
-  // animation scales from a single knob.
-  const slideX = (1 - eased) * 55; // vw
-  const slideY = (1 - eased) * RESULT_SLIDE_Y_VH; // vh
-  const rot = (1 - eased) * 6;
-  const opacity = Math.min(1, 0.1 + eased * 1.1);
-  const headingSize = Math.round((S.solutionH2 || 72) * 0.7);
-  return (
-    <div
-      ref={wrapRef}
-      style={{
-        minHeight: `${RESULT_SECTION_VH}vh`,
-        background: C.ink,
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        ref={contentRef}
-        style={{
-          position: "absolute",
-          top: `${RESULT_ANCHOR_VH}vh`,
-          left: "50%",
-          width: "100%",
-          maxWidth: S.solutionH2MaxW || 1100,
-          textAlign: "center",
-          // Horizontal padding lives on the inner wrapper (not the outer
-          // section) so the slide-in animation still uses the full
-          // viewport width without clipping from side padding.
-          padding: "0 24px",
-          boxSizing: "border-box",
-          transform: `translate(-50%, -50%) translate3d(${slideX.toFixed(2)}vw, ${slideY.toFixed(2)}vh, 0) rotate(${rot.toFixed(2)}deg)`,
-          transformOrigin: "center center",
-          opacity,
-          willChange: "transform, opacity",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontSize: S.solutionEyebrow || 18,
-            fontWeight: 700,
-            letterSpacing: "0.22em",
-            color: C.orange,
-            textTransform: "uppercase",
-            marginBottom: S.solutionEyebrowMB || 16,
-          }}
-        >
-          The Result
-        </div>
-        <h2
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 600,
-            fontSize: headingSize,
-            lineHeight: 0.98,
-            letterSpacing: "-0.035em",
-            margin: 0,
-            color: C.bone,
-            textWrap: "balance",
-          }}
-        >
-          Members stay engaged with{" "}
-          <span style={{ color: C.orange }}>your </span>gym.
-        </h2>
-      </div>
-    </div>
-  );
-}
-
-// ---------- 06 · Profitable Loyalty (paper) ----------
-function Loyalty() {
-  const bp = useBreakpoint();
-  // Mirror LoopSequence's tablet override so the section wrapper keeps its
-  // `overflow: visible` (sticky-friendly) mode instead of clipping.
-  const base = SIZES[bp];
-  const S =
-    bp === "tablet"
-      ? {
-          ...base,
-          loopPinned: true,
-          loyaltyPad: "120px 0 140px",
-          loyaltyMaxW: "100%",
-        }
-      : base;
-  return (
-    <>
-      <section
-        style={{
-          background: C.paper,
-          color: C.paperInk,
-          padding: S.loyaltyPad,
-          // overflow:hidden breaks position:sticky used by the pinned variant,
-          // so only clip when the unpinned (vertical) layout is active.
-          overflow: S.loopPinned ? "visible" : "hidden",
-        }}
-      >
-        <div
-          style={{ maxWidth: S.loyaltyMaxW, margin: "0 auto", width: "100%" }}
-        >
-          <LoopSequence />
-        </div>
-      </section>
-
-      <DualBenefit />
-    </>
-  );
-}
-
-// ---------- 05 · Dual Benefit (sticky reward image right, paired statements scroll left) ----------
-// Mirrors the HowItWorks sticky-scroll mechanic, flipped horizontally. The
-// right side pins a single reward item (shirt, friend pass, private lesson).
-// The left side scrolls through paired statements — one framing the gym's win,
-// one framing the member's — so every item reads as dual value in a single view.
-const DUAL_BENEFIT_LABELS = {
-  eyebrow: "Keep More Members",
-  headline: "Loyalty programs grows gyms.",
-  member: "For loyal members",
-  gym: "For the gym",
-};
-
-function DualBenefit() {
-  const bp = useBreakpoint();
-  // Override layout flags: tablet uses the desktop sticky-scroll layout, only
-  // phone falls back to stacked — how* tokens default tablet to mobile-style.
-  const base = SIZES[bp];
-  // Item-name display size — bigger than the shared eyebrow scale so reward
-  // names ("Free Friend pass", etc.) read as the dominant label of each block.
-  const itemSize = bp === "phone" ? 18 : bp === "tablet" ? 22 : 26;
-  const S =
-    bp === "tablet"
-      ? {
-          ...base,
-          howSticky: true,
-          howAlign: "left",
-          howGrid: "1fr 1fr",
-          howGridGap: 48,
-          howStepPadLeft: 32,
-          howTitlePad: "32px 0 20px",
-        }
-      : base;
-  const blocks = [
-    {
-      n: "01",
-      item: "Free/Discounted Gym Items",
-      gym: "Your gym's branded gear is walking advertisements.",
-      member: "Rewards loyalty with real items from your gym.",
-      src: "assets/images/FreeBranding.png",
-    },
-    {
-      n: "02",
-      item: "Free Friend Pass",
-      gym: "Members willingly bring potential customers to the gym for free.",
-      member: "Makes their next class more enjoyable by bringing a friend.",
-      src: "assets/images/FriendPass.jpg",
-    },
-    {
-      n: "03",
-      item: "Discounted Private Training",
-      gym: "Gives a taste of private training creating new repeat customers.",
-      member: "Affordable one on one coach time earned from consistency.",
-      src: "assets/images/Privates.webp",
-    },
-  ];
-
-  const [active, setActive] = useState(0);
-  const titleRef = useRef(null);
-  const [titleHeight, setTitleHeight] = useState(180);
-  useEffect(() => {
-    function update() {
-      const titleH = titleRef.current ? titleRef.current.offsetHeight : 160;
-      setTitleHeight(titleH);
-    }
-    update();
-    window.addEventListener("resize", update);
-    const raf = requestAnimationFrame(update);
-    return () => {
-      window.removeEventListener("resize", update);
-      cancelAnimationFrame(raf);
-    };
-  }, [S.navHeight]);
-
-  const [opacities, setOpacities] = useState(() =>
-    blocks.map((_, i) => (i === 0 ? 1 : 0)),
-  );
-  const blockRefs = [useRef(null), useRef(null), useRef(null)];
-
-  useEffect(() => {
-    function onScroll() {
-      const vh = window.innerHeight;
-      const vc = vh / 2;
-      const next = blockRefs.map((ref, i) => {
-        const el = ref.current;
-        if (!el) return 0;
-        const r = el.getBoundingClientRect();
-        const c = r.top + r.height / 2;
-        const dist = Math.abs(c - vc);
-        const above = c < vc;
-        const windowBelow = i === 0 ? vh * 0.8 : vh * 0.5;
-        const windowAbove = i === 0 ? vh * 0.32 : vh * 0.22;
-        const w = above ? windowAbove : windowBelow;
-        const t = Math.max(0, 1 - dist / w);
-        return Math.pow(t, 0.35);
-      });
-      setOpacities(next);
-      let best = 0;
-      let bestVal = next[0];
-      for (let i = 1; i < next.length; i++) {
-        if (next[i] > bestVal) {
-          best = i;
-          bestVal = next[i];
-        }
-      }
-      if (bestVal <= 0.001) {
-        let passed = -1;
-        for (let i = 0; i < blockRefs.length; i++) {
-          const el = blockRefs[i].current;
-          if (!el) continue;
-          const r = el.getBoundingClientRect();
-          if (r.top + r.height / 2 < vc) passed = i;
-        }
-        if (passed >= 0) best = passed;
-      }
-      setActive(best);
-    }
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, []);
-
-  const imageMax = S.howSticky ? 480 : S.howAlign === "center" ? 220 : 340;
-  const renderImagePanel = (b) => (
-    <div
-      style={{
-        position: "relative",
-        width: "100%",
-        maxWidth: imageMax,
-        aspectRatio: "1 / 1",
-        borderRadius: "50%",
-        overflow: "hidden",
-        transform: "translateZ(0)",
-        backfaceVisibility: "hidden",
-        isolation: "isolate",
-      }}
-    >
-      <img
-        src={b.src}
-        alt=""
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          display: "block",
-          clipPath: "circle(50%)",
-        }}
-      />
-    </div>
-  );
-
-  const renderPair = (label, text, S, isActive) => {
-    const labelSize = 14;
-    const textSize = S.howStepH3 ? Math.round(S.howStepH3 * 0.58) : 18;
-    const centered = S.howAlign === "center";
-    return (
-      <div style={{ width: "100%" }}>
-        <div
-          style={{
-            fontFamily: "'Jura', sans-serif",
-            fontSize: labelSize,
-            fontWeight: 700,
-            letterSpacing: "0.28em",
-            textTransform: "uppercase",
-            color: isActive ? C.orange : "rgba(244,243,238,0.4)",
-            transition: "color 240ms",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: centered ? "center" : "flex-start",
-            gap: 12,
-            lineHeight: 1,
-          }}
-        >
-          {!centered && (
-            <span
-              style={{
-                display: "inline-block",
-                width: 24,
-                height: 1.5,
-                background: isActive ? C.orange : "rgba(244,243,238,0.3)",
-                transition: "background 240ms",
-              }}
-            />
-          )}
-          {label}
-        </div>
-        <p
-          style={{
-            fontFamily: "Inter, sans-serif",
-            fontWeight: 500,
-            fontSize: textSize,
-            lineHeight: 1.25,
-            letterSpacing: "-0.02em",
-            margin: centered ? "14px auto 0" : "14px 0 0",
-            maxWidth: S.howStepCopyMaxW,
-            color: isActive ? C.bone : "rgba(244,243,238,0.5)",
-            transition: "color 240ms",
-            textAlign: centered ? "center" : "left",
-          }}
-        >
-          {text}
-        </p>
-      </div>
-    );
-  };
-
-  if (!S.howSticky) {
-    // Phone / tablet fallback — stacked single-column, no sticky.
-    return (
-      <section
-        style={{
-          background: C.ink,
-          color: C.bone,
-          padding: S.rewardsPad,
-          scrollMarginTop: S.navHeight,
-        }}
-      >
-        <div
-          style={{
-            maxWidth: S.rewardsMaxW,
-            margin: "0 auto",
-            textAlign: S.howAlign,
-          }}
-        >
-          <div
-            style={{
-              fontFamily: "Inter, sans-serif",
-              fontSize: S.rewardsEyebrow,
-              fontWeight: 700,
-              letterSpacing: "0.22em",
-              color: C.orange,
-              textTransform: "uppercase",
-              marginBottom: S.rewardsEyebrowMB,
-            }}
-          >
-            {DUAL_BENEFIT_LABELS.eyebrow}
-          </div>
-          <h2
-            style={{
-              fontFamily: "Inter, sans-serif",
-              fontWeight: 600,
-              fontSize: S.rewardsH2,
-              lineHeight: 1.05,
-              letterSpacing: "-0.03em",
-              margin:
-                S.howAlign === "center"
-                  ? `0 auto ${S.rewardsH2MB}px`
-                  : `0 0 ${S.rewardsH2MB}px`,
-              maxWidth: S.rewardsH2MaxW,
-              textWrap: "balance",
-              color: C.bone,
-            }}
-          >
-            {DUAL_BENEFIT_LABELS.headline}
-          </h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 72 }}>
-            {blocks.map((b, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: S.howAlign === "center" ? "center" : "stretch",
-                  gap: 24,
-                  textAlign: S.howAlign,
-                }}
-              >
-                <div
-                  style={{
-                    fontFamily: "'Jura', sans-serif",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    letterSpacing: "0.32em",
-                    color: C.fg3,
-                    textTransform: "uppercase",
-                    marginBottom: 10,
-                  }}
-                >
-                  Example {b.n}
-                </div>
-                <div
-                  style={{
-                    fontFamily: "Inter, sans-serif",
-                    fontSize: itemSize,
-                    fontWeight: 700,
-                    letterSpacing: "0.18em",
-                    color: C.bone,
-                    textTransform: "uppercase",
-                    lineHeight: 1.1,
-                  }}
-                >
-                  {b.item}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "center",
-                    width: "100%",
-                  }}
-                >
-                  {renderImagePanel(b)}
-                </div>
-                {renderPair(DUAL_BENEFIT_LABELS.member, b.member, S, true)}
-                {renderPair(DUAL_BENEFIT_LABELS.gym, b.gym, S, true)}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // Desktop — sticky image on the right, scrolling statements overlay on the left.
-  return (
-    <section
-      style={{
-        background: C.ink,
-        color: C.bone,
-        padding: S.rewardsPad,
-        scrollMarginTop: S.navHeight,
-      }}
-    >
-      <div
-        style={{
-          maxWidth: S.rewardsMaxW,
-          margin: "0 auto",
-          position: "relative",
-        }}
-      >
-        <div style={{ position: "relative" }}>
-          {/* Sticky group: centered title absolutely positioned, image in right grid cell */}
-          <div
-            style={{
-              position: "sticky",
-              top: S.navHeight,
-              height: `calc(100vh - ${S.navHeight}px)`,
-            }}
-          >
-            <div
-              ref={titleRef}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                padding: S.howTitlePad,
-                zIndex: 2,
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: S.howEyebrow,
-                  fontWeight: 700,
-                  letterSpacing: "0.22em",
-                  color: C.orange,
-                  textTransform: "uppercase",
-                  marginBottom: S.howEyebrowMB,
-                }}
-              >
-                {DUAL_BENEFIT_LABELS.eyebrow}
-              </div>
-              <h2
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontWeight: 600,
-                  fontSize: S.howH2,
-                  lineHeight: 1,
-                  letterSpacing: "-0.03em",
-                  margin: "0 auto",
-                  maxWidth: S.howH2MaxW,
-                  textWrap: "balance",
-                  color: C.bone,
-                }}
-              >
-                {DUAL_BENEFIT_LABELS.headline}
-              </h2>
-            </div>
-            <div
-              style={{
-                height: "100%",
-                paddingTop: titleHeight,
-                display: "grid",
-                gridTemplateColumns: S.howGrid,
-                gridTemplateRows: "1fr",
-                gap: S.howGridGap,
-                minHeight: 0,
-                boxSizing: "border-box",
-              }}
-            >
-              {/* Left cell reserved — scrolling statement blocks overlay here via negative margin */}
-              <div />
-              {/* Right cell — stacked image panels crossfade based on active block */}
-              <div
-                style={{
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minHeight: 0,
-                  minWidth: 0,
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    position: "relative",
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {blocks.map((b, i) => {
-                    const isActive = i === active;
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          position: i === 0 ? "relative" : "absolute",
-                          inset: i === 0 ? undefined : 0,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          opacity: isActive ? 1 : 0,
-                          transition: "opacity 420ms ease",
-                          pointerEvents: isActive ? "auto" : "none",
-                        }}
-                      >
-                        {renderImagePanel(b)}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Scrolling statement blocks — sibling overlaid on LEFT half */}
-          <div
-            style={{
-              marginTop: "-100vh",
-              marginRight: "50%",
-              paddingRight: S.howStepPadLeft,
-              paddingTop: "50vh",
-              paddingBottom: "30vh",
-              position: "relative",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {blocks.map((b, i) => (
-              <div
-                key={i}
-                ref={blockRefs[i]}
-                data-block={i}
-                style={{
-                  minHeight: "80vh",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  opacity: opacities[i],
-                  transition: "opacity 120ms linear",
-                }}
-              >
-                <div
-                  style={{
-                    fontFamily: "'Jura', sans-serif",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    letterSpacing: "0.32em",
-                    textTransform: "uppercase",
-                    color:
-                      active === i
-                        ? "rgba(244,243,238,0.55)"
-                        : "rgba(244,243,238,0.25)",
-                    transition: "color 240ms",
-                    marginBottom: 14,
-                  }}
-                >
-                  Example {b.n}
-                </div>
-                <div
-                  style={{
-                    fontFamily: "Inter, sans-serif",
-                    fontSize: itemSize,
-                    fontWeight: 700,
-                    letterSpacing: "0.10em",
-                    textTransform: "uppercase",
-                    color: active === i ? C.bone : "rgba(244,243,238,0.35)",
-                    transition: "color 240ms",
-                    lineHeight: 1.1,
-                  }}
-                >
-                  {b.item}
-                </div>
-                <div
-                  style={{
-                    marginTop: 32,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 32,
-                  }}
-                >
-                  {renderPair(
-                    DUAL_BENEFIT_LABELS.member,
-                    b.member,
-                    S,
-                    active === i,
-                  )}
-                  <div
-                    style={{
-                      height: 1,
-                      background: "rgba(244,243,238,0.12)",
-                      width: "60%",
-                    }}
-                  />
-                  {renderPair(DUAL_BENEFIT_LABELS.gym, b.gym, S, active === i)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// Scroll-driven loop sequence: pins while scrolling, line fills left→right,
-// and each circle scales up as the active point passes over it.
+// Loyalty loop animation. Three steps cycle:
+// attends class → earn points → redeem rewards, with a progress bar.
+// Driver depends on breakpoint:
+//   - Desktop (loopAutoplay=true): rAF loop fills 0→1 over loopAutoplayPeriodMs,
+//     holds at 1 for loopAutoplayHoldMs, snaps back. IntersectionObserver pauses
+//     off-screen and resets startTime on re-entry so the cycle plays from t=0.
+//   - Tablet/phone: scroll-driven (pinned on tablet, free-scrolled on phone).
 function LoopSequence() {
   const bp = useBreakpoint();
   // Tablet uses the desktop pinned/horizontal layout (not the mobile stacked one),
@@ -3265,27 +1776,16 @@ function LoopSequence() {
           loopFocusBump: 0.5,
         }
       : base;
-  const items = [
-    {
-      img: "assets/images/BJJClass.webp",
-      label: "Attends class",
-      desc: "Train Hard.",
-    },
-    {
-      text: "+160",
-      label: "Earn points",
-      desc: "Promotes class consistency.",
-    },
-    {
-      img: "assets/images/ShirtReward.webp",
-      label: "Redeem rewards",
-      desc: "Creates loyal and profitable members.",
-    },
-  ];
+  const items = COPY.loyalty.items.map((it, i) => ({
+    ...it,
+    img: LOYALTY_LOOP_IMAGES[i] || undefined,
+  }));
   const wrapRef = useRef(null);
-  const [progress, setProgress] = useState(0); // 0..1 across the pinned scroll range
+  const [progress, setProgress] = useState(0);
 
+  // Scroll-driven progress (mobile/tablet). Skipped when autoplay is on.
   useEffect(() => {
+    if (S.loopAutoplay) return;
     function onScroll() {
       const el = wrapRef.current;
       if (!el) return;
@@ -3296,9 +1796,6 @@ function LoopSequence() {
         const scrolled = Math.max(0, Math.min(total, -rect.top));
         setProgress(total > 0 ? scrolled / total : 0);
       } else {
-        // Unpinned (phone): progress tracks the viewport center as it moves
-        // through the element — line fills from 0 when the center hits the
-        // element's top to 1 when it hits the bottom.
         const center = vh / 2;
         const scrolled = center - rect.top;
         const total = rect.height;
@@ -3312,10 +1809,44 @@ function LoopSequence() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, [S.loopPinned]);
+  }, [S.loopPinned, S.loopAutoplay]);
+
+  // Autoplay rAF loop (desktop). Plays only while in view; resets on re-entry.
+  useEffect(() => {
+    if (!S.loopAutoplay) return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const period = S.loopAutoplayPeriodMs || 6000;
+    const hold = Math.min(S.loopAutoplayHoldMs ?? 1000, period - 1);
+    const fillMs = period - hold;
+    let inView = false;
+    let startTime = performance.now();
+    let raf = 0;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const next = entries[0].isIntersecting;
+        if (next && !inView) startTime = performance.now();
+        inView = next;
+        if (!inView) setProgress(0);
+      },
+      { threshold: 0 },
+    );
+    io.observe(el);
+    function tick(now) {
+      if (inView) {
+        const t = (now - startTime) % period;
+        setProgress(t < fillMs ? t / fillMs : 1);
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => {
+      io.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [S.loopAutoplay, S.loopAutoplayPeriodMs, S.loopAutoplayHoldMs]);
 
   const n = items.length;
-  // progress points for each circle (evenly spread with padding at the ends)
   const stops = items.map((_, i) => (i + 0.5) / n);
   const vertical = S.loopDir === "column";
 
@@ -3346,18 +1877,14 @@ function LoopSequence() {
           width: S.loopCircle,
           height: S.loopCircle,
           borderRadius: "50%",
-          background: it.img ? "transparent" : "#E8E6DF",
-          border: `4px solid ${reached ? C.orange : C.paperHairline}`,
+          background: it.img ? "transparent" : "#1A1F23",
+          border: `4px solid ${reached ? C.orange : C.divider}`,
           overflow: "hidden",
           transition: "border-color 180ms ease, box-shadow 180ms ease",
           boxShadow: reached ? "0 16px 44px rgba(255,108,45,0.28)" : "none",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          // Force a compositing layer so the circular border-radius clip is
-          // rasterised once and scales cleanly with the parent transform —
-          // without this, Chrome/Safari intermittently expose the image's
-          // rectangular bounding box during the scale transition.
           transform: "translateZ(0)",
           backfaceVisibility: "hidden",
           isolation: "isolate",
@@ -3389,10 +1916,6 @@ function LoopSequence() {
               height: "100%",
               objectFit: "cover",
               display: "block",
-              // Geometric circular clip on the image itself — acts as a
-              // fallback when the parent's border-radius + overflow:hidden
-              // clip fails during the parent's scale transition and would
-              // otherwise leak the image's rectangular corners.
               clipPath: "circle(50%)",
             }}
           />
@@ -3414,7 +1937,7 @@ function LoopSequence() {
                 fontWeight: 700,
                 fontSize: S.loopPtsFont,
                 letterSpacing: "-0.02em",
-                color: bump > 0.5 ? C.bone : C.paperInk2,
+                color: bump > 0.5 ? C.bone : C.fg2,
                 textShadow: bump > 0.5 ? "0 2px 6px rgba(0,0,0,0.18)" : "none",
                 transition: "color 180ms ease, text-shadow 180ms ease",
               }}
@@ -3427,12 +1950,12 @@ function LoopSequence() {
                 fontWeight: 700,
                 fontSize: S.loopPtsLabelFont,
                 letterSpacing: "0.24em",
-                color: bump > 0.5 ? "rgba(244,243,238,0.92)" : C.paperInk3,
+                color: bump > 0.5 ? "rgba(244,243,238,0.92)" : C.fg3,
                 marginTop: 8,
                 transition: "color 180ms ease",
               }}
             >
-              PTS
+              {COPY.loyalty.ptsLabel}
             </span>
           </div>
         )}
@@ -3454,7 +1977,7 @@ function LoopSequence() {
               fontSize: S.loopEyebrow || SECTION_EYEBROW_SIZE,
               fontWeight: 700,
               letterSpacing: "0.14em",
-              color: reached ? C.orange : C.paperInk3,
+              color: reached ? C.orange : C.fg3,
               textTransform: "uppercase",
               transition: "color 180ms ease",
             }}
@@ -3465,7 +1988,7 @@ function LoopSequence() {
             style={{
               fontFamily: "Inter, sans-serif",
               fontSize: 14,
-              color: C.paperInk2,
+              color: C.fg2,
               marginTop: 6,
             }}
           >
@@ -3518,17 +2041,14 @@ function LoopSequence() {
             height: S.loopCircle,
             margin: "0 auto",
             borderRadius: "50%",
-            background: it.img ? "transparent" : "#E8E6DF",
-            border: `4px solid ${reached ? C.orange : C.paperHairline}`,
+            background: it.img ? "transparent" : "#1A1F23",
+            border: `4px solid ${reached ? C.orange : C.divider}`,
             overflow: "hidden",
             transition: "border-color 180ms ease, box-shadow 180ms ease",
             boxShadow: reached ? "0 16px 44px rgba(255,108,45,0.28)" : "none",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            // See renderCircle for rationale — force a composite layer so
-            // the circular clip doesn't break during the parent's scale
-            // transition.
             transform: "translateZ(0)",
             backfaceVisibility: "hidden",
             isolation: "isolate",
@@ -3580,7 +2100,7 @@ function LoopSequence() {
                   fontWeight: 700,
                   fontSize: S.loopPtsFont,
                   letterSpacing: "-0.02em",
-                  color: bump > 0.5 ? C.bone : C.paperInk2,
+                  color: bump > 0.5 ? C.bone : C.fg2,
                   textShadow:
                     bump > 0.5 ? "0 2px 6px rgba(0,0,0,0.18)" : "none",
                   transition: "color 180ms ease, text-shadow 180ms ease",
@@ -3594,12 +2114,12 @@ function LoopSequence() {
                   fontWeight: 700,
                   fontSize: S.loopPtsLabelFont,
                   letterSpacing: "0.24em",
-                  color: bump > 0.5 ? "rgba(244,243,238,0.92)" : C.paperInk3,
+                  color: bump > 0.5 ? "rgba(244,243,238,0.92)" : C.fg3,
                   marginTop: 8,
                   transition: "color 180ms ease",
                 }}
               >
-                PTS
+                {COPY.loyalty.ptsLabel}
               </span>
             </div>
           )}
@@ -3610,7 +2130,7 @@ function LoopSequence() {
             fontSize: S.loopEyebrow || SECTION_EYEBROW_SIZE,
             fontWeight: 700,
             letterSpacing: "0.14em",
-            color: reached ? C.orange : C.paperInk3,
+            color: reached ? C.orange : C.fg3,
             marginTop: S.loopLabelMT,
             textTransform: "uppercase",
             transition: "color 180ms ease",
@@ -3622,7 +2142,7 @@ function LoopSequence() {
           style={{
             fontFamily: "Inter, sans-serif",
             fontSize: 14,
-            color: C.paperInk2,
+            color: C.fg2,
             marginTop: 8,
           }}
         >
@@ -3644,7 +2164,7 @@ function LoopSequence() {
         boxSizing: "border-box",
       }}
     >
-      {/* Title — first in the group, disclaimer + sequence follow */}
+      {/* Title — eyebrow + headline */}
       <div style={{ textAlign: "center", marginBottom: S.loopTitleMB }}>
         <div
           style={{
@@ -3657,7 +2177,7 @@ function LoopSequence() {
             marginBottom: S.loopEyebrowMB,
           }}
         >
-          Profitable Loyalty
+          {COPY.loyalty.eyebrow}
         </div>
         <h2
           style={{
@@ -3671,26 +2191,29 @@ function LoopSequence() {
             textWrap: "balance",
           }}
         >
-          Create a loyalty program.
+          {COPY.loyalty.headline}
         </h2>
       </div>
-      {/* Disclaimer above the sequence */}
+      {/* Short impact blurb above the sequence — capped at loopBlurbMaxW so
+          long sentences wrap cleanly instead of stretching the full row. */}
       <p
         style={{
-          margin: `0 0 ${S.loopDisclaimerMB}px`,
+          margin: `0 auto ${S.loopBlurbMB}px`,
+          width: "100%",
+          maxWidth: S.loopBlurbMaxW,
           fontFamily: "Inter, sans-serif",
-          fontSize: 15,
-          fontStyle: "italic",
-          color: C.paperInk3,
+          fontSize: S.loopBlurb,
+          lineHeight: 1.45,
+          color: C.fg2,
           textAlign: "center",
         }}
       >
-        Points-per-class and reward tiers are fully configurable by the gym.
+        {COPY.loyalty.blurb}
       </p>
 
       {vertical ? (
         <div style={{ position: "relative" }}>
-          {/* Vertical track + fill — line sits at 75% of the row width (center of the right-half circle column) */}
+          {/* Vertical track + fill */}
           <div
             style={{
               position: "absolute",
@@ -3699,7 +2222,7 @@ function LoopSequence() {
               top: S.loopLineTop,
               bottom: S.loopLineTop,
               width: 3,
-              background: C.paperHairline,
+              background: C.divider,
               borderRadius: 999,
             }}
           />
@@ -3713,7 +2236,7 @@ function LoopSequence() {
               height: `calc((100% - ${S.loopLineTop * 2}px) * ${progress})`,
               background: C.orange,
               borderRadius: 999,
-              transition: "height 80ms linear",
+              transition: S.loopAutoplay ? "none" : "height 80ms linear",
             }}
           />
           <div
@@ -3728,7 +2251,7 @@ function LoopSequence() {
         </div>
       ) : (
         <div style={{ position: "relative" }}>
-          {/* Horizontal track + fill — centered on circle row */}
+          {/* Horizontal track + fill */}
           <div
             style={{
               position: "absolute",
@@ -3737,7 +2260,7 @@ function LoopSequence() {
               top: S.loopLineTop,
               transform: "translateY(-50%)",
               height: 3,
-              background: C.paperHairline,
+              background: C.divider,
               borderRadius: 999,
             }}
           />
@@ -3751,7 +2274,7 @@ function LoopSequence() {
               height: 3,
               background: C.orange,
               borderRadius: 999,
-              transition: "width 80ms linear",
+              transition: S.loopAutoplay ? "none" : "width 80ms linear",
             }}
           />
           <div
@@ -3769,7 +2292,11 @@ function LoopSequence() {
     </div>
   );
 
-  if (!S.loopPinned) {
+  // Autoplay/non-pinned: render inner directly. Pinned (scroll-driven on
+  // tablet): wrap in a tall sticky container so the scroll progress drives
+  // the loop. Autoplay desktop falls into the non-pinned branch since the
+  // section already owns its 100vh canvas via the Loyalty wrapper.
+  if (!S.loopPinned || S.loopAutoplay) {
     return <div ref={wrapRef}>{inner}</div>;
   }
   return (
@@ -3793,67 +2320,528 @@ function LoopSequence() {
   );
 }
 
-function LoopStep({ icon, label, desc }) {
+// ---------- 06 · Profitable Loyalty (dark) ----------
+function Loyalty() {
+  const bp = useBreakpoint();
+  // Mirror LoopSequence's tablet override so the section wrapper keeps its
+  // `overflow: visible` (sticky-friendly) mode instead of clipping.
+  const base = SIZES[bp];
+  const S =
+    bp === "tablet"
+      ? {
+          ...base,
+          loopPinned: true,
+          loyaltyPad: "120px 0 140px",
+          loyaltyMaxW: "100%",
+        }
+      : base;
   return (
-    <div style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
-      <div
+    <>
+      <section
         style={{
-          width: 128,
-          height: 128,
-          margin: "0 auto",
-          borderRadius: "50%",
-          background: "rgba(18,22,25,0.04)",
-          border: `1px solid ${C.paperHairline}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 42,
-          color: C.orange,
+          background: C.ink,
+          color: C.bone,
+          padding: S.loyaltyPad,
+          // overflow:hidden breaks position:sticky used by the pinned variant,
+          // so only clip when the unpinned (vertical) layout is active.
+          overflow: S.loopPinned ? "visible" : "hidden",
+          boxSizing: "border-box",
         }}
       >
-        {icon}
-      </div>
+        {/* Loop animation owns its own 100vh canvas and is centred inside it
+            — that keeps it the focal point. Carousel + disclaimer flow below
+            and don't compete for that vertical real estate. */}
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            style={{
+              maxWidth: S.loyaltyMaxW,
+              margin: "0 auto",
+              width: "100%",
+            }}
+          >
+            <LoopSequence />
+          </div>
+        </div>
+        {/* Reward slideshow — sub-section under the 100vh. Caption underneath
+            replaces the old standalone disclaimer + the removed dualBenefit copy. */}
+        <RewardsSlideshow S={S} />
+      </section>
+    </>
+  );
+}
+
+// Reward card — image-dominant, name + Jura cost, centered. Mirrors the +160
+// PTS visual language from the loyalty loop circle so "earn" and "redeem" rhyme.
+function RewardCard({ name, cost, classes, img, S }) {
+  return (
+    <div
+      style={{
+        flexShrink: 0,
+        width: S.rewardCardW,
+        // Subtle light-on-dark card — lifts the reward off the section
+        // background and gives photos a clean frame to sit against.
+        background: "#1A1F23",
+        borderRadius: S.rewardImgR + 6,
+        boxShadow: `0 1px 0 ${C.divider} inset, 0 8px 28px rgba(0,0,0,0.4)`,
+        border: `1px solid ${C.divider}`,
+        padding: S.rewardCardPad,
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        textAlign: "center",
+      }}
+    >
       <div
         style={{
-          fontFamily: "'Jura', sans-serif",
-          fontSize: SECTION_EYEBROW_SIZE,
-          fontWeight: 700,
-          letterSpacing: "0.14em",
-          color: C.orange,
-          marginTop: 20,
-          textTransform: "uppercase",
+          width: "100%",
+          aspectRatio: "1 / 1",
+          borderRadius: S.rewardImgR,
+          overflow: "hidden",
+          background: "#0F1316",
+          marginBottom: Math.round(S.rewardCardPad * 0.9),
+          position: "relative",
         }}
       >
-        {label}
+        <img
+          src={img}
+          alt=""
+          loading="lazy"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
       </div>
       <div
         style={{
           fontFamily: "Inter, sans-serif",
-          fontSize: 14,
-          color: C.paperInk2,
-          marginTop: 8,
+          fontWeight: 600,
+          fontSize: S.rewardNameSize,
+          lineHeight: 1.25,
+          letterSpacing: "-0.01em",
+          color: C.bone,
+          marginBottom: Math.round(S.rewardCardPad * 0.45),
+          textAlign: "center",
+          // Two-line clamp keeps card heights uniform when names vary.
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          minHeight: `${Math.round(S.rewardNameSize * 1.25 * 2)}px`,
         }}
       >
-        {desc}
+        {name}
       </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "center",
+          gap: 6,
+          marginTop: "auto",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "'Jura', sans-serif",
+            fontWeight: 700,
+            fontSize: S.rewardCostSize,
+            letterSpacing: "-0.02em",
+            color: C.orange,
+            lineHeight: 1,
+          }}
+        >
+          {cost}
+        </span>
+        <span
+          style={{
+            fontFamily: "'Jura', sans-serif",
+            fontWeight: 700,
+            fontSize: S.rewardCostLabelSize,
+            letterSpacing: "0.24em",
+            color: C.fg2,
+            textTransform: "uppercase",
+          }}
+        >
+          {COPY.loyalty.ptsLabel}
+        </span>
+      </div>
+      {classes && (
+        <div
+          style={{
+            marginTop: Math.round(S.rewardCardPad * 0.35),
+            fontFamily: "Inter, sans-serif",
+            fontSize: S.rewardClassesSize,
+            color: C.fg3,
+            textAlign: "center",
+            letterSpacing: "0.02em",
+          }}
+        >
+          {classes}
+        </div>
+      )}
     </div>
   );
 }
-function LoopArrow() {
+
+// Reward slideshow — three cards visible at once: one centered/focused,
+// the other two slightly transparent and scaled down on either side.
+// Auto-advances every COPY.loyalty.rewardSlideAutoMs (paused off-screen via
+// IntersectionObserver), and exposes prev/next buttons. Below the slides
+// sits a one-line caption that distills the dual-benefit story.
+function RewardsSlideshow({ S }) {
+  const wrapRef = useRef(null);
+  const inViewRef = useRef(false);
+  const intervalRef = useRef(null);
+  const items = COPY.loyalty.rewards;
+  const n = items.length;
+  const [active, setActive] = useState(0);
+
+  // Restart the auto-advance timer from zero. Called on mount and after every
+  // manual prev/next click so manual interaction always gives a fresh
+  // COPY.loyalty.rewardSlideAutoMs window before the next auto-advance fires.
+  const restartTimer = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
+      if (inViewRef.current) setActive((a) => (a + 1) % n);
+    }, COPY.loyalty.rewardSlideAutoMs || 5000);
+  };
+
+  const goNext = () => {
+    setActive((a) => (a + 1) % n);
+    restartTimer();
+  };
+  const goPrev = () => {
+    setActive((a) => (a - 1 + n) % n);
+    restartTimer();
+  };
+
+  // Auto-advance, gated by visibility so we don't burn cycles off-screen.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        inViewRef.current = entries[0].isIntersecting;
+      },
+      { threshold: 0 },
+    );
+    io.observe(el);
+    restartTimer();
+    return () => {
+      io.disconnect();
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [n]);
+
+  // Card height — kept consistent so the absolute-positioned cards have a
+  // shared layout footprint. Mirrors the RewardCard box model.
+  const cardH = Math.round(
+    S.rewardCardW +
+      S.rewardCardPad * 0.9 +
+      S.rewardNameSize * 1.25 * 2 +
+      S.rewardCardPad * 0.45 +
+      S.rewardCostSize +
+      S.rewardCardPad * 2 +
+      4,
+  );
+
+  // Stage width = centre card + two side cards peeking out at sideOffset×cardW.
+  const sideOffsetPx = Math.round(S.rewardCardW * S.rewardSideOffset);
+  const stageW = S.rewardCardW + 2 * sideOffsetPx;
+  // Add room above/below so card shadows don't clip into adjacent rows.
+  const stageH = cardH + 32;
+
+  // For each card index i, compute its slot relative to the active card:
+  //   -1 = left, 0 = centre, +1 = right.
+  // With n=3 every card is always in one of these three slots.
+  const slotFor = (i) => {
+    let r = i - active;
+    if (r > n / 2) r -= n;
+    if (r < -n / 2) r += n;
+    return r;
+  };
+
   return (
-    <div
+    <div ref={wrapRef} style={{ width: "100%", marginTop: S.rewardSectionMT }}>
+      {/* Sub-section title — larger, dark, sentence-case so it doesn't fight
+          with the orange "Reward Benefit" label below the slideshow. */}
+      <h3
+        style={{
+          textAlign: "center",
+          margin: `0 0 ${S.rewardEyebrowMB}px`,
+          fontFamily: "Inter, sans-serif",
+          fontSize: S.rewardSectionTitleSize,
+          fontWeight: 600,
+          letterSpacing: "-0.02em",
+          color: C.bone,
+        }}
+      >
+        {COPY.loyalty.rewardsEyebrow}
+      </h3>
+      <div
+        style={{
+          position: "relative",
+          width: stageW,
+          maxWidth: "100%",
+          height: stageH,
+          margin: "0 auto",
+        }}
+      >
+        {items.map((it, i) => {
+          const slot = slotFor(i);
+          const isCentre = slot === 0;
+          const tx = slot * sideOffsetPx;
+          return (
+            <div
+              key={i}
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                width: S.rewardCardW,
+                transform: `translate(-50%, -50%) translateX(${tx}px) scale(${isCentre ? 1 : S.rewardSideScale})`,
+                opacity: isCentre ? 1 : S.rewardSideOpacity,
+                zIndex: isCentre ? 2 : 1,
+                pointerEvents: isCentre ? "auto" : "none",
+                transition:
+                  "transform 520ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 420ms ease",
+                willChange: "transform, opacity",
+              }}
+            >
+              <RewardCard
+                name={it.name}
+                cost={it.cost}
+                classes={it.classes}
+                img={it.img}
+                S={S}
+              />
+            </div>
+          );
+        })}
+        {/* Prev / Next buttons — sit just outside the centre card on each side */}
+        <button
+          type="button"
+          onClick={goPrev}
+          aria-label={COPY.loyalty.rewardsPrevAria}
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: S.rewardNavOffset,
+            transform: "translateY(-50%)",
+            width: S.rewardNavBtn,
+            height: S.rewardNavBtn,
+            borderRadius: "50%",
+            border: `1px solid ${C.divider}`,
+            background: "#1A1F23",
+            color: C.bone,
+            cursor: "pointer",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: S.rewardNavGlyph,
+            lineHeight: 1,
+            fontFamily: "'Jura', sans-serif",
+            fontWeight: 700,
+            zIndex: 3,
+            padding: 0,
+          }}
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          onClick={goNext}
+          aria-label={COPY.loyalty.rewardsNextAria}
+          style={{
+            position: "absolute",
+            top: "50%",
+            right: S.rewardNavOffset,
+            transform: "translateY(-50%)",
+            width: S.rewardNavBtn,
+            height: S.rewardNavBtn,
+            borderRadius: "50%",
+            border: `1px solid ${C.divider}`,
+            background: "#1A1F23",
+            color: C.bone,
+            cursor: "pointer",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: S.rewardNavGlyph,
+            lineHeight: 1,
+            fontFamily: "'Jura', sans-serif",
+            fontWeight: 700,
+            zIndex: 3,
+            padding: 0,
+          }}
+        >
+          ›
+        </button>
+      </div>
+      {/* Per-slide benefit copy. The label is static; the body text swaps with
+          the active slide. `key={active}` triggers a fresh fade-in each change. */}
+      <div
+        style={{
+          margin: `${S.rewardBenefitMT}px auto 0`,
+          maxWidth: S.rewardBenefitMaxW,
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "Inter, sans-serif",
+            fontSize: S.rewardBenefitLabelSize,
+            fontWeight: 700,
+            letterSpacing: "0.22em",
+            color: C.orange,
+            textTransform: "uppercase",
+            marginBottom: S.rewardBenefitLabelMB,
+          }}
+        >
+          {COPY.loyalty.rewardBenefitLabel}
+        </div>
+        <p
+          key={active}
+          className="reward-benefit-text"
+          style={{
+            margin: 0,
+            fontFamily: "Inter, sans-serif",
+            fontSize: S.rewardBenefitSize,
+            lineHeight: 1.5,
+            color: C.bone,
+          }}
+        >
+          {items[active].benefit}
+        </p>
+      </div>
+      <style>{`
+        @keyframes reward-benefit-fade {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .reward-benefit-text {
+          animation: reward-benefit-fade 360ms ease both;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ---------- Branded (dark, split text + tilted phone) ----------
+// A 2-column section (text + 3D-tilted phone mock) sitting between the
+// Loyalty rewards and Why It Matters. The phone is tilted via CSS perspective
+// + rotateY for a "3D rendered" feel without needing a real 3D asset.
+function Branded() {
+  const S = SIZES[useBreakpoint()];
+  return (
+    <section
       style={{
-        fontFamily: "'Jura', sans-serif",
-        fontSize: 42,
-        fontWeight: 700,
-        color: C.orange,
-        textAlign: "center",
-        position: "relative",
-        zIndex: 1,
+        background: C.ink,
+        color: C.bone,
+        padding: S.brandedPad,
+        boxSizing: "border-box",
       }}
     >
-      →
-    </div>
+      <div
+        style={{
+          maxWidth: S.brandedMaxW,
+          margin: "0 auto",
+          display: "grid",
+          gridTemplateColumns: S.brandedGrid,
+          gap: S.brandedGap,
+          alignItems: "center",
+        }}
+      >
+        {/* Text column */}
+        <div
+          style={{
+            order: S.brandedTextOrder,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: S.brandedGrid === "1fr" ? "center" : "flex-start",
+            textAlign: S.brandedGrid === "1fr" ? "center" : "left",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "Inter, sans-serif",
+              fontSize: S.brandedEyebrow,
+              fontWeight: 700,
+              letterSpacing: "0.22em",
+              color: C.orange,
+              textTransform: "uppercase",
+              marginBottom: S.brandedEyebrowMB,
+            }}
+          >
+            {COPY.branded.eyebrow}
+          </div>
+          <h2
+            style={{
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 600,
+              fontSize: S.brandedH2,
+              lineHeight: 1.05,
+              letterSpacing: "-0.03em",
+              margin: `0 0 ${S.brandedH2MB}px`,
+              maxWidth: S.brandedH2MaxW,
+              color: C.bone,
+              textWrap: "balance",
+            }}
+          >
+            {COPY.branded.headline}
+          </h2>
+          <p
+            style={{
+              fontFamily: "Inter, sans-serif",
+              fontSize: S.brandedBody,
+              lineHeight: 1.55,
+              color: C.fg2,
+              margin: 0,
+              maxWidth: S.brandedBodyMaxW,
+            }}
+          >
+            {COPY.branded.body}
+          </p>
+        </div>
+        {/* Phone column — real 3D-rendered PNG/WebP. The render has its
+            own lighting and pose baked in, so we don't add a CSS rotation
+            on top. drop-shadow grounds the image against the dark section. */}
+        <div
+          style={{
+            order: S.brandedPhoneOrder,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <img
+            src={COPY.branded.phoneImg}
+            alt={COPY.branded.phoneAlt}
+            style={{
+              width: S.brandedPhoneW,
+              maxWidth: "100%",
+              height: "auto",
+              display: "block",
+              filter: "drop-shadow(0 40px 60px rgba(0,0,0,0.55))",
+            }}
+          />
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -3893,8 +2881,8 @@ function WhyItMatters() {
       id="why"
       ref={sectionRef}
       style={{
-        background: C.paper,
-        color: C.paperInk,
+        background: C.ink,
+        color: C.bone,
         padding: S.whyPad,
         minHeight: "100vh",
         display: "flex",
@@ -3920,11 +2908,11 @@ function WhyItMatters() {
             margin: `0 auto ${S.whyH2MB}px`,
             maxWidth: S.whyH2MaxW,
             textWrap: "balance",
-            color: C.paperInk,
+            color: C.bone,
             textTransform: "uppercase",
           }}
         >
-          Why it matters
+          {COPY.whyItMatters.headline}
         </h2>
         <div
           style={{
@@ -3935,10 +2923,13 @@ function WhyItMatters() {
           }}
         >
           {[
-            [`${num1}×`, "cheaper to keep a member than acquire a new one."],
             [
-              `$${num2}k`,
-              "more a year from keeping 5% more members in a 100-member gym.",
+              `${num1}${COPY.whyItMatters.stats[0].suffix}`,
+              COPY.whyItMatters.stats[0].text,
+            ],
+            [
+              `${COPY.whyItMatters.stats[1].prefix}${num2}${COPY.whyItMatters.stats[1].suffix}`,
+              COPY.whyItMatters.stats[1].text,
             ],
           ].map(([n, t], i) => (
             <div key={i} style={{ textAlign: "center" }}>
@@ -3963,7 +2954,7 @@ function WhyItMatters() {
                   lineHeight: 1.25,
                   letterSpacing: "-0.01em",
                   maxWidth: S.whyStatH3MaxW,
-                  color: C.paperInk,
+                  color: C.bone,
                 }}
               >
                 {t}
@@ -4087,9 +3078,9 @@ function Footer() {
                 textWrap: "balance",
               }}
             >
-              See it live.
+              {COPY.footer.headlineLine1}
               <br />
-              Book a 15-min demo.
+              {COPY.footer.headlineLine2}
             </h2>
             <p
               style={{
@@ -4102,8 +3093,7 @@ function Footer() {
                 maxWidth: S.footerTagMaxW,
               }}
             >
-              Works alongside your current software — no card migration
-              required.
+              {COPY.footer.tagline}
             </p>
           </div>
           <form
@@ -4117,7 +3107,7 @@ function Footer() {
             <input
               style={inputStyle}
               type="text"
-              placeholder="Your name"
+              placeholder={COPY.footer.placeholders.name}
               value={form.name}
               onChange={onChange("name")}
               required
@@ -4125,7 +3115,7 @@ function Footer() {
             <input
               style={inputStyle}
               type="email"
-              placeholder="Email"
+              placeholder={COPY.footer.placeholders.email}
               value={form.email}
               onChange={onChange("email")}
               required
@@ -4133,7 +3123,7 @@ function Footer() {
             <input
               style={inputStyle}
               type="text"
-              placeholder="Gym name"
+              placeholder={COPY.footer.placeholders.gym}
               value={form.gym}
               onChange={onChange("gym")}
               required
@@ -4157,10 +3147,10 @@ function Footer() {
               }}
             >
               {submitting
-                ? "Sending…"
+                ? COPY.footer.btnSubmitting
                 : submitted
-                  ? "✓ Thanks — Calendly opened in a new tab"
-                  : "Book a demo →"}
+                  ? COPY.footer.btnSubmitted
+                  : COPY.footer.btnIdle}
             </button>
             {status === "error" && (
               <div
@@ -4171,8 +3161,7 @@ function Footer() {
                   marginTop: 4,
                 }}
               >
-                Couldn't record your details — but Calendly opened anyway. Feel
-                free to book.
+                {COPY.footer.errorMessage}
               </div>
             )}
           </form>
@@ -4194,7 +3183,7 @@ function Footer() {
         >
           <a
             href="#top"
-            aria-label="CombatDen home"
+            aria-label={COPY.brand.homeAria}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -4203,11 +3192,11 @@ function Footer() {
           >
             <img
               src="assets/images/LogoTransparent.png"
-              alt="CombatDen"
+              alt={COPY.brand.name}
               style={{ height: S.footerLogoH, width: "auto", display: "block" }}
             />
           </a>
-          <div>jesse@combatden.net · 832-871-2702</div>
+          <div>{COPY.brand.contact}</div>
         </div>
       </div>
     </footer>
@@ -4217,24 +3206,7 @@ function Footer() {
 // ---------- FAQ ----------
 function Faq() {
   const S = SIZES[useBreakpoint()];
-  const items = [
-    {
-      q: "Do I need to migrate data?",
-      a: "No payment information migration is needed. All we need is member names, emails, rank (optional), and your class schedule. Everything else stays where it is. We work alongside your current gym management software / payment processor.",
-    },
-    {
-      q: "Can I customize the content?",
-      a: "Yes — add YouTube videos of your own, and yours will be prioritized.",
-    },
-    {
-      q: "Won't coach feedback take too long?",
-      a: "We have an innovative coach feedback system. The coach speaks their feedback and the app formats it. Only takes about 5 minutes per class.",
-    },
-    {
-      q: "Is a loyalty program actually worth it?",
-      a: "Yes! It's used by the most successful companies in the world — Nike, Under Armour, Life Time Fitness, and countless more. It'll work for combat sports gyms too.",
-    },
-  ];
+  const items = COPY.faq.items;
   const [open, setOpen] = useState(-1);
   return (
     <section
@@ -4259,7 +3231,7 @@ function Faq() {
             textAlign: "center",
           }}
         >
-          FAQ
+          {COPY.faq.eyebrow}
         </div>
         <h2
           style={{
@@ -4275,7 +3247,7 @@ function Faq() {
             textAlign: "center",
           }}
         >
-          Questions, answered.
+          {COPY.faq.headline}
         </h2>
 
         <div
@@ -4325,7 +3297,7 @@ function Faq() {
                       display: "inline-block",
                     }}
                   >
-                    +
+                    {COPY.glyphs.plus}
                   </span>
                 </button>
                 <div
@@ -4375,14 +3347,17 @@ function App() {
         minHeight: "100vh",
         overflowX: "clip",
         maxWidth: "100vw",
+        // Global rule: \n in any COPY string renders as a line break.
+        // CSS white-space is inherited, so this applies to every descendant
+        // unless an element explicitly overrides (e.g. whiteSpace: "nowrap").
+        whiteSpace: "pre-line",
       }}
     >
       <Nav />
       <Hero />
-      <Problem />
-      <Solution />
       <HowItWorks />
       <Loyalty />
+      <Branded />
       <WhyItMatters />
       <Faq />
       <Footer />

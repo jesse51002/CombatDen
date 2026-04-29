@@ -18,6 +18,76 @@ const C = {
   cardOrangeBorder: "rgba(255,108,45,0.45)",
 };
 
+// ---------- Copy ----------
+// Single source of truth for every user-visible string on this page. Edit copy
+// here, never inline in JSX. Rule (also in CLAUDE.md): no hardcoded text in
+// this file — anything rendered to the user lives in COPY.
+const COPY = {
+  brand: {
+    name: "CombatDen",
+    homeAria: "CombatDen home",
+    contact: "jesse@combatden.net · 832-871-2702",
+    copyrightSuffix: "CombatDen",
+  },
+  nav: {
+    bookDemoLong: "Book a demo →",
+    bookDemoShort: "Book demo",
+    menuOpenAria: "Open menu",
+    menuCloseAria: "Close menu",
+    links: {
+      howItWorks: "How it works",
+      whyItMatters: "Why it matters",
+      pricing: "Pricing",
+      faq: "FAQ",
+    },
+  },
+  hero: {
+    eyebrow: "Pricing",
+    headlineLead: "Pricing that scales ",
+    headlineEmphasis: "with your gym.",
+    tagline:
+      "Flat monthly rate based on member count. No setup fees. Cancel anytime.",
+  },
+  plans: {
+    cadence: "/mo",
+    cta: "Book a demo",
+    featuresLabel: "All features included",
+    items: [
+      { name: "Starter", range: "0 – 100 members", price: "69.99" },
+      {
+        name: "Growth",
+        range: "100 – 200 members",
+        price: "99.99",
+        featured: true,
+      },
+      { name: "Scale", range: "200+ members", price: "149.99" },
+    ],
+    features: [
+      "Member App (iOS & Android)",
+      "Retention Engine",
+      "Loyalty Program",
+      "Class Management",
+    ],
+    benefits: [
+      ["No setup fees", "Onboarding and import included."],
+      ["No card migration", "Works alongside your current software."],
+      ["Cancel anytime", "Month-to-month. No long-term contracts."],
+    ],
+    whiteLabelNote: "White-labeled apps for your gym's available on request.",
+  },
+  footer: {
+    headlineLine1: "See it live.",
+    headlineLine2: "Book a 15-min demo.",
+    tagline:
+      "Works alongside your current software — no card migration required.",
+    placeholders: { name: "Your name", email: "Email", gym: "Gym name" },
+    btnIdle: "Book a demo →",
+    btnSubmitting: "Sending…",
+    btnSubmitted: "✓ Thanks — Calendly opened in a new tab",
+    errorMessage: "Couldn't record your details — but Calendly opened anyway.",
+  },
+};
+
 const BP = { phone: 767, tablet: 1199 };
 function useBreakpoint() {
   const get = () => {
@@ -41,88 +111,183 @@ const navLink = { color: "inherit", textDecoration: "none", cursor: "pointer" };
 
 function Nav() {
   const bp = useBreakpoint();
-  const showLinks = bp !== "phone";
-  const padX = bp === "phone" ? 16 : bp === "tablet" ? 28 : 48;
-  const navHeight = bp === "phone" ? 56 : bp === "tablet" ? 64 : 72;
-  const logoH = bp === "phone" ? 28 : bp === "tablet" ? 34 : 40;
-  return (
-    <div
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-        height: navHeight,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: `0 ${padX}px`,
-        background: "rgba(18,22,25,0.82)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        borderBottom: `1px solid ${C.divider}`,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: bp === "desktop" ? 44 : 24 }}>
-        <a
-          href="index.html"
-          aria-label="CombatDen home"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            lineHeight: 0,
-            textDecoration: "none",
-          }}
-        >
-          <img
-            src="assets/images/LogoTransparent.png"
-            alt="CombatDen"
-            style={{ height: logoH, width: "auto", display: "block" }}
-          />
-        </a>
-        {showLinks && (
-          <div
-            style={{
-              display: "flex",
-              gap: 28,
-              fontFamily: "Inter, sans-serif",
-              fontSize: 14,
-              color: "rgba(244,243,238,0.7)",
-            }}
-          >
-            <a href="index.html#how-it-works" style={navLink}>How it works</a>
-            <a href="index.html#why" style={navLink}>Why it matters</a>
-            <a
-              href="pricing.html"
-              style={{ ...navLink, color: C.bone, fontWeight: 600 }}
-              aria-current="page"
-            >
-              Pricing
-            </a>
-            <a href="index.html#faq" style={navLink}>FAQ</a>
-          </div>
-        )}
-      </div>
+  const isPhone = bp === "phone";
+  const showLinks = !isPhone;
+  const padX = isPhone ? 16 : bp === "tablet" ? 28 : 48;
+  const navHeight = isPhone ? 56 : bp === "tablet" ? 64 : 72;
+  const logoH = isPhone ? 28 : bp === "tablet" ? 34 : 40;
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Auto-close the mobile menu when the viewport leaves phone width.
+  useEffect(() => {
+    if (!isPhone && menuOpen) setMenuOpen(false);
+  }, [isPhone, menuOpen]);
+  // Lock body scroll while the mobile menu is open.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [menuOpen]);
+  const closeMenu = () => setMenuOpen(false);
+  const links = (
+    <>
+      <a href="index.html#how-it-works" style={navLink} onClick={closeMenu}>
+        {COPY.nav.links.howItWorks}
+      </a>
+      <a href="index.html#why" style={navLink} onClick={closeMenu}>
+        {COPY.nav.links.whyItMatters}
+      </a>
       <a
-        href="#book"
+        href="pricing.html"
+        style={{ ...navLink, color: C.bone, fontWeight: 600 }}
+        aria-current="page"
+        onClick={closeMenu}
+      >
+        {COPY.nav.links.pricing}
+      </a>
+      <a href="index.html#faq" style={navLink} onClick={closeMenu}>
+        {COPY.nav.links.faq}
+      </a>
+    </>
+  );
+  return (
+    <>
+      <div
         style={{
-          background: C.orange,
-          color: C.bone,
-          border: "none",
-          padding: bp === "phone" ? "10px 16px" : "12px 22px",
-          borderRadius: 999,
-          fontFamily: "Inter, sans-serif",
-          fontWeight: 600,
-          fontSize: 13,
-          cursor: "pointer",
-          letterSpacing: "0.01em",
-          textDecoration: "none",
-          display: "inline-block",
-          whiteSpace: "nowrap",
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          height: navHeight,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: `0 ${padX}px`,
+          background: "rgba(18,22,25,0.82)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: `1px solid ${C.divider}`,
         }}
       >
-        {bp === "phone" ? "Book demo" : "Book a demo →"}
-      </a>
-    </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: bp === "desktop" ? 44 : 24,
+          }}
+        >
+          <a
+            href="index.html"
+            aria-label={COPY.brand.homeAria}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              lineHeight: 0,
+              textDecoration: "none",
+            }}
+          >
+            <img
+              src="assets/images/LogoTransparent.png"
+              alt={COPY.brand.name}
+              style={{ height: logoH, width: "auto", display: "block" }}
+            />
+          </a>
+          {showLinks && (
+            <div
+              style={{
+                display: "flex",
+                gap: 28,
+                fontFamily: "Inter, sans-serif",
+                fontSize: 14,
+                color: "rgba(244,243,238,0.7)",
+              }}
+            >
+              {links}
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <a
+            href="#book"
+            onClick={closeMenu}
+            style={{
+              background: C.orange,
+              color: C.bone,
+              border: "none",
+              padding: isPhone ? "10px 16px" : "12px 22px",
+              borderRadius: 999,
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              letterSpacing: "0.01em",
+              textDecoration: "none",
+              display: "inline-block",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {isPhone ? COPY.nav.bookDemoShort : COPY.nav.bookDemoLong}
+          </a>
+          {isPhone && (
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={menuOpen ? COPY.nav.menuCloseAria : COPY.nav.menuOpenAria}
+              aria-expanded={menuOpen}
+              style={{
+                width: 40,
+                height: 40,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "transparent",
+                border: `1px solid ${C.divider}`,
+                borderRadius: 10,
+                color: C.bone,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              {menuOpen ? (
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+                  <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+                  <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+      {/* Mobile menu panel — full-width dropdown beneath the nav bar. */}
+      {isPhone && menuOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: navHeight,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 49,
+            background: "rgba(18,22,25,0.96)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            display: "flex",
+            flexDirection: "column",
+            padding: "24px 20px",
+            gap: 20,
+            fontFamily: "Inter, sans-serif",
+            fontSize: 22,
+            color: "rgba(244,243,238,0.85)",
+          }}
+        >
+          {links}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -136,8 +301,8 @@ function Hero() {
     bp === "phone"
       ? "80px 20px 48px"
       : bp === "tablet"
-      ? "120px 40px 72px"
-      : "160px 64px 96px";
+        ? "120px 40px 72px"
+        : "160px 64px 96px";
   const h1Size = bp === "phone" ? 44 : bp === "tablet" ? 72 : 104;
   const tagSize = bp === "phone" ? 16 : bp === "tablet" ? 18 : 20;
   const eyebrowSize = bp === "phone" ? 14 : 18;
@@ -202,7 +367,7 @@ function Hero() {
             textTransform: "uppercase",
           }}
         >
-          Pricing
+          {COPY.hero.eyebrow}
         </div>
         <h1
           style={{
@@ -217,8 +382,8 @@ function Hero() {
             textWrap: "balance",
           }}
         >
-          Pricing that scales{" "}
-          <span style={{ color: C.orange }}>with your gym.</span>
+          {COPY.hero.headlineLead}
+          <span style={{ color: C.orange }}>{COPY.hero.headlineEmphasis}</span>
         </h1>
         <p
           style={{
@@ -230,8 +395,7 @@ function Hero() {
             margin: "32px auto 0",
           }}
         >
-          Flat monthly rate based on member count. No setup fees. Cancel
-          anytime.
+          {COPY.hero.tagline}
         </p>
       </div>
     </section>
@@ -239,40 +403,14 @@ function Hero() {
 }
 
 // ---------- Plan cards ----------
-const PLANS = [
-  {
-    name: "Starter",
-    range: "0 – 100 members",
-    price: "69.99",
-    cadence: "/mo",
-    featured: false,
-    cta: "Book a demo",
-  },
-  {
-    name: "Growth",
-    range: "100 – 200 members",
-    price: "99.99",
-    cadence: "/mo",
-    featured: true,
-    cta: "Book a demo",
-    badge: null,
-  },
-  {
-    name: "Scale",
-    range: "200+ members",
-    price: "149.99",
-    cadence: "/mo",
-    featured: false,
-    cta: "Book a demo",
-  },
-];
+const PLANS = COPY.plans.items.map((p) => ({
+  ...p,
+  cadence: COPY.plans.cadence,
+  cta: COPY.plans.cta,
+  featured: !!p.featured,
+}));
 
-const FEATURES = [
-  "Member App (iOS & Android)",
-  "Retention Engine",
-  "Loyalty Engine",
-  "Class Management",
-];
+const FEATURES = COPY.plans.features;
 
 function CheckIcon({ color = C.orange, size = 18 }) {
   return (
@@ -307,7 +445,11 @@ function PlanCard({ plan, bp }) {
       onMouseLeave={() => setHover(false)}
       style={{
         position: "relative",
-        background: featured ? C.cardOrangeBg : hover ? C.cardBgHover : C.cardBg,
+        background: featured
+          ? C.cardOrangeBg
+          : hover
+            ? C.cardBgHover
+            : C.cardBg,
         border: featured
           ? `1.5px solid ${C.cardOrangeBorder}`
           : `1px solid ${C.divider}`,
@@ -448,7 +590,7 @@ function PlanCard({ plan, bp }) {
             marginBottom: 20,
           }}
         >
-          All features included
+          {COPY.plans.featuresLabel}
         </div>
         <ul
           style={{
@@ -509,10 +651,13 @@ function PlanCard({ plan, bp }) {
 
 function PricingGrid() {
   const bp = useBreakpoint();
-  const cols =
-    bp === "phone" ? "1fr" : bp === "tablet" ? "1fr" : "1fr 1fr 1fr";
+  const cols = bp === "phone" ? "1fr" : bp === "tablet" ? "1fr" : "1fr 1fr 1fr";
   const pad =
-    bp === "phone" ? "32px 20px 96px" : bp === "tablet" ? "48px 40px 120px" : "64px 64px 160px";
+    bp === "phone"
+      ? "32px 20px 96px"
+      : bp === "tablet"
+        ? "48px 40px 120px"
+        : "64px 64px 160px";
   const gap = bp === "phone" ? 24 : 28;
   return (
     <section
@@ -546,11 +691,7 @@ function PricingGrid() {
           textAlign: "center",
         }}
       >
-        {[
-          ["No setup fees", "Onboarding and import included."],
-          ["No card migration", "Works alongside your current software."],
-          ["Cancel anytime", "Month-to-month. No long-term contracts."],
-        ].map(([t, s]) => (
+        {COPY.plans.benefits.map(([t, s]) => (
           <div key={t}>
             <div
               style={{
@@ -578,6 +719,23 @@ function PricingGrid() {
           </div>
         ))}
       </div>
+
+      {/* White-label disclaimer — small italic note below the benefits row. */}
+      <p
+        style={{
+          maxWidth: 720,
+          margin: bp === "phone" ? "32px auto 0" : "48px auto 0",
+          fontFamily: "Inter, sans-serif",
+          fontStyle: "italic",
+          fontSize: bp === "phone" ? 13 : 14,
+          lineHeight: 1.5,
+          color: C.fg3,
+          textAlign: "center",
+          padding: bp === "phone" ? "0 8px" : 0,
+        }}
+      >
+        {COPY.plans.whiteLabelNote}
+      </p>
     </section>
   );
 }
@@ -634,8 +792,8 @@ function Footer() {
     bp === "phone"
       ? "80px 20px 48px"
       : bp === "tablet"
-      ? "96px 40px 48px"
-      : "120px 64px 48px";
+        ? "96px 40px 48px"
+        : "120px 64px 48px";
   const grid = bp === "desktop" ? "1fr 480px" : "1fr";
   const gap = bp === "desktop" ? 80 : 40;
   const align = bp === "desktop" ? "left" : "center";
@@ -698,9 +856,9 @@ function Footer() {
                 textWrap: "balance",
               }}
             >
-              See it live.
+              {COPY.footer.headlineLine1}
               <br />
-              Book a 15-min demo.
+              {COPY.footer.headlineLine2}
             </h2>
             <p
               style={{
@@ -713,8 +871,7 @@ function Footer() {
                 maxWidth: 560,
               }}
             >
-              Works alongside your current software — no card migration
-              required.
+              {COPY.footer.tagline}
             </p>
           </div>
           <form
@@ -729,7 +886,7 @@ function Footer() {
             <input
               style={inputStyle}
               type="text"
-              placeholder="Your name"
+              placeholder={COPY.footer.placeholders.name}
               value={form.name}
               onChange={onChange("name")}
               required
@@ -737,7 +894,7 @@ function Footer() {
             <input
               style={inputStyle}
               type="email"
-              placeholder="Email"
+              placeholder={COPY.footer.placeholders.email}
               value={form.email}
               onChange={onChange("email")}
               required
@@ -745,7 +902,7 @@ function Footer() {
             <input
               style={inputStyle}
               type="text"
-              placeholder="Gym name"
+              placeholder={COPY.footer.placeholders.gym}
               value={form.gym}
               onChange={onChange("gym")}
               required
@@ -769,10 +926,10 @@ function Footer() {
               }}
             >
               {submitting
-                ? "Sending…"
+                ? COPY.footer.btnSubmitting
                 : submitted
-                  ? "✓ Thanks — Calendly opened in a new tab"
-                  : "Book a demo →"}
+                  ? COPY.footer.btnSubmitted
+                  : COPY.footer.btnIdle}
             </button>
             {status === "error" && (
               <div
@@ -783,7 +940,7 @@ function Footer() {
                   marginTop: 4,
                 }}
               >
-                Couldn't record your details — but Calendly opened anyway.
+                {COPY.footer.errorMessage}
               </div>
             )}
           </form>
@@ -803,7 +960,7 @@ function Footer() {
         >
           <a
             href="index.html"
-            aria-label="CombatDen home"
+            aria-label={COPY.brand.homeAria}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -812,13 +969,13 @@ function Footer() {
           >
             <img
               src="assets/images/LogoTransparent.png"
-              alt="CombatDen"
+              alt={COPY.brand.name}
               style={{ height: logoH, width: "auto", display: "block" }}
             />
           </a>
-          <div>jesse@combatden.net · 832-871-2702</div>
+          <div>{COPY.brand.contact}</div>
           <div style={{ color: C.fg4 }}>
-            © {new Date().getFullYear()} CombatDen
+            © {new Date().getFullYear()} {COPY.brand.copyrightSuffix}
           </div>
         </div>
       </div>
@@ -829,7 +986,16 @@ function Footer() {
 // ---------- App ----------
 function App() {
   return (
-    <div style={{ background: C.ink, minHeight: "100vh" }}>
+    <div
+      style={{
+        background: C.ink,
+        minHeight: "100vh",
+        // Global rule: \n in any COPY string renders as a line break.
+        // CSS white-space is inherited, so this applies to every descendant
+        // unless an element explicitly overrides (e.g. whiteSpace: "nowrap").
+        whiteSpace: "pre-line",
+      }}
+    >
       <Nav />
       <Hero />
       <PricingGrid />
