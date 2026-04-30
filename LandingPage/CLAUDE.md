@@ -28,6 +28,14 @@ How to apply:
 - Then make the call — sometimes the convention is wrong for this product, but you can only know that after seeing it.
 - Skip the search for genuinely project-specific work (this product's unique mechanic, our brand voice, internal copy decisions). Convention search is for the parts every SaaS has.
 
+## Dev server: assume it's already running
+
+**Never spawn `serve.py` / `make serve` in the background to smoke-test.** The harness doesn't reliably reap backgrounded processes, and the leftover servers squat on port 4173 — next time the user runs `make serve`, it fails with "port taken" and they have to hunt down PIDs.
+
+Default assumption: the user has `make serve` running in their own terminal. To verify a change, just point them at the URL (e.g. `http://localhost:4173/onepager/onepager.html`).
+
+If you genuinely need the server running (e.g. for a Bash HTTP check), **ask first.** Don't background it yourself. If a smoke-test can be done by checking the filesystem (`ls`, `stat`, Read) instead of HTTP, prefer that.
+
 ## Line breaks in copy (\n)
 
 The App root in both `hifi/landing.jsx` and `hifi/pricing.jsx` sets `whiteSpace: "pre-line"`. Because CSS `white-space` is inherited, every `\n` inside a `COPY` string renders as a real line break, while runs of regular spaces still collapse normally. To force a line break in copy, just put `\n` in the string — no `<br />`, no extra wrapper element, no per-element `whiteSpace` override.

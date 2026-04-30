@@ -16,6 +16,12 @@ INCLUDE_GLOBS = [
     "assets/**/*",
 ]
 
+# Internal-only directories that must never be uploaded to the public bucket.
+# Today nothing under these prefixes matches INCLUDE_GLOBS — but keep this as
+# a defensive guard in case a future glob accidentally catches them.
+#   onepager/  — sales leave-behind + design scratch (not a public page)
+EXCLUDE_PREFIXES = ("onepager/",)
+
 
 def iter_site_files():
     seen = set()
@@ -24,6 +30,9 @@ def iter_site_files():
             if not path.is_file():
                 continue
             rel = path.relative_to(SITE_DIR)
+            rel_str = str(rel).replace("\\", "/")
+            if any(rel_str.startswith(p) for p in EXCLUDE_PREFIXES):
+                continue
             if rel in seen:
                 continue
             seen.add(rel)
