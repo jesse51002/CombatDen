@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/navigation/app_routes.dart';
 import 'package:mobile_app/shared/widgets/nav/app_nav_item.dart';
 
 enum AppBottomNavTab { home, rank, reward, videos }
+
+String _routeFor(AppBottomNavTab tab) {
+  return switch (tab) {
+    AppBottomNavTab.home => AppRoutes.home,
+    AppBottomNavTab.rank => AppRoutes.profile,
+    AppBottomNavTab.reward => AppRoutes.pointsStore,
+    AppBottomNavTab.videos => AppRoutes.videos,
+  };
+}
 
 const double _kBottomNavRowHeight = 64;
 
@@ -26,7 +36,7 @@ class AppBottomNavBar extends StatelessWidget {
         border: Border(
           top: BorderSide(
             color: DesignConstants.text3rd,
-            width: DesignConstants.buttonBorder,
+            width: DesignConstants.dividerThickness,
           ),
         ),
       ),
@@ -41,9 +51,7 @@ class AppBottomNavBar extends StatelessWidget {
                     icon: _iconFor(tab),
                     label: _labelFor(tab),
                     isActive: tab == selected,
-                    onTap: onTabSelected == null
-                        ? null
-                        : () => onTabSelected!(tab),
+                    onTap: () => _handleTap(context, tab),
                   ),
                 ),
               )
@@ -51,6 +59,15 @@ class AppBottomNavBar extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _handleTap(BuildContext context, AppBottomNavTab tab) {
+    if (onTabSelected != null) {
+      onTabSelected!(tab);
+      return;
+    }
+    if (tab == selected) return;
+    Navigator.of(context).pushReplacementNamed(_routeFor(tab));
   }
 
   IconData _iconFor(AppBottomNavTab tab) {

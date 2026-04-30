@@ -41,7 +41,7 @@ class AppNavItem extends StatelessWidget {
               Icon(
                 icon,
                 color: textColor,
-                size: 24,
+                size: DesignConstants.iconSizeMd,
                 weight: DesignConstants.iconWeight,
               ),
               Text(

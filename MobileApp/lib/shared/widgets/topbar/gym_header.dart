@@ -30,7 +30,7 @@ class GymHeader extends StatelessWidget {
               Symbols.expand_more_sharp,
               weight: DesignConstants.iconWeight,
               color: DesignConstants.text,
-              size: 21,
+              size: DesignConstants.iconSizeSm,
             ),
           ],
         ),

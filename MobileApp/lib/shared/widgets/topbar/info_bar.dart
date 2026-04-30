@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/navigation/app_routes.dart';
 
 class InfoBar extends StatelessWidget {
   const InfoBar({
@@ -18,25 +19,55 @@ class InfoBar extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Expanded(child: _RankItem(asset: rankBadgeAsset)),
         Expanded(
-          child: _IconValueItem(
-            asset: 'assets/images/icon_streak.png',
-            value: '$streakDays',
-            assetWidth: 23,
-            assetHeight: 30,
+          child: _TapTarget(
+            onTap: () =>
+                Navigator.of(context).pushNamed(AppRoutes.profile),
+            child: _RankItem(asset: rankBadgeAsset),
           ),
         ),
         Expanded(
-          child: _IconValueItem(
-            asset: 'assets/images/icon_coin.png',
-            value: pointsLabel,
-            assetWidth: 22,
-            assetHeight: 22,
+          child: _TapTarget(
+            onTap: () =>
+                Navigator.of(context).pushNamed(AppRoutes.profile),
+            child: _IconValueItem(
+              asset: 'assets/images/icon_streak.png',
+              value: '$streakDays',
+              assetWidth: 23,
+              assetHeight: 30,
+            ),
+          ),
+        ),
+        Expanded(
+          child: _TapTarget(
+            onTap: () =>
+                Navigator.of(context).pushNamed(AppRoutes.pointsStore),
+            child: _IconValueItem(
+              asset: 'assets/images/icon_coin.png',
+              value: pointsLabel,
+              assetWidth: 22,
+              assetHeight: 22,
+            ),
           ),
         ),
         const Expanded(child: _QrCodeItem()),
       ],
+    );
+  }
+}
+
+class _TapTarget extends StatelessWidget {
+  const _TapTarget({required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: child,
     );
   }
 }

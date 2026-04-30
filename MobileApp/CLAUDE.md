@@ -29,6 +29,14 @@ The whole point is to make screens that **look right** so the design can be eval
 
 If you find yourself writing widget code without the Figma context loaded in this conversation, stop and load it.
 
+### Figma rate-limit rule — NEVER make things up
+
+If a Figma MCP call returns a rate-limit error ("tool call limit reached", HTTP 429, or similar), **wait 30 seconds and retry the same call**. Retry up to **3 times** total. If it's still rate-limited after the 3rd retry, **stop the task and report it as blocked**. Do not proceed.
+
+**Never ever ever make up a layout because Figma is unavailable.** Not from convention, not from "the existing visual language", not from "what good apps usually do for this", not from your training data. The Figma frame is the source of truth. If you can't see it, you can't build it. Ship nothing rather than ship a guess.
+
+This rule applies to every screen, every component, every variant — individually. One rate-limited screen does not give you license to guess at the others. Stop, report which screens were unreachable, and let the user decide.
+
 ### Figma asset download rule
 
 Figma asset URLs from the MCP plugin **expire after 7 days**. Whenever a Figma frame contains bitmap images — gym logos, photos, raster icons, custom illustrations — **download them to `assets/images/<descriptive_snake_case_name>.png`** and register `assets/images/` in `pubspec.yaml`. Reference them via `Image.asset('assets/images/...')`.
@@ -58,6 +66,30 @@ How to apply:
 **YAGNI** — don't add features until needed.
 **Separation of Concerns** — separate UI from any logic that creeps in.
 
+## Always delete dead code
+
+When something is removed, **remove it completely** — don't leave orphans behind.
+
+When you delete a screen, widget, mock model, route, asset, enum, field, or feature, also delete:
+- Every file that only existed to support it (sub-widgets, helpers, `mock_*.dart`, the whole feature folder if nothing in it survives).
+- Every import, reference, route entry, and registration in `main.dart`, `app_routes.dart`, the bottom nav's route map, `pubspec.yaml`'s asset list, etc.
+- Every field on a model that was only there to feed the deleted UI.
+- Every asset under `assets/images/` that nothing references anymore.
+
+Before declaring the removal done, **verify**:
+- `grep -rn '<RemovedSymbolName>' lib/` returns nothing.
+- `flutter analyze` is clean (no unused-import / unused-field / unused-variable warnings).
+- `grep -rn '<deleted_asset_filename>' lib/ pubspec.yaml` returns nothing.
+
+**No tombstones.** Never leave behind:
+- Commented-out code or `// removed: ...` markers.
+- Empty files, empty folders, or stub classes that no longer do anything.
+- Re-exports / barrel files that only existed to forward the deleted symbol.
+- Unused imports, unused enum variants, unused mock fields.
+- Routes that point at a `NotYetBuiltScreen` placeholder for something that was deliberately deleted (delete the route too).
+
+If unsure whether something is truly dead, grep for it. If it has zero references, delete it in the same change as the thing that made it dead — not "later."
+
 ## Theming System
 
 **CRITICAL: ALWAYS Use DesignConstants**
@@ -65,8 +97,10 @@ How to apply:
 - **EVERY widget MUST import and use `package:mobile_app/core/constants/design_constants.dart`.**
 - **NEVER hardcode colors** — no `Colors.red`, no inline `Color(0xFF...)`, no copy-pasted Figma hex codes.
 - **NEVER hardcode font properties** — no inline `fontFamily`, no inline `fontSize`, no inline `fontWeight`. Use the text styles in `DesignConstants` (`h1`, `h2`, `h3`, `p`, `pBig`, `pSmall`, etc.).
-- **NEVER hardcode spacing, padding, radius, or border widths.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorderSize`.
-- **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/radius/padding, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
+- **NEVER hardcode spacing, padding, radius, border widths, divider thickness, or icon sizes.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorder` / `buttonBorderSize`, `DesignConstants.dividerThickness`, and `DesignConstants.iconSize{Xs|Sm|Md|Lg|Xl|2xl}` (T-shirt scale, 16/20/24/28/32/36).
+- **Image dimensions ARE allowed inline.** `Image.asset(width:, height:)`, asset-bound `SizedBox` constraints, and layout `aspectRatio:` are per-asset Figma values — they're not fungible design tokens, and there is no `imageSize*` catalog. Type the literal pixel value (or hoist it to a private `_kFoo` const at the top of the file when reused). Same for one-off `Positioned(left:/top:/...)` math when laying out an image overlay.
+- **`_kFoo` private file-scoped constants are also allowed for scroll-position math, sliver / pinned-header heights, and pure layout arithmetic that has no `DesignConstants` equivalent.** Examples: `_kTopbarHeight = 268`, `_kDateRowHeight = 50`, `_kCardWidth = 258`. The carve-out is for *layout math that is intrinsically per-screen and not a fungible design token*. If the same number appears across multiple screens or controls, it's not a `_k` candidate — escalate to add a `DesignConstants` token instead.
+- **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/padding/radius/border/divider/icon-size, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
 - **`design_constants.dart` is IMMUTABLE.** Do not add, remove, rename, or change any value in it. If a needed token doesn't exist, use the closest existing constant or stop and ask. **NEVER create new design constants without explicit permission.**
 - This file was copied verbatim from `../FlutterCRM/lib/core/constants/design_constants.dart`. Keep the two files byte-for-byte identical until they are extracted into a shared package. If a token is added in one repo, mirror it to the other in the same change.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
@@ -76,8 +110,9 @@ How to apply:
 - **ALWAYS use `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart`.
 - **NEVER use `Icons.*`** from Flutter's built-in Material icons.
 - **ALWAYS set `weight: DesignConstants.iconWeight`** on every `Icon()` widget.
-- Good: `Icon(Symbols.person_sharp, weight: DesignConstants.iconWeight)`
-- Bad: `Icon(Icons.person)`
+- **ALWAYS set `size:` to a `DesignConstants.iconSize*` token** — `iconSizeXs` (16), `iconSizeSm` (20), `iconSizeMd` (24), `iconSizeLg` (28), `iconSizeXl` (32), `iconSize2xl` (36). If the design lands between sizes, round to the nearest token rather than inlining a literal.
+- Good: `Icon(Symbols.person_sharp, weight: DesignConstants.iconWeight, size: DesignConstants.iconSizeMd)`
+- Bad: `Icon(Icons.person)` / `Icon(..., size: 21)`
 
 **App Theme**
 
@@ -111,7 +146,7 @@ How to apply:
 - Private: `_internalVar`, `_PrivateWidget`
 
 **Formatting**
-- Max 80 characters per line.
+- Max 80 characters per line **for body code**. Package imports are exempt — Dart's formatter doesn't break import lines, and renaming folders to fit a column limit isn't worth it.
 - `dart format` for consistent formatting.
 - Trailing commas on multi-line widget trees for clean diffs.
 
@@ -147,8 +182,15 @@ Helper functions (formatters, display builders) live in their own `_helpers.dart
 
 ## Screen Layout & Spacing
 
+**Screen frame**
+- Use `AppScreenScaffold` (`lib/shared/widgets/scaffold/app_screen_scaffold.dart`) for every screen. It owns the background color, top + bottom `SafeArea`, optional fixed topbar, optional fixed bottom nav, and the screen-edge horizontal inset. **Don't hand-roll `Scaffold` + `SafeArea` + `Padding` per screen** — that's exactly the duplication this widget exists to remove.
+- Pass `bottomNav: AppBottomNavBar(...)` when the screen sits behind the persistent nav. Pass `topbar:` only for the rare case of a fixed topbar above the body — most screens put `AppTopbar` *inside* the scrollable, so they leave `topbar:` null.
+
 **Horizontal padding**
-- Use `DesignConstants.screenHorizontalPadding` for all screen-level horizontal padding. Visual consistency across screens is non-negotiable.
+- `AppScreenScaffold` defaults to `horizontalPadding: AppScreenHorizontalPadding.standard` (= `DesignConstants.screenHorizontalPadding`, 16). This is the right answer ~90% of the time.
+- Use `AppScreenHorizontalPadding.big` (= `DesignConstants.paddingBig`, 32) for inset-frame screens like the photo verification flow where the design specifies a wider gutter.
+- Use `AppScreenHorizontalPadding.none` when the screen renders edge-to-edge (e.g. a screen whose AppTopbar is inside the scrollable, or each section handles its own horizontal padding internally).
+- **Don't apply screen-edge horizontal padding manually inside the body of a screen using `AppScreenScaffold`** — that's double-padding.
 
 **Spacing rules**
 - **NEVER use `SizedBox` for spacing.** Always use the `spacing:` parameter on `Column`/`Row`.
@@ -219,7 +261,7 @@ Bad: nesting the cascade but cramming it all into one giant `build` method — t
 
 **Widget naming**
 - Section widgets: `[Content]Section` — `MembersSection`, `HeaderSection`.
-- Item widgets: `[Item]Card`, `[Item]Tile`, `[Item]Item` — `MemberCard`, `MemberListTile`.
+- Item widgets: `[Item]Card`, `[Item]Tile`, `[Item]Item`, `[Item]Row` — `MemberCard`, `MemberListTile`, `BenefitRow`. `*Row` is valid for items that render as a horizontal strip inside a `*List` / `*Section` (avatar + label + meta).
 - Grid/List widgets: `[Content]Grid`, `[Content]List` — `MembersGrid`, `MembersList`.
 - Avoid generic names like `CustomWidget`, `WidgetOne`.
 
@@ -236,8 +278,10 @@ Bad: nesting the cascade but cramming it all into one giant `build` method — t
 lib/
 ├── main.dart
 ├── core/
-│   └── constants/
-│       └── design_constants.dart   # IMMUTABLE — copied from FlutterCRM
+│   ├── constants/
+│   │   └── design_constants.dart   # IMMUTABLE — copied from FlutterCRM
+│   └── navigation/
+│       └── app_routes.dart         # named-route constants + builder map
 ├── features/
 │   └── <feature>/
 │       ├── data/

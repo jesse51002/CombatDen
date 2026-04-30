@@ -35,7 +35,7 @@ class AppOutlineButton extends StatelessWidget {
     final width = borderWidth ?? DesignConstants.buttonBorder;
     final fg = textColor ?? DesignConstants.text;
     final style = (textStyle ?? DesignConstants.p).copyWith(color: fg);
-    final radius = borderRadius ?? 100;
+    final radius = borderRadius ?? DesignConstants.radiusCircle;
     final pad =
         padding ??
         EdgeInsets.symmetric(

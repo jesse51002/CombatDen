@@ -44,28 +44,6 @@ screens:
       combat_den: "190:353"
       combat_den_bjj: "3158:1962"
 
-  # ---- Photo verification ----
-  - name: PhotoVerifactionStart
-    notes: Intro / camera-permission screen.
-    nodes:
-      combat_den: "264:346"
-      combat_den_bjj: "3158:2432"
-  - name: PhotoVerfActive
-    notes: Camera capture interface.
-    nodes:
-      combat_den: "265:411"
-      combat_den_bjj: "3158:2451"
-  - name: PhotoVerfReview
-    notes: Review captured photo before submit.
-    nodes:
-      combat_den: "266:90"
-      combat_den_bjj: "3158:2458"
-  - name: PhotoVerfComplete
-    notes: Success confirmation.
-    nodes:
-      combat_den: "266:104"
-      combat_den_bjj: "3158:2384"
-
   # ---- Classes & booking ----
   - name: Class Screen
     notes: Class detail and scheduling.

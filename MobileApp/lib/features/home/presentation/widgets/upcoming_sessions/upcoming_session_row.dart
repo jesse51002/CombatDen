@@ -3,6 +3,8 @@ import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_upcoming_sessions.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_outline_button.dart';
 
+const double _kGutterWidth = 70;
+
 class UpcomingSessionRow extends StatelessWidget {
   const UpcomingSessionRow({super.key, required this.session});
 
@@ -20,7 +22,7 @@ class UpcomingSessionRow extends StatelessWidget {
         spacing: DesignConstants.spacingLarge,
         children: [
           SizedBox(
-            width: 70,
+            width: _kGutterWidth,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,

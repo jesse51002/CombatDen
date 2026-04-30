@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/features/home/presentation/screens/home_booked_body.dart';
-import 'package:mobile_app/features/home/presentation/screens/home_not_booked_body.dart';
+import 'package:mobile_app/features/home/presentation/widgets/home_body/home_booked_body.dart';
+import 'package:mobile_app/features/home/presentation/widgets/home_body/home_not_booked_body.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
+import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,21 +28,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: DesignConstants.backgroundColor,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                children: const [HomeNotBookedBody(), HomeBookedBody()],
-              ),
-            ),
-            const AppBottomNavBar(selected: AppBottomNavTab.home),
-          ],
-        ),
+    return AppScreenScaffold(
+      horizontalPadding: AppScreenHorizontalPadding.none,
+      bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.home),
+      child: PageView(
+        controller: _pageController,
+        children: const [HomeNotBookedBody(), HomeBookedBody()],
       ),
     );
   }

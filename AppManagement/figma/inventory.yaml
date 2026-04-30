@@ -1,0 +1,73 @@
+# Figma frame inventory for AppManagement.
+# Add one entry per known frame so future work can resolve file_key + node_id
+# without asking the user to paste the URL again.
+file_key: q04PCZ3W9syMik34JRtRbL
+file_name: CombatDenMobileAppManager
+frames:
+  # ----- Top-level screens (in scope) -----
+  - name: home
+    node_id: "3132:3823"
+    notes: |
+      Admin dashboard / landing screen.
+      Lives at route AppRoutes.home ('/').
+
+  - name: members
+    node_id: "3132:3574"
+    notes: |
+      Members list screen. Tapping a row navigates to SpecificMember.
+      "Add member" button is rendered but intentionally a no-op for now —
+      the AddMemberPersonalInfo / Finalize flow is out of scope this pass.
+      Lives at route AppRoutes.members ('/members').
+
+  - name: specific_member
+    node_id: "3132:3075"
+    notes: |
+      Member detail screen. Reachable from Members list.
+      Has a "view member's app" entry point that links to MemberApp.
+      Lives at route AppRoutes.memberDetail ('/members/detail').
+
+  - name: member_app
+    node_id: "3132:3427"
+    notes: |
+      Admin-side preview of what the member sees in the mobile app.
+      Reachable from SpecificMember.
+      Lives at route AppRoutes.memberAppPreview ('/members/app-preview').
+
+  - name: schedule
+    node_id: "3132:2339"
+    notes: |
+      Class schedule screen.
+      Lives at route AppRoutes.schedule ('/schedule').
+
+  - name: qr_codes
+    node_id: "3132:2322"
+    notes: |
+      Gym QR codes screen.
+      Lives at route AppRoutes.qrCodes ('/qr-codes').
+
+  - name: growth
+    node_id: "5001:3206"
+    notes: |
+      Growth / analytics screen.
+      Lives at route AppRoutes.growth ('/growth').
+
+  # ----- Top-level screens (out of scope this pass) -----
+  - name: add_member_personal_info
+    node_id: "3132:1728"
+    notes: |
+      Add-member flow, step 1 of 4. NOT BUILT in the current pass — the
+      user explicitly excluded it. Recorded here so it can be picked up later.
+
+  - name: add_member_finalize
+    node_id: "3132:2057"
+    notes: |
+      Add-member flow, final step. NOT BUILT in the current pass — the
+      user explicitly excluded it. Recorded here so it can be picked up later.
+
+  # ----- Shared components -----
+  - name: sections_bar
+    node_id: "5001:4340"
+    notes: |
+      Persistent left-side nav rail used on every screen.
+      Implemented as lib/shared/widgets/sections_bar.dart and embedded
+      inside lib/shared/widgets/app_shell.dart.

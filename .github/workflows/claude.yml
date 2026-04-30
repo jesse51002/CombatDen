@@ -1,0 +1,76 @@
+name: Claude Code
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+      actions: read # Required for Claude to read CI results on PRs
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          additional_permissions: |
+            actions: read
+
+          prompt: |
+            This is a monorepo. Each top-level directory is a separate
+            subsystem with its own `CLAUDE.md` file containing the rules and
+            conventions for that subsystem. The root `CLAUDE.md` documents how
+            the monorepo is organised and which cross-system contracts exist.
+
+            Before answering the user's request, orient yourself in the right
+            subsystem(s):
+
+            1. If this invocation is on a pull request, run
+               `gh pr diff <PR_NUMBER> --name-only` and group the changed
+               files by their top-level directory. For each touched subsystem
+               (any top-level directory that has its own `CLAUDE.md`), read
+               that subsystem's `CLAUDE.md`. Always also read the root
+               `CLAUDE.md`.
+
+            2. If this invocation is on an issue or a non-PR context, infer
+               the relevant subsystem(s) from the user's request and the files
+               or directories they reference, and read the matching
+               `CLAUDE.md` files. If you genuinely cannot tell which subsystem
+               applies, ask the user before guessing.
+
+            3. Then carry out the user's request the way the comment, issue,
+               or review that tagged you describes. Frame your answer around
+               the rules in the relevant subsystem's `CLAUDE.md` rather than
+               generic advice. Quote the rule when it's load-bearing.
+
+            4. When the user's request spans multiple subsystems and touches
+               a documented cross-system contract (e.g. `Database/openapi.json`,
+               `immutable_columns.py`, `schema_db_diagram.io`), flag both
+               sides of the contract in your answer.
+
+            Do not invent rules that aren't in any `CLAUDE.md`. Do not skip
+            rules that are.
+

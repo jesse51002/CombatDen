@@ -19,6 +19,9 @@ help:
 run:
 	flutter run -d emulator-5554
 
+run-phone:
+	flutter run -d 52121FDAS0018S
+
 run-ios:
 	flutter run -d ios
 

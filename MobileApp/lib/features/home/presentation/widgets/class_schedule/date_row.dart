@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/home/data/schedule_generator.dart';
+import 'package:mobile_app/features/home/presentation/widgets/class_schedule/date_tab.dart';
 
 // Estimated pitch (avg pill width + gap). Only used as a fallback when the
 // target pill isn't currently built — once the pill is built we re-center
 // exactly via Scrollable.ensureVisible.
 const double _kDateTabPitchEstimate = 120;
+
+const int _kDateTabCount = 365;
 
 class DateRow extends StatefulWidget {
   const DateRow({
@@ -101,71 +104,32 @@ class _DateRowState extends State<DateRow> {
       decoration: BoxDecoration(
         color: DesignConstants.backgroundColor,
         border: Border(
-          bottom: BorderSide(color: DesignConstants.text3rd, width: 1),
+          bottom: BorderSide(
+            color: DesignConstants.text3rd,
+            width: DesignConstants.dividerThickness,
+          ),
         ),
       ),
       padding: EdgeInsets.only(
         top: DesignConstants.spacingSmall,
         bottom: DesignConstants.spacingTiny,
       ),
-      child: ListView.builder(
+      child: ListView.separated(
         controller: widget.scrollController,
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.only(
           left: DesignConstants.paddingBig,
           right: DesignConstants.spacingMedium,
         ),
-        itemBuilder: (context, index) => Padding(
-          padding: EdgeInsets.only(right: DesignConstants.spacingBig),
-          child: _DateTab(
-            key: _keyFor(index),
-            label: formatDayLabel(index),
-            isSelected: index == widget.currentDayIndex,
-            onTap: () => widget.onDateTap(index),
-          ),
+        itemCount: _kDateTabCount,
+        separatorBuilder: (_, _) =>
+            SizedBox(width: DesignConstants.spacingBig),
+        itemBuilder: (context, index) => DateTab(
+          key: _keyFor(index),
+          label: formatDayLabel(index),
+          isSelected: index == widget.currentDayIndex,
+          onTap: () => widget.onDateTap(index),
         ),
-      ),
-    );
-  }
-}
-
-class _DateTab extends StatelessWidget {
-  const _DateTab({
-    super.key,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isSelected
-        ? DesignConstants.primaryColor
-        : DesignConstants.text2nd;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        decoration: isSelected
-            ? BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: DesignConstants.primaryColor,
-                    width: DesignConstants.buttonBorder,
-                  ),
-                ),
-              )
-            : null,
-        padding: EdgeInsets.symmetric(
-          vertical: DesignConstants.spacingMedium,
-          horizontal: DesignConstants.spacingLarge,
-        ),
-        alignment: Alignment.center,
-        child: Text(label, style: DesignConstants.h2.copyWith(color: color)),
       ),
     );
   }

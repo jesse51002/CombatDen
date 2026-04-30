@@ -36,6 +36,7 @@ class DesignConstants {
   // Design values
   static const double radiusBig = 32.0;
   static const double radiusSmall = 16.0;
+  static const double radiusCircle = 1000.0;
 
   static const double paddingBig = 32;
   static const double paddingSmall = 16;
@@ -51,6 +52,21 @@ class DesignConstants {
 
   static const double buttonBorderSize = 3.0;
   static const double screenHorizontalPadding = 16.0;
+
+  // Icon sizes (T-shirt scale, 16 + 4x)
+  static const double iconSizeXs = 16;
+  static const double iconSizeSm = 20;
+  static const double iconSizeMd = 24;
+  static const double iconSizeLg = 28;
+  static const double iconSizeXl = 32;
+  static const double iconSize2xl = 36;
+
+  // Pill heights
+  static const double pillHeightSm = 24;
+  static const double pillHeightMd = 30;
+
+  // Divider thickness (single source of truth for hairline dividers)
+  static const double dividerThickness = 1;
 
   static final Color divider = card;
   static const double sideNavWidth = 100.0;

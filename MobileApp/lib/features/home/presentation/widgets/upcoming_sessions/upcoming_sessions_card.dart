@@ -33,30 +33,6 @@ class UpcomingSessionsCard extends StatelessWidget {
   }
 }
 
-class _SessionList extends StatelessWidget {
-  const _SessionList({required this.sessions});
-  final List<MockUpcomingSession> sessions;
-
-  @override
-  Widget build(BuildContext context) {
-    final children = <Widget>[];
-    for (var i = 0; i < sessions.length; i++) {
-      children.add(UpcomingSessionRow(session: sessions[i]));
-      children.add(
-        Container(
-          height: DesignConstants.buttonBorder,
-          color: DesignConstants.divider,
-        ),
-      );
-    }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
-    );
-  }
-}
-
 class _StreakFooter extends StatelessWidget {
   const _StreakFooter({required this.weeks});
   final int weeks;
@@ -82,3 +58,28 @@ class _StreakFooter extends StatelessWidget {
     );
   }
 }
+
+class _SessionList extends StatelessWidget {
+  const _SessionList({required this.sessions});
+  final List<MockUpcomingSession> sessions;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[];
+    for (var i = 0; i < sessions.length; i++) {
+      children.add(UpcomingSessionRow(session: sessions[i]));
+      children.add(
+        Container(
+          height: DesignConstants.buttonBorder,
+          color: DesignConstants.divider,
+        ),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+}
+

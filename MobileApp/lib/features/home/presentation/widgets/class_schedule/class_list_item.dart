@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/navigation/app_routes.dart';
 import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
 
 class ClassListItem extends StatelessWidget {
@@ -19,33 +20,39 @@ class ClassListItem extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingLarge,
       children: [
-        Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: DesignConstants.screenHorizontalPadding,
-            vertical: DesignConstants.spacingMedium,
+        InkWell(
+          onTap: () => Navigator.of(context).pushNamed(
+            AppRoutes.classDetail,
+            arguments: classData,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            spacing: DesignConstants.spacingLarge,
-            children: [
-              Expanded(
-                child: _ClassInfo(
-                  classData: classData,
-                  showBookings: showBookings,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: DesignConstants.screenHorizontalPadding,
+              vertical: DesignConstants.spacingMedium,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              spacing: DesignConstants.spacingLarge,
+              children: [
+                Expanded(
+                  child: _ClassInfo(
+                    classData: classData,
+                    showBookings: showBookings,
+                  ),
                 ),
-              ),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(
-                  DesignConstants.radiusSmall,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(
+                    DesignConstants.radiusSmall,
+                  ),
+                  child: Image.asset(
+                    classData.imageAsset,
+                    width: 122,
+                    height: 73,
+                    fit: BoxFit.cover,
+                  ),
                 ),
-                child: Image.asset(
-                  classData.imageAsset,
-                  width: 122,
-                  height: 73,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         Container(
@@ -78,7 +85,8 @@ class _ClassInfo extends StatelessWidget {
           classData.mentor,
           style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
         ),
-        if (classData.attending != null) _BookedCount(count: classData.attending!),
+        if (classData.attending != null)
+          _BookedCount(count: classData.attending!),
         if (showBookings && classData.isBooked) const _BookedConfirmation(),
       ],
     );
@@ -99,7 +107,7 @@ class _BookedConfirmation extends StatelessWidget {
           Symbols.check_sharp,
           weight: DesignConstants.iconWeight,
           color: DesignConstants.text,
-          size: 16,
+          size: DesignConstants.iconSizeXs,
         ),
         Text('You booked this class!', style: DesignConstants.h3),
       ],
@@ -122,7 +130,7 @@ class _BookedCount extends StatelessWidget {
           Symbols.person_sharp,
           weight: DesignConstants.iconWeight,
           color: DesignConstants.text2nd,
-          size: 16,
+          size: DesignConstants.iconSizeXs,
         ),
         Text(
           '$count attending',
