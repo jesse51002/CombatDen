@@ -72,7 +72,7 @@ class _AttendingRow extends StatelessWidget {
         Icon(
           Symbols.person_sharp,
           weight: DesignConstants.iconWeight,
-          color: DesignConstants.primaryColor,
+          color: DesignConstants.of(context).primaryColor,
           size: DesignConstants.iconSizeSm,
         ),
         Text(

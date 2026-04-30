@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/rewards/data/mock_points_store.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
 /// Single store item rendered as a buyable card in the points-store grid.
@@ -21,7 +22,7 @@ class StoreItemCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: Image.asset(item.imageAsset, fit: BoxFit.cover),
+            child: BrandImage.asset(item.imageAsset, fit: BoxFit.cover),
           ),
           Padding(
             padding: EdgeInsets.all(DesignConstants.paddingSmall),
@@ -86,7 +87,9 @@ class _PointsCost extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       '${_formatPoints(pointsCost)} pts',
-      style: DesignConstants.h2.copyWith(color: DesignConstants.primaryColor),
+      style: DesignConstants.h2.copyWith(
+        color: DesignConstants.of(context).primaryColor,
+      ),
       textAlign: TextAlign.center,
     );
   }

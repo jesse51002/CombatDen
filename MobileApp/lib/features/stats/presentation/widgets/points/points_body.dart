@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 /// Hero illustration + "+N points" caption for the Points celebration card.
 class PointsBody extends StatelessWidget {
@@ -15,7 +16,7 @@ class PointsBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingLarge,
       children: [
-        Image.asset(
+        BrandImage.asset(
           stats.heroAsset,
           width: 238,
           height: 238,

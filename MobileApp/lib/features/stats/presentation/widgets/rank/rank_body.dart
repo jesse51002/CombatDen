@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/rank/rank_progress_bar.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 /// Two-line rank name + belt illustration + tier-progress bar with caption.
 class RankBody extends StatelessWidget {
@@ -35,7 +36,7 @@ class RankBody extends StatelessWidget {
           ],
         ),
         Center(
-          child: Image.asset(
+          child: BrandImage.asset(
             stats.beltAsset,
             width: 209,
             height: 208,

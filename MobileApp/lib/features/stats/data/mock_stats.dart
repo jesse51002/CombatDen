@@ -129,7 +129,7 @@ const mockStreakStats = MockStreakStats(
 const mockWinsStats = MockWinsStats(
   title: 'Today’s wins',
   subtitle: 'Every session you get stronger',
-  heroAsset: 'assets/images/stat_wins_trophy.png',
+  heroAsset: 'stat_wins_trophy.png',
   tiles: [
     MockWinTile(iconName: 'star', value: '3 week', label: 'Streak'),
     MockWinTile(iconName: 'award', value: '+50', label: 'Rating'),
@@ -139,7 +139,7 @@ const mockWinsStats = MockWinsStats(
 
 const mockPointsStats = MockPointsStats(
   amountLabel: '+160 points',
-  heroAsset: 'assets/images/stat_points_stars.png',
+  heroAsset: 'stat_points_stars.png',
 );
 
 const mockRewardsStats = MockRewardsStats(
@@ -148,19 +148,19 @@ const mockRewardsStats = MockRewardsStats(
   featuredIndex: 1,
   items: [
     MockRewardItem(
-      imageAsset: 'assets/images/stat_reward_wraps.png',
+      imageAsset: 'stat_reward_wraps.png',
       name: 'Hand Wraps',
       discountLabel: '\$10 off',
       pointsCost: 1500,
     ),
     MockRewardItem(
-      imageAsset: 'assets/images/stat_reward_gloves.png',
+      imageAsset: 'stat_reward_gloves.png',
       name: 'Venom Boxing Gloves',
       discountLabel: '\$20 off',
       pointsCost: 2200,
     ),
     MockRewardItem(
-      imageAsset: 'assets/images/stat_reward_shirt.png',
+      imageAsset: 'stat_reward_shirt.png',
       name: 'Muay Thai Tee',
       discountLabel: '\$15 off',
       pointsCost: 2500,
@@ -171,7 +171,7 @@ const mockRewardsStats = MockRewardsStats(
 const mockRankStats = MockRankStats(
   rankTitle: 'Gold Belt',
   rankSubtitle: 'Stripe III',
-  beltAsset: 'assets/images/stat_rank_belt.png',
+  beltAsset: 'stat_rank_belt.png',
   progressFraction: 0.55,
   previousProgressFraction: 0.32,
   nextTierLabel: 'Silver I',

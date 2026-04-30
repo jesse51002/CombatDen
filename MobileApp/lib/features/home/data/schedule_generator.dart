@@ -25,15 +25,15 @@ const _weekdayFull = <String>[
 ];
 
 const _muayThaiImages = <String>[
-  'assets/images/class_muay_thai_today.png',
-  'assets/images/class_muay_thai_wed.png',
-  'assets/images/class_muay_thai_thr.png',
+  'class_muay_thai_today.png',
+  'class_muay_thai_wed.png',
+  'class_muay_thai_thr.png',
 ];
 
 const _bjjImages = <String>[
-  'assets/images/class_bjj_today.png',
-  'assets/images/class_bjj_wed.png',
-  'assets/images/class_bjj_thr.png',
+  'class_bjj_today.png',
+  'class_bjj_wed.png',
+  'class_bjj_thr.png',
 ];
 
 DateTime _todayMidnight() {

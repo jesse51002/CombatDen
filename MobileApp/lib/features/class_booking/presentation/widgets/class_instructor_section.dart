@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
 /// "Instructor" header + bio paragraph next to a circular headshot.
@@ -42,7 +43,7 @@ class _InstructorRow extends StatelessWidget {
           ),
         ),
         ClipOval(
-          child: Image.asset(
+          child: BrandImage.asset(
             detail.instructorPfpAsset,
             width: _kPfpSize,
             height: _kPfpSize,

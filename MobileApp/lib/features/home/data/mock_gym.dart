@@ -16,8 +16,8 @@ class MockGym {
 
 const mockGymGlobalMma = MockGym(
   name: 'Global MMA',
-  logoAsset: 'assets/images/gym_logo_global_mma.png',
+  logoAsset: 'gym_logo_global_mma.png',
   streakDays: 3,
   pointsLabel: '3.4k',
-  rankBadgeAsset: 'assets/images/icon_rank_belt.png',
+  rankBadgeAsset: 'icon_rank_belt.png',
 );

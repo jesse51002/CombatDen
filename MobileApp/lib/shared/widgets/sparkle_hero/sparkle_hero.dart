@@ -55,6 +55,7 @@ class SparkleHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = DesignConstants.of(context).primaryColor;
     final eyebrow = DesignConstants.pSmall.copyWith(
       color: DesignConstants.text2nd,
       fontWeight: FontWeight.w700,
@@ -72,7 +73,7 @@ class SparkleHero extends StatelessWidget {
           for (final s in _kSparkles)
             Transform.translate(
               offset: Offset(s.$2, s.$3),
-              child: _Sparkle(size: s.$1, opacity: s.$4),
+              child: _Sparkle(size: s.$1, opacity: s.$4, color: primary),
             ),
           Column(
             mainAxisSize: MainAxisSize.min,
@@ -83,7 +84,7 @@ class SparkleHero extends StatelessWidget {
               Text(
                 accent,
                 style: DesignConstants.big1_5.copyWith(
-                  color: DesignConstants.primaryColor,
+                  color: primary,
                   fontWeight: FontWeight.w700,
                 ),
                 textAlign: TextAlign.center,
@@ -98,31 +99,39 @@ class SparkleHero extends StatelessWidget {
 }
 
 class _Sparkle extends StatelessWidget {
-  const _Sparkle({required this.size, required this.opacity});
+  const _Sparkle({
+    required this.size,
+    required this.opacity,
+    required this.color,
+  });
 
   final double size;
   final double opacity;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(painter: _SparklePainter(opacity: opacity)),
+      child: CustomPaint(
+        painter: _SparklePainter(opacity: opacity, color: color),
+      ),
     );
   }
 }
 
 class _SparklePainter extends CustomPainter {
-  _SparklePainter({required this.opacity});
+  _SparklePainter({required this.opacity, required this.color});
 
   final double opacity;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width / 24;
     final paint = Paint()
-      ..color = DesignConstants.primaryColor.withValues(alpha: opacity);
+      ..color = color.withValues(alpha: opacity);
     final path = Path()
       ..moveTo(12 * s, 0)
       ..lineTo(14 * s, 10 * s)
@@ -138,5 +147,5 @@ class _SparklePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SparklePainter old) =>
-      old.opacity != opacity;
+      old.opacity != opacity || old.color != color;
 }

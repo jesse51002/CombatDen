@@ -12,18 +12,19 @@ class StreakDayBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brand = DesignConstants.of(context);
     final letterColor = day.completed
-        ? DesignConstants.primaryColor
+        ? brand.primaryColor
         : DesignConstants.text2nd;
     final iconColor = day.completed
-        ? DesignConstants.primaryColor
+        ? brand.primaryColor
         : DesignConstants.text2nd;
 
     return Container(
       padding: EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
         color: day.completed
-            ? DesignConstants.primaryColor25
+            ? brand.primaryColor25
             : DesignConstants.backgroundColor,
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/wins/wins_tile_row.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 /// Hero illustration + "Today's wins" header + the three info tiles.
 class WinsBody extends StatelessWidget {
@@ -16,7 +17,7 @@ class WinsBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
       children: [
-        Image.asset(
+        BrandImage.asset(
           stats.heroAsset,
           width: 230,
           height: 230,

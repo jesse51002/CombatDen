@@ -17,9 +17,8 @@ class DateTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isSelected
-        ? DesignConstants.primaryColor
-        : DesignConstants.text2nd;
+    final primary = DesignConstants.of(context).primaryColor;
+    final color = isSelected ? primary : DesignConstants.text2nd;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -28,7 +27,7 @@ class DateTab extends StatelessWidget {
             ? BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
-                    color: DesignConstants.primaryColor,
+                    color: primary,
                     width: DesignConstants.buttonBorder,
                   ),
                 ),

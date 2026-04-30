@@ -28,7 +28,7 @@ class AppPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? DesignConstants.primaryColor;
+    final bg = backgroundColor ?? DesignConstants.of(context).primaryColor;
     final fg = textColor ?? DesignConstants.text;
     final style = (textStyle ?? DesignConstants.h3).copyWith(color: fg);
     final radius = borderRadius ?? DesignConstants.radiusSmall;

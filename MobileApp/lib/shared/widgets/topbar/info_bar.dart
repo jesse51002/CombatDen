@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/core/navigation/app_routes.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 class InfoBar extends StatelessWidget {
   const InfoBar({
@@ -31,7 +32,7 @@ class InfoBar extends StatelessWidget {
             onTap: () =>
                 Navigator.of(context).pushNamed(AppRoutes.profile),
             child: _IconValueItem(
-              asset: 'assets/images/icon_streak.png',
+              asset: 'icon_streak.png',
               value: '$streakDays',
               assetWidth: 23,
               assetHeight: 30,
@@ -43,7 +44,7 @@ class InfoBar extends StatelessWidget {
             onTap: () =>
                 Navigator.of(context).pushNamed(AppRoutes.pointsStore),
             child: _IconValueItem(
-              asset: 'assets/images/icon_coin.png',
+              asset: 'icon_coin.png',
               value: pointsLabel,
               assetWidth: 22,
               assetHeight: 22,
@@ -81,7 +82,7 @@ class _RankItem extends StatelessWidget {
     return SizedBox(
       height: 30,
       child: Center(
-        child: Image.asset(asset, width: 39, height: 24, fit: BoxFit.contain),
+        child: BrandImage.asset(asset, width: 39, height: 24, fit: BoxFit.contain),
       ),
     );
   }
@@ -111,7 +112,7 @@ class _IconValueItem extends StatelessWidget {
         spacing: DesignConstants.spacingSmall,
         children: [
           Text(value, style: DesignConstants.p),
-          Image.asset(
+          BrandImage.asset(
             asset,
             width: assetWidth,
             height: assetHeight,
@@ -131,8 +132,8 @@ class _QrCodeItem extends StatelessWidget {
     return SizedBox(
       height: 30,
       child: Center(
-        child: Image.asset(
-          'assets/images/icon_qrcode.png',
+        child: BrandImage.asset(
+          'icon_qrcode.png',
           height: 30,
           fit: BoxFit.contain,
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 /// Full-width video recommendation card.
 ///
@@ -37,7 +38,7 @@ class VideoReccCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: Image.asset(thumbnailAsset, fit: BoxFit.cover),
+              child: BrandImage.asset(thumbnailAsset, fit: BoxFit.cover),
             ),
           ),
           _CreatorRow(
@@ -73,7 +74,7 @@ class _CreatorRow extends StatelessWidget {
         spacing: DesignConstants.spacingMedium,
         children: [
           ClipOval(
-            child: Image.asset(
+            child: BrandImage.asset(
               creatorPfpAsset,
               width: _kPfpSize,
               height: _kPfpSize,

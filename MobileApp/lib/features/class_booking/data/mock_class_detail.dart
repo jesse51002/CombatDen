@@ -44,8 +44,8 @@ class MockClassDetail {
   final String mapAsset;
 }
 
-const String _kInstructorAndy = 'assets/images/summary_instructor_andy.png';
-const String _kMapAsset = 'assets/images/class_location_map.png';
+const String _kInstructorAndy = 'summary_instructor_andy.png';
+const String _kMapAsset = 'class_location_map.png';
 const String _kAddress = '1336 Inwood Rd, Dallas, TX 75247';
 const String _kAndyBio =
     'Andy Zerger, a prominent figure in MMA and Muay Thai. '
@@ -56,7 +56,7 @@ const _muayThaiClass = MockClass(
   timeRange: '6:00pm - 6:55pm CST',
   durationMinutes: 55,
   mentor: 'Coach Anan Chayanon',
-  imageAsset: 'assets/images/class_muay_thai_today.png',
+  imageAsset: 'class_muay_thai_today.png',
   attending: 21,
 );
 

@@ -26,7 +26,7 @@ class AppNavItem extends StatelessWidget {
         ? DesignConstants.text
         : DesignConstants.text2nd;
     if (isPrimary) {
-      textColor = DesignConstants.primaryColor;
+      textColor = DesignConstants.of(context).primaryColor;
     }
 
     return InkWell(

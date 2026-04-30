@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/core/navigation/app_routes.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
@@ -46,8 +47,8 @@ class _CelebrationContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingBig,
       children: [
-        Image.asset(
-          'assets/images/class_booked_celebration.png',
+        BrandImage.asset(
+          'class_booked_celebration.png',
           fit: BoxFit.contain,
         ),
         Text(

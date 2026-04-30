@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 /// Belt icon + main rank name on top, sub-rank name below.
 class RankHeader extends StatelessWidget {
@@ -22,7 +23,7 @@ class RankHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingLarge,
       children: [
-        Image.asset(
+        BrandImage.asset(
           rankBadgeAsset,
           width: 77,
           height: 50,

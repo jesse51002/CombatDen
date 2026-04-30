@@ -4,11 +4,11 @@ import 'package:mobile_app/core/constants/design_constants.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData get dark {
+  static ThemeData dark(DesignConstants c) {
     final colorScheme = ColorScheme.dark(
-      primary: DesignConstants.primaryColor,
+      primary: c.primaryColor,
       onPrimary: DesignConstants.text,
-      secondary: DesignConstants.darkPrimary,
+      secondary: c.darkPrimary,
       onSecondary: DesignConstants.text,
       surface: DesignConstants.backgroundColor,
       onSurface: DesignConstants.text,

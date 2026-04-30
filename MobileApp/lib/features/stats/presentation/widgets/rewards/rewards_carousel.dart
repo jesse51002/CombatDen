@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 /// Swipeable cover-flow reward carousel: the active page is full size and
 /// face-on, adjacent pages shrink and tilt away in 3D for depth.
@@ -90,7 +91,7 @@ class _RewardCircle extends StatelessWidget {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Image.asset(imageAsset, fit: BoxFit.cover),
+      child: BrandImage.asset(imageAsset, fit: BoxFit.cover),
     );
   }
 }

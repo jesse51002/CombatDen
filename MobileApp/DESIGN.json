@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-30T00:00:00Z",
+  "title": "Design System: CombatDen",
+  "extensions": {
+    "colorMeta": {
+      "cage-orange": {
+        "role": "primary",
+        "displayName": "Cage Orange",
+        "canonical": "oklch(70% 0.18 38)",
+        "tonalRamp": [
+          "#1F0E07",
+          "#3A1A0E",
+          "#592814",
+          "#7A381C",
+          "#A04A24",
+          "#C75A2C",
+          "#FF6C2D",
+          "#FFB78D"
+        ]
+      },
+      "ember-deep": {
+        "role": "primary",
+        "displayName": "Ember Deep",
+        "canonical": "oklch(35% 0.10 38)",
+        "tonalRamp": [
+          "#1A0A05",
+          "#2D140A",
+          "#421E10",
+          "#572717",
+          "#692F16",
+          "#82412A",
+          "#A86045",
+          "#D89A82"
+        ]
+      },
+      "canvas-black": {
+        "role": "neutral",
+        "displayName": "Canvas Black",
+        "canonical": "oklch(13% 0.005 220)",
+        "tonalRamp": [
+          "#0A0D0F",
+          "#121619",
+          "#1B2024",
+          "#262C30",
+          "#3A4148",
+          "#5A636B",
+          "#8E969D",
+          "#C8CDD2"
+        ]
+      },
+      "bone-text": {
+        "role": "neutral",
+        "displayName": "Bone Text",
+        "canonical": "oklch(96% 0.005 90)",
+        "tonalRamp": [
+          "#1F1E1B",
+          "#3A3935",
+          "#56544F",
+          "#73716B",
+          "#918E87",
+          "#B0ADA5",
+          "#D2CFC7",
+          "#F4F3EE"
+        ]
+      },
+      "bone-soft": {
+        "role": "neutral",
+        "displayName": "Bone Soft (75%)",
+        "canonical": "oklch(96% 0.005 90 / 0.75)",
+        "tonalRamp": []
+      },
+      "bone-mute": {
+        "role": "neutral",
+        "displayName": "Bone Mute (50%)",
+        "canonical": "oklch(96% 0.005 90 / 0.5)",
+        "tonalRamp": []
+      },
+      "surface-card": {
+        "role": "neutral",
+        "displayName": "Surface Card (10% bone over canvas)",
+        "canonical": "oklch(96% 0.005 90 / 0.1)",
+        "tonalRamp": []
+      },
+      "link-blue": {
+        "role": "tertiary",
+        "displayName": "Link Blue",
+        "canonical": "oklch(80% 0.10 240)",
+        "tonalRamp": []
+      },
+      "status-good": {
+        "role": "tertiary",
+        "displayName": "Status Good",
+        "canonical": "oklch(85% 0.20 145)",
+        "tonalRamp": []
+      },
+      "status-warn": {
+        "role": "tertiary",
+        "displayName": "Status Warn",
+        "canonical": "oklch(82% 0.14 100)",
+        "tonalRamp": []
+      },
+      "status-bad": {
+        "role": "tertiary",
+        "displayName": "Status Bad",
+        "canonical": "oklch(65% 0.22 25)",
+        "tonalRamp": []
+      }
+    },
+    "typographyMeta": {
+      "display-titanic": {
+        "displayName": "Display Titanic",
+        "purpose": "Single-screen ledger numerals (e.g., points-store totals). Use rarely."
+      },
+      "display-hero": {
+        "displayName": "Display Hero",
+        "purpose": "The SparkleHero accent numeral. Post-class scaffold only."
+      },
+      "display-medium": {
+        "displayName": "Display Medium",
+        "purpose": "Secondary display numerals (rank tier, large stat counters)."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Screen titles and section H1s. Tracks at -0.02em."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headers, list-row primaries (class name, gym name)."
+      },
+      "title-soft": {
+        "displayName": "Title Soft",
+        "purpose": "Title-weight text for body-density use (long instructor names, descriptions)."
+      },
+      "subtitle": {
+        "displayName": "Subtitle",
+        "purpose": "Subsection headers, button label text."
+      },
+      "body-large": {
+        "displayName": "Body Large",
+        "purpose": "Long-form copy: class descriptions, instructor bios."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default in-app paragraph and metadata size."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Non-actionable metadata only (timestamps, tertiary labels)."
+      },
+      "eyebrow": {
+        "displayName": "Eyebrow",
+        "purpose": "Small-caps labels above and below SparkleHero accent. Reserved for that pattern."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "ease-state",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Default ease-out for state transitions. Duration <=300ms. No bounce, no elastic."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile",
+        "value": "0px"
+      },
+      {
+        "name": "phablet",
+        "value": "480px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary action on a screen. Cage Orange fill, no shadow, 16px rounded.",
+      "html": "<button class=\"ds-btn-primary\">RESERVE YOUR SPOT</button>",
+      "css": ".ds-btn-primary { background: #FF6C2D; color: #F4F3EE; font-family: Jura, system-ui, sans-serif; font-weight: 600; font-size: 13px; line-height: 1.3; padding: 8px 16px; border: none; border-radius: 16px; cursor: pointer; transition: background 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 200ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-btn-primary:hover { background: #FF7E45; } .ds-btn-primary:focus-visible { outline: 2px solid #F4F3EE; outline-offset: 2px; } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:disabled { background: rgba(255, 108, 45, 0.5); cursor: not-allowed; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary or non-committal action. Pill-shaped (1000px), 2px Bone border, transparent fill.",
+      "html": "<button class=\"ds-btn-outline\">View details</button>",
+      "css": ".ds-btn-outline { background: transparent; color: #F4F3EE; font-family: Jura, system-ui, sans-serif; font-weight: 400; font-size: 12px; line-height: 1.4; letter-spacing: 0.03em; padding: 8px 16px; border: 2px solid #F4F3EE; border-radius: 1000px; cursor: pointer; transition: background 200ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-btn-outline:hover { background: rgba(244, 243, 238, 0.08); } .ds-btn-outline:focus-visible { outline: 2px solid #FF6C2D; outline-offset: 2px; }"
+    },
+    {
+      "name": "Timeframe Pill",
+      "kind": "chip",
+      "refersTo": "pill-timeframe-active",
+      "description": "Time-range selector (1W / 1M / 1Y). Active variant has a 2px Bone border; rest variant has no border and Bone Mute label.",
+      "html": "<div class=\"ds-pill-row\"><button class=\"ds-pill ds-pill--active\">1W</button><button class=\"ds-pill\">1M</button><button class=\"ds-pill\">1Y</button></div>",
+      "css": ".ds-pill-row { display: flex; gap: 8px; } .ds-pill { height: 30px; padding: 0 16px; background: transparent; color: rgba(244, 243, 238, 0.5); font-family: Jura, system-ui, sans-serif; font-weight: 600; font-size: 16px; line-height: 1; border: none; border-radius: 32px; cursor: pointer; transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1), border-color 200ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-pill--active { color: #F4F3EE; border: 2px solid #F4F3EE; } .ds-pill:hover { color: #F4F3EE; } .ds-pill:focus-visible { outline: 2px solid #FF6C2D; outline-offset: 2px; }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "The single tonal layer over Canvas Black. 10% bone tint, 32px rounded, 16px internal padding, no shadow, no border.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card__title\">Tonight's class</h3><p class=\"ds-card__body\">Muay Thai · 6:00 PM · Coach Mateo</p><p class=\"ds-card__meta\">12 attending</p></div>",
+      "css": ".ds-card { background: rgba(244, 243, 238, 0.1); color: #F4F3EE; border-radius: 32px; padding: 16px; display: flex; flex-direction: column; gap: 4px; } .ds-card__title { margin: 0; font-family: Jura, system-ui, sans-serif; font-weight: 600; font-size: 16px; line-height: 1.25; color: #F4F3EE; } .ds-card__body { margin: 0; font-family: Jura, system-ui, sans-serif; font-weight: 400; font-size: 12px; line-height: 1.4; letter-spacing: 0.03em; color: #F4F3EE; } .ds-card__meta { margin: 0; font-family: Jura, system-ui, sans-serif; font-weight: 400; font-size: 11px; line-height: 1.35; letter-spacing: 0.03em; color: rgba(244, 243, 238, 0.5); }"
+    },
+    {
+      "name": "Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "bottom-nav",
+      "description": "Four-destination bottom nav (Home, Rank, Reward, Videos). Canvas Black background, 1px Bone Mute top hairline, no shadow.",
+      "html": "<nav class=\"ds-bottom-nav\"><a class=\"ds-nav-item ds-nav-item--active\" href=\"#\"><svg class=\"ds-nav-icon\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M3 11 12 4l9 7v9h-6v-6h-6v6H3z\"/></svg><span>Home</span></a><a class=\"ds-nav-item\" href=\"#\"><svg class=\"ds-nav-icon\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M5 3h14l-2 6h-3l3 12-7-5-7 5 3-12H7z\"/></svg><span>Rank</span></a><a class=\"ds-nav-item\" href=\"#\"><svg class=\"ds-nav-icon\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M3 8h18v3H3zM3 12h8v9H3zM13 12h8v9h-8zM12 4a3 3 0 0 1 6 0c0 2-2 3-6 3 0-2 1-3 0-3z\"/></svg><span>Reward</span></a><a class=\"ds-nav-item\" href=\"#\"><svg class=\"ds-nav-icon\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M3 5h18v14H3zM10 9v6l5-3z\"/></svg><span>Videos</span></a></nav>",
+      "css": ".ds-bottom-nav { display: flex; height: 64px; background: #121619; border-top: 1px solid rgba(244, 243, 238, 0.5); } .ds-nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: rgba(244, 243, 238, 0.5); font-family: Jura, system-ui, sans-serif; font-weight: 400; font-size: 11px; line-height: 1.35; letter-spacing: 0.03em; transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-nav-item--active { color: #F4F3EE; } .ds-nav-icon { width: 24px; height: 24px; } .ds-nav-item:hover { color: #F4F3EE; } .ds-nav-item:focus-visible { outline: 2px solid #FF6C2D; outline-offset: -2px; }"
+    },
+    {
+      "name": "Sparkle Hero",
+      "kind": "custom",
+      "refersTo": "sparkle-hero-accent",
+      "description": "The system's signature post-class component. Three-line stack with Cage Orange display numeral and scattered orange sparkle particles. Reserved for streak / points / rank / rewards moments only.",
+      "html": "<div class=\"ds-sparkle-hero\"><div class=\"ds-sparkle-hero__sparkles\" aria-hidden=\"true\"><svg class=\"ds-sparkle ds-sparkle--1\" viewBox=\"0 0 24 24\"><path d=\"M12 0 14 10 24 12 14 14 12 24 10 14 0 12 10 10 Z\"/></svg><svg class=\"ds-sparkle ds-sparkle--2\" viewBox=\"0 0 24 24\"><path d=\"M12 0 14 10 24 12 14 14 12 24 10 14 0 12 10 10 Z\"/></svg><svg class=\"ds-sparkle ds-sparkle--3\" viewBox=\"0 0 24 24\"><path d=\"M12 0 14 10 24 12 14 14 12 24 10 14 0 12 10 10 Z\"/></svg><svg class=\"ds-sparkle ds-sparkle--4\" viewBox=\"0 0 24 24\"><path d=\"M12 0 14 10 24 12 14 14 12 24 10 14 0 12 10 10 Z\"/></svg><svg class=\"ds-sparkle ds-sparkle--5\" viewBox=\"0 0 24 24\"><path d=\"M12 0 14 10 24 12 14 14 12 24 10 14 0 12 10 10 Z\"/></svg></div><p class=\"ds-sparkle-hero__eyebrow\">YOU EARNED</p><p class=\"ds-sparkle-hero__accent\">3,400</p><p class=\"ds-sparkle-hero__eyebrow\">POINTS</p></div>",
+      "css": ".ds-sparkle-hero { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 32px 16px; background: #121619; color: #F4F3EE; overflow: visible; } .ds-sparkle-hero__sparkles { position: absolute; inset: 0; pointer-events: none; } .ds-sparkle { position: absolute; left: 50%; top: 50%; fill: #FF6C2D; } .ds-sparkle--1 { width: 14px; height: 14px; transform: translate(-150px, -40px); opacity: 0.85; } .ds-sparkle--2 { width: 12px; height: 12px; transform: translate(156px, 36px); opacity: 0.80; } .ds-sparkle--3 { width: 10px; height: 10px; transform: translate(152px, -48px); opacity: 0.60; } .ds-sparkle--4 { width: 8px; height: 8px; transform: translate(0px, -62px); opacity: 0.50; } .ds-sparkle--5 { width: 6px; height: 6px; transform: translate(110px, -38px); opacity: 0.45; } .ds-sparkle-hero__eyebrow { margin: 0; font-family: Jura, system-ui, sans-serif; font-weight: 700; font-size: 11px; line-height: 1.2; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(244, 243, 238, 0.75); } .ds-sparkle-hero__accent { margin: 0; font-family: Jura, system-ui, sans-serif; font-weight: 700; font-size: 64px; line-height: 1; color: #FF6C2D; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Loyalty Ledger",
+    "overview": "CombatDen is a points-and-streaks ledger that occasionally erupts into broadcast celebration. Most surfaces are calm columns of progress: class lists, rank deltas, points balances, video shelves. Then, exactly at the moments a member earns something on the mat, the ledger goes loud. Calm by default, kinetic when attendance pays off. The canvas is the gym after dark: near-black, warm bone-white text, sharp Material Symbols at light weight, Jura sans across every size. There is no marketing aesthetic, no wellness softness, no consumer-fitness gamification. The member is treated as a practitioner; the design treats their time the same way. Density beats whitespace; legibility beats decoration; rationed celebration beats constant cheerleading. This system explicitly rejects the look-and-feel of generic fitness SaaS (MyFitnessPal, Fitbod). It also rejects the gym-CRM-admin density of Mindbody / ClassPass / Triib; CombatDen sits next to those tools but is the member-facing layer, not another console.",
+    "keyCharacteristics": [
+      "Near-black canvas; cage-orange agency color used on <=10% of any screen.",
+      "Jura sans across the entire scale, from 11px caption to 160px display.",
+      "No shadows. Depth comes from a 10%-bone tonal layer over the canvas.",
+      "Rounded rectangles (16 / 32) for surfaces; full pills (1000) for outline buttons and tag selectors.",
+      "Sharp Material Symbols, weight 300, T-shirt sized 16 / 20 / 24 / 28 / 32 / 36.",
+      "Coach-to-athlete copy: imperative, factual, uppercase only on display eyebrows.",
+      "Celebration is rationed to the post-class scaffold; everywhere else is quiet."
+    ],
+    "rules": [
+      { "name": "The One Voice Rule", "body": "Cage Orange covers <=10% of any screen. Its rarity is the point. The instant orange becomes a background fill, a divider color, or a chart axis, the agency signal collapses. If a screen needs warmth without spending agency, use Ember Deep.", "section": "colors" },
+      { "name": "The Single Tonal Layer Rule", "body": "There is exactly one card surface (Surface Card, 10% bone over canvas). Nested cards are forbidden. If hierarchy is needed inside a card, use type weight, eyebrows, and dividers, never a second tonal layer.", "section": "colors" },
+      { "name": "The Tinted-Neutrals Rule", "body": "Canvas Black is not #000 and Bone Text is not #fff. Both are tinted toward warm. Pure black or pure white inside a CombatDen surface is a bug.", "section": "colors" },
+      { "name": "The Single Family Rule", "body": "The entire system runs on Jura. Pairing Jura with a serif, a script, or a different sans is forbidden. Hierarchy is built from weight and scale, not from font-family contrast.", "section": "typography" },
+      { "name": "The Negative-Tracking Headline Rule", "body": "The 24px Headline runs at -0.02em letter-spacing. The 11px Eyebrow runs at +0.24em (true small-cap treatment). Track for the size; never letter-space body or subtitle copy beyond their token defaults.", "section": "typography" },
+      { "name": "The Tap-Readable Rule", "body": "The 11px Caption is for non-actionable metadata only. If a member must read a string to decide or act on it, the floor is 12px Body. Members range from teenagers to adults in their 50s, often reading in variable gym lighting.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Every surface is flat at rest. There is no shadow vocabulary. State changes communicate through color and border, not through elevation.", "section": "elevation" },
+      { "name": "The No-Glassmorphism Rule", "body": "No backdrop-filter, no blurred translucent panels, no glass card decoration. The 10%-bone Surface Card is the only allowed translucent surface, and it is not blurred.", "section": "elevation" },
+      { "name": "The Single Primary Rule", "body": "A screen has exactly one Primary button. If the design seems to want two, one of them becomes an Outline.", "section": "components" },
+      { "name": "The SparkleHero Rationing Rule", "body": "SparkleHero appears only inside the post-class scaffold flow. Never on home, booking, profile, stats, video, or rewards landing. Putting it elsewhere debases the celebration.", "section": "components" },
+      { "name": "The Sharp Icon Rule", "body": "Every icon is Symbols.<name>_sharp at weight 300. Filled, rounded, or outlined Material variants are forbidden; non-Material icon sets are forbidden.", "section": "components" }
+    ],
+    "dos": [
+      "Do keep Cage Orange (#FF6C2D) on <=10% of any screen. Reserve it for primary actions, the active metric, and SparkleHero particles.",
+      "Do layer with the Surface Card token (#F4F3EE1A, 10% bone over Canvas Black). It's the only tonal step the system has.",
+      "Do use Jura for every text size. Build hierarchy from weight (400 / 600 / 700) and scale (11 -> 160), not from family contrast.",
+      "Do use Symbols.<name>_sharp from material_symbols_icons, weight 300, sized off the T-shirt scale (16 / 20 / 24 / 28 / 32 / 36).",
+      "Do keep SparkleHero inside the post-class scaffold. It's the system's one loud moment; protect its rarity.",
+      "Do treat the member like a practitioner. Coach-to-athlete copy: imperative, factual, outcome-named. 'Reserve your spot', not 'Get yours before they're gone!'",
+      "Do keep pSmall (11px Caption) for non-actionable metadata only. If a member must read a label to act, the floor is 12px Body.",
+      "Do use radius 16 for tight surfaces and radius 32 for screen-section cards. Use the full pill (1000) for outline buttons and timeframe pills."
+    ],
+    "donts": [
+      "Don't use #000 or #fff. Canvas Black is #121619, Bone Text is #F4F3EE. Pure black or pure white inside CombatDen is a bug.",
+      "Don't ship gradient fills, gradient text, or background-clip: text. The system has none, and the hero-metric template (big number + tiny label + supporting stats + gradient accent) is explicitly forbidden.",
+      "Don't ship glassmorphism: no backdrop-filter, no blurred translucent panels, no glass cards. The single tonal layer (Surface Card at 10% bone) is not blurred.",
+      "Don't ship box-shadow. Buttons render at elevation: 0. The bottom nav uses a 1px Bone Mute hairline, not a shadow.",
+      "Don't ship side-stripe borders: no border-left or border-right greater than 1px as a colored accent on cards, list items, callouts, or alerts.",
+      "Don't nest cards. There is exactly one card surface. If hierarchy is needed inside, use type weight and dividers, not a second tonal layer.",
+      "Don't introduce a second font. Jura runs the entire scale, top to bottom.",
+      "Don't ship the look-and-feel of generic fitness SaaS (MyFitnessPal, Fitbod, Strava-for-everyone). No teal/lime pastel accents, no cartoon mascots, no badges-as-stickers, no 'Crush your goal!' copy.",
+      "Don't ship the wellness / mindfulness aesthetic (soft gradients, pastel everything, rounded blobs, 'self-care' copy). Wrong sport, wrong audience.",
+      "Don't ship em dashes. Use commas, colons, semicolons, periods, or parentheses. Also not '--'.",
+      "Don't SparkleHero outside the post-class scaffold. Putting it on home, booking, profile, stats, videos, or rewards-landing collapses its rarity.",
+      "Don't invent a third button shape. The system has Primary (filled rectangle, 16r) and Outline (pill, 1000r). A third level is a styled link in Bone Soft.",
+      "Don't pull motion energy beyond <=300ms ease-out on state changes. No bounce, no elastic, no spring."
+    ]
+  }
+}

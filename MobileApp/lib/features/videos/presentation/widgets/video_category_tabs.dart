@@ -53,7 +53,7 @@ class _CategoryPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = isActive
-        ? DesignConstants.primaryColor
+        ? DesignConstants.of(context).primaryColor
         : DesignConstants.backgroundColor;
     final fg = isActive ? DesignConstants.text : DesignConstants.text2nd;
     return GestureDetector(

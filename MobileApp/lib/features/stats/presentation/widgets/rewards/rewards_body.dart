@@ -127,7 +127,7 @@ class _RewardsBodyState extends State<RewardsBody> {
                 '${_formatPoints(featured.pointsCost)} pts',
                 textAlign: TextAlign.center,
                 style: DesignConstants.h1.copyWith(
-                  color: DesignConstants.primaryColor,
+                  color: DesignConstants.of(context).primaryColor,
                 ),
               ),
             ],

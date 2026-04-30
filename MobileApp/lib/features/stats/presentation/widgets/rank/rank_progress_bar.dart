@@ -23,6 +23,7 @@ class RankProgressBar extends StatelessWidget {
     final prev = previousFraction.clamp(0.0, 1.0);
     final curr = currentFraction.clamp(prev, 1.0);
 
+    final brand = DesignConstants.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(_height),
       child: Container(
@@ -35,11 +36,11 @@ class RankProgressBar extends StatelessWidget {
               children: [
                 Container(
                   width: maxWidth * curr,
-                  color: DesignConstants.primaryColor,
+                  color: brand.primaryColor,
                 ),
                 Container(
                   width: maxWidth * prev,
-                  color: DesignConstants.darkPrimary,
+                  color: brand.darkPrimary,
                 ),
               ],
             );

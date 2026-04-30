@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 import 'package:mobile_app/shared/widgets/text/threshold_label.dart';
 
 /// Rating-over-time graph image with bronze rank threshold annotations
@@ -20,7 +21,7 @@ class RatingGraph extends StatelessWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: Image.asset(graphAsset, fit: BoxFit.contain),
+              child: BrandImage.asset(graphAsset, fit: BoxFit.contain),
             ),
             const Positioned(
               right: 0,

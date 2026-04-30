@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 /// Streak screen's top branding: gym name + small logo, centered.
 /// Mirrors the small `branding` row from the Figma frame.
@@ -25,7 +26,7 @@ class StreakBrandingHeader extends StatelessWidget {
           gymName,
           style: DesignConstants.h1.copyWith(color: DesignConstants.text2nd),
         ),
-        Image.asset(logoAsset, width: 35, height: 35, fit: BoxFit.contain),
+        BrandImage.asset(logoAsset, width: 35, height: 35, fit: BoxFit.contain),
       ],
     );
   }

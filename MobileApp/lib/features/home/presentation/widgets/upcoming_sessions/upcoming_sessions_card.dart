@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_upcoming_sessions.dart';
 import 'package:mobile_app/features/home/presentation/widgets/upcoming_sessions/upcoming_session_row.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
 class UpcomingSessionsCard extends StatelessWidget {
@@ -44,8 +45,8 @@ class _StreakFooter extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Image.asset(
-          'assets/images/icon_streak.png',
+        BrandImage.asset(
+          'icon_streak.png',
           width: 12,
           height: 15,
           fit: BoxFit.contain,

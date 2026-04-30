@@ -48,29 +48,29 @@ class MockMyRewardsData {
 
 const mockMyRewardsData = MockMyRewardsData(
   gymName: 'Global MMA',
-  gymLogoAsset: 'assets/images/gym_logo_global_mma.png',
+  gymLogoAsset: 'gym_logo_global_mma.png',
   streakDays: 3,
   pointsLabel: '3.4k',
-  rankBadgeAsset: 'assets/images/icon_rank_belt.png',
+  rankBadgeAsset: 'icon_rank_belt.png',
   totalPoints: 3400,
   rewards: [
     MockReward(
       brand: 'Venom',
       title: 'Hand wraps',
       subtitle: '30% off',
-      imageAsset: 'assets/images/reward_hand_wraps.png',
+      imageAsset: 'reward_hand_wraps.png',
     ),
     MockReward(
       brand: 'Hayabusa',
       title: 'Boxing gloves',
       subtitle: '20% off',
-      imageAsset: 'assets/images/reward_hand_wraps.png',
+      imageAsset: 'reward_hand_wraps.png',
     ),
     MockReward(
       brand: 'Global MMA',
       title: 'Walk-in pass',
       subtitle: '50% off',
-      imageAsset: 'assets/images/reward_hand_wraps.png',
+      imageAsset: 'reward_hand_wraps.png',
     ),
   ],
 );

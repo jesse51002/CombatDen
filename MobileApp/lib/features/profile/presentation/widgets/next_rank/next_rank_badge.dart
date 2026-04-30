@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 const double _kBadgeSize = 100;
 
@@ -25,14 +26,14 @@ class NextRankBadge extends StatelessWidget {
           Padding(
             padding: EdgeInsets.all(DesignConstants.spacingSmall),
             child: Center(
-              child: Image.asset(badgeAsset, fit: BoxFit.contain),
+              child: BrandImage.asset(badgeAsset, fit: BoxFit.contain),
             ),
           ),
           Positioned.fill(
             child: CustomPaint(
               painter: _ProgressArcPainter(
                 progress: progress,
-                color: DesignConstants.primaryColor,
+                color: DesignConstants.of(context).primaryColor,
                 strokeWidth: DesignConstants.buttonBorderSize,
               ),
             ),

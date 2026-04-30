@@ -42,47 +42,47 @@ class MockPointsStoreData {
 
 const mockPointsStoreData = MockPointsStoreData(
   gymName: 'Global MMA',
-  gymLogoAsset: 'assets/images/gym_logo_global_mma.png',
+  gymLogoAsset: 'gym_logo_global_mma.png',
   streakDays: 3,
   pointsLabel: '3.4k',
-  rankBadgeAsset: 'assets/images/icon_rank_belt.png',
+  rankBadgeAsset: 'icon_rank_belt.png',
   totalPoints: 3400,
   items: [
     MockPointsStoreItem(
       title: 'Bring a friend',
       priceLabel: 'Free guest pass',
       pointsCost: 800,
-      imageAsset: 'assets/images/reward_bring_friend.png',
+      imageAsset: 'reward_bring_friend.png',
     ),
     MockPointsStoreItem(
       title: 'Hayabusa hand wraps',
       priceLabel: r'$25 value',
       pointsCost: 1500,
-      imageAsset: 'assets/images/reward_hand_wraps.png',
+      imageAsset: 'reward_hand_wraps.png',
     ),
     MockPointsStoreItem(
       title: '15 min private training',
       priceLabel: 'Free session',
       pointsCost: 1800,
-      imageAsset: 'assets/images/reward_private_training_short.png',
+      imageAsset: 'reward_private_training_short.png',
     ),
     MockPointsStoreItem(
       title: 'Combat Den gloves',
       priceLabel: r'$60 value',
       pointsCost: 2200,
-      imageAsset: 'assets/images/stat_reward_gloves.png',
+      imageAsset: 'stat_reward_gloves.png',
     ),
     MockPointsStoreItem(
       title: 'Global MMA t-shirt',
       priceLabel: r'$45 value',
       pointsCost: 2500,
-      imageAsset: 'assets/images/reward_mma_tshirt.png',
+      imageAsset: 'reward_mma_tshirt.png',
     ),
     MockPointsStoreItem(
       title: 'Private training session',
       priceLabel: '50% off',
       pointsCost: 3500,
-      imageAsset: 'assets/images/reward_private_training.png',
+      imageAsset: 'reward_private_training.png',
     ),
   ],
 );

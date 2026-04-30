@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/core/navigation/app_routes.dart';
 import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
+import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 class ClassListItem extends StatelessWidget {
   const ClassListItem({
@@ -44,7 +45,7 @@ class ClassListItem extends StatelessWidget {
                   borderRadius: BorderRadius.circular(
                     DesignConstants.radiusSmall,
                   ),
-                  child: Image.asset(
+                  child: BrandImage.asset(
                     classData.imageAsset,
                     width: 122,
                     height: 73,
