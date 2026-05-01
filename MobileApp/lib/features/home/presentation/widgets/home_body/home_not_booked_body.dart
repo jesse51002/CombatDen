@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/branding/brand.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/home/data/schedule_generator.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/day_class_group.dart';
@@ -63,14 +64,19 @@ class _HomeNotBookedBodyState extends State<HomeNotBookedBody>
       controller: _verticalController,
       slivers: [
         SliverToBoxAdapter(
-          child: AppTopbar(
-            mode: AppTopbarMode.bigLogo,
-            showBackButton: false,
-            gymName: mockGymGlobalMma.name,
-            logoAsset: mockGymGlobalMma.logoAsset,
-            streakDays: mockGymGlobalMma.streakDays,
-            pointsLabel: mockGymGlobalMma.pointsLabel,
-            rankBadgeAsset: mockGymGlobalMma.rankBadgeAsset,
+          child: Builder(
+            builder: (context) {
+              final gym = mockGymFor(BrandScope.of(context));
+              return AppTopbar(
+                mode: AppTopbarMode.bigLogo,
+                showBackButton: false,
+                gymName: gym.name,
+                logoAsset: gym.logoAsset,
+                streakDays: gym.streakDays,
+                pointsLabel: gym.pointsLabel,
+                rankBadgeAsset: gym.rankBadgeAsset,
+              );
+            },
           ),
         ),
         SliverPersistentHeader(

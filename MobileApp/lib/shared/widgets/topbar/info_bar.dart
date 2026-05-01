@@ -32,9 +32,9 @@ class InfoBar extends StatelessWidget {
             onTap: () =>
                 Navigator.of(context).pushNamed(AppRoutes.profile),
             child: _IconValueItem(
-              asset: 'icon_streak.png',
+              asset: 'streak_icon.png',
               value: '$streakDays',
-              assetWidth: 23,
+              assetWidth: 22,
               assetHeight: 30,
             ),
           ),

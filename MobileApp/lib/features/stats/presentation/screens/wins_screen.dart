@@ -13,7 +13,7 @@ class WinsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return PostClassScaffold(
       body: WinsBody(stats: mockWinsStats),
-      ctaLabel: 'Continue',
+      ctaLabel: 'Book your next class',
       onClose: () => Navigator.of(context).pushNamedAndRemoveUntil(
         AppRoutes.home,
         (r) => false,

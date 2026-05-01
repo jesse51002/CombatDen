@@ -6,20 +6,20 @@ library;
 
 class MockReward {
   const MockReward({
-    required this.brand,
     required this.title,
-    required this.subtitle,
+    required this.priceLabel,
+    required this.pointsCost,
     required this.imageAsset,
   });
-
-  /// Brand or vendor name shown as the row's headline (e.g. "Venom").
-  final String brand;
 
   /// Item name (e.g. "Hand wraps").
   final String title;
 
-  /// Discount or offer line (e.g. "30% off").
-  final String subtitle;
+  /// Discount or "Free" label shown as a tag in the top-right of the card.
+  final String priceLabel;
+
+  /// Points the member spent to redeem this reward.
+  final int pointsCost;
 
   final String imageAsset;
 }
@@ -55,22 +55,22 @@ const mockMyRewardsData = MockMyRewardsData(
   totalPoints: 3400,
   rewards: [
     MockReward(
-      brand: 'Venom',
       title: 'Hand wraps',
-      subtitle: '30% off',
+      priceLabel: '30% off',
+      pointsCost: 1500,
       imageAsset: 'reward_hand_wraps.png',
     ),
     MockReward(
-      brand: 'Hayabusa',
       title: 'Boxing gloves',
-      subtitle: '20% off',
-      imageAsset: 'reward_hand_wraps.png',
+      priceLabel: '10% off',
+      pointsCost: 2500,
+      imageAsset: 'stat_reward_gloves.png',
     ),
     MockReward(
-      brand: 'Global MMA',
-      title: 'Walk-in pass',
-      subtitle: '50% off',
-      imageAsset: 'reward_hand_wraps.png',
+      title: 'Bring a friend',
+      priceLabel: 'Free',
+      pointsCost: 800,
+      imageAsset: 'reward_bring_friend.png',
     ),
   ],
 );

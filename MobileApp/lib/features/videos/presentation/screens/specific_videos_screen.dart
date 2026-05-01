@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/branding/brand.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/core/navigation/app_routes.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
@@ -47,10 +48,7 @@ class _SpecificVideosScreenState extends State<SpecificVideosScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingBig,
           children: [
-            _Header(
-              selectedIndex: activeTab,
-              onTabSelected: _onTabSelected,
-            ),
+            _Header(selectedIndex: activeTab, onTabSelected: _onTabSelected),
             const _SectionTitle(title: 'Fighting Lessons'),
             _VideoList(videos: _orderedVideos(selected)),
           ],
@@ -75,17 +73,18 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final gym = mockGymFor(BrandScope.of(context));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AppTopbar(
           mode: AppTopbarMode.nameOnly,
           showBackButton: false,
-          gymName: mockGymGlobalMma.name,
-          logoAsset: mockGymGlobalMma.logoAsset,
-          streakDays: mockGymGlobalMma.streakDays,
-          pointsLabel: mockGymGlobalMma.pointsLabel,
-          rankBadgeAsset: mockGymGlobalMma.rankBadgeAsset,
+          gymName: gym.name,
+          logoAsset: gym.logoAsset,
+          streakDays: gym.streakDays,
+          pointsLabel: gym.pointsLabel,
+          rankBadgeAsset: gym.rankBadgeAsset,
         ),
         VideoCategoryTabs(
           tabs: _kCategoryTabs,

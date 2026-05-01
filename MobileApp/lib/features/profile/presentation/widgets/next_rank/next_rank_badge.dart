@@ -24,7 +24,7 @@ class NextRankBadge extends StatelessWidget {
       child: Stack(
         children: [
           Padding(
-            padding: EdgeInsets.all(DesignConstants.spacingSmall),
+            padding: EdgeInsets.all(DesignConstants.paddingSmall),
             child: Center(
               child: BrandImage.asset(badgeAsset, fit: BoxFit.contain),
             ),

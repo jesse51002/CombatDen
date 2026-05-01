@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/branding/brand.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/profile/data/mock_profile.dart';
@@ -20,7 +21,9 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profile = mockProfileGlobalMma;
+    final brand = BrandScope.of(context);
+    final profile = mockProfileFor(brand);
+    final gym = mockGymFor(brand);
     return AppScreenScaffold(
       horizontalPadding: AppScreenHorizontalPadding.none,
       bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.rank),
@@ -35,7 +38,7 @@ class ProfileScreen extends StatelessWidget {
               mode: AppTopbarMode.nameOnly,
               showBackButton: false,
               gymName: profile.gymName,
-              logoAsset: mockGymGlobalMma.logoAsset,
+              logoAsset: gym.logoAsset,
               streakDays: profile.streakDays,
               pointsLabel: profile.pointsLabel,
               rankBadgeAsset: profile.rankBadgeAsset,

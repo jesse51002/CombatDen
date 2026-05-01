@@ -2,45 +2,69 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
+import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
+import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 
-/// Bordered info-tile shown in the Wins grid: icon + value + caption.
+/// Bordered info-tile shown in the Wins grid: icon + value + caption. If
+/// [tile.value] parses as a clean integer (e.g. "+50", "+160"), the value
+/// rolls in as a count-up; otherwise it renders as static text. The whole
+/// tile cascades in via [StaggeredReveal] after [delay].
 class WinsTile extends StatelessWidget {
-  const WinsTile({super.key, required this.tile});
+  const WinsTile({
+    super.key,
+    required this.tile,
+    this.delay = Duration.zero,
+  });
 
   final MockWinTile tile;
+  final Duration delay;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(DesignConstants.paddingSmall),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: DesignConstants.text,
-          width: DesignConstants.buttonBorder,
-        ),
-        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          Icon(
-            _iconFor(tile.iconName),
-            weight: DesignConstants.iconWeight,
+    final numeric = _parseNumeric(tile.value);
+
+    return StaggeredReveal(
+      delay: delay,
+      child: Container(
+        padding: EdgeInsets.all(DesignConstants.paddingSmall),
+        decoration: BoxDecoration(
+          border: Border.all(
             color: DesignConstants.text,
-            size: DesignConstants.iconSizeXl,
+            width: DesignConstants.buttonBorder,
           ),
-          Text(
-            tile.value,
-            textAlign: TextAlign.center,
-            style: DesignConstants.h3,
-          ),
-          Text(
-            tile.label,
-            textAlign: TextAlign.center,
-            style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
-          ),
-        ],
+          borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            Icon(
+              _iconFor(tile.iconName),
+              weight: DesignConstants.iconWeight,
+              color: DesignConstants.text,
+              size: DesignConstants.iconSizeXl,
+            ),
+            if (numeric != null)
+              CountUpText(
+                target: numeric.value,
+                delay: delay,
+                prefix: numeric.prefix,
+                style: DesignConstants.h3,
+                textAlign: TextAlign.center,
+              )
+            else
+              Text(
+                tile.value,
+                textAlign: TextAlign.center,
+                style: DesignConstants.h3,
+              ),
+            Text(
+              tile.label,
+              textAlign: TextAlign.center,
+              style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -57,4 +81,21 @@ class WinsTile extends StatelessWidget {
         return Symbols.help_sharp;
     }
   }
+}
+
+class _NumericValue {
+  const _NumericValue({required this.prefix, required this.value});
+
+  final String prefix;
+  final int value;
+}
+
+/// Parses values like `"+50"`, `"160"`, `"-3"` into a (prefix, integer) pair.
+/// Returns null for strings the count-up shouldn't touch (`"3 week"`, etc.).
+_NumericValue? _parseNumeric(String raw) {
+  final match = RegExp(r'^([+-]?)(\d+)$').firstMatch(raw.trim());
+  if (match == null) return null;
+  final value = int.tryParse(match.group(2)!);
+  if (value == null) return null;
+  return _NumericValue(prefix: match.group(1) ?? '', value: value);
 }

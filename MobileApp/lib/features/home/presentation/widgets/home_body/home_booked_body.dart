@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/branding/brand.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/home/data/schedule_generator.dart';
@@ -90,14 +91,19 @@ class _HomeBookedBodyState extends State<HomeBookedBody>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: _kSectionGap,
             children: [
-              AppTopbar(
-                mode: AppTopbarMode.bigLogo,
-                showBackButton: false,
-                gymName: mockGymGlobalMma.name,
-                logoAsset: mockGymGlobalMma.logoAsset,
-                streakDays: mockGymGlobalMma.streakDays,
-                pointsLabel: mockGymGlobalMma.pointsLabel,
-                rankBadgeAsset: mockGymGlobalMma.rankBadgeAsset,
+              Builder(
+                builder: (context) {
+                  final gym = mockGymFor(BrandScope.of(context));
+                  return AppTopbar(
+                    mode: AppTopbarMode.bigLogo,
+                    showBackButton: false,
+                    gymName: gym.name,
+                    logoAsset: gym.logoAsset,
+                    streakDays: gym.streakDays,
+                    pointsLabel: gym.pointsLabel,
+                    rankBadgeAsset: gym.rankBadgeAsset,
+                  );
+                },
               ),
               Padding(
                 padding: EdgeInsets.symmetric(

@@ -1,3 +1,5 @@
+import 'package:mobile_app/core/branding/brand.dart';
+
 /// Hardcoded post-class celebration data. Visual prototype only —
 /// every value here is shown verbatim on a stat card.
 class MockStreakStats {
@@ -49,12 +51,16 @@ class MockWinsStats {
 
 class MockPointsStats {
   const MockPointsStats({
-    required this.amountLabel,
-    required this.heroAsset,
+    required this.gained,
+    required this.totalPoints,
   });
 
-  final String amountLabel;
-  final String heroAsset;
+  /// Points earned from this class — rolls 0 → [gained] in the count-up.
+  final int gained;
+
+  /// Member's all-time total points balance, shown in the small caption
+  /// pinned at the bottom of the points screen.
+  final int totalPoints;
 }
 
 class MockRewardItem {
@@ -90,8 +96,6 @@ class MockRankStats {
     required this.rankTitle,
     required this.rankSubtitle,
     required this.beltAsset,
-    required this.progressFraction,
-    required this.previousProgressFraction,
     required this.nextTierLabel,
     required this.classesAttended,
     required this.classesRequired,
@@ -100,12 +104,6 @@ class MockRankStats {
   final String rankTitle;
   final String rankSubtitle;
   final String beltAsset;
-
-  /// Total progress to the next tier (0..1), including the new gain.
-  final double progressFraction;
-
-  /// Progress before this class — visualized as the dimmer band of the bar.
-  final double previousProgressFraction;
   final String nextTierLabel;
 
   final int classesAttended;
@@ -128,18 +126,18 @@ const mockStreakStats = MockStreakStats(
 
 const mockWinsStats = MockWinsStats(
   title: 'Today’s wins',
-  subtitle: 'Every session you get stronger',
+  subtitle: 'The grind never stops',
   heroAsset: 'stat_wins_trophy.png',
   tiles: [
     MockWinTile(iconName: 'star', value: '3 week', label: 'Streak'),
-    MockWinTile(iconName: 'award', value: '+50', label: 'Rating'),
+    MockWinTile(iconName: 'award', value: '28', label: 'Rank Classes'),
     MockWinTile(iconName: 'gift', value: '+160', label: 'Points'),
   ],
 );
 
 const mockPointsStats = MockPointsStats(
-  amountLabel: '+160 points',
-  heroAsset: 'stat_points_stars.png',
+  gained: 160,
+  totalPoints: 3400,
 );
 
 const mockRewardsStats = MockRewardsStats(
@@ -148,22 +146,22 @@ const mockRewardsStats = MockRewardsStats(
   featuredIndex: 1,
   items: [
     MockRewardItem(
-      imageAsset: 'stat_reward_wraps.png',
-      name: 'Hand Wraps',
-      discountLabel: '\$10 off',
-      pointsCost: 1500,
+      imageAsset: 'reward_bring_friend.png',
+      name: 'Bring a friend',
+      discountLabel: 'Free',
+      pointsCost: 800,
     ),
     MockRewardItem(
-      imageAsset: 'stat_reward_gloves.png',
-      name: 'Venom Boxing Gloves',
-      discountLabel: '\$20 off',
+      imageAsset: 'reward_mma_tshirt.png',
+      name: 'Gym t-shirt',
+      discountLabel: 'Free',
       pointsCost: 2200,
     ),
     MockRewardItem(
-      imageAsset: 'stat_reward_shirt.png',
-      name: 'Muay Thai Tee',
-      discountLabel: '\$15 off',
-      pointsCost: 2500,
+      imageAsset: 'reward_private_training.png',
+      name: 'Private Training',
+      discountLabel: '50% off',
+      pointsCost: 3500,
     ),
   ],
 );
@@ -172,9 +170,21 @@ const mockRankStats = MockRankStats(
   rankTitle: 'Gold Belt',
   rankSubtitle: 'Stripe III',
   beltAsset: 'stat_rank_belt.png',
-  progressFraction: 0.55,
-  previousProgressFraction: 0.32,
-  nextTierLabel: 'Silver I',
+  nextTierLabel: 'Gold Belt Stripe IV',
   classesAttended: 28,
   classesRequired: 50,
 );
+
+const mockRankStatsBjj = MockRankStats(
+  rankTitle: 'Blue Belt',
+  rankSubtitle: 'Stripe II',
+  beltAsset: 'stat_rank_belt.png',
+  nextTierLabel: 'Blue Belt Stripe III',
+  classesAttended: 28,
+  classesRequired: 50,
+);
+
+MockRankStats mockRankStatsFor(Brand brand) => switch (brand) {
+  Brand.combatDen => mockRankStats,
+  Brand.combatDenBjj => mockRankStatsBjj,
+};

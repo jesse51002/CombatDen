@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/branding/brand.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/core/navigation/app_routes.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
@@ -11,6 +12,7 @@ import 'package:mobile_app/features/class_booking/presentation/widgets/class_res
 import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
+import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 
 /// Class detail / booking screen.
@@ -25,49 +27,47 @@ class ClassScreen extends StatelessWidget {
     final args = ModalRoute.of(context)?.settings.arguments;
     final classData = args is MockClass ? args : mockMuayThaiDetail.classData;
     final detail = detailFor(classData);
+    final gym = mockGymFor(BrandScope.of(context));
 
-    return Scaffold(
-      backgroundColor: DesignConstants.backgroundColor,
-      body: SafeArea(
-        top: false,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onHorizontalDragEnd: (details) {
-            final velocity = details.primaryVelocity;
-            if (velocity != null && velocity < -50) {
-              Navigator.of(
-                context,
-              ).pushReplacementNamed(AppRoutes.postClassStreak);
-            }
-          },
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AppTopbar(
-                  mode: AppTopbarMode.nameOnly,
-                  showBackButton: true,
-                  gymName: mockGymGlobalMma.name,
-                  logoAsset: mockGymGlobalMma.logoAsset,
-                  streakDays: mockGymGlobalMma.streakDays,
-                  pointsLabel: mockGymGlobalMma.pointsLabel,
-                  rankBadgeAsset: mockGymGlobalMma.rankBadgeAsset,
-                ),
-                ClassImageBanner(imageAsset: classData.imageAsset),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: DesignConstants.spacingBig,
-                  children: [
-                    _Body(detail: detail),
-                    ClassReserveFooter(
-                      onReserve: () => Navigator.of(
-                        context,
-                      ).pushReplacementNamed(AppRoutes.reservingLoading),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+    return AppScreenScaffold(
+      horizontalPadding: AppScreenHorizontalPadding.none,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (details) {
+          final velocity = details.primaryVelocity;
+          if (velocity != null && velocity < -50) {
+            Navigator.of(
+              context,
+            ).pushReplacementNamed(AppRoutes.postClassStreak);
+          }
+        },
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppTopbar(
+                mode: AppTopbarMode.nameOnly,
+                showBackButton: true,
+                gymName: gym.name,
+                logoAsset: gym.logoAsset,
+                streakDays: gym.streakDays,
+                pointsLabel: gym.pointsLabel,
+                rankBadgeAsset: gym.rankBadgeAsset,
+              ),
+              ClassImageBanner(imageAsset: classData.imageAsset),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: DesignConstants.spacingBig,
+                children: [
+                  _Body(detail: detail),
+                  ClassReserveFooter(
+                    onReserve: () => Navigator.of(
+                      context,
+                    ).pushReplacementNamed(AppRoutes.reservingLoading),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
