@@ -28,7 +28,7 @@ class VideoCard extends StatelessWidget {
             children: [
               SizedBox(
                 height: _kThumbnailHeight,
-                child: BrandImage.asset(
+                child: BrandImage.videoAsset(
                   video.thumbnailAsset,
                   fit: BoxFit.cover,
                 ),
@@ -62,7 +62,7 @@ class _VideoCardInfo extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         ClipOval(
-          child: BrandImage.asset(
+          child: BrandImage.videoAsset(
             video.creatorAvatarAsset,
             width: _kAvatarSize,
             height: _kAvatarSize,

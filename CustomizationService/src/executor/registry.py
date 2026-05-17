@@ -1,0 +1,54 @@
+"""ModuleRegistry — constructs the customization modules (services) for one run."""
+
+from __future__ import annotations
+
+import logging
+
+from pydantic import BaseModel, ConfigDict
+
+from src.core.run_context import RunContext
+from src.modules.colors.color_service import ColorGenService
+from src.modules.images.image_service import ImageGenService
+from src.shared.interfaces.background_remover import BackgroundRemover
+from src.shared.interfaces.image_generator import ImageGenerator
+from src.shared.interfaces.llm_client import LLMClient
+
+logger = logging.getLogger(__name__)
+
+
+class Steps(BaseModel):
+    """The run's services: the colour root plus the ones that depend on it."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    color: ColorGenService
+    images: ImageGenService
+
+
+class ModuleRegistry:
+    """Builds the run's customization services from the run context."""
+
+    def __init__(self, run_ctx: RunContext) -> None:
+        self._run_ctx = run_ctx
+
+    def build_all(
+        self,
+        *,
+        llm: LLMClient,
+        image_gen: ImageGenerator,
+        bg_remover: BackgroundRemover,
+    ) -> Steps:
+        """Construct the colour service and the colour-dependent services."""
+        color = ColorGenService(self._run_ctx, llm=llm)
+        images = ImageGenService(
+            self._run_ctx,
+            llm=llm,
+            image_gen=image_gen,
+            bg_remover=bg_remover,
+        )
+        logger.debug(
+            "services: color=%s, images=%s",
+            type(color).__name__,
+            type(images).__name__,
+        )
+        return Steps(color=color, images=images)

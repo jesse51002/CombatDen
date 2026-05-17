@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/features/profile/presentation/widgets/next_rank/next_rank_badge.dart';
 
-/// "Next Rank: Silver I (45% left)" label with a circular progress-ring
-/// belt badge on the right.
+/// "Next Rank: Blue Stripe III (45% left)" label with a circular
+/// progress-ring belt badge on the right.
 class NextRankSection extends StatelessWidget {
   const NextRankSection({
     super.key,

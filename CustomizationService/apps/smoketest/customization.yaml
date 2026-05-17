@@ -1,0 +1,12 @@
+design_direction:
+  name: SmokeTest
+  short_desc: Pipeline smoke test.
+  long_desc: |
+    Minimal generic app used to exercise the pipeline cheaply: one image and
+    four colours. Clean, modern, neutral — nothing brand-specific.
+
+colors_direction:
+  dark_mode: true
+  description: |
+    Simple modern dark palette. Clear blue primary, near-black background,
+    off-white text, soft cyan accent. Readable, not loud.

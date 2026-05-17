@@ -1,10 +1,12 @@
+-- Daily snapshot of activity-state counts. Backend-generated.
+-- total_active / total_inactive are end-of-day balances; went_inactive /
+-- became_active are deltas for the day.
 CREATE TABLE gym_history (
-    gym_id UUID NOT NULL CONSTRAINT fk_history_gym REFERENCES gyms_unfiltered(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_history_gym REFERENCES gyms(gym_id),
     date DATE NOT NULL,
-    members_total INTEGER NOT NULL CHECK (members_total >= 0),
-    members_churned INTEGER NOT NULL CHECK (members_churned >= 0),
-    members_gained INTEGER NOT NULL CHECK (members_gained >= 0),
-    members_retained INTEGER NOT NULL CHECK (members_retained >= 0),
-    revenue INTEGER NOT NULL CHECK (revenue >= 0),
+    total_active INTEGER NOT NULL CHECK (total_active >= 0),
+    total_inactive INTEGER NOT NULL CHECK (total_inactive >= 0),
+    went_inactive INTEGER NOT NULL CHECK (went_inactive >= 0),
+    became_active INTEGER NOT NULL CHECK (became_active >= 0),
     PRIMARY KEY (gym_id, date)
 );

@@ -11,23 +11,16 @@ from src.shared.sql_loader import load_sql
 
 
 def _current_week_monday() -> date:
-    """Return the Monday of the current ISO week (UTC).
-
-    Returns:
-        A date representing Monday of this week.
-    """
     today = datetime.now(UTC).date()
     return today - timedelta(days=today.weekday())
 
 
 class ClassesStreakService:
-    """Computes the weekly class attendance streak for a member.
+    """Counts consecutive weeks with at least one class attendance.
 
-    A week counts toward the streak if the member attended at
-    least one class. The current (incomplete) week is included
-    if the member has already attended. If they haven't attended
-    this week yet, the streak is measured from last week back
-    so they aren't penalised mid-week.
+    The current incomplete week counts toward the streak only if the
+    member has already attended this week. Otherwise the streak is
+    measured from last week back so members aren't penalised mid-week.
 
     Args:
         db_pool: Injected database connection pool.
@@ -36,49 +29,22 @@ class ClassesStreakService:
     def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db_pool = db_pool
 
-    async def get_streak(
-        self,
-        crm_user_id: UUID,
-        gym_id: UUID,
-    ) -> int:
-        """Calculate the current weekly attendance streak.
-
-        Args:
-            crm_user_id: The member to check.
-            gym_id: The gym to check.
-
-        Returns:
-            Number of consecutive weeks with at least one class.
-        """
-        sql = load_sql(SQL_DIR / "classes_streak.sql")
+    async def get_streak(self, member_id: UUID, gym_id: UUID) -> int:
+        """Calculate the current weekly attendance streak."""
+        sql = load_sql(SQL_DIR / "streak_weeks.sql")
         params = {
-            "crm_user_id": str(crm_user_id),
+            "member_id": str(member_id),
             "gym_id": str(gym_id),
         }
 
         async with self._db_pool.session() as session:
-            result = await session.execute(text(sql), params)
-            rows = result.all()
-
-        if not rows:
-            return 0
+            rows = (await session.execute(text(sql), params)).all()
 
         week_starts: set[date] = {row[0] for row in rows}
         return self._count_streak(week_starts)
 
     @staticmethod
     def _count_streak(week_starts: set[date]) -> int:
-        """Walk backwards from now through consecutive attended weeks.
-
-        If neither the current week nor the previous week has
-        attendance, the streak is 0 regardless of older data.
-
-        Args:
-            week_starts: Set of Monday dates from the DB.
-
-        Returns:
-            The streak length in weeks.
-        """
         current_monday = _current_week_monday()
         previous_monday = current_monday - timedelta(weeks=1)
 
@@ -93,5 +59,4 @@ class ClassesStreakService:
         while cursor in week_starts:
             streak += 1
             cursor -= timedelta(weeks=1)
-
         return streak

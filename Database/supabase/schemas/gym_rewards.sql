@@ -1,6 +1,6 @@
 CREATE TABLE gym_rewards (
     reward_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    gym_id UUID NOT NULL CONSTRAINT fk_reward_gym REFERENCES gyms_unfiltered(gym_id),
+    gym_id UUID NOT NULL CONSTRAINT fk_reward_gym REFERENCES gyms(gym_id),
     title VARCHAR NOT NULL CHECK (title <> ''),
     amount_off VARCHAR,
     image_url VARCHAR,

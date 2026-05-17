@@ -34,7 +34,7 @@ class VideoCarouselCard extends StatelessWidget {
             children: [
               SizedBox(
                 height: _kThumbHeight,
-                child: BrandImage.asset(
+                child: BrandImage.videoAsset(
                   video.thumbnailAsset,
                   fit: BoxFit.cover,
                 ),
@@ -67,7 +67,7 @@ class _Info extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         ClipOval(
-          child: BrandImage.asset(
+          child: BrandImage.videoAsset(
             video.creatorPfpAsset,
             width: VideoCarouselCard._kPfpSize,
             height: VideoCarouselCard._kPfpSize,

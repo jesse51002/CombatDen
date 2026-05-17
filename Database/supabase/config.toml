@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "GoApi"
+project_id = "MemberApp"
 
 [api]
 enabled = true
@@ -57,16 +57,21 @@ enabled = true
 # Supports glob patterns relative to supabase directory: "./schemas/*.sql"
 schema_paths = [
     "./schemas/gyms.sql",
-    "./schemas/membership_plans.sql",
-    "./schemas/membership_plan_prices.sql",
-    "./schemas/gym_discounts.sql",
+    "./schemas/rank_presets.sql",
+    "./schemas/gym_ranks.sql",
+    "./schemas/members.sql",
+    "./schemas/member_status.sql",
+    "./schemas/member_active.sql",
+    "./schemas/members_with_status.sql",
     "./schemas/gym_classes.sql",
-    "./schemas/gym_class_schedules.sql",
-    "./schemas/gym_classes_exceptions.sql",
-    "./schemas/user_gym_profiles.sql",
-    "./schemas/member_memberships.sql",
-    "./schemas/gym_classes_log.sql",
-    "./schemas/user_gym_invoices.sql",
+    "./schemas/class_instance_exceptions.sql",
+    "./schemas/class_range_exceptions.sql",
+    "./schemas/class_history.sql",
+    "./schemas/member_attendance.sql",
+    "./schemas/gym_rewards.sql",
+    "./schemas/member_reward_redemptions.sql",
+    "./schemas/member_activities.sql",
+    "./schemas/gym_history.sql",
     "./schemas/*.sql",
     "./access_rules/*.sql"
 ]

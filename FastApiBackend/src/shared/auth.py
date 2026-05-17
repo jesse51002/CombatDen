@@ -66,10 +66,6 @@ class Auth:
     ) -> None:
         """Verify the authenticated user is an employee of the gym.
 
-        Args:
-            gym_id: The gym to check access for.
-            user_payload: Decoded JWT payload from get_current_user.
-
         Raises:
             HTTPException: 403 if user is not an employee of
                 the gym.
@@ -98,17 +94,13 @@ class Auth:
 
     async def verify_can_view_member(
         self,
-        crm_user_id: UUID,
+        member_id: UUID,
         user_payload: dict,
     ) -> None:
         """Verify the authenticated user can view this member.
 
         Access is granted if the user is the member themselves
-        (linked account) or an employee of the member's gym.
-
-        Args:
-            crm_user_id: The member's CRM user ID.
-            user_payload: Decoded JWT payload from get_current_user.
+        or an employee of the member's gym.
 
         Raises:
             HTTPException: 404 if member not found,
@@ -117,24 +109,24 @@ class Auth:
         auth_user_id = user_payload["sub"]
 
         member = await (
-            self._supabase.client.from_("user_gym_profiles")
+            self._supabase.client.from_("members")
             .select("user_id, gym_id")
-            .eq("crm_user_id", str(crm_user_id))
+            .eq("member_id", str(member_id))
             .maybe_single()
             .execute()
         )
 
-        if not member.data:
+        if not member or not member.data:
             logger.error(
-                "Member not found: crm_user_id=%s",
-                crm_user_id,
+                "Member not found: member_id=%s",
+                member_id,
             )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Member not found",
             ) from None
 
-        if member.data["user_id"] == auth_user_id:
+        if member.data.get("user_id") == auth_user_id:
             return
 
         employee = await (
@@ -150,9 +142,9 @@ class Auth:
             return
 
         logger.warning(
-            "Unauthorized member access attempt: user=%s, crm_user_id=%s",
+            "Unauthorized member access attempt: user=%s, member_id=%s",
             auth_user_id,
-            crm_user_id,
+            member_id,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

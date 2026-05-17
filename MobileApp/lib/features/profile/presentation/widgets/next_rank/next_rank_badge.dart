@@ -3,6 +3,7 @@ import 'package:mobile_app/core/constants/design_constants.dart';
 import 'package:mobile_app/shared/widgets/brand_image.dart';
 
 const double _kBadgeSize = 100;
+const double _kImageInset = 22;
 
 /// Circular belt icon with an orange progress arc tracking how close the
 /// member is to the next rank.
@@ -24,16 +25,16 @@ class NextRankBadge extends StatelessWidget {
       child: Stack(
         children: [
           Padding(
-            padding: EdgeInsets.all(DesignConstants.paddingSmall),
+            padding: EdgeInsets.all(_kImageInset),
             child: Center(
-              child: BrandImage.asset(badgeAsset, fit: BoxFit.contain),
+              child: BrandImage.rankAsset(badgeAsset, fit: BoxFit.contain),
             ),
           ),
           Positioned.fill(
             child: CustomPaint(
               painter: _ProgressArcPainter(
                 progress: progress,
-                color: DesignConstants.of(context).primaryColor,
+                color: DesignConstants.text,
                 strokeWidth: DesignConstants.buttonBorderSize,
               ),
             ),

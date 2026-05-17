@@ -1,0 +1,12 @@
+design_direction:
+  name: CombatDen
+  short_desc: Train like a pro.
+  long_desc: |
+    Premium combat sports brand serving fighters and serious amateurs.
+    Visual style: bold but refined, gritty but high-end. Not neon, not loud.
+
+colors_direction:
+  dark_mode: true
+  description: |
+    Deep red primary like dried blood. Background pitch black with the slightest
+    warmth. Text bone-white, slightly muted. Accent muted gold for premium feel.

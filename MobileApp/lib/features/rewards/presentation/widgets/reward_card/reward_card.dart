@@ -105,7 +105,7 @@ class RewardImageHero extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          BrandImage.asset(imageAsset, fit: BoxFit.cover),
+          BrandImage.rewardAsset(imageAsset, fit: BoxFit.cover),
           Positioned(
             top: DesignConstants.spacingMedium,
             right: DesignConstants.spacingMedium,

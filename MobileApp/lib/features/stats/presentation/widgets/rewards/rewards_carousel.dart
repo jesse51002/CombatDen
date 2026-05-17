@@ -91,7 +91,7 @@ class _RewardCircle extends StatelessWidget {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: BrandImage.asset(imageAsset, fit: BoxFit.cover),
+      child: BrandImage.rewardAsset(imageAsset, fit: BoxFit.cover),
     );
   }
 }

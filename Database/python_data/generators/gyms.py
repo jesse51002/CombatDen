@@ -1,10 +1,7 @@
 import random
 import uuid
 
-from faker import Faker
 from schema.gym import GymCreate
-
-fake = Faker()
 
 NAME_PREFIXES = [
     "Iron",
@@ -49,16 +46,11 @@ STYLES = [
 ]
 
 
-def generate(
-    gym_id: uuid.UUID | None = None,
-    stripe_account_id: str | None = None,
-) -> GymCreate:
+def generate(gym_id: uuid.UUID | None = None) -> GymCreate:
     name = f"{random.choice(NAME_PREFIXES)} {random.choice(NAME_SUFFIXES)}"
     description = random.choice(DESCRIPTION_TEMPLATES).format(style=random.choice(STYLES))
     return GymCreate(
         gym_id=gym_id or uuid.uuid4(),
         gym_name=name,
         gym_description=description,
-        stripe_account_id=stripe_account_id,
-        stripe_onboarding_status="complete" if stripe_account_id else "not_started",
     )

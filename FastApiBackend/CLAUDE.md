@@ -12,7 +12,6 @@
 - If you cannot fix the production code in the same change (scope, unknowns, waiting on approval), **stop and surface the bug to the user**. Do not ship a test that silently accommodates a known defect
 - Tell-tale patterns that mean you are writing around a bug — never do any of these:
   - Calling the same service method twice ("force a settle sync", "re-run so the writeback is visible") when the contract says once should be enough
-  - Writing directly to `_unfiltered` tables with raw SQL to set up state that a service call was supposed to produce
   - Substituting a lower-level path for the documented flow (e.g. flipping a column via SQL because the real cancel/update path is broken)
   - `pytest.mark.xfail` or `pytest.mark.skip` with a reason that points at a production line number instead of an external constraint
   - Loosening an assertion ("either 7500 or 7600 is fine") when the actual root cause is a bug on our side, not genuine non-determinism from a third party
@@ -54,15 +53,10 @@
 - **ALWAYS use enums instead of raw strings for known value sets** — statuses, types, categories, discriminators, etc. must be `str, Enum` classes
 - **NEVER use hardcoded strings** when an enum exists — all comparisons, match/case, filter values, and Pydantic field types must use the enum
 - **ALWAYS reuse enums and schemas from the Database package** (`../Database/python_data/schema/`) when they exist — import via `from schema.<module> import <Enum>` (available through `src/shared/db_schema_path.py`). Never redefine enums that already exist in the Database package.
-- Good: `from schema.gym_discount import DiscountType`
-- Good: `from schema.membership_plan import PlanType`
-- Bad: Redefining `class DiscountType(StrEnum)` in the FastAPI backend when it already exists in the Database package
 - Pydantic auto-serializes `str` enums to their string values in JSON responses, so no manual conversion needed
 - Use `Literal[MyEnum.value]` for Pydantic discriminated union fields, not `Literal["some_string"]`
-- Good: `type: Literal[FilterType.date_range] = FilterType.date_range`
-- Bad: `type: Literal["date_range"] = "date_range"`
-- Good: `value: list[MembershipStatus]` with `class MembershipStatus(str, Enum): active = "active"`
-- Bad: `value: list[str]` with hardcoded `"active"`, `"frozen"` scattered through the code
+- Good: `value: list[MemberStatus]` with `class MemberStatus(str, Enum): active = "active"`
+- Bad: `value: list[str]` with hardcoded `"active"`, `"trial"` scattered through the code
 
 **PEP 8 Naming**
 - Modules/packages: `my_module.py`
@@ -200,8 +194,8 @@ src/
 - Update schemas have optional fields
 - Response schemas exclude sensitive data
 - Use `EmailStr`, `HttpUrl`, built-in validators
-- **Update requests must separate IDs from mutable data** — the request model contains identity fields (`discount_id`, `gym_id`) and a nested `data` model with only mutable fields (all optional). This allows the service to extract change keys from `data` and validate them against the immutable columns guard (`validate_mutable_columns` from `src/shared/column_guard.py` + frozensets in `schema.immutable_columns` from the Database package).
-- Good: `DiscountUpdateRequest(discount_id, gym_id, data: DiscountUpdateData)` where `DiscountUpdateData` has only mutable optional fields
+- **Update requests must separate IDs from mutable data** — the request model contains identity fields (path parameters or top-level fields) and a nested `data` model with only mutable optional fields. This allows the service to extract change keys from `data` and validate them against the immutable columns guard (`validate_mutable_columns` from `src/shared/column_guard.py` + frozensets in `schema.immutable_columns` from the Database package).
+- Good: `RewardUpdateRequest(data: RewardUpdateData)` where `RewardUpdateData` has only mutable optional fields and the reward_id comes from the URL path
 - Bad: Flat update model mixing PKs, immutable columns, and mutable fields together
 
 **Error Handling**
@@ -259,48 +253,20 @@ src/
 - Repository handles data access
 - Never skip layers
 
-## Stripe Operation Order
+## Computed-Status Views
 
-Five tables use the `_unfiltered` / filtered-view pattern: `membership_plans`, `membership_plan_prices`, `gym_discounts`, `user_gym_profiles`, `member_memberships`. Each `_unfiltered` table has a view (the original name) that filters `WHERE stripe_*_id IS NOT NULL`.
+Tables whose "status" is a function of multiple date columns expose
+that derivation through a Postgres view rather than repeating the
+`CASE` expression in every query. Example: `members_with_status`
+(in `Database/supabase/schemas/members.sql`) wraps the `members`
+table and adds `status` (`trial` / `active` / `inactive`) and
+`last_class_days_ago`. All read-paths (`list_members.sql`,
+`counts_members.sql`, `member_detail.sql`) SELECT from the view.
+Writes go directly to the underlying table.
 
-**Creates — DB-first (INSERT → Stripe → UPDATE)**
-
-New rows follow a three-step pattern:
-1. INSERT into `_unfiltered` with the Stripe column set to NULL. The row exists in the DB but is invisible through the filtered view.
-2. Call Stripe to create the resource. Pass `metadata={"crm_pk": "<uuid>"}` using the PK from step 1.
-3. UPDATE `_unfiltered` SET `stripe_*_id = <value>`. The row is now visible through the view.
-
-On Stripe failure (step 2): DELETE the pending row from `_unfiltered` (use the `*_delete_pending.sql` files which guard with `AND stripe_*_id IS NULL`), then re-raise.
-On UPDATE failure (step 3): Retry 3x with exponential backoff via `DirectDatabasePool.execute_with_retry()`. If exhausted, raise `StripeOrphanError` with the Stripe resource type and ID prominently.
-
-- Good: `INSERT plan (NULL) → create Stripe product → UPDATE plan (stripe_product_id)`
-- Bad: `Create Stripe product → INSERT plan (with stripe_product_id)` — orphaned Stripe resource if DB insert fails
-
-**Updates & Deletes — Stripe-first**
-
-When the row already exists and is synced (has a non-NULL Stripe ID), the Stripe operation runs first, then the DB update. There is no orphan risk because the row is already visible.
-
-- Good: Update Stripe product name → UPDATE `_unfiltered` row
-- Good: Delete Stripe coupon → soft-delete `_unfiltered` row
-- Bad: Soft-delete CRM row → delete Stripe coupon (CRM is dirty if Stripe fails)
-
-**Writes always target `_unfiltered`**
-
-All INSERT, UPDATE, and DELETE SQL must target the `_unfiltered` table directly. The filtered views are read-only (REVOKE INSERT/UPDATE on authenticated).
-
-**Atomicity — reads always use filtered views**
-
-A row is either fully synced or it doesn't exist. All SELECT queries use the original view names (e.g., `membership_plans`, not `membership_plans_unfiltered`). If a create fails mid-sync, the pending row is invisible to all reads — this is correct behavior, the same as a Postgres transaction that is committed all the way or not at all. Never query `_unfiltered` for reads.
-
-## Stripe Resource Not Found Handling
-
-**`PaymentsResourceNotFoundError` must ALWAYS be explicitly caught** — never let it fall through to a generic `Exception` handler.
-
-Stripe is the source of truth. When a Stripe resource is not found:
-- **Write operations (create/update):** If the specific resource being edited is not found (check `exc.resource_type` against `StripeResourceType`), recreate it. The gym owner is explicitly performing this action, so re-creating is the correct behavior.
-- **Read operations (list/get):** If the resource is not found, remove the stale linkage on the CRM side (clear the Stripe ID from the database).
-- **Background tasks (bulk sync):** Log the error with `logger.error(... exc_info=True)` and continue iterating. Do not crash the background task.
-- **Other contexts:** Re-raise the error so the caller sees the failure.
+When you add a similar derived field, prefer extending an existing
+`*_with_status` view or adding a new view — never duplicate the
+derivation across SQL files.
 
 ## Security
 

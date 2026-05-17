@@ -14,9 +14,9 @@ CREATE POLICY "Members can view active rewards"
     USING (
         is_active = true
         AND EXISTS (
-            SELECT 1 FROM user_gym_profiles
-            WHERE user_gym_profiles.gym_id = gym_rewards.gym_id
-            AND user_gym_profiles.user_id = auth.uid()
+            SELECT 1 FROM members
+            WHERE members.gym_id = gym_rewards.gym_id
+            AND members.user_id = auth.uid()
         )
     );
 

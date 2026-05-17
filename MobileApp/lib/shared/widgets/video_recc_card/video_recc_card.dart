@@ -38,7 +38,7 @@ class VideoReccCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
             child: AspectRatio(
               aspectRatio: 16 / 9,
-              child: BrandImage.asset(thumbnailAsset, fit: BoxFit.cover),
+              child: BrandImage.videoAsset(thumbnailAsset, fit: BoxFit.cover),
             ),
           ),
           _CreatorRow(
@@ -74,7 +74,7 @@ class _CreatorRow extends StatelessWidget {
         spacing: DesignConstants.spacingMedium,
         children: [
           ClipOval(
-            child: BrandImage.asset(
+            child: BrandImage.videoAsset(
               creatorPfpAsset,
               width: _kPfpSize,
               height: _kPfpSize,

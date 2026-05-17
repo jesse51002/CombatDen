@@ -45,7 +45,7 @@ class ClassListItem extends StatelessWidget {
                   borderRadius: BorderRadius.circular(
                     DesignConstants.radiusSmall,
                   ),
-                  child: BrandImage.asset(
+                  child: BrandImage.classAsset(
                     classData.imageAsset,
                     width: 122,
                     height: 73,

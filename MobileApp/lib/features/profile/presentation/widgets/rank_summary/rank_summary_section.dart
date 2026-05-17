@@ -24,7 +24,7 @@ class RankSummarySection extends StatelessWidget {
           rankSubtitle: profile.rankSubtitle,
           rankBadgeAsset: profile.rankBadgeLargeAsset,
         ),
-        RatingGraph(graphAsset: profile.ratingGraphAsset),
+        const RatingGraph(),
         const TimeframeSelector(),
       ],
     );

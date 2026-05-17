@@ -1,8 +1,6 @@
-"""Direct-DB seeding for entities without backend CREATE endpoints.
+"""Direct-DB seeding for all entities.
 
-Everything in here writes to Supabase via the service-role client, because
-the corresponding entities (gyms, gym_employees, gym_classes, gym_rewards,
-gym_history) are admin-provisioned in production and have no REST endpoints
-we can hit from the seed script. Stripe-backed entities go through the API
-instead — see `api_creation/`.
+Everything writes to Supabase via the service-role client. There is no
+backend round-trip — the product no longer handles payments, so no
+Stripe-backed entities exist that would need to flow through the API.
 """

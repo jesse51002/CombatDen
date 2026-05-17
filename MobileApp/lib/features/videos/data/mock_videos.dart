@@ -27,7 +27,7 @@ class MockVideo {
   String get metaLabel => '$sponsorLabel by $creatorName ‧ $viewsLabel';
 }
 
-const String _kCreatorPfp = 'video_creator_pfp.png';
+const String _kCreatorPfp = 'creator_pfp.png';
 
 const List<MockVideo> mockVideos = [
   MockVideo(
@@ -65,7 +65,7 @@ const List<MockVideo> mockVideos = [
     title: 'Mauy Thai Basics (Don’t look lik)',
     creatorName: 'Rokas Leo',
     creatorPfpAsset: _kCreatorPfp,
-    thumbnailAsset: 'video_thumb_muay_thai_pad.png',
+    thumbnailAsset: 'video_thumb_muay_thai_drills.png',
     viewsLabel: '350K views',
     sponsorLabel: 'USDC',
     category: 'Level up your skills',
@@ -121,7 +121,7 @@ const MockVideo mockDrillOfTheDay = MockVideo(
   title: 'Head movement tutorial',
   creatorName: 'Rokas Leo',
   creatorPfpAsset: _kCreatorPfp,
-  thumbnailAsset: 'summary_drill_video.png',
+  thumbnailAsset: 'video_thumb_muay_thai_drills.png',
   viewsLabel: '350K views',
   sponsorLabel: 'USDC',
   category: 'Drill of the Day',
@@ -133,19 +133,19 @@ const MockVideo mockVideoBeforeClass = MockVideo(
   title: '5 Things You Should Know Before Joining a Martial Arts Gym',
   creatorName: 'Rokas Leo',
   creatorPfpAsset: _kCreatorPfp,
-  thumbnailAsset: 'video_thumb_before_class.png',
+  thumbnailAsset: 'video_thumb_netflix_red.png',
   viewsLabel: '350K views',
   sponsorLabel: 'USDC',
   category: 'Video Before Class',
 );
 
-/// "Technique of the Day" big card — uses the muay thai pad thumb.
+/// "Technique of the Day" big card — uses the muay thai drills thumb.
 const MockVideo mockTechniqueOfTheDay = MockVideo(
   id: 'technique-of-the-day',
   title: 'We Put Fighters in Self Defense Training',
   creatorName: 'Rokas Leo',
   creatorPfpAsset: _kCreatorPfp,
-  thumbnailAsset: 'video_thumb_muay_thai_pad.png',
+  thumbnailAsset: 'video_thumb_muay_thai_drills.png',
   viewsLabel: '350K views',
   sponsorLabel: 'USDC',
   category: 'Technique of the Day',

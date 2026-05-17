@@ -30,7 +30,6 @@ class MockProfile {
     required this.rankTitle,
     required this.rankSubtitle,
     required this.rankBadgeLargeAsset,
-    required this.ratingGraphAsset,
     required this.nextRankTitle,
     required this.nextRankProgressLabel,
     required this.nextRankProgress,
@@ -48,7 +47,6 @@ class MockProfile {
   final String rankTitle;
   final String rankSubtitle;
   final String rankBadgeLargeAsset;
-  final String ratingGraphAsset;
 
   final String nextRankTitle;
   final String nextRankProgressLabel;
@@ -62,14 +60,14 @@ const _kLevelUpVideos = [
   MockProfileVideo(
     title: 'Mauy Thai Basics (Don’t look lik)',
     viewCount: '350K views',
-    thumbnailAsset: 'profile_video_thumb.png',
-    creatorAvatarAsset: 'profile_creator_pfp.png',
+    thumbnailAsset: 'video_thumb_muay_thai_drills.png',
+    creatorAvatarAsset: 'creator_pfp.png',
   ),
   MockProfileVideo(
     title: 'We Put Fighters in Self Defense Training',
     viewCount: '350K views',
-    thumbnailAsset: 'profile_video_thumb.png',
-    creatorAvatarAsset: 'profile_creator_pfp.png',
+    thumbnailAsset: 'video_thumb_muay_thai_drills.png',
+    creatorAvatarAsset: 'creator_pfp.png',
   ),
 ];
 
@@ -79,12 +77,11 @@ const mockProfileGlobalMma = MockProfile(
   pointsLabel: '3.4k',
   rankBadgeAsset: 'icon_rank_belt.png',
   streakWeeks: 3,
-  rankTitle: 'Gold Belt',
-  rankSubtitle: 'Stripe III',
+  rankTitle: 'Blue Belt',
+  rankSubtitle: 'Stripe II',
   rankBadgeLargeAsset: 'profile_rank_belt_gold.png',
-  ratingGraphAsset: 'profile_rating_graph.png',
   nextRankTitle: 'Next Rank',
-  nextRankProgressLabel: 'Silver I (23/50 classes)',
+  nextRankProgressLabel: 'Blue Stripe III (23/50 classes)',
   nextRankProgress: 0.55,
   nextRankBadgeAsset: 'profile_next_rank_belt.png',
   levelUpVideos: _kLevelUpVideos,
@@ -99,7 +96,6 @@ const mockProfileGlobalBjj = MockProfile(
   rankTitle: 'Blue Belt',
   rankSubtitle: 'Stripe II',
   rankBadgeLargeAsset: 'profile_rank_belt_gold.png',
-  ratingGraphAsset: 'profile_rating_graph.png',
   nextRankTitle: 'Next Rank',
   nextRankProgressLabel: 'Blue Stripe III (23/50 classes)',
   nextRankProgress: 0.55,
@@ -113,9 +109,8 @@ MockProfile mockProfileFor(Brand brand) => switch (brand) {
 };
 
 const ratingGraphThresholdsCombatDen = <String>[
-  'Bronze III -',
-  'Bronze II -',
-  'Bronze I -',
+  'White Belt -',
+  'Blue Belt -',
 ];
 
 const ratingGraphThresholdsCombatDenBjj = <String>[
@@ -127,3 +122,27 @@ List<String> ratingGraphThresholdsFor(Brand brand) => switch (brand) {
   Brand.combatDen => ratingGraphThresholdsCombatDen,
   Brand.combatDenBjj => ratingGraphThresholdsCombatDenBjj,
 };
+
+/// Mock rating-over-time series for the rank summary graph.
+///
+/// Values are y-coordinates normalized to 0..1, where 0 is the bottom of the
+/// chart and 1 is the top. X is implied — points are spaced uniformly across
+/// the chart width. The shape is a slow start that accelerates toward the
+/// top-right, mirroring the original Figma placeholder.
+const List<double> mockRatingGraphSeries = <double>[
+  0.06,
+  0.08,
+  0.11,
+  0.13,
+  0.14,
+  0.17,
+  0.21,
+  0.26,
+  0.31,
+  0.37,
+  0.44,
+  0.55,
+  0.69,
+  0.86,
+  0.96,
+];

@@ -1,5 +1,14 @@
 # Monorepo Project
 
+## No assumptions
+
+When a decision has more than one reasonable answer, ask and wait for the user's explicit response. Never assume, recommend-and-proceed, or defer the choice unilaterally. Presenting researched options is encouraged; making the choice for the user is not.
+
+## No inline prompts or SQL
+- Never inline an LLM/agent prompt in code. Every prompt lives in its own `.md` file and is read at use; code may hold the path, never the prompt text.
+- Never inline SQL in code. Every query lives in its own `.sql` file and is read at use.
+- This holds repo-wide and for every system, including ones not using prompts or SQL yet.
+
 ## Organization
 - Each system (backend, frontend, database, etc.) lives in its own top-level directory.
 - The root directory must stay clean: no application code, no config files for individual systems.
@@ -17,4 +26,4 @@
 
 ## Calling the FastApi Backend
 - The authoritative request/response contract lives in `Database/openapi.json` (a regenerated OpenAPI dump).
-- Before writing or modifying any code that calls a backend endpoint (seed scripts, tests, other services), read the matching request schema in `Database/openapi.json` and include every field listed under `required`. `idempotency_key` in particular is required on most `member_memberships/*` endpoints.
+- Before writing or modifying any code that calls a backend endpoint (seed scripts, tests, other services), read the matching request schema in `Database/openapi.json` and include every field listed under `required`.

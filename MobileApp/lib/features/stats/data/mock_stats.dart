@@ -167,10 +167,10 @@ const mockRewardsStats = MockRewardsStats(
 );
 
 const mockRankStats = MockRankStats(
-  rankTitle: 'Gold Belt',
-  rankSubtitle: 'Stripe III',
+  rankTitle: 'Blue Belt',
+  rankSubtitle: 'Stripe II',
   beltAsset: 'stat_rank_belt.png',
-  nextTierLabel: 'Gold Belt Stripe IV',
+  nextTierLabel: 'Blue Belt Stripe III',
   classesAttended: 28,
   classesRequired: 50,
 );

@@ -23,7 +23,7 @@ class RankHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingLarge,
       children: [
-        BrandImage.asset(
+        BrandImage.rankAsset(
           rankBadgeAsset,
           width: 77,
           height: 50,

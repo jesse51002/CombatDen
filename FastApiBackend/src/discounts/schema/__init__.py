@@ -1,1 +1,0 @@
-"""Discounts schema package."""

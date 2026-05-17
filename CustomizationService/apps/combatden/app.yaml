@@ -1,0 +1,41 @@
+id: combatden
+display_name: CombatDen
+
+images:
+  # Shared (tenant-wide)
+  - id: logo_primary
+    description: Main brand logo, full color. Shown on splash and home header.
+  - id: logo_mark
+    description: Small square mark used as the app icon and inside the nav bar.
+  - id: rank_belt
+    description: Belt graphic shown in profile rank progression and rank celebration.
+
+  # Page-specific
+  - id: location_map_image
+    description: Map of the gym's physical location, shown on class detail.
+  - id: celebration_image
+    description: Hero illustration on the class-booked celebration screen.
+  - id: trophy_image
+    description: Trophy graphic on the wins celebration screen.
+  - id: points_stars_image
+    description: Stars graphic on the points celebration screen.
+  - id: rating_graph_image
+    description: Rating graph illustration on the profile screen.
+  - id: next_rank_belt_image
+    description: Preview of the next-rank belt on the profile screen.
+  - id: drill_video_thumbnail
+    description: Default thumbnail for drill videos in the summary modal.
+  - id: instructor_pfp
+    description: Default instructor profile-picture placeholder.
+  - id: recc_card_thumbnail
+    description: Default thumbnail for video recommendation cards.
+
+colors:
+  - id: primary
+    description: Dominant brand color. Used for primary CTAs and key accents.
+  - id: background
+    description: App background color. Usually dark for a gym aesthetic.
+  - id: text
+    description: Main text color for headings and body copy.
+  - id: accent
+    description: Secondary highlight color for badges, ratings, and small accents.

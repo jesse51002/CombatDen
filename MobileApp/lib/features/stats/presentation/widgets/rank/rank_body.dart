@@ -145,7 +145,7 @@ class _RankBodyState extends State<RankBody>
     double stackW,
     double stackH,
   ) {
-    final image = BrandImage.asset(
+    final image = BrandImage.rankAsset(
       widget.stats.beltAsset,
       fit: BoxFit.contain,
     );

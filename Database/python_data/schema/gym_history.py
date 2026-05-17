@@ -7,8 +7,7 @@ from . import SeedModel
 class GymHistoryCreate(SeedModel):
     gym_id: UUID
     date: date
-    members_total: int
-    members_churned: int
-    members_gained: int
-    members_retained: int
-    revenue: int
+    total_active: int
+    total_inactive: int
+    went_inactive: int
+    became_active: int

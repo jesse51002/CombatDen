@@ -22,7 +22,7 @@ class ClassLocationSection extends StatelessWidget {
         children: [
           AspectRatio(
             aspectRatio: 1160 / 580,
-            child: BrandImage.asset(detail.mapAsset, fit: BoxFit.cover),
+            child: BrandImage.classAsset(detail.mapAsset, fit: BoxFit.cover),
           ),
           Text(
             detail.address,

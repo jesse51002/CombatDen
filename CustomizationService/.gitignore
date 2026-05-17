@@ -1,0 +1,17 @@
+# In-project Poetry virtualenv
+.venv/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Generated pipeline runs (per-app, per-run output dirs)
+apps/*/2*/
+
+# Local dev secrets (never commit)
+.env
+
+# Vendored ColorMcp source is committed; build outputs are regenerated
+vendor/colormcp/node_modules/
+vendor/colormcp/dist/

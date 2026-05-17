@@ -9,19 +9,30 @@
 ## Security
 - Always enable Row Level Security (RLS) on every table.
 - Always use `REVOKE UPDATE` on immutable columns (e.g. PKs, FKs, created_at) for the `authenticated` role.
-- Tables with any `stripe_*_id` column must NOT have INSERT or UPDATE RLS policies for the `authenticated` role — those operations go through `service_role` only. SELECT policies for `authenticated` are allowed.
+- The product no longer handles payments, so `authenticated` users can INSERT/UPDATE freely on tables they own (members on their own row, gym staff on their gym's rows). No `service_role`-only carve-outs are needed.
+- Append-only tables (logs / history / metrics — `member_attendance`, `class_history`, `gym_history`, `member_activities`, `member_reward_redemptions`) should `REVOKE UPDATE` for `authenticated`.
+- **Every view MUST be declared `WITH (security_invoker = true)`.** Without this flag, the view runs with the privileges of its creator (typically `postgres`), which silently bypasses the RLS on the underlying tables and leaks rows across tenants.
 - **All access rules go in `access_rules/`, not in `schemas/`.** This includes `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`, `CREATE POLICY`, `REVOKE`, and `GRANT` statements. Each schema file in `schemas/` has a corresponding file in `access_rules/` with the same name. This separation exists to avoid circular dependencies (e.g. RLS policies that reference tables loaded later).
 
 ## Integrity constraints
 - Always name constraints with the `CONSTRAINT` keyword for readable error messages (e.g. `CONSTRAINT membership_must_match_gym`).
 - Always add both an inline foreign key on the column definition AND a composite foreign key at the table level when cross-table gym validation is needed (e.g. `class_id UUID NOT NULL CONSTRAINT fk_schedule_class_id REFERENCES gym_classes(class_id)` inline, plus `CONSTRAINT fk_schedule_class FOREIGN KEY (class_id, gym_id) REFERENCES gym_classes (class_id, gym_id)` at the bottom).
-- Prefer composite foreign keys over triggers for cross-table validation (e.g. ensuring crm_user_id belongs to the correct gym_id).
+- Prefer composite foreign keys over triggers for cross-table validation (e.g. ensuring member_id belongs to the correct gym_id).
 - Only use triggers when the constraint can't be expressed as a FK (e.g. JSONB array validation, immutability logic).
 - Keep triggers in the same schema file as the table they apply to, not in a separate file.
 
+## Naming
+- Tables that belong to a single owning entity get the entity's name as a prefix, even at the cost of slightly longer names. Examples: `member_status`, `member_active`, `member_attendance`, `member_activities`, `member_reward_redemptions`, `class_history`, `class_instance_exceptions`, `class_range_exceptions`, `gym_classes`, `gym_ranks`, `gym_rewards`, `gym_history`. The prefix groups related tables together in directory listings, in dbdiagram, and in the Supabase Studio sidebar — and disambiguates names that would otherwise collide across owning entities (e.g. there could be `class_history` and `member_status`, never just `status`).
+- Mirror the prefix in the file name, the table name, the constraint name (`fk_<table>_<purpose>`), the index name (`idx_<table>_<purpose>`), and the matching Python schema/generator/bootstrap module. Drift between any of these makes search painful.
+
+## Enums
+- Always use real Postgres enums (`CREATE TYPE foo AS ENUM (...)`) for any column with a fixed set of string values. Never use `CHECK (col IN ('a','b','c'))` for that case — the enum surfaces in PostgREST's OpenAPI output, in Supabase Studio dropdowns, and gives clearer errors than a CHECK violation.
+- Declare the `CREATE TYPE` at the top of the schema file that owns the consuming table. If multiple tables consume the same enum, hoist into the earliest-loaded file that uses it.
+- Mirror every Postgres enum with a `StrEnum` in `python_data/schema/*.py` whose member values are character-identical to the Postgres values, so the seed and the DB round-trip cleanly.
+
 ## Immutable Columns
 
-`python_data/schema/immutable_columns.py` defines frozensets of column names per table that must never appear in an UPDATE SET clause from **user-facing update requests** (i.e. data sent by the client). These are not about what the backend/service_role can write — they guard against clients modifying columns they shouldn't (PKs, FKs, auto-generated timestamps, Stripe-managed columns, backend-managed columns like linking and discount assignments, etc.).
+`python_data/schema/immutable_columns.py` defines frozensets of column names per table that must never appear in an UPDATE SET clause from **user-facing update requests** (i.e. data sent by the client). These are not about what the backend/service_role can write — they guard against clients modifying columns they shouldn't (PKs, FKs, auto-generated timestamps, etc.).
 
 - **Always keep this file in sync with schema changes** — when adding, removing, or renaming columns in `schemas/`, update `immutable_columns.py` to match.
 - The FastAPI backend imports these via `from schema.immutable_columns import <TABLE_NAME>` (available through `db_schema_path.py`).

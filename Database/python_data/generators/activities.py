@@ -1,7 +1,7 @@
 import random
 import uuid
 
-from schema.user_activity import UserActivityCreate
+from schema.member_activity import MemberActivityCreate
 from utils import random_past_datetime
 
 ACTIVITY_TYPES = ["class_attended", "rank_promoted", "reward_redeemed", "check_in"]
@@ -20,13 +20,13 @@ def _make_info(activity_type: str) -> dict:
     return {}
 
 
-def generate(crm_user_id: uuid.UUID, gym_id: uuid.UUID, count: int) -> list[UserActivityCreate]:
+def generate(member_id: uuid.UUID, gym_id: uuid.UUID, count: int) -> list[MemberActivityCreate]:
     activities = []
     for _ in range(count):
         act_type = random.choice(ACTIVITY_TYPES)
         activities.append(
-            UserActivityCreate(
-                crm_user_id=crm_user_id,
+            MemberActivityCreate(
+                member_id=member_id,
                 gym_id=gym_id,
                 activity_type=act_type,
                 activity_info=_make_info(act_type),

@@ -1,0 +1,19 @@
+id: smoketest
+display_name: Smoke Test
+
+# One image only — keeps a pipeline run cheap/fast (image gen + background
+# removal is the expensive part). Swap the description to test other prompts.
+images:
+  - id: celebration_image
+    description: Hero illustration on the class-booked celebration screen.
+
+# All four colour slots so the full colour flow (harmony + WCAG contrast) runs.
+colors:
+  - id: primary
+    description: Dominant brand color. Used for primary CTAs and key accents.
+  - id: background
+    description: App background color. Usually dark for a gym aesthetic.
+  - id: text
+    description: Main text color for headings and body copy.
+  - id: accent
+    description: Secondary highlight color for badges, ratings, and small accents.

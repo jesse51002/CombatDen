@@ -1,0 +1,83 @@
+app: combatden
+display_name: CombatDen
+
+images:
+  logo_primary:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/logo_primary.png
+    prompt: >-
+      Premium combat-sports wordmark logo for "CombatDen", bold but refined,
+      gritty high-end, deep oxblood red on a plain flat solid background,
+      nothing else in frame.
+  logo_mark:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/logo_mark.png
+    prompt: >-
+      Small square brand mark for CombatDen, minimal aggressive emblem,
+      single subject centered on a plain flat solid background.
+  rank_belt:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/rank_belt.png
+    prompt: >-
+      Martial-arts rank belt graphic, clean side-on illustration, premium
+      matte texture, centered on a plain flat solid background.
+  location_map_image:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/location_map_image.png
+    prompt: >-
+      Stylised dark city map tile marking a gym location, gritty premium
+      palette, subject centered on a plain flat solid background.
+  celebration_image:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/celebration_image.png
+    prompt: >-
+      Hero illustration celebrating a booked class, energetic but refined
+      combat-sports motif, centered on a plain flat solid background.
+  trophy_image:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/trophy_image.png
+    prompt: >-
+      Premium trophy graphic for a wins celebration, muted gold accents,
+      single subject centered on a plain flat solid background.
+  points_stars_image:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/points_stars_image.png
+    prompt: >-
+      Cluster of stars for a points celebration, muted gold, understated and
+      premium, centered on a plain flat solid background.
+  rating_graph_image:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/rating_graph_image.png
+    prompt: >-
+      Clean rating progression graph illustration, dark gritty premium style,
+      centered on a plain flat solid background.
+  next_rank_belt_image:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/next_rank_belt_image.png
+    prompt: >-
+      Preview of the next-rank martial-arts belt, slightly faded to imply it
+      is not yet earned, centered on a plain flat solid background.
+  drill_video_thumbnail:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/drill_video_thumbnail.png
+    prompt: >-
+      Default training-drill video thumbnail, gritty high-end combat-sports
+      framing, single subject on a plain flat solid background.
+  instructor_pfp:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/instructor_pfp.png
+    prompt: >-
+      Neutral default instructor profile-picture placeholder, premium matte
+      silhouette, centered on a plain flat solid background.
+  recc_card_thumbnail:
+    path: /abs/path/apps/combatden/20260516T120000Z/images/recc_card_thumbnail.png
+    prompt: >-
+      Default video recommendation card thumbnail, refined gritty combat
+      aesthetic, single subject on a plain flat solid background.
+
+colors:
+  primary:
+    hex: "#8B2E1F"
+    description: Deep oxblood red, like dried blood — muted, never neon.
+    vibe: Gritty, aggressive, premium; controlled violence.
+  background:
+    hex: "#0F0B08"
+    description: Near-black with the faintest warm undertone.
+    vibe: Dark, serious, focused — the den.
+  text:
+    hex: "#F0E8DC"
+    description: Soft bone-white, slightly warm and muted.
+    vibe: Clean and readable without harsh glare.
+  accent:
+    hex: "#C99350"
+    description: Muted antique gold, low saturation.
+    vibe: Premium and earned; an understated reward.

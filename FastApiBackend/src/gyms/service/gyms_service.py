@@ -1,128 +1,129 @@
-"""Orchestrator service for the gyms domain."""
+"""Gyms domain service: create gym + owner employee, get gym, update gym."""
 
 import logging
 from uuid import UUID
 
+from schema.immutable_columns import GYMS as GYMS_IMMUTABLE
 from sqlalchemy import text
 
 from src.gyms import SQL_DIR
 from src.gyms.schema.gyms_schema import (
     GymCreateRequest,
     GymCreateResponse,
-    GymOnboardingLinkResponse,
-    GymOnboardingStatusResponse,
+    GymEmployeeResponse,
+    GymResponse,
+    GymUpdateData,
 )
-from src.gyms.service.gyms_create import GymsCreateService
-from src.gyms.service.gyms_onboarding_status import GymOnboardingStatusService
-from src.gyms.service.gyms_status_mapping import (
-    GYM_STATUS_COMPLETE,
-    GYM_STATUS_DISABLED,
-    GYM_STATUS_PENDING,
-)
-from src.gyms.service.payments_stripe_connect_service import (
-    PaymentsStripeConnectService,
-)
+from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
 
 
-class GymAlreadyExistsError(Exception):
-    """Raised by ``create_gym`` when the caller already owns a gym.
-
-    Carries the existing gym's current ``stripe_onboarding_status``
-    so the router can translate to the correct 409 detail message.
-    """
-
-    def __init__(self, existing_status: str) -> None:
-        super().__init__(
-            f"User already owns a gym (status={existing_status})",
-        )
-        self.existing_status = existing_status
-
-
 class GymsService:
-    """Orchestrates the three gym routes.
+    """Create / get / update gyms.
 
-    Thin layer — most work is delegated to ``GymsCreateService``
-    and ``GymOnboardingStatusService``. The only logic that lives
-    here is the "user already owns a gym" pre-check used by the
-    create endpoint.
+    Args:
+        db_pool: Injected database connection pool.
     """
 
-    def __init__(
-        self,
-        db_pool: DirectDatabasePool,
-        stripe_connect_service: PaymentsStripeConnectService,
-    ) -> None:
+    def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db_pool = db_pool
-        self._create_service = GymsCreateService(
-            db_pool=db_pool,
-            stripe_connect_service=stripe_connect_service,
-        )
-        self._status_service = GymOnboardingStatusService(
-            db_pool=db_pool,
-            stripe_connect_service=stripe_connect_service,
-        )
 
     async def create_gym(
         self,
         request: GymCreateRequest,
         user_id: UUID,
-        user_email: str,
     ) -> GymCreateResponse:
-        """Create a gym — or raise if the user already owns one.
+        """Create a gym and the calling user's owner gym_employees row.
 
-        Raises:
-            GymAlreadyExistsError: If the caller owns any gym
-                (regardless of status). The router maps this to
-                409 with a status-specific detail message.
+        Both inserts happen in a single transaction so a partial
+        create cannot leave a gym without an owner.
         """
-        existing = await self._lookup_existing_gym(user_id)
-        if existing is not None:
-            raise GymAlreadyExistsError(existing["stripe_onboarding_status"])
+        async with self._db_pool.session() as session:
+            gym_row = (
+                (
+                    await session.execute(
+                        text(load_sql(SQL_DIR / "insert_gym.sql")),
+                        {
+                            "gym_name": request.gym_name,
+                            "gym_description": request.gym_description,
+                            "timezone": request.timezone,
+                        },
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
 
-        return await self._create_service.create_gym(
-            request=request,
-            user_id=user_id,
-            user_email=user_email,
+            owner_row = (
+                (
+                    await session.execute(
+                        text(load_sql(SQL_DIR / "insert_owner_employee.sql")),
+                        {
+                            "gym_id": gym_row["gym_id"],
+                            "user_id": str(user_id),
+                            "first_name": request.owner_first_name,
+                            "last_name": request.owner_last_name,
+                            "phone": request.owner_phone,
+                            "email": request.owner_email,
+                        },
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+
+            await session.commit()
+
+        return GymCreateResponse(
+            gym=GymResponse(**gym_row),
+            owner=GymEmployeeResponse(**owner_row),
         )
 
-    async def get_onboarding_status(
-        self,
-        user_id: UUID,
-    ) -> GymOnboardingStatusResponse:
-        """Fetch + refresh the caller's onboarding status."""
-        return await self._status_service.refresh(user_id)
-
-    async def get_fresh_onboarding_link(
-        self,
-        user_id: UUID,
-    ) -> GymOnboardingLinkResponse:
-        """Mint a new AccountLink without re-reading the account."""
-        return await self._status_service.new_link(user_id)
-
-    # ── Private ────────────────────────────────────────────────
-
-    async def _lookup_existing_gym(self, user_id: UUID) -> dict | None:
-        """Check whether the caller already owns any gym."""
-        sql = load_sql(SQL_DIR / "gyms_get_owned_by_user.sql")
+    async def get_gym_for_user(self, user_id: UUID) -> GymResponse:
+        """Return the caller's gym (looked up via gym_employees)."""
         async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"user_id": str(user_id)},
+            row = (
+                (
+                    await session.execute(
+                        text(load_sql(SQL_DIR / "get_gym_for_user.sql")),
+                        {"user_id": str(user_id)},
+                    )
+                )
+                .mappings()
+                .fetchone()
             )
-            row = result.mappings().fetchone()
-        return dict(row) if row else None
 
+        if not row:
+            raise ValueError("No gym found for this user")
 
-# Re-export status constants so the router can reference them
-# without reaching across service modules.
-__all__ = [
-    "GYM_STATUS_COMPLETE",
-    "GYM_STATUS_DISABLED",
-    "GYM_STATUS_PENDING",
-    "GymAlreadyExistsError",
-    "GymsService",
-]
+        return GymResponse(**row)
+
+    async def update_gym(
+        self,
+        gym_id: UUID,
+        data: GymUpdateData,
+    ) -> GymResponse:
+        """Update mutable fields on a gym row."""
+        update_fields = data.model_dump(exclude_unset=True, exclude_none=True)
+
+        if not update_fields:
+            raise ValueError("No fields provided to update")
+
+        validate_mutable_columns(GYMS_IMMUTABLE, set(update_fields.keys()))
+
+        set_clause = ", ".join(f"{col} = :{col}" for col in update_fields)
+        sql = load_sql(
+            SQL_DIR / "update_gym.sql",
+            {"set_clause": set_clause},
+        )
+
+        params = {**update_fields, "gym_id": str(gym_id)}
+        row = await self._db_pool.execute_with_retry(sql, params)
+
+        if not row:
+            raise ValueError("Gym not found")
+
+        return GymResponse(**row)

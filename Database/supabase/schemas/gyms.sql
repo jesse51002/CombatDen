@@ -1,24 +1,14 @@
+CREATE TYPE employee_type AS ENUM ('owner', 'admin', 'trainer');
 
-CREATE TABLE gyms_unfiltered (
+CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
     gym_description VARCHAR,
     timezone TEXT NOT NULL DEFAULT 'America/Chicago'
         CONSTRAINT gyms_timezone_valid CHECK (now() AT TIME ZONE timezone IS NOT NULL),
-    stripe_account_id VARCHAR,
-    stripe_onboarding_status VARCHAR NOT NULL DEFAULT 'not_started'
-        CHECK (stripe_onboarding_status IN ('not_started', 'pending', 'complete', 'disabled')),
+    is_rank_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     PRIMARY KEY (gym_id)
 );
-
--- View: only exposes gyms with a completed Stripe account link
-CREATE VIEW gyms
-WITH (security_invoker = true)
-AS
-SELECT * FROM gyms_unfiltered
-WHERE stripe_account_id IS NOT NULL;
-
-ALTER VIEW gyms SET (security_invoker = true);
 
 -- ============================================================
 -- gym_employees (co-located to avoid circular RLS dependency)
@@ -27,8 +17,8 @@ ALTER VIEW gyms SET (security_invoker = true);
 CREATE TABLE gym_employees (
     employee_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     user_id UUID CONSTRAINT fk_employee_user REFERENCES auth.users(id),
-    gym_id UUID NOT NULL CONSTRAINT fk_employee_gym REFERENCES gyms_unfiltered(gym_id),
-    employee_type VARCHAR NOT NULL CHECK (employee_type IN ('owner', 'admin', 'trainer')),
+    gym_id UUID NOT NULL CONSTRAINT fk_employee_gym REFERENCES gyms(gym_id),
+    employee_type employee_type NOT NULL,
     first_name VARCHAR NOT NULL CHECK (first_name <> ''),
     last_name VARCHAR NOT NULL CHECK (last_name <> ''),
     phone VARCHAR,

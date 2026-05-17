@@ -64,7 +64,7 @@ const mockMyRewardsData = MockMyRewardsData(
       title: 'Boxing gloves',
       priceLabel: '10% off',
       pointsCost: 2500,
-      imageAsset: 'stat_reward_gloves.png',
+      imageAsset: 'reward_gloves.png',
     ),
     MockReward(
       title: 'Bring a friend',

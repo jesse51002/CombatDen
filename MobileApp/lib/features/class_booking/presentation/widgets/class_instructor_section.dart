@@ -43,7 +43,7 @@ class _InstructorRow extends StatelessWidget {
           ),
         ),
         ClipOval(
-          child: BrandImage.asset(
+          child: BrandImage.classAsset(
             detail.instructorPfpAsset,
             width: _kPfpSize,
             height: _kPfpSize,

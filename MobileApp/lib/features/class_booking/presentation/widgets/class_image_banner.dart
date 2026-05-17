@@ -13,7 +13,7 @@ class ClassImageBanner extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       height: 248,
-      child: BrandImage.asset(imageAsset, fit: BoxFit.cover),
+      child: BrandImage.classAsset(imageAsset, fit: BoxFit.cover),
     );
   }
 }

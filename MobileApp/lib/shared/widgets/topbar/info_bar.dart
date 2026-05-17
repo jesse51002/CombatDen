@@ -44,7 +44,7 @@ class InfoBar extends StatelessWidget {
             onTap: () =>
                 Navigator.of(context).pushNamed(AppRoutes.pointsStore),
             child: _IconValueItem(
-              asset: 'icon_coin.png',
+              asset: 'single_point.png',
               value: pointsLabel,
               assetWidth: 22,
               assetHeight: 22,
@@ -82,7 +82,7 @@ class _RankItem extends StatelessWidget {
     return SizedBox(
       height: 30,
       child: Center(
-        child: BrandImage.asset(asset, width: 39, height: 24, fit: BoxFit.contain),
+        child: BrandImage.rankAsset(asset, width: 39, height: 24, fit: BoxFit.contain),
       ),
     );
   }
