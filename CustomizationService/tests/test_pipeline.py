@@ -24,7 +24,11 @@ from src.executor.writer import (
     CUSTOMIZATION_PROVENANCE_NAME,
     Writer,
 )
-from src.modules.images.image_models import ImageComplexity, ImagePrompt
+from src.modules.images.image_models import (
+    ImageComplexity,
+    ImagePrompt,
+    StyleCheck,
+)
 
 # Committed fixture tree — never the live ``apps/`` production runs.
 APP_DIR = Path(__file__).resolve().parent / "data" / "apps" / "demo"
@@ -78,6 +82,12 @@ class _FakeLLM:
             )
         elif schema is ImageComplexity:
             result = ImageComplexity(complexity=Complexity.MEDIUM)
+        elif schema is StyleCheck:
+            # Adherent: the conditional edit path stays out of the
+            # happy-path assembly test.
+            result = StyleCheck(
+                adherent=True, reason="", edit_instruction=""
+            )
         else:
             raise AssertionError(f"unexpected schema {schema!r}")
         return result
@@ -92,6 +102,14 @@ class _FakeImageGen:
     ) -> AbsolutePath:
         dest.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (64, 64), (10, 10, 10)).save(dest)
+        return AbsolutePath(str(dest.resolve()))
+
+    async def edit(
+        self, src: Path, instruction: str, dest: Path, *, model: str
+    ) -> AbsolutePath:
+        # Unused on the adherent happy path; present to honour the contract.
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (64, 64), (20, 20, 20)).save(dest)
         return AbsolutePath(str(dest.resolve()))
 
 
@@ -137,6 +155,9 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
         assert p.is_absolute() and p.exists()
         assert p.name == f"{slot_id}.png"
         assert img.prompt
+        # Style verdict always set by a fresh run; adherent ⇒ no edit.
+        assert img.adherent is True
+        assert img.edited_prompt is None and img.edited_reason is None
 
 
 def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
@@ -175,3 +196,69 @@ def test_demo_examples_round_trip():
     assert Output.model_validate(
         yaml.safe_load(DEFAULT_OUTPUT.read_text())
     )
+
+
+def test_output_style_fields_optional_and_back_compat():
+    """Old output.yaml (no style fields) still validates; a new one with
+    them validates too — the fields are optional like ``complexity``."""
+    base_image = {
+        "path": "/fixture/demo/default/final_images/hero.png",
+        "prompt": "A bold demo hero illustration on a flat solid background.",
+    }
+    colors = {
+        "primary": {
+            "oklch": "oklch(70% 0.19 41)",
+            "display_name": "Cage Orange",
+            "description": "Primary brand accent.",
+        }
+    }
+
+    # Back-compat: no style fields at all.
+    old = Output.model_validate(
+        {
+            "app": "demo",
+            "display_name": "Demo App",
+            "images": {"hero": {**base_image, "complexity": "medium"}},
+            "colors": colors,
+        }
+    )
+    assert old.images["hero"].adherent is None
+
+    # New run: adherent, no edit.
+    adherent = Output.model_validate(
+        {
+            "app": "demo",
+            "display_name": "Demo App",
+            "images": {
+                "hero": {
+                    **base_image,
+                    "complexity": "medium",
+                    "adherent": True,
+                }
+            },
+            "colors": colors,
+        }
+    )
+    assert adherent.images["hero"].adherent is True
+
+    # New run: off-style, one edit applied — provenance present.
+    edited = Output.model_validate(
+        {
+            "app": "demo",
+            "display_name": "Demo App",
+            "images": {
+                "hero": {
+                    **base_image,
+                    "complexity": "medium",
+                    "adherent": False,
+                    "edited_prompt": "make the finish forged gunmetal",
+                    "edited_reason": "too generic for the prompt",
+                }
+            },
+            "colors": colors,
+        }
+    )
+    img = edited.images["hero"]
+    assert img.adherent is False
+    assert img.edited_prompt == "make the finish forged gunmetal"
+    assert img.edited_reason == "too generic for the prompt"

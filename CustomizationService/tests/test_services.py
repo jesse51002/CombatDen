@@ -228,6 +228,65 @@ def test_litellm_image_gen_maps_failure_to_provider_error(
 
 
 # --------------------------------------------------------------------------
+# LiteLLMImageGenerator.edit
+# --------------------------------------------------------------------------
+
+
+def test_litellm_image_edit_writes_file_and_forwards_model_and_prompt(
+    monkeypatch, tmp_path
+):
+    src = tmp_path / "raw.png"
+    src.write_bytes(b"\x89PNG-raw-bytes")
+    edited_bytes = b"\x89PNG-edited-bytes"
+    seen: dict = {}
+
+    async def fake_aimage_edit(**kwargs):
+        seen.update(kwargs)
+        # The source file is handed over as an open binary handle.
+        assert kwargs["image"].read() == b"\x89PNG-raw-bytes"
+        return _FakeImageResponse(base64.b64encode(edited_bytes).decode())
+
+    monkeypatch.setattr(litellm, "aimage_edit", fake_aimage_edit)
+
+    dest = tmp_path / "nested" / "raw.edited.png"
+    result = asyncio.run(
+        LiteLLMImageGenerator().edit(
+            src,
+            "make the finish forged matte gunmetal",
+            dest,
+            model="gemini/gemini-2.5-flash-image-preview",
+        )
+    )
+
+    assert dest.read_bytes() == edited_bytes
+    assert str(result) == str(dest.resolve())
+    assert seen["model"] == "gemini/gemini-2.5-flash-image-preview"
+    assert seen["prompt"] == "make the finish forged matte gunmetal"
+
+
+def test_litellm_image_edit_maps_failure_to_provider_error(
+    monkeypatch, tmp_path
+):
+    src = tmp_path / "raw.png"
+    src.write_bytes(b"raw")
+
+    async def boom(**kwargs):
+        raise RuntimeError("image edit API exploded")
+
+    monkeypatch.setattr(litellm, "aimage_edit", boom)
+
+    with pytest.raises(ProviderError):
+        asyncio.run(
+            LiteLLMImageGenerator().edit(
+                src,
+                "x",
+                tmp_path / "out.png",
+                model="gemini/gemini-2.5-flash-image-preview",
+            )
+        )
+
+
+# --------------------------------------------------------------------------
 # PhotoRoomBackgroundRemover
 # --------------------------------------------------------------------------
 

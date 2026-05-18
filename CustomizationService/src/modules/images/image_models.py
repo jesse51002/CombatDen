@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from schema import Complexity
 
@@ -13,6 +13,34 @@ class ImageComplexity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     complexity: Complexity
+
+
+class StyleCheck(BaseModel):
+    """Structured verdict from the style-adherence classifier.
+
+    One small vision call decides whether the generated image actually
+    realises the prompt that produced it. ``adherent`` is the whole
+    verdict; on a miss ``edit_instruction`` carries *only what to change*
+    to bring that prompt's style to life — never a description of the
+    current image and never new creative direction. Both text fields are
+    empty when adherent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    adherent: bool
+    reason: str
+    edit_instruction: str
+
+    @model_validator(mode="after")
+    def _instruction_present_when_off_style(self) -> "StyleCheck":
+        # A non-adherent verdict that carries no fix is unusable; reject
+        # it so the client's existing re-ask loop asks again.
+        if not self.adherent and not self.edit_instruction.strip():
+            raise ValueError(
+                "StyleCheck.edit_instruction must be non-empty when "
+                "adherent is false"
+            )
+        return self
 
 
 class ImagePrompt(BaseModel):

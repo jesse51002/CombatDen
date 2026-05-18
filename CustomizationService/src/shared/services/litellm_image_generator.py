@@ -1,10 +1,14 @@
-"""LiteLLMImageGenerator — image generation via litellm, provider-agnostic.
+"""LiteLLMImageGenerator — image generate + edit via litellm.
 
 The mirror of ``LiteLLMClient`` for images: it does not know or care which
 provider it is talking to. The model id is passed in per call, carries the
 provider prefix litellm routes on, and ``provider_keys`` resolves that
 provider's key — so switching image providers/models is a one-constant
-change in the calling module, never a new class here.
+change in the calling module, never a new class here. ``generate`` and
+``edit`` are both litellm image calls sharing that key/payload handling,
+so they live on one class (regular nano-banana —
+``gemini/...-flash-image`` — is the default edit model today; the
+constant lives in the calling module).
 
 (``BflImageGenerator`` existed only because litellm's BFL image path is
 broken upstream; that does not apply to OpenAI/gpt-image, so this goes
@@ -42,7 +46,7 @@ def _b64_payload(item: Any) -> str:
 
 
 class LiteLLMImageGenerator(ImageGenerator):
-    """Concrete image generator that calls any litellm image model."""
+    """Concrete image generate + edit that calls any litellm image model."""
 
     async def generate(
         self, prompt: str, dest: Path, *, model: str, quality: str
@@ -76,6 +80,43 @@ class LiteLLMImageGenerator(ImageGenerator):
         except Exception as exc:
             raise ProviderError(
                 f"image generation failed for model {model!r}: {exc}"
+            ) from exc
+
+        return AbsolutePath(str(dest.resolve()))
+
+    async def edit(
+        self, src: Path, instruction: str, dest: Path, *, model: str
+    ) -> AbsolutePath:
+        """Apply ``instruction`` to ``src`` and write the PNG to ``dest``.
+
+        Raises:
+            ProviderError: the edit call or its payload failed.
+        """
+        logger.debug(
+            "image edit input → %s on %s:\n\n%s\n",
+            model,
+            src.name,
+            instruction,
+        )
+        try:
+            with open(src, "rb") as fh:
+                resp = await litellm.aimage_edit(
+                    model=model,
+                    image=fh,
+                    prompt=instruction,
+                    size=IMAGE_SIZE,
+                    n=1,
+                    output_format=OUTPUT_FORMAT,
+                    api_key=provider_api_key(model),
+                )
+            image_bytes = base64.b64decode(_b64_payload(resp.data[0]))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(image_bytes)
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(
+                f"image edit failed for model {model!r}: {exc}"
             ) from exc
 
         return AbsolutePath(str(dest.resolve()))

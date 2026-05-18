@@ -21,6 +21,7 @@ from src.modules.colors.color_models import ColorPalette
 from src.modules.images.background_service import BackgroundService
 from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_models import ImagePrompt
+from src.modules.images.style_service import StyleAdherenceService
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
 
@@ -40,6 +41,10 @@ THEME_BG_LIGHT = "pure white (the app is in light mode)"
 # generic litellm image generator routes on it (swap providers here).
 IMAGE_PROMPT_MODEL = "anthropic/claude-opus-4-7"
 IMAGE_GEN_MODEL = "openai/gpt-image-2"
+# Regular nano-banana, via litellm's image-edit path. Per-call constant
+# (one-line swap), same as the other model ids here. Used once, only when
+# the style check fails — never looped.
+STYLE_EDIT_MODEL = "gemini/gemini-2.5-flash-image-preview"
 # Bounded re-calls: image-provider moderation/infra is non-deterministic,
 # so a benign prompt can blip on one call and pass the next. There is no
 # usable fallback for a missing image, so exhaustion fails the run.
@@ -64,12 +69,14 @@ class ImageGenService(CustomizationService):
         llm: LLMClient,
         image_gen: ImageGenerator,
         classifier: ComplexityClassifier,
+        style: StyleAdherenceService,
         background: BackgroundService,
     ) -> None:
         super().__init__(run_ctx)
         self._llm = llm
         self._image_gen = image_gen
         self._classifier = classifier
+        self._style = style
         self._background = background
 
     async def run(
@@ -80,22 +87,46 @@ class ImageGenService(CustomizationService):
         prompt_model: str = IMAGE_PROMPT_MODEL,
     ) -> ImageOutput:
         """Resolve one slot end to end: prompt → classify → generate →
-        cutout → crop.
+        style check → (one-time edit) → cutout → crop.
 
         ``prompt_model`` drives the prompt-generation call (override in dev
         to compare models). Complexity classification picks the generator's
-        quality tier; the background pass is delegated to
-        ``BackgroundService``."""
+        quality tier. The style check judges whether the raw image realises
+        the prompt; on a miss exactly one corrective edit is applied (no
+        loop, no re-check) before the background pass — delegated to
+        ``BackgroundService`` — runs on the resulting image."""
         prompt = await self._build_prompt(slot, palette, model=prompt_model)
         complexity = await self._classifier.classify(prompt)
         quality = QUALITY_BY_COMPLEXITY[complexity]
         raw = await self._generate(slot, prompt, quality)
         final = Path(str(self._run_ctx.image_path(slot.id)))
+
+        verdict = await self._style.check(raw, prompt)
+        edited_prompt: str | None = None
+        edited_reason: str | None = None
+        if not verdict.adherent:
+            # One corrective pass only: if a single targeted edit toward
+            # the prompt's style does not land, more won't — so we ship
+            # the edited image as-is, no re-check.
+            edited = raw.with_name(f"{raw.stem}.edited.png")
+            await self._image_gen.edit(
+                raw,
+                verdict.edit_instruction,
+                edited,
+                model=STYLE_EDIT_MODEL,
+            )
+            raw = edited
+            edited_prompt = verdict.edit_instruction
+            edited_reason = verdict.reason
+
         await self._background.run(raw, final)
         return ImageOutput(
             path=self._run_ctx.image_path(slot.id),
             prompt=prompt,
             complexity=complexity,
+            adherent=verdict.adherent,
+            edited_prompt=edited_prompt,
+            edited_reason=edited_reason,
         )
 
     async def _build_prompt(

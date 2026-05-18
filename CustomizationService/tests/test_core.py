@@ -13,6 +13,7 @@ from src.core.errors import PipelineError
 from src.core.imaging import (
     TRANSPARENT_ALPHA_MAX,
     autocrop,
+    gridtrim_autocrop,
     transparent_fraction,
 )
 from src.core.run_context import RunContext
@@ -129,3 +130,131 @@ def test_autocrop_fully_transparent_copied(tmp_path: Path) -> None:
     out = Image.open(dst)
     assert out.size == (20, 30)
     assert out.convert("RGBA").getbbox() is None
+
+
+def test_gridtrim_autocrop_trims_halo_tighter_than_autocrop(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src.png"
+    auto_dst = tmp_path / "auto.png"
+    grid_dst = tmp_path / "grid.png"
+
+    canvas = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
+    # Faint low-alpha smudge filling a far corner cell (pure halo).
+    for x in range(32):
+        for y in range(32):
+            canvas.putpixel((x, y), (0, 0, 0, 8))
+    # Opaque subject, one whole 32px cell, away from the smudge.
+    for x in range(64, 96):
+        for y in range(64, 96):
+            canvas.putpixel((x, y), (255, 0, 0, 255))
+    canvas.save(src)
+
+    autocrop(src, auto_dst)
+    gridtrim_autocrop(src, grid_dst)
+
+    auto = Image.open(auto_dst)
+    grid = Image.open(grid_dst)
+    # autocrop's bbox is held loose by the faint corner smudge (alpha>0).
+    assert auto.size == (96, 96)
+    # The grid pass drops the all-halo border cells -> tight to subject.
+    assert grid.size == (32, 32)
+    assert grid.convert("RGBA").getbbox() == (0, 0, 32, 32)
+    assert grid.size[0] * grid.size[1] < auto.size[0] * auto.size[1]
+
+
+def test_gridtrim_autocrop_opaque_is_noop(tmp_path: Path) -> None:
+    src = tmp_path / "opaque.png"
+    dst = tmp_path / "opaque_out.png"
+    Image.new("RGBA", (64, 64), (10, 20, 30, 255)).save(src)
+
+    gridtrim_autocrop(src, dst)
+
+    out = Image.open(dst)
+    # No halo -> no red cells -> nothing trimmed, same extent.
+    assert out.size == (64, 64)
+    assert out.convert("RGBA").getbbox() == (0, 0, 64, 64)
+
+
+def test_gridtrim_autocrop_fully_transparent_copied(tmp_path: Path) -> None:
+    src = tmp_path / "blank.png"
+    dst = tmp_path / "blank_out.png"
+    Image.new("RGBA", (20, 30), (0, 0, 0, 0)).save(src)
+
+    gridtrim_autocrop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (20, 30)
+    assert out.convert("RGBA").getbbox() is None
+
+
+def test_gridtrim_autocrop_all_red_copies_bbox_unchanged(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "faint.png"
+    dst = tmp_path / "faint_out.png"
+    # Uniform faint alpha: getbbox() is non-empty (alpha>0) but every grid
+    # cell is pure halo -> keep the alpha-bbox crop, never a zero-size image.
+    Image.new("RGBA", (50, 50), (0, 0, 0, 8)).save(src)
+
+    gridtrim_autocrop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (50, 50)
+
+
+def test_gridtrim_autocrop_partial_edge_cells(tmp_path: Path) -> None:
+    src = tmp_path / "partial.png"
+    dst = tmp_path / "partial_out.png"
+
+    # 100 is not divisible by the 32px cell -> the last column/row is a
+    # 4px partial cell. The subject runs to the very edge through it.
+    canvas = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    # Faint smudge in the opposite corner cell, holding autocrop's bbox
+    # loose so the grid pass has a border to trim.
+    for x in range(32):
+        for y in range(32):
+            canvas.putpixel((x, y), (0, 0, 0, 8))
+    # Opaque subject filling the bottom-right, ending inside the partial
+    # edge cells at x/y == 100.
+    for x in range(40, 100):
+        for y in range(40, 100):
+            canvas.putpixel((x, y), (0, 200, 0, 255))
+    canvas.save(src)
+
+    gridtrim_autocrop(src, dst)
+
+    out = Image.open(dst)
+    # Tight to the 60x60 subject: proves the surviving box uses the
+    # clamped partial-cell extent (==100), not col*GRID_CELL_PX (==96).
+    assert out.size == (60, 60)
+    assert out.convert("RGBA").getbbox() == (0, 0, 60, 60)
+
+
+def test_gridtrim_autocrop_keeps_interior_hole(tmp_path: Path) -> None:
+    src = tmp_path / "hole.png"
+    dst = tmp_path / "hole_out.png"
+    canvas = Image.new("RGBA", (96, 96), (10, 20, 30, 255))
+    # A faint interior cell, fully surrounded by opaque subject. A
+    # rectangular crop cannot carve it out -> the extent is preserved.
+    for x in range(32, 64):
+        for y in range(32, 64):
+            canvas.putpixel((x, y), (0, 0, 0, 8))
+    canvas.save(src)
+
+    gridtrim_autocrop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (96, 96)
+
+
+def test_gridtrim_autocrop_smaller_than_one_cell(tmp_path: Path) -> None:
+    src = tmp_path / "tiny.png"
+    dst = tmp_path / "tiny_out.png"
+    Image.new("RGBA", (16, 16), (200, 50, 50, 255)).save(src)
+
+    gridtrim_autocrop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (16, 16)
+    assert out.convert("RGBA").getbbox() == (0, 0, 16, 16)

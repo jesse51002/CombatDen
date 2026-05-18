@@ -11,6 +11,7 @@ from src.modules.colors.color_service import ColorGenService
 from src.modules.images.background_service import BackgroundService
 from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_service import ImageGenService
+from src.modules.images.style_service import StyleAdherenceService
 from src.shared.interfaces.background_remover import BackgroundRemover
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
@@ -42,12 +43,14 @@ class ModuleRegistry:
     ) -> Steps:
         """Construct the colour service and the colour-dependent services.
 
-        The classifier and background pass are internal deps of the image
-        module (one image resolved end to end stays the atomic unit), so
-        ``Steps`` still exposes only ``color`` + ``images``.
+        The classifier, style check and background pass are internal deps
+        of the image module (one image resolved end to end stays the
+        atomic unit), so ``Steps`` still exposes only ``color`` +
+        ``images``.
         """
         color = ColorGenService(self._run_ctx, llm=llm)
         classifier = ComplexityClassifier(self._run_ctx, llm=llm)
+        style = StyleAdherenceService(self._run_ctx, llm=llm)
         background = BackgroundService(
             self._run_ctx, bg_remover=bg_remover
         )
@@ -56,6 +59,7 @@ class ModuleRegistry:
             llm=llm,
             image_gen=image_gen,
             classifier=classifier,
+            style=style,
             background=background,
         )
         logger.debug(

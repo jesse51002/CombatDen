@@ -16,7 +16,7 @@ import shutil
 from pathlib import Path
 
 from src.core.errors import ProviderError
-from src.core.imaging import autocrop
+from src.core.imaging import gridtrim_autocrop
 from src.core.run_context import RunContext
 from src.modules.base import CustomizationService
 from src.shared.interfaces.background_remover import BackgroundRemover
@@ -83,5 +83,5 @@ class BackgroundService(CustomizationService):
         return (raw, False)
 
     async def _autocrop(self, src: Path, dst: Path) -> None:
-        """Crop the cutout tight to its subject."""
-        autocrop(src, dst)
+        """Crop the cutout tight, grid-trim the halo border, re-crop tight."""
+        gridtrim_autocrop(src, dst)

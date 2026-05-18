@@ -30,8 +30,13 @@ from src.modules.images.background_service import (
     BackgroundService,
 )
 from src.modules.images.complexity_service import ComplexityClassifier
-from src.modules.images.image_models import ImageComplexity, ImagePrompt
+from src.modules.images.image_models import (
+    ImageComplexity,
+    ImagePrompt,
+    StyleCheck,
+)
 from src.modules.images.image_service import ImageGenService
+from src.modules.images.style_service import StyleAdherenceService
 
 # Committed fixture tree — never the live ``apps/`` production runs.
 _FIXTURE_APP = Path(__file__).resolve().parent / "data" / "apps" / "demo"
@@ -85,11 +90,17 @@ class StubLLM:
         structured_seq: list[Any] | None = None,
         text: str = "a generated prompt",
         complexity: Complexity = Complexity.LOW,
+        style: StyleCheck | None = None,
     ) -> None:
         self._structured = structured
         self._structured_seq = structured_seq
         self._text = text
         self._complexity = complexity
+        # Default: adherent, so the style check is a no-op unless a test
+        # opts into an off-style verdict.
+        self._style = style or StyleCheck(
+            adherent=True, reason="", edit_instruction=""
+        )
         self.structured_calls: list[dict] = []
 
     async def complete(self, messages: list[dict], **kw: Any) -> dict:
@@ -105,6 +116,8 @@ class StubLLM:
             result: Any = ImagePrompt(prompt=self._text)
         elif schema is ImageComplexity:
             result = ImageComplexity(complexity=self._complexity)
+        elif schema is StyleCheck:
+            result = self._style
         elif self._structured_seq is not None:
             result = self._structured_seq[
                 min(
@@ -118,10 +131,12 @@ class StubLLM:
 
 
 class StubImageGen:
-    """Stub ImageGenerator: writes a tiny placeholder file at dest."""
+    """Stub ImageGenerator: writes a placeholder file for generate + edit
+    and records both call streams."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, Path]] = []
+        self.edits: list[tuple[Path, str, Path]] = []
 
     async def generate(
         self, prompt: str, dest: Path, *, model: str, quality: str
@@ -129,6 +144,14 @@ class StubImageGen:
         self.calls.append((prompt, dest))
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(b"raw-image-bytes")
+        return str(dest.resolve())
+
+    async def edit(
+        self, src: Path, instruction: str, dest: Path, *, model: str
+    ) -> Any:
+        self.edits.append((src, instruction, dest))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"edited-image-bytes")
         return str(dest.resolve())
 
 
@@ -152,13 +175,15 @@ def _image_service(
     image_gen: Any = None,
     remover: Any = None,
 ) -> ImageGenService:
-    """Build an ImageGenService with real classifier + background sub-
-    services wired to the same stub llm (mirrors the registry)."""
+    """Build an ImageGenService with real classifier + style + background
+    sub-services wired to the same stub llm (mirrors the registry). The
+    image-gen stub serves both generate and edit (one contract)."""
     return ImageGenService(
         ctx,
         llm=llm,
         image_gen=image_gen if image_gen is not None else StubImageGen(),
         classifier=ComplexityClassifier(ctx, llm=llm),
+        style=StyleAdherenceService(ctx, llm=llm),
         background=BackgroundService(
             ctx,
             bg_remover=remover if remover is not None else StubBgRemover(),
@@ -278,7 +303,7 @@ def test_image_resolve_slot_falls_back_to_raw_when_no_cutout(
     def _spy_autocrop(src: Path, dst: Path) -> None:
         autocrop_calls.append((src, dst))
 
-    background_service.autocrop = _spy_autocrop
+    background_service.gridtrim_autocrop = _spy_autocrop
 
     out = asyncio.run(mod.run(slot, palette))
 
@@ -308,7 +333,7 @@ def test_image_resolve_slot_happy_path_autocrops(tmp_path: Path) -> None:
         autocrop_calls.append((src, dst))
         Path(dst).write_bytes(b"cropped")
 
-    background_service.autocrop = _spy_autocrop
+    background_service.gridtrim_autocrop = _spy_autocrop
 
     out = asyncio.run(mod.run(slot, palette))
 
@@ -366,3 +391,60 @@ def test_image_prompt_is_app_agnostic_and_theme_fixed(
     # Background tracks the theme, named literally for the image model.
     assert THEME_BG_DARK in dark and THEME_BG_LIGHT not in dark
     assert THEME_BG_LIGHT in light and THEME_BG_DARK not in light
+
+
+def test_image_adherent_skips_edit(tmp_path: Path) -> None:
+    """Adherent verdict: no edit; output records adherent, no edit fields."""
+    ctx = _run_ctx(tmp_path)
+    palette = _full_palette(ctx)
+    slot = ctx.app.images[0]
+
+    llm = StubLLM(
+        style=StyleCheck(adherent=True, reason="", edit_instruction="")
+    )
+    gen = StubImageGen()
+    remover = StubBgRemover()
+    mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
+
+    out = asyncio.run(mod.run(slot, palette))
+
+    # No corrective edit; the raw image is what bg-removal received.
+    assert gen.edits == []
+    assert remover.calls[0][0].name == f"{slot.id}.raw.png"
+    assert out.adherent is True
+    assert out.edited_prompt is None
+    assert out.edited_reason is None
+
+
+def test_image_off_style_edits_once_and_records(tmp_path: Path) -> None:
+    """Off-style verdict: exactly one edit, the edited image flows to
+    bg-removal, and the verdict is recorded on the output."""
+    ctx = _run_ctx(tmp_path)
+    palette = _full_palette(ctx)
+    slot = ctx.app.images[0]
+
+    llm = StubLLM(
+        style=StyleCheck(
+            adherent=False,
+            reason="too generic for the prompt's stated style",
+            edit_instruction="make the finish forged matte gunmetal",
+        )
+    )
+    gen = StubImageGen()
+    remover = StubBgRemover()
+    mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
+
+    out = asyncio.run(mod.run(slot, palette))
+
+    # Exactly one edit, fed the instruction verbatim, on the raw image.
+    assert len(gen.edits) == 1
+    edit_src, instruction, edit_dest = gen.edits[0]
+    assert edit_src.name == f"{slot.id}.raw.png"
+    assert instruction == "make the finish forged matte gunmetal"
+    # Background removal ran on the EDITED image, not the raw one.
+    assert remover.calls[0][0] == edit_dest
+    assert edit_dest.name == f"{slot.id}.raw.edited.png"
+    # Provenance recorded on the output.
+    assert out.adherent is False
+    assert out.edited_prompt == "make the finish forged matte gunmetal"
+    assert out.edited_reason == "too generic for the prompt's stated style"
