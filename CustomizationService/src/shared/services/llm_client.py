@@ -1,4 +1,5 @@
-"""ProxyLLMClient — the LLM contract implemented against the LiteLLM Proxy."""
+"""LiteLLMClient — the LLM contract implemented via litellm, calling
+providers directly (no proxy hop)."""
 
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from pydantic import ValidationError
 from src.core.config import settings
 from src.core.errors import ProviderError, SchemaValidationError
 from src.shared.interfaces.llm_client import LLMClient, ModelT
+from src.shared.services.provider_keys import provider_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -42,29 +44,96 @@ def _loggable(value: Any) -> Any:
     return value
 
 
-class ProxyLLMClient(LLMClient):
-    """Concrete LLM client that talks only to the LiteLLM Proxy."""
+_INDENT = "  "
 
-    def _proxy_kwargs(
+
+def _emit_scalar(prefix: str, value: Any, out: list[str], pad: str) -> None:
+    """Append a scalar, splitting on real newlines so each line stands
+    on its own (``str()`` keeps it total — an odd type never crashes it)."""
+    text = value if isinstance(value, str) else str(value)
+    head, *rest = text.split("\n")
+    out.append(f"{pad}{prefix}{head}")
+    out.extend(f"{pad}{line}" for line in rest)
+
+
+def _emit(value: Any, out: list[str], indent: int) -> None:
+    """Render one node into ``out`` with real newlines preserved."""
+    pad = _INDENT * indent
+    if isinstance(value, dict):
+        if "role" in value and "content" in value:
+            out.append(f"{pad}[{value['role']}]")
+            _emit(value["content"], out, indent + 1)
+            for key, val in value.items():
+                if key in ("role", "content") or val in (None, "", [], {}):
+                    continue
+                out.append(f"{pad}{_INDENT}{key}:")
+                _emit(val, out, indent + 2)
+            return
+        part_type = value.get("type")
+        if part_type == "text":
+            _emit_scalar("", value.get("text", ""), out, pad)
+            return
+        if part_type == "image_url":
+            url = value.get("image_url", "")
+            if isinstance(url, dict):
+                url = url.get("url", "")
+            _emit_scalar("<image> ", url, out, pad)
+            return
+        for key, val in value.items():
+            if isinstance(val, (dict, list)):
+                out.append(f"{pad}{key}:")
+                _emit(val, out, indent + 1)
+            else:
+                _emit_scalar(f"{key}: ", val, out, pad)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _emit(item, out, indent)
+        return
+    _emit_scalar("", value, out, pad)
+
+
+def _render(value: Any) -> str:
+    """Human-readable, newline-preserving dump for logs.
+
+    JSON-encoding (the old approach) escaped the real newlines in
+    ``.md``-templated prompts to literal ``\\n``, collapsing a prompt to
+    one unreadable line in the CLI. This walks the structure and prints
+    text with its line breaks intact; base64 image blobs are still
+    elided via ``_loggable``. Total — an odd type never crashes it."""
+    out: list[str] = []
+    _emit(_loggable(value), out, 0)
+    return "\n".join(out)
+
+
+class LiteLLMClient(LLMClient):
+    """Concrete LLM client that calls providers directly via litellm."""
+
+    @staticmethod
+    def _api_key(model_name: str) -> str:
+        """Resolve the provider key for a provider-routed model id
+        (shared with the image generator via ``provider_keys``)."""
+        return provider_api_key(model_name)
+
+    def _completion_kwargs(
         self, model_name: str, messages: list[dict]
     ) -> dict:
-        """Base litellm kwargs aiming every call at the proxy."""
+        """Base litellm kwargs for a direct provider call."""
         return {
-            "model": f"litellm_proxy/{model_name}",
+            "model": model_name,
             "messages": messages,
-            "api_base": settings.litellm_proxy_url,
-            "api_key": settings.litellm_proxy_key,
+            "api_key": self._api_key(model_name),
         }
 
     async def _acompletion(
         self, kwargs: dict, model_name: str
     ) -> Any:
-        """One proxy call; any SDK/transport failure → ``ProviderError``."""
+        """One litellm call; any SDK/transport failure → ``ProviderError``."""
         try:
             return await litellm.acompletion(**kwargs)
         except Exception as exc:
             raise ProviderError(
-                f"proxy completion failed for model {model_name!r}: {exc}"
+                f"completion failed for model {model_name!r}: {exc}"
             ) from exc
 
     @staticmethod
@@ -92,22 +161,22 @@ class ProxyLLMClient(LLMClient):
         self,
         messages: list[dict],
         *,
+        model: str,
         tools: list[dict] | None = None,
-        model: str | None = None,
     ) -> dict:
-        """One chat turn against the proxy → the message dict.
+        """One chat turn via litellm → the message dict. ``model`` is
+        required and carries the provider prefix (litellm routes on it).
         Raises ``ProviderError`` on a transport/litellm failure."""
-        model_name = model or settings.text_model
         logger.debug(
-            "complete input → %s:\n\n%s\n", model_name, _loggable(messages)
+            "complete input → %s:\n\n%s\n", model, _render(messages)
         )
-        kwargs = self._proxy_kwargs(model_name, messages)
+        kwargs = self._completion_kwargs(model, messages)
         if tools is not None:
             kwargs["tools"] = tools
-        resp = await self._acompletion(kwargs, model_name)
+        resp = await self._acompletion(kwargs, model)
         message = resp.choices[0].message.model_dump()
         logger.debug(
-            "complete output ← %s:\n\n%s\n", model_name, _loggable(message)
+            "complete output ← %s:\n\n%s\n", model, _render(message)
         )
         return message
 
@@ -116,39 +185,39 @@ class ProxyLLMClient(LLMClient):
         messages: list[dict],
         *,
         schema: type[ModelT],
-        model: str | None = None,
+        model: str,
     ) -> ModelT:
-        """Constrained generation: schema in, model out.
+        """Constrained generation: schema in, model out. ``model`` is
+        required and carries the provider prefix (litellm routes on it).
 
         A schema miss (parse/validation failure) is fed back and re-asked
         up to ``settings.llm_max_retries`` extra times, then raises
         ``SchemaValidationError``. ``ProviderError`` on a transport failure.
         """
-        model_name = model or settings.text_model
         # defensive copy: never reshape the caller's list
         convo: list[dict] = list(messages)
         last_error: Exception | None = None
 
         for attempt in range(settings.llm_max_retries + 1):
-            kwargs = self._proxy_kwargs(model_name, convo)
+            kwargs = self._completion_kwargs(model, convo)
             kwargs["response_format"] = schema
 
             logger.debug(
                 "complete_structured input → %s %s (attempt %d):\n\n%s\n",
-                model_name,
+                model,
                 schema.__name__,
                 attempt + 1,
-                _loggable(convo),
+                _render(convo),
             )
-            resp = await self._acompletion(kwargs, model_name)
+            resp = await self._acompletion(kwargs, model)
             content = self._message_content(resp.choices[0].message)
             try:
                 parsed = schema.model_validate_json(content)
                 logger.debug(
                     "complete_structured output ← %s %s (validated):\n\n%s\n",
-                    model_name,
+                    model,
                     schema.__name__,
-                    parsed.model_dump_json(),
+                    _render(parsed.model_dump()),
                 )
                 return parsed
             except (

@@ -1,0 +1,1788 @@
+This image is a promotional banner for a "Lucky Draw" giveaway. It features:
+• A vibrant green background with radiating light rays creating an eye-catching
+burst effect
+• The text "Lucky Draw" written in elegant white cursive lettering
+• A dark purple/black iPhone as the featured prize, displayed prominently in the
+center
+• Several white gift boxes with golden ribbons scattered around the phone
+• All items are arranged on a white circular platform or pedestal
+The overall design has an exciting, celebratory feel typical of contest or sweepstakes
+advertisements, suggesting participants could win a smartphone as a prize.
+
+Based on my research, here are the key elements for writing effective AI image
+prompts:
+
+• Be specific and descriptive (avoid vague terms)
+• Structure: Subject → Details → Style/Aesthetic
+• Include 4-6 high-signal details: lighting, mood, colors, composition, style
+• Use commas to separate elements
+• Specify the format/use case (e.g., "promotional banner")
+
+Here's a prompt tailored for your boxing gloves Lucky Draw banner:
+
+Promotional banner for a Lucky Draw giveaway, pair of shiny red boxing gloves
+as the main prize displayed prominently in the center, white gift boxes with
+orange satin ribbons scattered around, all items placed on a white circular
+pedestal platform, clean white background with subtle radiating light rays
+creating a celebratory burst effect, elegant cursive text "Lucky Draw" in orange
+or black, bright and eye-catching advertisement style, high quality, professional
+marketing graphic, 16:9 aspect ratio
+
+Lucky Draw promotional banner, red boxing gloves centered on white pedestal,
+white gift boxes with orange ribbons, white background with subtle radial light
+burst, "Lucky Draw" text in elegant cursive, clean professional advertisement
+style, vibrant and celebratory mood
+
+You can adjust the boxing glove color (red, black, gold) or add details like "leather
+texture" or "professional boxing gloves" depending on the look you want!
+
+Here are a few prompt options depending on the vibe you're going for:
+
+Orange boxing gloves, orange hand wraps, and orange fighting shorts elegantly
+arranged with golden jewelry, gold chains, gold rings, and ornate royal crowns,
+luxury sports aesthetic, rich textures of leather and polished gold, dramatic
+lighting with golden highlights, black background for contrast, high-end
+product photography style, opulent and powerful mood, 4K quality
+
+Flat lay composition of orange MMA gloves, orange boxing gear, and orange
+athletic wear mixed with luxurious golden crowns, gold chains, diamondencrusted rings, and golden medallions, arranged artistically on black velvet
+surface, overhead view, luxury streetwear aesthetic, rich contrast between
+athletic gear and royal accessories, studio lighting, high fashion editorial style
+
+Artistic composition of orange fighting equipment including boxing gloves,
+headgear, and hand wraps intertwined with golden royal crowns, gold
+necklaces, and shimmering jewelry, floating arrangement, dramatic cinematic
+lighting, dark moody background with golden light accents, champion royalty
+concept, bold and powerful aesthetic, ultra detailed textures
+
+Orange boxing gloves and fighting gear paired with golden crown and gold
+jewelry pieces, clean composition on neutral gray background, soft studio
+lighting, premium product showcase style, sports meets luxury concept, elegant
+and balanced arrangement
+
+Want me to adjust any of these? I can tweak things like background color, specific gear
+items (MMA vs boxing), jewelry types, or overall mood!
+
+Here are a few prompt options:
+
+Pair of orange boxing gloves with a golden royal crown resting on top, white
+background, centered composition, soft studio lighting, clean product
+photography style, champion victory concept, elegant and powerful, high
+quality detailed render
+
+Orange leather boxing gloves with a jewel-encrusted golden crown placed
+elegantly on top, white background, dramatic lighting with subtle shadows, rich
+textures of worn leather and polished gold, royalty meets sport aesthetic,
+premium product shot, 4K ultra detailed
+
+Orange boxing gloves stacked with ornate gold crown resting on top, pure white
+background, simple centered composition, soft diffused lighting, minimal
+shadows, iconic champion symbol, clean and striking visual, commercial
+advertisement style
+
+Close-up of orange boxing gloves with magnificent golden crown balanced on
+top, slight low angle view, white seamless background, cinematic studio
+lighting, detailed leather texture and shining gold metal, powerful champion
+imagery, sharp focus, professional photography
+
+Pick your favorite or let me know if you want me to adjust anything like crown style
+(classic royal, modern, ornate), glove positioning (stacked, side by side), or lighting
+mood!
+
+Here's a breakdown of the art style and vibe:
+
+• 3D CGI render with hyper-realistic textures
+• Polished, glossy surfaces with detailed material definition (leather grain, metallic
+shine, fabric wrinkles)
+• High-end product visualization quality — like something from a premium ad or
+mobile game promotional art
+
+• Dynamic "explosion" or "burst" arrangement — objects floating and scattered
+outward from a central point
+• No ground plane or surface — everything is suspended mid-air
+• Controlled chaos — feels energetic but still balanced and intentional
+• Isolated on white/transparent background for easy use as a graphic asset
+
+• Soft, diffused studio lighting
+• Even illumination with no harsh shadows
+• Subtle highlights and reflections that emphasize material quality
+• Clean and commercial
+
+• Cohesive and intentional — warm tones (orange + gold) dominate
+• Rich, saturated, vibrant colors
+• Luxurious warm metallics
+
+• Premium, aspirational, champion energy
+• Bold and powerful without being aggressive
+• Commercial advertising aesthetic — feels like a hero image for a brand or app
+• Energetic yet polished
+• "Luxury meets sport" crossover feel
+
+3D render, floating dynamic composition, explosive scattered arrangement,
+hyper-realistic textures, soft studio lighting, white background, commercial
+product visualization style, vibrant saturated colors, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+Want me to create a new prompt using this style breakdown?
+
+Here you go! You can use this as a reference whenever you're creating prompts in this
+style.
+Art style breakdown
+Document · MD
+
+Here are the updated prompts using that art style:
+
+3D render of orange boxing gloves with a golden royal crown resting on top,
+floating dynamic composition, hyper-realistic leather and metal textures, soft
+studio lighting, white background, small golden particles and spheres scattered
+around, explosive yet balanced arrangement, commercial product visualization
+style, vibrant saturated orange and gold colors, premium advertising aesthetic,
+4K detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves with ornate jewel-encrusted
+golden crown placed on top, suspended mid-air with subtle floating golden
+elements around it, hyper-realistic material textures, glossy polished surfaces,
+soft diffused studio lighting, pure white background, controlled chaos
+composition, luxury meets sport aesthetic, premium mobile game promotional
+art style, rich warm tones, 4K ultra detailed
+
+3D render, orange boxing gloves with golden crown on top, floating
+arrangement, small scattered gold particles, hyper-realistic textures, soft studio
+lighting, white background, premium commercial aesthetic, vibrant saturated
+colors, polished CGI product visualization, 4K detailed
+
+These should give you results much closer to your reference image's style — that
+premium, floating, high-end CGI look. Want me to save these to an artifact as well?
+
+Good catch! Looking back at the image, you're right — there are darker, more dramatic
+shadows underneath and around the objects that add depth and contrast. Let me
+update the prompts:
+
+3D render of orange boxing gloves with a golden royal crown resting on top,
+floating dynamic composition, hyper-realistic leather and metal textures, soft
+studio lighting with dark dramatic shadows underneath, white background,
+small golden particles and spheres scattered around, explosive yet balanced
+arrangement, commercial product visualization style, vibrant saturated orange
+and gold colors, strong shadow contrast, premium advertising aesthetic, 4K
+detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves with ornate jewel-encrusted
+golden crown placed on top, suspended mid-air with subtle floating golden
+elements around it, hyper-realistic material textures, glossy polished surfaces,
+soft diffused lighting with deep dark shadows for depth and contrast, pure white
+background, controlled chaos composition, luxury meets sport aesthetic,
+premium mobile game promotional art style, rich warm tones, dramatic
+shadowing, 4K ultra detailed
+
+3D render, orange boxing gloves with golden crown on top, floating
+arrangement, small scattered gold particles, hyper-realistic textures, soft
+lighting with dark dramatic shadows, high contrast, white background,
+premium commercial aesthetic, vibrant saturated colors, polished CGI product
+visualization, 4K detailed
+
+Want me to update the artifact with this shadow detail added to the style breakdown as
+well?
+
+Great eye! That neon orange glow really adds to the energy and makes the orange tones
+pop. Here are the fully updated prompts:
+
+3D render of orange boxing gloves with a golden royal crown resting on top,
+floating dynamic composition, hyper-realistic leather and metal textures, soft
+studio lighting with dark dramatic shadows underneath, neon orange rim
+lighting and glow, white background, small golden particles and spheres
+scattered around, explosive yet balanced arrangement, commercial product
+visualization style, vibrant saturated orange and gold colors, strong shadow
+contrast, premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves with ornate jewel-encrusted
+golden crown placed on top, suspended mid-air with subtle floating golden
+elements around it, hyper-realistic material textures, glossy polished surfaces,
+soft diffused lighting with deep dark shadows for depth, neon orange accent
+lighting and ambient glow, pure white background, controlled chaos
+composition, luxury meets sport aesthetic, premium mobile game promotional
+art style, rich warm tones, dramatic shadowing with orange light bleed, 4K ultra
+detailed
+
+3D render, orange boxing gloves with golden crown on top, floating
+arrangement, small scattered gold particles, hyper-realistic textures, soft
+lighting with dark dramatic shadows, neon orange glow and rim lighting, high
+contrast, white background, premium commercial aesthetic, vibrant saturated
+colors, polished CGI product visualization, 4K detailed
+
+Want me to update the artifact with all these details — the dark shadows and neon
+orange lighting added to the style breakdown?
+
+Ah got it! The shadows are on the objects themselves — giving the gloves and crown
+depth and dimension with darker shaded areas on the surfaces. Let me fix that:
+
+3D render of orange boxing gloves with a golden royal crown resting on top,
+floating dynamic composition, hyper-realistic leather and metal textures, soft
+studio lighting with deep shadows on object surfaces for depth and dimension,
+neon orange rim lighting and glow, white background, small golden particles
+and spheres scattered around, explosive yet balanced arrangement, commercial
+product visualization style, vibrant saturated orange and gold colors, high
+contrast shading, premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves with ornate jewel-encrusted
+golden crown placed on top, suspended mid-air with subtle floating golden
+elements around it, hyper-realistic material textures, glossy polished surfaces,
+dramatic shadows and shading on objects for depth, neon orange accent
+lighting and ambient glow, pure white background, controlled chaos
+composition, luxury meets sport aesthetic, premium mobile game promotional
+art style, rich warm tones, high contrast surface shading, 4K ultra detailed
+
+3D render, orange boxing gloves with golden crown on top, floating
+arrangement, small scattered gold particles, hyper-realistic textures, dramatic
+shading on surfaces, neon orange glow and rim lighting, high contrast, white
+background, premium commercial aesthetic, vibrant saturated colors, polished
+CGI product visualization, 4K detailed
+
+Want me to update the artifact with this corrected description?
+
+Here you go — the black background should make that neon orange glow and gold
+really pop:
+
+3D render of orange boxing gloves with a golden royal crown resting on top,
+floating dynamic composition, hyper-realistic leather and metal textures, soft
+studio lighting with deep shadows on object surfaces for depth and dimension,
+neon orange rim lighting and glow, black background, small golden particles
+and spheres scattered around, explosive yet balanced arrangement, commercial
+product visualization style, vibrant saturated orange and gold colors, high
+contrast shading, premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves with ornate jewel-encrusted
+golden crown placed on top, suspended mid-air with subtle floating golden
+elements around it, hyper-realistic material textures, glossy polished surfaces,
+dramatic shadows and shading on objects for depth, neon orange accent
+lighting and ambient glow, black background, controlled chaos composition,
+luxury meets sport aesthetic, premium mobile game promotional art style, rich
+warm tones, high contrast surface shading, 4K ultra detailed
+
+3D render, orange boxing gloves with golden crown on top, floating
+arrangement, small scattered gold particles, hyper-realistic textures, dramatic
+shading on surfaces, neon orange glow and rim lighting, high contrast, black
+background, premium commercial aesthetic, vibrant saturated colors, polished
+CGI product visualization, 4K detailed
+
+The black background will give it a moodier, more dramatic feel — almost like a
+championship promo. Let me know how it turns out!
+
+Done! The artifact now includes:
+• Full style breakdown (rendering, composition, lighting, colors, vibe)
+• Pro tip about using dark/black backgrounds for better shadows
+• Updated prompt keywords
+• All three example prompts (Dynamic, Detailed, Simplified)
+You've got a solid reference guide now for generating images in this style!
+Art style breakdown
+Document · MD
+
+Great concept! For BJJ no-gi, here are some recognizable items:
+
+• Rash guard (compression shirt)
+• Grappling shorts or spats
+• Mouthguard
+• Ear guards
+• Finger tape
+• Ankle/knee sleeves
+
+• Clipboard or registration form
+• Lanyard with badge/pass
+• Ticket or entry pass
+• Pen
+
+Here are the prompts:
+
+3D render of orange boxing gloves, hand wraps, calendar, luxury watch, rash
+guard, grappling shorts, mouthguard, and event lanyard with badge, floating
+dynamic composition, hyper-realistic textures, soft studio lighting with deep
+shadows on object surfaces for depth and dimension, neon orange rim lighting
+and glow, black background, small golden particles and spheres scattered
+around, explosive yet balanced arrangement, registration and sign-up concept,
+commercial product visualization style, vibrant saturated orange and gold
+colors, high contrast shading, premium advertising aesthetic, 4K detailed,
+polished CGI look
+
+3D CGI render of orange boxing gloves, hand wraps, wall calendar with marked
+date, elegant gold wristwatch, BJJ no-gi rash guard, grappling shorts,
+mouthguard, and event registration badge on lanyard, suspended mid-air with
+subtle floating golden elements around it, hyper-realistic material textures,
+glossy polished surfaces, dramatic shadows and shading on objects for depth,
+
+neon orange accent lighting and ambient glow, black background, controlled
+chaos composition, event registration concept, premium mobile game
+promotional art style, rich warm tones, high contrast surface shading, 4K ultra
+detailed
+
+3D render, orange boxing gloves, hand wraps, calendar, gold watch, rash guard,
+grappling shorts, event badge, floating arrangement, small scattered gold
+particles, hyper-realistic textures, dramatic shading on surfaces, neon orange
+glow and rim lighting, high contrast, black background, registration theme,
+premium commercial aesthetic, vibrant saturated colors, polished CGI product
+visualization, 4K detailed
+
+Want me to adjust the items or add/remove anything?
+
+Here are the updated prompts:
+
+3D render of orange boxing gloves, hand wraps, calendar, luxury watch,
+mouthguard, and event lanyard with badge, floating dynamic composition,
+hyper-realistic textures, soft studio lighting with deep shadows on object
+surfaces for depth and dimension, neon orange rim lighting and glow, black
+background, small golden particles and spheres scattered around, explosive yet
+balanced arrangement, registration and sign-up concept, commercial product
+visualization style, vibrant saturated orange and gold colors, high contrast
+shading, premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of orange boxing gloves, hand wraps, wall calendar with marked
+date, elegant gold wristwatch, mouthguard, and event registration badge on
+lanyard, suspended mid-air with subtle floating golden elements around it,
+hyper-realistic material textures, glossy polished surfaces, dramatic shadows
+and shading on objects for depth, neon orange accent lighting and ambient
+glow, black background, controlled chaos composition, event registration
+concept, premium mobile game promotional art style, rich warm tones, high
+contrast surface shading, 4K ultra detailed
+
+3D render, orange boxing gloves, hand wraps, calendar, gold watch,
+mouthguard, event badge, floating arrangement, small scattered gold particles,
+hyper-realistic textures, dramatic shading on surfaces, neon orange glow and
+rim lighting, high contrast, black background, registration theme, premium
+commercial aesthetic, vibrant saturated colors, polished CGI product
+visualization, 4K detailed
+
+Cleaner and more focused now! Want me to swap or add anything else?
+
+Here are the coaching session prompts:
+
+3D render of orange boxing glove, coach's notebook with pen, silver whistle, and
+digital timer, floating dynamic composition, hyper-realistic textures, soft studio
+lighting with deep shadows on object surfaces for depth and dimension, neon
+orange rim lighting and glow, black background, small golden particles and
+spheres scattered around, explosive yet balanced arrangement, boxing coach
+training session concept, commercial product visualization style, vibrant
+saturated orange and gold colors, high contrast shading, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of orange leather boxing glove, spiral-bound coach's notebook
+with pen, metallic silver whistle on lanyard, and digital countdown timer,
+suspended mid-air with subtle floating golden elements around it, hyperrealistic material textures, glossy polished surfaces, dramatic shadows and
+shading on objects for depth, neon orange accent lighting and ambient glow,
+black background, controlled chaos composition, coaching and training session
+aesthetic, premium mobile game promotional art style, rich warm tones, high
+contrast surface shading, 4K ultra detailed
+
+3D render, orange boxing glove, notebook with pen, whistle, digital timer,
+floating arrangement, small scattered gold particles, hyper-realistic textures,
+dramatic shading on surfaces, neon orange glow and rim lighting, high contrast,
+black background, coach training concept, premium commercial aesthetic,
+vibrant saturated colors, polished CGI product visualization, 4K detailed
+
+Want me to add anything like a clipboard, stopwatch, towel, or water bottle to make it
+feel more "gym coach"?
+
+Here are the bronze rank badge prompts:
+
+3D render of a bronze rank badge, front-facing symmetrical composition,
+centered in frame, straight-on perspective, hyper-realistic metal textures with
+brushed bronze finish, soft studio lighting with deep shadows on surface for
+depth and dimension, neon orange rim lighting and glow, black background,
+small golden particles and spheres scattered around, polished embossed details,
+commercial product visualization style, vibrant warm bronze and orange tones,
+high contrast shading, premium advertising aesthetic, 4K detailed, polished
+CGI look
+
+3D CGI render of an ornate bronze rank badge with embossed details and
+engraved patterns, displayed head-on in symmetrical centered composition,
+straight-on camera angle, hyper-realistic brushed and polished bronze metal
+textures, subtle floating golden elements around it, dramatic shadows and
+shading on surface for depth, neon orange accent lighting and ambient glow,
+black background, achievement badge aesthetic, premium mobile game
+promotional art style, rich warm metallic tones, high contrast surface shading,
+4K ultra detailed
+
+3D render, bronze rank badge, front view centered composition, symmetrical
+straight-on angle, small scattered gold particles, hyper-realistic metal textures,
+dramatic shading on surface, neon orange glow and rim lighting, high contrast,
+black background, premium commercial aesthetic, warm bronze tones, polished
+CGI product visualization, 4K detailed
+
+Want me to add details like a specific shape (shield, circle, star), text/rank number,
+ribbons, or any emblems on the badge?
+
+Here are the updated prompts:
+
+3D render of a bronze rank badge, front-facing symmetrical composition,
+centered in frame, straight-on perspective, hyper-realistic metal textures with
+brushed bronze finish, soft studio lighting with deep shadows on surface for
+depth and dimension, neon orange rim lighting and glow, black background,
+polished embossed details, commercial product visualization style, vibrant
+warm bronze and orange tones, high contrast shading, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of an ornate bronze rank badge with embossed details and
+engraved patterns, displayed head-on in symmetrical centered composition,
+straight-on camera angle, hyper-realistic brushed and polished bronze metal
+textures, dramatic shadows and shading on surface for depth, neon orange
+accent lighting and ambient glow, black background, achievement badge
+aesthetic, premium mobile game promotional art style, rich warm metallic
+tones, high contrast surface shading, 4K ultra detailed
+
+3D render, bronze rank badge, front view centered composition, symmetrical
+straight-on angle, hyper-realistic metal textures, dramatic shading on surface,
+neon orange glow and rim lighting, high contrast, black background, premium
+commercial aesthetic, warm bronze tones, polished CGI product visualization,
+4K detailed
+
+Cleaner and more focused on just the badge now. Anything else you'd like to tweak?
+
+Here are the camera prompts:
+
+3D render of a professional DSLR camera, front-facing symmetrical
+composition, centered in frame, straight-on perspective, hyper-realistic textures
+with detailed lens glass and body materials, soft studio lighting with deep
+shadows on surface for depth and dimension, neon orange rim lighting and
+glow, black background, polished and sleek design, commercial product
+visualization style, vibrant warm orange tones, high contrast shading, premium
+advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a professional camera with detailed lens, buttons, and grip
+texture, displayed head-on in symmetrical centered composition, straight-on
+camera angle, hyper-realistic plastic, metal, and glass textures, dramatic
+shadows and shading on surface for depth, neon orange accent lighting and
+ambient glow, black background, photography equipment aesthetic, premium
+mobile game promotional art style, rich warm tones, high contrast surface
+shading, 4K ultra detailed
+
+3D render, professional camera with lens, front view centered composition,
+symmetrical straight-on angle, hyper-realistic textures, dramatic shading on
+surface, neon orange glow and rim lighting, high contrast, black background,
+premium commercial aesthetic, warm tones, polished CGI product
+visualization, 4K detailed
+
+Want me to specify a camera type (DSLR, mirrorless, vintage film camera, action cam)
+or add any accessories like a strap or lens cap?
+
+Here are the prompts:
+
+3D render of a professional DSLR camera with orange boxing gloves resting on
+top, front-facing symmetrical composition, centered in frame, straight-on
+perspective, hyper-realistic textures with detailed lens glass, camera body, and
+leather glove materials, soft studio lighting with deep shadows on surfaces for
+depth and dimension, neon orange rim lighting and glow, black background,
+commercial product visualization style, vibrant warm orange tones, high
+contrast shading, premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a professional camera with orange leather boxing gloves
+draped over the top, displayed head-on in symmetrical centered composition,
+straight-on camera angle, hyper-realistic plastic, metal, glass, and leather
+textures, dramatic shadows and shading on surfaces for depth, neon orange
+accent lighting and ambient glow, black background, sports photography
+concept, premium mobile game promotional art style, rich warm tones, high
+contrast surface shading, 4K ultra detailed
+
+3D render, professional camera with orange boxing gloves resting on top, front
+view centered composition, symmetrical straight-on angle, hyper-realistic
+textures, dramatic shading on surfaces, neon orange glow and rim lighting, high
+contrast, black background, premium commercial aesthetic, warm orange tones,
+polished CGI product visualization, 4K detailed
+
+Nice combo — gives off a "fight night photographer" or "combat sports media" vibe.
+Want to add anything like a press badge, microphone, or lanyard to push that concept
+further?
+
+Here are the prompts:
+
+3D render of a stylized fire icon, front-facing symmetrical composition, centered
+in frame, straight-on perspective, hyper-realistic glossy and glowing flame
+textures, soft studio lighting with deep shadows on surface for depth and
+dimension, neon orange rim lighting and glow, black background, bold and
+iconic design, commercial product visualization style, vibrant orange red and
+yellow gradient tones, high contrast shading, premium advertising aesthetic, 4K
+detailed, polished CGI look
+
+3D CGI render of a stylized flame icon with smooth sculpted shape, displayed
+head-on in symmetrical centered composition, straight-on camera angle, hyperrealistic glossy material with inner glow and ember details, dramatic shadows
+and shading on surface for depth, neon orange accent lighting and ambient
+glow, black background, app icon aesthetic, premium mobile game promotional
+art style, rich warm orange yellow and red tones, high contrast surface shading,
+4K ultra detailed
+
+3D render, stylized fire flame icon, front view centered composition,
+symmetrical straight-on angle, glossy smooth surface with inner glow, hyperrealistic textures, dramatic shading on surface, neon orange glow and rim
+lighting, high contrast, black background, premium app icon aesthetic, warm
+orange and red tones, polished CGI product visualization, 4K detailed
+
+Want it more realistic and flickering, or more stylized like a clean app icon? I can also
+add elements like sparks or embers floating around if you want some movement.
+
+Here are the prompts:
+
+3D render of a stylized QR code with raised extruded blocks, front-facing
+symmetrical composition, centered in frame, straight-on perspective, hyperrealistic glossy and matte surface textures, soft studio lighting with deep
+shadows on surface for depth and dimension, neon orange rim lighting and
+glow, black background, modern tech aesthetic, commercial product
+visualization style, vibrant warm orange and black tones, high contrast shading,
+premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a QR code with raised geometric cube blocks creating depth,
+displayed head-on in symmetrical centered composition, straight-on camera
+angle, hyper-realistic glossy plastic or metallic material, dramatic shadows and
+shading between blocks for depth, neon orange accent lighting and ambient
+glow, black background, futuristic scannable code aesthetic, premium mobile
+game promotional art style, rich warm tones with orange highlights, high
+contrast surface shading, 4K ultra detailed
+
+3D render, extruded QR code with raised blocks, front view centered
+composition, symmetrical straight-on angle, glossy surface material, hyperrealistic textures, dramatic shading between elements, neon orange glow and
+rim lighting, high contrast, black background, premium tech aesthetic, warm
+orange tones, polished CGI product visualization, 4K detailed
+
+Want the blocks to look metallic, glassy, or plastic? I can also add effects like floating
+particles or a glowing scan line over it for a more interactive feel.
+
+Here are the simplified prompts:
+
+3D render of a QR code standing upright vertically, front-facing centered
+composition, straight-on perspective, extruded raised blocks, glossy surface,
+soft studio lighting with shadows on surface for depth, neon orange rim lighting,
+black background, clean modern tech aesthetic, high contrast, 4K detailed,
+polished CGI look
+
+3D QR code standing upright, front view centered, raised extruded blocks,
+glossy material, dramatic shading, neon orange glow, black background, clean
+minimal tech aesthetic, 4K detailed
+
+3D extruded QR code standing vertically upright, straight-on front view, glossy
+surface, neon orange rim lighting, black background, high contrast, clean and
+simple, 4K
+
+Want me to tweak the material (matte, metallic, glass) or add anything subtle like a
+base or platform for it to stand on?
+
+Here are the prompts:
+
+3D render of an orange coin standing upright, front-facing centered
+composition, straight-on perspective, glossy metallic surface with embossed
+details, soft studio lighting with shadows on surface for depth, neon orange rim
+lighting and glow, black background, clean premium aesthetic, high contrast,
+4K detailed, polished CGI look
+
+3D orange coin standing upright, front view centered, glossy metallic finish,
+embossed surface details, dramatic shading, neon orange glow, black
+background, clean minimal style, 4K detailed
+
+3D orange metallic coin standing vertically upright, straight-on front view,
+glossy polished surface, neon orange rim lighting, black background, high
+contrast, clean and simple, 4K
+
+Want me to add any details like a logo, symbol, text, or pattern embossed on the coin
+face?
+
+Here are the prompts:
+
+3D render of an orange holographic coin standing upright, front-facing centered
+composition, straight-on perspective, iridescent rainbow shimmer surface with
+glossy metallic finish, light-refracting holographic texture, soft studio lighting
+with shadows on surface for depth, neon orange rim lighting and glow, black
+background, futuristic premium aesthetic, high contrast, 4K detailed, polished
+CGI look
+
+3D orange holographic coin standing upright, front view centered, iridescent
+shimmering surface, rainbow light reflections, glossy metallic finish, dramatic
+shading, neon orange glow, black background, futuristic clean style, 4K detailed
+
+3D orange holographic coin standing vertically upright, straight-on front view,
+iridescent rainbow shimmer, glossy reflective surface, neon orange rim lighting,
+black background, high contrast, clean and futuristic, 4K
+
+Want it more subtle with just a hint of holographic shimmer, or full-on iridescent with
+strong rainbow reflections? I can also add elements like light rays or lens flare to
+enhance the holographic effect.
+
+Here are the prompts:
+
+3D icon of an orange holographic coin, front view centered, simple flat circular
+shape, iridescent shimmer, glossy surface, neon orange glow, black background,
+minimal app icon style, 4K
+
+3D orange holographic coin icon, centered front view, simple round shape,
+subtle iridescent sheen, glossy, neon orange rim lighting, black background,
+clean icon aesthetic, 4K
+
+Simple 3D orange holographic coin icon, front view, round, iridescent surface,
+neon orange glow, black background, minimal and clean, 4K
+
+Clean and icon-ready. Want me to adjust the shape (thicker, thinner) or the holographic
+intensity?
+
+Here are the prompts:
+
+3D icon of an orange holographic coin, front view centered, simple flat circular
+shape, glowing holographic orange surface, glossy finish, neon orange glow,
+black background, minimal app icon style, 4K
+
+3D orange holographic coin icon, centered front view, simple round shape,
+glowing orange hologram effect, glossy, neon orange rim lighting, black
+background, clean icon aesthetic, 4K
+
+Simple 3D orange holographic coin icon, front view, round, holographic orange
+glow, black background, minimal and clean, 4K
+
+Pure glowing orange hologram look now. Want it more transparent/translucent or
+solid?
+
+Got it — that glassy, transparent, futuristic coin look. Here are the updated prompts:
+
+3D icon of an orange glass coin, front view centered, translucent glossy material,
+smooth rounded edges, soft glowing orange rim, transparent futuristic
+holographic look, black background, minimal app icon style, 4K
+
+3D orange glass coin icon, centered front view, translucent smooth surface,
+glassy reflective material, soft orange glow on edges, black background, clean
+futuristic icon aesthetic, 4K
+
+Simple 3D translucent orange glass coin icon, front view, smooth glossy surface,
+glowing orange edges, black background, minimal and futuristic, 4K
+
+That should give you that sleek, glassy, see-through tech coin vibe in orange. Want me
+to adjust the transparency level or the glow intensity?
+
+Here are the updated prompts:
+
+3D icon of an orange glass coin, centered composition with subtle tilt to show
+depth, translucent glossy material, smooth rounded edges, soft glowing orange
+rim, transparent futuristic holographic look, black background, minimal app
+icon style, 4K
+
+3D orange glass coin icon, centered with slight turn to reveal thickness,
+translucent smooth surface, glassy reflective material, soft orange glow on
+edges, black background, clean futuristic icon aesthetic, 4K
+
+Simple 3D translucent orange glass coin icon, gently angled to show dimension,
+smooth glossy surface, glowing orange edges, black background, minimal and
+futuristic, 4K
+
+That subtle tilt should give it just enough depth to read as 3D without losing the clean
+icon look. Want more or less angle?
+
+Here are the prompts:
+
+3D icon of a QR code, centered composition with subtle tilt to show depth,
+extruded raised blocks, glossy orange material, soft glowing orange rim, black
+background, minimal app icon style, 4K
+
+3D orange QR code icon, centered with slight angle to reveal depth, raised
+blocks, glossy surface, soft orange glow on edges, black background, clean
+futuristic icon aesthetic, 4K
+
+Simple 3D orange QR code icon, gently angled to show dimension, extruded
+blocks, glossy surface, glowing orange edges, black background, minimal and
+clean, 4K
+
+Want it more glassy/translucent like the coin, or keep it solid and glossy?
+
+Here are the updated prompts:
+
+3D icon of a QR code standing upright vertically, front-facing centered
+composition, extruded raised blocks, glossy orange material, soft glowing
+orange rim, black background, minimal app icon style, 4K
+
+3D orange QR code icon standing vertically upright, centered front view, raised
+blocks, glossy surface, soft orange glow on edges, black background, clean
+futuristic icon aesthetic, 4K
+
+Simple 3D orange QR code icon, standing upright, straight-on front view,
+extruded blocks, glossy surface, glowing orange edges, black background,
+minimal and clean, 4K
+
+Want it glassy like the coin or keep it solid?
+
+Here are some simpler alternatives:
+
+— those four corner brackets you see when scanning
+
+•
+(cleanest option)
+•
+
+— simple vertical lines
+
+•
+
+— circle with cross
+
+•
+
+— horizontal line with glow
+
+•
+
+— simple square frame with corners
+
+I'd recommend the
+Here are prompts for that:
+
+— super clean and universally recognized.
+
+3D icon of scan frame corners standing upright vertically, front-facing centered
+composition, four corner brackets forming a square, glossy orange material, soft
+glowing orange rim, black background, minimal app icon style, 4K
+
+3D orange scan frame icon standing vertically upright, centered front view, four
+glowing corner brackets, glossy surface, soft orange glow, black background,
+clean futuristic icon aesthetic, 4K
+
+Simple 3D orange scan frame corners icon, standing upright, straight-on front
+view, glossy surface, glowing orange edges, black background, minimal and
+clean, 4K
+
+Want to try one of the other options instead?
+
+Here are the prompts:
+
+3D icon of scan frame corners with barcode inside, standing upright vertically,
+front-facing centered composition, four corner brackets framing vertical
+barcode lines, glossy orange material, soft glowing orange rim, black
+background, minimal app icon style, 4K
+
+3D orange scan frame icon with barcode in center, standing vertically upright,
+centered front view, corner brackets surrounding simple vertical lines, glossy
+surface, soft orange glow, black background, clean futuristic icon aesthetic, 4K
+
+Simple 3D orange scan frame corners with barcode inside, standing upright,
+straight-on front view, glossy surface, glowing orange edges, black background,
+minimal and clean, 4K
+
+Want the barcode lines thick and chunky to match the icon style, or thinner and more
+detailed?
+
+Here are the flame prompts — updated to match the simpler icon style we've been
+using:
+
+3D icon of a stylized flame standing upright, front-facing centered composition,
+smooth sculpted fire shape, glossy orange material, soft glowing orange rim,
+black background, minimal app icon style, 4K
+
+3D orange flame icon, centered front view, smooth stylized fire shape, glossy
+surface, soft orange glow on edges, black background, clean futuristic icon
+aesthetic, 4K
+
+Simple 3D orange flame icon, standing upright, straight-on front view, smooth
+glossy surface, glowing orange edges, black background, minimal and clean, 4K
+
+Want it more glassy/translucent like the coin, or solid and glossy? I can also add a subtle
+tilt to show dimension if you'd like.
+
+Here are the bronze badge prompts in the same simple icon style:
+
+3D icon of a bronze badge standing upright, front-facing centered composition,
+smooth polished medal shape, glossy bronze metallic material, soft glowing
+orange rim, black background, minimal app icon style, 4K
+
+3D bronze badge icon, centered front view, polished medal shape, glossy
+metallic surface, soft orange glow on edges, black background, clean futuristic
+icon aesthetic, 4K
+
+Simple 3D bronze badge icon, standing upright, straight-on front view, glossy
+metallic surface, glowing orange edges, black background, minimal and clean,
+4K
+
+Want a specific shape (shield, star, circle, hexagon) or any embossed details like a
+ribbon or emblem?
+
+Here are the updated prompts with that gaming rank badge vibe:
+
+3D icon of a bronze rank badge, front-facing centered composition, stylized
+shield shape with sharp edges and ornate details, polished bronze metallic
+material with engraved patterns, gemstone accent, soft glowing orange rim,
+black background, video game rank aesthetic, minimal icon style, 4K
+
+3D bronze gaming rank badge icon, centered front view, stylized shield with
+pointed edges, metallic surface with embossed details, subtle gem or crest in
+center, soft orange glow on edges, black background, competitive esports rank
+aesthetic, 4K
+
+Simple 3D bronze rank badge icon, front view, stylized angular shield shape,
+glossy metallic finish, ornate engraved details, glowing orange edges, black
+background, gaming achievement style, 4K
+
+Want me to push it further with elements like small wings, laurel wreaths, crossed
+swords, or a banner underneath? Or keep it cleaner?
+
+Here are the prompts:
+
+3D render of a pile of orange gold coins with boxing gloves, hand wraps, crowns,
+gold chains, rings, and jewelry scattered throughout, dynamic composition,
+hyper-realistic textures of metal, leather, and gemstones, soft studio lighting
+with deep shadows on surfaces for depth and dimension, neon orange rim
+lighting and glow, black background, treasure hoard aesthetic, commercial
+product visualization style, vibrant warm orange and gold tones, high contrast
+shading, premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a lavish pile of glowing orange gold coins overflowing with
+orange boxing gloves, hand wraps, ornate royal crowns, gold necklaces,
+diamond rings, and luxurious jewelry mixed in, hyper-realistic polished metal,
+leather, and gemstone textures, dramatic shadows and shading on surfaces for
+depth, neon orange accent lighting and ambient glow, black background,
+champion treasure loot pile concept, premium mobile game promotional art
+style, rich warm tones, high contrast surface shading, 4K ultra detailed
+
+3D render, pile of orange gold coins with boxing gloves, hand wraps, crowns, and
+gold jewelry scattered inside, hyper-realistic textures, dramatic shading on
+surfaces, neon orange glow and rim lighting, high contrast, black background,
+treasure loot aesthetic, premium commercial style, warm orange and gold tones,
+polished CGI product visualization, 4K detailed
+
+Want me to add more items like belts, medals, or trophies to push the champion
+treasure vibe further?
+
+Here are the prompts:
+
+3D render of an open treasure chest overflowing with glowing orange gold
+coins, dynamic composition, hyper-realistic wood and metal chest textures,
+polished shiny coins spilling out, soft studio lighting with deep shadows on
+surfaces for depth and dimension, neon orange rim lighting and glow, black
+background, treasure loot aesthetic, commercial product visualization style,
+vibrant warm orange and gold tones, high contrast shading, premium
+advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a classic wooden treasure chest with metal trim, lid open,
+overflowing with glowing orange gold coins pouring out, hyper-realistic wood
+grain, metal hardware, and polished coin textures, dramatic shadows and
+shading on surfaces for depth, neon orange accent lighting and ambient glow,
+black background, treasure reward concept, premium mobile game promotional
+art style, rich warm tones, high contrast surface shading, 4K ultra detailed
+
+3D render, open treasure chest filled with glowing orange gold coins spilling out,
+hyper-realistic textures, dramatic shading on surfaces, neon orange glow and
+rim lighting, high contrast, black background, treasure loot aesthetic, warm
+orange tones, polished CGI product visualization, 4K detailed
+
+Want the chest to look classic wooden pirate-style, or more stylized and modern to
+match the icon aesthetic?
+
+Here are the prompts:
+
+3D icon of a gift box standing upright, front-facing centered composition, simple
+cube shape with ribbon and bow on top, glossy orange material, soft glowing
+orange rim, black background, minimal app icon style, 4K
+
+3D orange gift box icon, centered front view, simple box with ribbon and bow,
+glossy surface, soft orange glow on edges, black background, clean futuristic
+icon aesthetic, 4K
+
+Simple 3D orange gift box icon, front view, cube with bow on top, glossy surface,
+glowing orange edges, black background, minimal and clean, 4K
+
+Want the ribbon a different color for contrast (like white or gold), or keep it all orange? I
+can also add a subtle tilt to show dimension.
+
+Here are the updated prompts:
+
+3D icon of a gift box standing upright, front-facing centered composition, simple
+cube shape with ribbon and bow on top, glossy orange material, soft studio
+lighting, black background, minimal app icon style, 4K
+
+3D orange gift box icon, centered front view, simple box with ribbon and bow,
+glossy surface, soft lighting, black background, clean futuristic icon aesthetic,
+4K
+
+Simple 3D orange gift box icon, front view, cube with bow on top, glossy surface,
+black background, minimal and clean, 4K
+
+Want to add a subtle tilt or keep it straight-on?
+
+Here are the prompts:
+
+3D icon of a clipboard with pen writing on it, front-facing centered composition,
+simple clipboard shape with paper and pen, glossy orange material, soft studio
+lighting, black background, minimal app icon style, 4K
+
+3D orange clipboard icon with pen, centered front view, simple clipboard with
+paper and pen resting on it, glossy surface, soft lighting, black background,
+clean futuristic icon aesthetic, 4K
+
+Simple 3D orange clipboard icon with pen writing on paper, front view, glossy
+surface, black background, minimal and clean, 4K
+
+Want the pen at an angle like it's actively writing, or resting flat on the clipboard?
+
+Here are the prompts:
+
+3D icon of a gold medal with number 1 on it, ribbon lanyard attached, frontfacing centered composition, simple circular medal shape with neck ribbon,
+glossy gold metallic material, soft studio lighting, black background, minimal
+app icon style, 4K
+
+3D gold medal icon with number 1, centered front view, round medal with
+orange neck ribbon, glossy metallic surface, soft lighting, black background,
+clean futuristic icon aesthetic, 4K
+
+Simple 3D gold medal icon with 1 on it, front view, circular medal with ribbon
+lanyard, glossy gold surface, black background, minimal and clean, 4K
+
+Want the ribbon orange to match the brand, or classic red/blue? I can also add a subtle
+tilt to show the medal's thickness.
+
+Here are the prompts:
+
+3D icon of a golden treasure chest, front-facing centered composition, simple
+chest shape with lid slightly open, glossy gold metallic material, soft studio
+lighting, black background, minimal app icon style, 4K
+
+3D golden chest icon, centered front view, simple treasure chest with open lid,
+glossy metallic surface, soft lighting, black background, clean futuristic icon
+aesthetic, 4K
+
+Simple 3D golden treasure chest icon, front view, glossy gold surface, black
+background, minimal and clean, 4K
+
+Want it closed, slightly open, or fully open with coins spilling out? I can also add orange
+glow from inside to make it look like there's loot glowing within.
+
+Here are the prompts:
+
+3D icon of an orange treasure chest with gold accents, front-facing centered
+composition, simple chest shape with lid slightly open, glossy orange material
+with gold metal trim and hinges, soft studio lighting, black background,
+minimal app icon style, 4K
+
+3D orange chest icon with gold accents, centered front view, simple treasure
+chest with open lid, glossy orange surface with gold metallic details, soft
+lighting, black background, clean futuristic icon aesthetic, 4K
+
+Simple 3D orange treasure chest icon with gold trim, front view, glossy surface,
+gold accents on edges and lock, black background, minimal and clean, 4K
+
+Want it closed, slightly open, or fully open? I can also add a subtle glow from inside to
+hint at treasure.
+
+Here are the prompts:
+
+3D render of a white clipboard leaning against orange boxing gloves, centered
+composition, hyper-realistic textures of paper, plastic clipboard, and leather
+gloves, soft studio lighting with deep shadows on surfaces for depth and
+dimension, neon orange rim lighting and glow, black background, coaching and
+training concept, commercial product visualization style, vibrant warm orange
+and white tones, high contrast shading, premium advertising aesthetic, 4K
+detailed, polished CGI look
+
+3D CGI render of a white clipboard with paper leaning against a pair of orange
+leather boxing gloves, hyper-realistic material textures, glossy clipboard surface
+and worn leather glove details, dramatic shadows and shading on surfaces for
+depth, neon orange accent lighting and ambient glow, black background, boxing
+coach aesthetic, premium mobile game promotional art style, warm tones, high
+contrast surface shading, 4K ultra detailed
+
+3D render, white clipboard leaning against orange boxing gloves, hyper-realistic
+textures, dramatic shading on surfaces, neon orange glow and rim lighting, high
+contrast, black background, training concept, premium commercial aesthetic,
+warm orange and white tones, polished CGI product visualization, 4K detailed
+
+Want to add a pen, whistle, or other coaching items to complete the look?
+
+Here are the prompts:
+
+3D render of a bronze MMA championship title belt, front-facing centered
+composition, ornate center plate with detailed engravings, leather strap with
+metal studs, polished bronze metallic finish, hyper-realistic leather and metal
+textures, soft studio lighting with deep shadows on surfaces for depth and
+dimension, neon orange rim lighting and glow, black background, combat
+sports champion aesthetic, commercial product visualization style, warm
+bronze and orange tones, high contrast shading, premium advertising aesthetic,
+4K detailed, polished CGI look
+
+3D CGI render of a professional MMA championship belt in bronze, large ornate
+center plate with side plates, detailed embossed patterns and gemstone accents,
+leather strap with metal rivets, hyper-realistic polished bronze metal and
+leather textures, dramatic shadows and shading on surfaces for depth, neon
+orange accent lighting and ambient glow, black background, fighting champion
+title belt aesthetic, premium mobile game promotional art style, rich warm
+bronze tones, high contrast surface shading, 4K ultra detailed
+
+3D render, bronze MMA title belt, centered front view, ornate championship
+plate with leather strap, polished metal and leather textures, dramatic shading
+on surfaces, neon orange glow and rim lighting, high contrast, black
+background, combat sports champion aesthetic, warm bronze tones, polished
+CGI product visualization, 4K detailed
+
+Want it laid flat, held up, or wrapped around something to show it off more?
+
+Here are the prompts:
+
+3D render of two MMA gloved fists crossed in an X pattern, front-facing
+centered composition, fingerless fight gloves with wrapped wrists, hyperrealistic leather and fabric textures, soft studio lighting with deep shadows on
+surfaces for depth and dimension, neon orange rim lighting and glow, black
+background, combat sports fighter aesthetic, commercial product visualization
+style, vibrant warm orange tones, high contrast shading, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of two clenched fists wearing orange MMA fingerless gloves
+crossed over each other in an X formation, hand wraps visible on wrists, hyperrealistic skin, leather, and fabric textures, dramatic shadows and shading on
+surfaces for depth, neon orange accent lighting and ambient glow, black
+background, mixed martial arts fighter pose, premium mobile game
+promotional art style, rich warm tones, high contrast surface shading, 4K ultra
+detailed
+
+3D render, two MMA gloved fists crossed in X pattern, fingerless orange gloves
+with wrist wraps, hyper-realistic textures, dramatic shading on surfaces, neon
+orange glow and rim lighting, high contrast, black background, fighter aesthetic,
+warm orange tones, polished CGI product visualization, 4K detailed
+
+Want the fists more aggressive and tight, or relaxed and open? I can also add tape,
+sweat, or battle-worn details for extra grit.
+
+Here are the prompts:
+
+3D render of a rubber stamp with MMA text on it, front-facing centered
+composition, classic wooden handle with rubber stamp base, hyper-realistic
+wood and rubber textures, soft studio lighting with deep shadows on surfaces
+for depth and dimension, neon orange rim lighting and glow, black background,
+official approval aesthetic, commercial product visualization style, vibrant
+warm orange tones, high contrast shading, premium advertising aesthetic, 4K
+detailed, polished CGI look
+
+3D CGI render of an official rubber stamp with MMA lettering embossed on
+base, wooden handle with polished finish, stamp facing forward showing text,
+hyper-realistic wood grain and rubber textures, dramatic shadows and shading
+on surfaces for depth, neon orange accent lighting and ambient glow, black
+background, certified approval stamp aesthetic, premium mobile game
+promotional art style, rich warm tones, high contrast surface shading, 4K ultra
+detailed
+
+3D render, rubber stamp with MMA text, wooden handle, front view showing
+embossed letters, hyper-realistic textures, dramatic shading on surfaces, neon
+orange glow and rim lighting, high contrast, black background, official stamp
+aesthetic, warm orange tones, polished CGI product visualization, 4K detailed
+
+Want the stamp pressing down with ink splatter effect, or standing upright showing the
+text? I can also make it all orange/metallic instead of classic wood and rubber.
+
+Here are the prompts:
+
+3D render of a circular stamp impression with MMA text in center, pressed
+indent in middle with raised ink ring around edges, glossy wet ink texture,
+hyper-realistic stamped seal look, soft studio lighting with deep shadows on
+surfaces for depth and dimension, neon orange rim lighting and glow, black
+background, official certified seal aesthetic, commercial product visualization
+style, vibrant warm orange tones, high contrast shading, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a circular ink stamp impression, MMA lettering pressed into
+center, outer ring raised from displaced ink, wet glossy ink texture with slight
+splatter, hyper-realistic embossed seal effect, dramatic shadows and shading on
+surfaces for depth, neon orange accent lighting and ambient glow, black
+background, official approval mark aesthetic, premium mobile game
+promotional art style, rich warm orange tones, high contrast surface shading, 4K
+ultra detailed
+
+3D render, circular stamp impression with MMA in center, pressed indent with
+raised ink ring around edge, glossy ink texture, dramatic shading, neon orange
+glow and rim lighting, high contrast, black background, certified seal aesthetic,
+warm orange tones, polished CGI product visualization, 4K detailed
+
+Want the ink look fresh and wet, or dried and worn? I can also add paper texture
+underneath or keep it floating.
+
+Here are the prompts:
+
+3D icon of a four point star, front-facing centered composition, simple geometric
+shape, glossy orange material, soft studio lighting, black background, minimal
+app icon style, 4K
+
+3D orange four point star icon, centered front view, sharp pointed geometric
+shape, glossy surface, soft lighting, black background, clean futuristic icon
+aesthetic, 4K
+
+Simple 3D orange four point star icon, front view, glossy surface, black
+background, minimal and clean, 4K
+
+Want it flat like a ninja star, or more 3D with depth and facets? I can also add a subtle tilt
+to show dimension.
+
+Here's the upgraded prompt:
+
+3D render of orange fighting equipment including boxing gloves, headgear, and
+hand wraps intertwined with many orange four point stars, floating dynamic
+composition, explosive scattered arrangement bursting outward from center,
+hyper-realistic leather and fabric textures, soft studio lighting with deep
+shadows on object surfaces for depth and dimension, neon orange rim lighting
+and glow, black background, small golden particles and spheres scattered
+throughout, controlled chaos composition, champion royalty concept, bold and
+powerful aesthetic, commercial product visualization style, vibrant saturated
+orange and gold tones, high contrast shading, premium advertising aesthetic,
+4K detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves, protective headgear, and hand
+wraps exploding outward mixed with dozens of orange four point stars floating
+throughout, suspended mid-air dynamic burst arrangement, hyper-realistic
+material textures, glossy polished surfaces, dramatic shadows and shading on
+objects for depth, neon orange accent lighting and ambient glow, golden light
+accents, black background, energetic yet balanced composition, champion
+royalty concept, premium mobile game promotional art style, rich warm tones,
+high contrast surface shading, 4K ultra detailed
+
+3D render, orange boxing gloves, headgear, hand wraps, and orange four point
+stars, floating explosive burst arrangement, hyper-realistic textures, dramatic
+shading on surfaces, neon orange glow and rim lighting, golden accents, high
+contrast, black background, champion aesthetic, polished CGI product
+visualization, 4K detailed
+
+Want me to add more items or adjust the star density?
+
+Here are the updated prompts:
+
+3D render of orange fighting equipment including boxing gloves, headgear, and
+hand wraps intertwined with many orange four point stars, floating dynamic
+composition, explosive scattered arrangement bursting outward from center,
+hyper-realistic leather and fabric textures, soft studio lighting with deep
+shadows on object surfaces for depth and dimension, neon orange rim lighting
+and glow, black background, controlled chaos composition, champion royalty
+concept, bold and powerful aesthetic, commercial product visualization style,
+vibrant saturated orange tones, high contrast shading, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves, protective headgear, and hand
+wraps exploding outward mixed with dozens of orange four point stars floating
+throughout, suspended mid-air dynamic burst arrangement, hyper-realistic
+material textures, glossy polished surfaces, dramatic shadows and shading on
+objects for depth, neon orange accent lighting and ambient glow, black
+background, energetic yet balanced composition, champion royalty concept,
+premium mobile game promotional art style, rich warm tones, high contrast
+surface shading, 4K ultra detailed
+
+3D render, orange boxing gloves, headgear, hand wraps, and orange four point
+stars, floating explosive burst arrangement, hyper-realistic textures, dramatic
+shading on surfaces, neon orange glow and rim lighting, high contrast, black
+background, champion aesthetic, polished CGI product visualization, 4K
+detailed
+
+Cleaner now. Anything else to tweak?
+
+Here are the updated prompts:
+
+3D render of orange fighting equipment including boxing gloves, headgear, and
+hand wraps with many orange four point stars, floating dynamic composition,
+explosive scattered arrangement bursting outward from center, hyper-realistic
+leather and fabric textures, soft studio lighting with deep shadows on object
+surfaces for depth and dimension, neon orange rim lighting and glow, black
+background, controlled chaos composition, champion royalty concept, bold and
+powerful aesthetic, commercial product visualization style, vibrant saturated
+orange tones, high contrast shading, premium advertising aesthetic, 4K
+detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves, protective headgear, and hand
+wraps exploding outward with dozens of orange four point stars floating
+throughout, suspended mid-air dynamic burst arrangement, hyper-realistic
+material textures, glossy polished surfaces, dramatic shadows and shading on
+objects for depth, neon orange accent lighting and ambient glow, black
+background, energetic yet balanced composition, champion royalty concept,
+premium mobile game promotional art style, rich warm tones, high contrast
+surface shading, 4K ultra detailed
+
+3D render, orange boxing gloves, headgear, hand wraps, and orange four point
+stars, floating explosive burst arrangement, hyper-realistic textures, dramatic
+shading on surfaces, neon orange glow and rim lighting, high contrast, black
+background, champion aesthetic, polished CGI product visualization, 4K
+detailed
+
+That should keep everything separate and floating naturally. Anything else?
+
+Here's the updated prompt:
+
+3D render of orange boxing gloves with orange four point stars scattered
+around, floating dynamic composition, hyper-realistic leather textures, soft
+studio lighting with deep shadows on object surfaces for depth and dimension,
+neon orange rim lighting and glow, black background, explosive yet balanced
+arrangement, commercial product visualization style, vibrant saturated orange
+tones, high contrast shading, premium advertising aesthetic, 4K detailed,
+polished CGI look
+
+3D CGI render of orange leather boxing gloves surrounded by floating orange
+four point stars, suspended mid-air dynamic burst arrangement, hyper-realistic
+material textures, glossy polished surfaces, dramatic shadows and shading on
+objects for depth, neon orange accent lighting and ambient glow, black
+background, energetic yet balanced composition, premium mobile game
+promotional art style, rich warm orange tones, high contrast surface shading, 4K
+ultra detailed
+
+3D render, orange boxing gloves with orange four point stars floating around,
+explosive burst arrangement, hyper-realistic textures, dramatic shading on
+surfaces, neon orange glow and rim lighting, high contrast, black background,
+premium commercial aesthetic, polished CGI product visualization, 4K detailed
+
+Want to add more items or adjust the number of stars?
+
+Here are the prompts:
+
+3D render of a pile of orange four point stars, scattered heap arrangement,
+hyper-realistic glossy surface textures, soft studio lighting with deep shadows
+on object surfaces for depth and dimension, neon orange rim lighting and glow,
+black background, commercial product visualization style, vibrant saturated
+orange tones, high contrast shading, premium advertising aesthetic, 4K
+detailed, polished CGI look
+
+3D CGI render of many orange four point stars piled together in a heap, some
+stacked and overlapping, hyper-realistic glossy material textures, dramatic
+shadows and shading on surfaces for depth, neon orange accent lighting and
+ambient glow, black background, collectible reward aesthetic, premium mobile
+game promotional art style, rich warm orange tones, high contrast surface
+shading, 4K ultra detailed
+
+3D render, pile of orange four point stars, stacked heap arrangement, glossy
+surface, dramatic shading, neon orange glow and rim lighting, high contrast,
+black background, premium commercial aesthetic, polished CGI product
+visualization, 4K detailed
+
+Want them neatly stacked or more chaotic and spilling over? I can also add a container
+like a chest or bowl if you want.
+
+Here are the prompts:
+
+3D icon of a notebook, front-facing centered composition, simple rectangular
+shape with spiral binding and pages, glossy orange material, soft studio lighting,
+black background, minimal app icon style, 4K
+
+3D orange notebook icon, centered front view, spiral bound with visible pages,
+glossy surface, soft lighting, black background, clean futuristic icon aesthetic,
+4K
+
+Simple 3D orange notebook icon, front view, spiral binding, glossy surface, black
+background, minimal and clean, 4K
+
+Want it open or closed? I can also add a pen, bookmark, or writing on the pages if you'd
+like.
+
+Here are the prompts:
+
+3D icon of an open notebook, front-facing centered composition, simple
+rectangular shape with spiral binding and visible pages, glossy white material,
+soft studio lighting, black background, minimal app icon style, 4K
+
+3D white open notebook icon, centered front view, spiral bound with pages
+spread open, glossy surface, soft lighting, black background, clean futuristic
+icon aesthetic, 4K
+
+Simple 3D white open notebook icon, front view, spiral binding, pages open,
+glossy surface, black background, minimal and clean, 4K
+
+Want to add lined pages, a pen, or any writing on it?
+
+Here are the prompts:
+
+3D icon of a whistle, front-facing centered composition, classic coach whistle
+shape, glossy white material, soft studio lighting, black background, minimal
+app icon style, 4K
+
+3D white whistle icon, centered front view, simple coach whistle shape, glossy
+surface, soft lighting, black background, clean futuristic icon aesthetic, 4K
+
+Simple 3D white whistle icon, front view, glossy surface, black background,
+minimal and clean, 4K
+
+Want it with or without a lanyard? I can also add orange accents to tie it to the brand.
+
+Here are the prompts:
+
+3D render of orange boxing gloves next to gift boxes with ribbons, floating
+dynamic composition, explosive scattered arrangement, hyper-realistic leather
+and glossy box textures, soft studio lighting with deep shadows on object
+surfaces for depth and dimension, neon orange rim lighting and glow, black
+background, prize giveaway aesthetic, commercial product visualization style,
+vibrant saturated orange tones, high contrast shading, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of orange leather boxing gloves placed next to wrapped prize
+boxes with bows, suspended mid-air dynamic burst arrangement, hyperrealistic leather and gift wrap textures, glossy polished surfaces, dramatic
+shadows and shading on objects for depth, neon orange accent lighting and
+ambient glow, black background, reward and giveaway concept, premium
+mobile game promotional art style, rich warm orange tones, high contrast
+surface shading, 4K ultra detailed
+
+3D render, orange boxing gloves next to prize gift boxes with ribbons, hyperrealistic textures, dramatic shading on surfaces, neon orange glow and rim
+lighting, high contrast, black background, giveaway aesthetic, premium
+commercial style, polished CGI product visualization, 4K detailed
+
+Want the boxes open, closed, or some spilling out prizes? I can also specify ribbon
+colors like white or gold.
+
+Done! Here's what I updated:
+
+• Golden particles/spheres/elements (we removed these)
+• "Intertwined" wording
+• Old crown + gloves prompts with gold
+• References to white background
+
+• Pro tips section (avoid "intertwined", use "shadows on surfaces" not "underneath",
+icon centering tips)
+• All the dynamic scene prompts (stars, coach session, registration, prize boxes,
+treasure chest, pile of stars)
+• Simple icon prompts (star, glass coin, flame, gift box, scan frame, notebook,
+whistle, badges, medal, chest)
+• Specialty prompts (MMA belt, crossed fists, stamp impression, camera with
+gloves)
+
+• Core style breakdown
+• Pro tips
+• Core prompt keywords
+• Dynamic scene prompts
+• Simple icon prompts
+• Specialty prompts
+You've got a solid reference guide now for all your image generation needs!
+Art style breakdown
+Document · MD
+
+Done! The artifact now focuses on:
+•
+
+— each element (rendering, composition, lighting,
+color, background, vibe) explained thoroughly
+
+•
+
+— problems we encountered and their solutions
+
+•
+
+— how to build prompts from scratch
+
+•
+
+— one dynamic scene, one simple icon, one icon with depth
+
+Much more useful as a reference guide now rather than just a prompt dump. Anything
+you'd like me to add or clarify?
+Art style breakdown
+Document · MD
+
+Done! Added the
+prompt back — that's the calmer,
+floating mid-air style without the explosive burst. Now you have both options in the
+guide.
+Art style breakdown
+Document · MD
+
+Here are the prompts:
+
+3D render of two orange fingerless MMA gloves crossed in an X pattern, floating
+dynamic composition, hyper-realistic leather and fabric textures, soft studio
+lighting with deep shadows on object surfaces for depth and dimension, neon
+orange rim lighting and glow, black background, explosive yet balanced
+arrangement, combat sports fighter aesthetic, commercial product visualization
+style, vibrant saturated orange tones, high contrast shading, premium
+advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of two orange fingerless MMA gloves crossed in an X formation,
+suspended mid-air, hyper-realistic leather and stitching textures, glossy
+polished surfaces, dramatic shadows and shading on objects for depth, neon
+orange accent lighting and ambient glow, black background, combat sports
+aesthetic, premium mobile game promotional art style, rich warm orange tones,
+high contrast surface shading, 4K ultra detailed
+
+3D render, two orange fingerless MMA gloves crossed in X shape, hyper-
+
+3D render, two orange fingerless MMA gloves crossed in X shape, hyperrealistic textures, dramatic shading on surfaces, neon orange glow and rim
+lighting, high contrast, black background, fighter aesthetic, polished CGI
+product visualization, 4K detailed
+
+Want me to add wrist wraps, stars, or any other elements around them?
+
+Here are the prompts:
+
+3D CGI render of a clenched fist wearing an orange fingerless MMA glove in a
+punching position, knuckles facing forward, suspended mid-air, hyper-realistic
+skin, leather, and fabric textures, glossy polished surfaces, dramatic shadows
+and shading on object for depth, neon orange accent lighting and ambient glow,
+black background, combat sports fighter aesthetic, premium mobile game
+promotional art style, rich warm orange tones, high contrast surface shading, 4K
+ultra detailed
+
+3D render of a clenched fist in orange fingerless MMA glove ready to strike,
+knuckles forward punching pose, floating dynamic composition, hyper-realistic
+skin and leather textures, soft studio lighting with deep shadows on object
+surfaces for depth and dimension, neon orange rim lighting and glow, black
+background, combat sports fighter aesthetic, commercial product visualization
+style, vibrant saturated orange tones, high contrast shading, premium
+advertising aesthetic, 4K detailed, polished CGI look
+
+3D render, clenched fist in orange MMA glove, punching pose, knuckles
+forward, hyper-realistic textures, dramatic shading on surfaces, neon orange
+glow and rim lighting, high contrast, black background, fighter aesthetic,
+polished CGI, 4K detailed
+
+Want me to adjust the angle (side view, low angle for power) or add wrist wraps?
+
+Here are the prompts:
+
+Clenched fist in orange fingerless MMA glove, punching pose, knuckles
+forward, front view centered, glossy surface, soft lighting, black background,
+minimal app icon style, 4K
+
+Orange MMA glove fist icon, knuckles forward punch position, centered front
+view, glossy surface, black background, clean icon aesthetic, 4K
+
+Orange MMA glove fist icon, punching pose, front view, glossy, black
+background, minimal and clean, 4K
+
+Want me to adjust the angle or add any details?
+
+You're right, that's unnecessary. Here are the fixed prompts:
+
+Clenched fist in orange fingerless MMA glove, punching pose, knuckles
+forward, front view centered, glossy surface, soft lighting, black background,
+minimal app icon style
+
+Orange MMA glove fist icon, knuckles forward punch position, centered front
+view, glossy surface, black background, clean icon aesthetic
+
+Orange MMA glove fist icon, punching pose, front view, glossy, black
+background, minimal and clean
+
+Want me to adjust anything?
+
+Here you go:
+
+Orange MMA glove fist icon, punching pose, knuckles forward, front view, flat
+single color, black background, simple clean icon
+
+Orange fist in MMA glove icon, punch position, flat style, single color, black
+background, minimal icon
+
+Want it even more simplified?
+
+Here you go:
+
+Orange MMA glove fist icon, punching pose, side view, flat single color, black
+background, simple clean icon
+
+Orange fist in MMA glove icon, punch position, side profile, flat style, single
+color, black background, minimal icon
+
+Want it facing left or right specifically?
+
+Here are the prompts:
+
+3D render of an MMA octagon cage, isometric view, fighting arena with canvas
+floor and chain-link fence walls, hyper-realistic metal and fabric textures, soft
+studio lighting with deep shadows on surfaces for depth and dimension, neon
+orange rim lighting and glow, black background, combat sports arena aesthetic,
+commercial product visualization style, vibrant saturated orange tones, high
+contrast shading, premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of an MMA octagon fighting cage, isometric perspective, eight-
+
+sided ring with padded posts, chain-link fencing, and canvas mat, hyperrealistic metal, padding, and fabric textures, glossy polished surfaces, dramatic
+shadows and shading on objects for depth, neon orange accent lighting and
+ambient glow, black background, premium mobile game promotional art style,
+rich warm orange tones, high contrast surface shading, 4K ultra detailed
+
+3D render, MMA octagon cage, isometric view, chain-link fence and canvas
+floor, hyper-realistic textures, dramatic shading on surfaces, neon orange glow
+and rim lighting, high contrast, black background, arena aesthetic, polished CGI
+product visualization, 4K detailed
+
+Want the octagon empty or with fighters/equipment inside?
+
+Here are the prompts:
+
+3D render of a boxing ring, isometric view, square ring with ropes, corner posts,
+and canvas floor, hyper-realistic rope, metal, and fabric textures, soft studio
+lighting with deep shadows on surfaces for depth and dimension, neon orange
+rim lighting and glow, black background, combat sports arena aesthetic,
+commercial product visualization style, vibrant saturated orange tones, high
+contrast shading, premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a boxing ring, isometric perspective, square platform with
+turnbuckle corner posts, ring ropes, and padded canvas mat, hyper-realistic
+metal, rope, and fabric textures, glossy polished surfaces, dramatic shadows and
+shading on objects for depth, neon orange accent lighting and ambient glow,
+black background, premium mobile game promotional art style, rich warm
+orange tones, high contrast surface shading, 4K ultra detailed
+
+3D render, boxing ring, isometric view, ropes and corner posts, canvas floor,
+hyper-realistic textures, dramatic shading on surfaces, neon orange glow and
+rim lighting, high contrast, black background, arena aesthetic, polished CGI
+product visualization, 4K detailed
+
+Want it empty or with gloves, a stool, or other equipment in the corners?
+
+Here are the prompts:
+
+3D render of an open BJJ training mat, isometric view, flat padded floor mat
+with pairs of fighters grappling on the ground, no-gi sparring positions, hyperrealistic mat and fabric textures, soft studio lighting with deep shadows on
+surfaces for depth and dimension, neon orange rim lighting and glow, black
+background, martial arts gym aesthetic, commercial product visualization style,
+vibrant saturated orange tones, high contrast shading, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a BJJ training area, isometric perspective, open floor mat with
+multiple athletes in ground grappling positions, no-gi submission wrestling,
+hyper-realistic mat, skin, and athletic wear textures, glossy polished surfaces,
+dramatic shadows and shading on objects for depth, neon orange accent
+lighting and ambient glow, black background, premium mobile game
+promotional art style, rich warm orange tones, high contrast surface shading, 4K
+ultra detailed
+
+3D render, open BJJ mat with fighters grappling, isometric view, no-gi ground
+sparring, hyper-realistic textures, dramatic shading on surfaces, neon orange
+glow and rim lighting, high contrast, black background, martial arts gym
+aesthetic, polished CGI product visualization, 4K detailed
+
+Want to specify the number of pairs rolling or add equipment like water bottles, towels,
+or a timer on the side?
+
+Here are the prompts:
+
+3D render of a karate training mat, isometric view, flat padded floor mat with
+two fighters in striking combat stance, gi uniforms, kicks and punches
+exchanged, hyper-realistic mat and fabric textures, soft studio lighting with
+deep shadows on surfaces for depth and dimension, neon orange rim lighting
+and glow, black background, martial arts dojo aesthetic, commercial product
+visualization style, vibrant saturated orange tones, high contrast shading,
+premium advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a karate sparring session, isometric perspective, open floor
+mat with two athletes in fighting stance facing each other, traditional gi
+uniforms with belts, mid-strike action pose, hyper-realistic mat and fabric
+textures, glossy polished surfaces, dramatic shadows and shading on objects for
+depth, neon orange accent lighting and ambient glow, black background,
+premium mobile game promotional art style, rich warm orange tones, high
+contrast surface shading, 4K ultra detailed
+
+3D render, karate mat with two fighters sparring, isometric view, gi uniforms,
+striking stance, hyper-realistic textures, dramatic shading on surfaces, neon
+orange glow and rim lighting, high contrast, black background, dojo aesthetic,
+polished CGI product visualization, 4K detailed
+
+Want them mid-kick, in ready stance, or bowing to each other?
+
+Here are the prompts:
+
+3D render of a YouTube play button, rounded rectangle with triangle play
+symbol in center, hyper-realistic glossy red and white material, soft studio
+lighting with deep shadows on surface for depth and dimension, neon orange
+rim lighting and glow, black background, social media icon aesthetic,
+commercial product visualization style, high contrast shading, premium
+advertising aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a YouTube play button, rounded red rectangle with white
+triangle in center, front-facing centered composition, hyper-realistic glossy
+plastic texture, dramatic shadows and shading on surface for depth, neon
+orange accent lighting and ambient glow, black background, premium mobile
+game promotional art style, high contrast surface shading, 4K ultra detailed
+
+3D render, YouTube play button, red rounded rectangle with white play triangle,
+hyper-realistic glossy surface, dramatic shading, neon orange rim lighting, high
+contrast, black background, social media aesthetic, polished CGI, 4K detailed
+
+Want it in orange instead of red to match the brand? Or keep it classic YouTube colors?
+
+Here are the prompts:
+
+3D render of a play button, rounded rectangle with triangle play symbol in
+center, hyper-realistic glossy orange material with white triangle, soft studio
+lighting with deep shadows on surface for depth and dimension, neon orange
+rim lighting and glow, black background, video icon aesthetic, commercial
+product visualization style, high contrast shading, premium advertising
+aesthetic, 4K detailed, polished CGI look
+
+3D CGI render of a play button, rounded orange rectangle with white triangle in
+center, front-facing centered composition, hyper-realistic glossy plastic texture,
+dramatic shadows and shading on surface for depth, neon orange accent
+lighting and ambient glow, black background, premium mobile game
+promotional art style, high contrast surface shading, 4K ultra detailed
+
+3D render, play button, orange rounded rectangle with white play triangle,
+hyper-realistic glossy surface, dramatic shading, neon orange rim lighting, high
+contrast, black background, polished CGI, 4K detailed
+
+Want it flat or with a subtle tilt to show depth?
+
+Here are the prompts:
+
+3D CGI render of a play button, rounded white rectangle with orange triangle in
+center, front-facing centered composition, hyper-realistic glossy plastic
+material, detailed surface reflections, soft studio lighting with deep shadows on
+surface for depth and dimension, neon orange accent lighting and ambient
+glow, black background, high contrast surface shading, ultra realistic product
+photography style, 4K ultra detailed
+
+Hyper-realistic 3D render of a white play button, rounded rectangle shape with
+orange play triangle, photorealistic glossy white plastic material, subtle surface
+imperfections and reflections, soft diffused studio lighting with dramatic
+shadows on surface, neon orange rim lighting, black background, product
+photography aesthetic, sharp focus, 8K ultra detailed
+
+Hyper-realistic 3D render, white play button with orange triangle, glossy white
+plastic, realistic surface reflections, dramatic shading, neon orange rim lighting,
+black background, product photography style, 8K detailed
+
+Want me to add any texture like matte finish, metallic, or keep it clean glossy plastic?
+
+Here are the prompts:
+
+Hyper-realistic 3D render of a message bubble icon, rounded white speech
+bubble shape, front-facing centered composition, photorealistic glossy white
+plastic material, detailed surface reflections, soft studio lighting with deep
+shadows on surface for depth and dimension, neon orange accent lighting and
+ambient glow, black background, high contrast surface shading, ultra realistic
+product photography style, 4K ultra detailed
+
+Hyper-realistic 3D render of a white speech bubble icon, smooth rounded
+rectangle with tail, photorealistic glossy white plastic material, subtle surface
+imperfections and reflections, soft diffused studio lighting with dramatic
+shadows on surface, neon orange rim lighting, black background, product
+photography aesthetic, sharp focus, 8K ultra detailed
+
+Hyper-realistic 3D render, white message bubble icon, glossy white plastic,
+realistic surface reflections, dramatic shading, neon orange rim lighting, black
+background, product photography style, 8K detailed
+
+Want three dots inside the bubble, or keep it empty and clean?
+
+Here are the prompts:
+
+Hyper-realistic 3D render of boxing gloves, front-facing centered composition,
+photorealistic leather material with visible stitching and grain, soft diffused
+studio lighting with dramatic shadows on surface, clean white seamless
+backdrop, commercial retail product photography, sharp focus, shallow depth of
+field, 8K ultra detailed
+
+Photorealistic product shot of boxing gloves, professional studio setup, soft box
+lighting with natural highlights and reflections, detailed leather texture with
+wear and stitching, clean neutral background, e-commerce product listing
+aesthetic, crisp detail, shot on medium format camera, 8K ultra detailed
+
+Photorealistic boxing gloves, studio product photography, soft lighting, detailed
+leather texture, clean background, retail catalog aesthetic, sharp focus, 8K
+detailed
+
+Here are the prompts:
+
+Hyper-realistic 3D render of boxing gloves, front-facing centered composition,
+photorealistic leather material with visible stitching and grain, soft diffused
+studio lighting with dramatic shadows on surface, commercial retail product
+photography, sharp focus, shallow depth of field, 8K ultra detailed
+
+Photorealistic product shot of boxing gloves, professional studio setup, soft box
+lighting with natural highlights and reflections, detailed leather texture with
+wear and stitching, e-commerce product listing aesthetic, crisp detail, shot on
+medium format camera, 8K ultra detailed
+
+Photorealistic boxing gloves, studio product photography, soft lighting, detailed
+leather texture, retail catalog aesthetic, sharp focus, 8K detailed
+
+Want me to try this with other items or add this style to the artifact?
+
+Here are the prompts:
+
+Retail product photograph of boxing gloves, professional studio setup, soft box
+lighting with natural highlights and reflections, detailed leather texture with
+visible stitching and grain, commercial product photography, sharp focus,
+shallow depth of field, 8K ultra detailed
+
+Professional product photography of boxing gloves, shot on medium format
+camera, soft diffused studio lighting with dramatic shadows, photorealistic
+leather material with wear and stitching detail, e-commerce product listing
+aesthetic, crisp detail, 8K ultra detailed
+
+Boxing gloves, professional product photography, studio lighting, detailed
+leather texture, retail catalog aesthetic, sharp focus, 8K
+
+Want me to add this as a new style to the artifact?
+
+Here are the prompts:
+
+Retail product photograph of boxing gloves, displayed in a sports store, natural
+environment lighting, detailed leather texture with visible stitching and grain,
+commercial product photography, sharp focus, shallow depth of field, 8K ultra
+detailed
+
+Professional product photography of boxing gloves, shot on medium format
+camera, in-store retail setting, photorealistic leather material with wear and
+stitching detail, e-commerce lifestyle product aesthetic, crisp detail, 8K ultra
+detailed
+
+Boxing gloves, product photography, retail store setting, natural lighting,
+detailed leather texture, sharp focus, 8K
+
+Want me to add this style to the artifact?
+
+Here are the prompts:
+
+Retail product photograph of boxing hand wraps, displayed in a sports store,
+natural environment lighting, detailed fabric texture with visible weave and
+stitching, commercial product photography, sharp focus, shallow depth of field,
+8K ultra detailed
+
+Professional product photography of boxing hand wraps, shot on medium
+format camera, in-store retail setting, photorealistic fabric material with texture
+detail, e-commerce lifestyle product aesthetic, crisp detail, 8K ultra detailed
+
+Boxing hand wraps, product photography, retail store setting, natural lighting,
+detailed fabric texture, sharp focus, 8K
+
+Want them rolled up, unrolled, or wrapped around a hand?
+
+Here are the prompts:
+
+Retail product photograph of boxing headgear, displayed in a sports store,
+natural environment lighting, detailed padded leather texture with visible
+stitching and foam padding, commercial product photography, sharp focus,
+shallow depth of field, 8K ultra detailed
+
+Professional product photography of boxing headgear, shot on medium format
+camera, in-store retail setting, photorealistic padded leather material with
+stitching and strap detail, e-commerce lifestyle product aesthetic, crisp detail,
+8K ultra detailed
+
+Boxing headgear, product photography, retail store setting, natural lighting,
+detailed leather and padding texture, sharp focus, 8K
+
+Want it on a mannequin head or displayed on a shelf?
+
+Here are the prompts:
+
+Retail product photograph of a person wearing a rash guard, in a sports store,
+natural environment lighting, detailed compression fabric texture with visible
+seams and print, commercial product photography, sharp focus, shallow depth
+of field, 8K ultra detailed
+
+Professional product photography of an athlete wearing a rash guard, shot on
+medium format camera, in-store retail setting, photorealistic compression fabric
+with stitching and fit detail, e-commerce lifestyle product aesthetic, crisp detail,
+8K ultra detailed
+
+Person wearing rash guard, product photography, retail store setting, natural
+lighting, detailed compression fabric texture, sharp focus, 8K
+
+Want them standing, in a fighting stance, or mid-training?
+
+Done! This guide includes:
+— 3D Commercial and Retail Photography
+
+•
+
+— templates you can fill in
+
+•
+
+— all the lessons learned (avoid "intertwined", shadows on
+
+•
+surfaces, etc.)
+
+— one of each type
+
+•
+
+— fighting gear, icons, achievements, coaching, scenes,
+
+•
+concepts
+•
+•
+
+— composition, materials, and lighting keywords
+— how to refine prompts
+
+You can drop this into any chat and start generating immediately. Want me to add or
+adjust anything?

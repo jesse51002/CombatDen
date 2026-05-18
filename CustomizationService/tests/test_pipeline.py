@@ -12,6 +12,7 @@ from schema import (
     AbsolutePath,
     AppFormat,
     ColorOutput,
+    Complexity,
     Customization,
     Output,
 )
@@ -23,9 +24,17 @@ from src.executor.writer import (
     CUSTOMIZATION_PROVENANCE_NAME,
     Writer,
 )
-from src.modules.images.image_models import BackgroundCheck, ImagePrompt
+from src.modules.images.image_models import (
+    BackgroundCheck,
+    ImageComplexity,
+    ImagePrompt,
+)
 
-APP_DIR = Path(__file__).resolve().parent.parent / "apps" / "combatden"
+# Committed fixture tree — never the live ``apps/`` production runs.
+APP_DIR = Path(__file__).resolve().parent / "data" / "apps" / "demo"
+# The resolved Output lives in a run subdir; the committed baseline
+# run is "default".
+DEFAULT_OUTPUT = APP_DIR / "default" / "output.yaml"
 
 
 def _run_ctx(tmp_path: Path) -> RunContext:
@@ -34,6 +43,15 @@ def _run_ctx(tmp_path: Path) -> RunContext:
         yaml.safe_load((APP_DIR / "customization.yaml").read_text())
     )
     return RunContext(app, cust, tmp_path)
+
+
+def _palette_oklch(slot_id: str) -> str:
+    """Contract-satisfying oklch for the demo (dark-mode) slots."""
+    if slot_id == "background":
+        return "oklch(15% 0.012 40)"
+    if slot_id == "text":
+        return "oklch(92% 0.01 80)"
+    return "oklch(52% 0.16 25)"  # primary/accent — unconstrained
 
 
 class _FakeLLM:
@@ -47,10 +65,13 @@ class _FakeLLM:
     ):
         if getattr(schema, "__name__", "") == "ColorPalette":
             # Per-request closed model: one field per requested slot id.
+            # Constructing it runs the deterministic contract validator.
             result = schema(
                 **{
                     sid: ColorOutput(
-                        hex="#8B2E1F", description="deep red", vibe="gritty"
+                        oklch=_palette_oklch(sid),
+                        display_name=f"{sid} tone",
+                        description="on-brand demo colour",
                     )
                     for sid in self._color_slot_ids
                 }
@@ -58,8 +79,9 @@ class _FakeLLM:
         elif schema is ImagePrompt:
             result = ImagePrompt(
                 prompt="studio shot of the subject on a plain solid background",
-                rationale="isolated subject cuts out cleanly and stays on-brand",
             )
+        elif schema is ImageComplexity:
+            result = ImageComplexity(complexity=Complexity.MEDIUM)
         elif schema is BackgroundCheck:
             result = BackgroundCheck(ok=True, reason="clean cutout")
         else:
@@ -71,7 +93,9 @@ class _FakeLLM:
 
 
 class _FakeImageGen:
-    async def generate(self, prompt: str, dest: Path) -> AbsolutePath:
+    async def generate(
+        self, prompt: str, dest: Path, *, model: str, quality: str
+    ) -> AbsolutePath:
         dest.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (64, 64), (10, 10, 10)).save(dest)
         return AbsolutePath(str(dest.resolve()))
@@ -91,9 +115,11 @@ class _FakeBgRemover:
 
 def _patch_services(monkeypatch, color_slot_ids: list[str]) -> None:
     monkeypatch.setattr(
-        orchestrator, "ProxyLLMClient", lambda: _FakeLLM(color_slot_ids)
+        orchestrator, "LiteLLMClient", lambda: _FakeLLM(color_slot_ids)
     )
-    monkeypatch.setattr(orchestrator, "BflImageGenerator", lambda: _FakeImageGen())
+    monkeypatch.setattr(
+        orchestrator, "LiteLLMImageGenerator", lambda: _FakeImageGen()
+    )
     monkeypatch.setattr(
         orchestrator, "PhotoRoomBackgroundRemover", lambda: _FakeBgRemover()
     )
@@ -141,11 +167,11 @@ def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
     # Typed primitives unwrapped to plain strings in the YAML.
     raw = yaml.safe_load(out_yaml.read_text())
     any_color = next(iter(raw["colors"].values()))
-    assert isinstance(any_color["hex"], str)
+    assert isinstance(any_color["oklch"], str)
 
 
-def test_combatden_examples_round_trip():
-    """CLAUDE.md mandate: every apps/combatden example validates."""
+def test_demo_examples_round_trip():
+    """Every committed demo fixture validates against its schema."""
     assert AppFormat.model_validate(
         yaml.safe_load((APP_DIR / "app.yaml").read_text())
     )
@@ -153,5 +179,5 @@ def test_combatden_examples_round_trip():
         yaml.safe_load((APP_DIR / "customization.yaml").read_text())
     )
     assert Output.model_validate(
-        yaml.safe_load((APP_DIR / "output.yaml").read_text())
+        yaml.safe_load(DEFAULT_OUTPUT.read_text())
     )

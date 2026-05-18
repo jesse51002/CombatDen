@@ -1,12 +1,47 @@
 design_direction:
   name: SmokeTest
-  short_desc: Pipeline smoke test.
+  short_desc: "A calming indoor cycling studio that believes in taking it easy — riding for wellbeing, not for the burn."
   long_desc: |
-    Minimal generic app used to exercise the pipeline cheaply: one image and
-    four colours. Clean, modern, neutral — nothing brand-specific.
+    SmokeTest is a calming indoor cycling studio and companion app. Its
+    whole philosophy is the opposite of hustle fitness: ride to feel
+    good, go at your own pace, leave lighter than you came. The audience
+    is people who want movement without pressure — beginners, people
+    returning to exercise, anyone burnt out by "no pain, no gain". The
+    voice is warm, gentle and unhurried, like a calm instructor with the
+    lights low: encouraging, never barking, never counting down at you.
+
+    Visual system — the shared look every generated asset must wear:
+
+    - Feel: soft, airy, serene, unhurried. Spacious and breathing, with
+      plenty of calm empty room. Gentle and reassuring, never intense.
+    - Medium & materials: simple smooth modern 3D — soft matte surfaces,
+      generously rounded organic geometry, no sharp edges, minimal
+      detail. Light, weightless, almost pillowy. Never gritty, never
+      hard, never high-contrast.
+    - Finish & light: soft, even, diffused daylight; the faintest gentle
+      shading worked into each object's own surfaces for a little form —
+      no scene, no drama, no harsh shadow.
+    - Energy by role: even rewards and celebrations stay quiet and warm —
+      a gentle glow and a soft lift, never loud, never a burst.
+      Persistent icons are simple, rounded and still. Calm over
+      energetic, always.
+    - Hard nos: no neon, no high contrast, no aggressive angles, no
+      speed lines, no sweat-and-grind imagery, no clutter, nothing loud.
 
 colors_direction:
-  dark_mode: true
+  dark_mode: false
   description: |
-    Simple modern dark palette. Clear blue primary, near-black background,
-    off-white text, soft cyan accent. Readable, not loud.
+    A soft, light, airy palette — calm and restful, deliberately low
+    energy. Colour should soothe, never shout.
+
+    - Primary: a calm muted sage / eucalyptus green for primary actions
+      and key accents — soft and natural, gently desaturated, never a
+      vivid grassy green.
+    - Background: a warm near-white, like soft oat paper, with the
+      faintest warm undertone and very low chroma — bright and airy, not
+      a clinical pure white.
+    - Text: a soft deep slate, gently warm rather than pure black, easy
+      and low-contrast-feeling while still comfortably above AA against
+      the background.
+    - Accent: a gentle dusty clay / warm terracotta for small secondary
+      highlights — a quiet, earthy companion to the sage, used sparingly.

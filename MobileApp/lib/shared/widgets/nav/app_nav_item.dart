@@ -23,7 +23,7 @@ class AppNavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color textColor = isActive
-        ? DesignConstants.text
+        ? DesignConstants.accent
         : DesignConstants.text2nd;
     if (isPrimary) {
       textColor = DesignConstants.primaryColor;

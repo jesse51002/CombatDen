@@ -14,9 +14,15 @@ from pydantic import BaseModel
 
 from src.core.errors import ProviderError, SchemaValidationError
 from src.shared.services.background_remover import PhotoRoomBackgroundRemover
-from src.shared.services.bfl_image_generator import BflImageGenerator
-from src.shared.services.image_generator import ProxyImageGenerator
-from src.shared.services.llm_client import ProxyLLMClient, _loggable
+from src.shared.services.litellm_image_generator import LiteLLMImageGenerator
+from src.shared.services.llm_client import LiteLLMClient, _loggable
+from src.shared.services.provider_keys import provider_api_key
+
+
+# litellm.acompletion is monkeypatched in every test, but _completion_kwargs
+# still resolves the provider key from this prefix, so it must be a
+# configured provider ("anthropic"/"gemini").
+_MODEL = "anthropic/claude-haiku-4-5-20251001"
 
 
 class Tiny(BaseModel):
@@ -51,7 +57,7 @@ class _FakeCompletion:
 
 
 # --------------------------------------------------------------------------
-# ProxyLLMClient
+# LiteLLMClient
 # --------------------------------------------------------------------------
 
 
@@ -62,9 +68,10 @@ def test_complete_structured_returns_validated_model(monkeypatch):
     monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
 
     result = asyncio.run(
-        ProxyLLMClient().complete_structured(
+        LiteLLMClient().complete_structured(
             [{"role": "user", "content": "give me x"}],
             schema=Tiny,
+            model=_MODEL,
         )
     )
     assert isinstance(result, Tiny)
@@ -82,9 +89,10 @@ def test_complete_structured_raises_after_retries(monkeypatch):
 
     with pytest.raises(SchemaValidationError):
         asyncio.run(
-            ProxyLLMClient().complete_structured(
+            LiteLLMClient().complete_structured(
                 [{"role": "user", "content": "give me x"}],
                 schema=Tiny,
+                model=_MODEL,
             )
         )
     # llm_max_retries extra attempts + the first => total attempts.
@@ -101,54 +109,16 @@ def test_complete_maps_litellm_error_to_provider_error(monkeypatch):
 
     with pytest.raises(ProviderError):
         asyncio.run(
-            ProxyLLMClient().complete(
+            LiteLLMClient().complete(
                 [{"role": "user", "content": "hi"}],
+                model=_MODEL,
             )
         )
 
 
 # --------------------------------------------------------------------------
-# ProxyImageGenerator
+# _loggable
 # --------------------------------------------------------------------------
-
-
-class _FakeImageItem:
-    def __init__(self, b64_json: str) -> None:
-        self.b64_json = b64_json
-
-
-class _FakeImageResponse:
-    def __init__(self, b64_json: str) -> None:
-        self.data = [_FakeImageItem(b64_json)]
-
-
-def test_image_generate_writes_file_and_returns_abspath(monkeypatch, tmp_path):
-    payload = b"\x89PNG-fake-bytes"
-    b64 = base64.b64encode(payload).decode()
-
-    async def fake_aimage_generation(**kwargs):
-        return _FakeImageResponse(b64)
-
-    monkeypatch.setattr(litellm, "aimage_generation", fake_aimage_generation)
-
-    dest = tmp_path / "nested" / "out.png"
-    result = asyncio.run(ProxyImageGenerator().generate("a logo", dest))
-
-    assert dest.read_bytes() == payload
-    assert str(result).startswith("/")
-    assert str(result) == str(dest.resolve())
-
-
-def test_image_generate_error_maps_to_provider_error(monkeypatch, tmp_path):
-    async def fake_aimage_generation(**kwargs):
-        raise RuntimeError("image backend down")
-
-    monkeypatch.setattr(litellm, "aimage_generation", fake_aimage_generation)
-
-    with pytest.raises(ProviderError):
-        asyncio.run(
-            ProxyImageGenerator().generate("a logo", tmp_path / "x.png")
-        )
 
 
 def test_loggable_elides_base64_image_but_keeps_text():
@@ -177,70 +147,84 @@ def test_loggable_elides_base64_image_but_keeps_text():
 
 
 # --------------------------------------------------------------------------
-# BflImageGenerator
+# provider_api_key
 # --------------------------------------------------------------------------
 
 
-_BFL_POLL_URL = "https://poll.bfl.test/abc"
-_BFL_SAMPLE_URL = "https://img.bfl.test/x.png"
+def test_provider_api_key_routes_by_prefix():
+    from src.core.config import settings
+
+    assert (
+        provider_api_key("openai/gpt-image-2") == settings.openai_api_key
+    )
+    assert (
+        provider_api_key("anthropic/claude-opus-4-7")
+        == settings.anthropic_api_key
+    )
 
 
-class _FakeBflResponse:
-    def __init__(self, *, json_body: dict | None = None, content: bytes = b""):
-        self._json = json_body
-        self.content = content
-
-    def raise_for_status(self) -> None:
-        return None
-
-    def json(self) -> dict | None:
-        return self._json
+def test_provider_api_key_unknown_provider_raises():
+    with pytest.raises(ProviderError):
+        provider_api_key("nope/some-model")
 
 
-class _FakeBflClient:
-    """httpx.AsyncClient stand-in: submit -> poll -> sample download."""
-
-    poll_body: dict = {"status": "Ready", "result": {"sample": _BFL_SAMPLE_URL}}
-    sample_bytes: bytes = b"\x89PNG-flux-bytes"
-
-    def __init__(self, *args, **kwargs) -> None:
-        pass
-
-    async def __aenter__(self) -> "_FakeBflClient":
-        return self
-
-    async def __aexit__(self, *exc) -> None:
-        return None
-
-    async def post(self, *args, **kwargs) -> _FakeBflResponse:
-        return _FakeBflResponse(json_body={"polling_url": _BFL_POLL_URL})
-
-    async def get(self, url, *args, **kwargs) -> _FakeBflResponse:
-        if url == _BFL_POLL_URL:
-            return _FakeBflResponse(json_body=self.poll_body)
-        return _FakeBflResponse(content=self.sample_bytes)
+# --------------------------------------------------------------------------
+# LiteLLMImageGenerator
+# --------------------------------------------------------------------------
 
 
-def test_bfl_generate_writes_file_and_returns_abspath(monkeypatch, tmp_path):
-    monkeypatch.setattr(httpx, "AsyncClient", _FakeBflClient)
-
-    dest = tmp_path / "nested" / "hero.png"
-    result = asyncio.run(BflImageGenerator().generate("a hero", dest))
-
-    assert dest.read_bytes() == _FakeBflClient.sample_bytes
-    assert str(result) == str(dest.resolve())
+class _FakeImageDatum:
+    def __init__(self, b64_json: str) -> None:
+        self.b64_json = b64_json
 
 
-def test_bfl_generate_failed_status_maps_to_provider_error(
+class _FakeImageResponse:
+    def __init__(self, b64_json: str) -> None:
+        self.data = [_FakeImageDatum(b64_json)]
+
+
+def test_litellm_image_gen_writes_file_and_forwards_model_and_quality(
     monkeypatch, tmp_path
 ):
-    class FailClient(_FakeBflClient):
-        poll_body = {"status": "Content Moderated"}
+    png_bytes = b"\x89PNG-gpt-image-bytes"
+    seen: dict = {}
 
-    monkeypatch.setattr(httpx, "AsyncClient", FailClient)
+    async def fake_aimage_generation(**kwargs):
+        seen.update(kwargs)
+        return _FakeImageResponse(base64.b64encode(png_bytes).decode())
+
+    monkeypatch.setattr(litellm, "aimage_generation", fake_aimage_generation)
+
+    dest = tmp_path / "nested" / "hero.png"
+    result = asyncio.run(
+        LiteLLMImageGenerator().generate(
+            "a hero", dest, model="openai/gpt-image-2", quality="low"
+        )
+    )
+
+    assert dest.read_bytes() == png_bytes
+    assert str(result) == str(dest.resolve())
+    # The per-call model + quality are forwarded to litellm verbatim.
+    assert seen["model"] == "openai/gpt-image-2"
+    assert seen["quality"] == "low"
+    assert seen["prompt"] == "a hero"
+
+
+def test_litellm_image_gen_maps_failure_to_provider_error(
+    monkeypatch, tmp_path
+):
+    async def boom(**kwargs):
+        raise RuntimeError("image API exploded")
+
+    monkeypatch.setattr(litellm, "aimage_generation", boom)
 
     with pytest.raises(ProviderError):
-        asyncio.run(BflImageGenerator().generate("x", tmp_path / "x.png"))
+        asyncio.run(
+            LiteLLMImageGenerator().generate(
+                "x", tmp_path / "x.png", model="openai/gpt-image-2",
+                quality="medium",
+            )
+        )
 
 
 # --------------------------------------------------------------------------

@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict
 
 from src.core.run_context import RunContext
 from src.modules.colors.color_service import ColorGenService
+from src.modules.images.background_service import BackgroundService
+from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_service import ImageGenService
 from src.shared.interfaces.background_remover import BackgroundRemover
 from src.shared.interfaces.image_generator import ImageGenerator
@@ -38,13 +40,23 @@ class ModuleRegistry:
         image_gen: ImageGenerator,
         bg_remover: BackgroundRemover,
     ) -> Steps:
-        """Construct the colour service and the colour-dependent services."""
+        """Construct the colour service and the colour-dependent services.
+
+        The classifier and background pass are internal deps of the image
+        module (one image resolved end to end stays the atomic unit), so
+        ``Steps`` still exposes only ``color`` + ``images``.
+        """
         color = ColorGenService(self._run_ctx, llm=llm)
+        classifier = ComplexityClassifier(self._run_ctx, llm=llm)
+        background = BackgroundService(
+            self._run_ctx, llm=llm, bg_remover=bg_remover
+        )
         images = ImageGenService(
             self._run_ctx,
             llm=llm,
             image_gen=image_gen,
-            bg_remover=bg_remover,
+            classifier=classifier,
+            background=background,
         )
         logger.debug(
             "services: color=%s, images=%s",

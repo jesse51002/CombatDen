@@ -8,8 +8,8 @@ from schema import ImageOutput, Output
 from src.core.run_context import RunContext
 from src.executor.registry import ModuleRegistry
 from src.shared.services.background_remover import PhotoRoomBackgroundRemover
-from src.shared.services.bfl_image_generator import BflImageGenerator
-from src.shared.services.llm_client import ProxyLLMClient
+from src.shared.services.litellm_image_generator import LiteLLMImageGenerator
+from src.shared.services.llm_client import LiteLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,8 @@ class Pipeline:
     async def run(self, run_ctx: RunContext) -> Output:
         """Resolve every slot via the steps and assemble the ``Output``."""
 
-        llm = ProxyLLMClient()
-        image_gen = BflImageGenerator()
+        llm = LiteLLMClient()
+        image_gen = LiteLLMImageGenerator()
         bg_remover = PhotoRoomBackgroundRemover()
 
         steps = ModuleRegistry(run_ctx).build_all(

@@ -1,0 +1,58 @@
+codebase/CustomizationService on  main [✘»!?] is 📦 v0.1.0 via 🐍 v3.14.4 on ☁️  (us-east-1)
+❯ poetry run python scripts/image_gen_prompt_test/run.py
+
+========================================================================
+anthropic/claude-haiku-4-5-20251001
+========================================================================
+
+--- prompt ---
+A gentle rounded bicycle seat suspended and floating, soft warm matte finish, luminous warm highlights pooled on its own curved form, calming sage-green with dusty-clay accent stitching, flat solid pure-white background, peaceful modern 3D object style
+
+--- rationale ---
+The bicycle seat is the intimate, tactile symbol of the booking moment—it's what the user has just secured a spot on. Floating it alone with soft, warm lighting creates a celebratory yet serene visual that honors the booking win without noise or intensity; the gentle highlights and quiet palette (sage with a touch of clay accent) speak to SmokeTest's calm philosophy while the scale-in reveal will give the moment its peak payoff. This reads as triumph through stillness, not bustle.
+
+========================================================================
+anthropic/claude-sonnet-4-6
+========================================================================
+
+--- prompt ---
+A smooth rounded indoor cycling bike with a softly glowing sage ribbon looping gently around it and a single small dusty-clay circle badge resting beside it, floating balanced composition, soft matte surfaces with diffused daylight shading on each form's own curves, calm sage and dusty-clay palette, flat solid pure-white background, simple smooth modern 3D rounded illustration style
+
+--- rationale ---
+A quietly triumphant floating composition — bike plus ribbon plus badge — honours the brand's 'calm over energetic' rule while still layering enough visual warmth and lift for a genuine booking-success payoff. Soft matte materials, diffused light, and rounded geometry keep every element on-brand, and the flat white background ensures a clean composite behind the headline and button below.
+
+========================================================================
+anthropic/claude-opus-4-7
+========================================================================
+
+--- prompt ---
+A softly rounded calendar tile marked with a small heart, a tiny bicycle bell, and a slim folded ribbon, balanced floating composition with a gentle warm glow lifting outward from the centre, soft matte pillowy materials, even diffused daylight shading each object's own curves, muted sage and dusty-clay palette with warm oat highlights, flat solid pure-white background, smooth modern 3D illustration style
+
+--- rationale ---
+A Dynamic hero structure carries the peak booking moment, but the brand's "quiet celebration" rule swaps the burst for a soft glow and pillowy objects — calendar, bell, ribbon — that read instantly as a locked-in class without raising the volume. Distinct rounded forms on pure white composite cleanly behind the headline and button.
+
+codebase/CustomizationService on  main [✘»!?] is 📦 v0.1.0 via 🐍 v3.14.4 on ☁️  (us-east-1)
+❯ poetry run python scripts/image_gen_prompt_test/run.py
+
+========================================================================
+anthropic/claude-haiku-4-5-20251001
+========================================================================
+
+--- prompt ---
+A soft rounded bicycle seat in warm sage and dusty clay, suspended and gently tilted, single subject with faint warm highlights working into its own matte surface, diffused even light with minimal shading for serene form, calm warm palette, flat solid pure-white background, pillowy modern 3D style
+
+========================================================================
+anthropic/claude-sonnet-4-6
+========================================================================
+
+--- prompt ---
+A smooth rounded indoor cycling bike with a small glowing laurel wreath resting gently above its handlebars, two or three soft rounded confetti ovals floating nearby, calm even diffused light with faint shading on each form's own surfaces, muted sage and dusty clay palette with warm-oat highlights, flat solid pure-white background, soft pillowy modern 3D illustration style
+
+========================================================================
+anthropic/claude-opus-4-7
+========================================================================
+
+--- prompt ---
+A softly rounded calendar card with a small embossed checkmark and a tiny floating sprig of eucalyptus leaves resting beside it, balanced floating composition with a quiet warm glow rising from the centre, soft matte pillowy 3D surfaces with gentle shading on their own forms, muted sage and dusty-clay palette, flat solid pure-white background, calm modern 3D illustration style
+
+codebase/CustomizationService on  main [✘»!?] is 📦 v0.1.0 via 🐍 v3.14.4 on ☁️  (us-east-1)

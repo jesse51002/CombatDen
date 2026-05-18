@@ -73,7 +73,7 @@ class _RewardsTabItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isActive
-        ? DesignConstants.text
+        ? DesignConstants.accent
         : DesignConstants.text2nd;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -84,7 +84,7 @@ class _RewardsTabItem extends StatelessWidget {
           border: Border(
             bottom: BorderSide(
               color: isActive
-                  ? DesignConstants.text
+                  ? DesignConstants.accent
                   : DesignConstants.backgroundColor,
               width: DesignConstants.buttonBorder,
             ),

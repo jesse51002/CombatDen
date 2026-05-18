@@ -22,15 +22,16 @@ flowchart TD
     Palette["ColorPalette — hex per slot"]
     IBuild["image step, per slot — build image prompt: brief + slot + palette"]
     ILLM["LLM — structured ImagePrompt"]
-    Gen["image generation"]
+    Classify["classify — structured Complexity → quality tier"]
+    Gen["image generation (litellm image model, quality by tier)"]
     Raw["images/logo_primary.raw.png"]
-    BgRemove["background removal"]
+    BgRemove["background removal — BackgroundService"]
     BgCheck["vision judge — structured BackgroundCheck"]
     Decide{"cutout clean?"}
-    Crop["autocrop_symmetric"]
+    Crop["autocrop"]
     Fallback["keep un-removed raw"]
 
-    In --> CBuild --> CLLM --> Palette --> IBuild --> ILLM --> Gen --> Raw --> BgRemove --> BgCheck --> Decide
+    In --> CBuild --> CLLM --> Palette --> IBuild --> ILLM --> Classify --> Gen --> Raw --> BgRemove --> BgCheck --> Decide
     Decide -- "yes" --> Crop
     Decide -- "no · retry ≤ bg_max_attempts" --> BgRemove
     Decide -- "attempts exhausted" --> Fallback
@@ -39,9 +40,19 @@ flowchart TD
     class In yaml
 ```
 
-> Entry point: `src/executor/orchestrator.py`. Provider/transport choices
-> (which model, proxy vs. direct calls) are architecture, not pipeline
-> logic — they're intentionally not in this diagram.
+> Entry point: `src/executor/orchestrator.py`. Provider choices
+> (which model, which provider) are architecture, not pipeline
+> logic — they're intentionally not in this diagram. Each call's
+> model id is a per-call constant at the top of the module that
+> makes the call (`color_service.py`, `image_service.py`,
+> `complexity_service.py`, `background_service.py`), not a
+> config/env knob; only secrets (API keys) stay in `config.py`.
+> Image generation goes through a generic litellm generator, so the
+> image model (`openai/gpt-image-2` today) is just one of those
+> per-call constants — swapping providers is a one-line change. The
+> background pass (remove → validate → crop) is its own
+> `BackgroundService`. These constants are optional call overrides so
+> dev bake-off scripts under `scripts/` can compare models.
 
 ---
 
@@ -73,7 +84,7 @@ codebase/AICustomizationPipeline/
 │   │   └── images/      # ImageGenService, image_models, prompts/*.md
 │   └── shared/
 │       ├── interfaces/  # LLMClient, ImageGenerator, BackgroundRemover
-│       └── services/    # ProxyLLMClient, BflImageGenerator,
+│       └── services/    # LiteLLMClient, BflImageGenerator,
 │                        #   PhotoRoomBackgroundRemover, prompts/*.md
 ├── tests/               # core, modules, pipeline, services
 └── apps/
@@ -90,55 +101,61 @@ example.
 
 ## Roadmap / TODO
 
-### 0. Post-generation colour validation — top priority
+The first real end-to-end run validated quality and style: the prompts
+produce genuinely strong, style-consistent outputs. The remaining gaps are
+**speed** (slot resolution is sequential), a **style** safety net, and a
+**tighter crop**. Nothing below is implemented yet.
 
-All MCP wiring (and `vendor/colormcp`) was removed: the proxy never
-actually invoked it on completions, so it was dead/ineffective. Replace
-the lost intent with a deterministic, **tool-free** check — after
-`ColorGenService` returns the palette, compute WCAG contrast in pure
-Python (relative-luminance math, ~10 lines) for each text↔background
-companion; on an AA miss (< 4.5:1) feed it back and re-ask, the same
-retry pattern the structured loop already uses. No LLM tools, no MCP.
+### 1. DAG execution engine with bounded concurrency
 
-### 1. Harden existing prompts — prerequisite for the validation loop
+The pipeline is correct but slow because the executor resolves slots one
+at a time. Replace the hand-rolled orchestrator with a dependency DAG that
+runs each level in parallel (a bounded gather). Module-level atomicity is
+already in place, which makes this tractable — but it is still the larger,
+more intricate piece of work, and the prerequisite for the speed win:
 
-Before any new LLM step is added, tighten every prompt currently in the
-tree so they're robust and produce reliable structured output:
+- **One node per unit of work.** Each image gets its **own node class** —
+  not a single `ImageGenService` reused via different `run(...)` args.
+- **Typed contracts.** Every node takes required, named inputs and returns
+  a single Pydantic model (already true today), so inputs and outputs are
+  predictable and validated at the boundary.
+- **Explicit dependencies — not name-matched.** The engine does **not**
+  infer edges from kwarg names. `color` is an automatic dependency of
+  every image node. **Image→image** dependencies are declared by the
+  user: an image node takes an optional
+  `dependant_image: list[ImageOutput]` input carrying the outputs of the
+  images it depends on, so one image can build on others.
+- **Registry emits the node set.** The registry returns a dict of every
+  node to run for the app; the engine levels them topologically and
+  gathers each level concurrently.
 
-- `src/modules/colors/prompts/color_palette_rule.md`
-- `src/modules/images/prompts/image_prompt_rule.md`
-- `src/modules/images/prompts/background_check.md`
-- `src/shared/services/prompts/schema_correction.md`
+### 2. Style-adherence validation + conditional edit (NOT quality)
 
-### 2. Mobile-ready validation loop (new feature — not started)
+Reinstate the image validation step that is currently bypassed — but
+strictly scoped to **style adherence**, never quality:
 
-A judge over the **freshly generated** image — right after the first
-image generation, before background removal — in two independently-shippable
-parts:
+- **Explicit non-goal: quality.** Judging "is this good enough" is a
+  slippery slope that ends in unbounded regeneration. Do not do it.
+- **In scope: does the image match the intended style?** A structured
+  verdict on style alignment only.
+- **On mismatch → edit, not regenerate.** If the image is off-style, fix
+  it with an image **edit** (nano-banana / OpenAI image edit) toward the
+  target style. A corrective alignment step, not a quality loop.
 
-**Part 1 — LLM-as-judge live classification.** Immediately after image
-generation (not after the slot resolves), ask a vision LLM whether the
-generated image is *mobile-ready*:
+### 3. Tighter crop — grid-based transparency trim
 
-- subject centered both vertically and horizontally,
-- minimal / clean background (nothing busy),
-- nothing bleeding into or attached to the page edges,
-- (other framing/safe-area checks as needed).
+The current autocrop (the first crop — `autocrop` in
+`src/core/imaging.py`) gets stuck on **slightly-non-transparent fringe**:
+faint low-alpha halo left by background removal keeps the bounding box
+loose. Add a second, grid-based pass that runs **after** the existing
+crop and trims those regions:
 
-Returns a structured verdict.
+- Walk the already-cropped image as a grid of cells.
+- For each cell, measure the share of non-zero-alpha pixels. If **≥90%**
+  of the cell is effectively transparent, drop the cell.
+- If a cell fails that check, look only at the pixels that *do* carry
+  alpha and take their **average** alpha; if that average is **≤5%**,
+  treat the cell as halo and remove it too.
+- Re-crop tight to whatever survives.
 
-**Part 2 — nano-banana conditional editing.** Extend the verdict so the
-judge also returns `editable` + concrete edit instructions:
-
-- if **editable** → targeted fix via **nano-banana** (Gemini image edit)
-  rather than a full regenerate,
-- if **not editable** → regenerate from scratch.
-
-When this is built, the **image-regeneration limit** should be **5** — a
-new, regen-specific config setting, distinct from `bg_max_attempts` and
-`llm_max_retries` (those stay at 3).
-
-Sits in the per-slot image loop **right after generation and before
-background removal**, as its own edit/regenerate retry loop (separate from
-the existing background-removal retry downstream). Blocked on the Gemini
-image-gen billing access (see `docs/`) and on item 0.
+This refines the existing crop — it does not replace it.

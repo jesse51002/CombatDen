@@ -4,38 +4,132 @@ display_name: CombatDen
 images:
   # Shared (tenant-wide)
   - id: logo_primary
-    description: Main brand logo, full color. Shown on splash and home header.
-  - id: logo_mark
-    description: Small square mark used as the app icon and inside the nav bar.
+    description: >-
+      The gym's primary brand logo / identity mark. Lives in the persistent
+      app top bar (GymHeader), shown roughly 100x100 and centred directly
+      above the gym name and the info bar (which holds the rank, streak,
+      points and QR items). It is present on every main tab — Home,
+      Profile, Rewards, Videos — and at the top of every post-class
+      celebration screen. It is the first thing the user sees on app open
+      and is on screen almost constantly. Purpose: pure brand anchor and
+      gym identity; it is never tied to an event or a reward. Role is calm
+      and permanent, not celebratory — it must read instantly and stay
+      legible at small size as a single coherent logo mark.
   - id: rank_belt
-    description: Belt graphic shown in profile rank progression and rank celebration.
+    description: >-
+      Depicts the user's CURRENT rank as a martial-arts / championship
+      style belt — the visual token of the tier they have earned. Used in
+      three places: (1) a tiny ~39x24 indicator in the persistent top info
+      bar next to the rank label; (2) ~77x50 in the Profile screen's rank
+      header beside the rank name and subtitle; (3) the animated hero of
+      the post-class Rank celebration screen — the 2nd of five post-class
+      cards (Streak, Rank, Points, Rewards, Wins) — where it flies in large
+      and centred (~280px), holds, then shrinks down into the profile
+      header slot as stats fade in. So it must work both as a calm, tiny
+      status indicator and as a bold, proud celebratory hero. The moment is
+      achievement and earned status.
 
   # Page-specific
-  - id: location_map_image
-    description: Map of the gym's physical location, shown on class detail.
   - id: celebration_image
-    description: Hero illustration on the class-booked celebration screen.
+    description: >-
+      The single hero that celebrates a successful class booking. Fills the
+      ClassBookedScreen as a full-bleed centred hero (~50-60% of the
+      viewport), revealed with a scale-in pop after a brief loading +
+      done-check sequence, with a "Class Booked" headline directly below it
+      and a Continue button at the bottom. It appears the instant the user
+      commits to booking a class and is the ONLY place a booking success is
+      celebrated — the first positive payoff for that action and a key
+      retention moment. The emotion is peak, energetic, congratulatory
+      success: "you're in, your spot is locked".
   - id: trophy_image
-    description: Trophy graphic on the wins celebration screen.
+    description: >-
+      A trophy that headlines the end-of-session "Today's Wins" recap.
+      Sits ~230x230, centred inside a sparkle/particle burst, on the
+      WinsScreen — the 5th and final card of the post-class flow — with a
+      "Today's Wins" headline, subtitle and three summary stat tiles
+      cascading in below it. This is the closing high note as the user
+      leaves the gym after their session is recapped. The emotion is
+      victory and accomplishment: the reward for showing up and finishing.
   - id: points_stars_image
-    description: Stars graphic on the points celebration screen.
-  - id: rating_graph_image
-    description: Rating graph illustration on the profile screen.
+    description: >-
+      The hero that celebrates the points earned during a session. On the
+      PointsScreen — the 3rd post-class card — a kinetic 3D sphere of
+      orbiting point-stars first collapses inward, and then this ~238x238
+      stars graphic is revealed centred with a "+N POINTS" count-up and a
+      running total caption pinned below. It is the payoff at the end of
+      the points animation. The emotion is rewarding and high-energy — the
+      climax of the points reveal, a burst of earned value.
   - id: next_rank_belt_image
-    description: Preview of the next-rank belt on the profile screen.
-  - id: drill_video_thumbnail
-    description: Default thumbnail for drill videos in the summary modal.
-  - id: instructor_pfp
-    description: Default instructor profile-picture placeholder.
-  - id: recc_card_thumbnail
-    description: Default thumbnail for video recommendation cards.
+    description: >-
+      A preview of the NEXT rank's belt — the tier the user is working
+      toward, deliberately distinct from rank_belt (their current tier).
+      Lives in the Profile screen's "Next Rank" section, inset inside a
+      ~100x100 circular progress badge: an animated progress arc rings the
+      badge and the image sits within it with ~22px padding, above a "Next
+      Rank" title and an "X / Y classes to next tier" progress label. The
+      moment is calm, between-classes browsing — motivational, not
+      celebratory. It must read clearly inside a small circular badge
+      without fighting the progress ring, and should clearly feel like a
+      higher, aspirational belt tier the user has not reached yet.
+  - id: giftbox
+    description: >-
+      A closed gift box — the visual metaphor for unlocking rewards and the
+      SOURCE of an unwrap-then-burst animation. On the RewardsCardScreen
+      (4th post-class card) the box flies in with a spin, holds briefly,
+      then scales away as point-stars burst outward from its centre, after
+      which a rewards carousel takes over. It is never shown statically for
+      long — it exists to be opened. The moment is anticipation releasing
+      into payoff: "you've earned something, claim it". Playful, kinetic,
+      high-energy; it must read instantly as a wrapped gift even mid-motion.
+  - id: single_point
+    description: >-
+      The app's signature single point-star particle — the atomic unit of
+      the points / rewards visual language. Three uses: (1) a ~22px points
+      icon in the persistent top info bar next to the points balance; (2)
+      fourteen instances forming the orbiting 3D sphere on the Points
+      screen; (3) fourteen instances bursting radially out of the giftbox
+      on the Rewards screen. So it is simultaneously a tiny permanent
+      utility icon AND a mass-instanced motion particle: it must be simple,
+      perfectly legible at ~22px, symmetrical, and look right when
+      repeated, rotated, depth-sorted and scaled in motion. A single clean
+      star token, never a scene or a cluster.
+  - id: icon_qrcode
+    description: >-
+      A QR-code graphic that signals in-gym check-in / sign-up. It is the
+      right-most item of the persistent top info bar, ~30px tall and
+      tappable; per the product it serves the at-the-gym check-in moment —
+      scanned one-thumbed, sometimes with sweaty hands and variable gym
+      lighting (the dedicated full check-in screen is not built yet, so for
+      now it lives only as this top-bar entry point). Role is a calm,
+      functional, navigational utility — it must read unmistakably as a
+      scannable QR affordance at small size, never celebratory. It is a
+      stylised QR-style graphic standing for "check in here", not a real
+      scannable code.
+  - id: streak_icon
+    description: >-
+      The streak indicator — it communicates that the user has an active
+      attendance streak going. Three contexts: (1) ~22x30 in the persistent
+      top info bar beside the streak day count; (2) ~12x15 in the Home
+      screen's upcoming-sessions card footer next to "You're on an X week
+      streak!"; (3) the ~240px icon hero of the post-class Streak screen
+      (the 1st post-class card) that grows in after a lightning-strike
+      animation. So it is mostly a small, ever-present utility that must
+      stay sharp when tiny, but is occasionally a celebratory hero. A
+      single bold streak / momentum mark that reads at a glance and
+      survives heavy downscaling.
 
 colors:
   - id: primary
     description: Dominant brand color. Used for primary CTAs and key accents.
   - id: background
     description: App background color. Usually dark for a gym aesthetic.
+    role: background
   - id: text
     description: Main text color for headings and body copy.
+    role: text
   - id: accent
-    description: Secondary highlight color for badges, ratings, and small accents.
+    description: Selection / active-state highlight. MUST be a visibly distinct
+      hue from `primary` (a different hue family, not a tint or clone of it),
+      premium and coherent on the dark gym canvas, and meet WCAG AA against the
+      background. Drives the active nav item, active timeframe pill, and active
+      tab — used as borders / one active label, never a fill.

@@ -1,0 +1,14 @@
+# Intentionally old-shape colours (hex/vibe). Validates against the
+# PREVIOUS schema but not the current one (oklch/display_name), so the
+# API must return 422 — the run exists, the artifact is just stale.
+app: demo
+display_name: Demo App (stale)
+images:
+  hero:
+    path: /fixture/demo/stale/final_images/hero.png
+    prompt: A bold demo hero illustration on a flat solid background.
+colors:
+  primary:
+    hex: '#0D7FFF'
+    description: Old-shape colour using hex/vibe instead of oklch/display_name.
+    vibe: Modern, trustworthy

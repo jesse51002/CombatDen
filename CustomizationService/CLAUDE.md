@@ -104,8 +104,11 @@ primitive captures it.
 Poetry, with an in-project `.venv` (`poetry.toml`: `in-project = true`).
 Add dependencies with `poetry add <pkg>` (dev: `poetry add --group dev
 <pkg>`) — **never hand-edit `pyproject.toml` or `poetry.lock`**; let
-Poetry resolve and write the lock. Run code and tests through the venv
-(`.venv/bin/python ...`), not a bare `python3`.
+Poetry resolve and write the lock. Run all code, scripts, and tests via
+**`poetry run`** (`poetry run python ...`, `poetry run pytest`), never a
+bare `python3` or the raw `.venv/bin/*` entrypoints. `poetry run` resolves
+the project venv itself, so it sidesteps the stale hardcoded-shebang
+breakage the `.venv/bin/*` scripts hit when this package was renamed.
 
 ---
 

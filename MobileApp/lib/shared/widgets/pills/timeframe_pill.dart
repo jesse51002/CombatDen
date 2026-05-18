@@ -28,7 +28,7 @@ class TimeframePill extends StatelessWidget {
           borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
           border: isActive
               ? Border.all(
-                  color: DesignConstants.text,
+                  color: DesignConstants.accent,
                   width: DesignConstants.buttonBorder,
                 )
               : null,
@@ -38,7 +38,7 @@ class TimeframePill extends StatelessWidget {
           label,
           style: DesignConstants.h2.copyWith(
             color: isActive
-                ? DesignConstants.text
+                ? DesignConstants.accent
                 : DesignConstants.text3rd,
           ),
         ),

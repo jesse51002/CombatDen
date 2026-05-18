@@ -11,17 +11,18 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 class LLMClient(ABC):
-    """Async, proxy-backed LLM caller (contract only)."""
+    """Async LLM caller (contract only)."""
 
     @abstractmethod
     async def complete(
         self,
         messages: list[dict],
         *,
+        model: str,
         tools: list[dict] | None = None,
-        model: str | None = None,
     ) -> dict:
-        """Run one chat turn."""
+        """Run one chat turn. ``model`` is required and carries the
+        provider prefix the client routes on."""
         raise NotImplementedError
 
     @abstractmethod
@@ -30,9 +31,12 @@ class LLMClient(ABC):
         messages: list[dict],
         *,
         schema: type[ModelT],
-        model: str | None = None,
+        model: str,
     ) -> ModelT:
         """Constrained generation: a Pydantic schema in, a model out.
+
+        ``model`` is required and carries the provider prefix the client
+        routes on.
 
         Raises:
             SchemaValidationError: output never validated within

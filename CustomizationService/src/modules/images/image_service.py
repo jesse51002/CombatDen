@@ -1,33 +1,56 @@
-"""ImageGenService — the image module: resolve image slots one at a time."""
+"""ImageGenService — the image module: resolve image slots one at a time.
+
+Orchestrates one image: write the prompt, classify its complexity (which
+picks the generator's quality tier), generate, then hand off to the
+``BackgroundService`` for removal/validation/crop. The executor owns the
+per-slot loop; this stays atomic per image.
+"""
 
 from __future__ import annotations
 
-import base64
 import logging
-import shutil
 from pathlib import Path
 from string import Template
 from typing import Any
 
-from schema import ImageOutput, ImageSlot
-from src.core.config import settings
+from schema import Complexity, ImageOutput, ImageSlot
 from src.core.errors import ProviderError
-from src.core.imaging import autocrop_symmetric
 from src.core.run_context import RunContext
 from src.modules.base import CustomizationService
 from src.modules.colors.color_models import ColorPalette
-from src.modules.images.image_models import BackgroundCheck, ImagePrompt
-from src.shared.interfaces.background_remover import BackgroundRemover
+from src.modules.images.background_service import BackgroundService
+from src.modules.images.complexity_service import ComplexityClassifier
+from src.modules.images.image_models import ImagePrompt
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
 IMAGE_PROMPT_PATH = Path(__file__).parent / "prompts" / "image_prompt_rule.md"
-BG_CHECK_PROMPT_PATH = Path(__file__).parent / "prompts" / "background_check.md"
 RAW_SUFFIX = ".raw.png"
-CUTOUT_SUFFIX = ".cutout.png"
-PNG_DATA_URL_PREFIX = "data:image/png;base64,"
+# The asset composites onto the app's own base surface, so the generated
+# background is fixed to that surface by theme: a matching flat field makes
+# the cutout trivial. Named literally — image models render these reliably.
+THEME_BG_DARK = "pure black (the app is in dark mode)"
+THEME_BG_LIGHT = "pure white (the app is in light mode)"
+
+# Per-call constants, not config — this flow is now too specific for
+# global config. Override in dev (bake-off scripts under `scripts/`);
+# production uses these. ``IMAGE_GEN_MODEL`` is provider-prefixed and the
+# generic litellm image generator routes on it (swap providers here).
+IMAGE_PROMPT_MODEL = "anthropic/claude-opus-4-7"
+IMAGE_GEN_MODEL = "openai/gpt-image-2"
+# Bounded re-calls: image-provider moderation/infra is non-deterministic,
+# so a benign prompt can blip on one call and pass the next. There is no
+# usable fallback for a missing image, so exhaustion fails the run.
+IMAGE_GEN_MAX_ATTEMPTS = 3
+# Complexity tier → generator quality. ``high`` is reserved/unused for now
+# (overkill); flip it to "high" here to enable it — no schema change.
+QUALITY_BY_COMPLEXITY: dict[Complexity, str] = {
+    Complexity.LOW: "low",
+    Complexity.MEDIUM: "medium",
+    Complexity.HIGH: "medium",
+}
 
 
 class ImageGenService(CustomizationService):
@@ -40,33 +63,55 @@ class ImageGenService(CustomizationService):
         *,
         llm: LLMClient,
         image_gen: ImageGenerator,
-        bg_remover: BackgroundRemover,
+        classifier: ComplexityClassifier,
+        background: BackgroundService,
     ) -> None:
         super().__init__(run_ctx)
         self._llm = llm
         self._image_gen = image_gen
-        self._bg_remover = bg_remover
+        self._classifier = classifier
+        self._background = background
 
     async def run(
-        self, slot: ImageSlot, palette: ColorPalette
+        self,
+        slot: ImageSlot,
+        palette: ColorPalette,
+        *,
+        prompt_model: str = IMAGE_PROMPT_MODEL,
     ) -> ImageOutput:
-        """Resolve one slot end to end: prompt → generate → cutout → crop."""
-        prompt = await self._build_prompt(slot, palette)
-        raw = await self._generate(slot, prompt)
-        cutout, ok = await self._remove_background(raw)
-        final = Path(str(self._run_ctx.image_path(slot.id)))
-        if ok:
-            await self._autocrop(cutout, final)
-        else:
-            shutil.copyfile(raw, final)
-        return ImageOutput(path=self._run_ctx.image_path(slot.id), prompt=prompt)
+        """Resolve one slot end to end: prompt → classify → generate →
+        cutout → crop.
 
-    async def _build_prompt(self, slot: ImageSlot, palette: Any) -> str:
-        """Brief + slot + palette → image prompt (rationale just sharpens it)."""
+        ``prompt_model`` drives the prompt-generation call (override in dev
+        to compare models). Complexity classification picks the generator's
+        quality tier; the background pass is delegated to
+        ``BackgroundService``."""
+        prompt = await self._build_prompt(slot, palette, model=prompt_model)
+        complexity = await self._classifier.classify(prompt)
+        quality = QUALITY_BY_COMPLEXITY[complexity]
+        raw = await self._generate(slot, prompt, quality)
+        final = Path(str(self._run_ctx.image_path(slot.id)))
+        await self._background.run(raw, final)
+        return ImageOutput(
+            path=self._run_ctx.image_path(slot.id),
+            prompt=prompt,
+            complexity=complexity,
+        )
+
+    async def _build_prompt(
+        self,
+        slot: ImageSlot,
+        palette: Any,
+        *,
+        model: str = IMAGE_PROMPT_MODEL,
+    ) -> str:
+        """Brief + slot + palette → image prompt."""
         template = IMAGE_PROMPT_PATH.read_text(encoding="utf-8")
         design = self._run_ctx.cust.design_direction
+        dark_mode = self._run_ctx.cust.colors_direction.dark_mode
         palette_summary = "\n".join(
-            f"  {slot_id}: {color.hex} ({color.vibe})"
+            f"  {slot_id}: {color.oklch} — {color.display_name}: "
+            f"{color.description}"
             for slot_id, color in palette.colors.items()
         )
         prompt = Template(template).safe_substitute(
@@ -74,75 +119,47 @@ class ImageGenService(CustomizationService):
             short=design.short_desc,
             long=design.long_desc,
             palette=palette_summary,
+            theme_background=(
+                THEME_BG_DARK if dark_mode else THEME_BG_LIGHT
+            ),
             subject=slot.description,
         )
         result = await self._llm.complete_structured(
-            [{"role": "user", "content": prompt}], schema=ImagePrompt
+            [{"role": "user", "content": prompt}],
+            schema=ImagePrompt,
+            model=model,
         )
         return result.prompt
 
-    async def _generate(self, slot: ImageSlot, prompt: str) -> Path:
-        """Generate the raw image (subject on a plain solid background)."""
-        dest = self._run_ctx.image_dir / f"{slot.id}{RAW_SUFFIX}"
-        await self._image_gen.generate(prompt, dest)
-        return dest
+    async def _generate(
+        self, slot: ImageSlot, prompt: str, quality: str
+    ) -> Path:
+        """Generate the raw image (subject on a plain solid background).
 
-    async def _remove_background(self, raw: Path) -> tuple[Path, bool]:
-        """Bounded background removal, validated each attempt.
-
-        Returns ``(cutout, True)`` on success, or ``(raw, False)`` if every
-        attempt failed and the un-removed image is kept.
+        The image provider's moderation/infra is non-deterministic — a
+        benign prompt can hit a false-positive block, a transient failure,
+        or a timeout on one call and succeed on the next — so generation is
+        retried a bounded number of times. Unlike background removal there
+        is no usable fallback for a missing image, so exhaustion re-raises
+        the last provider error and fails the run.
         """
-        cutout = self._run_ctx.image_dir / f"{raw.stem}{CUTOUT_SUFFIX}"
-        for attempt in range(settings.bg_max_attempts):
+        dest = self._run_ctx.image_dir / f"{slot.id}{RAW_SUFFIX}"
+        last_error: ProviderError | None = None
+        for attempt in range(IMAGE_GEN_MAX_ATTEMPTS):
             try:
-                await self._bg_remover.remove(raw, cutout)
-            except ProviderError:
-                logger.warning(
-                    "background remover failed on attempt %d/%d for %s",
-                    attempt + 1,
-                    settings.bg_max_attempts,
-                    raw.name,
+                await self._image_gen.generate(
+                    prompt, dest, model=IMAGE_GEN_MODEL, quality=quality
                 )
-                continue
-            verdict = await self._validate_background(raw, cutout)
-            if verdict.ok:
-                return (cutout, True)
-            logger.warning(
-                "background cutout rejected on attempt %d/%d for %s: %s",
-                attempt + 1,
-                settings.bg_max_attempts,
-                raw.name,
-                verdict.reason,
-            )
-        logger.warning(
-            "background removal exhausted for %s; keeping un-removed image",
-            raw.name,
+                return dest
+            except ProviderError as exc:
+                last_error = exc
+                logger.warning(
+                    "image generation failed on attempt %d/%d for %s: %s",
+                    attempt + 1,
+                    IMAGE_GEN_MAX_ATTEMPTS,
+                    slot.id,
+                    exc,
+                )
+        raise last_error or ProviderError(
+            f"image generation produced nothing for {slot.id}"
         )
-        return (raw, False)
-
-    async def _validate_background(
-        self, original: Path, removed: Path
-    ) -> BackgroundCheck:
-        """Ask the Gemini-vision validator whether the cutout is clean."""
-        instruction = BG_CHECK_PROMPT_PATH.read_text(encoding="utf-8")
-        encoded = base64.b64encode(removed.read_bytes()).decode("ascii")
-        data_url = f"{PNG_DATA_URL_PREFIX}{encoded}"
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": instruction},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }
-        ]
-        return await self._llm.complete_structured(
-            messages,
-            schema=BackgroundCheck,
-            model=settings.bg_validation_model,
-        )
-
-    async def _autocrop(self, src: Path, dst: Path) -> None:
-        """Symmetrically crop the clean cutout to its subject."""
-        autocrop_symmetric(src, dst)

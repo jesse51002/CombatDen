@@ -1,4 +1,4 @@
-"""ColorGenService — the colour module: resolve colour slots in one proxy call."""
+"""ColorGenService — the colour module: resolve colour slots in one LLM call."""
 
 from __future__ import annotations
 
@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 COLOR_PROMPT_PATH = Path(__file__).parent / "prompts" / "color_palette_rule.md"
 
+# Model for the one colour-palette call. A per-call constant, not config:
+# the model is a property of this call. Override `run(model=...)` in dev
+# (bake-off scripts under `scripts/`); production uses this default.
+COLOR_MODEL = "anthropic/claude-haiku-4-5-20251001"
+
 
 class ColorGenService(CustomizationService):
     """The colour module. ``run() -> ColorPalette``."""
@@ -26,19 +31,27 @@ class ColorGenService(CustomizationService):
         super().__init__(run_ctx)
         self._llm = llm
 
-    async def run(self) -> ColorPalette:
+    async def run(self, *, model: str = COLOR_MODEL) -> ColorPalette:
         """Resolve every colour slot; return the ``ColorPalette`` model.
 
         The wire schema is a per-request closed model so Pydantic validates
         the response accurately; the result is flattened back into the
-        ``ColorPalette`` map.
+        ``ColorPalette`` map. ``model`` defaults to the module constant;
+        override it in dev to compare models.
         """
         messages = [{"role": "user", "content": self._build_prompt()}]
         slot_ids = [slot.id for slot in self._run_ctx.app.colors]
-        response_model = build_color_response_model(slot_ids)
+        # roles + dark_mode come from app.yaml / customization.yaml (never
+        # the LLM); they drive the deterministic contract on the wire model.
+        roles = {slot.id: slot.role for slot in self._run_ctx.app.colors}
+        dark_mode = self._run_ctx.cust.colors_direction.dark_mode
+        response_model = build_color_response_model(
+            slot_ids, roles=roles, dark_mode=dark_mode
+        )
         resolved = await self._llm.complete_structured(
             messages,
             schema=response_model,
+            model=model,
         )
         return ColorPalette(
             colors={slot_id: getattr(resolved, slot_id) for slot_id in slot_ids}

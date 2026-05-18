@@ -1,0 +1,58 @@
+app: combatden
+display_name: CombatDen BJJ
+images:
+  logo_primary:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/logo_primary.png
+    prompt: Main brand logo, full color. Shown on splash and home header.
+  rank_belt:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/rank_belt.png
+    prompt: Belt graphic shown in profile rank progression and rank celebration.
+  celebration_image:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/celebration_image.png
+    prompt: Hero illustration on the class-booked celebration screen.
+  trophy_image:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/trophy_image.png
+    prompt: Trophy graphic on the wins celebration screen.
+  points_stars_image:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/points_stars_image.png
+    prompt: Stars graphic on the points celebration screen.
+  next_rank_belt_image:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/next_rank_belt_image.png
+    prompt: Preview of the next-rank belt on the profile screen.
+  giftbox:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/giftbox.png
+    prompt: Gift-box graphic in the rewards intro / unwrap animation.
+  single_point:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/single_point.png
+    prompt: Single point-star particle used in the points burst animation.
+  icon_qrcode:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/icon_qrcode.png
+    prompt: QR-code graphic shown on the check-in / sign-up screen.
+  streak_icon:
+    path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/bjj/final_images/streak_icon.png
+    prompt: Small streak indicator icon shown in the top bar.
+colors:
+  primary:
+    oklch: oklch(74.948% 0.0855 227.16)
+    display_name: Mat Blue
+    description: 'Primary brand accent for CTAs, hero numerals, and key highlights.
+      Cool, technical blue carried over from the CombatDen BJJ brand variant
+      (Figma --primary #70B9D8). Used sparingly (One Voice Rule: ~10% of any
+      screen).'
+  background:
+    oklch: oklch(19.728% 0.0087 240.37)
+    display_name: Canvas Black
+    description: Default background surface. Warm-tinted near-black, deliberately
+      not pure black. Shared with the CombatDen base preset.
+  text:
+    oklch: oklch(96.354% 0.0067 97.35)
+    display_name: Bone Text
+    description: Primary text, headings, and icons. Warm off-white, deliberately not
+      pure white. Shared with the CombatDen base preset.
+  accent:
+    oklch: oklch(80% 0.12 85)
+    display_name: Premium Gold
+    description: Selection / active-state colour. A visibly distinct hue from
+      primary, premium and high-contrast on the dark canvas. Marks the active
+      nav item, active timeframe pill, and active tab — never a fill, so the
+      One Voice Rule holds and primary stays the agency colour.

@@ -32,11 +32,16 @@ class DesignConstants {
         .toColor();
   }
 
-  /// Secondary brand accent. No call sites yet; wired so the
-  /// `accent` slot can drive future surfaces / ColorScheme.
+  /// Secondary brand accent — the SELECTION / active-state colour.
+  /// Marks "where you are" (active nav item, active timeframe pill,
+  /// active tab), distinct from `primaryColor` which marks agency
+  /// ("what to tap"). The const fallback is the CombatDen baseline
+  /// (muted "Premium Gold", the exact sRGB of `oklch(80% 0.12 85)`
+  /// emitted for the served design) so offline rendering matches
+  /// the live palette.
   static Color get accent => BrandColor.color(
         CombatDenSlots.accent,
-        fallback: const Color(0xFFFF6C2D),
+        fallback: const Color(0xFFE1B75C),
       );
 
   // === Brand colours (resolved via the customization engine) ===

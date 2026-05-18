@@ -6,6 +6,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from schema.color_role import ColorRole
 from schema.slots import ColorSlot, ImageSlot
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -54,5 +55,21 @@ class AppFormat(BaseModel):
         if len(color_ids) != len(set(color_ids)):
             dupes = sorted({i for i in color_ids if color_ids.count(i) > 1})
             raise ValueError(f"duplicate color slot ids: {dupes}")
+
+        # Exactly one background + one text slot: the deterministic contrast
+        # check pairs these two. Enforced at config load, before any LLM call.
+        roles = [s.role for s in self.colors]
+        n_bg = roles.count(ColorRole.BACKGROUND)
+        if n_bg != 1:
+            raise ValueError(
+                "AppFormat.colors must have exactly one slot with "
+                f"role 'background'; found {n_bg}"
+            )
+        n_text = roles.count(ColorRole.TEXT)
+        if n_text != 1:
+            raise ValueError(
+                "AppFormat.colors must have exactly one slot with "
+                f"role 'text'; found {n_text}"
+            )
 
         return self

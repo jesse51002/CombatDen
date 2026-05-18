@@ -1,0 +1,12 @@
+design_direction:
+  name: Demo App
+  short_desc: A demo brand.
+  long_desc: |
+    Generic demo brand used to exercise the pipeline in tests. Clean,
+    modern, neutral — nothing app-specific.
+
+colors_direction:
+  dark_mode: true
+  description: |
+    Dark palette: a confident primary, near-black background, off-white
+    text, one restrained accent. Readable, not loud.

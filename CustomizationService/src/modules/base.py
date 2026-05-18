@@ -17,5 +17,8 @@ class CustomizationService(ABC):
     over slots, so modules never batch or manage concurrency themselves.
     """
 
-    def __init__(self, run_ctx: RunContext) -> None:
+    def __init__(self, run_ctx: RunContext | None = None) -> None:
+        # Optional only so a module can be built for a sub-task that needs
+        # no run context (e.g. ImageGenService for cutout validation
+        # alone); every ``run`` path still requires it.
         self._run_ctx = run_ctx

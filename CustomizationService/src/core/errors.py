@@ -8,7 +8,7 @@ class PipelineError(Exception):
 
 
 class ProviderError(PipelineError):
-    """A backing provider (the proxy, an image model, or PhotoRoom) failed."""
+    """A backing provider (an LLM provider, an image model, or PhotoRoom) failed."""
 
 
 class SchemaValidationError(PipelineError):

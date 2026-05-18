@@ -6,6 +6,8 @@ import re
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from schema.color_role import ColorRole
+
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -36,7 +38,14 @@ class SlotBase(BaseModel):
 
 
 class ColorSlot(SlotBase):
-    """A named color the pipeline will resolve to a hex value."""
+    """A named color the pipeline will resolve to an oklch value.
+
+    ``role`` is optional and validation-only: it is never sent to the LLM
+    (the prompt infers role from the description). When set, it tells the
+    deterministic contract which colours to contrast-test and sanity-bound.
+    """
+
+    role: ColorRole | None = None
 
 
 class ImageSlot(SlotBase):

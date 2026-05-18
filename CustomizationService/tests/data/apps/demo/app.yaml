@@ -1,0 +1,18 @@
+id: demo
+display_name: Demo App
+
+images:
+  - id: hero
+    description: Bold hero illustration on a flat solid background.
+
+colors:
+  - id: primary
+    description: Dominant brand colour for primary CTAs and key accents.
+  - id: background
+    description: App background surface colour.
+    role: background
+  - id: text
+    description: Primary readable text colour for headings and body.
+    role: text
+  - id: accent
+    description: Secondary highlight colour for badges and small accents.

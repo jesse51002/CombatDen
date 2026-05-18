@@ -1,12 +1,46 @@
 design_direction:
   name: CombatDen
-  short_desc: Train like a pro.
+  short_desc: "Train like a pro — a premium combat-sports training and progression app for competitive fighters and serious amateurs."
   long_desc: |
-    Premium combat sports brand serving fighters and serious amateurs.
-    Visual style: bold but refined, gritty but high-end. Not neon, not loud.
+    CombatDen is a premium combat-sports training and progression app for
+    competitive fighters and serious amateurs across boxing, MMA, Muay
+    Thai, BJJ and wrestling. The audience is disciplined and unsentimental:
+    they want a tool that respects the work, not a gamified toy. The voice
+    is confident, terse and earned — a coach in your corner, never hype.
+
+    Visual system — the shared look every generated asset must wear:
+
+    - Feel: gritty but high-end. Forged, hard-earned, championship
+      gravitas. Restraint over spectacle — quietly expensive, never flashy.
+    - Medium & materials: realistic sculpted 3D — forged and brushed
+      metal, worn full-grain leather, taut canvas, dense matte rubber.
+      Tangible, weighty, faintly battle-worn. Never cartoon, never flat
+      vector, never glossy plastic.
+    - Finish & light: matte surfaces with a tight, controlled specular.
+      Low-key studio lighting, one hard key with soft fill, deep shadow
+      worked into each object's own surfaces for form and depth — no
+      scene, no shadow cast onto a floor.
+    - Energy by role: rewards, wins, rank-ups and celebrations land with
+      weight and forward momentum — impact, not confetti; powerful but
+      still disciplined. Persistent UI icons and indicators are stripped,
+      solid and calm — crafted but quiet, never loud.
+    - Hard nos: no neon, no glow, no rainbow or playful gradients, no
+      sci-fi, no sparkles, no busy clutter, nothing cute.
 
 colors_direction:
   dark_mode: true
   description: |
-    Deep red primary like dried blood. Background pitch black with the slightest
-    warmth. Text bone-white, slightly muted. Accent muted gold for premium feel.
+    A dark, premium, low-key palette — deliberately not loud. Restraint is
+    the point: colour earns attention by being rare, not bright.
+
+    - Primary: a deep oxblood red, like dried blood — saturated but dark
+      and serious, never a bright pillarbox red. Used sparingly for
+      primary CTAs and the few moments that truly matter.
+    - Background: near-black warm charcoal with the slightest red-warm
+      undertone and very low chroma — reads as black, feels intentional,
+      not a dead pure black.
+    - Text: bone / ivory white, slightly muted and warm, easy against the
+      charcoal and comfortably above AA contrast.
+    - Accent: an antique, desaturated muted gold for badges, ranks and
+      small premium highlights — aged trophy metal, not shiny yellow. One
+      confident accent; it must never compete with the red.

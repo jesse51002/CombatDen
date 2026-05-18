@@ -5,15 +5,36 @@ display_name: Smoke Test
 # removal is the expensive part). Swap the description to test other prompts.
 images:
   - id: celebration_image
-    description: Hero illustration on the class-booked celebration screen.
+    description: >-
+      The single hero that celebrates a successful class booking. Fills the
+      ClassBookedScreen as a full-bleed centred hero (~50-60% of the
+      viewport), revealed with a scale-in pop after a brief loading +
+      done-check sequence, with a "Class Booked" headline directly below it
+      and a Continue button at the bottom. It appears the instant the user
+      commits to booking a class and is the ONLY place a booking success is
+      celebrated — the first positive payoff for that action and a key
+      retention moment. The emotion is peak, congratulatory success:
+      "you're in, your spot is locked".
 
 # All four colour slots so the full colour flow (harmony + WCAG contrast) runs.
 colors:
   - id: primary
-    description: Dominant brand color. Used for primary CTAs and key accents.
+    description: >-
+      Dominant brand colour. Drives primary buttons / CTAs and the key
+      interactive accents the product leans on.
   - id: background
-    description: App background color. Usually dark for a gym aesthetic.
+    description: >-
+      The app's base surface — the large, calm canvas every screen and all
+      content sits on. Its lightness/darkness follows the brief's theme,
+      not this description.
+    role: background
   - id: text
-    description: Main text color for headings and body copy.
+    description: >-
+      Primary readable text colour for headings and body copy; must stay
+      comfortably legible against the base surface.
+    role: text
   - id: accent
-    description: Secondary highlight color for badges, ratings, and small accents.
+    description: >-
+      Secondary highlight colour for small accents — badges, indicators,
+      progress and minor emphasis. Used sparingly; never competes with the
+      primary.

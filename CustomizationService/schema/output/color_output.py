@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from schema.primitives import HexColor
+from schema.primitives import OklchColor
 
 
 class ColorOutput(BaseModel):
-    """One resolved colour: the hex plus why it is what it is."""
+    """One resolved colour: the oklch value plus its name and rationale."""
 
     model_config = ConfigDict(extra="forbid")
 
-    hex: HexColor
-    description: str  # natural-language description of the colour itself
-    vibe: str  # the feeling/mood it carries
+    oklch: OklchColor
+    display_name: str  # evocative human label, e.g. "Warm Ash Cream"
+    description: str  # purpose/usage prose for the colour
 
-    @field_validator("description", "vibe")
+    @field_validator("display_name", "description")
     @classmethod
     def _non_empty(cls, v: str) -> str:
         if not v.strip():
