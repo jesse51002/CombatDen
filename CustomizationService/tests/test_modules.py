@@ -16,7 +16,6 @@ from schema import (
     ColorRole,
     Complexity,
     Customization,
-    ImageOutput,
 )
 from src.core.errors import ProviderError
 from src.core.run_context import RunContext
@@ -31,11 +30,7 @@ from src.modules.images.background_service import (
     BackgroundService,
 )
 from src.modules.images.complexity_service import ComplexityClassifier
-from src.modules.images.image_models import (
-    BackgroundCheck,
-    ImageComplexity,
-    ImagePrompt,
-)
+from src.modules.images.image_models import ImageComplexity, ImagePrompt
 from src.modules.images.image_service import ImageGenService
 
 # Committed fixture tree — never the live ``apps/`` production runs.
@@ -138,8 +133,8 @@ class StubImageGen:
 
 
 class StubBgRemover:
-    """Stub BackgroundRemover: writes a real (mostly transparent) PNG so
-    the deterministic alpha gate in ``validate_cutout`` can read it."""
+    """Stub BackgroundRemover: writes a real (mostly transparent) RGBA
+    PNG cutout."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[Path, Path]] = []
@@ -166,7 +161,6 @@ def _image_service(
         classifier=ComplexityClassifier(ctx, llm=llm),
         background=BackgroundService(
             ctx,
-            llm=llm,
             bg_remover=remover if remover is not None else StubBgRemover(),
         ),
     )
@@ -256,52 +250,6 @@ def test_color_prompt_is_data_driven(tmp_path: Path) -> None:
 # --- ImageGenService -------------------------------------------------------
 
 
-@pytest.mark.skip(
-    reason="background validation temporarily disabled in "
-    "BackgroundService._remove_background; re-enable this test when the "
-    "validate_cutout block is uncommented"
-)
-def test_image_resolve_slot_keeps_rejected_cutout(tmp_path: Path) -> None:
-    """A produced-but-rejected cutout is kept and autocropped — a bad
-    cutout beats the un-removed image."""
-    ctx = _run_ctx(tmp_path)
-    palette = _full_palette(ctx)
-    slot = ctx.app.images[0]
-
-    llm = StubLLM(
-        structured=BackgroundCheck(ok=False, reason="halo left"),
-        text="prompt for the subject",
-    )
-    gen = StubImageGen()
-    remover = StubBgRemover()
-    mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
-
-    autocrop_calls: list[tuple[Path, Path]] = []
-    import src.modules.images.background_service as background_service
-
-    def _spy_autocrop(src: Path, dst: Path) -> None:
-        autocrop_calls.append((src, dst))
-        Path(dst).write_bytes(b"cropped")
-
-    background_service.autocrop = _spy_autocrop
-
-    out = asyncio.run(mod.run(slot, palette))
-
-    expected_path = str(ctx.image_path(slot.id))
-    assert isinstance(out, ImageOutput)
-    assert str(out.path) == expected_path
-    assert out.prompt == "prompt for the subject"
-    assert out.complexity == Complexity.LOW
-    # Rejected cutout kept: autocrop called once, on the *cutout* (not raw).
-    assert len(autocrop_calls) == 1
-    assert str(autocrop_calls[0][0]).endswith(".raw.cutout.png")
-    assert not str(autocrop_calls[0][0]).endswith(".raw.png")
-    assert str(autocrop_calls[0][1]) == expected_path
-    assert Path(expected_path).read_bytes() == b"cropped"
-    # Every verdict failed, so the remover retried up to the cap.
-    assert len(remover.calls) == BG_MAX_ATTEMPTS
-
-
 def test_image_resolve_slot_falls_back_to_raw_when_no_cutout(
     tmp_path: Path,
 ) -> None:
@@ -319,10 +267,7 @@ def test_image_resolve_slot_falls_back_to_raw_when_no_cutout(
             self.calls.append((src, dst))
             raise ProviderError("remover down")
 
-    llm = StubLLM(
-        structured=BackgroundCheck(ok=True, reason="unused"),
-        text="prompt for the subject",
-    )
+    llm = StubLLM(text="prompt for the subject")
     gen = StubImageGen()
     remover = FailingBgRemover()
     mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
@@ -351,7 +296,7 @@ def test_image_resolve_slot_happy_path_autocrops(tmp_path: Path) -> None:
     palette = _full_palette(ctx)
     slot = ctx.app.images[0]
 
-    llm = StubLLM(structured=BackgroundCheck(ok=True, reason="clean"))
+    llm = StubLLM()
     gen = StubImageGen()
     remover = StubBgRemover()
     mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
@@ -421,58 +366,3 @@ def test_image_prompt_is_app_agnostic_and_theme_fixed(
     # Background tracks the theme, named literally for the image model.
     assert THEME_BG_DARK in dark and THEME_BG_LIGHT not in dark
     assert THEME_BG_LIGHT in light and THEME_BG_DARK not in light
-
-
-# --- validate_cutout: deterministic alpha gate before the model ----------
-
-
-def test_validate_cutout_short_circuits_on_opaque_image(
-    tmp_path: Path,
-) -> None:
-    """Too little transparency in the cutout → deterministic reject, no
-    model call: a vision model can't see alpha, so pixels decide 'backdrop
-    removed' before the original is ever shown."""
-    original = tmp_path / "original.png"
-    Image.new("RGBA", (32, 32), (200, 30, 30, 255)).save(original)
-    cutout = tmp_path / "opaque.png"
-    Image.new("RGBA", (32, 32), (200, 200, 200, 255)).save(cutout)
-
-    class _NoLLM:
-        async def complete_structured(self, *a: Any, **k: Any) -> Any:
-            raise AssertionError("model must not be called on opaque cutout")
-
-    verdict = asyncio.run(
-        BackgroundService(llm=_NoLLM()).validate_cutout(original, cutout)
-    )
-
-    assert verdict.ok is False
-    assert "not removed" in verdict.reason
-
-
-def test_validate_cutout_sends_before_and_after_when_transparent_enough(
-    tmp_path: Path,
-) -> None:
-    original = tmp_path / "original.png"
-    Image.new("RGBA", (32, 32), (200, 30, 30, 255)).save(original)
-    cutout = tmp_path / "clear.png"
-    Image.new("RGBA", (32, 32), (0, 0, 0, 0)).save(cutout)
-    llm = StubLLM(structured=BackgroundCheck(ok=True, reason="subject ok"))
-
-    verdict = asyncio.run(
-        BackgroundService(llm=llm).validate_cutout(original, cutout)
-    )
-
-    assert verdict.ok is True
-    assert verdict.reason == "subject ok"
-    assert len(llm.structured_calls) == 1
-    # One instruction text + the two images (BEFORE then AFTER, by order).
-    content = llm.structured_calls[0]["messages"][0]["content"]
-    texts = [c["text"] for c in content if c["type"] == "text"]
-    images = [c for c in content if c["type"] == "image_url"]
-    assert len(images) == 2
-    assert len(texts) == 1
-    instruction = texts[0]
-    # The $alpha placeholder is substituted with the measured value (the
-    # cutout here is fully transparent → 100%).
-    assert "$alpha" not in instruction
-    assert "100%" in instruction

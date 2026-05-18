@@ -49,7 +49,7 @@ class ModuleRegistry:
         color = ColorGenService(self._run_ctx, llm=llm)
         classifier = ComplexityClassifier(self._run_ctx, llm=llm)
         background = BackgroundService(
-            self._run_ctx, llm=llm, bg_remover=bg_remover
+            self._run_ctx, bg_remover=bg_remover
         )
         images = ImageGenService(
             self._run_ctx,

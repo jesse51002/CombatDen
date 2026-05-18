@@ -15,15 +15,6 @@ class ImageComplexity(BaseModel):
     complexity: Complexity
 
 
-class BackgroundCheck(BaseModel):
-    """Structured verdict from the Gemini-vision background validator."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    ok: bool
-    reason: str
-
-
 class ImagePrompt(BaseModel):
     """The prompt build: just ``prompt`` flows on to the generator.
 
@@ -37,7 +28,6 @@ class ImagePrompt(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt: str
-    # rationale: str
 
     @field_validator("prompt")
     @classmethod

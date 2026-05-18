@@ -24,11 +24,7 @@ from src.executor.writer import (
     CUSTOMIZATION_PROVENANCE_NAME,
     Writer,
 )
-from src.modules.images.image_models import (
-    BackgroundCheck,
-    ImageComplexity,
-    ImagePrompt,
-)
+from src.modules.images.image_models import ImageComplexity, ImagePrompt
 
 # Committed fixture tree — never the live ``apps/`` production runs.
 APP_DIR = Path(__file__).resolve().parent / "data" / "apps" / "demo"
@@ -82,8 +78,6 @@ class _FakeLLM:
             )
         elif schema is ImageComplexity:
             result = ImageComplexity(complexity=Complexity.MEDIUM)
-        elif schema is BackgroundCheck:
-            result = BackgroundCheck(ok=True, reason="clean cutout")
         else:
             raise AssertionError(f"unexpected schema {schema!r}")
         return result
