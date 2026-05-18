@@ -202,3 +202,20 @@ crop and trims those regions:
 - Re-crop tight to whatever survives.
 
 This refines the existing crop — it does not replace it.
+
+### 4. Per-run cost estimation
+
+Every run should report what it cost. This is a business number, not a
+nicety — pricing and margin depend on a consistent per-generation figure
+(rough guess today is ~$1/generation, but that's unverified).
+
+- **Each service that makes paid external calls tracks its own running
+  cost** — the LLM calls (palette, image prompt, complexity), image
+  generation, background removal — accumulating as it runs.
+- **The writer aggregates.** It already assembles the output; extend it
+  to take the services, sum their costs, and write the total (and ideally
+  the per-service breakdown) into `output.yaml`.
+- **Optional output field**, like `complexity` — absent on older runs so
+  existing `output.yaml` files still validate; always set by new runs.
+- Goal: one authoritative, consistent cost per run to base business
+  calculations on, instead of guessing.
