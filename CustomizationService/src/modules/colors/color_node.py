@@ -1,4 +1,9 @@
-"""ColorGenService — the colour module: resolve colour slots in one LLM call."""
+"""ColorNode — the colour graph node: resolve every colour slot in one call.
+
+The DAG root: it has no dependencies and every image node depends on it.
+``run()`` resolves the whole palette in one structured LLM call (atomic —
+the executor owns iteration, this node owns the single palette call).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +12,7 @@ from pathlib import Path
 from string import Template
 
 from src.core.run_context import RunContext
-from src.modules.base import CustomizationService
+from src.modules.base import DependencyKind, Node
 from src.modules.colors.color_models import (
     ColorPalette,
     build_color_response_model,
@@ -24,11 +29,13 @@ COLOR_PROMPT_PATH = Path(__file__).parent / "prompts" / "color_palette_rule.md"
 COLOR_MODEL = "anthropic/claude-haiku-4-5-20251001"
 
 
-class ColorGenService(CustomizationService):
-    """The colour module. ``run() -> ColorPalette``."""
+class ColorNode(Node):
+    """The colour node. ``run() -> ColorPalette``. No dependencies."""
 
     def __init__(self, run_ctx: RunContext, *, llm: LLMClient) -> None:
-        super().__init__(run_ctx)
+        super().__init__(
+            run_ctx, key=DependencyKind.COLOR.value, deps=frozenset()
+        )
         self._llm = llm
 
     async def run(self, *, model: str = COLOR_MODEL) -> ColorPalette:
@@ -37,7 +44,8 @@ class ColorGenService(CustomizationService):
         The wire schema is a per-request closed model so Pydantic validates
         the response accurately; the result is flattened back into the
         ``ColorPalette`` map. ``model`` defaults to the module constant;
-        override it in dev to compare models.
+        override it in dev to compare models. Takes no positional inputs —
+        the root has no dependencies, so ``inputs`` is unused.
         """
         messages = [{"role": "user", "content": self._build_prompt()}]
         slot_ids = [slot.id for slot in self._run_ctx.app.colors]

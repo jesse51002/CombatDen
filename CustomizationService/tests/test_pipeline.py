@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
 import yaml
 from PIL import Image
 
@@ -54,8 +55,16 @@ def _palette_oklch(slot_id: str) -> str:
     return "oklch(52% 0.16 25)"  # primary/accent — unconstrained
 
 
+# Distinct known per-service costs so the aggregation is unambiguous.
+_FAKE_LLM_COST = 0.001234
+_FAKE_IMAGE_COST = 0.05
+_FAKE_BG_COST = 0.02
+
+
 class _FakeLLM:
     """Honours LLMClient: structured colour palette + image prompt + bg verdict."""
+
+    cost = _FAKE_LLM_COST
 
     def __init__(self, color_slot_ids: list[str]) -> None:
         self._color_slot_ids = color_slot_ids
@@ -97,6 +106,8 @@ class _FakeLLM:
 
 
 class _FakeImageGen:
+    cost = _FAKE_IMAGE_COST
+
     async def generate(
         self, prompt: str, dest: Path, *, model: str, quality: str
     ) -> AbsolutePath:
@@ -112,9 +123,26 @@ class _FakeImageGen:
         Image.new("RGB", (64, 64), (20, 20, 20)).save(dest)
         return AbsolutePath(str(dest.resolve()))
 
+    async def compose(
+        self,
+        prompt: str,
+        srcs: list[Path],
+        dest: Path,
+        *,
+        model: str,
+        quality: str,
+    ) -> AbsolutePath:
+        # The demo app declares no depends_on, so this is never hit on the
+        # happy path; present to honour the contract.
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (64, 64), (30, 30, 30)).save(dest)
+        return AbsolutePath(str(dest.resolve()))
+
 
 class _FakeBgRemover:
     """Writes a real RGBA cutout: transparent border, opaque centred square."""
+
+    cost = _FAKE_BG_COST
 
     async def remove(self, src: Path, dst: Path) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -141,9 +169,14 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
     ctx = _run_ctx(tmp_path)
     _patch_services(monkeypatch, [c.id for c in ctx.app.colors])
 
-    output = asyncio.run(Pipeline().run(ctx))
+    result = asyncio.run(Pipeline().run(ctx))
+    output = result.output
 
     assert isinstance(output, Output)
+    # The run exposes its paid services so the writer can total cost.
+    assert result.llm.cost == _FAKE_LLM_COST
+    assert result.image_gen.cost == _FAKE_IMAGE_COST
+    assert result.bg_remover.cost == _FAKE_BG_COST
     assert output.app == ctx.app.id
     assert output.display_name == ctx.app.display_name
     # Every declared slot resolved.
@@ -163,9 +196,9 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
 def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
     ctx = _run_ctx(tmp_path)
     _patch_services(monkeypatch, [c.id for c in ctx.app.colors])
-    output = asyncio.run(Pipeline().run(ctx))
+    result = asyncio.run(Pipeline().run(ctx))
 
-    Writer().write(output, ctx)
+    Writer().write(result, ctx)
 
     app_yaml = ctx.run_dir / APP_PROVENANCE_NAME
     cust_yaml = ctx.run_dir / CUSTOMIZATION_PROVENANCE_NAME
@@ -178,11 +211,36 @@ def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
         Customization.model_validate(yaml.safe_load(cust_yaml.read_text())) == ctx.cust
     )
     reloaded = Output.model_validate(yaml.safe_load(out_yaml.read_text()))
-    assert reloaded == output
+    # The writer stamps cost on; everything else round-trips exactly.
+    assert reloaded.cost is not None
+    assert reloaded.model_copy(update={"cost": None}) == result.output
     # Typed primitives unwrapped to plain strings in the YAML.
     raw = yaml.safe_load(out_yaml.read_text())
     any_color = next(iter(raw["colors"].values()))
     assert isinstance(any_color["oklch"], str)
+
+
+def test_writer_writes_run_cost_breakdown(tmp_path, monkeypatch):
+    """The writer sums each paid service's running cost into the optional
+    ``RunCost`` (total + per-service breakdown) and it round-trips."""
+    ctx = _run_ctx(tmp_path)
+    _patch_services(monkeypatch, [c.id for c in ctx.app.colors])
+    result = asyncio.run(Pipeline().run(ctx))
+
+    Writer().write(result, ctx)
+
+    raw = yaml.safe_load(ctx.output_path().read_text())
+    cost = raw["cost"]
+    assert cost["llm"] == pytest.approx(_FAKE_LLM_COST)
+    assert cost["image_generation"] == pytest.approx(_FAKE_IMAGE_COST)
+    assert cost["background_removal"] == pytest.approx(_FAKE_BG_COST)
+    assert cost["total"] == pytest.approx(
+        _FAKE_LLM_COST + _FAKE_IMAGE_COST + _FAKE_BG_COST
+    )
+    # Optional field validates back through the schema.
+    assert Output.model_validate(raw).cost.total == pytest.approx(
+        cost["total"]
+    )
 
 
 def test_demo_examples_round_trip():
@@ -223,6 +281,34 @@ def test_output_style_fields_optional_and_back_compat():
         }
     )
     assert old.images["hero"].adherent is None
+    # Same back-compat guarantee for the new optional dependency-usage
+    # field: an old output that predates it still validates as None.
+    assert old.images["hero"].dependency_usage is None
+    # Same back-compat guarantee for the new optional cost field.
+    assert old.cost is None
+
+    # New run: a slot with a recorded reference/direct verdict validates.
+    with_usage = Output.model_validate(
+        {
+            "app": "demo",
+            "display_name": "Demo App",
+            "images": {
+                "hero": {**base_image, "complexity": "medium"},
+                "derived": {
+                    **base_image,
+                    "complexity": "medium",
+                    "dependency_usage": {"hero": "direct"},
+                },
+            },
+            "colors": colors,
+        }
+    )
+    from schema import DependencyUsage
+
+    assert with_usage.images["derived"].dependency_usage == {
+        "hero": DependencyUsage.DIRECT
+    }
+    assert with_usage.images["hero"].dependency_usage is None
 
     # New run: adherent, no edit.
     adherent = Output.model_validate(

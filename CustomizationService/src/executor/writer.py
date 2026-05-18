@@ -9,43 +9,82 @@ import yaml
 from pydantic import BaseModel
 
 from src.core.run_context import RunContext
-from schema import Output
+from src.executor.orchestrator import PipelineResult
+from schema import RunCost
 
 logger = logging.getLogger(__name__)
 
 APP_PROVENANCE_NAME = "app.yaml"
 CUSTOMIZATION_PROVENANCE_NAME = "customization.yaml"
 
-
-def _dump_model(model: BaseModel, path: Path) -> None:
-    """Serialize one validated model to readable YAML at ``path``."""
-    path.write_text(
-        yaml.safe_dump(
-            model.model_dump(mode="json"),
-            sort_keys=False,
-            allow_unicode=True,
-            default_flow_style=False,
-        ),
-        encoding="utf-8",
-    )
+# Cost is an estimate (litellm pricing + a flat PhotoRoom rate), so a
+# fixed business precision — not float noise — lands in output.yaml.
+COST_PRECISION = 6
 
 
 class Writer:
     """Writes provenance + output for one run, together."""
 
-    def write(self, output: Output, run_ctx: RunContext) -> None:
-        """Serialize the canonical provenance and the resolved output."""
+    def write(self, result: PipelineResult, run_ctx: RunContext) -> None:
+        """Serialize provenance, then ``output.yaml`` with the run cost.
+
+        The writer already owns assembly, so it also aggregates cost:
+        each paid service tracked its own running total during the run;
+        here we sum them into an optional ``RunCost`` and stamp it onto
+        the output before the dump.
+        """
         app_path = run_ctx.run_dir / APP_PROVENANCE_NAME
         cust_path = run_ctx.run_dir / CUSTOMIZATION_PROVENANCE_NAME
         output_path = run_ctx.output_path()
 
-        _dump_model(run_ctx.app, app_path)
-        _dump_model(run_ctx.cust, cust_path)
-        _dump_model(output, output_path)
+        run_cost = self._run_cost(result)
+        output = result.output.model_copy(update={"cost": run_cost})
+
+        self._dump_model(run_ctx.app, app_path)
+        self._dump_model(run_ctx.cust, cust_path)
+        self._dump_model(output, output_path)
 
         logger.debug(
-            "wrote provenance + output: %s, %s, %s",
+            "wrote provenance + output (cost $%.6f: llm $%.6f, "
+            "image $%.6f, bg $%.6f): %s, %s, %s",
+            run_cost.total,
+            run_cost.llm,
+            run_cost.image_generation,
+            run_cost.background_removal,
             app_path,
             cust_path,
             output_path,
+        )
+
+    @staticmethod
+    def _run_cost(result: PipelineResult) -> RunCost:
+        """Sum the run's paid services into the total + per-service breakdown.
+
+        ``llm`` = every structured LLM call; ``image_generation`` =
+        generate + any corrective edit (one service);
+        ``background_removal`` = the flat PhotoRoom per-call rate.
+        """
+        llm = round(result.llm.cost, COST_PRECISION)
+        image_generation = round(result.image_gen.cost, COST_PRECISION)
+        background_removal = round(result.bg_remover.cost, COST_PRECISION)
+        return RunCost(
+            total=round(
+                llm + image_generation + background_removal, COST_PRECISION
+            ),
+            llm=llm,
+            image_generation=image_generation,
+            background_removal=background_removal,
+        )
+
+    @staticmethod
+    def _dump_model(model: BaseModel, path: Path) -> None:
+        """Serialize one validated model to readable YAML at ``path``."""
+        path.write_text(
+            yaml.safe_dump(
+                model.model_dump(mode="json"),
+                sort_keys=False,
+                allow_unicode=True,
+                default_flow_style=False,
+            ),
+            encoding="utf-8",
         )

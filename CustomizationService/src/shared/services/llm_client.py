@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from src.core.config import settings
 from src.core.errors import ProviderError, SchemaValidationError
 from src.shared.interfaces.llm_client import LLMClient, ModelT
+from src.shared.services.cost import CostTracking, litellm_call_cost
 from src.shared.services.provider_keys import provider_api_key
 
 logger = logging.getLogger(__name__)
@@ -106,8 +107,13 @@ def _render(value: Any) -> str:
     return "\n".join(out)
 
 
-class LiteLLMClient(LLMClient):
-    """Concrete LLM client that calls providers directly via litellm."""
+class LiteLLMClient(CostTracking, LLMClient):
+    """Concrete LLM client that calls providers directly via litellm.
+
+    Accumulates the USD cost of every call it makes (palette, image
+    prompt, complexity, style check all route through here) via
+    ``CostTracking``; the writer reads ``cost`` to build the run total.
+    """
 
     @staticmethod
     def _api_key(model_name: str) -> str:
@@ -115,9 +121,7 @@ class LiteLLMClient(LLMClient):
         (shared with the image generator via ``provider_keys``)."""
         return provider_api_key(model_name)
 
-    def _completion_kwargs(
-        self, model_name: str, messages: list[dict]
-    ) -> dict:
+    def _completion_kwargs(self, model_name: str, messages: list[dict]) -> dict:
         """Base litellm kwargs for a direct provider call."""
         return {
             "model": model_name,
@@ -125,9 +129,7 @@ class LiteLLMClient(LLMClient):
             "api_key": self._api_key(model_name),
         }
 
-    async def _acompletion(
-        self, kwargs: dict, model_name: str
-    ) -> Any:
+    async def _acompletion(self, kwargs: dict, model_name: str) -> Any:
         """One litellm call; any SDK/transport failure → ``ProviderError``."""
         try:
             return await litellm.acompletion(**kwargs)
@@ -167,17 +169,19 @@ class LiteLLMClient(LLMClient):
         """One chat turn via litellm → the message dict. ``model`` is
         required and carries the provider prefix (litellm routes on it).
         Raises ``ProviderError`` on a transport/litellm failure."""
+
+        """
         logger.debug(
             "complete input → %s:\n\n%s\n", model, _render(messages)
         )
+        """
         kwargs = self._completion_kwargs(model, messages)
         if tools is not None:
             kwargs["tools"] = tools
         resp = await self._acompletion(kwargs, model)
+        self._add_cost(litellm_call_cost(resp, model))
         message = resp.choices[0].message.model_dump()
-        logger.debug(
-            "complete output ← %s:\n\n%s\n", model, _render(message)
-        )
+        logger.debug("complete output ← %s:\n\n%s\n", model, _render(message))
         return message
 
     async def complete_structured(
@@ -210,6 +214,9 @@ class LiteLLMClient(LLMClient):
                 _render(convo),
             )
             resp = await self._acompletion(kwargs, model)
+            # Every attempt is a billed call — count each, not just the
+            # one that finally validates.
+            self._add_cost(litellm_call_cost(resp, model))
             content = self._message_content(resp.choices[0].message)
             try:
                 parsed = schema.model_validate_json(content)

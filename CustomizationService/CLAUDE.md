@@ -39,6 +39,11 @@ only makes sense for one app, push back — it belongs in YAML.
   YAML typos fail loudly.
 - **One concept per file.** Each Pydantic class lives in its own file
   under `schema/` unless several classes form one tight unit.
+- **Helpers belong to their class.** A function used only by one class
+  is a `@staticmethod`/method on that class, not a module-level function
+  sitting above it. Module level is reserved for genuinely shared
+  helpers and the `UPPER_CASE` constants (including names other modules
+  or tests import).
 - **Native generics** (`list[X]`, `dict[str, Y]`), pipe unions
   (`X | None`), type hints on every parameter and return.
 - **Absolute imports** from `schema.*`. No relative imports.

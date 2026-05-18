@@ -18,3 +18,9 @@ class SchemaValidationError(PipelineError):
 class ValidationFeedback(PipelineError):
     """Raised by a ``validate=`` callback to reject valid-but-unacceptable output;
     the client re-asks, surfacing as ``SchemaValidationError`` if exhausted."""
+
+
+class GraphError(PipelineError):
+    """The run's dependency graph is invalid: a node depends on a key no
+    node produces, or the declared ``depends_on`` edges form a cycle.
+    Raised before any node runs (fail fast, no spend)."""

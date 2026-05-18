@@ -12,8 +12,6 @@ from pathlib import Path
 from string import Template
 
 from schema import Complexity
-from src.core.run_context import RunContext
-from src.modules.base import CustomizationService
 from src.modules.images.image_models import ImageComplexity
 from src.shared.interfaces.llm_client import LLMClient
 
@@ -27,18 +25,13 @@ COMPLEXITY_PROMPT_PATH = (
 # the model is a property of this call. Override `classify(model=...)` in
 # dev to compare models; production uses this default. Gemma/Gemini route
 # on the existing gemini provider key.
-COMPLEXITY_MODEL = "gemini/gemini-3-flash-lite-preview"
+COMPLEXITY_MODEL = "gemini/gemini-3.1-flash-lite-preview"
 
 
-class ComplexityClassifier(CustomizationService):
+class ComplexityClassifier:
     """The complexity step. ``classify(prompt) -> Complexity``."""
 
-    def __init__(
-        self, run_ctx: RunContext | None = None, *, llm: LLMClient
-    ) -> None:
-        # run_ctx is unused (classification is prompt-only); accepted so
-        # the registry constructs every service the same way.
-        super().__init__(run_ctx)
+    def __init__(self, *, llm: LLMClient) -> None:
         self._llm = llm
 
     async def classify(

@@ -43,3 +43,9 @@ class LLMClient(ABC):
                 ``settings.llm_max_retries`` extra attempts.
         """
         raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def cost(self) -> float:
+        """Running USD this client has spent this run (the writer sums it)."""
+        raise NotImplementedError

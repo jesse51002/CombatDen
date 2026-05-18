@@ -3,18 +3,6 @@ display_name: CombatDen
 
 images:
   # Shared (tenant-wide)
-  - id: logo_primary
-    description: >-
-      The gym's primary brand logo / identity mark. Lives in the persistent
-      app top bar (GymHeader), shown roughly 100x100 and centred directly
-      above the gym name and the info bar (which holds the rank, streak,
-      points and QR items). It is present on every main tab — Home,
-      Profile, Rewards, Videos — and at the top of every post-class
-      celebration screen. It is the first thing the user sees on app open
-      and is on screen almost constantly. Purpose: pure brand anchor and
-      gym identity; it is never tied to an event or a reward. Role is calm
-      and permanent, not celebratory — it must read instantly and stay
-      legible at small size as a single coherent logo mark.
   - id: rank_belt
     description: >-
       Depicts the user's CURRENT rank as a martial-arts / championship
@@ -59,6 +47,8 @@ images:
       running total caption pinned below. It is the payoff at the end of
       the points animation. The emotion is rewarding and high-energy — the
       climax of the points reveal, a burst of earned value.
+    depends_on:
+      - single_point
   - id: next_rank_belt_image
     description: >-
       A preview of the NEXT rank's belt — the tier the user is working
@@ -71,6 +61,8 @@ images:
       celebratory. It must read clearly inside a small circular badge
       without fighting the progress ring, and should clearly feel like a
       higher, aspirational belt tier the user has not reached yet.
+    depends_on:
+      - rank_belt
   - id: giftbox
     description: >-
       A closed gift box — the visual metaphor for unlocking rewards and the
@@ -81,6 +73,8 @@ images:
       long — it exists to be opened. The moment is anticipation releasing
       into payoff: "you've earned something, claim it". Playful, kinetic,
       high-energy; it must read instantly as a wrapped gift even mid-motion.
+    depends_on:
+      - single_point
   - id: single_point
     description: >-
       The app's signature single point-star particle — the atomic unit of

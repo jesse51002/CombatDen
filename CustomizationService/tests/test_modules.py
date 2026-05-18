@@ -1,4 +1,4 @@
-"""Light, mocked tests for the two customization modules (no network)."""
+"""Light, mocked tests for the colour + image nodes (no network)."""
 
 from __future__ import annotations
 
@@ -16,27 +16,33 @@ from schema import (
     ColorRole,
     Complexity,
     Customization,
+    DependencyUsage,
+    ImageOutput,
 )
 from src.core.errors import ProviderError
 from src.core.run_context import RunContext
 from src.core.util import load_yaml
+from src.modules.base import DependencyKind
 from src.modules.colors.color_models import (
     ColorPalette,
     build_color_response_model,
 )
-from src.modules.colors.color_service import ColorGenService
+from src.modules.colors.color_node import ColorNode
 from src.modules.images.background_service import (
     BG_MAX_ATTEMPTS,
     BackgroundService,
 )
 from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_models import (
+    DependencyUsageEntry,
     ImageComplexity,
     ImagePrompt,
     StyleCheck,
 )
-from src.modules.images.image_service import ImageGenService
+from src.modules.images.image_node import ImageNode
 from src.modules.images.style_service import StyleAdherenceService
+
+_COLOR = DependencyKind.COLOR.value
 
 # Committed fixture tree — never the live ``apps/`` production runs.
 _FIXTURE_APP = Path(__file__).resolve().parent / "data" / "apps" / "demo"
@@ -91,11 +97,13 @@ class StubLLM:
         text: str = "a generated prompt",
         complexity: Complexity = Complexity.LOW,
         style: StyleCheck | None = None,
+        dep_usage: list[DependencyUsageEntry] | None = None,
     ) -> None:
         self._structured = structured
         self._structured_seq = structured_seq
         self._text = text
         self._complexity = complexity
+        self._dep_usage = dep_usage
         # Default: adherent, so the style check is a no-op unless a test
         # opts into an off-style verdict.
         self._style = style or StyleCheck(
@@ -113,7 +121,10 @@ class StubLLM:
             {"messages": messages, "schema": schema, **kw}
         )
         if schema is ImagePrompt:
-            result: Any = ImagePrompt(prompt=self._text)
+            result: Any = ImagePrompt(
+                prompt=self._text,
+                dependency_usage=self._dep_usage or [],
+            )
         elif schema is ImageComplexity:
             result = ImageComplexity(complexity=self._complexity)
         elif schema is StyleCheck:
@@ -137,6 +148,7 @@ class StubImageGen:
     def __init__(self) -> None:
         self.calls: list[tuple[str, Path]] = []
         self.edits: list[tuple[Path, str, Path]] = []
+        self.composes: list[tuple[str, list[Path], Path]] = []
 
     async def generate(
         self, prompt: str, dest: Path, *, model: str, quality: str
@@ -154,6 +166,20 @@ class StubImageGen:
         dest.write_bytes(b"edited-image-bytes")
         return str(dest.resolve())
 
+    async def compose(
+        self,
+        prompt: str,
+        srcs: list[Path],
+        dest: Path,
+        *,
+        model: str,
+        quality: str,
+    ) -> Any:
+        self.composes.append((prompt, list(srcs), dest))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"composed-image-bytes")
+        return str(dest.resolve())
+
 
 class StubBgRemover:
     """Stub BackgroundRemover: writes a real (mostly transparent) RGBA
@@ -168,33 +194,46 @@ class StubBgRemover:
         Image.new("RGBA", (16, 16), (0, 0, 0, 0)).save(dst)
 
 
-def _image_service(
+def _image_node(
     ctx: RunContext,
     llm: Any,
+    slot: Any,
     *,
     image_gen: Any = None,
     remover: Any = None,
-) -> ImageGenService:
-    """Build an ImageGenService with real classifier + style + background
-    sub-services wired to the same stub llm (mirrors the registry). The
-    image-gen stub serves both generate and edit (one contract)."""
-    return ImageGenService(
+    deps: frozenset[str] = frozenset({_COLOR}),
+) -> ImageNode:
+    """Build one per-slot ImageNode with real classifier + style +
+    background sub-services wired to the same stub llm (mirrors the
+    registry). The image-gen stub serves generate, edit and compose (one
+    contract). The reference/direct verdict is no longer a sub-service —
+    the stub llm answers it inline on the ImagePrompt call. ``deps`` is
+    the slot's dependency-key set (default: colour only); pass the
+    declared ``depends_on`` ids too for a slot that builds on others."""
+    return ImageNode(
         ctx,
+        slot=slot,
+        deps=deps,
         llm=llm,
         image_gen=image_gen if image_gen is not None else StubImageGen(),
-        classifier=ComplexityClassifier(ctx, llm=llm),
-        style=StyleAdherenceService(ctx, llm=llm),
+        classifier=ComplexityClassifier(llm=llm),
+        style=StyleAdherenceService(llm=llm),
         background=BackgroundService(
-            ctx,
             bg_remover=remover if remover is not None else StubBgRemover(),
         ),
     )
 
 
-# --- ColorGenService -------------------------------------------------------
+def _resolve(node: ImageNode, palette: ColorPalette) -> Any:
+    """Inject the colour dependency the way the executor does, then run."""
+    node.inputs = {_COLOR: palette}
+    return asyncio.run(node.run())
 
 
-def test_color_service_run_returns_full_palette(tmp_path: Path) -> None:
+# --- ColorNode -------------------------------------------------------------
+
+
+def test_color_node_run_returns_full_palette(tmp_path: Path) -> None:
     ctx = _run_ctx(tmp_path)
     slot_ids = [slot.id for slot in ctx.app.colors]
     roles = {slot.id: slot.role for slot in ctx.app.colors}
@@ -216,15 +255,18 @@ def test_color_service_run_returns_full_palette(tmp_path: Path) -> None:
         }
     )
     llm = StubLLM(structured=resolved)
-    mod = ColorGenService(ctx, llm=llm)
+    node = ColorNode(ctx, llm=llm)
 
-    result = asyncio.run(mod.run())
+    result = asyncio.run(node.run())
 
     # run() flattens the closed model back into a ColorPalette map.
     assert isinstance(result, ColorPalette)
     assert set(result.colors) == set(slot_ids)
     # Exactly one structured call.
     assert len(llm.structured_calls) == 1
+    # The colour node is the DAG root: keyed "color", no dependencies.
+    assert node.key == _COLOR
+    assert node.deps == frozenset()
 
 
 def test_color_response_model_rejects_missing_slot() -> None:
@@ -249,11 +291,11 @@ def test_color_response_model_rejects_missing_slot() -> None:
 
 def test_color_prompt_is_data_driven(tmp_path: Path) -> None:
     ctx = _run_ctx(tmp_path)
-    mod = ColorGenService(ctx, llm=StubLLM())
+    node = ColorNode(ctx, llm=StubLLM())
 
-    from src.modules.colors.color_service import COLOR_PROMPT_PATH
+    from src.modules.colors.color_node import COLOR_PROMPT_PATH
 
-    prompt = mod._build_prompt()
+    prompt = node._build_prompt()
     template = COLOR_PROMPT_PATH.read_text(encoding="utf-8")
 
     # The .md template is app-agnostic: slots are deferred to a placeholder,
@@ -272,11 +314,12 @@ def test_color_prompt_is_data_driven(tmp_path: Path) -> None:
         assert f"- {slot.id}: {slot.description}" in prompt
 
 
-# --- ImageGenService -------------------------------------------------------
+# --- ImageNode -------------------------------------------------------------
 
 
 def test_image_resolve_slot_falls_back_to_raw_when_no_cutout(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Only when the remover never produced *any* cutout do we ship the
     un-removed raw image (autocrop skipped)."""
@@ -295,17 +338,16 @@ def test_image_resolve_slot_falls_back_to_raw_when_no_cutout(
     llm = StubLLM(text="prompt for the subject")
     gen = StubImageGen()
     remover = FailingBgRemover()
-    mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
+    node = _image_node(ctx, llm, slot, image_gen=gen, remover=remover)
 
     autocrop_calls: list[Any] = []
-    import src.modules.images.background_service as background_service
 
-    def _spy_autocrop(src: Path, dst: Path) -> None:
+    async def _spy_autocrop(self: Any, src: Path, dst: Path) -> None:
         autocrop_calls.append((src, dst))
 
-    background_service.gridtrim_autocrop = _spy_autocrop
+    monkeypatch.setattr(BackgroundService, "_autocrop", _spy_autocrop)
 
-    out = asyncio.run(mod.run(slot, palette))
+    out = _resolve(node, palette)
 
     expected_path = str(ctx.image_path(slot.id))
     assert str(out.path) == expected_path
@@ -316,7 +358,10 @@ def test_image_resolve_slot_falls_back_to_raw_when_no_cutout(
     assert len(remover.calls) == BG_MAX_ATTEMPTS
 
 
-def test_image_resolve_slot_happy_path_autocrops(tmp_path: Path) -> None:
+def test_image_resolve_slot_happy_path_autocrops(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     ctx = _run_ctx(tmp_path)
     palette = _full_palette(ctx)
     slot = ctx.app.images[0]
@@ -324,18 +369,17 @@ def test_image_resolve_slot_happy_path_autocrops(tmp_path: Path) -> None:
     llm = StubLLM()
     gen = StubImageGen()
     remover = StubBgRemover()
-    mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
+    node = _image_node(ctx, llm, slot, image_gen=gen, remover=remover)
 
     autocrop_calls: list[tuple[Path, Path]] = []
-    import src.modules.images.background_service as background_service
 
-    def _spy_autocrop(src: Path, dst: Path) -> None:
+    async def _spy_autocrop(self: Any, src: Path, dst: Path) -> None:
         autocrop_calls.append((src, dst))
         Path(dst).write_bytes(b"cropped")
 
-    background_service.gridtrim_autocrop = _spy_autocrop
+    monkeypatch.setattr(BackgroundService, "_autocrop", _spy_autocrop)
 
-    out = asyncio.run(mod.run(slot, palette))
+    out = _resolve(node, palette)
 
     expected_path = str(ctx.image_path(slot.id))
     assert str(out.path) == expected_path
@@ -344,6 +388,161 @@ def test_image_resolve_slot_happy_path_autocrops(tmp_path: Path) -> None:
     assert str(autocrop_calls[0][1]) == expected_path
     assert Path(expected_path).read_bytes() == b"cropped"
     assert len(remover.calls) == 1
+
+
+# --- BackgroundService crop passes -----------------------------------------
+#
+# The two-pass crop (alpha bbox -> grid halo trim -> alpha bbox) lives on
+# BackgroundService. These exercise the deterministic crop directly via a
+# throwaway service instance (the remover is unused on this path).
+
+
+def _bg() -> BackgroundService:
+    return BackgroundService(bg_remover=StubBgRemover())
+
+
+def test_grid_trim_crops_tight_to_subject(tmp_path: Path) -> None:
+    src = tmp_path / "src.png"
+    dst = tmp_path / "dst.png"
+
+    canvas = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    # Opaque rectangle off-centre: x in [10, 30), y in [60, 80).
+    for x in range(10, 30):
+        for y in range(60, 80):
+            canvas.putpixel((x, y), (255, 0, 0, 255))
+    canvas.save(src)
+
+    _bg()._grid_trim_crop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (20, 20)
+    assert out.convert("RGBA").getbbox() == (0, 0, 20, 20)
+
+
+def test_grid_trim_trims_halo_tighter_than_alpha_bbox(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src.png"
+    dst = tmp_path / "dst.png"
+
+    canvas = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
+    # Faint low-alpha smudge filling a far corner cell (pure halo).
+    for x in range(32):
+        for y in range(32):
+            canvas.putpixel((x, y), (0, 0, 0, 8))
+    # Opaque subject, one whole 32px cell, away from the smudge.
+    for x in range(64, 96):
+        for y in range(64, 96):
+            canvas.putpixel((x, y), (255, 0, 0, 255))
+    canvas.save(src)
+
+    # The plain alpha bbox is held loose by the faint corner smudge.
+    loose = Image.open(src).convert("RGBA").getbbox()
+    assert loose == (0, 0, 96, 96)
+
+    _bg()._grid_trim_crop(src, dst)
+
+    out = Image.open(dst)
+    # The grid pass drops the all-halo border cells -> tight to subject.
+    assert out.size == (32, 32)
+    assert out.convert("RGBA").getbbox() == (0, 0, 32, 32)
+    lw, lh = loose[2] - loose[0], loose[3] - loose[1]
+    assert out.size[0] * out.size[1] < lw * lh
+
+
+def test_grid_trim_opaque_is_noop(tmp_path: Path) -> None:
+    src = tmp_path / "opaque.png"
+    dst = tmp_path / "opaque_out.png"
+    Image.new("RGBA", (64, 64), (10, 20, 30, 255)).save(src)
+
+    _bg()._grid_trim_crop(src, dst)
+
+    out = Image.open(dst)
+    # No halo -> no red cells -> nothing trimmed, same extent.
+    assert out.size == (64, 64)
+    assert out.convert("RGBA").getbbox() == (0, 0, 64, 64)
+
+
+def test_grid_trim_fully_transparent_copied(tmp_path: Path) -> None:
+    src = tmp_path / "blank.png"
+    dst = tmp_path / "blank_out.png"
+    Image.new("RGBA", (20, 30), (0, 0, 0, 0)).save(src)
+
+    _bg()._grid_trim_crop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (20, 30)
+    assert out.convert("RGBA").getbbox() is None
+
+
+def test_grid_trim_all_red_keeps_bbox_unchanged(tmp_path: Path) -> None:
+    src = tmp_path / "faint.png"
+    dst = tmp_path / "faint_out.png"
+    # Uniform faint alpha: getbbox() is non-empty (alpha>0) but every grid
+    # cell is pure halo -> keep the alpha-bbox crop, never a zero-size image.
+    Image.new("RGBA", (50, 50), (0, 0, 0, 8)).save(src)
+
+    _bg()._grid_trim_crop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (50, 50)
+
+
+def test_grid_trim_partial_edge_cells(tmp_path: Path) -> None:
+    src = tmp_path / "partial.png"
+    dst = tmp_path / "partial_out.png"
+
+    # 100 is not divisible by the 32px cell -> the last column/row is a
+    # 4px partial cell. The subject runs to the very edge through it.
+    canvas = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    # Faint smudge in the opposite corner cell, holding the alpha bbox
+    # loose so the grid pass has a border to trim.
+    for x in range(32):
+        for y in range(32):
+            canvas.putpixel((x, y), (0, 0, 0, 8))
+    # Opaque subject filling the bottom-right, ending inside the partial
+    # edge cells at x/y == 100.
+    for x in range(40, 100):
+        for y in range(40, 100):
+            canvas.putpixel((x, y), (0, 200, 0, 255))
+    canvas.save(src)
+
+    _bg()._grid_trim_crop(src, dst)
+
+    out = Image.open(dst)
+    # Tight to the 60x60 subject: proves the surviving box uses the
+    # clamped partial-cell extent (==100), not col*GRID_CELL_PX (==96).
+    assert out.size == (60, 60)
+    assert out.convert("RGBA").getbbox() == (0, 0, 60, 60)
+
+
+def test_grid_trim_keeps_interior_hole(tmp_path: Path) -> None:
+    src = tmp_path / "hole.png"
+    dst = tmp_path / "hole_out.png"
+    canvas = Image.new("RGBA", (96, 96), (10, 20, 30, 255))
+    # A faint interior cell, fully surrounded by opaque subject. A
+    # rectangular crop cannot carve it out -> the extent is preserved.
+    for x in range(32, 64):
+        for y in range(32, 64):
+            canvas.putpixel((x, y), (0, 0, 0, 8))
+    canvas.save(src)
+
+    _bg()._grid_trim_crop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (96, 96)
+
+
+def test_grid_trim_smaller_than_one_cell(tmp_path: Path) -> None:
+    src = tmp_path / "tiny.png"
+    dst = tmp_path / "tiny_out.png"
+    Image.new("RGBA", (16, 16), (200, 50, 50, 255)).save(src)
+
+    _bg()._grid_trim_crop(src, dst)
+
+    out = Image.open(dst)
+    assert out.size == (16, 16)
+    assert out.convert("RGBA").getbbox() == (0, 0, 16, 16)
 
 
 def test_image_prompt_is_app_agnostic_and_theme_fixed(
@@ -355,7 +554,7 @@ def test_image_prompt_is_app_agnostic_and_theme_fixed(
     palette = _full_palette(ctx)
     slot = ctx.app.images[0]
 
-    from src.modules.images.image_service import (
+    from src.modules.images.image_node import (
         IMAGE_PROMPT_PATH,
         THEME_BG_DARK,
         THEME_BG_LIGHT,
@@ -375,8 +574,8 @@ def test_image_prompt_is_app_agnostic_and_theme_fixed(
     def _sent_prompt(dark_mode: bool) -> str:
         ctx.cust.colors_direction.dark_mode = dark_mode
         llm = StubLLM(text="stub")
-        mod = _image_service(ctx, llm)
-        asyncio.run(mod._build_prompt(slot, palette))
+        node = _image_node(ctx, llm, slot)
+        asyncio.run(node._build_prompt(palette, {}))
         return llm.structured_calls[0]["messages"][0]["content"]
 
     dark = _sent_prompt(True)
@@ -404,9 +603,9 @@ def test_image_adherent_skips_edit(tmp_path: Path) -> None:
     )
     gen = StubImageGen()
     remover = StubBgRemover()
-    mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
+    node = _image_node(ctx, llm, slot, image_gen=gen, remover=remover)
 
-    out = asyncio.run(mod.run(slot, palette))
+    out = _resolve(node, palette)
 
     # No corrective edit; the raw image is what bg-removal received.
     assert gen.edits == []
@@ -432,9 +631,9 @@ def test_image_off_style_edits_once_and_records(tmp_path: Path) -> None:
     )
     gen = StubImageGen()
     remover = StubBgRemover()
-    mod = _image_service(ctx, llm, image_gen=gen, remover=remover)
+    node = _image_node(ctx, llm, slot, image_gen=gen, remover=remover)
 
-    out = asyncio.run(mod.run(slot, palette))
+    out = _resolve(node, palette)
 
     # Exactly one edit, fed the instruction verbatim, on the raw image.
     assert len(gen.edits) == 1
@@ -448,3 +647,164 @@ def test_image_off_style_edits_once_and_records(tmp_path: Path) -> None:
     assert out.adherent is False
     assert out.edited_prompt == "make the finish forged matte gunmetal"
     assert out.edited_reason == "too generic for the prompt's stated style"
+
+
+# --- ImageNode with image dependencies (depends_on) ------------------------
+
+_DEP_CUST = {
+    "design_direction": {
+        "name": "Demo",
+        "short_desc": "short",
+        "long_desc": "long",
+    },
+    "colors_direction": {"description": "calm", "dark_mode": True},
+}
+_DEP_COLORS = [
+    {"id": "primary", "description": "primary"},
+    {"id": "background", "description": "bg", "role": "background"},
+    {"id": "text", "description": "text", "role": "text"},
+    {"id": "accent", "description": "accent"},
+]
+
+
+def _dep_ctx(tmp_path: Path) -> RunContext:
+    """A two-image app where ``derived`` declares ``depends_on: [hero]``."""
+    app = AppFormat.model_validate(
+        {
+            "id": "demo",
+            "display_name": "Demo",
+            "images": [
+                {"id": "hero", "description": "a hero"},
+                {
+                    "id": "derived",
+                    "description": "builds on hero",
+                    "depends_on": ["hero"],
+                },
+            ],
+            "colors": _DEP_COLORS,
+        }
+    )
+    cust = Customization.model_validate(_DEP_CUST)
+    return RunContext(app, cust, tmp_path)
+
+
+def _run_derived(
+    node: ImageNode, palette: ColorPalette, hero: ImageOutput
+) -> Any:
+    """Inject colour + the resolved ``hero`` dependency, then run."""
+    node.inputs = {_COLOR: palette, "hero": hero}
+    return asyncio.run(node.run())
+
+
+def test_image_dependency_reference_folds_into_prompt(
+    tmp_path: Path,
+) -> None:
+    """A REFERENCE verdict: the dependency is listed in the injected
+    block, generation stays text-to-image, and the verdict is recorded."""
+    ctx = _dep_ctx(tmp_path)
+    palette = _full_palette(ctx)
+    derived = ctx.app.images[1]
+    hero = ImageOutput(path=ctx.image_path("hero"), prompt="hero prompt")
+
+    llm = StubLLM(
+        dep_usage=[
+            DependencyUsageEntry(
+                dependency="hero", usage=DependencyUsage.REFERENCE
+            )
+        ]
+    )
+    gen = StubImageGen()
+    node = _image_node(
+        ctx, llm, derived, image_gen=gen, deps=frozenset({_COLOR, "hero"})
+    )
+
+    out = _run_derived(node, palette, hero)
+
+    sent = llm.structured_calls[0]["messages"][0]["content"]
+    assert "Related assets (visual continuity)" in sent
+    assert "hero: hero prompt" in sent
+    # Text-to-image: no DIRECT dependency to feed in.
+    assert len(gen.calls) == 1
+    assert gen.composes == []
+    assert out.dependency_usage == {"hero": DependencyUsage.REFERENCE}
+
+
+def test_image_dependency_direct_feeds_image_into_compose(
+    tmp_path: Path,
+) -> None:
+    """A DIRECT verdict: the dependency image itself is fed to ``compose``
+    (image-conditioned generation), not text-to-image, and recorded."""
+    ctx = _dep_ctx(tmp_path)
+    palette = _full_palette(ctx)
+    derived = ctx.app.images[1]
+    hero_path = Path(str(ctx.image_path("hero")))
+    hero_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (32, 32), (10, 10, 10)).save(hero_path)
+    hero = ImageOutput(path=ctx.image_path("hero"), prompt="hero prompt")
+
+    llm = StubLLM(
+        dep_usage=[
+            DependencyUsageEntry(
+                dependency="hero", usage=DependencyUsage.DIRECT
+            )
+        ]
+    )
+    gen = StubImageGen()
+    node = _image_node(
+        ctx, llm, derived, image_gen=gen, deps=frozenset({_COLOR, "hero"})
+    )
+
+    out = _run_derived(node, palette, hero)
+
+    # Image-conditioned: compose got the hero image, generate untouched.
+    assert gen.calls == []
+    assert len(gen.composes) == 1
+    _, srcs, _ = gen.composes[0]
+    assert srcs == [hero_path]
+    assert out.dependency_usage == {"hero": DependencyUsage.DIRECT}
+
+
+def test_image_no_dependency_block_absent_and_usage_none(
+    tmp_path: Path,
+) -> None:
+    """A slot with no image dependencies: nothing about dependencies
+    reaches the model and ``dependency_usage`` is ``None``."""
+    ctx = _run_ctx(tmp_path)
+    palette = _full_palette(ctx)
+    slot = ctx.app.images[0]
+
+    llm = StubLLM()
+    node = _image_node(ctx, llm, slot)
+    out = _resolve(node, palette)
+
+    sent = llm.structured_calls[0]["messages"][0]["content"]
+    assert "Related assets (visual continuity)" not in sent
+    assert "$dependency_block" not in sent
+    assert out.dependency_usage is None
+
+
+def test_image_dependency_usage_normalised(tmp_path: Path) -> None:
+    """An undeclared id is dropped and a declared id the model skipped
+    defaults to REFERENCE — so a hallucinated DIRECT never feeds compose."""
+    ctx = _dep_ctx(tmp_path)
+    palette = _full_palette(ctx)
+    derived = ctx.app.images[1]
+    hero = ImageOutput(path=ctx.image_path("hero"), prompt="hero prompt")
+
+    llm = StubLLM(
+        dep_usage=[
+            DependencyUsageEntry(
+                dependency="ghost", usage=DependencyUsage.DIRECT
+            )
+        ]
+    )
+    gen = StubImageGen()
+    node = _image_node(
+        ctx, llm, derived, image_gen=gen, deps=frozenset({_COLOR, "hero"})
+    )
+
+    out = _run_derived(node, palette, hero)
+
+    assert out.dependency_usage == {"hero": DependencyUsage.REFERENCE}
+    assert gen.composes == []
+    assert len(gen.calls) == 1

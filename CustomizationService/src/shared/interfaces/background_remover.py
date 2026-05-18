@@ -13,3 +13,9 @@ class BackgroundRemover(ABC):
     async def remove(self, src: Path, dst: Path) -> None:
         """Read ``src``, strip its background, write the RGBA cutout to ``dst``."""
         raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def cost(self) -> float:
+        """Running USD spent this run on background removal (writer sums it)."""
+        raise NotImplementedError

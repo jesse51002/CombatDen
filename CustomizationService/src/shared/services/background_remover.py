@@ -10,11 +10,18 @@ import httpx
 from src.core.config import settings
 from src.core.errors import ProviderError
 from src.shared.interfaces.background_remover import BackgroundRemover
+from src.shared.services.cost import CostTracking
 
 logger = logging.getLogger(__name__)
 
 # PhotoRoom authenticates with this header, not a bearer token.
 API_KEY_HEADER = "x-api-key"
+
+# Flat USD per accepted PhotoRoom call — litellm cannot see PhotoRoom
+# (raw HTTP, no usage in the response), so this is the one price the
+# pipeline holds itself. Lives next to the call it prices, like the
+# model-id constants elsewhere. Update if the PhotoRoom plan changes.
+PHOTOROOM_COST_PER_CALL = 0.02
 
 # MIME type sent for the multipart upload (we always generate PNGs).
 IMAGE_MIME = "image/png"
@@ -23,8 +30,11 @@ IMAGE_MIME = "image/png"
 REQUEST_TIMEOUT_SECONDS = 120.0
 
 
-class PhotoRoomBackgroundRemover(BackgroundRemover):
-    """Concrete background remover backed by the PhotoRoom API."""
+class PhotoRoomBackgroundRemover(CostTracking, BackgroundRemover):
+    """Concrete background remover backed by the PhotoRoom API.
+
+    Accumulates a flat ``PHOTOROOM_COST_PER_CALL`` per accepted call via
+    ``CostTracking``; the writer reads ``cost`` for the run total."""
 
     async def remove(self, src: Path, dst: Path) -> None:
         """Send ``src`` to PhotoRoom, write the transparent cutout to ``dst``.
@@ -48,6 +58,9 @@ class PhotoRoomBackgroundRemover(BackgroundRemover):
                     },
                 )
                 resp.raise_for_status()
+                # A 2xx means PhotoRoom accepted and billed the call —
+                # count it even if the cutout turns out unusable later.
+                self._add_cost(PHOTOROOM_COST_PER_CALL)
                 cutout = resp.content
 
             dst.parent.mkdir(parents=True, exist_ok=True)

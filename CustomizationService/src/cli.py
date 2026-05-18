@@ -59,8 +59,8 @@ async def main(argv: list[str] | None = None) -> int:
         args.out_root,
     )
 
-    output = await Pipeline().run(run_ctx)
-    Writer().write(output, run_ctx)
+    result = await Pipeline().run(run_ctx)
+    Writer().write(result, run_ctx)
 
     logger.debug("done: %s", run_ctx.output_path())
     return 0

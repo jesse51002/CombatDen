@@ -110,7 +110,7 @@ treatment must still obey every one of them.
 
 The background is fixed and not yours to choose: the subject sits on a
 single flat, perfectly even, solid background that is exactly
-$theme_background. Nothing else is in frame — no scene, no real-world
+pure black (the app is in dark mode). Nothing else is in frame — no scene, no real-world
 setting, no props, no shadow cast onto a ground or surface, no gradient, no
 texture, no border. This holds for every treatment, including the studio
 product look: photoreal materials and lighting are welcome, an in-context
@@ -149,13 +149,75 @@ Craft rules (how good assets avoid amateur output):
   quality cue, usually none.
 
 --- Brand brief ---
-Brand name: $name
-In short: $short
-In depth: $long
+Brand name: CombatDen
+In short: Train like a pro — a premium combat-sports training and progression app for competitive fighters and serious amateurs.
+In depth: CombatDen is a premium combat-sports training and progression app for
+competitive fighters and serious amateurs across boxing, MMA, Muay
+Thai, BJJ and wrestling. The audience is disciplined and unsentimental:
+they want a tool that respects the work, not a gamified toy. The voice
+is confident, terse and earned — a coach in your corner, never hype.
+
+Visual system — the shared look every generated asset must wear:
+
+- Feel: gritty but high-end. Forged, hard-earned, championship
+  gravitas. Restraint over spectacle — quietly expensive, never flashy.
+- Medium & materials: realistic sculpted 3D — forged and brushed
+  metal, worn full-grain leather, taut canvas, dense matte rubber.
+  Tangible, weighty, faintly battle-worn. Never cartoon, never flat
+  vector, never glossy plastic.
+- Finish & light: matte surfaces with a tight, controlled specular.
+  Low-key studio lighting, one hard key with soft fill, deep shadow
+  worked into each object's own surfaces for form and depth — no
+  scene, no shadow cast onto a floor.
+- Energy by role: rewards, wins, rank-ups and celebrations land with
+  weight and forward momentum — impact, not confetti; powerful but
+  still disciplined. Persistent UI icons and indicators are stripped,
+  solid and calm — crafted but quiet, never loud.
+- Hard nos: no neon, no glow, no rainbow or playful gradients, no
+  sci-fi, no sparkles, no busy clutter, nothing cute.
+
 --- Palette ---
-$palette
+  primary: oklch(35% 0.18 15) — Oxblood Red: Deep, saturated red with the weight of dried blood—a dark, serious primary that commands attention without shouting. Used sparingly for primary CTAs, rank-ups, and the moments that truly matter in training.
+  background: oklch(18% 0.008 20) — Charcoal Black: Near-black warm charcoal with a whisper of red undertone and minimal chroma—reads as black but feels intentional and crafted, never dead or purely synthetic. The foundational canvas for the entire app.
+  text: oklch(92% 0.01 45) — Bone White: A slightly muted, warm ivory that sits comfortably above WCAG AA contrast against the charcoal background. Calm and readable for headings and body copy, with enough warmth to feel premium rather than clinical.
+  accent: oklch(58% 0.12 70) — Antique Gold: A desaturated, warm muted gold—aged trophy metal, not shiny or bright. Reserved for badges, rank highlights, and active states (nav items, tabs, timeframe pills), where it lands with earned dignity and never competes with the red.
 --- Background (fixed by app theme) ---
-$theme_background
+pure black (the app is in dark mode)
 --- Subject ---
-$subject
-$dependency_block
+A preview of the NEXT rank's belt — the tier the user is working toward, deliberately distinct from rank_belt (their current tier). Lives in the Profile screen's "Next Rank" section, inset inside a ~100x100 circular progress badge: an animated progress arc rings the badge and the image sits within it with ~22px padding, above a "Next Rank" title and an "X / Y classes to next tier" progress label. The moment is calm, between-classes browsing — motivational, not celebratory. It must read clearly inside a small circular badge without fighting the progress ring, and should clearly feel like a higher, aspirational belt tier the user has not reached yet.
+--- Related assets (visual continuity) ---
+The assets below were already generated for THIS SAME app. This image
+should look like it came from the same hand — match their medium,
+materials, finish and palette discipline so the set is coherent. Do NOT
+copy their subject, composition or wording; this is its own distinct
+subject.
+
+For EACH related asset you ALSO decide how it should inform this image
+and return that decision in the `dependency_usage` list — exactly one
+entry per asset, `dependency` set to the asset's id EXACTLY as listed,
+`usage` either `reference` or `direct`:
+
+- Pick `reference` when this image only needs to *match the style,
+  material, finish, palette, or family* of that asset — it is a
+  sibling/companion asset that should look like it came from the same
+  hand, but is its own distinct subject. The asset's description below is
+  enough to steer the prompt; the asset image itself does not need to
+  appear. Fold its look into the `prompt` text.
+
+- Pick `direct` when this image must actually *contain* that asset, or
+  something so close to it that re-generating from words alone would not
+  be faithful enough — e.g. the same object shown again, a tighter/looser
+  crop of it, the same emblem placed onto something, or a variation that
+  must preserve that exact specific artwork. The asset image itself is
+  fed to the generator, so do NOT describe that asset in `prompt`;
+  instead write `prompt` as the instruction for how the result is built
+  from / around it.
+
+When unsure, prefer `reference`: it is the cheaper, lower-risk default
+and covers the common "keep these assets visually consistent" case.
+Reserve `direct` for a genuine "this specific image must be in/under the
+result".
+
+Related assets (use these ids exactly in `dependency_usage`):
+  rank_belt: A championship belt coiled into a centred medallion, thick worn full-grain leather strap wrapping a forged antique-gold central plate embossed with a stern crest, straight-on and perfectly symmetrical, low-key studio key light raking across its own brushed metal and matte leather, oxblood-red inlay accent, flat solid pure-black background, premium sculpted 3D emblem style
+

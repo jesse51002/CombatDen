@@ -14,8 +14,6 @@ import logging
 from pathlib import Path
 from string import Template
 
-from src.core.run_context import RunContext
-from src.modules.base import CustomizationService
 from src.modules.images.image_models import StyleCheck
 from src.shared.interfaces.llm_client import LLMClient
 
@@ -30,18 +28,13 @@ PNG_DATA_URL_PREFIX = "data:image/png;base64,"
 # the model is a property of this call. Deliberately the small lite tier —
 # this is a conservative yes/no judgement, not a reasoning task. Override
 # `check(model=...)` in dev to compare models. Routes on the gemini key.
-STYLE_CHECK_MODEL = "gemini/gemini-3-flash-lite-preview"
+STYLE_CHECK_MODEL = "gemini/gemini-3.1-flash-lite-preview"
 
 
-class StyleAdherenceService(CustomizationService):
+class StyleAdherenceService:
     """The style-adherence step. ``check(image, prompt) -> StyleCheck``."""
 
-    def __init__(
-        self, run_ctx: RunContext | None = None, *, llm: LLMClient
-    ) -> None:
-        # run_ctx is unused (the call is image + prompt only); accepted so
-        # the registry constructs every service the same way.
-        super().__init__(run_ctx)
+    def __init__(self, *, llm: LLMClient) -> None:
         self._llm = llm
 
     async def check(

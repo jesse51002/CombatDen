@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
-from schema import Complexity
+from schema import Complexity, DependencyUsage
 
 
 class ImageComplexity(BaseModel):
@@ -43,8 +49,31 @@ class StyleCheck(BaseModel):
         return self
 
 
+class DependencyUsageEntry(BaseModel):
+    """One declared image dependency and how it should inform this image.
+
+    ``dependency`` is the dependency slot's id (exactly as listed in the
+    prompt); ``usage`` is the model's ``reference``/``direct`` verdict.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dependency: str
+    usage: DependencyUsage
+
+
 class ImagePrompt(BaseModel):
-    """The prompt build: just ``prompt`` flows on to the generator.
+    """The prompt build: ``prompt`` flows on to the generator, and
+    ``dependency_usage`` carries the per-dependency ``reference``/``direct``
+    verdict the same call makes while writing the prompt.
+
+    ``dependency_usage`` is an empty list when the slot declares no image
+    dependencies (the prompt is told to return an empty list, and the
+    field defaults to empty if the model omits it). It is a *list* of
+    entries, not a map: structured-output schemas honour arrays of objects
+    far more reliably than a dict-of-enum (``additionalProperties``). The
+    image node converts and validates it against the slot's declared
+    dependencies.
 
     ``rationale`` is commented out: it sat *after* ``prompt`` in the
     schema, so structured output generated it too late to sharpen the
@@ -56,6 +85,9 @@ class ImagePrompt(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt: str
+    dependency_usage: list[DependencyUsageEntry] = Field(
+        default_factory=list
+    )
 
     @field_validator("prompt")
     @classmethod

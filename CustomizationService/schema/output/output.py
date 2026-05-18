@@ -8,12 +8,17 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from schema.output.color_output import ColorOutput
 from schema.output.image_output import ImageOutput
+from schema.output.run_cost import RunCost
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class Output(BaseModel):
-    """Resolved customization for one app. One YAML document per pipeline run."""
+    """Resolved customization for one app. One YAML document per pipeline run.
+
+    ``cost`` is optional, like ``ImageOutput.complexity``: every fresh run
+    sets it, but older or externally-produced ``output.yaml`` files
+    predate the field and must still validate (defaults to ``None``)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -21,6 +26,7 @@ class Output(BaseModel):
     display_name: str
     images: dict[str, ImageOutput]
     colors: dict[str, ColorOutput]
+    cost: RunCost | None = None
 
     @field_validator("app")
     @classmethod

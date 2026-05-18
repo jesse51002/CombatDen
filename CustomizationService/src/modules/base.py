@@ -1,24 +1,52 @@
-"""CustomizationService — the shared parent of every customization module."""
+"""Executor graph primitives: ``DependencyKind`` and the ``Node`` base.
+
+Sub-services (the small atomic calls a node composes — complexity, style,
+background) have no shared base: each takes only what it uses. Graph
+nodes extend ``Node``.
+"""
 
 from __future__ import annotations
 
-from abc import ABC
+import enum
+from abc import ABC, abstractmethod
+
+from pydantic import BaseModel
 
 from src.core.run_context import RunContext
 
 
-class CustomizationService(ABC):
-    """A customization module (colors, images, ...): shared run-context
-    plumbing only.
+class DependencyKind(str, enum.Enum):
+    """Executor-owned, frozen dependency keys.
 
-    Every module's entrypoint is ``run`` and does the smallest atomic unit
-    of work — colours resolve the whole palette (``run()``); images resolve
-    a single image (``run(slot, palette)``). The executor owns iteration
-    over slots, so modules never batch or manage concurrency themselves.
+    Never appears in any YAML / ``Output`` / schema: the executor injects
+    ``COLOR`` onto every image node so the engine treats the colour root
+    like any other dependency. New executor-defined dependency kinds (never
+    user slot ids) go here.
     """
 
-    def __init__(self, run_ctx: RunContext | None = None) -> None:
-        # Optional only so a module can be built for a sub-task that needs
-        # no run context (e.g. ImageGenService for cutout validation
-        # alone); every ``run`` path still requires it.
+    COLOR = "color"
+
+
+class Node(ABC):
+    """A graph node: a customization unit the executor schedules.
+
+    ``key`` and ``deps`` are set at construction; the executor copies the
+    resolved outputs of this node's dependencies into ``inputs`` just
+    before calling ``run()`` (each node instance runs exactly once per
+    pipeline run, so the pre-run mutation is safe). ``run()`` takes no
+    positional parameters and returns exactly one Pydantic model — the
+    engine stays domain-blind.
+    """
+
+    def __init__(
+        self, run_ctx: RunContext | None, *, key: str, deps: frozenset[str]
+    ) -> None:
         self._run_ctx = run_ctx
+        self.key = key
+        self.deps = deps
+        self.inputs: dict[str, BaseModel] = {}
+
+    @abstractmethod
+    async def run(self) -> BaseModel:
+        """Resolve this node; return its single typed output model."""
+        raise NotImplementedError

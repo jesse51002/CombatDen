@@ -11,6 +11,13 @@ from schema.slots import ColorSlot, ImageSlot
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
+# Image slot ids that collide with an executor-injected dependency key are
+# rejected: a node's resolved-input dict is keyed by these, so an image
+# named "color" would shadow the palette. Source of truth for the values
+# is ``src.modules.base.DependencyKind`` (kept local so schema/ imports no
+# src/ — same reason ColorRole lives in schema/).
+_RESERVED_IMAGE_IDS = frozenset({"color"})
+
 
 class AppFormat(BaseModel):
     """Slot inventory for one app. One YAML document per app."""
@@ -50,6 +57,36 @@ class AppFormat(BaseModel):
         if len(image_ids) != len(set(image_ids)):
             dupes = sorted({i for i in image_ids if image_ids.count(i) > 1})
             raise ValueError(f"duplicate image slot ids: {dupes}")
+
+        reserved = sorted(set(image_ids) & _RESERVED_IMAGE_IDS)
+        if reserved:
+            raise ValueError(
+                f"image slot ids {reserved} are reserved executor "
+                "dependency keys (see src.modules.base.DependencyKind)"
+            )
+
+        # depends_on cross-references: every id must be a declared image
+        # slot, no self-dependency, no dupes within one slot's list. Cycle
+        # detection is the executor graph's job (it owns the edge set).
+        image_id_set = set(image_ids)
+        for s in self.images:
+            if s.id in s.depends_on:
+                raise ValueError(
+                    f"image slot {s.id!r} cannot depend on itself"
+                )
+            if len(s.depends_on) != len(set(s.depends_on)):
+                d = sorted(
+                    {i for i in s.depends_on if s.depends_on.count(i) > 1}
+                )
+                raise ValueError(
+                    f"image slot {s.id!r} has duplicate depends_on ids: {d}"
+                )
+            unknown = sorted(set(s.depends_on) - image_id_set)
+            if unknown:
+                raise ValueError(
+                    f"image slot {s.id!r} depends_on unknown image ids: "
+                    f"{unknown}"
+                )
 
         color_ids = [s.id for s in self.colors]
         if len(color_ids) != len(set(color_ids)):

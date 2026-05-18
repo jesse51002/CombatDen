@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from schema.color_role import ColorRole
 
@@ -49,4 +49,15 @@ class ColorSlot(SlotBase):
 
 
 class ImageSlot(SlotBase):
-    """A named image the pipeline will generate and write to disk."""
+    """A named image the pipeline will generate and write to disk.
+
+    ``depends_on`` lists other image slot ids whose resolved outputs this
+    image builds on (visual continuity / one image feeding another). The
+    colour palette is always an implicit dependency and is never listed
+    here. Empty by default, so existing app.yaml files validate unchanged.
+    Cross-reference checks (ids exist, no self-dep, no dupes, not the
+    reserved key) live on ``AppFormat``; cycle detection lives on the
+    executor graph — a slot in isolation cannot see its siblings.
+    """
+
+    depends_on: list[str] = Field(default_factory=list)
