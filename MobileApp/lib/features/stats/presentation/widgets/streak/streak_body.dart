@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/app_slots.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/streak/streak_week_strip.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
+import 'package:mobile_app/shared/widgets/branded_image.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 
 // Per-screen layout/timing math, file-scoped per CLAUDE.md's _k carve-out.
@@ -134,7 +136,7 @@ class _LottieIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = DesignConstants.of(context).primaryColor;
+    final brand = DesignConstants.primaryColor;
     return SizedBox(
       width: _kLottieSize,
       height: _kLottieSize,
@@ -177,8 +179,9 @@ class _IconHero extends StatelessWidget {
           opacity: opacity,
           child: Transform.scale(
             scale: scale,
-            child: BrandImage.asset(
-              'streak_icon.png',
+            child: BrandedImage(
+              slot: CombatDenSlots.streakIcon,
+              fallback: ApiImage.asset('streak_icon.png'),
               width: _kBoltSize,
               height: _kBoltSize,
               fit: BoxFit.contain,

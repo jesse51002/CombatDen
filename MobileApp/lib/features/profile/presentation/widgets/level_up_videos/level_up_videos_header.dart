@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 
 /// Section header with a title on the left and an inline "view all" link
 /// on the right.

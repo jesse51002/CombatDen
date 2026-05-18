@@ -1,4 +1,3 @@
-import 'package:mobile_app/core/branding/brand.dart';
 
 /// Hardcoded post-class celebration data. Visual prototype only —
 /// every value here is shown verbatim on a stat card.
@@ -175,16 +174,5 @@ const mockRankStats = MockRankStats(
   classesRequired: 50,
 );
 
-const mockRankStatsBjj = MockRankStats(
-  rankTitle: 'Blue Belt',
-  rankSubtitle: 'Stripe II',
-  beltAsset: 'stat_rank_belt.png',
-  nextTierLabel: 'Blue Belt Stripe III',
-  classesAttended: 28,
-  classesRequired: 50,
-);
-
-MockRankStats mockRankStatsFor(Brand brand) => switch (brand) {
-  Brand.combatDen => mockRankStats,
-  Brand.combatDenBjj => mockRankStatsBjj,
-};
+// Per-tenant variation now comes from the customization engine,
+// not a compile-time Brand enum. `mockRankStats` is canonical.

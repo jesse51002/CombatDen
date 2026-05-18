@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 
 /// Single date pill rendered inside [DateRow]. Bottom-bordered when
 /// selected; tappable.
@@ -17,7 +17,7 @@ class DateTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = DesignConstants.of(context).primaryColor;
+    final primary = DesignConstants.primaryColor;
     final color = isSelected ? primary : DesignConstants.text2nd;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

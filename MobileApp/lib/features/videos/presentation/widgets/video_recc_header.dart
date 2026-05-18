@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_close_button.dart';
 
 /// Top-of-screen header for [VideoReccScreen] — a centered title with

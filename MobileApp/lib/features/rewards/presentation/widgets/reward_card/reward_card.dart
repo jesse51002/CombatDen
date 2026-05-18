@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
 // Reserve two lines of h2 (16px font, ~1.3 line height) so all cards have
@@ -105,7 +105,10 @@ class RewardImageHero extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          BrandImage.rewardAsset(imageAsset, fit: BoxFit.cover),
+          Image(
+            image: ApiImage.rewardAsset(imageAsset),
+            fit: BoxFit.cover,
+          ),
           Positioned(
             top: DesignConstants.spacingMedium,
             right: DesignConstants.spacingMedium,
@@ -128,7 +131,7 @@ class RewardPriceTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = DesignConstants.of(context).primaryColor;
+    final brand = DesignConstants.primaryColor;
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: DesignConstants.spacingMedium,
@@ -159,7 +162,7 @@ class RewardPointsCost extends StatelessWidget {
     return Text(
       '${formatRewardPoints(pointsCost)} pts',
       style: DesignConstants.h2.copyWith(
-        color: DesignConstants.of(context).primaryColor,
+        color: DesignConstants.primaryColor,
       ),
       textAlign: TextAlign.center,
     );

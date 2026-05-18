@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/rewards/data/mock_my_rewards.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_card.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_redeem_dialog.dart';

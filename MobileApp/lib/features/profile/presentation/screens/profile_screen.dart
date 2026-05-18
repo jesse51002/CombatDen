@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/branding/brand.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/profile/data/mock_profile.dart';
 import 'package:mobile_app/features/profile/presentation/widgets/level_up_videos/level_up_videos_section.dart';
@@ -21,9 +20,8 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = BrandScope.of(context);
-    final profile = mockProfileFor(brand);
-    final gym = mockGymFor(brand);
+    final profile = mockProfile;
+    final gym = mockGym;
     return AppScreenScaffold(
       horizontalPadding: AppScreenHorizontalPadding.none,
       bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.rank),

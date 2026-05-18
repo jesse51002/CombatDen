@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/videos/data/mock_videos.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
 
 /// Compact video card used inside the horizontally-scrolling sections
 /// ("Your Next Watch", "Level up your skills", etc.).
@@ -34,8 +34,8 @@ class VideoCarouselCard extends StatelessWidget {
             children: [
               SizedBox(
                 height: _kThumbHeight,
-                child: BrandImage.videoAsset(
-                  video.thumbnailAsset,
+                child: Image(
+                  image: ApiImage.videoAsset(video.thumbnailAsset),
                   fit: BoxFit.cover,
                 ),
               ),
@@ -67,8 +67,8 @@ class _Info extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         ClipOval(
-          child: BrandImage.videoAsset(
-            video.creatorPfpAsset,
+          child: Image(
+            image: ApiImage.videoAsset(video.creatorPfpAsset),
             width: VideoCarouselCard._kPfpSize,
             height: VideoCarouselCard._kPfpSize,
             fit: BoxFit.cover,

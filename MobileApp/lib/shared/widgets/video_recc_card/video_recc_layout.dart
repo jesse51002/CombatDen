@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/videos/data/mock_videos.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_recc_header.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';

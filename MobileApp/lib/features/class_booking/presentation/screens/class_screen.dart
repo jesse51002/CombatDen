@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/branding/brand.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/core/navigation/app_routes.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_details_section.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_image_banner.dart';
@@ -27,7 +26,7 @@ class ClassScreen extends StatelessWidget {
     final args = ModalRoute.of(context)?.settings.arguments;
     final classData = args is MockClass ? args : mockMuayThaiDetail.classData;
     final detail = detailFor(classData);
-    final gym = mockGymFor(BrandScope.of(context));
+    final gym = mockGym;
 
     return AppScreenScaffold(
       horizontalPadding: AppScreenHorizontalPadding.none,

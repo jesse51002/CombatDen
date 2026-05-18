@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/class_list_item.dart';
 

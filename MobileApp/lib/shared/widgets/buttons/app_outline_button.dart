@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 
 /// Outlined pill-style button. Defaults to a fully-rounded pill with
 /// `text` border at `buttonBorder` weight.

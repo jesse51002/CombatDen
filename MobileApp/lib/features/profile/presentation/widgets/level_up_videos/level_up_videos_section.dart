@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/profile/data/mock_profile.dart';
 import 'package:mobile_app/features/profile/presentation/widgets/level_up_videos/level_up_videos_header.dart';
 import 'package:mobile_app/features/profile/presentation/widgets/level_up_videos/video_card.dart';

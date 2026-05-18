@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/profile/presentation/widgets/next_rank/next_rank_badge.dart';
 
 /// "Next Rank: Blue Stripe III (45% left)" label with a circular

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';

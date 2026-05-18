@@ -101,8 +101,9 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 - **Image dimensions ARE allowed inline.** `Image.asset(width:, height:)`, asset-bound `SizedBox` constraints, and layout `aspectRatio:` are per-asset Figma values — they're not fungible design tokens, and there is no `imageSize*` catalog. Type the literal pixel value (or hoist it to a private `_kFoo` const at the top of the file when reused). Same for one-off `Positioned(left:/top:/...)` math when laying out an image overlay.
 - **`_kFoo` private file-scoped constants are also allowed for scroll-position math, sliver / pinned-header heights, and pure layout arithmetic that has no `DesignConstants` equivalent.** Examples: `_kTopbarHeight = 268`, `_kDateRowHeight = 50`, `_kCardWidth = 258`. The carve-out is for *layout math that is intrinsically per-screen and not a fungible design token*. If the same number appears across multiple screens or controls, it's not a `_k` candidate — escalate to add a `DesignConstants` token instead.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/padding/radius/border/divider/icon-size, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
-- **`design_constants.dart` is IMMUTABLE.** Do not add, remove, rename, or change any value in it. If a needed token doesn't exist, use the closest existing constant or stop and ask. **NEVER create new design constants without explicit permission.**
-- This file was copied verbatim from `../FlutterCRM/lib/core/constants/design_constants.dart`. Keep the two files byte-for-byte identical until they are extracted into a shared package. If a token is added in one repo, mirror it to the other in the same change.
+- **`design_constants.dart` is runtime-driven, not immutable.** The brand colours (`primaryColor`, `backgroundColor`, `text`, `accent`) are static getters that resolve live from the loaded tenant customization via `BrandColor.color(slot, fallback: <const CombatDen default>)`. Derived shades (`primaryColor50/25/10`, `darkPrimary`, `text2nd/3rd`, `card`, `popup`, `divider`) are getters off those bases. Status/semantic colours (`goodGreen`, `okYellow`, `badRed`, `hyperlink`, the `*Dark` variants) stay hardcoded and are NOT brandable. The const fallback is the CombatDen palette, used verbatim when no customization is loaded. Do not hand-edit token values or the `BrandColor` wiring, and do not add/rename tokens without explicit permission.
+- The customization **engine** (`lib/customization/`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/customization/app_slots.dart` (`CombatDenSlots`) is missing. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is no longer byte-identical with FlutterCRM, which was reverted; this app is the customization host.)
+- Images: the `BrandImage` widget is URL-first — a bundled-asset filename that maps to a customization slot renders the fetched image (disk-cached via `cached_network_image`) and falls back to the bundled asset otherwise. Call sites are unchanged.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
 **Icons: Use Material Symbols**
@@ -279,7 +280,7 @@ lib/
 ├── main.dart
 ├── core/
 │   ├── constants/
-│   │   └── design_constants.dart   # IMMUTABLE — copied from FlutterCRM
+│   │   └── design_constants.dart   # runtime-driven via BrandColor (customization engine)
 │   └── navigation/
 │       └── app_routes.dart         # named-route constants + builder map
 ├── features/

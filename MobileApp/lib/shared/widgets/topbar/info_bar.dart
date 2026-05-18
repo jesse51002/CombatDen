@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/core/navigation/app_routes.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/core/app_slots.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
+import 'package:mobile_app/shared/widgets/branded_image.dart';
 
 class InfoBar extends StatelessWidget {
   const InfoBar({
@@ -32,6 +34,7 @@ class InfoBar extends StatelessWidget {
             onTap: () =>
                 Navigator.of(context).pushNamed(AppRoutes.profile),
             child: _IconValueItem(
+              slot: CombatDenSlots.streakIcon,
               asset: 'streak_icon.png',
               value: '$streakDays',
               assetWidth: 22,
@@ -44,6 +47,7 @@ class InfoBar extends StatelessWidget {
             onTap: () =>
                 Navigator.of(context).pushNamed(AppRoutes.pointsStore),
             child: _IconValueItem(
+              slot: CombatDenSlots.singlePoint,
               asset: 'single_point.png',
               value: pointsLabel,
               assetWidth: 22,
@@ -82,7 +86,13 @@ class _RankItem extends StatelessWidget {
     return SizedBox(
       height: 30,
       child: Center(
-        child: BrandImage.rankAsset(asset, width: 39, height: 24, fit: BoxFit.contain),
+        child: BrandedImage(
+          slot: CombatDenSlots.rankBelt,
+          fallback: ApiImage.rankAsset(asset),
+          width: 39,
+          height: 24,
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }
@@ -90,12 +100,14 @@ class _RankItem extends StatelessWidget {
 
 class _IconValueItem extends StatelessWidget {
   const _IconValueItem({
+    required this.slot,
     required this.asset,
     required this.value,
     required this.assetWidth,
     required this.assetHeight,
   });
 
+  final String slot;
   final String asset;
   final String value;
   final double assetWidth;
@@ -112,8 +124,9 @@ class _IconValueItem extends StatelessWidget {
         spacing: DesignConstants.spacingSmall,
         children: [
           Text(value, style: DesignConstants.p),
-          BrandImage.asset(
-            asset,
+          BrandedImage(
+            slot: slot,
+            fallback: ApiImage.asset(asset),
             width: assetWidth,
             height: assetHeight,
             fit: BoxFit.contain,
@@ -132,8 +145,9 @@ class _QrCodeItem extends StatelessWidget {
     return SizedBox(
       height: 30,
       child: Center(
-        child: BrandImage.asset(
-          'icon_qrcode.png',
+        child: BrandedImage(
+          slot: CombatDenSlots.iconQrcode,
+          fallback: ApiImage.asset('icon_qrcode.png'),
           height: 30,
           fit: BoxFit.contain,
         ),

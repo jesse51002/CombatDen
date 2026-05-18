@@ -3,12 +3,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/core/navigation/app_routes.dart';
+import 'package:mobile_app/core/app_slots.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/animation/scale_reveal.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
+import 'package:mobile_app/shared/widgets/branded_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
@@ -137,7 +139,7 @@ class _DoneIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = DesignConstants.of(context).primaryColor;
+    final brand = DesignConstants.primaryColor;
     final screen = MediaQuery.sizeOf(context);
     final size = math.min(
       math.min(screen.width, screen.height) * _kDoneScreenFraction,
@@ -179,8 +181,9 @@ class _BookedContent extends StatelessWidget {
       children: [
         ScaleReveal(
           duration: _kImageScaleDuration,
-          child: BrandImage.asset(
-            'class_booked_celebration.png',
+          child: BrandedImage(
+            slot: CombatDenSlots.celebrationImage,
+            fallback: ApiImage.asset('class_booked_celebration.png'),
             fit: BoxFit.contain,
           ),
         ),

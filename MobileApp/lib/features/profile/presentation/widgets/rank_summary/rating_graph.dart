@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/branding/brand.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/profile/data/mock_profile.dart';
 import 'package:mobile_app/shared/widgets/text/threshold_label.dart';
 
@@ -15,8 +14,8 @@ class RatingGraph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final thresholds = ratingGraphThresholdsFor(BrandScope.of(context));
-    const lineColor = DesignConstants.text;
+    final thresholds = ratingGraphThresholds;
+    final lineColor = DesignConstants.text;
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: DesignConstants.screenHorizontalPadding,

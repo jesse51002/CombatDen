@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
 
 /// Full-bleed hero image for the class detail screen. Height matches the
 /// Figma frame (248px) and the asset is rendered with [BoxFit.cover].
@@ -13,7 +13,10 @@ class ClassImageBanner extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       height: 248,
-      child: BrandImage.classAsset(imageAsset, fit: BoxFit.cover),
+      child: Image(
+        image: ApiImage.classAsset(imageAsset),
+        fit: BoxFit.cover,
+      ),
     );
   }
 }

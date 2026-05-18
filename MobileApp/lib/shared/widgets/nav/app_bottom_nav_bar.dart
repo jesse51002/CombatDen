@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/core/navigation/app_routes.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/shared/widgets/nav/app_nav_item.dart';
 
 enum AppBottomNavTab { home, rank, reward, videos }

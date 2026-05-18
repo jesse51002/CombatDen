@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
@@ -21,17 +21,16 @@ class StreakDayBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = DesignConstants.of(context);
     final letterColor =
-        day.completed ? brand.primaryColor : DesignConstants.text2nd;
+        day.completed ? DesignConstants.primaryColor : DesignConstants.text2nd;
     final iconColor =
-        day.completed ? brand.primaryColor : DesignConstants.text2nd;
+        day.completed ? DesignConstants.primaryColor : DesignConstants.text2nd;
 
     final badge = Container(
       padding: EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
         color: day.completed
-            ? brand.primaryColor25
+            ? DesignConstants.primaryColor25
             : DesignConstants.backgroundColor,
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       ),

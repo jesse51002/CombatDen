@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 
 /// Sparkles scattered around a hero accent — porting the loyalty-loop
@@ -98,7 +98,7 @@ class _SparkleHeroState extends State<SparkleHero>
 
   @override
   Widget build(BuildContext context) {
-    final primary = DesignConstants.of(context).primaryColor;
+    final primary = DesignConstants.primaryColor;
     final eyebrow = DesignConstants.pSmall.copyWith(
       color: DesignConstants.text2nd,
       fontWeight: FontWeight.w700,

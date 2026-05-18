@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 
 /// A single icon-over-label navigation target. Used in both top-level
 /// navigation (the bottom nav bar) and any side/inline nav grid. Mirrors
@@ -26,7 +26,7 @@ class AppNavItem extends StatelessWidget {
         ? DesignConstants.text
         : DesignConstants.text2nd;
     if (isPrimary) {
-      textColor = DesignConstants.of(context).primaryColor;
+      textColor = DesignConstants.primaryColor;
     }
 
     return InkWell(

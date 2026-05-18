@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/pills/timeframe_pill.dart';
 
 /// 1W / 1M / 1Y / ALL pill row sitting under the rating graph.

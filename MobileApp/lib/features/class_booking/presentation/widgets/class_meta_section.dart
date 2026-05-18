@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
 
 /// Class title + location/time/attending block. Mirrors the Figma
@@ -72,7 +72,7 @@ class _AttendingRow extends StatelessWidget {
         Icon(
           Symbols.person_sharp,
           weight: DesignConstants.iconWeight,
-          color: DesignConstants.of(context).primaryColor,
+          color: DesignConstants.primaryColor,
           size: DesignConstants.iconSizeSm,
         ),
         Text(

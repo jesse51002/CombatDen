@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/branding/brand.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/core/navigation/app_routes.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/videos/data/mock_videos.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_category_tabs.dart';
@@ -73,7 +72,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gym = mockGymFor(BrandScope.of(context));
+    final gym = mockGym;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/profile/data/mock_profile.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
 
 const double _kThumbnailHeight = 145;
 const double _kAvatarSize = 35;
@@ -28,8 +28,8 @@ class VideoCard extends StatelessWidget {
             children: [
               SizedBox(
                 height: _kThumbnailHeight,
-                child: BrandImage.videoAsset(
-                  video.thumbnailAsset,
+                child: Image(
+                  image: ApiImage.videoAsset(video.thumbnailAsset),
                   fit: BoxFit.cover,
                 ),
               ),
@@ -62,8 +62,8 @@ class _VideoCardInfo extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         ClipOval(
-          child: BrandImage.videoAsset(
-            video.creatorAvatarAsset,
+          child: Image(
+            image: ApiImage.videoAsset(video.creatorAvatarAsset),
             width: _kAvatarSize,
             height: _kAvatarSize,
             fit: BoxFit.cover,

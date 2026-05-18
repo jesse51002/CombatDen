@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 
 class ClassScheduleTitle extends StatelessWidget {
   const ClassScheduleTitle({super.key});

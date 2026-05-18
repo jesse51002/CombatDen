@@ -4,8 +4,6 @@
 /// repositories is mechanical.
 library;
 
-import 'package:mobile_app/core/branding/brand.dart';
-
 class MockProfileVideo {
   const MockProfileVideo({
     required this.title,
@@ -87,41 +85,17 @@ const mockProfileGlobalMma = MockProfile(
   levelUpVideos: _kLevelUpVideos,
 );
 
-const mockProfileGlobalBjj = MockProfile(
-  gymName: 'Global BJJ',
-  streakDays: 3,
-  pointsLabel: '3.4k',
-  rankBadgeAsset: 'icon_rank_belt.png',
-  streakWeeks: 3,
-  rankTitle: 'Blue Belt',
-  rankSubtitle: 'Stripe II',
-  rankBadgeLargeAsset: 'profile_rank_belt_gold.png',
-  nextRankTitle: 'Next Rank',
-  nextRankProgressLabel: 'Blue Stripe III (23/50 classes)',
-  nextRankProgress: 0.55,
-  nextRankBadgeAsset: 'profile_next_rank_belt.png',
-  levelUpVideos: _kLevelUpVideos,
-);
-
-MockProfile mockProfileFor(Brand brand) => switch (brand) {
-  Brand.combatDen => mockProfileGlobalMma,
-  Brand.combatDenBjj => mockProfileGlobalBjj,
-};
+/// Single canonical dataset. Per-tenant variation now comes from
+/// the customization engine, not a compile-time Brand enum.
+MockProfile get mockProfile => mockProfileGlobalMma;
 
 const ratingGraphThresholdsCombatDen = <String>[
   'White Belt -',
   'Blue Belt -',
 ];
 
-const ratingGraphThresholdsCombatDenBjj = <String>[
-  'White Belt -',
-  'Blue Belt -',
-];
-
-List<String> ratingGraphThresholdsFor(Brand brand) => switch (brand) {
-  Brand.combatDen => ratingGraphThresholdsCombatDen,
-  Brand.combatDenBjj => ratingGraphThresholdsCombatDenBjj,
-};
+List<String> get ratingGraphThresholds =>
+    ratingGraphThresholdsCombatDen;
 
 /// Mock rating-over-time series for the rank summary graph.
 ///

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 
 /// Decorative one-shot sparkle scatter that animates in around a hero image.
@@ -63,7 +63,7 @@ class _SparkleBurstState extends State<SparkleBurst>
 
   @override
   Widget build(BuildContext context) {
-    final color = DesignConstants.of(context).primaryColor;
+    final color = DesignConstants.primaryColor;
     return SizedBox(
       width: widget.size,
       height: widget.size,

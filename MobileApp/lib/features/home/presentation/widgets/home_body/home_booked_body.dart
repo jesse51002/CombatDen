@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/branding/brand.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/home/data/schedule_generator.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/class_schedule_title.dart';
@@ -93,7 +92,7 @@ class _HomeBookedBodyState extends State<HomeBookedBody>
             children: [
               Builder(
                 builder: (context) {
-                  final gym = mockGymFor(BrandScope.of(context));
+                  final gym = mockGym;
                   return AppTopbar(
                     mode: AppTopbarMode.bigLogo,
                     showBackButton: false,

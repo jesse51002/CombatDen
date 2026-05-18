@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/branding/brand.dart';
-import 'package:mobile_app/core/navigation/app_routes.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/rank/rank_body.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
@@ -28,7 +27,7 @@ class _RankScreenState extends State<RankScreen> {
     return PostClassScaffold(
       controller: _controller,
       body: RankBody(
-        stats: mockRankStatsFor(BrandScope.of(context)),
+        stats: mockRankStats,
         controller: _controller,
       ),
       ctaLabel: 'Continue',

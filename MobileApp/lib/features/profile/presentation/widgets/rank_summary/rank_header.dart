@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/core/app_slots.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
+import 'package:mobile_app/shared/widgets/branded_image.dart';
 
 /// Belt icon + main rank name on top, sub-rank name below.
 class RankHeader extends StatelessWidget {
@@ -23,8 +25,9 @@ class RankHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingLarge,
       children: [
-        BrandImage.rankAsset(
-          rankBadgeAsset,
+        BrandedImage(
+          slot: CombatDenSlots.rankBelt,
+          fallback: ApiImage.rankAsset(rankBadgeAsset),
           width: 77,
           height: 50,
           fit: BoxFit.contain,

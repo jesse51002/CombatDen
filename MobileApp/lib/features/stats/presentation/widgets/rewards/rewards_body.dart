@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/app_slots.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/customization/brand_image.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/rewards/rewards_carousel.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
+import 'package:mobile_app/shared/widgets/branded_image.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 
 // Giftbox intro phase durations (file-scoped per CLAUDE.md _k carve-out).
@@ -201,7 +204,7 @@ class _CarouselLayout extends StatelessWidget {
                   '${_formatPoints(featured.pointsCost)} pts',
                   textAlign: TextAlign.center,
                   style: DesignConstants.h1.copyWith(
-                    color: DesignConstants.of(context).primaryColor,
+                    color: DesignConstants.primaryColor,
                   ),
                 ),
               ),
@@ -319,8 +322,9 @@ class _GiftboxIntroState extends State<_GiftboxIntro>
           ..setEntry(3, 2, 0.001)
           ..rotateY(yRotation)
           ..scaleByDouble(boxScale, boxScale, boxScale, 1),
-        child: BrandImage.asset(
-          'giftbox.png',
+        child: BrandedImage(
+          slot: CombatDenSlots.giftbox,
+          fallback: ApiImage.asset('giftbox.png'),
           width: _kBoxSize,
           height: _kBoxSize,
           fit: BoxFit.contain,
@@ -354,8 +358,9 @@ class _GiftboxIntroState extends State<_GiftboxIntro>
           opacity: opacity,
           child: Transform.scale(
             scale: starScale,
-            child: BrandImage.asset(
-              'single_point.png',
+            child: Image(
+              image: BrandImage.of(CombatDenSlots.singlePoint) ??
+                  ApiImage.asset('single_point.png'),
               width: seed.size,
               height: seed.size,
               fit: BoxFit.contain,

@@ -1,5 +1,3 @@
-import 'package:mobile_app/core/branding/brand.dart';
-
 class MockGym {
   const MockGym({
     required this.name,
@@ -24,15 +22,6 @@ const mockGymGlobalMma = MockGym(
   rankBadgeAsset: 'icon_rank_belt.png',
 );
 
-const mockGymGlobalBjj = MockGym(
-  name: 'Global BJJ',
-  logoAsset: 'gym_logo_global_mma.png',
-  streakDays: 3,
-  pointsLabel: '3.4k',
-  rankBadgeAsset: 'icon_rank_belt.png',
-);
-
-MockGym mockGymFor(Brand brand) => switch (brand) {
-  Brand.combatDen => mockGymGlobalMma,
-  Brand.combatDenBjj => mockGymGlobalBjj,
-};
+/// Single canonical dataset. Per-tenant variation now comes from
+/// the customization engine, not a compile-time Brand enum.
+MockGym get mockGym => mockGymGlobalMma;

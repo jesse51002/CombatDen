@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
 /// "Location" header + static map preview + street address.
@@ -22,7 +22,10 @@ class ClassLocationSection extends StatelessWidget {
         children: [
           AspectRatio(
             aspectRatio: 1160 / 580,
-            child: BrandImage.classAsset(detail.mapAsset, fit: BoxFit.cover),
+            child: Image(
+              image: ApiImage.classAsset(detail.mapAsset),
+              fit: BoxFit.cover,
+            ),
           ),
           Text(
             detail.address,

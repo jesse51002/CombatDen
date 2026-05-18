@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/core/navigation/app_routes.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/features/rewards/data/mock_points_store.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/points_headline.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/rewards_tabs.dart';

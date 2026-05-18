@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/home/data/schedule_generator.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/date_tab.dart';
 

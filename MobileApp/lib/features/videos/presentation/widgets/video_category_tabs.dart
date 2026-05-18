@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 
 /// The pill row across the top of the video screens (All / Explore /
 /// Learn / Fights). Visually only — not wired to any filtering logic
@@ -53,7 +53,7 @@ class _CategoryPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = isActive
-        ? DesignConstants.of(context).primaryColor
+        ? DesignConstants.primaryColor
         : DesignConstants.backgroundColor;
     final fg = isActive ? DesignConstants.text : DesignConstants.text2nd;
     return GestureDetector(

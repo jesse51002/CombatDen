@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
-import 'package:mobile_app/shared/widgets/brand_image.dart';
+import 'package:mobile_app/core/app_slots.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
+import 'package:mobile_app/shared/widgets/branded_image.dart';
 
 const double _kBadgeSize = 100;
 const double _kImageInset = 22;
@@ -27,7 +29,11 @@ class NextRankBadge extends StatelessWidget {
           Padding(
             padding: EdgeInsets.all(_kImageInset),
             child: Center(
-              child: BrandImage.rankAsset(badgeAsset, fit: BoxFit.contain),
+              child: BrandedImage(
+                slot: CombatDenSlots.nextRankBeltImage,
+                fallback: ApiImage.rankAsset(badgeAsset),
+                fit: BoxFit.contain,
+              ),
             ),
           ),
           Positioned.fill(

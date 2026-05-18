@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 
 /// Three brand-colored dots bouncing in a continuous wave — the Airbnb /
 /// Linear / Vercel "..." loader. Each dot is offset by 1/3 of a cycle, so
@@ -42,7 +42,7 @@ class _LoadingDotsState extends State<LoadingDots>
 
   @override
   Widget build(BuildContext context) {
-    final brand = DesignConstants.of(context).primaryColor;
+    final brand = DesignConstants.primaryColor;
     final width = _kDotCount * widget.dotSize +
         (_kDotCount - 1) * widget.spacing;
     final height = widget.dotSize + widget.bounceHeight;

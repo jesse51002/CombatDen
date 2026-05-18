@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/videos/data/mock_videos.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/featured_video_card.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_carousel_section.dart';

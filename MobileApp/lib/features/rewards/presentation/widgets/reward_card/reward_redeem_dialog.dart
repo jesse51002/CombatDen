@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_card.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
@@ -46,7 +46,7 @@ class RewardRedeemDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = DesignConstants.of(context).primaryColor;
+    final brand = DesignConstants.primaryColor;
     return Dialog(
       backgroundColor: DesignConstants.popup,
       insetPadding: EdgeInsets.symmetric(

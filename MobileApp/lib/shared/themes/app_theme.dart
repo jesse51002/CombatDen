@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/constants/design_constants.dart';
+import 'package:mobile_app/core/design_constants.dart';
 
 class AppTheme {
   AppTheme._();
 
-  static ThemeData dark(DesignConstants c) {
+  static ThemeData dark() {
     final colorScheme = ColorScheme.dark(
-      primary: c.primaryColor,
+      primary: DesignConstants.primaryColor,
       onPrimary: DesignConstants.text,
-      secondary: c.darkPrimary,
+      secondary: DesignConstants.darkPrimary,
       onSecondary: DesignConstants.text,
       surface: DesignConstants.backgroundColor,
       onSurface: DesignConstants.text,
