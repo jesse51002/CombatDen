@@ -1,4 +1,5 @@
-"""The two read-only endpoints: a run's output, and one image's bytes."""
+"""The read-only endpoints: a run's output, one image's bytes, and the
+per-slot font delivery payload."""
 
 from __future__ import annotations
 
@@ -8,7 +9,9 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
 from src.api.errors import InvalidRunError, NotFoundError
+from src.api.schema.font_delivery import FontDeliveryResponse
 from src.api.schema.output_response import OutputResponse
+from src.api.service.font_service import resolve_font
 from src.api.service.output_service import load_output, resolve_image_file
 
 logger = logging.getLogger(__name__)
@@ -87,4 +90,57 @@ async def get_image(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to serve image",
+        ) from None
+
+
+@output_router.get(
+    "/{app_id}/{run_id}/fonts/{slot_id}",
+    response_model=FontDeliveryResponse,
+    summary="Get the deliverable Google Font payload for one font slot",
+    responses={
+        200: {
+            "description": (
+                "Family, category, CSS URL and per-variant TTF URLs on "
+                "fonts.gstatic.com (browsers can hit the CSS URL for "
+                "woff2)"
+            )
+        },
+        404: {
+            "description": (
+                "No such app/run/slot, or the picked family is no longer "
+                "in the Google Fonts catalog"
+            )
+        },
+        422: {"description": "Run exists but its output.yaml is stale"},
+    },
+)
+async def get_font(
+    app_id: str, run_id: str, slot_id: str
+) -> FontDeliveryResponse:
+    """Return the Google Fonts payload (family + per-variant URLs) for
+    one declared font slot. ``variants`` carries TTF URLs the frontend
+    can fetch from Google's CDN directly; ``css_url`` is the CSS2
+    endpoint browsers can drop in for woff2."""
+    try:
+        return await resolve_font(app_id, run_id, slot_id)
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except InvalidRunError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to resolve font %s/%s/%s",
+            app_id,
+            run_id,
+            slot_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve font",
         ) from None

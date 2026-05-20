@@ -20,15 +20,18 @@ from dataclasses import dataclass
 import networkx as nx
 from pydantic import BaseModel
 
-from schema import ColorPalette, ImageSet, Output
+from schema import ColorPalette, FontSet, ImageSet, Output, TextSet
+from src.core.config import settings
 from src.core.errors import GraphError
 from src.core.run_context import RunContext
 from src.executor.registry import Graph, ModuleRegistry
 from src.modules.base import DependencyKind, Node
 from src.shared.interfaces.background_remover import BackgroundRemover
+from src.shared.interfaces.google_fonts_catalog import GoogleFontsCatalog
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
 from src.shared.services.background_remover import PhotoRoomBackgroundRemover
+from src.shared.services.google_fonts_catalog import HttpxGoogleFontsCatalog
 from src.shared.services.litellm_image_generator import LiteLLMImageGenerator
 from src.shared.services.llm_client import LiteLLMClient
 
@@ -69,7 +72,12 @@ class Pipeline:
         both *before* any node runs.
         """
         graph: nx.DiGraph = nx.DiGraph()
-        nodes = [node_set.color, *node_set.images]
+        # ``text`` is optional: apps with no copy overrides don't get a
+        # text node, so it's filtered out of the level-0 sibling set
+        # rather than producing a no-op root.
+        nodes = [node_set.color, node_set.font, *node_set.images]
+        if node_set.text is not None:
+            nodes.append(node_set.text)
         for node in nodes:
             graph.add_node(node.key, node=node)
         known = {node.key for node in nodes}
@@ -101,11 +109,18 @@ class Pipeline:
         llm = LiteLLMClient()
         image_gen = LiteLLMImageGenerator()
         bg_remover = PhotoRoomBackgroundRemover()
+        google_fonts: GoogleFontsCatalog = HttpxGoogleFontsCatalog(
+            api_key=settings.google_fonts_api_key,
+            api_url=settings.google_fonts_api_url,
+            ttl_seconds=settings.google_fonts_ttl_seconds,
+            request_timeout_seconds=settings.google_fonts_request_timeout_seconds,
+        )
 
         node_set = ModuleRegistry(run_ctx).build_all(
             llm=llm,
             image_gen=image_gen,
             bg_remover=bg_remover,
+            google_fonts=google_fonts,
         )
         graph = self._build_digraph(node_set)
 
@@ -162,14 +177,42 @@ class Pipeline:
         """Assemble the (possibly partial) ``Output`` from what resolved."""
         palette = resolved.get(DependencyKind.COLOR.value)
         if palette is None:
+            # Colour node didn't resolve — emit the minimal valid shell so
+            # the writer can still produce something useful. `palette` is
+            # required by ColorPalette, but there's nothing to populate it
+            # with when colours failed; an empty dict is the honest answer.
             palette = ColorPalette(
-                mode=run_ctx.cust.colors_direction.mode, colors={}
+                mode=run_ctx.cust.colors_direction.mode,
+                colors={},
+                palette={},
             )
         if not palette.colors:
             logger.error(
                 "colour node did not resolve — output has no colours "
                 "(and therefore no images)"
             )
+        font_set = resolved.get(DependencyKind.FONT.value)
+        if font_set is None:
+            # Font node didn't resolve — empty FontSet is the honest
+            # answer (no font slots populated). Unlike colours, no other
+            # node depends on it, so an empty set doesn't cascade.
+            font_set = FontSet(fonts={})
+            logger.error("font node did not resolve — output has no fonts")
+        text_set = resolved.get(DependencyKind.TEXT.value)
+        if text_set is None:
+            # Text node either wasn't built (app declared no text slots —
+            # the registry skipped it) or failed outright. Empty TextSet
+            # is the honest answer either way; the MobileApp falls back
+            # to its bundled default copy. Logging the failure is only
+            # warranted when a text node was actually expected — the
+            # registry skip is a normal, common case for apps without
+            # copy overrides.
+            text_set = TextSet(texts={})
+            if run_ctx.app.texts:
+                logger.error(
+                    "text node did not resolve — output has no copy "
+                    "overrides"
+                )
         image_set = ImageSet(
             images={
                 slot.id: resolved[slot.id]
@@ -182,4 +225,6 @@ class Pipeline:
             display_name=run_ctx.app.display_name,
             image_set=image_set,
             color_set=palette,
+            font_set=font_set,
+            text_set=text_set,
         )

@@ -4,16 +4,28 @@ from __future__ import annotations
 
 from schema.output.color_output import ColorOutput
 from schema.output.color_palette import ColorPalette
+from schema.output.color_value import ColorValue
+from schema.output.derivations import Derivations
+from schema.output.font_output import FontOutput
+from schema.output.font_set import FontSet
 from schema.output.image_output import ImageOutput
 from schema.output.image_set import ImageSet
 from schema.output.output import Output
 from schema.output.run_cost import RunCost
+from schema.output.text_output import TextOutput
+from schema.output.text_set import TextSet
 
 __all__ = [
     "ColorOutput",
     "ColorPalette",
+    "ColorValue",
+    "Derivations",
+    "FontOutput",
+    "FontSet",
     "ImageOutput",
     "ImageSet",
     "Output",
     "RunCost",
+    "TextOutput",
+    "TextSet",
 ]

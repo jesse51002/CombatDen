@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from schema.color_role import ColorRole
-from schema.slots import ColorSlot, ImageSlot
+from schema.slots import ColorSlot, FontSlot, ImageSlot, TextSlot
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -15,8 +15,11 @@ _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 # rejected: a node's resolved-input dict is keyed by these, so an image
 # named "color" would shadow the palette. Source of truth for the values
 # is ``src.modules.base.DependencyKind`` (kept local so schema/ imports no
-# src/ — same reason ColorRole lives in schema/).
-_RESERVED_IMAGE_IDS = frozenset({"color"})
+# src/ — same reason ColorRole lives in schema/). ``font`` and ``text``
+# are reserved for the same keyspace reason even though no image module
+# depends on either today, so a future ``depends_on: font`` /
+# ``depends_on: text`` doesn't get shadowed.
+_EXECUTOR_NODE_NAMES = frozenset({"color", "font", "text"})
 
 
 class AppFormat(BaseModel):
@@ -26,8 +29,10 @@ class AppFormat(BaseModel):
 
     id: str
     display_name: str
-    images: list[ImageSlot]
-    colors: list[ColorSlot]
+    images: list[ImageSlot] = Field(default_factory=list)
+    colors: list[ColorSlot] = Field(default_factory=list)
+    fonts: list[FontSlot] = Field(default_factory=list)
+    texts: list[TextSlot] = Field(default_factory=list)
 
     @field_validator("id")
     @classmethod
@@ -48,17 +53,12 @@ class AppFormat(BaseModel):
 
     @model_validator(mode="after")
     def _slot_lists_well_formed(self) -> "AppFormat":
-        if not self.images:
-            raise ValueError("AppFormat.images must contain at least one slot")
-        if not self.colors:
-            raise ValueError("AppFormat.colors must contain at least one slot")
-
         image_ids = [s.id for s in self.images]
         if len(image_ids) != len(set(image_ids)):
             dupes = sorted({i for i in image_ids if image_ids.count(i) > 1})
             raise ValueError(f"duplicate image slot ids: {dupes}")
 
-        reserved = sorted(set(image_ids) & _RESERVED_IMAGE_IDS)
+        reserved = sorted(set(image_ids) & _EXECUTOR_NODE_NAMES)
         if reserved:
             raise ValueError(
                 f"image slot ids {reserved} are reserved executor "
@@ -71,21 +71,16 @@ class AppFormat(BaseModel):
         image_id_set = set(image_ids)
         for s in self.images:
             if s.id in s.depends_on:
-                raise ValueError(
-                    f"image slot {s.id!r} cannot depend on itself"
-                )
+                raise ValueError(f"image slot {s.id!r} cannot depend on itself")
             if len(s.depends_on) != len(set(s.depends_on)):
-                d = sorted(
-                    {i for i in s.depends_on if s.depends_on.count(i) > 1}
-                )
+                d = sorted({i for i in s.depends_on if s.depends_on.count(i) > 1})
                 raise ValueError(
                     f"image slot {s.id!r} has duplicate depends_on ids: {d}"
                 )
             unknown = sorted(set(s.depends_on) - image_id_set)
             if unknown:
                 raise ValueError(
-                    f"image slot {s.id!r} depends_on unknown image ids: "
-                    f"{unknown}"
+                    f"image slot {s.id!r} depends_on unknown image ids: {unknown}"
                 )
 
         color_ids = [s.id for s in self.colors]
@@ -108,5 +103,20 @@ class AppFormat(BaseModel):
                 "AppFormat.colors must have exactly one slot with "
                 f"role 'text'; found {n_text}"
             )
+
+        if not self.fonts:
+            raise ValueError("AppFormat.fonts must contain at least one slot")
+        font_ids = [s.id for s in self.fonts]
+        if len(font_ids) != len(set(font_ids)):
+            dupes = sorted({i for i in font_ids if font_ids.count(i) > 1})
+            raise ValueError(f"duplicate font slot ids: {dupes}")
+
+        # texts is optional (default empty): copy overrides are a new
+        # facet; existing apps don't have to declare any. When present,
+        # ids must be unique — the LLM response model is keyed by them.
+        text_ids = [s.id for s in self.texts]
+        if len(text_ids) != len(set(text_ids)):
+            dupes = sorted({i for i in text_ids if text_ids.count(i) > 1})
+            raise ValueError(f"duplicate text slot ids: {dupes}")
 
         return self

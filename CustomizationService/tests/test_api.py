@@ -18,7 +18,9 @@ from fastapi.testclient import TestClient
 from src.api.config import settings
 from src.api.errors import NotFoundError
 from src.api.main import app
+from src.api.service import font_service
 from src.api.service.output_service import load_output
+from src.shared.interfaces.google_fonts_catalog import GoogleFontMetadata
 
 FIXTURE_APPS = Path(__file__).resolve().parent / "data" / "apps"
 APP = "demo"
@@ -126,3 +128,101 @@ def test_traversal_ids_are_rejected_by_the_guard(
 
 def test_encoded_traversal_via_http_is_404() -> None:
     assert client.get("/apps/..%2f..%2fetc/run1").status_code == 404
+
+
+# --- Font endpoint ---------------------------------------------------------
+
+
+class _StubCatalog:
+    """In-memory Google Fonts catalog. The endpoint never hits Google
+    in tests — this stub feeds the families the fixture's font_set
+    references and lets one test simulate a retired family."""
+
+    def __init__(
+        self, entries: dict[str, GoogleFontMetadata] | None = None
+    ) -> None:
+        self._entries = entries if entries is not None else {
+            "inter": GoogleFontMetadata(
+                family="Inter",
+                category="sans-serif",
+                variants=["regular", "700"],
+                files={
+                    "regular": "https://fonts.gstatic.com/s/inter/regular.woff2",
+                    "700": "https://fonts.gstatic.com/s/inter/700.woff2",
+                },
+            ),
+            "funnel display": GoogleFontMetadata(
+                family="Funnel Display",
+                category="display",
+                variants=["regular", "700"],
+                files={
+                    "regular": "https://fonts.gstatic.com/s/funneldisplay/regular.woff2",
+                    "700": "https://fonts.gstatic.com/s/funneldisplay/700.woff2",
+                },
+            ),
+        }
+
+    async def contains(self, family: str) -> bool:
+        return family.lower() in self._entries
+
+    async def lookup(self, family: str) -> GoogleFontMetadata | None:
+        return self._entries.get(family.lower())
+
+    async def families(self) -> frozenset[str]:
+        return frozenset(self._entries.keys())
+
+
+@pytest.fixture
+def _stub_catalog(monkeypatch: pytest.MonkeyPatch) -> _StubCatalog:
+    """Swap the module-level lazy singleton for an in-memory stub so the
+    font endpoint never hits the live Google Fonts API in tests."""
+    catalog = _StubCatalog()
+    monkeypatch.setattr(font_service, "_CATALOG", catalog)
+    return catalog
+
+
+def test_font_endpoint_returns_family_and_variant_urls(
+    _stub_catalog: _StubCatalog,
+) -> None:
+    """The endpoint returns the canonical family, category, css_url,
+    and per-variant font-file URLs the frontend fetches directly from
+    fonts.gstatic.com (TTF from the Developer API, woff2 served via
+    the CSS2 endpoint under a browser user-agent)."""
+    resp = client.get(f"/apps/{APP}/run1/fonts/display")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["family"] == "Funnel Display"
+    assert body["category"] == "display"
+    assert body["css_url"].startswith("https://fonts.googleapis.com/css2")
+    assert "Funnel%20Display" in body["css_url"]
+    # Variants come straight from the catalog entry's files map.
+    assert body["variants"]["regular"].startswith(
+        "https://fonts.gstatic.com/"
+    )
+
+
+def test_font_endpoint_unknown_slot_404(_stub_catalog: _StubCatalog) -> None:
+    resp = client.get(f"/apps/{APP}/run1/fonts/no_such_slot")
+    assert resp.status_code == 404
+    assert "not declared" in resp.json()["detail"]
+
+
+def test_font_endpoint_malformed_slot_404(
+    _stub_catalog: _StubCatalog,
+) -> None:
+    resp = client.get(f"/apps/{APP}/run1/fonts/Bad-Slot")
+    assert resp.status_code == 404
+    assert "invalid font slot id" in resp.json()["detail"]
+
+
+def test_font_endpoint_family_retired_from_catalog_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Google occasionally retires a family. If the pipeline picked one
+    that's no longer in the live catalog, the endpoint 404s clearly so
+    the caller knows to re-run the pipeline."""
+    empty = _StubCatalog(entries={})
+    monkeypatch.setattr(font_service, "_CATALOG", empty)
+    resp = client.get(f"/apps/{APP}/run1/fonts/display")
+    assert resp.status_code == 404
+    assert "no longer in the Google Fonts catalog" in resp.json()["detail"]

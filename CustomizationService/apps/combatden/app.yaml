@@ -142,3 +142,23 @@ colors:
       premium and coherent on the dark gym canvas, and meet WCAG AA against the
       background. Drives the active nav item, active timeframe pill, and active
       tab — used as borders / one active label, never a fill.
+
+fonts:
+  - id: display
+    description: >-
+      Headline / hero / celebration typography — the "Class Booked"
+      title, post-class card titles (Streak / Rank / Points / Rewards /
+      Wins), points count-ups, and screen titles. Used at large sizes
+      (24–64px) and short bursts. Must carry the brand's athletic
+      energy and feel distinctive at a glance — confident, modern,
+      premium. Numerals must read cleanly because every celebration
+      screen pairs the title with a big number.
+  - id: body
+    description: >-
+      All running UI text — buttons, list rows, info-bar labels (rank /
+      streak / points), stat tiles, body copy. Used at 13–18px in long
+      sessions on a dark canvas. Must be highly legible at small sizes,
+      have a generous x-height, hold up at every weight from regular to
+      bold, and feel visually quiet so the display font and the
+      accents lead. Numerals must be tabular-friendly because the info
+      bar stacks several side-by-side counters.

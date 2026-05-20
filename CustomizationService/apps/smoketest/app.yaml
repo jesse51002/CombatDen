@@ -38,3 +38,19 @@ colors:
       Secondary highlight colour for small accents — badges, indicators,
       progress and minor emphasis. Used sparingly; never competes with the
       primary.
+
+# Two-slot font system: a display face for headlines/heroes and a body
+# face for running UI text. Keeps the smoke test exercising both lanes
+# of the selection prompt without ballooning the run cost.
+fonts:
+  - id: display
+    description: >-
+      Headline / hero / celebration typography — the "Class Booked"
+      title and any large titles. Used at 24–64px in short bursts. Must
+      carry the brand's energy and feel distinctive at a glance.
+  - id: body
+    description: >-
+      All running UI text — buttons, labels, list rows, body copy. Used
+      at 13–18px in long sessions. Must be highly legible at small
+      sizes, comfortable to read, and visually quiet so the display
+      font and the rest of the UI lead.
