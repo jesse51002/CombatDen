@@ -54,3 +54,27 @@ fonts:
       at 13–18px in long sessions. Must be highly legible at small
       sizes, comfortable to read, and visually quiet so the display
       font and the rest of the UI lead.
+
+# Two text slots — just enough to exercise the batched rewrite call,
+# the per-slot length-bounds check, and the retry loop without
+# ballooning the smoke-test cost.
+texts:
+  - id: booking_headline
+    description: >-
+      The hero headline shown the moment a booking succeeds — sits
+      directly below the celebration image, large display weight.
+      The single high point of the booking flow; the brand's first
+      positive payoff for the user committing.
+    min_words: 1
+    max_words: 3
+    min_chars: 4
+    max_chars: 22
+  - id: primary_cta
+    description: >-
+      A primary action button label — verb-led, imperative,
+      single-line on a pill button. Reads as the brand's voice
+      asking the user to commit (book, claim, reserve, lock in).
+    min_words: 1
+    max_words: 4
+    min_chars: 4
+    max_chars: 20

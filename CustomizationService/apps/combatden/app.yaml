@@ -162,3 +162,74 @@ fonts:
       bold, and feel visually quiet so the display font and the
       accents lead. Numerals must be tabular-friendly because the info
       bar stacks several side-by-side counters.
+
+texts:
+  - id: class_booked_headline
+    description: >-
+      The full-bleed celebration headline shown the moment a class
+      booking succeeds. Sits directly below the celebration hero on
+      ClassBookedScreen, ~36–48px display weight. The single high
+      point of the booking flow — the user just committed, this is
+      their first positive payoff. Should land like the brand
+      cheering — combative gyms read like a fighter locking in,
+      grappling academies like stepping on the mat, premium studios
+      like a calm confirmation. Title-case or sentence case; never
+      ALL CAPS unless the brand demands it.
+    min_words: 1
+    max_words: 3
+    min_chars: 4
+    max_chars: 22
+  - id: reserve_cta
+    description: >-
+      The primary booking button on a class detail / reservation
+      screen — the action that commits the user to attend. Reads as
+      a verb phrase in the brand's voice (combat gym: "Lock it in.";
+      grappling academy: "Claim your mat."; calmer studio: "Reserve
+      a spot."). Has to fit a single-line pill button without
+      wrapping. Imperative, present tense, no trailing period unless
+      the brand reads punchy with one.
+    min_words: 1
+    max_words: 4
+    min_chars: 4
+    max_chars: 22
+  - id: wins_title
+    description: >-
+      The headline of the post-class "wins" recap screen — the 5th
+      and final post-class card. Pairs with a sparkle / trophy hero
+      and three summary stat tiles. The closing high note of the
+      session: it should celebrate the user's effort in the brand's
+      voice without being saccharine. Combat-leaning brands lean
+      punchy ("Today's wins"); calmer brands lean reflective
+      ("Today's progress"). Short, declarative, never a full
+      sentence.
+    min_words: 1
+    max_words: 4
+    min_chars: 4
+    max_chars: 20
+  - id: wins_subtitle
+    description: >-
+      The one-line subtitle directly under the wins headline on the
+      same end-of-session recap screen. This is the single chattiest
+      line of brand voice in the app — a short motivational beat
+      that pushes the user back into the next session. Combat gyms
+      read aggressive ("The grind never stops"), BJJ academies more
+      technique-led ("Every roll sharpens you"), premium studios
+      calm ("Each session counts"). One short clause; no exclamation
+      mark unless the brand genuinely shouts.
+    min_words: 2
+    max_words: 6
+    min_chars: 8
+    max_chars: 40
+  - id: book_next_class_cta
+    description: >-
+      The CTA at the bottom of the post-class wins recap that takes
+      the user back into the booking flow for their next session.
+      Same button shape as ``reserve_cta`` but the moment is
+      different — the user just finished training and is being
+      nudged to commit again. Should read like the brand inviting
+      them back, not pleading. Imperative, verb-led, no trailing
+      period.
+    min_words: 2
+    max_words: 5
+    min_chars: 8
+    max_chars: 28
