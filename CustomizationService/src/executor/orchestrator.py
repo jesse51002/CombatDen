@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import networkx as nx
 from pydantic import BaseModel
 
-from schema import Output
+from schema import ColorPalette, ImageSet, Output
 from src.core.errors import GraphError
 from src.core.run_context import RunContext
 from src.executor.registry import Graph, ModuleRegistry
@@ -161,20 +161,25 @@ class Pipeline:
     ) -> Output:
         """Assemble the (possibly partial) ``Output`` from what resolved."""
         palette = resolved.get(DependencyKind.COLOR.value)
-        colors = palette.colors if palette is not None else {}
-        if not colors:
+        if palette is None:
+            palette = ColorPalette(
+                mode=run_ctx.cust.colors_direction.mode, colors={}
+            )
+        if not palette.colors:
             logger.error(
                 "colour node did not resolve — output has no colours "
                 "(and therefore no images)"
             )
-        images = {
-            slot.id: resolved[slot.id]
-            for slot in run_ctx.app.images
-            if slot.id in resolved
-        }
+        image_set = ImageSet(
+            images={
+                slot.id: resolved[slot.id]
+                for slot in run_ctx.app.images
+                if slot.id in resolved
+            }
+        )
         return Output(
             app=run_ctx.app.id,
             display_name=run_ctx.app.display_name,
-            colors=colors,
-            images=images,
+            image_set=image_set,
+            color_set=palette,
         )

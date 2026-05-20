@@ -8,13 +8,18 @@ from typing import Any
 import networkx as nx
 import pytest
 
-from schema import AppFormat, Customization, ImageOutput
+from schema import (
+    AppFormat,
+    ColorMode,
+    ColorPalette,
+    Customization,
+    ImageOutput,
+)
 from src.core.errors import GraphError
 from src.core.run_context import RunContext
 from src.executor.orchestrator import Pipeline
 from src.executor.registry import ModuleRegistry
 from src.modules.base import DependencyKind
-from src.modules.colors.color_models import ColorPalette
 
 _COLOR = DependencyKind.COLOR.value
 
@@ -24,7 +29,7 @@ _CUST: dict[str, Any] = {
         "short_desc": "short",
         "long_desc": "long",
     },
-    "colors_direction": {"description": "calm", "dark_mode": True},
+    "colors_direction": {"description": "calm", "mode": "dark"},
 }
 _COLORS = [
     {"id": "primary", "description": "primary"},
@@ -105,6 +110,7 @@ def _palette(ctx: RunContext) -> ColorPalette:
     from schema import ColorOutput
 
     return ColorPalette(
+        mode=ColorMode.DARK,
         colors={
             s.id: ColorOutput(
                 oklch="oklch(55% 0.12 250)",
@@ -112,7 +118,7 @@ def _palette(ctx: RunContext) -> ColorPalette:
                 description=f"{s.id} colour",
             )
             for s in ctx.app.colors
-        }
+        },
     )
 
 
@@ -138,8 +144,13 @@ def test_assemble_partial_keeps_finished_work(tmp_path: Path) -> None:
     }
     out = Pipeline._assemble(ctx, resolved)
 
-    assert set(out.colors) == {"primary", "background", "text", "accent"}
-    assert set(out.images) == {"hero"}  # 'other' omitted, not fatal
+    assert set(out.color_set.colors) == {
+        "primary",
+        "background",
+        "text",
+        "accent",
+    }
+    assert set(out.image_set.images) == {"hero"}  # 'other' omitted
 
 
 def test_assemble_color_failure_yields_valid_empty_output(
@@ -150,5 +161,6 @@ def test_assemble_color_failure_yields_valid_empty_output(
     out = Pipeline._assemble(ctx, {})
 
     assert out.app == "demo"
-    assert out.colors == {}
-    assert out.images == {}
+    assert out.color_set.colors == {}
+    assert out.color_set.mode == ColorMode.DARK
+    assert out.image_set.images == {}

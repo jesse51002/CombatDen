@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
-/// "Details" header + long-form description body. Mirrors the Figma
+/// "Details" header + long-form description body. Mirrors the
 /// `DesciptionWidget` group.
 class ClassDetailsSection extends StatelessWidget {
   const ClassDetailsSection({super.key, required this.description});

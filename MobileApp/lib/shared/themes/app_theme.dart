@@ -4,8 +4,17 @@ import 'package:mobile_app/core/design_constants.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData dark() {
-    final colorScheme = ColorScheme.dark(
+  static ThemeData forCanvas() {
+    final brightness = DesignConstants.isLightCanvas
+        ? Brightness.light
+        : Brightness.dark;
+
+    // Start from the matching named scheme (correct brightness +
+    // sensible role defaults), then override the branded roles once.
+    final base = brightness == Brightness.light
+        ? const ColorScheme.light()
+        : const ColorScheme.dark();
+    final colorScheme = base.copyWith(
       primary: DesignConstants.primaryColor,
       onPrimary: DesignConstants.text,
       secondary: DesignConstants.darkPrimary,
@@ -32,7 +41,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: brightness,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: DesignConstants.backgroundColor,
       textTheme: textTheme,

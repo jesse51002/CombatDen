@@ -64,7 +64,7 @@ int _seededAttending(int dayOffset, int classIndex) {
 
 bool _isClassBooked(int dayOffset, int classIndex) {
   // Deterministic pattern: ~1-2 booked classes per ~3 days, varied across
-  // both axes so the visual mix matches Figma without real state.
+  // both axes so the visual mix matches the design without real state.
   return (dayOffset * 4 + classIndex) % 7 == 0 ||
       (dayOffset * 3 + classIndex * 2) % 11 == 0;
 }

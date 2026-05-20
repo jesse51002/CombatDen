@@ -1,17 +1,28 @@
-# mobile_app
+# CombatDen MobileApp (white-label / templated)
 
-A new Flutter project.
+A Flutter app **reskinned per tenant**, not a single-brand product. One
+codebase; the look is resolved at runtime from a customization preset
+produced by the CustomizationService.
+
+## Templating
+
+- The active tenant and design are declared in `lib/core/app_config.dart`
+  (`AppConfig.appId` + `AppConfig.designId`).
+- The resolved preset lives in
+  `../CustomizationService/apps/<appId>/<designId>/` — `customization.yaml`
+  (brief + `dark_mode`), `output.yaml` (resolved colour/image slots),
+  `final_images/`.
+- Today the customization surface is colours (4 slots) and imagery; the app
+  derives every other token (elevation, dividers, popups) from those.
+- **This is just the start.** The templating surface is open-ended — over
+  time more of the app (copy, layout, enabled features) becomes
+  tenant-customizable. Do not build assuming only colour and text vary;
+  never hardcode or assume a single brand's palette, assets, or copy.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+- `flutter pub get`
+- `flutter run` (debug) / `flutter run --release`
+- `flutter analyze` must be clean before committing.
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+See `CLAUDE.md` for coding standards and the full customization contract.

@@ -3,6 +3,21 @@ display_name: CombatDen
 
 images:
   # Shared (tenant-wide)
+  - id: logo_primary
+    description: >-
+      The gym's primary brand logo / identity mark. Lives in the persistent
+      app top bar (GymHeader), shown roughly 100x100 and centred directly
+      above the gym name and the info bar (which holds the rank, streak,
+      points and QR items). It is present on every main tab — Home,
+      Profile, Rewards, Videos — and at the top of every post-class
+      celebration screen. It is the first thing the user sees on app open
+      and is on screen almost constantly. Purpose: pure brand anchor and
+      gym identity; it is never tied to an event or a reward. Role is calm
+      and permanent, not celebratory — it must read instantly and stay
+      legible at small size as a single coherent logo mark. Keep it simple
+      and realistic — a clean, professional logo an actual business would
+      really use as its mark, not an illustrated scene, a busy composition,
+      or a rendered mascot.
   - id: rank_belt
     description: >-
       Depicts the user's CURRENT rank as a martial-arts / championship

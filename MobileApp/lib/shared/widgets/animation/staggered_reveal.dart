@@ -3,7 +3,8 @@ import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 
 /// One-shot fade + translateY entrance. Fires once on `initState` after
 /// [delay]. Used to cascade element reveals on the post-class celebration
-/// screens. Curve is ease-out-quart per DESIGN.md's motion law.
+/// screens. Curve is ease-out-quart (the app's motion law: ease-out,
+/// no bounce, ≤300ms).
 class StaggeredReveal extends StatefulWidget {
   const StaggeredReveal({
     super.key,

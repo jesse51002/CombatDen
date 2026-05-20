@@ -1,24 +1,27 @@
 app: demo
 display_name: Demo App
-images:
-  hero:
-    path: /fixture/demo/noimg/final_images/hero.png
-    prompt: A bold demo hero illustration on a flat solid background.
-    complexity: medium
-colors:
-  primary:
-    oklch: oklch(70.5% 0.19 41)
-    display_name: Cage Orange
-    description: Primary brand accent for CTAs and key highlights.
-  background:
-    oklch: oklch(20% 0.01 240)
-    display_name: Canvas Black
-    description: Default near-black background surface.
-  text:
-    oklch: oklch(95% 0.005 90)
-    display_name: Bone White
-    description: Readable foreground text colour.
-  accent:
-    oklch: oklch(75% 0.12 200)
-    display_name: Signal Cyan
-    description: Secondary emphasis for badges and highlights.
+image_set:
+  images:
+    hero:
+      path: /fixture/demo/noimg/final_images/hero.png
+      prompt: A bold demo hero illustration on a flat solid background.
+      complexity: medium
+color_set:
+  mode: dark
+  colors:
+    primary:
+      oklch: oklch(70.5% 0.19 41)
+      display_name: Cage Orange
+      description: Primary brand accent for CTAs and key highlights.
+    background:
+      oklch: oklch(20% 0.01 240)
+      display_name: Canvas Black
+      description: Default near-black background surface.
+    text:
+      oklch: oklch(95% 0.005 90)
+      display_name: Bone White
+      description: Readable foreground text colour.
+    accent:
+      oklch: oklch(75% 0.12 200)
+      display_name: Signal Cyan
+      description: Secondary emphasis for badges and highlights.

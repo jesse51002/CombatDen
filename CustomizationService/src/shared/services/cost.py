@@ -96,18 +96,31 @@ def litellm_call_cost(resp: Any, model: str) -> float:
 
 
 class CostTracking:
-    """Mixin: a per-instance running USD total a paid service accumulates.
+    """Mixin: a per-instance running USD total a paid service accumulates,
+    plus the same spend split per model id.
 
     Lazy by design — no ``__init__`` so it composes onto the existing
     services without touching their construction or MRO. The writer reads
-    ``cost`` off each service to assemble the run's ``RunCost``.
+    ``cost`` (the running total) and ``cost_by_model`` (the per-model-id
+    split) off each service to assemble the run's ``RunCost``. Every
+    ``_add_cost`` carries the model id it spent on; a service with no
+    model id (a flat-rate provider) passes a synthetic key.
     """
 
-    def _add_cost(self, amount: float) -> None:
-        """Add one paid call's cost to this service's running total."""
+    def _add_cost(self, amount: float, model: str) -> None:
+        """Add one paid call's cost to the running total and to ``model``'s
+        own bucket."""
         self._cost = getattr(self, "_cost", 0.0) + amount
+        by_model = getattr(self, "_by_model", {})
+        by_model[model] = by_model.get(model, 0.0) + amount
+        self._by_model = by_model
 
     @property
     def cost(self) -> float:
         """USD this service has spent so far this run."""
         return getattr(self, "_cost", 0.0)
+
+    @property
+    def cost_by_model(self) -> dict[str, float]:
+        """USD this service has spent so far this run, keyed by model id."""
+        return getattr(self, "_by_model", {})

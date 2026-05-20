@@ -58,15 +58,29 @@ class Writer:
 
     @staticmethod
     def _run_cost(result: PipelineResult) -> RunCost:
-        """Sum the run's paid services into the total + per-service breakdown.
+        """Sum the run's paid services into the total + per-service breakdown,
+        and the same spend split per model id.
 
         ``llm`` = every structured LLM call; ``image_generation`` =
         generate + any corrective edit (one service);
         ``background_removal`` = the flat PhotoRoom per-call rate.
+        ``by_model`` merges the three services' per-model-id buckets:
+        LLM ids only ever appear on the LLM client, image ids only on the
+        image generator, and ``"photoroom"`` only on the remover, so the
+        buckets are disjoint and a plain merge cannot double-count.
         """
         llm = round(result.llm.cost, COST_PRECISION)
         image_generation = round(result.image_gen.cost, COST_PRECISION)
         background_removal = round(result.bg_remover.cost, COST_PRECISION)
+        by_model = {
+            model: round(amount, COST_PRECISION)
+            for service in (
+                result.llm,
+                result.image_gen,
+                result.bg_remover,
+            )
+            for model, amount in service.cost_by_model.items()
+        }
         return RunCost(
             total=round(
                 llm + image_generation + background_removal, COST_PRECISION
@@ -74,6 +88,7 @@ class Writer:
             llm=llm,
             image_generation=image_generation,
             background_removal=background_removal,
+            by_model=by_model,
         )
 
     @staticmethod

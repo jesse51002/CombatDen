@@ -15,8 +15,9 @@ turns the two YAMLs into a node set — one **colour node** plus one
 topologically and resolves each level **concurrently**. The colour node
 is the root: it resolves the whole palette in one structured LLM call,
 and every image node depends on it. An image slot may also declare
-`depends_on` other image slots (visual continuity, or one asset feeding
-another), which deepens the graph.
+`depends_on` other image slots — used purely for **visual continuity**:
+the dependency's look is folded into this slot's prompt as a style
+reference (never fed in as an input image), which deepens the graph.
 
 The graph is validated (acyclic, every dependency satisfied) **before
 any paid call**. The run is then **fault-tolerant**: a node that fails
@@ -58,30 +59,30 @@ owns iteration):
 
 ```mermaid
 flowchart LR
-  P["build prompt<br/>brief + slot + palette<br/>(+ classify each declared<br/>dependency: reference | direct)"]
+  P["build prompt<br/>brief + slot + palette<br/>(+ declared dependencies<br/>as style reference)"]
   C["classify visual<br/>complexity<br/>→ quality tier"]
-  G["generate — text-to-image,<br/>or compose conditioned on<br/>any direct dependency image(s)"]
-  S["style-adherence check<br/>off-style → one corrective edit<br/>(no loop, no re-check)"]
+  G["generate<br/>text-to-image"]
   B["background — always:<br/>remove flat backdrop<br/>→ grid-trim crop"]
-  P --> C --> G --> S --> B
+  P --> C --> G --> B
 ```
 
 > Entry point: `src/executor/orchestrator.py`. Provider choices (which
 > model, which provider) are architecture, not pipeline logic. Each
 > call's model id is a per-call constant at the top of the module that
 > makes the call (`color_node.py`, `image_node.py`,
-> `complexity_service.py`, `style_service.py`,
-> `background_service.py`), not a config/env knob; only secrets (API
-> keys) stay in `config.py`. Image generation goes through a generic
-> litellm generator, so the image model (`openai/gpt-image-2` today) is
-> just one of those per-call constants — swapping providers is a
-> one-line change. The style check is **style adherence only, never
-> quality**: a single corrective edit on a miss, never a regeneration
-> loop. The background pass (remove → two-pass grid-trim crop) is its
-> own `BackgroundService` and runs no cutout-quality check. Cost is
-> estimated from litellm's own per-response pricing (plus a flat
-> per-call rate for background removal); there is no hand-maintained
-> price table.
+> `complexity_service.py`, `background_service.py`), not a config/env
+> knob; only secrets (API keys) stay in `config.py`. Image generation
+> goes through a generic litellm generator, so the image model
+> (`openai/gpt-image-2` today) is just one of those per-call constants
+> — swapping providers is a one-line change. Generation is
+> text-to-image only: there is no style-adherence check and no
+> corrective edit (removed — extra paid calls for marginal gain), and
+> declared dependencies are folded into the prompt as reference, never
+> fed in as input images. The background pass (remove → two-pass
+> grid-trim crop) is its own `BackgroundService` and runs no
+> cutout-quality check. Cost is estimated from litellm's own
+> per-response pricing (plus a flat per-call rate for background
+> removal); there is no hand-maintained price table.
 
 ---
 
@@ -98,13 +99,46 @@ new app is one new `apps/<app_id>/` folder.
 
 ---
 
+## TODO
+
+1. **Own the resolved surface set, with guaranteed contrast.** Today the
+   client (MobileApp) *derives* its surfaces from the four base slots —
+   the elevation card/popup (a translucent white veil over the canvas),
+   the `divider`, and a primary-tinted card — as best-effort, per-app
+   math. That logic belongs here, where palettes are generated, so it
+   generalises across every app instead of being re-implemented (and
+   re-guessed) in each client. The pipeline should resolve and emit the
+   full surface set (e.g. `surface`/`card`, `primary_card`, `divider`,
+   `popup`) alongside the base slots, each computed for the resolved
+   light/dark `mode`. As part of this it must guarantee on-surface
+   contrast the client structurally cannot: (a) a primary-derived
+   surface that carries both `primary`-as-accent and the body `text`
+   colour at WCAG AA (4.5:1); and (b) `primary` against the resolved
+   `background` itself — primary-coloured UI placed directly on the
+   canvas (active tab underline, active nav item, icons) must clear
+   contrast too. The same applies to `accent` vs `background`. (b) is
+   exactly what failed in the original light preset: the yellow
+   accent/primary washed out on the cream background. The client cannot
+   solve (a): when a preset's `text` and `primary` sit on opposite
+   luminance sides (e.g. Duck Groove — dark slate text, bright yellow
+   primary) no single surface lightness clears 4.5:1 against both, so
+   any client solve just clamps and one fails AA. Resolve all of it at
+   generation time (validate/clamp the palette and steer the
+   colour-generation prompt) so `text`, `primary`, `accent` and
+   `background` land on contrast-safe relationships. Builds on the
+   shipped background-lightness band; once this ships, the client's
+   interim surface math (incl. `primaryCard`) is deleted and the client
+   becomes a plain consumer.
+
+---
+
 ## Shipped
 
 ```
 codebase/CustomizationService/
 ├── schema/              # Pydantic contracts for the YAMLs
 │   ├── app_format, customization, primitives, slots,
-│   │     color_role, complexity, dependency_usage
+│   │     color_role, complexity
 │   └── output/          # ColorOutput, ImageOutput, Output, RunCost
 ├── src/
 │   ├── __main__, cli    # CLI entrypoint
@@ -112,7 +146,7 @@ codebase/CustomizationService/
 │   ├── executor/        # orchestrator (the DAG), registry, writer
 │   ├── modules/         # base = Node + DependencyKind
 │   │   ├── colors/      # ColorNode, color_models, prompts/*.md
-│   │   └── images/      # ImageNode + complexity / style /
+│   │   └── images/      # ImageNode + complexity /
 │   │                    #   background services, prompts/*.md
 │   ├── shared/
 │   │   ├── interfaces/  # LLMClient, ImageGenerator, BackgroundRemover
@@ -131,28 +165,3 @@ to end, `make smoke` does the same on `apps/smoketest/`; `make api`
 serves the read-only output API. Entry point:
 `src/executor/orchestrator.py`. Read the schemas for the exact YAML
 shapes; read `apps/combatden/` for a worked example.
-
-## Roadmap / TODO
-
-### 1. Per-model cost breakdown in the output
-
-Cost tracking today (`src/shared/services/cost.py` → `CostTracking`
-mixin → `PipelineResult` → `src/executor/writer.py`) sums one running
-total per paid *service* into `RunCost`. Extend it to also record cost
-**per model id** — image-gen model, prompt LLM, classify LLM,
-nano-banana edit — and emit that breakdown in `output.yaml` alongside
-the existing totals, so a run shows exactly what each model spent.
-litellm already returns per-call cost for every model id
-(provider-prefixed included), so this is an accumulation/shape change
-on `RunCost`, not new pricing data.
-
-### 2. Persist every image variant — never overwrite on nano-banana regen
-
-The image node runs `generate → style check → (one-time edit) → cutout
-→ crop` (`src/modules/images/image_node.py`); the nano-banana edit and
-the cutout/crop steps write over earlier PNGs, so the raw generation
-and pre-edit frames are lost. Persist **every** intermediate (raw
-generation, post-edit, post-cutout, final) under distinct per-slot
-filenames and never overwrite when nano-banana regenerates — keep the
-full lineage on disk for inspection and debugging. The output still
-points at the final image; the extra frames sit beside it.

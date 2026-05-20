@@ -2,7 +2,7 @@
 ///
 /// Lives outside `DesignConstants` (which is immutable) because these are
 /// celebration-specific timings, not fungible app-wide design tokens. Per-
-/// element transitions stay inside DESIGN.md's ≤300ms ease-out budget; the
+/// element transitions stay inside the app's ≤300ms ease-out budget; the
 /// overall sense of celebration comes from stacking many short beats with
 /// staggered start times, not from any single long animation.
 class CelebrationTimings {

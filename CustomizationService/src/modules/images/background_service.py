@@ -40,6 +40,12 @@ from src.shared.interfaces.background_remover import BackgroundRemover
 logger = logging.getLogger(__name__)
 
 CUTOUT_SUFFIX = ".cutout.png"
+# A retried removal reuses the canonical cutout dest; before the next
+# attempt overwrites a cutout a prior attempt already wrote, that file is
+# moved aside under this name so the full attempt lineage survives on disk
+# for inspection. ``{n}`` is the 1-based number of the preserved attempt.
+# The happy path (no retry) never produces one of these.
+CUTOUT_ATTEMPT_TMPL = "{stem}.attempt{n}.png"
 # Bounded remover re-calls; on exhaustion the un-removed image is kept.
 BG_MAX_ATTEMPTS = 3
 
@@ -96,6 +102,18 @@ class BackgroundService:
         # own parent is that dir — no run_ctx needed for the cutout path.
         cutout = raw.parent / f"{raw.stem}{CUTOUT_SUFFIX}"
         for attempt in range(BG_MAX_ATTEMPTS):
+            # Never clobber a cutout an earlier attempt actually wrote:
+            # move it aside under its attempt number before this one
+            # overwrites the canonical dest. (A hard-failed attempt raises
+            # before writing, so usually there is nothing here to preserve.)
+            if attempt and cutout.exists():
+                cutout.rename(
+                    cutout.with_name(
+                        CUTOUT_ATTEMPT_TMPL.format(
+                            stem=cutout.stem, n=attempt
+                        )
+                    )
+                )
             try:
                 await self._bg_remover.remove(raw, cutout)
             except ProviderError:

@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:mobile_app/customization/data/models/color_mode.dart';
 import 'package:mobile_app/customization/data/models/customization_color.dart';
 import 'package:mobile_app/customization/data/models/customization_image.dart';
 
@@ -12,26 +13,40 @@ import 'package:mobile_app/customization/data/models/customization_image.dart';
 class Customization extends Equatable {
   final String app;
   final String displayName;
+  final ColorMode colorMode;
   final Map<String, CustomizationColor> colors;
   final Map<String, CustomizationImage> images;
 
   const Customization({
     required this.app,
     required this.displayName,
+    required this.colorMode,
     required this.colors,
     required this.images,
   });
 
   factory Customization.fromJson(Map<String, dynamic> json) {
+    // The wire envelope: `color_set.{mode,colors}` +
+    // `image_set.images`. No legacy-shape fallback — a payload that
+    // doesn't match the current contract yields empty maps, and the
+    // app's existing bundled defaults (BrandColor / BrandImage) own
+    // the fallback. `_parseMap` already null-guards a missing or
+    // non-map section to `{}`.
+    final colorSet = json['color_set'];
+    final imageSet = json['image_set'];
+    final colorsRaw = colorSet is Map ? colorSet['colors'] : null;
+    final imagesRaw = imageSet is Map ? imageSet['images'] : null;
+    final modeRaw = colorSet is Map ? colorSet['mode'] : null;
     return Customization(
       app: (json['app'] as String?) ?? '',
       displayName: (json['display_name'] as String?) ?? '',
+      colorMode: ColorMode.fromJson(modeRaw),
       colors: _parseMap(
-        json['colors'],
+        colorsRaw,
         CustomizationColor.fromJson,
       ),
       images: _parseMap(
-        json['images'],
+        imagesRaw,
         CustomizationImage.fromJson,
       ),
     );
@@ -40,11 +55,16 @@ class Customization extends Equatable {
   Map<String, dynamic> toJson() => {
         'app': app,
         'display_name': displayName,
-        'colors': {
-          for (final e in colors.entries) e.key: e.value.toJson(),
+        'color_set': {
+          'mode': colorMode.toJson(),
+          'colors': {
+            for (final e in colors.entries) e.key: e.value.toJson(),
+          },
         },
-        'images': {
-          for (final e in images.entries) e.key: e.value.toJson(),
+        'image_set': {
+          'images': {
+            for (final e in images.entries) e.key: e.value.toJson(),
+          },
         },
       };
 
@@ -68,5 +88,5 @@ class Customization extends Equatable {
   }
 
   @override
-  List<Object?> get props => [app, displayName, colors, images];
+  List<Object?> get props => [app, displayName, colorMode, colors, images];
 }

@@ -14,7 +14,7 @@ import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 // Bottom scroll padding to clear the persistent bottom nav.
 const double _kBottomScrollPadding = 64;
 
-/// Profile screen — Figma node `13:174`.
+/// Profile screen.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 

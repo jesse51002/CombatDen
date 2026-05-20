@@ -36,7 +36,15 @@ only makes sense for one app, push back — it belongs in YAML.
 ## Python standards
 
 - **Pydantic v2.** Every model sets `ConfigDict(extra="forbid")` so
-  YAML typos fail loudly.
+  YAML typos fail loudly. The sole deliberate exception is the
+  output-read models — `Output` (`schema/output/output.py`),
+  `ImageOutput` (`schema/output/image_output.py`), and the two output
+  group wrappers `ColorPalette` (`schema/output/color_palette.py`) and
+  `ImageSet` (`schema/output/image_set.py`): those use `extra="ignore"`
+  so an externally- or previously-produced `output.yaml` carrying
+  since-removed keys still validates (the stale keys are dropped, not
+  rejected). Input contracts (`app.yaml`, `customization.yaml`, slots,
+  etc.) keep `forbid`.
 - **One concept per file.** Each Pydantic class lives in its own file
   under `schema/` unless several classes form one tight unit.
 - **Helpers belong to their class.** A function used only by one class
@@ -101,6 +109,24 @@ When a new string-shaped concept needs validation, add it here as
 another `RootModel[str]` and reuse it across schemas. Don't repeat
 the same regex check across multiple field validators when one
 primitive captures it.
+
+---
+
+## Output groups
+
+Each group on the produced `output.yaml` is its own Pydantic model under
+`schema/output/`, never a bare `dict`/collection on `Output`. The group
+is exposed on `Output` under a `*_set` field/YAML key (`color_set` →
+`ColorPalette`, `image_set` → `ImageSet`) with the inner collection
+keeping its plain plural name, so the artifact reads `color_set.colors`
+/ `image_set.images`, never the redundant `colors.colors`.
+
+These wrappers exist so a group can gain run-wide fields (e.g.
+`ColorPalette.mode`) without another breaking `output.yaml` reshape;
+that is why they are read back with `extra="ignore"` like `Output` /
+`ImageOutput`. A *required* field on a group stays required — adding one
+is a deliberate breaking change that requires migrating every existing
+`apps/<app>/*/output.yaml` (and the `tests/data/` fixtures).
 
 ---
 

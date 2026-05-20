@@ -5,7 +5,7 @@ import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
 /// "Location" header + static map preview + street address.
-/// Mirrors the Figma `MapWidget` group.
+/// Mirrors the `MapWidget` group.
 class ClassLocationSection extends StatelessWidget {
   const ClassLocationSection({super.key, required this.detail});
 

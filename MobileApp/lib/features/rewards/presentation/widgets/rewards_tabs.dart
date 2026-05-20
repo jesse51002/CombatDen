@@ -5,7 +5,7 @@ import 'package:mobile_app/core/design_constants.dart';
 enum RewardsTab { pointsStore, myRewards }
 
 /// Two-tab segmented selector used on both rewards screens. Mimics the
-/// underline-on-active treatment from Figma — the inactive tab is dim and
+/// underline-on-active treatment from the design — the inactive tab is dim and
 /// has no underline.
 class RewardsTabs extends StatelessWidget {
   const RewardsTabs({

@@ -29,7 +29,7 @@ design_direction:
       speed lines, no sweat-and-grind imagery, no clutter, nothing loud.
 
 colors_direction:
-  dark_mode: false
+  mode: light
   description: |
     A soft, light, airy palette — calm and restful, deliberately low
     energy. Colour should soothe, never shout.

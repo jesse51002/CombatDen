@@ -13,4 +13,4 @@ colors_direction:
     warmth. Text bone-white, slightly muted. Accent muted gold for premium feel.
 
     '
-  dark_mode: true
+  mode: dark

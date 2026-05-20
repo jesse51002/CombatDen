@@ -1,46 +1,55 @@
 design_direction:
-  name: CombatDen
-  short_desc: "Train like a pro — a premium combat-sports training and progression app for competitive fighters and serious amateurs."
+  name: Duck Groove
+  short_desc: "Dance it out — a light, fun, bubbly dance-workout club app where the Duck Groove duck cheers you on."
   long_desc: |
-    CombatDen is a premium combat-sports training and progression app for
-    competitive fighters and serious amateurs across boxing, MMA, Muay
-    Thai, BJJ and wrestling. The audience is disciplined and unsentimental:
-    they want a tool that respects the work, not a gamified toy. The voice
-    is confident, terse and earned — a coach in your corner, never hype.
+    Duck Groove is a playful dance-workout club app for people who want
+    moving their body to feel like joy, not a chore — all ages, all
+    skill levels, here to have fun. The audience is upbeat and
+    unintimidated: they want a tool that makes them smile and keeps them
+    coming back. The voice is warm, bubbly and encouraging — a friend
+    hyping you up on the dance floor, never drill-sergeant, never hype-y
+    sales.
+
+    The Duck Groove duck mascot is the HERO of this visual system: a
+    rounded, friendly, expressive cartoon duck that stars in every
+    celebratory moment — dancing, cheering, presenting rewards. It is
+    the recurring face of the brand, not a background accent.
 
     Visual system — the shared look every generated asset must wear:
 
-    - Feel: gritty but high-end. Forged, hard-earned, championship
-      gravitas. Restraint over spectacle — quietly expensive, never flashy.
-    - Medium & materials: realistic sculpted 3D — forged and brushed
-      metal, worn full-grain leather, taut canvas, dense matte rubber.
-      Tangible, weighty, faintly battle-worn. Never cartoon, never flat
-      vector, never glossy plastic.
-    - Finish & light: matte surfaces with a tight, controlled specular.
-      Low-key studio lighting, one hard key with soft fill, deep shadow
-      worked into each object's own surfaces for form and depth — no
-      scene, no shadow cast onto a floor.
-    - Energy by role: rewards, wins, rank-ups and celebrations land with
-      weight and forward momentum — impact, not confetti; powerful but
-      still disciplined. Persistent UI icons and indicators are stripped,
-      solid and calm — crafted but quiet, never loud.
-    - Hard nos: no neon, no glow, no rainbow or playful gradients, no
-      sci-fi, no sparkles, no busy clutter, nothing cute.
+    - Feel: light, fun, bubbly and welcoming. Joyful and energetic,
+      playful over polished. Delight over restraint — it should make
+      you grin.
+    - Medium & materials: soft, rounded, plump 3D — squishy matte
+      plastic, soft inflated balloon-like forms, candy and felt
+      textures, gently bouncy. Friendly and tactile, never sharp,
+      never gritty. Never battle-worn metal, leather or canvas.
+    - Finish & light: bright, soft studio lighting, gentle soft
+      shadows that keep forms rounded and approachable. No harsh key
+      light, no deep gloom — everything stays airy and clear.
+    - Energy by role: rewards, wins, streaks and celebrations land
+      with bounce, sparkle and confetti — joyful pop, the duck mid-
+      celebration. Persistent UI icons and indicators stay clean,
+      friendly and simple — cheerful but calm, never busy.
+    - Hard nos: nothing gritty, dark, heavy or battle-worn; no muted
+      or desaturated palettes; nothing intimidating, corporate-serious
+      or cold. Cute is the point.
 
 colors_direction:
-  dark_mode: true
+  mode: light
   description: |
-    A dark, premium, low-key palette — deliberately not loud. Restraint is
-    the point: colour earns attention by being rare, not bright.
+    A bright, light, bubbly palette — cheerful and inviting. Color is
+    the point here: it should feel warm, playful and full of energy.
 
-    - Primary: a deep oxblood red, like dried blood — saturated but dark
-      and serious, never a bright pillarbox red. Used sparingly for
-      primary CTAs and the few moments that truly matter.
-    - Background: near-black warm charcoal with the slightest red-warm
-      undertone and very low chroma — reads as black, feels intentional,
-      not a dead pure black.
-    - Text: bone / ivory white, slightly muted and warm, easy against the
-      charcoal and comfortably above AA contrast.
-    - Accent: an antique, desaturated muted gold for badges, ranks and
-      small premium highlights — aged trophy metal, not shiny yellow. One
-      confident accent; it must never compete with the red.
+    - Primary: a sunny, joyful duck-yellow — warm and inviting, the
+      brand's signature pop. Used confidently for primary CTAs and the
+      moments that delight.
+    - Background: a soft, airy near-white with the faintest warm pastel
+      tint — clean and bright, never stark clinical white, never dark.
+    - Text: a soft, friendly deep slate — readable and comfortably
+      above AA contrast on the light background, warm rather than harsh
+      pure black.
+    - Accent: a playful bubblegum or sky pop for selections, highlights
+      and active states — a clearly different, cheerful hue from the
+      yellow primary, fun but never muddy. One confident accent that
+      complements the primary without competing with it.

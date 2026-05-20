@@ -6,9 +6,6 @@ Return:
 
 - `prompt`: the exact text the image model receives. Just the prompt — no
   preamble, no quotes, no markdown, no labels.
-- `dependency_usage`: a list with one entry per related asset listed below
-  (under "Related assets"). Return an EMPTY list when no related assets
-  are listed. The rules for filling it are in that section when present.
 
 The subject description tells you WHAT to depict and its style intent. It may
 also mention where or how the asset is used in the app — a screen name, a
@@ -158,4 +155,4 @@ $palette
 $theme_background
 --- Subject ---
 $subject
-$dependency_block
+$related_assets

@@ -4,8 +4,8 @@ import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/shared/widgets/topbar/info_bar.dart';
 import 'package:mobile_app/shared/widgets/topbar/topbar_header_section.dart';
 
-/// Visual mode for [AppTopbar], matching the two variants in the Figma
-/// `topbar` master component (node `288:581`).
+/// Visual mode for [AppTopbar], matching the two variants in the
+/// `topbar` master component.
 ///
 /// * [bigLogo] — large square gym logo above the gym name and chevron-down.
 ///   Used on the home screen.
@@ -13,7 +13,7 @@ import 'package:mobile_app/shared/widgets/topbar/topbar_header_section.dart';
 ///   other screen that shows the topbar.
 enum AppTopbarMode { bigLogo, nameOnly }
 
-/// Shared page topbar used across the app. Mirrors the Figma `topbar`
+/// Shared page topbar used across the app. Mirrors the `topbar`
 /// component variants exactly: [AppTopbarMode.bigLogo] /
 /// [AppTopbarMode.nameOnly] crossed with an optional [showBackButton].
 class AppTopbar extends StatelessWidget {

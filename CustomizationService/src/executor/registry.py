@@ -17,7 +17,6 @@ from src.modules.colors.color_node import ColorNode
 from src.modules.images.background_service import BackgroundService
 from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_node import ImageNode
-from src.modules.images.style_service import StyleAdherenceService
 from src.shared.interfaces.background_remover import BackgroundRemover
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
@@ -54,16 +53,14 @@ class ModuleRegistry:
     ) -> Graph:
         """Construct the colour node and one image node per slot.
 
-        The classifier, style check and background pass are internal
-        sub-services every image node shares (one image resolved end to
-        end stays the atomic unit). The reference/direct dependency
-        verdict is no longer a sub-service — the prompt-writing call
-        makes it inline. Each image node gets ``color`` as an automatic
-        dependency plus its declared ``depends_on`` images.
+        The classifier and background pass are internal sub-services
+        every image node shares (one image resolved end to end stays the
+        atomic unit). Each image node gets ``color`` as an automatic
+        dependency plus its declared ``depends_on`` images (always used
+        as reference, folded into the prompt text).
         """
         color = ColorNode(self._run_ctx, llm=llm)
         classifier = ComplexityClassifier(llm=llm)
-        style = StyleAdherenceService(llm=llm)
         background = BackgroundService(bg_remover=bg_remover)
 
         images = [
@@ -75,7 +72,6 @@ class ModuleRegistry:
                 llm=llm,
                 image_gen=image_gen,
                 classifier=classifier,
-                style=style,
                 background=background,
             )
             for slot in self._run_ctx.app.images

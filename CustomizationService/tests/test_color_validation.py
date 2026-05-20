@@ -13,6 +13,9 @@ from schema import AppFormat, ColorOutput, ColorRole, OklchColor
 from src.core.errors import SchemaValidationError
 from src.modules.colors.color_models import build_color_response_model
 from src.modules.colors.color_validation import (
+    MIN_CONTRAST_AA,
+    _parse_oklch,
+    clamp_bg_lightness,
     contrast_ratio,
     enforce_color_contract,
     oklch_to_srgb,
@@ -115,7 +118,9 @@ def test_contract_passes_light_mode() -> None:
     ("bg", "text", "dark", "needle"),
     [
         ("oklch(15% 0.20 40)", "oklch(92% 0.01 80)", True, "chroma"),
-        ("oklch(70% 0.012 40)", "oklch(92% 0.01 80)", True, "lightness"),
+        # Background lightness is no longer a contract raise (the clamp owns
+        # it); the contract still rejects a too-narrow text/bg contrast gap.
+        ("oklch(45% 0.012 40)", "oklch(40% 0.01 80)", False, "contrast"),
         ("oklch(15% 0.012 40)", "oklch(40% 0.01 80)", True, "lightness"),
         ("oklch(15% 0.0 40)", "oklch(92% 0.01 80)", True, "chroma"),
         ("oklch(95% 0.006 250)", "oklch(60% 0.01 250)", False, "lightness"),
@@ -137,6 +142,65 @@ def test_contract_requires_exactly_one_background_and_text() -> None:
             roles={"primary": None, "background": None, "text": ColorRole.TEXT},
             dark_mode=True,
         )
+
+
+# --- clamp_bg_lightness ----------------------------------------------------
+
+
+def _bg(oklch: str) -> ColorOutput:
+    return ColorOutput(
+        oklch=oklch, display_name="BG name", description="bg desc"
+    )
+
+
+def test_clamp_light_bg_pulled_below_ceiling() -> None:
+    out = clamp_bg_lightness(_bg("oklch(97% 0.0123 70.5)"), dark_mode=False)
+    # Only the L token is rewritten to the 0.90 ceiling; chroma/hue tokens
+    # stay byte-identical and the prose is untouched.
+    assert str(out.oklch) == "oklch(90% 0.0123 70.5)"
+    assert out.display_name == "BG name"
+    assert out.description == "bg desc"
+
+
+def test_clamp_dark_bg_lifted_above_floor() -> None:
+    out = clamp_bg_lightness(_bg("oklch(3% 0.006 40)"), dark_mode=True)
+    assert str(out.oklch) == "oklch(8% 0.006 40)"
+
+
+def test_clamp_in_band_is_identity() -> None:
+    src = _bg("oklch(88% 0.01 250)")  # within the light band [86%, 90%]
+    assert clamp_bg_lightness(src, dark_mode=False) is src
+
+
+def test_clamp_is_idempotent() -> None:
+    once = clamp_bg_lightness(_bg("oklch(99% 0.02 30)"), dark_mode=False)
+    twice = clamp_bg_lightness(once, dark_mode=False)
+    assert str(once.oklch) == str(twice.oklch) == "oklch(90% 0.02 30)"
+
+
+def test_clamp_preserves_alpha_token() -> None:
+    out = clamp_bg_lightness(_bg("oklch(5% 0.006 40 / 0.5)"), dark_mode=True)
+    assert str(out.oklch) == "oklch(8% 0.006 40 / 0.5)"
+
+
+def test_clamp_preserves_aa_contrast_at_boundaries() -> None:
+    """The contract validates contrast on the *pre-clamp* background; assert
+    the post-clamp background still clears WCAG AA against worst-case
+    boundary text in both modes."""
+    light_bg = clamp_bg_lightness(_bg("oklch(99% 0.006 250)"), dark_mode=False)
+    bl, bc, bh = _parse_oklch(str(light_bg.oklch))
+    tl, tc, th = _parse_oklch("oklch(40% 0.01 250)")  # darkest light text
+    assert (
+        contrast_ratio(oklch_to_srgb(bl, bc, bh), oklch_to_srgb(tl, tc, th))
+        >= MIN_CONTRAST_AA
+    )
+    dark_bg = clamp_bg_lightness(_bg("oklch(2% 0.006 40)"), dark_mode=True)
+    bl, bc, bh = _parse_oklch(str(dark_bg.oklch))
+    tl, tc, th = _parse_oklch("oklch(85% 0.01 80)")  # darkest dark-mode text
+    assert (
+        contrast_ratio(oklch_to_srgb(bl, bc, bh), oklch_to_srgb(tl, tc, th))
+        >= MIN_CONTRAST_AA
+    )
 
 
 # --- AppFormat role gate ---------------------------------------------------

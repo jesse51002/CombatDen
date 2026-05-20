@@ -179,7 +179,7 @@ class LiteLLMClient(CostTracking, LLMClient):
         if tools is not None:
             kwargs["tools"] = tools
         resp = await self._acompletion(kwargs, model)
-        self._add_cost(litellm_call_cost(resp, model))
+        self._add_cost(litellm_call_cost(resp, model), model)
         message = resp.choices[0].message.model_dump()
         logger.debug("complete output ← %s:\n\n%s\n", model, _render(message))
         return message
@@ -206,6 +206,7 @@ class LiteLLMClient(CostTracking, LLMClient):
             kwargs = self._completion_kwargs(model, convo)
             kwargs["response_format"] = schema
 
+            """
             logger.debug(
                 "complete_structured input → %s %s (attempt %d):\n\n%s\n",
                 model,
@@ -213,10 +214,11 @@ class LiteLLMClient(CostTracking, LLMClient):
                 attempt + 1,
                 _render(convo),
             )
+            """
             resp = await self._acompletion(kwargs, model)
             # Every attempt is a billed call — count each, not just the
             # one that finally validates.
-            self._add_cost(litellm_call_cost(resp, model))
+            self._add_cost(litellm_call_cost(resp, model), model)
             content = self._message_content(resp.choices[0].message)
             try:
                 parsed = schema.model_validate_json(content)

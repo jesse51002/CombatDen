@@ -5,7 +5,7 @@ import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
 /// "Instructor" header + bio paragraph next to a circular headshot.
-/// Mirrors the Figma `InstructorWidget` group.
+/// Mirrors the `InstructorWidget` group.
 class ClassInstructorSection extends StatelessWidget {
   const ClassInstructorSection({super.key, required this.detail});
 

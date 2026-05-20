@@ -1,14 +1,10 @@
-"""LiteLLMImageGenerator — image generate + edit via litellm.
+"""LiteLLMImageGenerator — image generation via litellm.
 
 The mirror of ``LiteLLMClient`` for images: it does not know or care which
 provider it is talking to. The model id is passed in per call, carries the
 provider prefix litellm routes on, and ``provider_keys`` resolves that
 provider's key — so switching image providers/models is a one-constant
-change in the calling module, never a new class here. ``generate`` and
-``edit`` are both litellm image calls sharing that key/payload handling,
-so they live on one class (regular nano-banana —
-``gemini/...-flash-image`` — is the default edit model today; the
-constant lives in the calling module).
+change in the calling module, never a new class here.
 
 (``BflImageGenerator`` existed only because litellm's BFL image path is
 broken upstream; that does not apply to OpenAI/gpt-image, so this goes
@@ -21,7 +17,6 @@ import asyncio
 import base64
 import logging
 from collections.abc import Awaitable, Callable
-from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -55,12 +50,10 @@ def _b64_payload(item: Any) -> str:
 
 
 class LiteLLMImageGenerator(CostTracking, ImageGenerator):
-    """Concrete image generate + edit that calls any litellm image model.
+    """Concrete text-to-image generation that calls any litellm image model.
 
-    Both ``generate`` and ``edit`` accumulate into one running cost via
-    ``CostTracking`` — the writer reports it as the single
-    ``image_generation`` bucket (generation and corrective edit are one
-    service, one spend source)."""
+    Accumulates a running cost via ``CostTracking`` — the writer reports
+    it as the single ``image_generation`` bucket."""
 
     @staticmethod
     async def _call_with_retry(
@@ -131,7 +124,7 @@ class LiteLLMImageGenerator(CostTracking, ImageGenerator):
                 output_format=OUTPUT_FORMAT,
                 api_key=provider_api_key(model),
             )
-            self._add_cost(litellm_call_cost(resp, model))
+            self._add_cost(litellm_call_cost(resp, model), model)
             image_bytes = base64.b64decode(_b64_payload(resp.data[0]))
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(image_bytes)
@@ -139,96 +132,4 @@ class LiteLLMImageGenerator(CostTracking, ImageGenerator):
 
         return await self._call_with_retry(
             _attempt, what="generation", model=model
-        )
-
-    async def edit(
-        self, src: Path, instruction: str, dest: Path, *, model: str
-    ) -> AbsolutePath:
-        """Apply ``instruction`` to ``src`` and write the PNG to ``dest``.
-
-        Raises:
-            ProviderError: the edit call or its payload failed every
-                attempt (see ``_call_with_retry``).
-        """
-        logger.debug(
-            "image edit input → %s on %s:\n\n%s\n",
-            model,
-            src.name,
-            instruction,
-        )
-
-        async def _attempt() -> AbsolutePath:
-            with open(src, "rb") as fh:
-                resp = await litellm.aimage_edit(
-                    model=model,
-                    image=fh,
-                    prompt=instruction,
-                    size=IMAGE_SIZE,
-                    n=1,
-                    output_format=OUTPUT_FORMAT,
-                    api_key=provider_api_key(model),
-                )
-            self._add_cost(litellm_call_cost(resp, model))
-            image_bytes = base64.b64decode(_b64_payload(resp.data[0]))
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(image_bytes)
-            return AbsolutePath(str(dest.resolve()))
-
-        return await self._call_with_retry(
-            _attempt, what="edit", model=model
-        )
-
-    async def compose(
-        self,
-        prompt: str,
-        srcs: list[Path],
-        dest: Path,
-        *,
-        model: str,
-        quality: str,
-    ) -> AbsolutePath:
-        """Generate a new image conditioned on ``srcs`` per ``prompt`` and
-        write the PNG to ``dest``.
-
-        Image-conditioned generation goes through litellm's image-edit
-        path (the same call ``edit`` uses), which accepts one or more
-        input images plus the prompt. A single source keeps the proven
-        single-handle shape; multiple sources pass a list. ``ExitStack``
-        holds every handle open across the one call and closes them all.
-
-        Raises:
-            ProviderError: the compose call or its payload failed every
-                attempt (see ``_call_with_retry``).
-        """
-        logger.debug(
-            "image compose input → %s (quality=%s) on %s:\n\n%s\n",
-            model,
-            quality,
-            [s.name for s in srcs],
-            prompt,
-        )
-
-        async def _attempt() -> AbsolutePath:
-            with ExitStack() as stack:
-                handles = [
-                    stack.enter_context(open(s, "rb")) for s in srcs
-                ]
-                resp = await litellm.aimage_edit(
-                    model=model,
-                    image=handles if len(handles) > 1 else handles[0],
-                    prompt=prompt,
-                    quality=quality,
-                    size=IMAGE_SIZE,
-                    n=1,
-                    output_format=OUTPUT_FORMAT,
-                    api_key=provider_api_key(model),
-                )
-            self._add_cost(litellm_call_cost(resp, model))
-            image_bytes = base64.b64decode(_b64_payload(resp.data[0]))
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(image_bytes)
-            return AbsolutePath(str(dest.resolve()))
-
-        return await self._call_with_retry(
-            _attempt, what="compose", model=model
         )

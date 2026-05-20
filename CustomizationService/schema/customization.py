@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from schema.color_mode import ColorMode
+
 
 class DesignDirection(BaseModel):
     """Brand intent prose fed into every agent prompt."""
@@ -23,12 +25,12 @@ class DesignDirection(BaseModel):
 
 
 class ColorsDirection(BaseModel):
-    """Raw color brief: prose intent plus a light/dark mode flag."""
+    """Raw color brief: prose intent plus the light/dark mode."""
 
     model_config = ConfigDict(extra="forbid")
 
     description: str
-    dark_mode: bool
+    mode: ColorMode
 
     @field_validator("description")
     @classmethod

@@ -11,12 +11,11 @@ import logging
 from pathlib import Path
 from string import Template
 
+from schema import ColorMode, ColorPalette, ColorRole
 from src.core.run_context import RunContext
 from src.modules.base import DependencyKind, Node
-from src.modules.colors.color_models import (
-    ColorPalette,
-    build_color_response_model,
-)
+from src.modules.colors.color_models import build_color_response_model
+from src.modules.colors.color_validation import clamp_bg_lightness
 from src.shared.interfaces.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -26,7 +25,7 @@ COLOR_PROMPT_PATH = Path(__file__).parent / "prompts" / "color_palette_rule.md"
 # Model for the one colour-palette call. A per-call constant, not config:
 # the model is a property of this call. Override `run(model=...)` in dev
 # (bake-off scripts under `scripts/`); production uses this default.
-COLOR_MODEL = "anthropic/claude-haiku-4-5-20251001"
+COLOR_MODEL = "anthropic/claude-sonnet-4-6"
 
 
 class ColorNode(Node):
@@ -49,21 +48,33 @@ class ColorNode(Node):
         """
         messages = [{"role": "user", "content": self._build_prompt()}]
         slot_ids = [slot.id for slot in self._run_ctx.app.colors]
-        # roles + dark_mode come from app.yaml / customization.yaml (never
-        # the LLM); they drive the deterministic contract on the wire model.
+        # roles + mode come from app.yaml / customization.yaml (never the
+        # LLM); they drive the deterministic contract on the wire model.
         roles = {slot.id: slot.role for slot in self._run_ctx.app.colors}
-        dark_mode = self._run_ctx.cust.colors_direction.dark_mode
+        mode = self._run_ctx.cust.colors_direction.mode
         response_model = build_color_response_model(
-            slot_ids, roles=roles, dark_mode=dark_mode
+            slot_ids, roles=roles, dark_mode=mode is ColorMode.DARK
         )
         resolved = await self._llm.complete_structured(
             messages,
             schema=response_model,
             model=model,
         )
-        return ColorPalette(
-            colors={slot_id: getattr(resolved, slot_id) for slot_id in slot_ids}
+        colors = {
+            slot_id: getattr(resolved, slot_id) for slot_id in slot_ids
+        }
+        # The colour contract no longer raises on background lightness:
+        # the background band is enforced here, deterministically, so a
+        # near-extreme answer is corrected (not re-asked) and the client
+        # always has elevation headroom. See clamp_bg_lightness. AppFormat
+        # guarantees exactly one background-role slot, so next() is safe.
+        bg_id = next(
+            sid for sid, r in roles.items() if r is ColorRole.BACKGROUND
         )
+        colors[bg_id] = clamp_bg_lightness(
+            colors[bg_id], dark_mode=mode is ColorMode.DARK
+        )
+        return ColorPalette(mode=mode, colors=colors)
 
     def _build_prompt(self) -> str:
         """Rule + brand brief + slot inventory, substituted into the one
@@ -79,6 +90,6 @@ class ColorNode(Node):
             short=design.short_desc,
             long=design.long_desc,
             colour_direction=colors.description,
-            dark_mode=colors.dark_mode,
+            dark_mode=colors.mode is ColorMode.DARK,
             slots=inventory,
         )

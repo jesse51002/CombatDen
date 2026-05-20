@@ -10,6 +10,12 @@ A failure raises a single, self-describing ``ValueError``. It is invoked
 from a ``model_validator`` on the per-request colour response model, so it
 rides the existing ``complete_structured`` retry loop — the raised message
 flows verbatim into ``schema_correction.md`` and the model is re-asked.
+
+``clamp_bg_lightness`` is the one deliberate exception to the raise-and-
+re-ask model: the background lightness band is *not* a contract raise but
+a deterministic post-generation clamp (the client must work with whatever
+it is given, so the colour layer guarantees elevation headroom rather than
+arguing with the model). See its docstring and the band-constant comment.
 """
 
 from __future__ import annotations
@@ -17,17 +23,33 @@ from __future__ import annotations
 import math
 import re
 
-from schema import ColorOutput, ColorRole
+from schema import ColorOutput, ColorRole, OklchColor
 
 # --- strict sanity bounds (background & text only) -------------------------
 # primary/accent (role=None) are intentionally unconstrained.
 CHROMA_MIN_TINT = 0.003  # never pure gray/black — require a faint hued tint
 CHROMA_MAX_NEUTRAL = 0.04  # base/text colours stay low-chroma, not "designed"
-DARK_MODE_BG_L_MAX = 0.30  # dark mode: background pinned near-black
 DARK_MODE_TEXT_L_MIN = 0.85  # dark mode: text pinned near-white
-LIGHT_MODE_BG_L_MIN = 0.92  # light mode: background pinned near-white
 LIGHT_MODE_TEXT_L_MAX = 0.40  # light mode: text pinned near-black
 MIN_CONTRAST_AA = 4.5  # WCAG AA, normal text
+
+# Background lightness BAND, by mode — two-sided on purpose. The MobileApp
+# client builds elevated surfaces (cards, popups) by compositing a
+# translucent white veil over the resolved background; the card/background
+# separation it can achieve is gated by the headroom toward the opposite
+# extreme, which collapses as the background nears pure white (or pure
+# black in dark mode). A background flush against an extreme leaves no
+# tonal room for elevation to read (README TODO #1). These bounds are
+# enforced by the deterministic clamp (`clamp_bg_lightness`), NOT by a
+# contract raise: the clamp is the sole authority on this band, so a
+# near-extreme model answer is silently corrected — never re-asked or
+# failed. Dark ceiling 0.30 / floor 0.08; light ceiling 0.90 (the bug
+# fix — derived from the client's real veil-alpha formula) / floor 0.86
+# (dim end still reads as a light theme).
+DARK_MODE_BG_L_MIN = 0.08
+DARK_MODE_BG_L_MAX = 0.30
+LIGHT_MODE_BG_L_MIN = 0.86
+LIGHT_MODE_BG_L_MAX = 0.90
 
 # Lenient parse: the OklchColor field validator already guaranteed shape +
 # numeric ranges before this ever runs; this only needs to read L/C/H back.
@@ -144,14 +166,12 @@ def enforce_color_contract(
                 f"faint brand-hued tint."
             )
 
-    # Lightness bands by mode.
+    # Text lightness by mode. Background lightness is intentionally NOT
+    # checked here — the deterministic clamp (`clamp_bg_lightness`, run
+    # after this in ColorNode.run) is its sole authority, so a near-extreme
+    # background is corrected rather than re-asked or failed. Raising on it
+    # here would reject perfectly good in-band values the clamp accepts.
     if dark_mode:
-        if bg_l > DARK_MODE_BG_L_MAX:
-            raise ValueError(
-                f"colour contract: dark mode — the '{bg_id}' background "
-                f"({resolved[bg_id].oklch}) must have lightness ≤ "
-                f"{DARK_MODE_BG_L_MAX} (got {bg_l:.2f}). Make it near-black."
-            )
         if tx_l < DARK_MODE_TEXT_L_MIN:
             raise ValueError(
                 f"colour contract: dark mode — the '{text_id}' text "
@@ -159,12 +179,6 @@ def enforce_color_contract(
                 f"{DARK_MODE_TEXT_L_MIN} (got {tx_l:.2f}). Make it near-white."
             )
     else:
-        if bg_l < LIGHT_MODE_BG_L_MIN:
-            raise ValueError(
-                f"colour contract: light mode — the '{bg_id}' background "
-                f"({resolved[bg_id].oklch}) must have lightness ≥ "
-                f"{LIGHT_MODE_BG_L_MIN} (got {bg_l:.2f}). Make it near-white."
-            )
         if tx_l > LIGHT_MODE_TEXT_L_MAX:
             raise ValueError(
                 f"colour contract: light mode — the '{text_id}' text "
@@ -185,3 +199,38 @@ def enforce_color_contract(
             f"≥ {MIN_CONTRAST_AA}:1 for normal text. Widen the lightness "
             f"gap between them."
         )
+
+
+def clamp_bg_lightness(color: ColorOutput, *, dark_mode: bool) -> ColorOutput:
+    """Pull a background colour's L into the safe band — deterministically,
+    in place of a re-ask.
+
+    The MobileApp client builds elevated surfaces by compositing a
+    translucent white veil over the resolved background; a background flush
+    against pure black or white leaves no tonal room for that elevation to
+    read (README TODO #1). This is the *sole* authority on the background
+    lightness band — ``enforce_color_contract`` deliberately no longer
+    raises on it, so a near-extreme model answer is corrected here rather
+    than re-asked or failed.
+
+    Only the L token is rewritten; chroma, hue and any alpha are preserved
+    byte-for-byte (no float-reformat drift), and ``display_name`` /
+    ``description`` are left untouched — a few-point L nudge does not change
+    the colour's identity. In-band input is returned unchanged (the same
+    object), so the clamp is idempotent.
+    """
+    m = _OKLCH_RE.match(str(color.oklch))
+    if m is None:  # OklchColor already guaranteed the shape; defensive only
+        raise ValueError(f"not a parseable oklch string: {color.oklch!r}")
+    lightness = float(m.group(1)) / 100.0
+    lo, hi = (
+        (DARK_MODE_BG_L_MIN, DARK_MODE_BG_L_MAX)
+        if dark_mode
+        else (LIGHT_MODE_BG_L_MIN, LIGHT_MODE_BG_L_MAX)
+    )
+    clamped = min(hi, max(lo, lightness))
+    if clamped == lightness:
+        return color
+    s = str(color.oklch)
+    spliced = f"{s[: m.start(1)]}{clamped * 100:g}{s[m.end(1) :]}"
+    return color.model_copy(update={"oklch": OklchColor(spliced)})

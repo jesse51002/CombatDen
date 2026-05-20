@@ -42,11 +42,11 @@ The acid test: *if I fixed all N instances right now, would the codebase be bett
 
 ### Bucket 3 — verify against design (or other context)
 
-Some violations are judgment calls that depend on context the code doesn't carry — usually the Figma frame, sometimes a product decision the user has stated elsewhere. Examples: gap hierarchy that may match the design, layout choices that look "wrong" but are intentional.
+Some violations are judgment calls that depend on context the code doesn't carry — the active design source, a product decision the user has stated elsewhere. Examples: gap hierarchy that may match the design, layout choices that look "wrong" but are intentional.
 
 Flag with low confidence and **verify before declaring a fix.** If the design matches the code, dismiss. If it doesn't, move to Bucket 1.
 
-If the source of truth (Figma, etc.) is unavailable or being deprecated, ask the user to make the call rather than guessing.
+If the source of truth is unavailable, ask the user to make the call rather than guessing.
 
 ## Verification discipline (don't trust grep, don't trust subagents)
 

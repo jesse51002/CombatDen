@@ -23,6 +23,12 @@ API_KEY_HEADER = "x-api-key"
 # model-id constants elsewhere. Update if the PhotoRoom plan changes.
 PHOTOROOM_COST_PER_CALL = 0.02
 
+# Synthetic model-id key for the per-model cost breakdown: PhotoRoom is a
+# flat-rate provider with no litellm model id, but it is still a paid call
+# the breakdown must show, so it gets its own bucket alongside the model
+# ids. A provider name, not an app-specific value.
+PHOTOROOM_MODEL_KEY = "photoroom"
+
 # MIME type sent for the multipart upload (we always generate PNGs).
 IMAGE_MIME = "image/png"
 
@@ -60,7 +66,7 @@ class PhotoRoomBackgroundRemover(CostTracking, BackgroundRemover):
                 resp.raise_for_status()
                 # A 2xx means PhotoRoom accepted and billed the call —
                 # count it even if the cutout turns out unusable later.
-                self._add_cost(PHOTOROOM_COST_PER_CALL)
+                self._add_cost(PHOTOROOM_COST_PER_CALL, PHOTOROOM_MODEL_KEY)
                 cutout = resp.content
 
             dst.parent.mkdir(parents=True, exist_ok=True)

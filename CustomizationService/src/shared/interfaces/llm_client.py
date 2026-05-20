@@ -49,3 +49,9 @@ class LLMClient(ABC):
     def cost(self) -> float:
         """Running USD this client has spent this run (the writer sums it)."""
         raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def cost_by_model(self) -> dict[str, float]:
+        """The same running spend, split per model id (the writer merges it)."""
+        raise NotImplementedError

@@ -6,7 +6,7 @@ design_direction:
     modern, neutral — nothing app-specific.
 
 colors_direction:
-  dark_mode: true
+  mode: dark
   description: |
     Dark palette: a confident primary, near-black background, off-white
     text, one restrained accent. Readable, not loud.

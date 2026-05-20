@@ -16,6 +16,7 @@ from schema import (
     Complexity,
     Customization,
     Output,
+    RunCost,
 )
 from src.core.run_context import RunContext
 from src.executor import orchestrator
@@ -25,11 +26,7 @@ from src.executor.writer import (
     CUSTOMIZATION_PROVENANCE_NAME,
     Writer,
 )
-from src.modules.images.image_models import (
-    ImageComplexity,
-    ImagePrompt,
-    StyleCheck,
-)
+from src.modules.images.image_models import ImageComplexity, ImagePrompt
 
 # Committed fixture tree — never the live ``apps/`` production runs.
 APP_DIR = Path(__file__).resolve().parent / "data" / "apps" / "demo"
@@ -60,11 +57,22 @@ _FAKE_LLM_COST = 0.001234
 _FAKE_IMAGE_COST = 0.05
 _FAKE_BG_COST = 0.02
 
+# Each fake's per-model-id split. Distinct keys per service so the
+# writer's merge is unambiguous and each bucket sums back to its service
+# total (pure model-id keying; PhotoRoom under its synthetic key).
+_FAKE_LLM_BY_MODEL = {
+    "anthropic/demo-prompt": _FAKE_LLM_COST * 0.75,
+    "gemini/demo-classify": _FAKE_LLM_COST * 0.25,
+}
+_FAKE_IMAGE_BY_MODEL = {"openai/demo-image": _FAKE_IMAGE_COST}
+_FAKE_BG_BY_MODEL = {"photoroom": _FAKE_BG_COST}
+
 
 class _FakeLLM:
     """Honours LLMClient: structured colour palette + image prompt + bg verdict."""
 
     cost = _FAKE_LLM_COST
+    cost_by_model = _FAKE_LLM_BY_MODEL
 
     def __init__(self, color_slot_ids: list[str]) -> None:
         self._color_slot_ids = color_slot_ids
@@ -91,12 +99,6 @@ class _FakeLLM:
             )
         elif schema is ImageComplexity:
             result = ImageComplexity(complexity=Complexity.MEDIUM)
-        elif schema is StyleCheck:
-            # Adherent: the conditional edit path stays out of the
-            # happy-path assembly test.
-            result = StyleCheck(
-                adherent=True, reason="", edit_instruction=""
-            )
         else:
             raise AssertionError(f"unexpected schema {schema!r}")
         return result
@@ -107,6 +109,7 @@ class _FakeLLM:
 
 class _FakeImageGen:
     cost = _FAKE_IMAGE_COST
+    cost_by_model = _FAKE_IMAGE_BY_MODEL
 
     async def generate(
         self, prompt: str, dest: Path, *, model: str, quality: str
@@ -115,34 +118,12 @@ class _FakeImageGen:
         Image.new("RGB", (64, 64), (10, 10, 10)).save(dest)
         return AbsolutePath(str(dest.resolve()))
 
-    async def edit(
-        self, src: Path, instruction: str, dest: Path, *, model: str
-    ) -> AbsolutePath:
-        # Unused on the adherent happy path; present to honour the contract.
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        Image.new("RGB", (64, 64), (20, 20, 20)).save(dest)
-        return AbsolutePath(str(dest.resolve()))
-
-    async def compose(
-        self,
-        prompt: str,
-        srcs: list[Path],
-        dest: Path,
-        *,
-        model: str,
-        quality: str,
-    ) -> AbsolutePath:
-        # The demo app declares no depends_on, so this is never hit on the
-        # happy path; present to honour the contract.
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        Image.new("RGB", (64, 64), (30, 30, 30)).save(dest)
-        return AbsolutePath(str(dest.resolve()))
-
 
 class _FakeBgRemover:
     """Writes a real RGBA cutout: transparent border, opaque centred square."""
 
     cost = _FAKE_BG_COST
+    cost_by_model = _FAKE_BG_BY_MODEL
 
     async def remove(self, src: Path, dst: Path) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -180,17 +161,19 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
     assert output.app == ctx.app.id
     assert output.display_name == ctx.app.display_name
     # Every declared slot resolved.
-    assert set(output.colors) == {c.id for c in ctx.app.colors}
-    assert set(output.images) == {i.id for i in ctx.app.images}
+    assert set(output.color_set.colors) == {c.id for c in ctx.app.colors}
+    assert set(output.image_set.images) == {i.id for i in ctx.app.images}
+    assert output.color_set.mode == ctx.cust.colors_direction.mode
     # Image paths point into this run's images dir and the files exist.
-    for slot_id, img in output.images.items():
+    for slot_id, img in output.image_set.images.items():
         p = Path(str(img.path))
         assert p.is_absolute() and p.exists()
         assert p.name == f"{slot_id}.png"
         assert img.prompt
-        # Style verdict always set by a fresh run; adherent ⇒ no edit.
-        assert img.adherent is True
-        assert img.edited_prompt is None and img.edited_reason is None
+        assert img.complexity is not None
+        # The removed style/dependency provenance fields are gone.
+        assert not hasattr(img, "adherent")
+        assert not hasattr(img, "dependency_usage")
 
 
 def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
@@ -216,13 +199,15 @@ def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
     assert reloaded.model_copy(update={"cost": None}) == result.output
     # Typed primitives unwrapped to plain strings in the YAML.
     raw = yaml.safe_load(out_yaml.read_text())
-    any_color = next(iter(raw["colors"].values()))
+    assert raw["color_set"]["mode"] in ("light", "dark")
+    any_color = next(iter(raw["color_set"]["colors"].values()))
     assert isinstance(any_color["oklch"], str)
 
 
 def test_writer_writes_run_cost_breakdown(tmp_path, monkeypatch):
     """The writer sums each paid service's running cost into the optional
-    ``RunCost`` (total + per-service breakdown) and it round-trips."""
+    ``RunCost`` (total + per-service + per-model-id breakdown) and it
+    round-trips."""
     ctx = _run_ctx(tmp_path)
     _patch_services(monkeypatch, [c.id for c in ctx.app.colors])
     result = asyncio.run(Pipeline().run(ctx))
@@ -237,10 +222,38 @@ def test_writer_writes_run_cost_breakdown(tmp_path, monkeypatch):
     assert cost["total"] == pytest.approx(
         _FAKE_LLM_COST + _FAKE_IMAGE_COST + _FAKE_BG_COST
     )
-    # Optional field validates back through the schema.
-    assert Output.model_validate(raw).cost.total == pytest.approx(
-        cost["total"]
+    # Per-model-id breakdown: every service's buckets merged, keyed by
+    # model id (PhotoRoom under its synthetic key), summing back to total.
+    by_model = cost["by_model"]
+    assert set(by_model) == (
+        set(_FAKE_LLM_BY_MODEL)
+        | set(_FAKE_IMAGE_BY_MODEL)
+        | set(_FAKE_BG_BY_MODEL)
     )
+    assert "photoroom" in by_model
+    # Each bucket is independently rounded to COST_PRECISION (6 dp), so the
+    # per-model sum equals total only modulo that rounding (as the RunCost
+    # docstring states) — a real double-count/miss would be off by cents.
+    assert sum(by_model.values()) == pytest.approx(cost["total"], abs=1e-5)
+    # Optional field validates back through the schema.
+    reloaded = Output.model_validate(raw)
+    assert reloaded.cost.total == pytest.approx(cost["total"])
+    assert reloaded.cost.by_model == pytest.approx(by_model)
+
+
+def test_run_cost_by_model_back_compat():
+    """A cost block written before ``by_model`` existed still validates;
+    the field defaults to ``{}`` (same back-compat contract as the
+    optional ``Output.cost`` itself)."""
+    legacy = RunCost.model_validate(
+        {
+            "total": 0.07,
+            "llm": 0.001,
+            "image_generation": 0.05,
+            "background_removal": 0.02,
+        }
+    )
+    assert legacy.by_model == {}
 
 
 def test_demo_examples_round_trip():
@@ -256,9 +269,12 @@ def test_demo_examples_round_trip():
     )
 
 
-def test_output_style_fields_optional_and_back_compat():
-    """Old output.yaml (no style fields) still validates; a new one with
-    them validates too — the fields are optional like ``complexity``."""
+def test_output_back_compat_ignores_removed_fields():
+    """``extra="ignore"`` on the output models: a legacy ``output.yaml``
+    that still carries the now-removed style/dependency provenance keys
+    (``adherent``, ``edited_prompt``, ``edited_reason``,
+    ``dependency_usage``) still validates — those keys are silently
+    dropped, not rejected. ``complexity`` and ``cost`` stay optional."""
     base_image = {
         "path": "/fixture/demo/default/final_images/hero.png",
         "prompt": "A bold demo hero illustration on a flat solid background.",
@@ -271,80 +287,45 @@ def test_output_style_fields_optional_and_back_compat():
         }
     }
 
-    # Back-compat: no style fields at all.
+    # Back-compat: no optional fields at all (mode is required, though).
     old = Output.model_validate(
         {
             "app": "demo",
             "display_name": "Demo App",
-            "images": {"hero": {**base_image, "complexity": "medium"}},
-            "colors": colors,
+            "image_set": {"images": {"hero": dict(base_image)}},
+            "color_set": {"mode": "light", "colors": colors},
         }
     )
-    assert old.images["hero"].adherent is None
-    # Same back-compat guarantee for the new optional dependency-usage
-    # field: an old output that predates it still validates as None.
-    assert old.images["hero"].dependency_usage is None
-    # Same back-compat guarantee for the new optional cost field.
+    assert old.image_set.images["hero"].complexity is None
     assert old.cost is None
 
-    # New run: a slot with a recorded reference/direct verdict validates.
-    with_usage = Output.model_validate(
+    # Legacy run: still carries every removed key — all dropped, no error.
+    legacy = Output.model_validate(
         {
             "app": "demo",
             "display_name": "Demo App",
-            "images": {
-                "hero": {**base_image, "complexity": "medium"},
-                "derived": {
-                    **base_image,
-                    "complexity": "medium",
-                    "dependency_usage": {"hero": "direct"},
-                },
-            },
-            "colors": colors,
-        }
-    )
-    from schema import DependencyUsage
-
-    assert with_usage.images["derived"].dependency_usage == {
-        "hero": DependencyUsage.DIRECT
-    }
-    assert with_usage.images["hero"].dependency_usage is None
-
-    # New run: adherent, no edit.
-    adherent = Output.model_validate(
-        {
-            "app": "demo",
-            "display_name": "Demo App",
-            "images": {
-                "hero": {
-                    **base_image,
-                    "complexity": "medium",
-                    "adherent": True,
+            "image_set": {
+                "images": {
+                    "hero": {
+                        **base_image,
+                        "complexity": "medium",
+                        "adherent": False,
+                        "edited_prompt": "make the finish forged gunmetal",
+                        "edited_reason": "too generic for the prompt",
+                        "dependency_usage": {"sibling": "direct"},
+                    }
                 }
             },
-            "colors": colors,
+            "color_set": {"mode": "dark", "colors": colors},
         }
     )
-    assert adherent.images["hero"].adherent is True
-
-    # New run: off-style, one edit applied — provenance present.
-    edited = Output.model_validate(
-        {
-            "app": "demo",
-            "display_name": "Demo App",
-            "images": {
-                "hero": {
-                    **base_image,
-                    "complexity": "medium",
-                    "adherent": False,
-                    "edited_prompt": "make the finish forged gunmetal",
-                    "edited_reason": "too generic for the prompt",
-                }
-            },
-            "colors": colors,
-        }
-    )
-    img = edited.images["hero"]
-    assert img.adherent is False
-    assert img.edited_prompt == "make the finish forged gunmetal"
-    assert img.edited_reason == "too generic for the prompt"
+    img = legacy.image_set.images["hero"]
+    assert img.prompt == base_image["prompt"]
+    assert img.complexity is not None
+    for removed in (
+        "adherent",
+        "edited_prompt",
+        "edited_reason",
+        "dependency_usage",
+    ):
+        assert not hasattr(img, removed)

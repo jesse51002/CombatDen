@@ -84,7 +84,7 @@ async def resolve_image_file(
     if not _ID_PATTERN.match(slot_id):
         raise NotFoundError(f"invalid slot id {slot_id!r}")
     output = await load_output(app_id, run_id)
-    if slot_id not in output.images:
+    if slot_id not in output.image_set.images:
         raise NotFoundError(
             f"slot {slot_id!r} is not declared in run {app_id}/{run_id}"
         )

@@ -28,10 +28,15 @@ Colour craft rules (these are how good systems avoid amateur output):
   hued toward the brand colour — small enough not to read as tinted, big
   enough to create subconscious cohesion with the brand.
 - The base background surface and the primary readable text must be
-  low-chroma: chroma between 0.003 and 0.04. In a dark theme the
-  background is near-black (L at or below 30%) and the text is near-white
-  (L at or above 85%); in a light theme the background is near-white (L
-  at or above 92%) and the text is near-black (L at or below 40%).
+  low-chroma: chroma between 0.003 and 0.04. The background must sit
+  inside a band off BOTH pure extremes: in a dark theme its L is between
+  8% and 30% (near-black but never pure black); in a light theme its L
+  is between 86% and 90% (near-white but never pure white). The text
+  stays near-white (L at or above 85%) in a dark theme and near-black (L
+  at or below 40%) in a light theme. The background band matters because
+  the client builds elevated surfaces (cards, sheets) by compositing a
+  translucent overlay over the resolved background — a background flush
+  against black or white leaves no tonal room for that elevation to read.
 - The readable text colour MUST meet WCAG AA contrast — at least 4.5:1
   for normal text — against the base background colour. Reason about the
   contrast deliberately by widening the lightness gap; do not eyeball it.

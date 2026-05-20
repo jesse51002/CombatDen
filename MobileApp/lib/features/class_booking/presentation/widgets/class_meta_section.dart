@@ -3,7 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
 
-/// Class title + location/time/attending block. Mirrors the Figma
+/// Class title + location/time/attending block. Mirrors the
 /// `ClassMetatext` group.
 class ClassMetaSection extends StatelessWidget {
   const ClassMetaSection({super.key, required this.detail});

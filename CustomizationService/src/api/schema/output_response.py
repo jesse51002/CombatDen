@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from schema import ColorOutput, Output
+from schema import ColorPalette, Output
 
 
 class ImageResponse(BaseModel):
@@ -16,16 +16,26 @@ class ImageResponse(BaseModel):
     url: str
 
 
+class ImageSetResponse(BaseModel):
+    """The image group, mirroring ``ImageSet`` on the wire: every slot's
+    prompt + fetch URL, keyed by slot id."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    images: dict[str, ImageResponse]
+
+
 class OutputResponse(BaseModel):
     """A run's `output.yaml` with each image's filesystem path replaced by
-    a streamable URL. Colours pass through unchanged."""
+    a streamable URL. The colour group (including its ``mode``) passes
+    through unchanged."""
 
     model_config = ConfigDict(extra="forbid")
 
     app: str
     display_name: str
-    images: dict[str, ImageResponse]
-    colors: dict[str, ColorOutput]
+    image_set: ImageSetResponse
+    color_set: ColorPalette
 
     @classmethod
     def from_output(
@@ -36,12 +46,14 @@ class OutputResponse(BaseModel):
         return cls(
             app=output.app,
             display_name=output.display_name,
-            colors=output.colors,
-            images={
-                slot_id: ImageResponse(
-                    prompt=img.prompt,
-                    url=f"/apps/{app_id}/{run_id}/images/{slot_id}",
-                )
-                for slot_id, img in output.images.items()
-            },
+            color_set=output.color_set,
+            image_set=ImageSetResponse(
+                images={
+                    slot_id: ImageResponse(
+                        prompt=img.prompt,
+                        url=f"/apps/{app_id}/{run_id}/images/{slot_id}",
+                    )
+                    for slot_id, img in output.image_set.images.items()
+                }
+            ),
         )

@@ -5,7 +5,7 @@ import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_layout.dart
 
 /// Full-screen video recommendation surfaced after booking a class.
 ///
-/// Mirrors Figma `VideoRecc`: a centered "Video Before Class" header with
+/// Mirrors the `VideoRecc` design: a centered "Video Before Class" header with
 /// a close button, the [VideoReccCard] body, and a primary Watch CTA at
 /// the bottom. Accepts an optional [MockVideo] via route arguments and
 /// falls back to [mockVideoBeforeClass].

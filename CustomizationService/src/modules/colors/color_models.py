@@ -1,5 +1,8 @@
-"""ColorPalette — the colour module's output model, plus the per-request
-closed wire schema builder for the colour LLM call."""
+"""The per-request closed wire schema builder for the colour LLM call.
+
+The colour module's output model, ``ColorPalette``, now lives in
+``schema/output/color_palette.py`` — it is part of the ``output.yaml``
+contract, not module-private."""
 
 from __future__ import annotations
 
@@ -9,14 +12,6 @@ from schema import ColorOutput, ColorRole
 from src.modules.colors.color_validation import enforce_color_contract
 
 COLOR_RESPONSE_MODEL_NAME = "ColorPalette"
-
-
-class ColorPalette(BaseModel):
-    """The colour module's output: every colour slot resolved."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    colors: dict[str, ColorOutput]
 
 
 def build_color_response_model(

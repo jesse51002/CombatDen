@@ -43,7 +43,7 @@ class MobileAppRoot extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CombatDen',
-      theme: AppTheme.dark(),
+      theme: AppTheme.forCanvas(),
       debugShowCheckedModeBanner: false,
       initialRoute: AppRoutes.home,
       routes: {

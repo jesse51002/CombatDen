@@ -15,37 +15,6 @@ The whole point is to make screens that **look right** so the design can be eval
 
 **Theme/design rules are NOT relaxed because this is a prototype.** See *Theming System* below.
 
-## Always use the Figma MCP plugin before designing
-
-**Never design from memory and never guess at a layout.** Before writing widget code for any screen or component:
-
-1. **Look up the screen in `figma/inventory.yaml`.** That file holds every known frame — name, `file_key`, `node_id`. Use it instead of asking the user to paste the URL again. If the screen isn't in the inventory, ask the user for the Figma URL and **add it to `figma/inventory.yaml` in the same change** so the next person doesn't have to ask.
-2. Call `mcp__plugin_figma_figma__get_design_context` with the `file_key` and `node_id` from the inventory to fetch the design.
-3. Call `mcp__plugin_figma_figma__get_screenshot` whenever you need to verify pixel placement, spacing, color, or visual fidelity. Use it liberally.
-4. Re-fetch as many times as needed during implementation. **It is better to look at Figma five times than to ship one screen that's wrong.** Round-tripping Figma is cheap; rebuilding a screen because you guessed the spacing is not.
-5. Use the `figma:figma-implement-design` skill when translating a Figma frame into Flutter code.
-6. The Figma MCP returns React/Tailwind. Adapt to Flutter + DesignConstants — never paste hex codes, font sizes, or pixel values from the Figma export directly into widget code. Map every Figma token to its closest existing `DesignConstants.*` value.
-7. If a value in Figma has no DesignConstants equivalent, **stop and ask the user.** Do not invent a new constant. Do not silently inline a magic number.
-
-If you find yourself writing widget code without the Figma context loaded in this conversation, stop and load it.
-
-### Figma rate-limit rule — NEVER make things up
-
-If a Figma MCP call returns a rate-limit error ("tool call limit reached", HTTP 429, or similar), **wait 30 seconds and retry the same call**. Retry up to **3 times** total. If it's still rate-limited after the 3rd retry, **stop the task and report it as blocked**. Do not proceed.
-
-**Never ever ever make up a layout because Figma is unavailable.** Not from convention, not from "the existing visual language", not from "what good apps usually do for this", not from your training data. The Figma frame is the source of truth. If you can't see it, you can't build it. Ship nothing rather than ship a guess.
-
-This rule applies to every screen, every component, every variant — individually. One rate-limited screen does not give you license to guess at the others. Stop, report which screens were unreachable, and let the user decide.
-
-### Figma asset download rule
-
-Figma asset URLs from the MCP plugin **expire after 7 days**. Whenever a Figma frame contains bitmap images — gym logos, photos, raster icons, custom illustrations — **download them to `assets/images/<descriptive_snake_case_name>.png`** and register `assets/images/` in `pubspec.yaml`. Reference them via `Image.asset('assets/images/...')`.
-
-- **Never hotlink** Figma asset URLs (`https://www.figma.com/api/mcp/asset/...`) from widget code. They will silently 404 in a week.
-- **Never use `NetworkImage`** for Figma-sourced visuals. Same reason.
-- The only icons that bypass this rule are ones Figma is rendering as a system glyph that already exists in Material Symbols (chevrons, person/user, simple arrows, common UI icons). Those become `Symbols.*_sharp` per the icon rule above.
-- When choosing the local filename, use a name that survives the design changing — `gym_logo_global_mma.png`, not `rectangle_10.png`.
-
 ## Search the web for conventions before designing
 
 When the UX question is "how do good apps usually present X?" — login flows, empty states, error states, onboarding, pull-to-refresh, list/detail patterns, settings screens, paywalls, billing screens, permission prompts, password reset, account deletion, etc. — **search the web first.** Look at what proven mobile apps actually ship (Stripe, Linear, Notion, Cash App, Robinhood, Airbnb, etc.). Don't guess.
@@ -94,15 +63,15 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 
 **CRITICAL: ALWAYS Use DesignConstants**
 
-- **EVERY widget MUST import and use `package:mobile_app/core/constants/design_constants.dart`.**
-- **NEVER hardcode colors** — no `Colors.red`, no inline `Color(0xFF...)`, no copy-pasted Figma hex codes.
+- **EVERY widget MUST import and use `package:mobile_app/core/design_constants.dart`.**
+- **NEVER hardcode colors** — no `Colors.red`, no inline `Color(0xFF...)`.
 - **NEVER hardcode font properties** — no inline `fontFamily`, no inline `fontSize`, no inline `fontWeight`. Use the text styles in `DesignConstants` (`h1`, `h2`, `h3`, `p`, `pBig`, `pSmall`, etc.).
 - **NEVER hardcode spacing, padding, radius, border widths, divider thickness, or icon sizes.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorder` / `buttonBorderSize`, `DesignConstants.dividerThickness`, and `DesignConstants.iconSize{Xs|Sm|Md|Lg|Xl|2xl}` (T-shirt scale, 16/20/24/28/32/36).
-- **Image dimensions ARE allowed inline.** `Image.asset(width:, height:)`, asset-bound `SizedBox` constraints, and layout `aspectRatio:` are per-asset Figma values — they're not fungible design tokens, and there is no `imageSize*` catalog. Type the literal pixel value (or hoist it to a private `_kFoo` const at the top of the file when reused). Same for one-off `Positioned(left:/top:/...)` math when laying out an image overlay.
+- **Image dimensions ARE allowed inline.** `Image.asset(width:, height:)`, asset-bound `SizedBox` constraints, and layout `aspectRatio:` are per-asset values — they're not fungible design tokens, and there is no `imageSize*` catalog. Type the literal pixel value (or hoist it to a private `_kFoo` const at the top of the file when reused). Same for one-off `Positioned(left:/top:/...)` math when laying out an image overlay.
 - **`_kFoo` private file-scoped constants are also allowed for scroll-position math, sliver / pinned-header heights, and pure layout arithmetic that has no `DesignConstants` equivalent.** Examples: `_kTopbarHeight = 268`, `_kDateRowHeight = 50`, `_kCardWidth = 258`. The carve-out is for *layout math that is intrinsically per-screen and not a fungible design token*. If the same number appears across multiple screens or controls, it's not a `_k` candidate — escalate to add a `DesignConstants` token instead.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/padding/radius/border/divider/icon-size, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
 - **`design_constants.dart` is runtime-driven, not immutable.** The brand colours (`primaryColor`, `backgroundColor`, `text`, `accent`) are static getters that resolve live from the loaded tenant customization via `BrandColor.color(slot, fallback: <const CombatDen default>)`. Derived shades (`primaryColor50/25/10`, `darkPrimary`, `text2nd/3rd`, `card`, `popup`, `divider`) are getters off those bases. Status/semantic colours (`goodGreen`, `okYellow`, `badRed`, `hyperlink`, the `*Dark` variants) stay hardcoded and are NOT brandable. The const fallback is the CombatDen palette, used verbatim when no customization is loaded. Do not hand-edit token values or the `BrandColor` wiring, and do not add/rename tokens without explicit permission.
-- The customization **engine** (`lib/customization/`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/customization/app_slots.dart` (`CombatDenSlots`) is missing. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is no longer byte-identical with FlutterCRM, which was reverted; this app is the customization host.)
+- The customization **engine** (`lib/customization/`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/app_slots.dart` (`CombatDenSlots`) is missing. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is no longer byte-identical with FlutterCRM, which was reverted; this app is the customization host.)
 - Images: the `BrandImage` widget is URL-first — a bundled-asset filename that maps to a customization slot renders the fetched image (disk-cached via `cached_network_image`) and falls back to the bundled asset otherwise. Call sites are unchanged.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
@@ -119,6 +88,45 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 
 - Global `ThemeData` lives in `lib/shared/themes/app_theme.dart` and is wired in `main.dart`. It maps DesignConstants into Material 3's `ColorScheme` and `TextTheme` so stock Material widgets (`ElevatedButton`, `Text`, `Scaffold`, etc.) auto-theme.
 - For widget-specific styling beyond what the global theme provides, reach into `DesignConstants` directly. Don't add one-off overrides at the call site.
+
+## Current Customization Preset (where the live look comes from)
+
+The colours, images, and design direction the app shows at runtime are **not**
+the CombatDen dark defaults in `design_constants.dart` — those are only the
+fallback used when no customization is loaded. This is a **white-label /
+templated app**: the live look comes from a customization preset produced by
+the CustomizationService. There is no single canonical palette; never assume
+or hardcode one. The customization surface is **open-ended and growing** —
+colours and images are just the start; over time more of the app (copy,
+layout, enabled features) becomes tenant-customizable. Build accordingly:
+do not bake in assumptions that only colour and text vary.
+
+- **Which preset is active is declared in `lib/core/app_config.dart`** —
+  `AppConfig.appId` (tenant, e.g. `combatden`) and `AppConfig.designId` (the
+  preset/run, e.g. `20260518T131056Z`). This is the app's identity, not part
+  of the customization package. **Read this file first** to learn what is
+  actually loaded.
+- **The preset lives in `../CustomizationService/apps/<appId>/<designId>/`.**
+  Before diagnosing or changing anything about how the app looks, read:
+  - `customization.yaml` — the design brief: `design_direction` (name +
+    intent, e.g. "Duck Groove"), `colors_direction`, and the **`dark_mode`**
+    flag. This says whether the preset is *intentionally* light or dark.
+  - `output.yaml` — the resolved output the app consumes: the four colour
+    slots (`primary`, `background`, `text`, `accent`), plus every generated
+    image and its prompt.
+  - `final_images/` — the resolved bitmap assets (logo, belt, sparkles).
+- **Never assume the dark CombatDen palette.** Always resolve the active
+  preset via `app_config.dart`, then read that preset's `customization.yaml`
+  + `output.yaml`. A light preset (`dark_mode: false`) is a deliberate,
+  supported configuration, not a bug.
+- The app maps only those four slots through `BrandColor` / `CombatDenSlots`.
+  Elevated surfaces (`card`, `popup`) are a translucent **white** overlay
+  whose alpha tracks the background's HSL lightness, so they self-adjust to
+  any preset and stack for layered surfaces. `divider` is keyed to `text`
+  (a separating line needs contrast against the surface, not elevation).
+  Material's discrete light/dark `ColorScheme` uses the hardcoded
+  `DesignConstants.isLightCanvas` flag (being wired to a `dark_mode` field
+  the CustomizationService output schema will soon carry).
 
 ## Hardcoded Mock Data Conventions
 
@@ -279,10 +287,10 @@ Bad: nesting the cascade but cramming it all into one giant `build` method — t
 lib/
 ├── main.dart
 ├── core/
-│   ├── constants/
-│   │   └── design_constants.dart   # runtime-driven via BrandColor (customization engine)
-│   └── navigation/
-│       └── app_routes.dart         # named-route constants + builder map
+│   ├── app_config.dart             # active tenant + designId (preset)
+│   ├── app_routes.dart             # named-route constants + builder map
+│   ├── app_slots.dart              # CombatDenSlots: expected colour/image slots
+│   └── design_constants.dart       # runtime-driven via BrandColor (customization engine)
 ├── features/
 │   └── <feature>/
 │       ├── data/
@@ -339,4 +347,4 @@ Until that work happens, none of those concerns belong in this repo.
 
 ---
 
-**Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability. And always look at Figma first.**
+**Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**

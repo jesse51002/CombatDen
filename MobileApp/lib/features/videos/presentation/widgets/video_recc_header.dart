@@ -3,7 +3,7 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_close_button.dart';
 
 /// Top-of-screen header for [VideoReccScreen] — a centered title with
-/// a close (X) action on the right. Mirrors the Figma `VideoRecc` frame
+/// a close (X) action on the right. Mirrors the `VideoRecc` frame
 /// header pattern.
 class VideoReccHeader extends StatelessWidget {
   const VideoReccHeader({

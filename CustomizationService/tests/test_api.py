@@ -47,12 +47,12 @@ def test_get_output_matches_the_runs_yaml() -> None:
 
     assert body["app"] == expected["app"]
     assert body["display_name"] == expected["display_name"]
-    # Colours pass through unchanged (oklch/display_name/description).
-    assert body["colors"] == expected["colors"]
+    # Colour group passes through unchanged (mode + oklch/name/desc).
+    assert body["color_set"] == expected["color_set"]
 
-    img = body["images"]["hero"]
+    img = body["image_set"]["images"]["hero"]
     assert img["url"] == f"/apps/{APP}/run1/images/hero"
-    assert img["prompt"] == expected["images"]["hero"]["prompt"]
+    assert img["prompt"] == expected["image_set"]["images"]["hero"]["prompt"]
     # The unreliable server path must never leak to the client.
     assert "path" not in img
 

@@ -4,7 +4,7 @@ import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 /// One-shot scale + fade entrance. Fires once on `initState` after [delay].
 /// Pairs with [StaggeredReveal] when a more dramatic entrance is wanted —
 /// e.g. an image popping in before its caption slides up underneath. Curve
-/// is ease-out-quart per DESIGN.md's motion law.
+/// is ease-out-quart (the app's motion law: ease-out, no bounce, ≤300ms).
 class ScaleReveal extends StatefulWidget {
   const ScaleReveal({
     super.key,

@@ -102,7 +102,7 @@ List<String> get ratingGraphThresholds =>
 /// Values are y-coordinates normalized to 0..1, where 0 is the bottom of the
 /// chart and 1 is the top. X is implied — points are spaced uniformly across
 /// the chart width. The shape is a slow start that accelerates toward the
-/// top-right, mirroring the original Figma placeholder.
+/// top-right, mirroring the original design placeholder.
 const List<double> mockRatingGraphSeries = <double>[
   0.06,
   0.08,

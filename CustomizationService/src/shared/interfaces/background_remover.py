@@ -19,3 +19,9 @@ class BackgroundRemover(ABC):
     def cost(self) -> float:
         """Running USD spent this run on background removal (writer sums it)."""
         raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def cost_by_model(self) -> dict[str, float]:
+        """The same running spend under a synthetic key (writer merges it)."""
+        raise NotImplementedError
