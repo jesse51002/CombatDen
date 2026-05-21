@@ -104,6 +104,17 @@ flowchart LR
 
 ---
 
+## Configuration
+
+The app reads a single `.env` (via pydantic-settings). Copy `.env.example`
+to `.env` and fill in the `TODO-…` values.
+
+`.env.example` is the authoritative list of every key the pipeline needs —
+each is documented inline there. This README deliberately does not repeat the
+key list, so it can't drift out of date when keys are added or removed.
+
+---
+
 ## Colour: one paid call, the rest derived
 
 A usable theme is far more than four brand colours. A real UI needs

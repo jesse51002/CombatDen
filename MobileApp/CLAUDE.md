@@ -109,24 +109,25 @@ do not bake in assumptions that only colour and text vary.
 - **The preset lives in `../CustomizationService/apps/<appId>/<designId>/`.**
   Before diagnosing or changing anything about how the app looks, read:
   - `customization.yaml` — the design brief: `design_direction` (name +
-    intent, e.g. "Duck Groove"), `colors_direction`, and the **`dark_mode`**
-    flag. This says whether the preset is *intentionally* light or dark.
+    intent, e.g. "Duck Groove") and `colors_direction`, whose
+    **`colors_direction.mode`** (`light`/`dark`) says whether the preset is
+    *intentionally* light or dark.
   - `output.yaml` — the resolved output the app consumes: the four colour
     slots (`primary`, `background`, `text`, `accent`), plus every generated
     image and its prompt.
   - `final_images/` — the resolved bitmap assets (logo, belt, sparkles).
 - **Never assume the dark CombatDen palette.** Always resolve the active
   preset via `app_config.dart`, then read that preset's `customization.yaml`
-  + `output.yaml`. A light preset (`dark_mode: false`) is a deliberate,
+  + `output.yaml`. A light preset (`color_set.mode: light`) is a deliberate,
   supported configuration, not a bug.
 - The app maps only those four slots through `BrandColor` / `CombatDenSlots`.
   Elevated surfaces (`card`, `popup`) are a translucent **white** overlay
   whose alpha tracks the background's HSL lightness, so they self-adjust to
   any preset and stack for layered surfaces. `divider` is keyed to `text`
   (a separating line needs contrast against the surface, not elevation).
-  Material's discrete light/dark `ColorScheme` uses the hardcoded
-  `DesignConstants.isLightCanvas` flag (being wired to a `dark_mode` field
-  the CustomizationService output schema will soon carry).
+  Material's discrete light/dark `ColorScheme` is driven by
+  `DesignConstants.isLightCanvas`, which resolves from the loaded
+  customization's `color_set.mode` (defaulting to dark when none is loaded).
 
 ## Hardcoded Mock Data Conventions
 

@@ -24,10 +24,11 @@ produced by the CustomizationService.
   that with the tenant's bundled asset (local-vs-network resolution made a
   built-in fallback more complex than it was worth — the bundled tenant asset
   *is* the fallback).
-- **This is just the start.** The templating surface is open-ended — icons and
-  animation are next, and over time more of the app (layout, enabled features)
-  becomes tenant-customizable. Do not build assuming only colour and text vary;
-  never hardcode or assume a single brand's palette, assets, or copy.
+- **This is just the start.** The templating surface is open-ended — icon-set
+  and animation modification stay in the pipeline and are scheduled for after
+  validation, and over time more of the app (layout, enabled features) becomes
+  tenant-customizable. Do not build assuming only colour and text vary; never
+  hardcode or assume a single brand's palette, assets, or copy.
 
 ## Getting Started
 
