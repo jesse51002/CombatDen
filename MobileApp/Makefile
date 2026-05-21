@@ -1,10 +1,14 @@
-.PHONY: help run run-ios run-release analyze format test clean get reset devices doctor
+.PHONY: help run run-phone run-ios run-release analyze format test clean get reset devices doctor
+
+# Physical device serial (from `adb devices` / `flutter devices`).
+DEVICE := 52121FDAS0018S
 
 help:
 	@echo "MobileApp — visual prototype Flutter app"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make run          Run on Android (default)"
+	@echo "  make run-phone    Run on physical device (USB adb-reverse tunnel to backend)"
 	@echo "  make run-ios      Run on iOS simulator"
 	@echo "  make run-release  Run on Android in release mode"
 	@echo "  make analyze      Static analysis (must be clean before committing)"
@@ -19,8 +23,13 @@ help:
 run:
 	flutter run -d emulator-5554
 
+# Tunnel the phone's localhost:8000 to the host's localhost:8000 over USB
+# (Wi-Fi-independent — sidesteps router AP/client isolation), then run
+# pointed at localhost. Re-run after unplugging/rebooting the device.
+# The CustomizationService (`make api` in ../CustomizationService) must be up.
 run-phone:
-	flutter run -d 52121FDAS0018S
+	adb -s $(DEVICE) reverse tcp:8000 tcp:8000
+	flutter run -d $(DEVICE) --dart-define=CUST_BASE_URL=http://localhost:8000
 
 run-ios:
 	flutter run -d ios

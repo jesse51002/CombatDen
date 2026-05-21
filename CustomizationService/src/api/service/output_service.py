@@ -27,17 +27,23 @@ from pydantic import ValidationError
 from schema import Output
 from src.api.config import settings
 from src.api.errors import InvalidRunError, NotFoundError
+from src.api.schema.style_summary import StyleSummary
 
 OUTPUT_FILENAME = "output.yaml"
 # The one place a delivered per-slot PNG lives. `images/` (raw + cutout
 # intermediates) is never served — by contract, not by guesswork.
 FINAL_IMAGES_DIRNAME = "final_images"
 IMAGE_SUFFIX = ".png"
+# The image slot a style picker shows as each style's card art.
+CELEBRATION_SLOT = "celebration_image"
 
 # snake_case ids (mirrors schema.output.Output's app/slot rule).
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 # Run ids are UTC stamps like `20260517T052107Z` — alphanumeric only.
 _RUN_ID_PATTERN = re.compile(r"^[0-9A-Za-z]+$")
+# Date-stamped pipeline runs (e.g. `20260518T131056Z`). A style picker
+# lists only the named presets, never these transient run dirs.
+_RUN_STAMP_PATTERN = re.compile(r"^\d{8}T\d{6}Z$")
 
 
 class OutputService:
@@ -110,6 +116,55 @@ class OutputService:
                 "is incomplete"
             )
         return image
+
+    async def list_styles(self, app_id: str) -> list[StyleSummary]:
+        """The app's named, selectable styles — one per run directory
+        that is *not* a date-stamped pipeline run.
+
+        For a picker: skips the ``YYYYMMDDTHHMMSSZ`` run dirs, any dir
+        without a valid ``output.yaml``, and any whose
+        ``celebration_image`` PNG is absent (so every entry has card
+        art). A stale ``output.yaml`` is skipped, not surfaced — a bad
+        preset shouldn't 500 the whole list. Sorted by display name.
+
+        404 (``NotFoundError``) when the app itself is unknown.
+        """
+        if not _ID_PATTERN.match(app_id):
+            raise NotFoundError(f"no app {app_id!r}")
+        apps_root = self._apps_root.resolve()
+        app_dir = (apps_root / app_id).resolve()
+        if app_dir.parent != apps_root or not app_dir.is_dir():
+            raise NotFoundError(f"no app {app_id!r}")
+
+        styles: list[StyleSummary] = []
+        for child in sorted(app_dir.iterdir()):
+            run_id = child.name
+            if not child.is_dir() or _RUN_STAMP_PATTERN.match(run_id):
+                continue
+            if not _RUN_ID_PATTERN.match(run_id):
+                continue
+            if not (child / OUTPUT_FILENAME).is_file():
+                continue
+            celebration = (
+                child / FINAL_IMAGES_DIRNAME / f"{CELEBRATION_SLOT}{IMAGE_SUFFIX}"
+            )
+            if not celebration.is_file():
+                continue
+            try:
+                output = await self.load(app_id, run_id)
+            except (NotFoundError, InvalidRunError):
+                continue
+            styles.append(
+                StyleSummary(
+                    id=run_id,
+                    display_name=output.design_name,
+                    celebration_image=(
+                        f"/apps/{app_id}/{run_id}/images/{CELEBRATION_SLOT}"
+                    ),
+                )
+            )
+        styles.sort(key=lambda s: s.display_name)
+        return styles
 
     def _safe_run_dir(self, app_id: str, run_id: str) -> Path:
         """``apps_root/app_id/run_id``, but only if the ids are

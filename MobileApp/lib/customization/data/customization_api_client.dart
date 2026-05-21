@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import 'package:mobile_app/customization/data/models/customization_style.dart';
+
 /// Thrown on any customization fetch failure; the service
 /// catches it and degrades to disk/defaults.
 class CustomizationFetchException implements Exception {
@@ -20,9 +22,17 @@ class CustomizationFetchException implements Exception {
 class CustomizationApiClient {
   /// Base URL of the CustomizationService. Package-internal
   /// infrastructure — change here for a different deployment.
-  /// `10.0.2.2` is the Android emulator's alias for the host's
-  /// `localhost` (use the host LAN IP for a physical device).
-  static const String _baseUrl = 'http://10.0.2.2:8000';
+  /// Override at launch with `--dart-define=CUST_BASE_URL=<url>`.
+  ///
+  /// Default is `localhost`, used together with an adb reverse tunnel
+  /// (`adb reverse tcp:8000 tcp:8000`) so the device reaches the host's
+  /// server over the USB cable — Wi‑Fi-independent (no LAN IP, no AP
+  /// isolation). The tunnel must be re-set after unplugging/reboot.
+  /// Without adb reverse, pass `--dart-define=CUST_BASE_URL=http://<host-LAN-IP>:8000`.
+  static const String _baseUrl = String.fromEnvironment(
+    'CUST_BASE_URL',
+    defaultValue: 'http://localhost:8000',
+  );
 
   CustomizationApiClient({
     required this.appId,
@@ -46,13 +56,16 @@ class CustomizationApiClient {
   /// Resolved base URL (used to absolutise relative image URLs).
   String get baseUrl => _baseUrl;
 
-  /// The request path for this app/design (the "sub url").
-  String get _outputPath => '/apps/$appId/$designId';
+  /// The request path for a given design (defaults to the one this
+  /// client was built with). [design] lets the live style switch
+  /// fetch a different preset without rebuilding the client.
+  String _outputPath([String? design]) => '/apps/$appId/${design ?? designId}';
 
   /// `GET /apps/{appId}/{designId}` — the resolved customization.
-  Future<Map<String, dynamic>> fetchOutput() async {
+  /// Pass [designId] to fetch a different preset than the default.
+  Future<Map<String, dynamic>> fetchOutput({String? designId}) async {
     try {
-      final response = await _dio.get<dynamic>(_outputPath);
+      final response = await _dio.get<dynamic>(_outputPath(designId));
       final data = response.data;
       if (data is Map) {
         return Map<String, dynamic>.from(data);
@@ -63,6 +76,35 @@ class CustomizationApiClient {
     } on DioException catch (e) {
       throw CustomizationFetchException(
         'Customization fetch failed: ${e.message}',
+      );
+    }
+  }
+
+  /// `GET /apps/{appId}/styles` — the app's selectable styles
+  /// (design name + celebration image). Same degrade-on-failure
+  /// contract as [fetchOutput].
+  Future<List<CustomizationStyle>> fetchStyles() async {
+    try {
+      final response = await _dio.get<dynamic>('/apps/$appId/styles');
+      final data = response.data;
+      if (data is List) {
+        return data
+            .whereType<Map>()
+            .map(
+              (e) => CustomizationStyle.fromJson(
+                Map<String, dynamic>.from(e),
+                resolveImageUrl,
+              ),
+            )
+            .where((s) => s.id.isNotEmpty)
+            .toList(growable: false);
+      }
+      throw const CustomizationFetchException(
+        'Styles response was not a JSON array',
+      );
+    } on DioException catch (e) {
+      throw CustomizationFetchException(
+        'Styles fetch failed: ${e.message}',
       );
     }
   }

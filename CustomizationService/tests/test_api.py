@@ -127,6 +127,46 @@ def test_unknown_app_run_and_slot_404() -> None:
     assert client.get(f"/apps/nope/run1").status_code == 404
     assert client.get(f"/apps/{APP}/no_such_run").status_code == 404
 
+
+def test_styles_route_is_not_captured_as_a_run() -> None:
+    """``/apps/{app}/styles`` resolves to the styles list, not the
+    run endpoint with ``run_id='styles'``. The demo fixtures declare a
+    ``hero`` slot (no ``celebration_image``), so the list is empty —
+    but it is a 200 list, proving the route ordering."""
+    resp = client.get(f"/apps/{APP}/styles")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_styles_unknown_app_404() -> None:
+    assert client.get("/apps/no_such_app/styles").status_code == 404
+
+
+def test_list_styles_excludes_date_runs_and_imageless(tmp_path: Path) -> None:
+    """A named style with a ``celebration_image`` PNG lists; a
+    date-stamped run is skipped even if it has the image; a named dir
+    without the image is skipped."""
+    src_output = (FIXTURE_APPS / APP / "default" / "output.yaml").read_text()
+    appdir = tmp_path / "demo"
+    for name in ("ZenStyle", "20260518T131056Z", "noimg"):
+        d = appdir / name / "final_images"
+        d.mkdir(parents=True)
+        (appdir / name / "output.yaml").write_text(src_output)
+    # Only the named dir + the date run carry the image; the date run is
+    # still excluded by the stamp filter, "noimg" by the missing PNG.
+    (appdir / "ZenStyle" / "final_images" / "celebration_image.png").write_bytes(b"png")
+    (appdir / "20260518T131056Z" / "final_images" / "celebration_image.png").write_bytes(b"png")
+
+    svc = OutputService(apps_root=tmp_path)
+    styles = asyncio.run(svc.list_styles("demo"))
+
+    assert [s.id for s in styles] == ["ZenStyle"]
+    assert styles[0].display_name == "Demo App"
+    assert (
+        styles[0].celebration_image
+        == "/apps/demo/ZenStyle/images/celebration_image"
+    )
+
     # Undeclared slot: 404 with a message distinct from "incomplete run".
     resp = client.get(f"/apps/{APP}/run1/images/no_such_slot")
     assert resp.status_code == 404

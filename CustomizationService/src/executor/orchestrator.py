@@ -223,6 +223,7 @@ class Pipeline:
         return Output(
             app=run_ctx.app.id,
             display_name=run_ctx.app.display_name,
+            design_name=run_ctx.cust.design_direction.name,
             image_set=image_set,
             color_set=palette,
             font_set=font_set,

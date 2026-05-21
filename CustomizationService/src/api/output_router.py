@@ -11,12 +11,45 @@ from fastapi.responses import FileResponse
 from src.api.errors import InvalidRunError, NotFoundError
 from src.api.schema.font_delivery import FontDeliveryResponse
 from src.api.schema.output_response import OutputResponse
+from src.api.schema.style_summary import StyleSummary
 from src.api.service.font_service import font_service
 from src.api.service.output_service import output_service
 
 logger = logging.getLogger(__name__)
 
 output_router = APIRouter(prefix="/apps", tags=["output"])
+
+
+# Declared before `/{app_id}/{run_id}` so the literal `styles` segment
+# isn't captured as a run id (Starlette matches in declaration order).
+@output_router.get(
+    "/{app_id}/styles",
+    response_model=list[StyleSummary],
+    summary="List an app's selectable styles",
+    responses={
+        200: {
+            "description": (
+                "The named styles (design name + celebration image URL); "
+                "date-stamped runs are excluded"
+            )
+        },
+        404: {"description": "No such app"},
+    },
+)
+async def list_styles(app_id: str) -> list[StyleSummary]:
+    """Return the app's named presets a picker can switch between."""
+    try:
+        return await output_service().list_styles(app_id)
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error("Failed to list styles for %s", app_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list styles",
+        ) from None
 
 
 @output_router.get(

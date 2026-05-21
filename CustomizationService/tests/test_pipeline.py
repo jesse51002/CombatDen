@@ -514,6 +514,7 @@ def test_output_back_compat_ignores_removed_fields():
         {
             "app": "demo",
             "display_name": "Demo App",
+            "design_name": "Demo App",
             "image_set": {"images": {"hero": dict(base_image)}},
             "color_set": {
                 "mode": "light", "colors": colors, "palette": palette,
@@ -528,6 +529,7 @@ def test_output_back_compat_ignores_removed_fields():
         {
             "app": "demo",
             "display_name": "Demo App",
+            "design_name": "Demo App",
             "image_set": {
                 "images": {
                     "hero": {

@@ -206,43 +206,49 @@ class DesignConstants {
   // numerals / celebration moments (big1 / big1_5 / big2). Every
   // running-UI style (h1..h3, p variants) uses `bodyFont`.
   // ===========================================================
-  static final TextStyle displayFont = BrandFont.style(
+  // These are getters, not `static final`, on purpose: a `static final`
+  // TextStyle would bake in `color: text` (and the resolved font) ONCE,
+  // at first access, and never pick up a live style switch. As getters
+  // they re-resolve `text` / `bodyFont` / `displayFont` on every read, so
+  // headings re-theme with the rest of the app when the customization
+  // changes.
+  static TextStyle get displayFont => BrandFont.style(
     CombatDenSlots.fontDisplay,
     fallbackFamily: _fallbackFontFamily,
   );
 
-  static final TextStyle bodyFont = BrandFont.style(
+  static TextStyle get bodyFont => BrandFont.style(
     CombatDenSlots.fontBody,
     fallbackFamily: _fallbackFontFamily,
   );
 
   /// H1 text style
-  static final TextStyle h1 = bodyFont.copyWith(
+  static TextStyle get h1 => bodyFont.copyWith(
     fontWeight: FontWeight.w700,
     fontSize: 24,
     color: text,
     letterSpacing: -0.02,
   );
 
-  static final TextStyle h1Regular = h1.copyWith(fontWeight: FontWeight.w500);
+  static TextStyle get h1Regular => h1.copyWith(fontWeight: FontWeight.w500);
 
   /// H2 text style
-  static final TextStyle h2 = bodyFont.copyWith(
+  static TextStyle get h2 => bodyFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 16,
     color: text,
     letterSpacing: 0,
   );
 
-  static final TextStyle h2Regular = h2.copyWith(
+  static TextStyle get h2Regular => h2.copyWith(
     fontWeight: FontWeight.w400,
     letterSpacing: 0.03,
   );
 
-  static final TextStyle h2Bold = h2.copyWith(fontWeight: FontWeight.w700);
+  static TextStyle get h2Bold => h2.copyWith(fontWeight: FontWeight.w700);
 
   /// H3 text style
-  static final TextStyle h3 = bodyFont.copyWith(
+  static TextStyle get h3 => bodyFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 13,
     color: text,
@@ -250,30 +256,30 @@ class DesignConstants {
   );
 
   /// Paragraph text style
-  static final TextStyle p = bodyFont.copyWith(
+  static TextStyle get p => bodyFont.copyWith(
     fontWeight: FontWeight.w400,
     fontSize: 12,
     color: text,
     letterSpacing: 0.03,
   );
 
-  static final TextStyle pBig = p.copyWith(fontSize: 16);
-  static final TextStyle pSmall = p.copyWith(fontSize: 11);
+  static TextStyle get pBig => p.copyWith(fontSize: 16);
+  static TextStyle get pSmall => p.copyWith(fontSize: 11);
 
   /// Hero numerals — celebration moments only.
-  static final TextStyle big1 = displayFont.copyWith(
+  static TextStyle get big1 => displayFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 160,
     color: text,
   );
 
-  static final TextStyle big1_5 = displayFont.copyWith(
+  static TextStyle get big1_5 => displayFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 64,
     color: text,
   );
 
-  static final TextStyle big2 = displayFont.copyWith(
+  static TextStyle get big2 => displayFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 32,
     color: text,

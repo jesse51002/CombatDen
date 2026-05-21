@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/home/data/schedule_generator.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/day_class_group.dart';
@@ -59,39 +60,50 @@ class _HomeNotBookedBodyState extends State<HomeNotBookedBody>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return CustomScrollView(
-      controller: _verticalController,
-      slivers: [
-        SliverToBoxAdapter(
-          child: Builder(
-            builder: (context) {
-              final gym = mockGym;
-              return AppTopbar(
-                mode: AppTopbarMode.bigLogo,
-                showBackButton: false,
-                gymName: gym.name,
-                logoAsset: gym.logoAsset,
-                streakDays: gym.streakDays,
-                pointsLabel: gym.pointsLabel,
-                rankBadgeAsset: gym.rankBadgeAsset,
-              );
-            },
+    // Double-tap the schedule to jump straight into the post-class stats
+    // flow — a quick-demo shortcut. Double-tap is discrete, so it doesn't
+    // fight the list's vertical scroll. Mirrors the class screen's entry
+    // (replace, not push: the flow exits back to home on its own).
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onDoubleTap: () =>
+          Navigator.of(context).pushReplacementNamed(AppRoutes.postClassStreak),
+      child: CustomScrollView(
+        controller: _verticalController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Builder(
+              builder: (context) {
+                final gym = mockGym;
+                return AppTopbar(
+                  mode: AppTopbarMode.bigLogo,
+                  showBackButton: false,
+                  gymName: gym.name,
+                  logoAsset: gym.logoAsset,
+                  streakDays: gym.streakDays,
+                  pointsLabel: gym.pointsLabel,
+                  rankBadgeAsset: gym.rankBadgeAsset,
+                  onTitleDoubleTap: () =>
+                      Navigator.of(context).pushNamed(AppRoutes.styleSelect),
+                );
+              },
+            ),
           ),
-        ),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: PinnedDateRowDelegate(
-            currentDayIndex: _currentDayIndex,
-            scrollController: _dateController,
-            height: _kDateRowHeight,
-            onDateTap: _onDateTap,
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: PinnedDateRowDelegate(
+              currentDayIndex: _currentDayIndex,
+              scrollController: _dateController,
+              height: _kDateRowHeight,
+              onDateTap: _onDateTap,
+            ),
           ),
-        ),
-        SliverList.builder(
-          itemBuilder: (context, index) =>
-              DayClassGroup(day: dayAt(index), showBookings: false),
-        ),
-      ],
+          SliverList.builder(
+            itemBuilder: (context, index) =>
+                DayClassGroup(day: dayAt(index), showBookings: false),
+          ),
+        ],
+      ),
     );
   }
 }

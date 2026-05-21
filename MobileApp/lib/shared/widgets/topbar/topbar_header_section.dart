@@ -17,6 +17,7 @@ class TopbarHeaderSection extends StatelessWidget {
     required this.gymName,
     required this.logoAsset,
     required this.onTitleTap,
+    this.onTitleDoubleTap,
   });
 
   final AppTopbarMode mode;
@@ -24,12 +25,14 @@ class TopbarHeaderSection extends StatelessWidget {
   final String gymName;
   final String logoAsset;
   final VoidCallback onTitleTap;
+  final VoidCallback? onTitleDoubleTap;
 
   @override
   Widget build(BuildContext context) {
     final gymLabel = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTitleTap,
+      onDoubleTap: onTitleDoubleTap,
       child: mode == AppTopbarMode.bigLogo
           ? GymHeader(gymName: gymName, logoAsset: logoAsset)
           : _GymNameLabel(gymName: gymName),

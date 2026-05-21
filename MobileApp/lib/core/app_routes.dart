@@ -17,6 +17,9 @@ class AppRoutes {
   // Profile
   static const String profile = '/profile';
 
+  // Style picker (double-tap the home logo)
+  static const String styleSelect = '/style-select';
+
   // Rewards tab
   static const String myRewards = '/rewards';
   static const String pointsStore = '/rewards/store';

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mobile_app/customization/data/customization_api_client.dart';
 import 'package:mobile_app/customization/data/models/customization.dart';
+import 'package:mobile_app/customization/data/models/customization_style.dart';
 
 /// App-level singleton holding the active customization.
 ///
@@ -18,7 +19,12 @@ import 'package:mobile_app/customization/data/models/customization.dart';
 ///
 /// Loaded once at startup: fresh network ► disk last-good ►
 /// per-call defaults. [initialize] never throws.
-class CustomizationService {
+///
+/// A [ChangeNotifier] so the app can rebuild when the active style
+/// changes at runtime (see [selectDesign]). This is the one piece of
+/// reactive plumbing in the app — a core Flutter primitive, not a
+/// state-management framework.
+class CustomizationService extends ChangeNotifier {
   CustomizationService(
     this._apiClient, {
     required this.expectedColorKeys,
@@ -37,10 +43,17 @@ class CustomizationService {
   final List<String> expectedTextKeys;
 
   static const String _prefsKey = 'customization_last_good_json';
+  static const String _selectedDesignKey = 'customization_selected_design_id';
 
   Customization? _current;
   Customization? get current => _current;
   bool get isLoaded => _current != null;
+
+  /// The design (preset/run) currently loaded. Defaults to the
+  /// build-time design, or a previously [selectDesign]ed one that
+  /// survived a restart.
+  String? _activeDesignId;
+  String? get activeDesignId => _activeDesignId;
 
   /// Loads disk last-good, then refreshes from the network
   /// (hard 5s cap), then warns loudly about any missing expected
@@ -54,10 +67,15 @@ class CustomizationService {
       _tryAdopt(cached);
     }
 
+    // Prefer a style the user picked on a previous run; fall back to
+    // the build-time design the client was constructed with.
+    _activeDesignId =
+        prefs.getString(_selectedDesignKey) ?? _apiClient.designId;
+
     try {
-      final json = await _apiClient.fetchOutput().timeout(
-            const Duration(seconds: 5),
-          );
+      final json = await _apiClient
+          .fetchOutput(designId: _activeDesignId)
+          .timeout(const Duration(seconds: 5));
       final raw = jsonEncode(json);
       if (_tryAdopt(raw)) {
         await prefs.setString(_prefsKey, raw);
@@ -68,7 +86,37 @@ class CustomizationService {
     }
 
     _warnMissingSlots();
+    notifyListeners();
   }
+
+  /// Switches the live style: fetches [designId], adopts it as the
+  /// active customization, persists it as last-good + the sticky
+  /// selection, and notifies listeners so the whole app re-themes.
+  /// Returns whether the switch took effect. Never throws — on any
+  /// failure the current style stays put.
+  Future<bool> selectDesign(String designId) async {
+    try {
+      final json = await _apiClient
+          .fetchOutput(designId: designId)
+          .timeout(const Duration(seconds: 5));
+      final raw = jsonEncode(json);
+      if (!_tryAdopt(raw)) return false;
+      _activeDesignId = designId;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKey, raw);
+      await prefs.setString(_selectedDesignKey, designId);
+      _warnMissingSlots();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Customization selectDesign failed: $e');
+      return false;
+    }
+  }
+
+  /// The app's selectable styles (design name + celebration image).
+  Future<List<CustomizationStyle>> fetchStyles() =>
+      _apiClient.fetchStyles();
 
   /// Absolute, deduped, non-empty image URLs for cache warming.
   List<String> imageUrlsForPrewarm() {

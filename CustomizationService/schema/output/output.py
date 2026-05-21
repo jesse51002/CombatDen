@@ -18,6 +18,11 @@ _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 class Output(BaseModel):
     """Resolved customization for one app. One YAML document per pipeline run.
 
+    ``display_name`` is the app/brand name (from ``app.yaml``);
+    ``design_name`` is this run's design/style name (from the input
+    ``customization.yaml``'s ``design_direction.name``) — the label a
+    style picker shows to distinguish one preset from another.
+
     Each output group is its own model, never a bare ``dict``:
     ``image_set`` (``ImageSet``), ``color_set`` (``ColorPalette``, which
     also carries the required light/dark ``mode``), and ``font_set``
@@ -44,6 +49,7 @@ class Output(BaseModel):
 
     app: str
     display_name: str
+    design_name: str
     image_set: ImageSet
     color_set: ColorPalette
     font_set: FontSet = Field(default_factory=lambda: FontSet(fonts={}))
@@ -60,9 +66,9 @@ class Output(BaseModel):
             )
         return v
 
-    @field_validator("display_name")
+    @field_validator("display_name", "design_name")
     @classmethod
-    def _display_name_non_empty(cls, v: str) -> str:
+    def _name_non_empty(cls, v: str) -> str:
         if not v.strip():
-            raise ValueError("display_name must be non-empty")
+            raise ValueError("name must be non-empty")
         return v
