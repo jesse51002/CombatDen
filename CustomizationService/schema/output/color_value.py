@@ -28,3 +28,19 @@ class ColorValue(BaseModel):
     hsl: HslColor
     rgb: RgbColor
     hex: HexColor
+
+    @classmethod
+    def from_oklch(cls, c: OklchColor) -> ColorValue:
+        """Build a ``ColorValue`` (every format) from one ``OklchColor``.
+
+        One coloraide round-trip; each primitive does its own conversion.
+        This is the single "OKLCH → all formats" constructor — the colour
+        services call it rather than re-deriving the projection.
+        """
+        aide = c.to_aide()
+        return cls(
+            oklch=OklchColor.from_aide(aide),
+            hsl=HslColor.from_aide(aide),
+            rgb=RgbColor.from_aide(aide),
+            hex=HexColor.from_aide(aide),
+        )

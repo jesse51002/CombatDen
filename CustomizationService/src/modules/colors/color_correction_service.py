@@ -16,8 +16,8 @@ responsibility; this file is just the clamp.
 
 from __future__ import annotations
 
-from schema import ColorMode, ColorRole, OklchColor
-from src.modules.colors.color_models import PaletteSchema
+from schema import OklchColor
+from src.modules.colors.color_models import LLMPalette
 
 # Background lightness BAND, by mode — two-sided on purpose. The MobileApp
 # client builds elevated surfaces by compositing a translucent veil over
@@ -33,7 +33,7 @@ LIGHT_MODE_BG_L_MAX = 0.90
 
 
 class ColorCorrectionService:
-    """Applies deterministic post-LLM corrections to a ``PaletteSchema``.
+    """Applies deterministic post-LLM corrections to a ``LLMPalette``.
 
     Today that's just the background lightness clamp; future corrections
     (e.g. text/bg luminance pair guarantees) plug in here without
@@ -41,20 +41,18 @@ class ColorCorrectionService:
     fine for the whole run.
     """
 
-    def apply(self, schema: PaletteSchema) -> PaletteSchema:
-        """Return a new ``PaletteSchema`` with corrections applied.
+    def apply(self, schema: LLMPalette) -> LLMPalette:
+        """Return a new ``LLMPalette`` with corrections applied.
 
         Looks up the background-role slot, clamps its L into the safe
         band, and returns a copy of the schema with that slot's OKLCH
         replaced. Other slots are unchanged. In-band background is an
         identity rewrite — the clamp is idempotent.
         """
-        bg_id = next(
-            sid for sid, r in schema.roles.items() if r is ColorRole.BACKGROUND
-        )
+        bg_id = schema.background_id
         old_bg = schema.colors[bg_id]
         new_bg_oklch = self._clamp_bg_lightness(
-            old_bg.oklch, dark_mode=schema.mode is ColorMode.DARK
+            old_bg.oklch, dark_mode=schema.dark_mode
         )
         if new_bg_oklch is old_bg.oklch:
             return schema  # clamp was idempotent — no rewrite needed

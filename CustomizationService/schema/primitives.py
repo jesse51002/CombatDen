@@ -25,6 +25,7 @@ always lived here; it stays a thin validated string.
 
 from __future__ import annotations
 
+import math
 import re
 from abc import ABC, abstractmethod
 from typing import Self
@@ -83,32 +84,34 @@ class CssColor(BaseModel, ABC):
         """
         return cls.from_aide(Color(s))
 
+    # --- shared coloraide adapters (used by every subclass's
+    #     to_aide / from_aide; same logic so it lives here) -----------------
 
-def _hue_or_zero(h: float | None) -> float:
-    """Coalesce the hue coloraide reports for an achromatic colour into 0.
+    @staticmethod
+    def _hue_or_zero(h: float | None) -> float:
+        """Coalesce the hue coloraide reports for an achromatic colour
+        into 0.
 
-    Coloraide returns ``None`` (or ``NaN`` when emitted from the HSL
-    space) for hue when chroma/saturation collapses to zero — both are
-    "no meaningful hue". Our primitives require a real number in
-    [0, 360]; 0 is the conventional achromatic anchor.
-    """
-    import math
+        Coloraide returns ``None`` (or ``NaN`` when emitted from the
+        HSL space) for hue when chroma/saturation collapses to zero —
+        both are "no meaningful hue". Our primitives require a real
+        number in [0, 360]; 0 is the conventional achromatic anchor.
+        """
+        if h is None or (isinstance(h, float) and math.isnan(h)):
+            return 0.0
+        return h % 360.0
 
-    if h is None or (isinstance(h, float) and math.isnan(h)):
-        return 0.0
-    return h % 360.0
+    @staticmethod
+    def _aide_alpha_or_none(c: Color) -> float | None:
+        """Coloraide carries alpha as 1.0 when opaque; our wire
+        convention is to elide the field. This is the single rule."""
+        alpha = float(c["alpha"])
+        return None if alpha >= 1.0 else alpha
 
-
-def _aide_alpha_or_none(c: Color) -> float | None:
-    """Coloraide carries alpha as 1.0 when opaque; our wire convention
-    is to elide the field. This is the single rule."""
-    alpha = float(c["alpha"])
-    return None if alpha >= 1.0 else alpha
-
-
-def _aide_alpha_or_one(alpha: float | None) -> float:
-    """Inverse of the above for the constructor's positional arg."""
-    return alpha if alpha is not None else 1.0
+    @staticmethod
+    def _aide_alpha_or_one(alpha: float | None) -> float:
+        """Inverse of the above for the constructor's positional arg."""
+        return alpha if alpha is not None else 1.0
 
 
 class OklchColor(CssColor):
@@ -131,7 +134,7 @@ class OklchColor(CssColor):
     alpha: float | None = Field(default=None, ge=0.0, le=1.0)
 
     def to_aide(self) -> Color:
-        return Color("oklch", [self.l, self.c, self.h], _aide_alpha_or_one(self.alpha))
+        return Color("oklch", [self.l, self.c, self.h], self._aide_alpha_or_one(self.alpha))
 
     @classmethod
     def from_aide(cls, c: Color) -> OklchColor:
@@ -139,8 +142,8 @@ class OklchColor(CssColor):
         return cls(
             l=min(1.0, max(0.0, o["lightness"])),
             c=min(0.5, max(0.0, o["chroma"])),
-            h=_hue_or_zero(o["hue"]),
-            alpha=_aide_alpha_or_none(o),
+            h=cls._hue_or_zero(o["hue"]),
+            alpha=cls._aide_alpha_or_none(o),
         )
 
     def __str__(self) -> str:
@@ -148,6 +151,32 @@ class OklchColor(CssColor):
         if self.alpha is not None:
             body += f" / {_fmt_num(self.alpha)}"
         return body + ")"
+
+    def with_alpha(self, alpha: float) -> OklchColor:
+        """Return a copy with the alpha set to ``alpha`` (0–1); L/C/H
+        unchanged. ``alpha >= 1`` collapses to ``None`` (opaque, our wire
+        convention). Pydantic's ``model_copy`` doesn't re-validate, so the
+        range is checked explicitly here."""
+        if not 0.0 <= alpha <= 1.0:
+            raise ValueError(f"alpha must be 0–1; got {alpha!r}")
+        return self.model_copy(
+            update={"alpha": None if alpha >= 1.0 else alpha}
+        )
+
+    def composite_over(self, under: OklchColor) -> OklchColor:
+        """Porter–Duff "over": this colour composited on top of an
+        (opaque) ``under`` colour, in sRGB, returned as opaque OKLCH.
+
+        ``under``'s own alpha is ignored — surfaces composite onto the
+        canvas, not onto translucency. The result has no alpha.
+        """
+        under_opaque = under.model_copy(update={"alpha": None})
+        composited = Color.layer(
+            [self.to_aide(), under_opaque.to_aide()], space="srgb"
+        )
+        return OklchColor.from_aide(composited).model_copy(
+            update={"alpha": None}
+        )
 
 
 class HslColor(CssColor):
@@ -172,7 +201,7 @@ class HslColor(CssColor):
         return Color(
             "hsl",
             [self.h, self.s / 100.0, self.l / 100.0],
-            _aide_alpha_or_one(self.alpha),
+            self._aide_alpha_or_one(self.alpha),
         )
 
     @classmethod
@@ -180,10 +209,10 @@ class HslColor(CssColor):
         # Multiply back to 0–100 on the way out (see to_aide).
         o = c.convert("hsl")
         return cls(
-            h=_hue_or_zero(o["hue"]),
+            h=cls._hue_or_zero(o["hue"]),
             s=min(100.0, max(0.0, o["saturation"] * 100.0)),
             l=min(100.0, max(0.0, o["lightness"] * 100.0)),
-            alpha=_aide_alpha_or_none(o),
+            alpha=cls._aide_alpha_or_none(o),
         )
 
     def __str__(self) -> str:
@@ -211,7 +240,7 @@ class RgbColor(CssColor):
         return Color(
             "srgb",
             [self.r / 255.0, self.g / 255.0, self.b / 255.0],
-            _aide_alpha_or_one(self.alpha),
+            self._aide_alpha_or_one(self.alpha),
         )
 
     @classmethod
@@ -223,7 +252,7 @@ class RgbColor(CssColor):
             r=int(round(o["red"] * 255)),
             g=int(round(o["green"] * 255)),
             b=int(round(o["blue"] * 255)),
-            alpha=_aide_alpha_or_none(o),
+            alpha=cls._aide_alpha_or_none(o),
         )
 
     def __str__(self) -> str:

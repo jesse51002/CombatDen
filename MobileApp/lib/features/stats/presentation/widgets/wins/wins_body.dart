@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/customization/brand_text.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/wins/wins_tile_row.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
@@ -54,7 +55,10 @@ class WinsBody extends StatelessWidget {
             StaggeredReveal(
               delay: headerDelay,
               child: Text(
-                stats.title,
+                BrandText.value(
+                  CombatDenSlots.winsTitle,
+                  fallback: stats.title,
+                ),
                 textAlign: TextAlign.center,
                 style: DesignConstants.big2,
               ),
@@ -62,7 +66,10 @@ class WinsBody extends StatelessWidget {
             StaggeredReveal(
               delay: subtitleDelay,
               child: Text(
-                stats.subtitle,
+                BrandText.value(
+                  CombatDenSlots.winsSubtitle,
+                  fallback: stats.subtitle,
+                ),
                 textAlign: TextAlign.center,
                 style: DesignConstants.pBig.copyWith(
                   color: DesignConstants.text2nd,

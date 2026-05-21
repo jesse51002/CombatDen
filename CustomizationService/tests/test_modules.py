@@ -24,10 +24,9 @@ from src.core.errors import ProviderError
 from src.core.run_context import RunContext
 from src.core.util import load_yaml
 from src.modules.base import DependencyKind
-from src.modules.colors.color_derivation_service import ColorDerivationService
 from src.modules.colors.color_models import LLMSlotResponse, build_color_response_model
 from src.modules.colors.color_node import ColorNode
-from src.modules.colors.color_models import PaletteSchema
+from src.modules.colors.color_models import LLMPalette
 from src.modules.images.background_service import (
     BG_MAX_ATTEMPTS,
     BackgroundService,
@@ -61,10 +60,10 @@ def _contract_oklch(role: ColorRole | None, dark_mode: bool) -> str:
 
 def _full_palette(ctx: RunContext) -> ColorPalette:
     """Build a contract-valid, fully expanded palette by running the
-    production derivation service over a hand-built ``PaletteSchema`` —
+    production derivation service over a hand-built ``LLMPalette`` —
     image-node tests see exactly the shape ``ColorNode`` produces."""
     roles = {s.id: s.role for s in ctx.app.colors}
-    schema = PaletteSchema(
+    schema = LLMPalette(
         mode=ColorMode.DARK,
         roles=roles,
         colors={
@@ -76,7 +75,9 @@ def _full_palette(ctx: RunContext) -> ColorPalette:
             for s in ctx.app.colors
         },
     )
-    return ColorDerivationService().build(schema)
+    from tests.colour_helpers import assemble_color_palette
+
+    return assemble_color_palette(schema)
 
 
 # --- stub interfaces -------------------------------------------------------

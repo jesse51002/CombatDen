@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/core/app_slots.dart';
+import 'package:mobile_app/customization/brand_text.dart';
 import 'package:mobile_app/features/videos/data/mock_videos.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_layout.dart';
 
@@ -13,7 +15,10 @@ class SummaryScreen extends StatelessWidget {
     return VideoReccLayout(
       title: 'Drill of the Day',
       video: mockDrillOfTheDay,
-      ctaLabel: 'Book your next class',
+      ctaLabel: BrandText.value(
+        CombatDenSlots.bookNextClassCta,
+        fallback: 'Book your next class',
+      ),
       onClose: () => Navigator.of(context).pushNamedAndRemoveUntil(
         AppRoutes.home,
         (r) => false,

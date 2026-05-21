@@ -13,5 +13,5 @@ class AppConfig {
   static const String appId = 'combatden';
 
   /// The design (preset/run) of [appId] to load.
-  static const String designId = '20260518T131056Z';
+  static const String designId = '20260520T234553Z';
 }

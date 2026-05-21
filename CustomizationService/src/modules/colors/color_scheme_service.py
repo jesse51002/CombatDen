@@ -8,7 +8,7 @@ loop via the ``model_validator(mode="after")`` on the per-request
 response model. Failures are re-asked; everything in this file runs
 after the contract has passed.
 
-The service returns a typed ``PaletteSchema`` (defined in
+The service returns a typed ``LLMPalette`` (defined in
 ``color_models``) — the internal handoff to the correction and
 derivation services downstream — rather than the final ``ColorPalette``
 so each stage of the pipeline owns one concern.
@@ -22,7 +22,7 @@ from string import Template
 from schema import ColorMode
 from src.core.run_context import RunContext
 from src.modules.colors.color_models import (
-    PaletteSchema,
+    LLMPalette,
     build_color_response_model,
 )
 from src.shared.interfaces.llm_client import LLMClient
@@ -44,7 +44,7 @@ class ColorSchemeService:
 
     async def resolve(
         self, run_ctx: RunContext, *, model: str = COLOR_MODEL
-    ) -> PaletteSchema:
+    ) -> LLMPalette:
         """Run the colour LLM call; return the contract-clean schema.
 
         The per-request closed model is built per call so the LLM sees an
@@ -70,7 +70,7 @@ class ColorSchemeService:
         # Flatten the closed dynamic model back into a plain dict so
         # downstream services don't have to know its per-request shape.
         colors = {sid: getattr(resolved, sid) for sid in slot_ids}
-        return PaletteSchema(mode=mode, roles=roles, colors=colors)
+        return LLMPalette(mode=mode, roles=roles, colors=colors)
 
     @staticmethod
     def _build_prompt(run_ctx: RunContext) -> str:

@@ -11,8 +11,8 @@ from fastapi.responses import FileResponse
 from src.api.errors import InvalidRunError, NotFoundError
 from src.api.schema.font_delivery import FontDeliveryResponse
 from src.api.schema.output_response import OutputResponse
-from src.api.service.font_service import resolve_font
-from src.api.service.output_service import load_output, resolve_image_file
+from src.api.service.font_service import font_service
+from src.api.service.output_service import output_service
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ output_router = APIRouter(prefix="/apps", tags=["output"])
 async def get_output(app_id: str, run_id: str) -> OutputResponse:
     """Return one run's ``output.yaml`` with streamable image URLs."""
     try:
-        output = await load_output(app_id, run_id)
+        output = await output_service().load(app_id, run_id)
         return OutputResponse.from_output(output, app_id, run_id)
     except NotFoundError as exc:
         raise HTTPException(
@@ -68,7 +68,7 @@ async def get_image(
 ) -> FileResponse:
     """Stream the generated PNG for one declared image slot."""
     try:
-        path = await resolve_image_file(app_id, run_id, slot_id)
+        path = await output_service().image_file(app_id, run_id, slot_id)
         return FileResponse(path, media_type="image/png")
     except NotFoundError as exc:
         raise HTTPException(
@@ -122,7 +122,7 @@ async def get_font(
     can fetch from Google's CDN directly; ``css_url`` is the CSS2
     endpoint browsers can drop in for woff2."""
     try:
-        return await resolve_font(app_id, run_id, slot_id)
+        return await font_service().resolve(app_id, run_id, slot_id)
     except NotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)

@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient
 from src.api.config import settings
 from src.api.errors import NotFoundError
 from src.api.main import app
-from src.api.service import font_service
-from src.api.service.output_service import load_output
+from src.api.service import font_service, output_service
+from src.api.service.output_service import OutputService
 from src.shared.interfaces.google_fonts_catalog import GoogleFontMetadata
 
 FIXTURE_APPS = Path(__file__).resolve().parent / "data" / "apps"
@@ -30,8 +30,20 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def _use_fixture_apps(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Serve from the fixture tree, not production ``apps/``."""
+    """Serve from the fixture tree, not production ``apps/``.
+
+    Patches ``settings.apps_root`` AND pins a fresh ``OutputService``
+    pointed at the fixtures as the process-scoped singleton. The pin is
+    required because ``OutputService`` captures ``apps_root`` at
+    construction, so without it the lazily-built default would freeze
+    on whatever ``settings.apps_root`` was when the first test ran.
+    """
     monkeypatch.setattr(settings, "apps_root", FIXTURE_APPS)
+    monkeypatch.setattr(
+        output_service,
+        "_DEFAULT",
+        OutputService(apps_root=FIXTURE_APPS),
+    )
 
 
 def test_health() -> None:
@@ -52,11 +64,19 @@ def test_get_output_matches_the_runs_yaml() -> None:
     # Colour group passes through unchanged (mode + oklch/name/desc).
     assert body["color_set"] == expected["color_set"]
 
-    img = body["image_set"]["images"]["hero"]
-    assert img["url"] == f"/apps/{APP}/run1/images/hero"
-    assert img["prompt"] == expected["image_set"]["images"]["hero"]["prompt"]
-    # The unreliable server path must never leak to the client.
-    assert "path" not in img
+    # Images collapse to a flat slot -> fetch-URL map; the unreliable
+    # server ``path`` and the generation ``prompt`` never reach the client.
+    assert body["images"] == {"hero": f"/apps/{APP}/run1/images/hero"}
+
+    # Fonts collapse to a flat slot -> Google Fonts family map.
+    assert body["fonts"] == {
+        slot_id: font["family"]
+        for slot_id, font in expected["font_set"]["fonts"].items()
+    }
+
+    # The text group passes through unchanged; run1 declares none, so it
+    # is the empty default.
+    assert body["text_set"] == {"texts": {}}
 
 
 def test_image_served_from_final_images() -> None:
@@ -113,17 +133,15 @@ def test_unknown_app_run_and_slot_404() -> None:
     assert "not declared" in resp.json()["detail"]
 
 
-def test_traversal_ids_are_rejected_by_the_guard(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_traversal_ids_are_rejected_by_the_guard() -> None:
     """Malformed ids never escape apps_root; they raise NotFoundError."""
-    monkeypatch.setattr(settings, "apps_root", FIXTURE_APPS)
+    outputs = OutputService(apps_root=FIXTURE_APPS)
     with pytest.raises(NotFoundError):
-        asyncio.run(load_output("../../etc", "run1"))
+        asyncio.run(outputs.load("../../etc", "run1"))
     with pytest.raises(NotFoundError):
-        asyncio.run(load_output(APP, "../.."))
+        asyncio.run(outputs.load(APP, "../.."))
     # The legitimate run still resolves.
-    assert asyncio.run(load_output(APP, "run1")).app == APP
+    assert asyncio.run(outputs.load(APP, "run1")).app == APP
 
 
 def test_encoded_traversal_via_http_is_404() -> None:
@@ -174,10 +192,19 @@ class _StubCatalog:
 
 @pytest.fixture
 def _stub_catalog(monkeypatch: pytest.MonkeyPatch) -> _StubCatalog:
-    """Swap the module-level lazy singleton for an in-memory stub so the
-    font endpoint never hits the live Google Fonts API in tests."""
+    """Construct a FontService around an in-memory stub catalog and pin
+    it as the process-scoped singleton, so the font endpoint never hits
+    the live Google Fonts API in tests. The OutputService it depends
+    on is the one already pinned by ``_use_fixture_apps``."""
     catalog = _StubCatalog()
-    monkeypatch.setattr(font_service, "_CATALOG", catalog)
+    monkeypatch.setattr(
+        font_service,
+        "_DEFAULT",
+        font_service.FontService(
+            catalog=catalog,
+            outputs=OutputService(apps_root=FIXTURE_APPS),
+        ),
+    )
     return catalog
 
 
@@ -222,7 +249,14 @@ def test_font_endpoint_family_retired_from_catalog_404(
     that's no longer in the live catalog, the endpoint 404s clearly so
     the caller knows to re-run the pipeline."""
     empty = _StubCatalog(entries={})
-    monkeypatch.setattr(font_service, "_CATALOG", empty)
+    monkeypatch.setattr(
+        font_service,
+        "_DEFAULT",
+        font_service.FontService(
+            catalog=empty,
+            outputs=OutputService(apps_root=FIXTURE_APPS),
+        ),
+    )
     resp = client.get(f"/apps/{APP}/run1/fonts/display")
     assert resp.status_code == 404
     assert "no longer in the Google Fonts catalog" in resp.json()["detail"]

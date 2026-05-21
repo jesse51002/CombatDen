@@ -157,16 +157,13 @@ def test_build_digraph_rejects_unknown_producer(tmp_path: Path) -> None:
 
 
 def _palette(ctx: RunContext) -> ColorPalette:
-    """Build a contract-valid ColorPalette via the production derivation
-    service. The executor's only contract with this object is that it
+    """Build a contract-valid ColorPalette via the node's deterministic
+    assembly. The executor's only contract with this object is that it
     round-trips through the writer, so we just need a fully-populated one.
     """
     from schema import ColorRole, OklchColor
-    from src.modules.colors.color_derivation_service import (
-        ColorDerivationService,
-    )
-    from src.modules.colors.color_models import LLMSlotResponse
-    from src.modules.colors.color_models import PaletteSchema
+    from src.modules.colors.color_models import LLMSlotResponse, LLMPalette
+    from tests.colour_helpers import assemble_color_palette
 
     roles = {s.id: s.role for s in ctx.app.colors}
 
@@ -177,7 +174,7 @@ def _palette(ctx: RunContext) -> ColorPalette:
             return OklchColor.from_css("oklch(92% 0.01 80)")
         return OklchColor.from_css("oklch(55% 0.12 250)")
 
-    schema = PaletteSchema(
+    schema = LLMPalette(
         mode=ColorMode.DARK,
         roles=roles,
         colors={
@@ -189,7 +186,7 @@ def _palette(ctx: RunContext) -> ColorPalette:
             for s in ctx.app.colors
         },
     )
-    return ColorDerivationService().build(schema)
+    return assemble_color_palette(schema)
 
 
 def _img_out(ctx: RunContext, slot_id: str) -> ImageOutput:

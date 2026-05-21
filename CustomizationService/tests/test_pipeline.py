@@ -466,22 +466,19 @@ def test_output_back_compat_ignores_removed_fields():
     }
     # The colour shape changed: a ColorOutput now nests its value as a
     # ColorValue and carries the six pipeline-computed derivations. Build
-    # the fixture by running the production derivation service over a
-    # hand-built PaletteSchema so it stays contract-valid as the math
+    # the fixture by running the node's deterministic assembly over a
+    # hand-built LLMPalette so it stays contract-valid as the math
     # evolves.
     from schema import ColorMode
-    from src.modules.colors.color_derivation_service import (
-        ColorDerivationService,
-    )
-    from src.modules.colors.color_models import LLMSlotResponse
-    from src.modules.colors.color_models import PaletteSchema
+    from src.modules.colors.color_models import LLMSlotResponse, LLMPalette
+    from tests.colour_helpers import assemble_color_palette
 
     roles = {
         "primary": None,
         "background": ColorRole.BACKGROUND,
         "text": ColorRole.TEXT,
     }
-    schema = PaletteSchema(
+    schema = LLMPalette(
         mode=ColorMode.LIGHT,
         roles=roles,
         colors={
@@ -502,7 +499,7 @@ def test_output_back_compat_ignores_removed_fields():
             ),
         },
     )
-    expanded = ColorDerivationService().build(schema)
+    expanded = assemble_color_palette(schema)
     colors = {
         sid: c.model_dump(mode="json") for sid, c in expanded.colors.items()
     }

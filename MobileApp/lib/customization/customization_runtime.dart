@@ -23,6 +23,8 @@ class CustomizationRuntime {
     required String designId,
     required List<String> expectedColors,
     required List<String> expectedImages,
+    required List<String> expectedFonts,
+    required List<String> expectedText,
   }) async {
     if (!getIt.isRegistered<CustomizationService>()) {
       getIt.registerLazySingleton<CustomizationApiClient>(
@@ -36,6 +38,8 @@ class CustomizationRuntime {
           getIt<CustomizationApiClient>(),
           expectedColorKeys: expectedColors,
           expectedImageKeys: expectedImages,
+          expectedFontKeys: expectedFonts,
+          expectedTextKeys: expectedText,
         ),
       );
     }

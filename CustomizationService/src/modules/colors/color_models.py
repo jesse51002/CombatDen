@@ -13,7 +13,7 @@ palette — is computed deterministically downstream:
 Three models live here:
 
 - ``LLMSlotResponse`` — the narrow per-slot wire type the LLM fills in.
-- ``PaletteSchema`` — the typed handoff between the colour services
+- ``LLMPalette`` — the typed handoff between the colour services
   after the LLM call and contract pass.
 - The per-request closed model built by ``build_color_response_model``
   for the structured-output call itself, with the contract as its
@@ -66,14 +66,17 @@ class LLMSlotResponse(BaseModel):
     description: str  # purpose/usage prose for the colour
 
 
-class PaletteSchema(BaseModel):
+class LLMPalette(BaseModel):
     """The LLM-resolved palette, before any post-LLM correction or
     derivation. Internal handoff between the three colour services
     (scheme → correction → derivation).
 
     Lives in ``color_models`` (next to ``LLMSlotResponse``) because it
     IS the typed wire-shaped result of the colour LLM call; the scheme
-    service is just what produces it.
+    service is just what produces it. The ``background_id`` / ``text_id``
+    / ``canvas`` / ``text`` / ``dark_mode`` accessors centralise the
+    "which slot plays which structural role" lookup so the correction
+    and derivation stages don't each re-derive it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -81,6 +84,35 @@ class PaletteSchema(BaseModel):
     mode: ColorMode
     roles: dict[str, ColorRole | None]
     colors: dict[str, LLMSlotResponse]
+
+    @property
+    def background_id(self) -> str:
+        """The single background-role slot id (AppFormat guarantees one)."""
+        return next(
+            sid for sid, r in self.roles.items() if r is ColorRole.BACKGROUND
+        )
+
+    @property
+    def text_id(self) -> str:
+        """The single text-role slot id (AppFormat guarantees one)."""
+        return next(
+            sid for sid, r in self.roles.items() if r is ColorRole.TEXT
+        )
+
+    @property
+    def canvas(self) -> OklchColor:
+        """The resolved background colour — the canvas every surface and
+        derivation is computed against."""
+        return self.colors[self.background_id].oklch
+
+    @property
+    def text(self) -> OklchColor:
+        """The resolved body-text colour."""
+        return self.colors[self.text_id].oklch
+
+    @property
+    def dark_mode(self) -> bool:
+        return self.mode is ColorMode.DARK
 
 
 def build_color_response_model(

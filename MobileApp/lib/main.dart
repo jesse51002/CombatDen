@@ -31,6 +31,8 @@ Future<void> main() async {
     designId: AppConfig.designId,
     expectedColors: CombatDenSlots.expectedColors,
     expectedImages: CombatDenSlots.expectedImages,
+    expectedFonts: CombatDenSlots.expectedFonts,
+    expectedText: CombatDenSlots.expectedText,
   );
 
   runApp(const MobileAppRoot());
