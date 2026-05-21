@@ -132,6 +132,23 @@ color_set:
             b: 180
             alpha: null
           hex: '#ffc8b4'
+        regular_text:
+          oklch:
+            l: 0.2
+            c: 0.01
+            h: 240.0
+            alpha: null
+          hsl:
+            h: 205.46659875311087
+            s: 18.414946344838544
+            l: 8.666561899978127
+            alpha: null
+          rgb:
+            r: 18
+            g: 23
+            b: 26
+            alpha: null
+          hex: '#12171a'
     background:
       color:
         oklch:
@@ -255,6 +272,23 @@ color_set:
             b: 153
             alpha: null
           hex: '#8e9499'
+        regular_text:
+          oklch:
+            l: 0.9500000000000001
+            c: 0.005
+            h: 90.0
+            alpha: null
+          hsl:
+            h: 43.877900413658736
+            s: 13.76768708486075
+            l: 93.00035709491124
+            alpha: null
+          rgb:
+            r: 240
+            g: 238
+            b: 235
+            alpha: null
+          hex: '#f0eeeb'
     text:
       color:
         oklch:
@@ -378,6 +412,23 @@ color_set:
             b: 244
             alpha: null
           hex: '#f9f8f4'
+        regular_text:
+          oklch:
+            l: 0.2
+            c: 0.01
+            h: 240.0
+            alpha: null
+          hsl:
+            h: 205.46659875311087
+            s: 18.414946344838544
+            l: 8.666561899978127
+            alpha: null
+          rgb:
+            r: 18
+            g: 23
+            b: 26
+            alpha: null
+          hex: '#12171a'
     accent:
       color:
         oklch:
@@ -501,6 +552,23 @@ color_set:
             b: 252
             alpha: null
           hex: '#6af4fc'
+        regular_text:
+          oklch:
+            l: 0.2
+            c: 0.01
+            h: 240.0
+            alpha: null
+          hsl:
+            h: 205.46659875311087
+            s: 18.414946344838544
+            l: 8.666561899978127
+            alpha: null
+          rgb:
+            r: 18
+            g: 23
+            b: 26
+            alpha: null
+          hex: '#12171a'
   palette:
     primary_second:
       oklch:
@@ -604,6 +672,23 @@ color_set:
         b: 180
         alpha: null
       hex: '#ffc8b4'
+    primary_regular_text:
+      oklch:
+        l: 0.2
+        c: 0.01
+        h: 240.0
+        alpha: null
+      hsl:
+        h: 205.46659875311087
+        s: 18.414946344838544
+        l: 8.666561899978127
+        alpha: null
+      rgb:
+        r: 18
+        g: 23
+        b: 26
+        alpha: null
+      hex: '#12171a'
     background_second:
       oklch:
         l: 0.2
@@ -706,6 +791,23 @@ color_set:
         b: 153
         alpha: null
       hex: '#8e9499'
+    background_regular_text:
+      oklch:
+        l: 0.9500000000000001
+        c: 0.005
+        h: 90.0
+        alpha: null
+      hsl:
+        h: 43.877900413658736
+        s: 13.76768708486075
+        l: 93.00035709491124
+        alpha: null
+      rgb:
+        r: 240
+        g: 238
+        b: 235
+        alpha: null
+      hex: '#f0eeeb'
     text_second:
       oklch:
         l: 0.9500000000000001
@@ -808,6 +910,23 @@ color_set:
         b: 244
         alpha: null
       hex: '#f9f8f4'
+    text_regular_text:
+      oklch:
+        l: 0.2
+        c: 0.01
+        h: 240.0
+        alpha: null
+      hsl:
+        h: 205.46659875311087
+        s: 18.414946344838544
+        l: 8.666561899978127
+        alpha: null
+      rgb:
+        r: 18
+        g: 23
+        b: 26
+        alpha: null
+      hex: '#12171a'
     accent_second:
       oklch:
         l: 0.75
@@ -910,6 +1029,23 @@ color_set:
         b: 252
         alpha: null
       hex: '#6af4fc'
+    accent_regular_text:
+      oklch:
+        l: 0.2
+        c: 0.01
+        h: 240.0
+        alpha: null
+      hsl:
+        h: 205.46659875311087
+        s: 18.414946344838544
+        l: 8.666561899978127
+        alpha: null
+      rgb:
+        r: 18
+        g: 23
+        b: 26
+        alpha: null
+      hex: '#12171a'
     card:
       oklch:
         l: 0.98

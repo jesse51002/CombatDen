@@ -1,0 +1,61 @@
+design_direction:
+  name: Killer Muay Thai
+  short_desc: Train like you mean it — a fight-team Muay Thai gym for people who came
+    to get dangerous, not to dabble.
+  long_desc: "Killer Muay Thai is a fight-team Muay Thai gym and companion app for\n\
+    people who came to get dangerous — committed amateurs, competitors and\nserious\
+    \ hobbyists who train at a fighter's intensity. It teaches the\nreal art of eight\
+    \ limbs and holds a fighter's standard; newcomers are\nwelcome only on the understanding\
+    \ that they rise to that bar, not that\nit bends for them. The brand sits in a\
+    \ deliberate spot — it is\nemphatically NOT cardio-kickboxing or bag-punching\
+    \ fitness theatre\ndressed up as \"boxing-inspired\", and equally NOT a soft wellness\
+    \ or\nlifestyle brand (spa calm, mindfulness positioning, an\nInstagram-aesthetic\
+    \ gym). It is serious, severe and combative: Muay\nThai as a fight discipline,\
+    \ not a workout class.\n\nThe voice is cold and commanding — terse, direct and\
+    \ imperative, the\nway a corner talks to a fighter between rounds. No filler,\
+    \ no\ncheerleading, no cushioning. It respects the work without coddling. It\n\
+    must never sound warm-and-fuzzy, chatty, motivational-poster,\nhype-bro, cute,\
+    \ or sterile-corporate; when it speaks it gives an\norder, not encouragement.\n\
+    \nKiller Muay Thai's anchor is a dynamic fighter silhouette caught\nmid-strike\
+    \ — a flying knee, an elbow, a teep — explosive, aggressive\nand unmistakably\
+    \ Muay Thai. The silhouette anchors the primary logo as\na bold, high-contrast\
+    \ action mark and drives the celebratory heroes\n(booking success, the rank belt,\
+    \ the points burst, the gift, the wins\ntrophy), which land kinetic and heavy.\
+    \ The tiny persistent tokens —\nthe single point-star, the streak mark, the QR\
+    \ check-in icon — stay\nabstract, minimal and razor-legible at small size, living\
+    \ in the\nfighter's world through colour and severity rather than being the\n\
+    figure itself. The logo stays a clean, professional mark a real fight\ngym would\
+    \ use, never a busy illustrated scene.\n\nVisual system — the shared look every\
+    \ generated asset must wear:\n\n- Feel: hard, sharp and dangerous — coiled power\
+    \ and explosive strike\n  energy, serious and severe. Charged with threat, the\
+    \ opposite of\n  bright-and-fun or soft-and-calm.\n- Medium & materials: dramatic,\
+    \ high-contrast 3D and strong\n  silhouette work with premium metallic surfaces\
+    \ — the gold of earned\n  belts and trophies — set on a dark ground. Hard edges\
+    \ and real\n  weight. Never glossy neon, never pillowy or pastel-soft, never flat\n\
+    \  clip-art.\n- Finish & light: dark and dramatic, with hard directional light\n\
+    \  carving strong form and deep shadow — a fighter under the ring\n  lights, never\
+    \ a soft daylit scene.\n- Energy by role: celebratory heroes (booking success,\
+    \ rank belt,\n  points burst, gift, wins trophy) hit hard, heavy and dramatic\
+    \ — a\n  real payoff with weight behind it. Persistent UI (the logo, the\n  single\
+    \ point-star, streak mark, QR) stays minimal, severe and\n  blade-sharp, reading\
+    \ instantly at small size.\n- Hard nos: no soft or wellness blandness (spa pastels,\
+    \ pillowy\n  forms, zen calm, lifestyle gloss); nothing cute, cartoonish or\n\
+    \  Saturday-morning (no mascots, no friendly rounded characters); no\n  neon club\
+    \ brightness, candy colour or bright-fun party energy; no\n  generic combat clip-art\
+    \ (stock gloves, flat clip-art fighters,\n  sterile gym-chain look, fake-tough\
+    \ clichés).\n"
+colors_direction:
+  description: "A dark, severe palette — earned gold against a deep near-black\nground,\
+    \ with danger held in reserve. Premium and combative, never\nbright or festive.\n\
+    \n- Primary: a rich championship gold / bronze for primary CTAs and key\n  accents\
+    \ — earned, premium and warm-metallic, the colour of belts and\n  trophies. Confident\
+    \ and saturated against the dark ground, never a\n  pale or washed-out yellow.\n\
+    - Background: a deep cool near-black with the faintest warm\n  brand-tinted undertone\
+    \ — a dark, dramatic ground that lets the gold\n  lift off it, never a flat pure\
+    \ black, with tonal room for cards and\n  sheets to read.\n- Text: a crisp warm\
+    \ off-white for headings and body copy — clean and\n  legible, comfortably above\
+    \ AA against the dark canvas, never a harsh\n  pure white.\n- Accent: a deep blood-red\
+    \ for selections, active states and\n  highlights — a clearly different hue from\
+    \ the gold primary, hard and\n  dangerous, used sparingly on active nav, pills\
+    \ and tabs as borders or\n  a single active label, never a fill.\n"
+  mode: dark

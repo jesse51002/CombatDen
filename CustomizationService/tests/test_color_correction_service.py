@@ -23,14 +23,14 @@ from src.modules.colors.color_correction_service import ColorCorrectionService
 from src.modules.colors.color_models import (
     MIN_CONTRAST_AA,
     LLMSlotResponse,
-    _contrast_ratio,
     build_color_response_model,
 )
 from src.shared.services.llm_client import LiteLLMClient
 
 # Aliases for readability — every helper lives on the service class now.
 _clamp = ColorCorrectionService._clamp_bg_lightness
-_contrast = _contrast_ratio
+# Contrast now lives on the primitive (``OklchColor.contrast``).
+_contrast = OklchColor.contrast
 
 # litellm.acompletion is monkeypatched, but _completion_kwargs still resolves
 # the provider key from this prefix, so it must be a configured provider.

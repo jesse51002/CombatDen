@@ -28,6 +28,7 @@ def assemble_color_palette(schema: LLMPalette) -> ColorPalette:
             schema.colors[sid],
             role=schema.roles[sid],
             canvas=schema.canvas,
+            text=schema.text,
             dark_mode=schema.dark_mode,
             surfaces=surfaces,
         )

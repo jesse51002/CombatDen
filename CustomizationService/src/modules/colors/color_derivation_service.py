@@ -1,9 +1,10 @@
 """ColorDerivationService — expand ONE colour into its full ``ColorOutput``.
 
 Atomic by design: the public method ``expand`` takes a single resolved
-slot and produces that colour's base ``ColorValue`` plus its six
+slot and produces that colour's base ``ColorValue`` plus its seven
 derivations (``second`` / ``third`` alpha tints, ``card`` / ``popup``
-surfaces, ``dark`` / ``light`` lightness shifts). It does NOT loop the
+surfaces, ``dark`` / ``light`` lightness shifts, and ``regular_text`` —
+the readable colour for text painted ON this colour). It does NOT loop the
 palette, compute the shared surfaces, or assemble the flat
 recommendation dict — the node orchestrates iteration, and
 ``ColorSurfaceService`` owns the run-wide surfaces (passed in here so
@@ -22,7 +23,7 @@ from schema import ColorRole, OklchColor
 from schema.output.color_output import ColorOutput
 from schema.output.color_value import ColorValue
 from schema.output.derivations import Derivations
-from src.modules.colors.color_models import LLMSlotResponse
+from src.modules.colors.color_models import MIN_CONTRAST_AA, LLMSlotResponse
 from src.modules.colors.color_surface_service import SharedSurfaces
 
 # Alpha tints — lifted verbatim from MobileApp/lib/core/design_constants.dart
@@ -55,12 +56,15 @@ class ColorDerivationService:
         *,
         role: ColorRole | None,
         canvas: OklchColor,
+        text: OklchColor,
         dark_mode: bool,
         surfaces: SharedSurfaces,
     ) -> ColorOutput:
-        """One resolved slot → its ``ColorOutput`` (base value + the six
+        """One resolved slot → its ``ColorOutput`` (base value + the seven
         derivations). ``surfaces`` supplies the shared card/popup the
-        background + text slots reuse instead of tinting their own."""
+        background + text slots reuse instead of tinting their own;
+        ``canvas`` / ``text`` are the resolved background + body-text
+        colours, used to pick the slot's ``regular_text`` foreground."""
         return ColorOutput(
             color=ColorValue.from_oklch(slot.oklch),
             display_name=slot.display_name,
@@ -69,6 +73,7 @@ class ColorDerivationService:
                 slot.oklch,
                 role=role,
                 canvas=canvas,
+                text=text,
                 dark_mode=dark_mode,
                 surfaces=surfaces,
             ),
@@ -81,6 +86,7 @@ class ColorDerivationService:
         *,
         role: ColorRole | None,
         canvas: OklchColor,
+        text: OklchColor,
         dark_mode: bool,
         surfaces: SharedSurfaces,
     ) -> Derivations:
@@ -107,6 +113,9 @@ class ColorDerivationService:
             card = ColorValue.from_oklch(card_oklch)
             popup = ColorValue.from_oklch(card_oklch.composite_over(canvas))
 
+        # regular_text: a readable foreground for text painted ON this colour.
+        regular_text = cls._regular_text(base, text=text, canvas=canvas)
+
         return Derivations(
             second=ColorValue.from_oklch(second),
             third=ColorValue.from_oklch(third),
@@ -114,7 +123,23 @@ class ColorDerivationService:
             popup=popup,
             dark=ColorValue.from_oklch(dark),
             light=ColorValue.from_oklch(light),
+            regular_text=ColorValue.from_oklch(regular_text),
         )
+
+    @staticmethod
+    def _regular_text(
+        base: OklchColor, *, text: OklchColor, canvas: OklchColor
+    ) -> OklchColor:
+        """Readable foreground for text painted ON ``base``: the body
+        ``text`` colour if it clears WCAG AA against the fill, else
+        whichever of {text, canvas} contrasts better. ``canvas`` is the
+        background slot — and text↔background are already AA by contract,
+        so a fill near either pole always has a usable winner. Per-colour
+        because a fill can sit closer to the canvas than to the text."""
+        text_ratio = base.contrast(text)
+        if text_ratio >= MIN_CONTRAST_AA:
+            return text
+        return text if text_ratio >= base.contrast(canvas) else canvas
 
     @staticmethod
     def _card_alpha(canvas_L: float, *, dark_mode: bool) -> float:

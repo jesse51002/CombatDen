@@ -178,6 +178,10 @@ class OklchColor(CssColor):
             update={"alpha": None}
         )
 
+    def contrast(self, other: OklchColor) -> float:
+        """WCAG 2.1 contrast ratio against ``other``, via coloraide."""
+        return self.to_aide().contrast(other.to_aide(), method="wcag21")
+
 
 class HslColor(CssColor):
     """A CSS HSL colour, structured. Produced deterministically from

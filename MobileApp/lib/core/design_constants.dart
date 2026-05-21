@@ -63,10 +63,10 @@ class DesignConstants {
   );
 
   // === Derived tokens (sourced from each base slot's derivations) ===
-  // The service centralises the math: every base slot ships six
+  // The service centralises the math: every base slot ships seven
   // pre-computed variants (`second`/`third`/`card`/`popup`/`dark`/
-  // `light`). The local fallback expressions only fire when the
-  // derivation is absent.
+  // `light`/`regular_text`). The local fallback expressions only fire
+  // when the derivation is absent.
   static Color get primaryColor50 => BrandColor.color(
     CombatDenSlots.primary,
     derivation: BrandDerivation.third,
@@ -93,6 +93,17 @@ class DesignConstants {
     CombatDenSlots.primary,
     derivation: BrandDerivation.card,
     fallback: _fallbackPrimary.withValues(alpha: 0.09),
+  );
+
+  /// Readable colour for text/labels painted ON the primary fill
+  /// (primary buttons, the reward price tag). Sourced from
+  /// `primary.regular_text`: the pipeline picks the body text colour
+  /// when it clears WCAG AA on the primary fill, otherwise the
+  /// background colour. Falls back to the body text colour.
+  static Color get primaryButtonText => BrandColor.color(
+    CombatDenSlots.primary,
+    derivation: BrandDerivation.regularText,
+    fallback: _fallbackText,
   );
 
   static Color get text2nd => BrandColor.color(

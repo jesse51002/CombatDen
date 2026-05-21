@@ -1,7 +1,12 @@
-/// The six derivation keys the CustomizationService ships per
+/// The seven derivation keys the CustomizationService ships per
 /// colour slot (`primary.second`, `primary.third`, `primary.card`,
-/// `primary.popup`, `primary.dark`, `primary.light`, and the same
-/// six for every other slot).
+/// `primary.popup`, `primary.dark`, `primary.light`,
+/// `primary.regular_text`, and the same seven for every other slot).
+///
+/// `regular_text` is the readable colour for text/labels painted ON
+/// that slot's colour (e.g. a label on a primary-filled button): the
+/// body text colour when it clears WCAG AA on the fill, otherwise
+/// whichever of text/background contrasts better.
 ///
 /// The values are plain `String`s — they are what the wire and the
 /// `CustomizationColor.derivations` map are keyed by — so this
@@ -19,4 +24,5 @@ class BrandDerivation {
   static const String popup = 'popup';
   static const String dark = 'dark';
   static const String light = 'light';
+  static const String regularText = 'regular_text';
 }

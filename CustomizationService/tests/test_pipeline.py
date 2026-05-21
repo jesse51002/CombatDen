@@ -370,9 +370,9 @@ def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
     assert set(any_color["color"]["rgb"].keys()) >= {"r", "g", "b"}
     assert isinstance(any_color["color"]["hex"], str)
     # Derivations are a dict of ColorValue-shaped entries with the exact
-    # six pipeline-computed keys.
+    # seven pipeline-computed keys.
     assert set(any_color["derivations"]) == {
-        "second", "third", "card", "popup", "dark", "light",
+        "second", "third", "card", "popup", "dark", "light", "regular_text",
     }
     second = any_color["derivations"]["second"]
     assert isinstance(second["oklch"], dict)

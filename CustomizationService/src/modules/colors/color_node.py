@@ -70,6 +70,7 @@ class ColorNode(Node):
                 schema.colors[sid],
                 role=schema.roles[sid],
                 canvas=schema.canvas,
+                text=schema.text,
                 dark_mode=schema.dark_mode,
                 surfaces=surfaces,
             )
@@ -91,7 +92,7 @@ class ColorNode(Node):
         Order matters (the "no original gets overwritten" invariant):
         1. per-colour derivations flattened as ``<slot>_<deriv>``
            (``Derivations.model_fields`` is the source of truth for the
-           six names),
+           derivation names),
         2. shared surfaces (``card``, ``popup``, ``divider``),
         3. base slot colours LAST — a derivation-key collision with a
            base slot id falls to the base.

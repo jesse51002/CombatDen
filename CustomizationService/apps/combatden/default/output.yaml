@@ -36,24 +36,1164 @@ color_set:
   mode: dark
   colors:
     primary:
-      oklch: oklch(70.523% 0.1936 41.09)
+      color:
+        oklch:
+          l: 0.70523
+          c: 0.1936
+          h: 41.09
+          alpha: null
+        hsl:
+          h: 18.003256007419903
+          s: 100.0
+          l: 58.81989776574361
+          alpha: null
+        rgb:
+          r: 255
+          g: 108
+          b: 45
+          alpha: null
+        hex: '#ff6c2d'
       display_name: Cage Orange
       description: 'Primary brand accent for CTAs, hero numerals, and key highlights.
         Warm, energetic orange used sparingly (One Voice Rule: ~10% of any screen).'
+      derivations:
+        second:
+          oklch:
+            l: 0.70523
+            c: 0.1936
+            h: 41.09
+            alpha: 0.75
+          hsl:
+            h: 18.003256007419903
+            s: 100.0
+            l: 58.81989776574361
+            alpha: 0.75
+          rgb:
+            r: 255
+            g: 108
+            b: 45
+            alpha: 0.75
+          hex: '#ff6c2dbf'
+        third:
+          oklch:
+            l: 0.70523
+            c: 0.1936
+            h: 41.09
+            alpha: 0.5
+          hsl:
+            h: 18.003256007419903
+            s: 100.0
+            l: 58.81989776574361
+            alpha: 0.5
+          rgb:
+            r: 255
+            g: 108
+            b: 45
+            alpha: 0.5
+          hex: '#ff6c2d80'
+        card:
+          oklch:
+            l: 0.70523
+            c: 0.1936
+            h: 41.09
+            alpha: 0.13945600000000002
+          hsl:
+            h: 18.003256007419903
+            s: 100.0
+            l: 58.81989776574361
+            alpha: 0.13945600000000002
+          rgb:
+            r: 255
+            g: 108
+            b: 45
+            alpha: 0.13945600000000002
+          hex: '#ff6c2d24'
+        popup:
+          oklch:
+            l: 0.27101102363980245
+            c: 0.028768055852204523
+            h: 40.82370821639552
+            alpha: null
+          hsl:
+            h: 15.994513606983018
+            s: 29.47203093274337
+            l: 15.45854719971154
+            alpha: null
+          rgb:
+            r: 51
+            g: 34
+            b: 28
+            alpha: null
+          hex: '#33221c'
+        dark:
+          oklch:
+            l: 0.13728
+            c: 0.1936
+            h: 41.09
+            alpha: null
+          hsl:
+            h: 344.10423005036967
+            s: 100.0
+            l: 6.023294411044909
+            alpha: null
+          rgb:
+            r: 22
+            g: 3
+            b: 0
+            alpha: null
+          hex: '#160300'
+        light:
+          oklch:
+            l: 0.8761966
+            c: 0.1936
+            h: 41.09
+            alpha: null
+          hsl:
+            h: 16.685815820415648
+            s: 100.0
+            l: 82.97255648694988
+            alpha: null
+          rgb:
+            r: 255
+            g: 200
+            b: 180
+            alpha: null
+          hex: '#ffc8b4'
+        regular_text:
+          oklch:
+            l: 0.19728
+            c: 0.0087
+            h: 240.37
+            alpha: null
+          hsl:
+            h: 205.71211803878103
+            s: 16.361753033304353
+            l: 8.431596219242708
+            alpha: null
+          rgb:
+            r: 18
+            g: 22
+            b: 25
+            alpha: null
+          hex: '#121619'
     background:
-      oklch: oklch(19.728% 0.0087 240.37)
+      color:
+        oklch:
+          l: 0.19728
+          c: 0.0087
+          h: 240.37
+          alpha: null
+        hsl:
+          h: 205.71211803878103
+          s: 16.361753033304353
+          l: 8.431596219242708
+          alpha: null
+        rgb:
+          r: 18
+          g: 22
+          b: 25
+          alpha: null
+        hex: '#121619'
       display_name: Canvas Black
       description: Default background surface. Warm-tinted near-black, deliberately
         not pure black.
+      derivations:
+        second:
+          oklch:
+            l: 0.19728
+            c: 0.0087
+            h: 240.37
+            alpha: 0.75
+          hsl:
+            h: 205.71211803878103
+            s: 16.361753033304353
+            l: 8.431596219242708
+            alpha: 0.75
+          rgb:
+            r: 18
+            g: 22
+            b: 25
+            alpha: 0.75
+          hex: '#121619bf'
+        third:
+          oklch:
+            l: 0.19728
+            c: 0.0087
+            h: 240.37
+            alpha: 0.5
+          hsl:
+            h: 205.71211803878103
+            s: 16.361753033304353
+            l: 8.431596219242708
+            alpha: 0.5
+          rgb:
+            r: 18
+            g: 22
+            b: 25
+            alpha: 0.5
+          hex: '#12161980'
+        card:
+          oklch:
+            l: 0.98
+            c: 0.0
+            h: 0.0
+            alpha: 0.1696
+          hsl:
+            h: 0.0
+            s: 8.439959124068866e-13
+            l: 97.36912701044001
+            alpha: 0.1696
+          rgb:
+            r: 248
+            g: 248
+            b: 248
+            alpha: 0.1696
+          hex: '#f8f8f82b'
+        popup:
+          oklch:
+            l: 0.355385250366341
+            c: 0.006278622101023242
+            h: 239.97861646361346
+            alpha: null
+          hsl:
+            h: 205.71211803877998
+            s: 4.871633147596813
+            l: 23.515401441429745
+            alpha: null
+          rgb:
+            r: 57
+            g: 60
+            b: 63
+            alpha: null
+          hex: '#393c3f'
+        dark:
+          oklch:
+            l: 0.0828576
+            c: 0.0087
+            h: 240.37
+            alpha: null
+          hsl:
+            h: 210.07255264037383
+            s: 53.5602596317908
+            l: 0.8059933132008708
+            alpha: null
+          rgb:
+            r: 1
+            g: 2
+            b: 3
+            alpha: null
+          hex: '#010203'
+        light:
+          oklch:
+            l: 0.6628575999999999
+            c: 0.0087
+            h: 240.37
+            alpha: null
+          hsl:
+            h: 205.95047480084583
+            s: 4.380244021762805
+            l: 57.722072507979426
+            alpha: null
+          rgb:
+            r: 142
+            g: 148
+            b: 152
+            alpha: null
+          hex: '#8e9498'
+        regular_text:
+          oklch:
+            l: 0.9635400000000001
+            c: 0.0067
+            h: 97.35
+            alpha: null
+          hsl:
+            h: 49.99793649710549
+            s: 21.384033915544336
+            l: 94.5122572997585
+            alpha: null
+          rgb:
+            r: 244
+            g: 243
+            b: 238
+            alpha: null
+          hex: '#f4f3ee'
     text:
-      oklch: oklch(96.354% 0.0067 97.35)
+      color:
+        oklch:
+          l: 0.9635400000000001
+          c: 0.0067
+          h: 97.35
+          alpha: null
+        hsl:
+          h: 49.99793649710549
+          s: 21.384033915544336
+          l: 94.5122572997585
+          alpha: null
+        rgb:
+          r: 244
+          g: 243
+          b: 238
+          alpha: null
+        hex: '#f4f3ee'
       display_name: Bone Text
       description: Primary text, headings, and icons. Warm off-white, deliberately
         not pure white.
+      derivations:
+        second:
+          oklch:
+            l: 0.9635400000000001
+            c: 0.0067
+            h: 97.35
+            alpha: 0.75
+          hsl:
+            h: 49.99793649710549
+            s: 21.384033915544336
+            l: 94.5122572997585
+            alpha: 0.75
+          rgb:
+            r: 244
+            g: 243
+            b: 238
+            alpha: 0.75
+          hex: '#f4f3eebf'
+        third:
+          oklch:
+            l: 0.9635400000000001
+            c: 0.0067
+            h: 97.35
+            alpha: 0.5
+          hsl:
+            h: 49.99793649710549
+            s: 21.384033915544336
+            l: 94.5122572997585
+            alpha: 0.5
+          rgb:
+            r: 244
+            g: 243
+            b: 238
+            alpha: 0.5
+          hex: '#f4f3ee80'
+        card:
+          oklch:
+            l: 0.98
+            c: 0.0
+            h: 0.0
+            alpha: 0.1696
+          hsl:
+            h: 0.0
+            s: 8.439959124068866e-13
+            l: 97.36912701044001
+            alpha: 0.1696
+          rgb:
+            r: 248
+            g: 248
+            b: 248
+            alpha: 0.1696
+          hex: '#f8f8f82b'
+        popup:
+          oklch:
+            l: 0.355385250366341
+            c: 0.006278622101023242
+            h: 239.97861646361346
+            alpha: null
+          hsl:
+            h: 205.71211803877998
+            s: 4.871633147596813
+            l: 23.515401441429745
+            alpha: null
+          rgb:
+            r: 57
+            g: 60
+            b: 63
+            alpha: null
+          hex: '#393c3f'
+        dark:
+          oklch:
+            l: 0.13728
+            c: 0.0067
+            h: 97.35
+            alpha: null
+          hsl:
+            h: 48.48474723094614
+            s: 20.96955611503509
+            l: 2.9897999963855773
+            alpha: null
+          rgb:
+            r: 9
+            g: 9
+            b: 6
+            alpha: null
+          hex: '#090906'
+        light:
+          oklch:
+            l: 0.98
+            c: 0.0067
+            h: 97.35
+            alpha: null
+          hsl:
+            h: 49.99935881361881
+            s: 35.329219349216054
+            l: 96.66450831240752
+            alpha: null
+          rgb:
+            r: 249
+            g: 248
+            b: 243
+            alpha: null
+          hex: '#f9f8f3'
+        regular_text:
+          oklch:
+            l: 0.19728
+            c: 0.0087
+            h: 240.37
+            alpha: null
+          hsl:
+            h: 205.71211803878103
+            s: 16.361753033304353
+            l: 8.431596219242708
+            alpha: null
+          rgb:
+            r: 18
+            g: 22
+            b: 25
+            alpha: null
+          hex: '#121619'
     accent:
-      oklch: oklch(80% 0.12 85)
+      color:
+        oklch:
+          l: 0.8
+          c: 0.12
+          h: 85.0
+          alpha: null
+        hsl:
+          h: 41.257878736851254
+          s: 69.03271118162348
+          l: 62.14780626462314
+          alpha: null
+        rgb:
+          r: 225
+          g: 183
+          b: 92
+          alpha: null
+        hex: '#e1b75c'
       display_name: Premium Gold
       description: Selection / active-state colour. A visibly distinct hue from primary,
         premium and high-contrast on the dark canvas. Marks the active nav item, active
         timeframe pill, and active tab — never a fill, so the One Voice Rule holds
         and primary stays the agency colour.
+      derivations:
+        second:
+          oklch:
+            l: 0.8
+            c: 0.12
+            h: 85.0
+            alpha: 0.75
+          hsl:
+            h: 41.257878736851254
+            s: 69.03271118162348
+            l: 62.14780626462314
+            alpha: 0.75
+          rgb:
+            r: 225
+            g: 183
+            b: 92
+            alpha: 0.75
+          hex: '#e1b75cbf'
+        third:
+          oklch:
+            l: 0.8
+            c: 0.12
+            h: 85.0
+            alpha: 0.5
+          hsl:
+            h: 41.257878736851254
+            s: 69.03271118162348
+            l: 62.14780626462314
+            alpha: 0.5
+          rgb:
+            r: 225
+            g: 183
+            b: 92
+            alpha: 0.5
+          hex: '#e1b75c80'
+        card:
+          oklch:
+            l: 0.8
+            c: 0.12
+            h: 85.0
+            alpha: 0.13945600000000002
+          hsl:
+            h: 41.257878736851254
+            s: 69.03271118162348
+            l: 62.14780626462314
+            alpha: 0.13945600000000002
+          rgb:
+            r: 225
+            g: 183
+            b: 92
+            alpha: 0.13945600000000002
+          hex: '#e1b75c24'
+        popup:
+          oklch:
+            l: 0.29432507586656403
+            c: 0.017994696973176547
+            h: 96.54407006811647
+            alpha: null
+          hsl:
+            h: 48.76964974627321
+            s: 15.43004408296281
+            l: 15.922644007331266
+            alpha: null
+          rgb:
+            r: 47
+            g: 45
+            b: 34
+            alpha: null
+          hex: '#2f2d22'
+        dark:
+          oklch:
+            l: 0.13728
+            c: 0.12
+            h: 85.0
+            alpha: null
+          hsl:
+            h: 6.67994213178546
+            s: 100.0
+            l: 4.630103063917394
+            alpha: null
+          rgb:
+            r: 14
+            g: 8
+            b: 0
+            alpha: null
+          hex: '#0e0800'
+        light:
+          oklch:
+            l: 0.916
+            c: 0.12
+            h: 85.0
+            alpha: null
+          hsl:
+            h: 40.88552952460634
+            s: 100.0
+            l: 77.22983525379028
+            alpha: null
+          rgb:
+            r: 255
+            g: 223
+            b: 157
+            alpha: null
+          hex: '#ffdf9d'
+        regular_text:
+          oklch:
+            l: 0.19728
+            c: 0.0087
+            h: 240.37
+            alpha: null
+          hsl:
+            h: 205.71211803878103
+            s: 16.361753033304353
+            l: 8.431596219242708
+            alpha: null
+          rgb:
+            r: 18
+            g: 22
+            b: 25
+            alpha: null
+          hex: '#121619'
+  palette:
+    primary_second:
+      oklch:
+        l: 0.70523
+        c: 0.1936
+        h: 41.09
+        alpha: 0.75
+      hsl:
+        h: 18.003256007419903
+        s: 100.0
+        l: 58.81989776574361
+        alpha: 0.75
+      rgb:
+        r: 255
+        g: 108
+        b: 45
+        alpha: 0.75
+      hex: '#ff6c2dbf'
+    primary_third:
+      oklch:
+        l: 0.70523
+        c: 0.1936
+        h: 41.09
+        alpha: 0.5
+      hsl:
+        h: 18.003256007419903
+        s: 100.0
+        l: 58.81989776574361
+        alpha: 0.5
+      rgb:
+        r: 255
+        g: 108
+        b: 45
+        alpha: 0.5
+      hex: '#ff6c2d80'
+    primary_card:
+      oklch:
+        l: 0.70523
+        c: 0.1936
+        h: 41.09
+        alpha: 0.13945600000000002
+      hsl:
+        h: 18.003256007419903
+        s: 100.0
+        l: 58.81989776574361
+        alpha: 0.13945600000000002
+      rgb:
+        r: 255
+        g: 108
+        b: 45
+        alpha: 0.13945600000000002
+      hex: '#ff6c2d24'
+    primary_popup:
+      oklch:
+        l: 0.27101102363980245
+        c: 0.028768055852204523
+        h: 40.82370821639552
+        alpha: null
+      hsl:
+        h: 15.994513606983018
+        s: 29.47203093274337
+        l: 15.45854719971154
+        alpha: null
+      rgb:
+        r: 51
+        g: 34
+        b: 28
+        alpha: null
+      hex: '#33221c'
+    primary_dark:
+      oklch:
+        l: 0.13728
+        c: 0.1936
+        h: 41.09
+        alpha: null
+      hsl:
+        h: 344.10423005036967
+        s: 100.0
+        l: 6.023294411044909
+        alpha: null
+      rgb:
+        r: 22
+        g: 3
+        b: 0
+        alpha: null
+      hex: '#160300'
+    primary_light:
+      oklch:
+        l: 0.8761966
+        c: 0.1936
+        h: 41.09
+        alpha: null
+      hsl:
+        h: 16.685815820415648
+        s: 100.0
+        l: 82.97255648694988
+        alpha: null
+      rgb:
+        r: 255
+        g: 200
+        b: 180
+        alpha: null
+      hex: '#ffc8b4'
+    primary_regular_text:
+      oklch:
+        l: 0.19728
+        c: 0.0087
+        h: 240.37
+        alpha: null
+      hsl:
+        h: 205.71211803878103
+        s: 16.361753033304353
+        l: 8.431596219242708
+        alpha: null
+      rgb:
+        r: 18
+        g: 22
+        b: 25
+        alpha: null
+      hex: '#121619'
+    background_second:
+      oklch:
+        l: 0.19728
+        c: 0.0087
+        h: 240.37
+        alpha: 0.75
+      hsl:
+        h: 205.71211803878103
+        s: 16.361753033304353
+        l: 8.431596219242708
+        alpha: 0.75
+      rgb:
+        r: 18
+        g: 22
+        b: 25
+        alpha: 0.75
+      hex: '#121619bf'
+    background_third:
+      oklch:
+        l: 0.19728
+        c: 0.0087
+        h: 240.37
+        alpha: 0.5
+      hsl:
+        h: 205.71211803878103
+        s: 16.361753033304353
+        l: 8.431596219242708
+        alpha: 0.5
+      rgb:
+        r: 18
+        g: 22
+        b: 25
+        alpha: 0.5
+      hex: '#12161980'
+    background_card:
+      oklch:
+        l: 0.98
+        c: 0.0
+        h: 0.0
+        alpha: 0.1696
+      hsl:
+        h: 0.0
+        s: 8.439959124068866e-13
+        l: 97.36912701044001
+        alpha: 0.1696
+      rgb:
+        r: 248
+        g: 248
+        b: 248
+        alpha: 0.1696
+      hex: '#f8f8f82b'
+    background_popup:
+      oklch:
+        l: 0.355385250366341
+        c: 0.006278622101023242
+        h: 239.97861646361346
+        alpha: null
+      hsl:
+        h: 205.71211803877998
+        s: 4.871633147596813
+        l: 23.515401441429745
+        alpha: null
+      rgb:
+        r: 57
+        g: 60
+        b: 63
+        alpha: null
+      hex: '#393c3f'
+    background_dark:
+      oklch:
+        l: 0.0828576
+        c: 0.0087
+        h: 240.37
+        alpha: null
+      hsl:
+        h: 210.07255264037383
+        s: 53.5602596317908
+        l: 0.8059933132008708
+        alpha: null
+      rgb:
+        r: 1
+        g: 2
+        b: 3
+        alpha: null
+      hex: '#010203'
+    background_light:
+      oklch:
+        l: 0.6628575999999999
+        c: 0.0087
+        h: 240.37
+        alpha: null
+      hsl:
+        h: 205.95047480084583
+        s: 4.380244021762805
+        l: 57.722072507979426
+        alpha: null
+      rgb:
+        r: 142
+        g: 148
+        b: 152
+        alpha: null
+      hex: '#8e9498'
+    background_regular_text:
+      oklch:
+        l: 0.9635400000000001
+        c: 0.0067
+        h: 97.35
+        alpha: null
+      hsl:
+        h: 49.99793649710549
+        s: 21.384033915544336
+        l: 94.5122572997585
+        alpha: null
+      rgb:
+        r: 244
+        g: 243
+        b: 238
+        alpha: null
+      hex: '#f4f3ee'
+    text_second:
+      oklch:
+        l: 0.9635400000000001
+        c: 0.0067
+        h: 97.35
+        alpha: 0.75
+      hsl:
+        h: 49.99793649710549
+        s: 21.384033915544336
+        l: 94.5122572997585
+        alpha: 0.75
+      rgb:
+        r: 244
+        g: 243
+        b: 238
+        alpha: 0.75
+      hex: '#f4f3eebf'
+    text_third:
+      oklch:
+        l: 0.9635400000000001
+        c: 0.0067
+        h: 97.35
+        alpha: 0.5
+      hsl:
+        h: 49.99793649710549
+        s: 21.384033915544336
+        l: 94.5122572997585
+        alpha: 0.5
+      rgb:
+        r: 244
+        g: 243
+        b: 238
+        alpha: 0.5
+      hex: '#f4f3ee80'
+    text_card:
+      oklch:
+        l: 0.98
+        c: 0.0
+        h: 0.0
+        alpha: 0.1696
+      hsl:
+        h: 0.0
+        s: 8.439959124068866e-13
+        l: 97.36912701044001
+        alpha: 0.1696
+      rgb:
+        r: 248
+        g: 248
+        b: 248
+        alpha: 0.1696
+      hex: '#f8f8f82b'
+    text_popup:
+      oklch:
+        l: 0.355385250366341
+        c: 0.006278622101023242
+        h: 239.97861646361346
+        alpha: null
+      hsl:
+        h: 205.71211803877998
+        s: 4.871633147596813
+        l: 23.515401441429745
+        alpha: null
+      rgb:
+        r: 57
+        g: 60
+        b: 63
+        alpha: null
+      hex: '#393c3f'
+    text_dark:
+      oklch:
+        l: 0.13728
+        c: 0.0067
+        h: 97.35
+        alpha: null
+      hsl:
+        h: 48.48474723094614
+        s: 20.96955611503509
+        l: 2.9897999963855773
+        alpha: null
+      rgb:
+        r: 9
+        g: 9
+        b: 6
+        alpha: null
+      hex: '#090906'
+    text_light:
+      oklch:
+        l: 0.98
+        c: 0.0067
+        h: 97.35
+        alpha: null
+      hsl:
+        h: 49.99935881361881
+        s: 35.329219349216054
+        l: 96.66450831240752
+        alpha: null
+      rgb:
+        r: 249
+        g: 248
+        b: 243
+        alpha: null
+      hex: '#f9f8f3'
+    text_regular_text:
+      oklch:
+        l: 0.19728
+        c: 0.0087
+        h: 240.37
+        alpha: null
+      hsl:
+        h: 205.71211803878103
+        s: 16.361753033304353
+        l: 8.431596219242708
+        alpha: null
+      rgb:
+        r: 18
+        g: 22
+        b: 25
+        alpha: null
+      hex: '#121619'
+    accent_second:
+      oklch:
+        l: 0.8
+        c: 0.12
+        h: 85.0
+        alpha: 0.75
+      hsl:
+        h: 41.257878736851254
+        s: 69.03271118162348
+        l: 62.14780626462314
+        alpha: 0.75
+      rgb:
+        r: 225
+        g: 183
+        b: 92
+        alpha: 0.75
+      hex: '#e1b75cbf'
+    accent_third:
+      oklch:
+        l: 0.8
+        c: 0.12
+        h: 85.0
+        alpha: 0.5
+      hsl:
+        h: 41.257878736851254
+        s: 69.03271118162348
+        l: 62.14780626462314
+        alpha: 0.5
+      rgb:
+        r: 225
+        g: 183
+        b: 92
+        alpha: 0.5
+      hex: '#e1b75c80'
+    accent_card:
+      oklch:
+        l: 0.8
+        c: 0.12
+        h: 85.0
+        alpha: 0.13945600000000002
+      hsl:
+        h: 41.257878736851254
+        s: 69.03271118162348
+        l: 62.14780626462314
+        alpha: 0.13945600000000002
+      rgb:
+        r: 225
+        g: 183
+        b: 92
+        alpha: 0.13945600000000002
+      hex: '#e1b75c24'
+    accent_popup:
+      oklch:
+        l: 0.29432507586656403
+        c: 0.017994696973176547
+        h: 96.54407006811647
+        alpha: null
+      hsl:
+        h: 48.76964974627321
+        s: 15.43004408296281
+        l: 15.922644007331266
+        alpha: null
+      rgb:
+        r: 47
+        g: 45
+        b: 34
+        alpha: null
+      hex: '#2f2d22'
+    accent_dark:
+      oklch:
+        l: 0.13728
+        c: 0.12
+        h: 85.0
+        alpha: null
+      hsl:
+        h: 6.67994213178546
+        s: 100.0
+        l: 4.630103063917394
+        alpha: null
+      rgb:
+        r: 14
+        g: 8
+        b: 0
+        alpha: null
+      hex: '#0e0800'
+    accent_light:
+      oklch:
+        l: 0.916
+        c: 0.12
+        h: 85.0
+        alpha: null
+      hsl:
+        h: 40.88552952460634
+        s: 100.0
+        l: 77.22983525379028
+        alpha: null
+      rgb:
+        r: 255
+        g: 223
+        b: 157
+        alpha: null
+      hex: '#ffdf9d'
+    accent_regular_text:
+      oklch:
+        l: 0.19728
+        c: 0.0087
+        h: 240.37
+        alpha: null
+      hsl:
+        h: 205.71211803878103
+        s: 16.361753033304353
+        l: 8.431596219242708
+        alpha: null
+      rgb:
+        r: 18
+        g: 22
+        b: 25
+        alpha: null
+      hex: '#121619'
+    card:
+      oklch:
+        l: 0.98
+        c: 0.0
+        h: 0.0
+        alpha: 0.1696
+      hsl:
+        h: 0.0
+        s: 8.439959124068866e-13
+        l: 97.36912701044001
+        alpha: 0.1696
+      rgb:
+        r: 248
+        g: 248
+        b: 248
+        alpha: 0.1696
+      hex: '#f8f8f82b'
+    popup:
+      oklch:
+        l: 0.355385250366341
+        c: 0.006278622101023242
+        h: 239.97861646361346
+        alpha: null
+      hsl:
+        h: 205.71211803877998
+        s: 4.871633147596813
+        l: 23.515401441429745
+        alpha: null
+      rgb:
+        r: 57
+        g: 60
+        b: 63
+        alpha: null
+      hex: '#393c3f'
+    divider:
+      oklch:
+        l: 0.9635400000000001
+        c: 0.0067
+        h: 97.35
+        alpha: 0.119728
+      hsl:
+        h: 49.99793649710549
+        s: 21.384033915544336
+        l: 94.5122572997585
+        alpha: 0.119728
+      rgb:
+        r: 244
+        g: 243
+        b: 238
+        alpha: 0.119728
+      hex: '#f4f3ee1f'
+    primary:
+      oklch:
+        l: 0.70523
+        c: 0.1936
+        h: 41.09
+        alpha: null
+      hsl:
+        h: 18.003256007419903
+        s: 100.0
+        l: 58.81989776574361
+        alpha: null
+      rgb:
+        r: 255
+        g: 108
+        b: 45
+        alpha: null
+      hex: '#ff6c2d'
+    background:
+      oklch:
+        l: 0.19728
+        c: 0.0087
+        h: 240.37
+        alpha: null
+      hsl:
+        h: 205.71211803878103
+        s: 16.361753033304353
+        l: 8.431596219242708
+        alpha: null
+      rgb:
+        r: 18
+        g: 22
+        b: 25
+        alpha: null
+      hex: '#121619'
+    text:
+      oklch:
+        l: 0.9635400000000001
+        c: 0.0067
+        h: 97.35
+        alpha: null
+      hsl:
+        h: 49.99793649710549
+        s: 21.384033915544336
+        l: 94.5122572997585
+        alpha: null
+      rgb:
+        r: 244
+        g: 243
+        b: 238
+        alpha: null
+      hex: '#f4f3ee'
+    accent:
+      oklch:
+        l: 0.8
+        c: 0.12
+        h: 85.0
+        alpha: null
+      hsl:
+        h: 41.257878736851254
+        s: 69.03271118162348
+        l: 62.14780626462314
+        alpha: null
+      rgb:
+        r: 225
+        g: 183
+        b: 92
+        alpha: null
+      hex: '#e1b75c'

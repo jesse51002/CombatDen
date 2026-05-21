@@ -1,4 +1,4 @@
-"""Derivations — the six deterministic per-colour variants the pipeline
+"""Derivations — the seven deterministic per-colour variants the pipeline
 produces alongside the base colour.
 
 A Pydantic model on the Python side (one typed attribute per derivation,
@@ -21,7 +21,7 @@ from schema.output.color_value import ColorValue
 
 
 class Derivations(BaseModel):
-    """Six deterministic variants of one base colour."""
+    """Seven deterministic variants of one base colour."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -31,3 +31,4 @@ class Derivations(BaseModel):
     popup: ColorValue  # opaque popup surface (card-over-canvas)
     dark: ColorValue  # darker variant, always below canvas L
     light: ColorValue  # lighter variant, always above canvas L
+    regular_text: ColorValue  # readable colour for text painted ON this colour

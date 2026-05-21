@@ -5,18 +5,19 @@ import 'package:flutter/material.dart';
 ///
 /// The service ships every colour in four formats (oklch / hsl / rgb /
 /// hex). We read [rgb] directly — the service has already done the
-/// OKLCH→sRGB conversion — and expose a parsed [Color], plus six
+/// OKLCH→sRGB conversion — and expose a parsed [Color], plus seven
 /// deterministic derivation slots (`second` / `third` / `card` /
-/// `popup` / `dark` / `light`) the service also pre-computes.
+/// `popup` / `dark` / `light` / `regular_text`) the service also
+/// pre-computes.
 class CustomizationColor extends Equatable {
   /// Parsed sRGB colour from the wire's `rgb` block, or `null` when
   /// the block is missing/unparseable. Call sites fall back to their
   /// bundled default.
   final Color? color;
 
-  /// Six pre-computed variants keyed by derivation id (`second`,
-  /// `third`, `card`, `popup`, `dark`, `light`). Each is `null` only
-  /// when its `rgb` block was missing/unparseable.
+  /// Seven pre-computed variants keyed by derivation id (`second`,
+  /// `third`, `card`, `popup`, `dark`, `light`, `regular_text`). Each
+  /// is `null` only when its `rgb` block was missing/unparseable.
   final Map<String, Color> derivations;
 
   /// Human label, e.g. "Sunshine Duck Yellow".
@@ -38,6 +39,7 @@ class CustomizationColor extends Equatable {
   Color? get popup => derivations['popup'];
   Color? get dark => derivations['dark'];
   Color? get light => derivations['light'];
+  Color? get regularText => derivations['regular_text'];
 
   factory CustomizationColor.fromJson(Map<String, dynamic> json) {
     return CustomizationColor(

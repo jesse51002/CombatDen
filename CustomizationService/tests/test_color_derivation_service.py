@@ -49,10 +49,12 @@ def _expand(
     name: str = "slot",
 ) -> ColorOutput:
     canvas = _DARK_CANVAS if dark_mode else _LIGHT_CANVAS
+    text = _DARK_TEXT if dark_mode else _LIGHT_TEXT
     return _DERIVE.expand(
         LLMSlotResponse(oklch=oklch, display_name=f"{name} tone", description=name),
         role=role,
         canvas=canvas,
+        text=text,
         dark_mode=dark_mode,
         surfaces=surfaces,
     )
@@ -62,7 +64,7 @@ def _expand(
 
 
 @pytest.mark.parametrize("dark_mode", [True, False], ids=["dark", "light"])
-def test_expand_produces_coloroutput_with_six_typed_derivations(dark_mode):
+def test_expand_produces_coloroutput_with_seven_typed_derivations(dark_mode):
     out = _expand(
         OklchColor(l=0.60, c=0.18, h=30.0),
         role=None,
@@ -71,9 +73,9 @@ def test_expand_produces_coloroutput_with_six_typed_derivations(dark_mode):
     )
     assert isinstance(out, ColorOutput)
     assert isinstance(out.derivations, Derivations)
-    # `Derivations` is the source of truth for the six names.
+    # `Derivations` is the source of truth for the derivation names.
     assert set(Derivations.model_fields) == {
-        "second", "third", "card", "popup", "dark", "light",
+        "second", "third", "card", "popup", "dark", "light", "regular_text",
     }
 
 
@@ -141,6 +143,37 @@ def test_dark_below_canvas_light_above(dark_mode):
             f"light.l {out.derivations.light.oklch.l} not above canvas "
             f"{canvas.l} (base {base_l}, dark={dark_mode})"
         )
+
+
+# --- regular_text: readable foreground for text painted ON the colour -----
+
+
+def test_regular_text_uses_text_when_it_clears_aa():
+    """A dark fill in dark mode: the near-white body text clears AA on it,
+    so ``regular_text`` is the text colour itself."""
+    surfaces = _surfaces(dark_mode=True)
+    out = _expand(
+        OklchColor(l=0.20, c=0.05, h=260.0),  # dark fill
+        role=None,
+        dark_mode=True,
+        surfaces=surfaces,
+    )
+    assert out.derivations.regular_text.oklch == _DARK_TEXT
+
+
+def test_regular_text_falls_back_to_better_of_two_when_text_fails():
+    """A light/mid fill in dark mode: near-white text fails AA on it, so the
+    picker falls back to whichever of {text, canvas} contrasts better — the
+    dark canvas here."""
+    surfaces = _surfaces(dark_mode=True)
+    fill = OklchColor(l=0.85, c=0.12, h=90.0)  # bright fill
+    out = _expand(fill, role=None, dark_mode=True, surfaces=surfaces)
+    chosen = out.derivations.regular_text.oklch
+    # text fails on the bright fill, canvas wins (it's the higher-contrast
+    # of the two and is what the best-of-two rule must pick).
+    assert fill.contrast(_DARK_TEXT) < 4.5
+    assert chosen == _DARK_CANVAS
+    assert fill.contrast(chosen) >= fill.contrast(_DARK_TEXT)
 
 
 # --- flat recommendation palette (via ColorNode.assemble) -----------------

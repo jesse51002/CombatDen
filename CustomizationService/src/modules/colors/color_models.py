@@ -5,7 +5,7 @@ builder (with the deterministic contract inlined as its
 
 The LLM is asked for ONLY the base colour value (in OKLCH) plus the
 prose fields. Every other shape on the eventual ``ColorOutput`` — the
-HSL/RGB/hex projections, the six derivations, the flat recommendation
+HSL/RGB/hex projections, the seven derivations, the flat recommendation
 palette — is computed deterministically downstream:
 ``ColorCorrectionService`` clamps the background L band, then
 ``ColorDerivationService`` builds everything else.
@@ -41,12 +41,8 @@ MIN_CONTRAST_AA = 4.5  # WCAG AA, normal text
 # one thing ``ColorCorrectionService.apply`` corrects deterministically
 # rather than re-asking the LLM. See that service for the band bounds.
 
-
-def _contrast_ratio(a: OklchColor, b: OklchColor) -> float:
-    """WCAG 2.1 contrast ratio between two OKLCH colours, via coloraide.
-    Module-level helper used only by the validator below — kept here so
-    the contract logic lives in one file."""
-    return a.to_aide().contrast(b.to_aide(), method="wcag21")
+# The WCAG-2.1 contrast computation lives on ``OklchColor.contrast`` (a
+# reusable primitive); both this contract and the derivation service call it.
 
 
 class LLMSlotResponse(BaseModel):
@@ -198,7 +194,7 @@ def build_color_response_model(
                 )
 
         # WCAG AA contrast between background and text — via coloraide.
-        ratio = _contrast_ratio(bg, text)
+        ratio = bg.contrast(text)
         if ratio < MIN_CONTRAST_AA:
             raise ValueError(
                 f"colour contract: contrast between the '{text_id}' text "
