@@ -20,5 +20,14 @@ class Settings(BaseSettings):
     # No auth: the emulator hits this directly. `["*"]` keeps it open.
     cors_origins: list[str] = ["*"]
 
+    # Google Fonts Developer API. The font delivery endpoint resolves the
+    # per-variant TTF URLs by hitting Google's catalog, so the API process
+    # needs the key too. Required — fail loud if absent, matching how the
+    # pipeline process treats every provider key.
+    google_fonts_api_key: str
+    google_fonts_api_url: str = "https://www.googleapis.com/webfonts/v1/webfonts"
+    google_fonts_request_timeout_seconds: float = 30.0
+    google_fonts_ttl_seconds: int = 24 * 60 * 60
+
 
 settings = Settings()

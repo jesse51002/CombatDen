@@ -28,7 +28,7 @@ class BrandImage {
   static ImageProvider? of(String slot) {
     if (!getIt.isRegistered<CustomizationService>()) return null;
     final service = getIt<CustomizationService>();
-    final raw = service.current?.images[slot]?.url ?? '';
+    final raw = service.current?.images[slot] ?? '';
     if (raw.isEmpty) return null;
     return CachedNetworkImageProvider(service.resolveImageUrl(raw));
   }

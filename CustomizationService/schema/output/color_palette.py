@@ -22,27 +22,37 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from schema.color_mode import ColorMode
 from schema.output.color_output import ColorOutput
+from schema.output.color_value import ColorValue
 
-_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+# snake_case identifier — lowercase letters, digits, underscores; must
+# start with a letter. Used for both base slot ids (``primary``,
+# ``background``, ``text``, ``accent``) and the richer flat palette
+# keys, which include flattened derivations (``primary_card``) and
+# shared surface keys (``card``, ``popup``, ``divider``). Same shape
+# rule for both, so one constant.
+_SNAKE_CASE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class ColorPalette(BaseModel):
-    """The resolved light/dark mode plus every colour slot."""
+    """The resolved light/dark mode, every colour slot, and the flat
+    recommendation palette derived from them."""
 
     model_config = ConfigDict(extra="ignore")
 
     mode: ColorMode
     colors: dict[str, ColorOutput]
+    palette: dict[str, ColorValue]
 
-    @field_validator("colors")
+    @field_validator("colors", "palette")
     @classmethod
-    def _slot_ids_snake_case(
+    def _keys_are_snake_case(
         cls, v: dict[str, object]
     ) -> dict[str, object]:
-        for slot_id in v:
-            if not _ID_PATTERN.match(slot_id):
+        """Every slot id and every palette key must be snake_case."""
+        for key in v:
+            if not _SNAKE_CASE_PATTERN.match(key):
                 raise ValueError(
-                    f"slot id {slot_id!r} must be snake_case "
+                    f"key {key!r} must be snake_case "
                     "(lowercase, digits, underscores; must start with a "
                     "letter)"
                 )

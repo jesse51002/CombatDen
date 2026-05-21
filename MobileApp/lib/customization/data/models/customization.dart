@@ -1,72 +1,93 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
 
 import 'package:mobile_app/customization/data/models/color_mode.dart';
 import 'package:mobile_app/customization/data/models/customization_color.dart';
-import 'package:mobile_app/customization/data/models/customization_image.dart';
 
-/// A loaded, resolved customization. App-agnostic: colours and
-/// images are typed-value maps keyed by slot id — the engine
-/// never knows which slots a given app expects (that's the
-/// caller's expected-key lists). Parsing is resilient: a
-/// missing/non-map section is `{}` and a single malformed slot
-/// is skipped, never failing the whole payload.
+/// A loaded, resolved customization. App-agnostic: colours,
+/// images, fonts and texts are typed-value maps keyed by slot id
+/// — the engine never knows which slots a given app expects
+/// (that's the caller's expected-key lists). Parsing is
+/// resilient: a missing/non-map section is `{}` and a single
+/// malformed slot is skipped, never failing the whole payload.
 class Customization extends Equatable {
   final String app;
   final String displayName;
   final ColorMode colorMode;
   final Map<String, CustomizationColor> colors;
-  final Map<String, CustomizationImage> images;
+
+  /// The wire's flat recommendation palette: every `<slot>_<derivation>`
+  /// pair (e.g. `primary_dark`, `background_popup`) plus shared
+  /// surface tokens (`card`, `popup`, `divider`). Single source of
+  /// truth for `DesignConstants`'s derived colour tokens.
+  final Map<String, Color> palette;
+
+  /// Slot -> fetch URL. The wire ships this flat (no wrapper, no
+  /// prompt) — just the URL the client uses to GET the PNG.
+  final Map<String, String> images;
+
+  /// Slot -> Google Fonts family. Flat on the wire — categories,
+  /// prose, and per-slot delivery URLs are dropped at the API
+  /// layer because Flutter only needs the family to call
+  /// `GoogleFonts.getFont(...)`.
+  final Map<String, String> fonts;
+
+  /// Brand-rewritten copy strings, keyed by slot id (e.g.
+  /// `class_booked_headline` → "You're in"). Absent slots fall
+  /// back to whatever the call site declares as its default.
+  final Map<String, String> texts;
 
   const Customization({
     required this.app,
     required this.displayName,
     required this.colorMode,
     required this.colors,
+    required this.palette,
     required this.images,
+    required this.fonts,
+    required this.texts,
   });
 
   factory Customization.fromJson(Map<String, dynamic> json) {
-    // The wire envelope: `color_set.{mode,colors}` +
-    // `image_set.images`. No legacy-shape fallback — a payload that
-    // doesn't match the current contract yields empty maps, and the
-    // app's existing bundled defaults (BrandColor / BrandImage) own
-    // the fallback. `_parseMap` already null-guards a missing or
-    // non-map section to `{}`.
+    // Wire envelope: `color_set.{mode, colors, palette}` (typed,
+    // passthrough), `text_set.texts` (typed, passthrough), and
+    // flat `images` / `fonts` maps at the top level. Each missing
+    // section is `{}` (handled by the helper parsers).
     final colorSet = json['color_set'];
-    final imageSet = json['image_set'];
+    final textSet = json['text_set'];
     final colorsRaw = colorSet is Map ? colorSet['colors'] : null;
-    final imagesRaw = imageSet is Map ? imageSet['images'] : null;
+    final paletteRaw = colorSet is Map ? colorSet['palette'] : null;
     final modeRaw = colorSet is Map ? colorSet['mode'] : null;
+    final textsRaw = textSet is Map ? textSet['texts'] : null;
     return Customization(
       app: (json['app'] as String?) ?? '',
       displayName: (json['display_name'] as String?) ?? '',
       colorMode: ColorMode.fromJson(modeRaw),
-      colors: _parseMap(
-        colorsRaw,
-        CustomizationColor.fromJson,
-      ),
-      images: _parseMap(
-        imagesRaw,
-        CustomizationImage.fromJson,
-      ),
+      colors: _parseMap(colorsRaw, CustomizationColor.fromJson),
+      palette: _parsePalette(paletteRaw),
+      images: _parseStringMap(json['images']),
+      fonts: _parseStringMap(json['fonts']),
+      texts: _parseTexts(textsRaw),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'app': app,
-        'display_name': displayName,
-        'color_set': {
-          'mode': colorMode.toJson(),
-          'colors': {
-            for (final e in colors.entries) e.key: e.value.toJson(),
-          },
-        },
-        'image_set': {
-          'images': {
-            for (final e in images.entries) e.key: e.value.toJson(),
-          },
-        },
-      };
+    'app': app,
+    'display_name': displayName,
+    'color_set': {
+      'mode': colorMode.toJson(),
+      'colors': {
+        for (final e in colors.entries) e.key: e.value.toJson(),
+      },
+    },
+    'images': Map<String, String>.from(images),
+    'fonts': Map<String, String>.from(fonts),
+    'text_set': {
+      'texts': {
+        for (final e in texts.entries) e.key: {'value': e.value},
+      },
+    },
+  };
 
   static Map<String, T> _parseMap<T>(
     Object? raw,
@@ -87,6 +108,42 @@ class Customization extends Equatable {
     return result;
   }
 
+  static Map<String, String> _parseStringMap(Object? raw) {
+    if (raw is! Map) return const {};
+    final result = <String, String>{};
+    raw.forEach((key, value) {
+      if (key is! String || value is! String) return;
+      if (value.isEmpty) return;
+      result[key] = value;
+    });
+    return result;
+  }
+
+  static Map<String, Color> _parsePalette(Object? raw) {
+    if (raw is! Map) return const {};
+    final result = <String, Color>{};
+    raw.forEach((key, value) {
+      if (key is! String) return;
+      final color = CustomizationColor.parseColorValue(value);
+      if (color != null) result[key] = color;
+    });
+    return result;
+  }
+
+  static Map<String, String> _parseTexts(Object? raw) {
+    if (raw is! Map) return const {};
+    final result = <String, String>{};
+    raw.forEach((key, value) {
+      if (key is! String || value is! Map) return;
+      final v = value['value'];
+      if (v is String && v.isNotEmpty) {
+        result[key] = v;
+      }
+    });
+    return result;
+  }
+
   @override
-  List<Object?> get props => [app, displayName, colorMode, colors, images];
+  List<Object?> get props =>
+      [app, displayName, colorMode, colors, palette, images, fonts, texts];
 }

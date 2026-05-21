@@ -16,7 +16,7 @@ class AppTheme {
         : const ColorScheme.dark();
     final colorScheme = base.copyWith(
       primary: DesignConstants.primaryColor,
-      onPrimary: DesignConstants.text,
+      onPrimary: DesignConstants.primaryButtonText,
       secondary: DesignConstants.darkPrimary,
       onSecondary: DesignConstants.text,
       surface: DesignConstants.backgroundColor,

@@ -14,6 +14,7 @@ import 'package:mobile_app/features/stats/presentation/screens/rank_screen.dart'
 import 'package:mobile_app/features/stats/presentation/screens/rewards_card_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/streak_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/wins_screen.dart';
+import 'package:mobile_app/features/style_select/presentation/screens/style_select_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/specific_videos_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/video_recc_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/videos_screen.dart';
@@ -31,6 +32,8 @@ Future<void> main() async {
     designId: AppConfig.designId,
     expectedColors: CombatDenSlots.expectedColors,
     expectedImages: CombatDenSlots.expectedImages,
+    expectedFonts: CombatDenSlots.expectedFonts,
+    expectedText: CombatDenSlots.expectedText,
   );
 
   runApp(const MobileAppRoot());
@@ -41,27 +44,42 @@ class MobileAppRoot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'CombatDen',
-      theme: AppTheme.forCanvas(),
-      debugShowCheckedModeBanner: false,
-      initialRoute: AppRoutes.home,
-      routes: {
-        AppRoutes.home: (_) => const HomeScreen(),
-        AppRoutes.classDetail: (_) => const ClassScreen(),
-        AppRoutes.reservingLoading: (_) => const ClassBookedScreen(),
-        AppRoutes.videos: (_) => const VideosScreen(),
-        AppRoutes.videoDetail: (_) => const SpecificVideosScreen(),
-        AppRoutes.videoRecc: (_) => const VideoReccScreen(),
-        AppRoutes.profile: (_) => const ProfileScreen(),
-        AppRoutes.myRewards: (_) => const MyRewardsScreen(),
-        AppRoutes.pointsStore: (_) => const PointsStoreScreen(),
-        AppRoutes.summary: (_) => const SummaryScreen(),
-        AppRoutes.postClassStreak: (_) => const StreakScreen(),
-        AppRoutes.postClassWins: (_) => const WinsScreen(),
-        AppRoutes.postClassPoints: (_) => const PointsScreen(),
-        AppRoutes.postClassRewards: (_) => const RewardsCardScreen(),
-        AppRoutes.postClassRank: (_) => const RankScreen(),
+    // Rebuild the whole app when the active customization changes, so a
+    // live style switch (CustomizationRuntime.selectDesign) re-themes
+    // everything: AppTheme + DesignConstants re-resolve, BrandImage slots
+    // re-fetch. The builder runs on first load too (harmless no-op).
+    return ListenableBuilder(
+      listenable: CustomizationRuntime.changes,
+      builder: (context, _) {
+        return MaterialApp(
+          // Re-key on the active design so a live style switch rebuilds
+          // the whole tree from a fresh Home. Needed because widgets read
+          // DesignConstants static getters (not Theme.of), so the
+          // Navigator's already-pushed routes won't otherwise re-theme.
+          key: ValueKey(CustomizationRuntime.activeDesignId),
+          title: 'CombatDen',
+          theme: AppTheme.forCanvas(),
+          debugShowCheckedModeBanner: false,
+          initialRoute: AppRoutes.home,
+          routes: {
+            AppRoutes.home: (_) => const HomeScreen(),
+            AppRoutes.classDetail: (_) => const ClassScreen(),
+            AppRoutes.reservingLoading: (_) => const ClassBookedScreen(),
+            AppRoutes.videos: (_) => const VideosScreen(),
+            AppRoutes.videoDetail: (_) => const SpecificVideosScreen(),
+            AppRoutes.videoRecc: (_) => const VideoReccScreen(),
+            AppRoutes.profile: (_) => const ProfileScreen(),
+            AppRoutes.styleSelect: (_) => const StyleSelectScreen(),
+            AppRoutes.myRewards: (_) => const MyRewardsScreen(),
+            AppRoutes.pointsStore: (_) => const PointsStoreScreen(),
+            AppRoutes.summary: (_) => const SummaryScreen(),
+            AppRoutes.postClassStreak: (_) => const StreakScreen(),
+            AppRoutes.postClassWins: (_) => const WinsScreen(),
+            AppRoutes.postClassPoints: (_) => const PointsScreen(),
+            AppRoutes.postClassRewards: (_) => const RewardsCardScreen(),
+            AppRoutes.postClassRank: (_) => const RankScreen(),
+          },
+        );
       },
     );
   }

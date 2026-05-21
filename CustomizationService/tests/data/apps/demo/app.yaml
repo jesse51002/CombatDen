@@ -16,3 +16,29 @@ colors:
     role: text
   - id: accent
     description: Secondary highlight colour for badges and small accents.
+
+fonts:
+  - id: display
+    description: Headlines and hero typography at large sizes.
+  - id: body
+    description: Running UI text — buttons, labels, body copy.
+
+texts:
+  - id: booked_screen
+    description: CTA shown to the user the moment a session is booked.
+    min_words: 1
+    max_words: 4
+    min_chars: 3
+    max_chars: 24
+  - id: cancel_cta
+    description: Button label that cancels a pending session.
+    min_words: 1
+    max_words: 3
+    min_chars: 4
+    max_chars: 18
+  - id: home_greeting
+    description: Top-of-home-screen greeting shown when the app opens.
+    min_words: 2
+    max_words: 6
+    min_chars: 6
+    max_chars: 40

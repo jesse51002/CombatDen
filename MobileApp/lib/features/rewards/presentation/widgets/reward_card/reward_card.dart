@@ -144,7 +144,7 @@ class RewardPriceTag extends StatelessWidget {
       child: Text(
         label,
         style: DesignConstants.pSmall.copyWith(
-          color: DesignConstants.text,
+          color: DesignConstants.primaryButtonText,
           fontWeight: FontWeight.w700,
         ),
       ),

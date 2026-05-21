@@ -1,19 +1,18 @@
 /// The CombatDen app's customization slot manifest — the ONE
 /// app-specific declaration of which slots this app expects.
 ///
-/// Colours and images are handled identically: an explicit slot
-/// id constant + an explicit `expected*` list. No dictionaries.
-/// Adding a slot = add a `static const` id and one line to the
-/// matching list here, plus `id` + `description` in the service
-/// `apps/<app>/app.yaml`.
+/// Colours, images, fonts and texts are handled identically: an
+/// explicit slot id constant + an explicit `expected*` list. No
+/// dictionaries. Adding a slot = add a `static const` id and one
+/// line to the matching list here, plus the matching declaration
+/// in the service `apps/<app>/app.yaml`.
 ///
 /// Colours are consumed via `DesignConstants` (which calls
 /// `BrandColor.color(slot, fallback:)`); images via
-/// `BrandImage.of(slot)` (a resolver returning an
-/// `ImageProvider?`) — usually through the `BrandedImage`
-/// widget, which pairs it with a bundled `ApiImage` fallback.
-/// `ApiImage` itself is for live feature content and is fully
-/// separate.
+/// `BrandImage.of(slot)` — usually through the `BrandedImage`
+/// widget. Fonts are consumed via `BrandFont.style(slot,
+/// fallbackFamily:)`. Texts are consumed via
+/// `BrandText.value(slot, fallback:)`.
 ///
 /// To retarget the engine for another app: write a sibling
 /// manifest and change the wiring in `service_locator.dart`.
@@ -57,5 +56,29 @@ class CombatDenSlots {
     singlePoint,
     iconQrcode,
     streakIcon,
+  ];
+
+  // ---- Font slots ----
+  static const String fontDisplay = 'display';
+  static const String fontBody = 'body';
+
+  static const List<String> expectedFonts = [
+    fontDisplay,
+    fontBody,
+  ];
+
+  // ---- Text slots ----
+  static const String classBookedHeadline = 'class_booked_headline';
+  static const String reserveCta = 'reserve_cta';
+  static const String winsTitle = 'wins_title';
+  static const String winsSubtitle = 'wins_subtitle';
+  static const String bookNextClassCta = 'book_next_class_cta';
+
+  static const List<String> expectedText = [
+    classBookedHeadline,
+    reserveCta,
+    winsTitle,
+    winsSubtitle,
+    bookNextClassCta,
   ];
 }

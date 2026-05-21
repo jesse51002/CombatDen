@@ -10,14 +10,25 @@ produced by the CustomizationService.
   (`AppConfig.appId` + `AppConfig.designId`).
 - The resolved preset lives in
   `../CustomizationService/apps/<appId>/<designId>/` — `customization.yaml`
-  (brief + `dark_mode`), `output.yaml` (resolved colour/image slots),
-  `final_images/`.
-- Today the customization surface is colours (4 slots) and imagery; the app
-  derives every other token (elevation, dividers, popups) from those.
-- **This is just the start.** The templating surface is open-ended — over
-  time more of the app (copy, layout, enabled features) becomes
-  tenant-customizable. Do not build assuming only colour and text vary;
-  never hardcode or assume a single brand's palette, assets, or copy.
+  (brief + `mode`), `output.yaml` (the resolved palette plus image, font, and
+  text slots), `final_images/`.
+- Today the customization surface is **colours, images, fonts, and text**. The
+  pipeline ships a *finished* palette — it derives the elevated surfaces,
+  dividers, popups, and faded variants itself — so the app is a plain consumer
+  that reads slots and no longer carries its own surface-derivation math.
+- The `lib/customization/` engine resolves each surface at runtime via
+  `BrandColor`, `BrandFont`, `BrandText`, and `BrandImage`. Colours, fonts, and
+  text fall back to a bundled const default when nothing is loaded.
+  **Images have no engine fallback by design:** `BrandImage.of(slot)` returns
+  `null` when no customization applies, and the `BrandedImage` widget pairs
+  that with the tenant's bundled asset (local-vs-network resolution made a
+  built-in fallback more complex than it was worth — the bundled tenant asset
+  *is* the fallback).
+- **This is just the start.** The templating surface is open-ended — icon-set
+  and animation modification stay in the pipeline and are scheduled for after
+  validation, and over time more of the app (layout, enabled features) becomes
+  tenant-customizable. Do not build assuming only colour and text vary; never
+  hardcode or assume a single brand's palette, assets, or copy.
 
 ## Getting Started
 

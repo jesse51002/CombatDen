@@ -140,7 +140,11 @@ class ImageNode(Node):
         design = self._run_ctx.cust.design_direction
         dark_mode = self._run_ctx.cust.colors_direction.mode is ColorMode.DARK
         palette_summary = "\n".join(
-            f"  {slot_id}: {color.oklch} — {color.display_name}: {color.description}"
+            # OklchColor.__str__ gives the canonical CSS string form
+            # (`oklch(70.5% 0.19 41)`) — easier for the image-gen model to
+            # reason about than the wire JSON `{l, c, h}`.
+            f"  {slot_id}: {color.color.oklch!s} — "
+            f"{color.display_name}: {color.description}"
             for slot_id, color in palette.colors.items()
         )
         if image_deps:

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/home/data/schedule_generator.dart';
@@ -60,10 +61,7 @@ class _HomeBookedBodyState extends State<HomeBookedBody>
 
   void _onVerticalScroll() {
     final offset = _verticalController.offset;
-    final adjusted = (offset - _kPreScheduleHeight).clamp(
-      0.0,
-      double.infinity,
-    );
+    final adjusted = (offset - _kPreScheduleHeight).clamp(0.0, double.infinity);
     final newIndex = (adjusted / _kDayGroupHeight).floor();
     if (newIndex == _currentDayIndex) return;
     setState(() => _currentDayIndex = newIndex);
@@ -81,53 +79,64 @@ class _HomeBookedBodyState extends State<HomeBookedBody>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return CustomScrollView(
-      controller: _verticalController,
-      slivers: [
-        SliverToBoxAdapter(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: _kSectionGap,
-            children: [
-              Builder(
-                builder: (context) {
-                  final gym = mockGym;
-                  return AppTopbar(
-                    mode: AppTopbarMode.bigLogo,
-                    showBackButton: false,
-                    gymName: gym.name,
-                    logoAsset: gym.logoAsset,
-                    streakDays: gym.streakDays,
-                    pointsLabel: gym.pointsLabel,
-                    rankBadgeAsset: gym.rankBadgeAsset,
-                  );
-                },
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: DesignConstants.screenHorizontalPadding,
+    // Double-tap the schedule to jump straight into the post-class stats
+    // flow — a quick-demo shortcut. Discrete double-tap, so it doesn't
+    // fight the vertical scroll. Mirrors the class screen's entry (replace,
+    // not push: the flow exits back to home on its own).
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onDoubleTap: () =>
+          Navigator.of(context).pushReplacementNamed(AppRoutes.postClassStreak),
+      child: CustomScrollView(
+        controller: _verticalController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: _kSectionGap,
+              children: [
+                Builder(
+                  builder: (context) {
+                    final gym = mockGym;
+                    return AppTopbar(
+                      mode: AppTopbarMode.bigLogo,
+                      showBackButton: false,
+                      gymName: gym.name,
+                      logoAsset: gym.logoAsset,
+                      streakDays: gym.streakDays,
+                      pointsLabel: gym.pointsLabel,
+                      rankBadgeAsset: gym.rankBadgeAsset,
+                      onTitleDoubleTap: () => Navigator.of(
+                        context,
+                      ).pushNamed(AppRoutes.styleSelect),
+                    );
+                  },
                 ),
-                child: const UpcomingSessionsCard(),
-              ),
-              const ClassScheduleTitle(),
-            ],
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: DesignConstants.screenHorizontalPadding,
+                  ),
+                  child: const UpcomingSessionsCard(),
+                ),
+                const ClassScheduleTitle(),
+              ],
+            ),
           ),
-        ),
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: PinnedDateRowDelegate(
-            currentDayIndex: _currentDayIndex,
-            scrollController: _dateController,
-            height: _kDateRowHeight,
-            onDateTap: _onDateTap,
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: PinnedDateRowDelegate(
+              currentDayIndex: _currentDayIndex,
+              scrollController: _dateController,
+              height: _kDateRowHeight,
+              onDateTap: _onDateTap,
+            ),
           ),
-        ),
-        SliverList.builder(
-          itemBuilder: (context, index) => DayClassGroup(day: dayAt(index)),
-        ),
-      ],
+          SliverList.builder(
+            itemBuilder: (context, index) => DayClassGroup(day: dayAt(index)),
+          ),
+        ],
+      ),
     );
   }
 }
-

@@ -27,6 +27,7 @@ class AppTopbar extends StatelessWidget {
     required this.pointsLabel,
     required this.rankBadgeAsset,
     this.onTitleTap,
+    this.onTitleDoubleTap,
   });
 
   final AppTopbarMode mode;
@@ -37,6 +38,7 @@ class AppTopbar extends StatelessWidget {
   final String pointsLabel;
   final String rankBadgeAsset;
   final VoidCallback? onTitleTap;
+  final VoidCallback? onTitleDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +69,7 @@ class AppTopbar extends StatelessWidget {
             gymName: gymName,
             logoAsset: logoAsset,
             onTitleTap: () => _handleTitleTap(context),
+            onTitleDoubleTap: onTitleDoubleTap,
           ),
           InfoBar(
             rankBadgeAsset: rankBadgeAsset,

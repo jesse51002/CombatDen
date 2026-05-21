@@ -30,7 +30,7 @@ class StreakDayBadge extends StatelessWidget {
       padding: EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
         color: day.completed
-            ? DesignConstants.primaryColor25
+            ? DesignConstants.primaryCard
             : DesignConstants.backgroundColor,
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       ),

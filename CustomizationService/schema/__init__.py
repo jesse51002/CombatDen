@@ -8,13 +8,19 @@ from schema.customization import ColorsDirection, Customization, DesignDirection
 from schema.output import (
     ColorOutput,
     ColorPalette,
+    ColorValue,
+    Derivations,
+    FontOutput,
+    FontSet,
     ImageOutput,
     ImageSet,
     Output,
     RunCost,
+    TextOutput,
+    TextSet,
 )
-from schema.primitives import AbsolutePath, OklchColor
-from schema.slots import ColorSlot, ImageSlot, SlotBase
+from schema.primitives import AbsolutePath, HexColor, HslColor, OklchColor, RgbColor
+from schema.slots import ColorSlot, FontSlot, ImageSlot, SlotBase, TextSlot
 
 __all__ = [
     "AbsolutePath",
@@ -24,15 +30,26 @@ __all__ = [
     "ColorPalette",
     "ColorRole",
     "ColorSlot",
+    "ColorValue",
     "ColorsDirection",
     "Complexity",
     "Customization",
+    "Derivations",
     "DesignDirection",
+    "FontOutput",
+    "FontSet",
+    "FontSlot",
+    "HexColor",
+    "HslColor",
     "ImageOutput",
     "ImageSet",
     "ImageSlot",
     "OklchColor",
     "Output",
+    "RgbColor",
     "RunCost",
     "SlotBase",
+    "TextOutput",
+    "TextSet",
+    "TextSlot",
 ]

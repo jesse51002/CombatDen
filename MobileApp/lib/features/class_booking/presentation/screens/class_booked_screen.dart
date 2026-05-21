@@ -6,6 +6,7 @@ import 'package:lottie/lottie.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/customization/brand_text.dart';
 import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/animation/scale_reveal.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
@@ -190,7 +191,10 @@ class _BookedContent extends StatelessWidget {
         StaggeredReveal(
           delay: captionDelay,
           child: Text(
-            'Class Booked',
+            BrandText.value(
+              CombatDenSlots.classBookedHeadline,
+              fallback: 'Class Booked',
+            ),
             style: DesignConstants.big2,
             textAlign: TextAlign.center,
           ),

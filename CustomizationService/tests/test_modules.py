@@ -13,19 +13,20 @@ from pydantic import ValidationError
 from schema import (
     AppFormat,
     ColorMode,
-    ColorOutput,
     ColorPalette,
     ColorRole,
     Complexity,
     Customization,
     ImageOutput,
+    OklchColor,
 )
 from src.core.errors import ProviderError
 from src.core.run_context import RunContext
 from src.core.util import load_yaml
 from src.modules.base import DependencyKind
-from src.modules.colors.color_models import build_color_response_model
+from src.modules.colors.color_models import LLMSlotResponse, build_color_response_model
 from src.modules.colors.color_node import ColorNode
+from src.modules.colors.color_models import LLMPalette
 from src.modules.images.background_service import (
     BG_MAX_ATTEMPTS,
     BackgroundService,
@@ -58,17 +59,25 @@ def _contract_oklch(role: ColorRole | None, dark_mode: bool) -> str:
 
 
 def _full_palette(ctx: RunContext) -> ColorPalette:
-    return ColorPalette(
+    """Build a contract-valid, fully expanded palette by running the
+    production derivation service over a hand-built ``LLMPalette`` —
+    image-node tests see exactly the shape ``ColorNode`` produces."""
+    roles = {s.id: s.role for s in ctx.app.colors}
+    schema = LLMPalette(
         mode=ColorMode.DARK,
+        roles=roles,
         colors={
-            slot.id: ColorOutput(
-                oklch="oklch(55% 0.12 250)",
-                display_name=f"{slot.id} tone",
-                description=f"{slot.id} colour",
+            s.id: LLMSlotResponse(
+                oklch=OklchColor.from_css(_contract_oklch(roles[s.id], True)),
+                display_name=f"{s.id} tone",
+                description=f"{s.id} colour",
             )
-            for slot in ctx.app.colors
+            for s in ctx.app.colors
         },
     )
+    from tests.colour_helpers import assemble_color_palette
+
+    return assemble_color_palette(schema)
 
 
 # --- stub interfaces -------------------------------------------------------
@@ -200,8 +209,10 @@ def test_color_node_run_returns_full_palette(tmp_path: Path) -> None:
     )
     resolved = response_model(
         **{
-            sid: ColorOutput(
-                oklch=_contract_oklch(roles[sid], dark_mode),
+            sid: LLMSlotResponse(
+                # OklchColor is structured now — parse the CSS fixture
+                # via from_css for readability.
+                oklch=OklchColor.from_css(_contract_oklch(roles[sid], dark_mode)),
                 display_name=f"{sid} tone",
                 description=f"{sid} colour",
             )
@@ -213,10 +224,30 @@ def test_color_node_run_returns_full_palette(tmp_path: Path) -> None:
 
     result = asyncio.run(node.run())
 
-    # run() flattens the closed model back into a ColorPalette map.
+    # run() flattens the closed model back into a ColorPalette map,
+    # expands every slot into a full ColorOutput, and assembles the flat
+    # recommendation palette.
     assert isinstance(result, ColorPalette)
     assert result.mode == ctx.cust.colors_direction.mode
     assert set(result.colors) == set(slot_ids)
+    # Every colour carries every format + the six derivations, and the
+    # flat palette has every slot's six derivation entries + the three
+    # shared surfaces + the base slots. Derivations is a typed Pydantic
+    # model — required-field validation proves the six exist; touch each
+    # to also assert non-None.
+    for color in result.colors.values():
+        assert (
+            color.color.oklch
+            and color.color.hsl
+            and color.color.rgb
+            and color.color.hex
+        )
+        for deriv_name in ("second", "third", "card", "popup", "dark", "light"):
+            assert getattr(color.derivations, deriv_name) is not None
+    for sid in slot_ids:
+        for deriv in ("second", "third", "card", "popup", "dark", "light"):
+            assert f"{sid}_{deriv}" in result.palette
+    assert {"card", "popup", "divider"}.issubset(result.palette.keys())
     # Exactly one structured call.
     assert len(llm.structured_calls) == 1
     # The colour node is the DAG root: keyed "color", no dependencies.
@@ -235,8 +266,8 @@ def test_color_node_clamps_out_of_band_background(tmp_path: Path) -> None:
     )
     resolved = response_model(
         **{
-            sid: ColorOutput(
-                oklch=(
+            sid: LLMSlotResponse(
+                oklch=OklchColor.from_css(
                     "oklch(2% 0.006 40)"  # near pure black: valid, out of band
                     if roles[sid] is ColorRole.BACKGROUND
                     else _contract_oklch(roles[sid], True)
@@ -252,25 +283,37 @@ def test_color_node_clamps_out_of_band_background(tmp_path: Path) -> None:
     result = asyncio.run(node.run())
 
     bg_id = next(s for s, r in roles.items() if r is ColorRole.BACKGROUND)
-    # 0.02 lifted to the 0.08 dark-mode floor; chroma/hue preserved.
-    assert str(result.colors[bg_id].oklch) == "oklch(8% 0.006 40)"
+    # 0.02 lifted to the 0.08 dark-mode floor; chroma/hue preserved. The
+    # base value lives under .color now (composition).
+    assert str(result.colors[bg_id].color.oklch) == "oklch(8% 0.006 40)"
 
 
 def test_color_response_model_rejects_missing_slot() -> None:
     """Completeness is structural: the per-slot model is required-only, so a
-    payload missing a slot fails validation (re-asked by the client loop)."""
+    payload missing a slot fails validation (re-asked by the client loop).
+
+    The roles map now requires exactly one bg + one text at build time
+    (the contract validator closure needs both), so the test uses a
+    contract-shaped roles dict and omits one slot from the payload."""
     model = build_color_response_model(
-        ["primary", "background"],
-        roles={"primary": None, "background": ColorRole.BACKGROUND},
+        ["primary", "background", "text"],
+        roles={
+            "primary": None,
+            "background": ColorRole.BACKGROUND,
+            "text": ColorRole.TEXT,
+        },
         dark_mode=True,
     )
-    only_one = (
-        '{"primary": {"oklch": "oklch(55% 0.15 25)", '
-        '"display_name": "P", "description": "p"}}'
+    # Payload missing "background".
+    missing_bg = (
+        '{"primary": {"oklch": {"l": 0.55, "c": 0.15, "h": 25}, '
+        '"display_name": "P", "description": "p"}, '
+        '"text": {"oklch": {"l": 0.92, "c": 0.01, "h": 80}, '
+        '"display_name": "T", "description": "t"}}'
     )
 
     with pytest.raises(ValidationError) as exc:
-        model.model_validate_json(only_one)
+        model.model_validate_json(missing_bg)
 
     # The omitted slot is the reported missing field.
     assert "background" in str(exc.value)
@@ -278,11 +321,17 @@ def test_color_response_model_rejects_missing_slot() -> None:
 
 def test_color_prompt_is_data_driven(tmp_path: Path) -> None:
     ctx = _run_ctx(tmp_path)
-    node = ColorNode(ctx, llm=StubLLM())
 
-    from src.modules.colors.color_node import COLOR_PROMPT_PATH
+    # Prompt building moved into ColorSchemeService when the colour
+    # pipeline split into schema → correction → derivation services —
+    # the node is now a thin orchestrator with no prompt logic of its
+    # own. Test the schema service's prompt builder directly.
+    from src.modules.colors.color_scheme_service import (
+        COLOR_PROMPT_PATH,
+        ColorSchemeService,
+    )
 
-    prompt = node._build_prompt()
+    prompt = ColorSchemeService._build_prompt(ctx)
     template = COLOR_PROMPT_PATH.read_text(encoding="utf-8")
 
     # The .md template is app-agnostic: slots are deferred to a placeholder,
@@ -680,6 +729,10 @@ _DEP_COLORS = [
     {"id": "text", "description": "text", "role": "text"},
     {"id": "accent", "description": "accent"},
 ]
+_DEP_FONTS = [
+    {"id": "display", "description": "headlines"},
+    {"id": "body", "description": "body copy"},
+]
 
 
 def _dep_ctx(tmp_path: Path) -> RunContext:
@@ -697,6 +750,7 @@ def _dep_ctx(tmp_path: Path) -> RunContext:
                 },
             ],
             "colors": _DEP_COLORS,
+            "fonts": _DEP_FONTS,
         }
     )
     cust = Customization.model_validate(_DEP_CUST)
@@ -755,3 +809,145 @@ def test_image_no_dependency_block_absent(tmp_path: Path) -> None:
     assert "Related assets (visual continuity)" not in sent
     assert "$related_assets" not in sent
     assert not hasattr(out, "dependency_usage")
+
+
+# --- FontNode --------------------------------------------------------------
+
+
+def _fake_catalog():
+    """Tiny in-memory catalog with two well-known families."""
+    from schema import FontSet  # noqa: F401  (touch import to fail fast)
+    from src.shared.interfaces.google_fonts_catalog import GoogleFontMetadata
+
+    class _C:
+        def __init__(self) -> None:
+            self._e = {
+                "inter": GoogleFontMetadata(
+                    family="Inter",
+                    category="sans-serif",
+                    variants=["regular", "700"],
+                    files={
+                        "regular": "https://fonts.gstatic.com/s/inter/regular.woff2",
+                        "700": "https://fonts.gstatic.com/s/inter/700.woff2",
+                    },
+                ),
+                "funnel display": GoogleFontMetadata(
+                    family="Funnel Display",
+                    category="display",
+                    variants=["regular"],
+                    files={
+                        "regular": "https://fonts.gstatic.com/s/funneldisplay/regular.woff2",
+                    },
+                ),
+            }
+
+        async def contains(self, family: str) -> bool:
+            return family.lower() in self._e
+
+        async def lookup(self, family: str):
+            return self._e.get(family.lower())
+
+        async def families(self) -> frozenset[str]:
+            return frozenset(self._e.keys())
+
+    return _C()
+
+
+def test_font_node_run_returns_fontset_keyed_by_slot(tmp_path: Path) -> None:
+    """FontNode resolves every slot, lifts each pick into a FontOutput
+    with the catalog-supplied canonical family and category."""
+    from schema import FontSet
+    from src.modules.fonts.font_models import (
+        LLMFontResponse,
+        build_font_response_model,
+    )
+    from src.modules.fonts.font_node import FontNode
+
+    ctx = _run_ctx(tmp_path)
+    catalog = _fake_catalog()
+    slot_ids = [s.id for s in ctx.app.fonts]
+    known = asyncio.run(catalog.families())
+    response_model = build_font_response_model(slot_ids, known_families=known)
+    resolved = response_model(
+        **{
+            sid: LLMFontResponse(
+                family="Funnel Display" if sid == "display" else "Inter",
+                display_name=f"{sid} pick",
+                description=f"on-brand demo font for {sid}",
+            )
+            for sid in slot_ids
+        }
+    )
+    llm = StubLLM(structured=resolved)
+    node = FontNode(ctx, llm=llm, catalog=catalog)
+
+    out = asyncio.run(node.run())
+
+    assert isinstance(out, FontSet)
+    assert set(out.fonts) == set(slot_ids)
+    # Family + category come from the catalog (not the LLM); the LLM
+    # only picks the family + prose.
+    assert out.fonts["display"].family == "Funnel Display"
+    assert out.fonts["display"].category == "display"
+    assert out.fonts["body" if "body" in slot_ids else slot_ids[-1]].family == "Inter"
+    # FontNode is a level-0 sibling of the colour root.
+    assert node.key == DependencyKind.FONT.value
+    assert node.deps == frozenset()
+
+
+def test_font_response_model_rejects_unknown_family() -> None:
+    """The per-request response model's after-validator raises
+    ValidationError when any picked family isn't in the catalog
+    snapshot — exactly what makes the existing complete_structured
+    retry loop re-ask the LLM, with no new retry code."""
+    from src.modules.fonts.font_models import (
+        LLMFontResponse,
+        build_font_response_model,
+    )
+
+    model = build_font_response_model(
+        ["display", "body"],
+        known_families=frozenset({"inter", "funnel display"}),
+    )
+    with pytest.raises(ValidationError) as exc:
+        model(
+            display=LLMFontResponse(
+                family="Definitely Not A Google Font",
+                display_name="x",
+                description="x",
+            ),
+            body=LLMFontResponse(
+                family="Inter",
+                display_name="x",
+                description="x",
+            ),
+        )
+    assert "Not found on Google Fonts" in str(exc.value)
+    assert "display" in str(exc.value)
+
+
+def test_font_prompt_is_data_driven(tmp_path: Path) -> None:
+    """The .md template is app-agnostic — no slot description, no
+    brand name baked in. The built prompt substitutes brand brief
+    fields + every requested font slot's description."""
+    from src.modules.fonts.font_selection_service import (
+        FONT_PROMPT_PATH,
+        FontSelectionService,
+    )
+
+    ctx = _run_ctx(tmp_path)
+    prompt = FontSelectionService._build_prompt(ctx)
+    template = FONT_PROMPT_PATH.read_text(encoding="utf-8")
+
+    # Slots are deferred to a placeholder; no slot description baked in.
+    assert "$slots" in template
+    for slot in ctx.app.fonts:
+        assert slot.description not in template
+    # The rule portion (before the brand-brief marker) holds no
+    # placeholders, so it survives substitution byte-for-byte.
+    rule_part = template.split("--- Brand brief ---")[0]
+    assert rule_part in prompt
+    # Brand data + every requested slot substituted into the one prompt.
+    assert ctx.cust.design_direction.name in prompt
+    for slot in ctx.app.fonts:
+        assert f"- {slot.id}: {slot.description}" in prompt

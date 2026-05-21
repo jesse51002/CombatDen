@@ -1,55 +1,82 @@
 design_direction:
-  name: Duck Groove
-  short_desc: "Dance it out — a light, fun, bubbly dance-workout club app where the Duck Groove duck cheers you on."
+  name: Killer Muay Thai
+  short_desc: "Train like you mean it — a fight-team Muay Thai gym for people who came to get dangerous, not to dabble."
   long_desc: |
-    Duck Groove is a playful dance-workout club app for people who want
-    moving their body to feel like joy, not a chore — all ages, all
-    skill levels, here to have fun. The audience is upbeat and
-    unintimidated: they want a tool that makes them smile and keeps them
-    coming back. The voice is warm, bubbly and encouraging — a friend
-    hyping you up on the dance floor, never drill-sergeant, never hype-y
-    sales.
+    Killer Muay Thai is a fight-team Muay Thai gym and companion app for
+    people who came to get dangerous — committed amateurs, competitors and
+    serious hobbyists who train at a fighter's intensity. It teaches the
+    real art of eight limbs and holds a fighter's standard; newcomers are
+    welcome only on the understanding that they rise to that bar, not that
+    it bends for them. The brand sits in a deliberate spot — it is
+    emphatically NOT cardio-kickboxing or bag-punching fitness theatre
+    dressed up as "boxing-inspired", and equally NOT a soft wellness or
+    lifestyle brand (spa calm, mindfulness positioning, an
+    Instagram-aesthetic gym). It is serious, severe and combative: Muay
+    Thai as a fight discipline, not a workout class.
 
-    The Duck Groove duck mascot is the HERO of this visual system: a
-    rounded, friendly, expressive cartoon duck that stars in every
-    celebratory moment — dancing, cheering, presenting rewards. It is
-    the recurring face of the brand, not a background accent.
+    The voice is cold and commanding — terse, direct and imperative, the
+    way a corner talks to a fighter between rounds. No filler, no
+    cheerleading, no cushioning. It respects the work without coddling. It
+    must never sound warm-and-fuzzy, chatty, motivational-poster,
+    hype-bro, cute, or sterile-corporate; when it speaks it gives an
+    order, not encouragement.
+
+    Killer Muay Thai's anchor is a dynamic fighter silhouette caught
+    mid-strike — a flying knee, an elbow, a teep — explosive, aggressive
+    and unmistakably Muay Thai. The silhouette anchors the primary logo as
+    a bold, high-contrast action mark and drives the celebratory heroes
+    (booking success, the rank belt, the points burst, the gift, the wins
+    trophy), which land kinetic and heavy. The tiny persistent tokens —
+    the single point-star, the streak mark, the QR check-in icon — stay
+    abstract, minimal and razor-legible at small size, living in the
+    fighter's world through colour and severity rather than being the
+    figure itself. The logo stays a clean, professional mark a real fight
+    gym would use, never a busy illustrated scene.
 
     Visual system — the shared look every generated asset must wear:
 
-    - Feel: light, fun, bubbly and welcoming. Joyful and energetic,
-      playful over polished. Delight over restraint — it should make
-      you grin.
-    - Medium & materials: soft, rounded, plump 3D — squishy matte
-      plastic, soft inflated balloon-like forms, candy and felt
-      textures, gently bouncy. Friendly and tactile, never sharp,
-      never gritty. Never battle-worn metal, leather or canvas.
-    - Finish & light: bright, soft studio lighting, gentle soft
-      shadows that keep forms rounded and approachable. No harsh key
-      light, no deep gloom — everything stays airy and clear.
-    - Energy by role: rewards, wins, streaks and celebrations land
-      with bounce, sparkle and confetti — joyful pop, the duck mid-
-      celebration. Persistent UI icons and indicators stay clean,
-      friendly and simple — cheerful but calm, never busy.
-    - Hard nos: nothing gritty, dark, heavy or battle-worn; no muted
-      or desaturated palettes; nothing intimidating, corporate-serious
-      or cold. Cute is the point.
+    - Feel: hard, sharp and dangerous — coiled power and explosive strike
+      energy, serious and severe. Charged with threat, the opposite of
+      bright-and-fun or soft-and-calm.
+    - Medium & materials: dramatic, high-contrast 3D and strong
+      silhouette work with premium metallic surfaces — the gold of earned
+      belts and trophies — set on a dark ground. Hard edges and real
+      weight. Never glossy neon, never pillowy or pastel-soft, never flat
+      clip-art.
+    - Finish & light: dark and dramatic, with hard directional light
+      carving strong form and deep shadow — a fighter under the ring
+      lights, never a soft daylit scene.
+    - Energy by role: celebratory heroes (booking success, rank belt,
+      points burst, gift, wins trophy) hit hard, heavy and dramatic — a
+      real payoff with weight behind it. Persistent UI (the logo, the
+      single point-star, streak mark, QR) stays minimal, severe and
+      blade-sharp, reading instantly at small size.
+    - Hard nos: no soft or wellness blandness (spa pastels, pillowy
+      forms, zen calm, lifestyle gloss); nothing cute, cartoonish or
+      Saturday-morning (no mascots, no friendly rounded characters); no
+      neon club brightness, candy colour or bright-fun party energy; no
+      generic combat clip-art (stock gloves, flat clip-art fighters,
+      sterile gym-chain look, fake-tough clichés).
 
 colors_direction:
-  mode: light
+  mode: dark
   description: |
-    A bright, light, bubbly palette — cheerful and inviting. Color is
-    the point here: it should feel warm, playful and full of energy.
+    A dark, severe palette — earned gold against a deep near-black
+    ground, with danger held in reserve. Premium and combative, never
+    bright or festive.
 
-    - Primary: a sunny, joyful duck-yellow — warm and inviting, the
-      brand's signature pop. Used confidently for primary CTAs and the
-      moments that delight.
-    - Background: a soft, airy near-white with the faintest warm pastel
-      tint — clean and bright, never stark clinical white, never dark.
-    - Text: a soft, friendly deep slate — readable and comfortably
-      above AA contrast on the light background, warm rather than harsh
-      pure black.
-    - Accent: a playful bubblegum or sky pop for selections, highlights
-      and active states — a clearly different, cheerful hue from the
-      yellow primary, fun but never muddy. One confident accent that
-      complements the primary without competing with it.
+    - Primary: a rich championship gold / bronze for primary CTAs and key
+      accents — earned, premium and warm-metallic, the colour of belts and
+      trophies. Confident and saturated against the dark ground, never a
+      pale or washed-out yellow.
+    - Background: a deep cool near-black with the faintest warm
+      brand-tinted undertone — a dark, dramatic ground that lets the gold
+      lift off it, never a flat pure black, with tonal room for cards and
+      sheets to read.
+    - Text: a crisp warm off-white for headings and body copy — clean and
+      legible, comfortably above AA against the dark canvas, never a harsh
+      pure white.
+    - Accent: a deep blood-red for selections, active states and
+      highlights — a clearly different hue from the gold primary, hard and
+      dangerous, used sparingly on active nav, pills and tabs as borders or
+      a single active label, never a fill.

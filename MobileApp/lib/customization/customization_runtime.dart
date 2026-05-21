@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
+
 import 'package:mobile_app/customization/customization_service.dart';
 import 'package:mobile_app/customization/data/customization_api_client.dart';
+import 'package:mobile_app/customization/data/models/customization_style.dart';
 import 'package:mobile_app/customization/image_prewarmer.dart';
 import 'package:mobile_app/customization/service_locator.dart';
 
@@ -23,6 +26,8 @@ class CustomizationRuntime {
     required String designId,
     required List<String> expectedColors,
     required List<String> expectedImages,
+    required List<String> expectedFonts,
+    required List<String> expectedText,
   }) async {
     if (!getIt.isRegistered<CustomizationService>()) {
       getIt.registerLazySingleton<CustomizationApiClient>(
@@ -36,6 +41,8 @@ class CustomizationRuntime {
           getIt<CustomizationApiClient>(),
           expectedColorKeys: expectedColors,
           expectedImageKeys: expectedImages,
+          expectedFontKeys: expectedFonts,
+          expectedTextKeys: expectedText,
         ),
       );
     }
@@ -43,5 +50,30 @@ class CustomizationRuntime {
     final service = getIt<CustomizationService>();
     await service.initialize();
     CustomizationImagePrewarmer.prewarm(service);
+  }
+
+  /// Listenable that fires whenever the active customization changes
+  /// (initial load + every [selectDesign]). Wrap the app root in a
+  /// `ListenableBuilder` on this so the whole tree re-themes live.
+  static Listenable get changes => getIt<CustomizationService>();
+
+  /// The app's selectable styles (design name + celebration image).
+  static Future<List<CustomizationStyle>> fetchStyles() =>
+      getIt<CustomizationService>().fetchStyles();
+
+  /// The design (preset/run) currently loaded, for marking the active
+  /// style in a picker.
+  static String? get activeDesignId =>
+      getIt<CustomizationService>().activeDesignId;
+
+  /// Switches the live style and re-warms its image cache. Returns
+  /// whether the switch took effect. Never throws.
+  static Future<bool> selectDesign(String designId) async {
+    final service = getIt<CustomizationService>();
+    final ok = await service.selectDesign(designId);
+    if (ok) {
+      CustomizationImagePrewarmer.prewarm(service);
+    }
+    return ok;
   }
 }
