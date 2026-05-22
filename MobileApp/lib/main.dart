@@ -15,7 +15,7 @@ import 'package:mobile_app/features/stats/presentation/screens/rewards_card_scre
 import 'package:mobile_app/features/stats/presentation/screens/streak_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/wins_screen.dart';
 import 'package:mobile_app/features/style_select/presentation/screens/style_select_screen.dart';
-import 'package:mobile_app/features/videos/presentation/screens/specific_videos_screen.dart';
+import 'package:mobile_app/features/videos/presentation/screens/tag_videos_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/video_recc_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/videos_screen.dart';
 import 'package:mobile_app/customization/customization_runtime.dart';
@@ -66,7 +66,7 @@ class MobileAppRoot extends StatelessWidget {
             AppRoutes.classDetail: (_) => const ClassScreen(),
             AppRoutes.reservingLoading: (_) => const ClassBookedScreen(),
             AppRoutes.videos: (_) => const VideosScreen(),
-            AppRoutes.videoDetail: (_) => const SpecificVideosScreen(),
+            AppRoutes.videoTagList: (_) => const TagVideosScreen(),
             AppRoutes.videoRecc: (_) => const VideoReccScreen(),
             AppRoutes.profile: (_) => const ProfileScreen(),
             AppRoutes.styleSelect: (_) => const StyleSelectScreen(),

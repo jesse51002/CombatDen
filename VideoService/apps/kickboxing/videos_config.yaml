@@ -1,0 +1,24 @@
+company_name: Northside Kickboxing
+type: Kickboxing gym
+videos_desc: |
+  Competitive ring kickboxing — sharp combinations, footwork, and power striking
+  for members who want to actually spar and compete. Worth surfacing: technique
+  tutorials for kicks and combinations, high-level promotion knockout footage,
+  fighter interviews on mindset and preparation, and the occasional lighthearted
+  gym moment that keeps training human.
+avoid_desc: |
+  Within-kickboxing content the gym rejects: pad-slapping cardio classes passed
+  off as competitive kickboxing, McDojo point-sparring presented as the standard,
+  and sloppy or unsafe technique taught as gospel by low-credibility instructors.
+searches:
+  - query: kickboxing combinations tutorial for beginners
+    tags: [tutorial, educational]
+  - query: GLORY kickboxing best knockouts
+    tags: [professional, clips, entertainment]
+  - query: how to throw a roundhouse kick step by step
+    tags: [tutorial]
+  - query: professional kickboxer interview fight mindset
+    tags: [interview, informative]
+  - query: funny kickboxing training fails compilation
+    tags: [fun, entertainment]
+priority_channels: []

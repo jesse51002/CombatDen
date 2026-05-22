@@ -1,0 +1,47 @@
+company_name: Smoke Test Gym
+app_id: smoketest
+# Images are real Wikimedia Commons Muay Thai photos, each downloaded and
+# VISUALLY VERIFIED (viewed) for relevance before being written here. Instructor
+# names/bios are placeholders for this smoketest; the class-images phase of the
+# video-brief skill gathers real instructor data from the gym.
+classes:
+  - name: Fundamentals
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Learning_Muay_Thai_with_Royal_Thai_Marines_160213-M-CX588-016.jpg/1280px-Learning_Muay_Thai_with_Royal_Thai_Marines_160213-M-CX588-016.jpg
+    description: >-
+      Build your base — stance, footwork, and the core punches and kicks, drilled
+      slow then live. All levels welcome; work at your own pace.
+    instructor_name: Coach Anan Chayanon
+    instructor_bio: >-
+      Former national-level Muay Thai competitor with 15+ years on the pads.
+      Specializes in clean fundamentals and getting beginners comfortable fast.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Artem_Golik_mt.jpg/960px-Artem_Golik_mt.jpg
+  - name: Clinch
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Muay_thai_clinch.jpg/1280px-Muay_thai_clinch.jpg
+    description: >-
+      Close-range control — neck ties, off-balancing, knees, and defending the
+      clinch. Partner drills into live rounds.
+    instructor_name: Kru Mai Suksan
+    instructor_bio: >-
+      Trained in Bangkok for a decade and a clinch specialist who has cornered
+      pro fighters across Southeast Asia.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/80/Chamuekpet_Kevin.jpg
+  - name: Pad Work
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Kicking_Thai_Pads.JPG/1280px-Kicking_Thai_Pads.JPG
+    description: >-
+      Sharpen power and combinations on the Thai pads with round-by-round
+      coaching. Great conditioning, great technique.
+    instructor_name: Coach Diego Ramirez
+    instructor_bio: >-
+      Pad-holding craftsman and strength coach focused on timing, output, and
+      keeping rounds fight-realistic.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/0/04/Brian_Denis.jpg
+  - name: Sparring
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/5/58/USMC-120215-M-SR181-138.jpg/1280px-USMC-120215-M-SR181-138.jpg
+    description: >-
+      Controlled live rounds to put it all together. Mandatory gear, partner
+      matching by level — leave the ego at the door.
+    instructor_name: Coach Lena Petrova
+    instructor_bio: >-
+      Active amateur competitor who runs the sparring program with a focus on
+      safety, control, and steady progression.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/7/7c/Yulia_Sachkov_Champion.jpg

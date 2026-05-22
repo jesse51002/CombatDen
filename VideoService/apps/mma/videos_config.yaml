@@ -1,0 +1,25 @@
+company_name: Apex MMA
+type: Mixed martial arts gym
+videos_desc: |
+  All-ranges mixed martial arts for members who want the complete game — striking,
+  wrestling, and submissions stitched together. Worth surfacing: fundamentals
+  explainers that frame how the phases connect, high-level fight breakdowns and
+  technique analysis, elite professional fight footage and finishes, training-camp
+  day-in-the-life vlogs, and credible news on the sport's biggest events.
+avoid_desc: |
+  Within-MMA content the gym rejects: backyard and unsanctioned street brawls
+  passed off as "MMA", fake or staged knockout compilations, low-credibility
+  "deadly technique" channels promising one-move finishes, and content
+  normalizing dangerous weight cuts or reckless training as how the sport works.
+searches:
+  - query: mma fundamentals for beginners explained
+    tags: [educational, tutorial]
+  - query: UFC knockouts of the year compilation
+    tags: [clips, entertainment, professional]
+  - query: best UFC title fight full highlights
+    tags: [professional, clips]
+  - query: mma fighter training camp day in the life
+    tags: [vlog, behind_the_scenes]
+  - query: UFC news this week breakdown
+    tags: [news, informative]
+priority_channels: []

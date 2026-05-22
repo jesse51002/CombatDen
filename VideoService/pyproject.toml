@@ -1,0 +1,27 @@
+[project]
+name = "videoservice"
+version = "0.1.0"
+description = "Temporary demo service: author a per-company videos_config.yaml (business + the kinds of YouTube videos worth surfacing + 10-20 tagged search prompts) and serve it over a read-only API. Querying YouTube is a later manual batch script."
+requires-python = ">=3.13,<4.0"
+dependencies = [
+    "pydantic>=2.0,<3.0",
+    "pydantic-settings>=2.0,<3.0",
+    "pyyaml>=6.0,<7.0",
+    "fastapi (>=0.136.1,<0.137.0)",
+    "uvicorn[standard] (>=0.47.0,<0.48.0)",
+    "google-api-python-client (>=2.196.0,<3.0.0)",
+]
+
+[tool.poetry]
+# Two top-level packages (neither matches the project name) -> list explicitly.
+packages = [
+    { include = "src" },
+    { include = "schema" },
+]
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0,<9.0"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"

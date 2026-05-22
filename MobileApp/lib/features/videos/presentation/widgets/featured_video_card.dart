@@ -1,6 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/videos/data/mock_videos.dart';
+import 'package:mobile_app/features/videos/data/video.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 
@@ -10,7 +11,7 @@ import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 class FeaturedVideoCard extends StatelessWidget {
   const FeaturedVideoCard({super.key, required this.video, this.onTap});
 
-  final MockVideo video;
+  final Video video;
   final VoidCallback? onTap;
 
   @override
@@ -28,8 +29,9 @@ class FeaturedVideoCard extends StatelessWidget {
           VideoReccCard(
             title: video.title,
             metaLabel: video.metaLabel,
-            thumbnailAsset: video.thumbnailAsset,
-            creatorPfpAsset: video.creatorPfpAsset,
+            thumbnail: CachedNetworkImageProvider(video.thumbnailUrl),
+            creatorPfp: CachedNetworkImageProvider(video.channelAvatarUrl),
+            roundThumbnail: false,
             onTap: onTap,
           ),
           Padding(

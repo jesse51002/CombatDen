@@ -1,9 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
-import 'package:mobile_app/shared/widgets/api_image.dart';
 
 class ClassListItem extends StatelessWidget {
   const ClassListItem({
@@ -46,10 +46,15 @@ class ClassListItem extends StatelessWidget {
                     DesignConstants.radiusSmall,
                   ),
                   child: Image(
-                    image: ApiImage.classAsset(classData.imageAsset),
+                    image: CachedNetworkImageProvider(classData.imageUrl),
                     width: 122,
                     height: 73,
                     fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => SizedBox(
+                      width: 122,
+                      height: 73,
+                      child: ColoredBox(color: DesignConstants.card),
+                    ),
                   ),
                 ),
               ],

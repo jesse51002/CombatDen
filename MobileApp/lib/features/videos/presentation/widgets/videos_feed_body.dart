@@ -1,84 +1,77 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/videos/data/mock_videos.dart';
+import 'package:mobile_app/features/videos/data/video.dart';
+import 'package:mobile_app/features/videos/data/video_helpers.dart';
+import 'package:mobile_app/features/videos/data/video_selectors.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/featured_video_card.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_carousel_section.dart';
 
-/// The vertically-stacked feed of sections shown below the topbar / tabs
-/// on `VideosScreen`. Pulled out so the screen file stays focused on
-/// orchestration (state, scroll, nav).
+/// The vertically-stacked feed below the topbar / tabs on `VideosScreen`,
+/// derived live from the loaded [videos] and the active [scope]: a featured
+/// hero, an optional Technique-of-the-Day block, then one carousel per tag.
 class VideosFeedBody extends StatelessWidget {
-  const VideosFeedBody({super.key, required this.onVideoTap});
+  const VideosFeedBody({
+    super.key,
+    required this.videos,
+    required this.scope,
+    required this.onVideoTap,
+  });
 
-  final ValueChanged<MockVideo> onVideoTap;
+  final List<Video> videos;
+  final BigGroup? scope;
+  final ValueChanged<Video> onVideoTap;
 
   @override
   Widget build(BuildContext context) {
-    final yourNextWatch = mockVideos
-        .where((v) => v.category == 'Your Next Watch')
-        .toList(growable: false);
-    final levelUp = mockVideos
-        .where((v) => v.category == 'Level up your skills')
-        .toList(growable: false);
-    final fightsHighlights = [
-      ...mockVideos.where((v) => v.category == 'Fights Highlights'),
-      ...mockVideos.where((v) => v.category == 'Fights Highlights'),
-    ];
-    final realityShow = [mockFeaturedVideo, mockFeaturedVideo];
-    final skits = [
-      ...mockVideos.where((v) => v.category == 'Martial Arts Skits'),
-      ...mockVideos.where((v) => v.category == 'Martial Arts Skits'),
-    ];
+    final featured = featuredVideo(videos, scope);
+    // Technique of the Day is an educational moment — hidden under the
+    // Entertainment filter, and skipped when it would just echo the hero.
+    final technique =
+        scope == BigGroup.entertainment ? null : techniqueOfTheDay(videos);
+    final sections = tagSections(videos, scope);
+
+    if (featured == null && sections.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingBig),
+        child: Center(
+          child: Text(
+            'Nothing here yet.',
+            style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+          ),
+        ),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
       children: [
-        _PaddedSection(
-          child: FeaturedVideoCard(
-            video: mockFeaturedVideo,
-            onTap: () => onVideoTap(mockFeaturedVideo),
+        if (featured != null)
+          _PaddedSection(
+            child: FeaturedVideoCard(
+              video: featured,
+              onTap: () => onVideoTap(featured),
+            ),
           ),
-        ),
-        VideoCarouselSection(
-          title: 'Your Next Watch',
-          videos: yourNextWatch,
-          onViewAllTap: () => debugPrint('TODO: view all Your Next Watch'),
-          onVideoTap: onVideoTap,
-        ),
-        VideoCarouselSection(
-          title: 'Level up your skills',
-          videos: levelUp,
-          onViewAllTap: () =>
-              debugPrint('TODO: view all Level up your skills'),
-          onVideoTap: onVideoTap,
-        ),
-        _PaddedSection(
-          child: _TitledFeatured(
-            title: 'Technique of the Day',
-            video: mockTechniqueOfTheDay,
-            onTap: () => onVideoTap(mockTechniqueOfTheDay),
+        if (technique != null && technique.url != featured?.url)
+          _PaddedSection(
+            child: _TitledFeatured(
+              title: 'Technique of the Day',
+              video: technique,
+              onTap: () => onVideoTap(technique),
+            ),
           ),
-        ),
-        VideoCarouselSection(
-          title: 'Fights Highlights',
-          videos: fightsHighlights,
-          onViewAllTap: () => debugPrint('TODO: view all Fights Highlights'),
-          onVideoTap: onVideoTap,
-        ),
-        VideoCarouselSection(
-          title: 'Reality Style Fighting Show',
-          videos: realityShow,
-          onViewAllTap: () =>
-              debugPrint('TODO: view all Reality Style Fighting Show'),
-          onVideoTap: onVideoTap,
-        ),
-        VideoCarouselSection(
-          title: 'Martial Arts Skits',
-          videos: skits,
-          onViewAllTap: () => debugPrint('TODO: view all Martial Arts Skits'),
-          onVideoTap: onVideoTap,
-        ),
+        for (final section in sections)
+          VideoCarouselSection(
+            title: tagDisplayName(section.tag),
+            videos: section.videos,
+            onViewAllTap: () => Navigator.of(context).pushNamed(
+              AppRoutes.videoTagList,
+              arguments: section.tag,
+            ),
+            onVideoTap: onVideoTap,
+          ),
       ],
     );
   }
@@ -108,7 +101,7 @@ class _TitledFeatured extends StatelessWidget {
   });
 
   final String title;
-  final MockVideo video;
+  final Video video;
   final VoidCallback onTap;
 
   @override

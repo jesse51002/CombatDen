@@ -1,30 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/app_routes.dart';
-import 'package:mobile_app/features/videos/data/mock_videos.dart';
-import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_layout.dart';
+import 'package:mobile_app/features/videos/data/video_selectors.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/video_recc_flow.dart';
 
-/// Full-screen video recommendation surfaced after booking a class.
-///
-/// Mirrors the `VideoRecc` design: a centered "Video Before Class" header with
-/// a close button, the [VideoReccCard] body, and a primary Watch CTA at
-/// the bottom. Accepts an optional [MockVideo] via route arguments and
-/// falls back to [mockVideoBeforeClass].
+/// Full-screen video recommendation surfaced after booking a class. Pulls the
+/// most-viewed beginner/educational video from the live feed.
 class VideoReccScreen extends StatelessWidget {
   const VideoReccScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    final video = args is MockVideo ? args : mockVideoBeforeClass;
-
-    return VideoReccLayout(
+    return VideoReccFlow(
       title: 'Video Before Class',
-      video: video,
+      selectVideo: videoBeforeClass,
       ctaLabel: 'Watch',
       onClose: () => Navigator.of(context).pop(),
-      onCtaPressed: () => Navigator.of(
-        context,
-      ).pushReplacementNamed(AppRoutes.videoDetail),
+      onCtaPressed: () => Navigator.of(context).pop(),
     );
   }
 }

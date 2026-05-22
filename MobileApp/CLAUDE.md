@@ -6,14 +6,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase.
 
-- **No backend.** No Supabase, no API client, no HTTP, no auth.
-- **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller).
-- **No real data.** Every list, every card, every detail screen is fed by hardcoded mock data co-located with the feature.
+- **Mostly no backend.** No Supabase, no auth. **Two features are live exceptions** that do real read-only HTTP via `dio` + disk-cached `cached_network_image`: the **customization engine** (`lib/customization/`, fetches the tenant's branding) and the **videos feature** (`lib/features/videos/`, fetches the tenant's feed from the VideoService — see *Videos feature is live* below). Don't add HTTP anywhere else without asking.
+- **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller). The live features fetch via `FutureBuilder` + a cached repository, not a state framework.
+- **No real data, except the live features above.** Every other list, card, and detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
 
 The whole point is to make screens that **look right** so the design can be evaluated, screenshotted for sales, and iterated on quickly. When this app graduates to real data, this CLAUDE.md gets revised and the data/state sections from `../FlutterCRM/CLAUDE.md` come back.
 
 **Theme/design rules are NOT relaxed because this is a prototype.** See *Theming System* below.
+
+## Videos feature is live
+
+The videos feature (`lib/features/videos/`) is **real**, not mock. It reads the
+active tenant's feed from the **VideoService** (`../VideoService/`, a read-only
+HTTP API). Architecture, mirroring the customization engine:
+
+- **`core/app_styles.dart`** — `kAppStyles`, the curated `List<AppStyle>`
+  pairing each customization **theme** (`designId`) with the VideoService
+  **feed** (`videoAppId` + base URL) that goes with it. This list — NOT the
+  CustomizationService's full catalog — is the source of truth for both the
+  style picker (double-tap the home logo, which fetches each design's art but
+  only renders these `designId`s) and which feed the app pulls for the active
+  theme. A design absent from the list has no videos (empty state). Base URL
+  defaults to `localhost:8002`, overridable with `--dart-define=VIDEO_BASE_URL`.
+- **`data/video.dart`** — the `Video` model (matches the API's `VideoCard`) plus
+  the `VideoTag` (12 genres) and `BigGroup` (educational/entertainment) enums,
+  both with resilient `fromWire` + `unknown` fallback. The fine-grained `tags`
+  and the server-derived coarse `bigGroups` both come down on each video.
+- **`data/video_api_client.dart`** — `dio` client, `GET /apps/{videoAppId}/videos`.
+- **`data/video_feed_repository.dart`** — `VideoFeedRepository.instance`, a lazy
+  app-wide singleton that resolves the feed from the **active theme** (via
+  `kAppStyles`) and caches it per `videoAppId`, shared by every video surface.
+  Switching style in the picker switches both theme and feed. (No `get_it`; the
+  customization locator is package-internal.)
+- **`data/video_selectors.dart`** — pure derivations: top-filter scoping via
+  `bigGroups`, one carousel per `tag`, featured = most-viewed, and the picks for
+  the recommendation surfaces. The tag→big-group map mirrors
+  `../VideoService/schema/big_group.py` — keep them in sync.
+
+Top filters are `All / Education / Entertainment` (the coarse `big_groups`) and
+filter the home feed **in place**; sub-groups are per-`tag` carousels. Tapping a
+video is a `debugPrint` no-op (real YouTube playback needs `url_launcher`, a
+deliberate follow-up). Mock video data and the old detail screen were deleted.
 
 ## Search the web for conventions before designing
 

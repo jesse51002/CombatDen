@@ -4,20 +4,6 @@
 /// repositories is mechanical.
 library;
 
-class MockProfileVideo {
-  const MockProfileVideo({
-    required this.title,
-    required this.viewCount,
-    required this.thumbnailAsset,
-    required this.creatorAvatarAsset,
-  });
-
-  final String title;
-  final String viewCount;
-  final String thumbnailAsset;
-  final String creatorAvatarAsset;
-}
-
 class MockProfile {
   const MockProfile({
     required this.gymName,
@@ -32,7 +18,6 @@ class MockProfile {
     required this.nextRankProgressLabel,
     required this.nextRankProgress,
     required this.nextRankBadgeAsset,
-    required this.levelUpVideos,
   });
 
   final String gymName;
@@ -50,24 +35,7 @@ class MockProfile {
   final String nextRankProgressLabel;
   final double nextRankProgress;
   final String nextRankBadgeAsset;
-
-  final List<MockProfileVideo> levelUpVideos;
 }
-
-const _kLevelUpVideos = [
-  MockProfileVideo(
-    title: 'Mauy Thai Basics (Don’t look lik)',
-    viewCount: '350K views',
-    thumbnailAsset: 'video_thumb_muay_thai_drills.png',
-    creatorAvatarAsset: 'creator_pfp.png',
-  ),
-  MockProfileVideo(
-    title: 'We Put Fighters in Self Defense Training',
-    viewCount: '350K views',
-    thumbnailAsset: 'video_thumb_muay_thai_drills.png',
-    creatorAvatarAsset: 'creator_pfp.png',
-  ),
-];
 
 const mockProfileGlobalMma = MockProfile(
   gymName: 'Global MMA',
@@ -82,7 +50,6 @@ const mockProfileGlobalMma = MockProfile(
   nextRankProgressLabel: 'Blue Stripe III (23/50 classes)',
   nextRankProgress: 0.55,
   nextRankBadgeAsset: 'profile_next_rank_belt.png',
-  levelUpVideos: _kLevelUpVideos,
 );
 
 /// Single canonical dataset. Per-tenant variation now comes from

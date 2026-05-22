@@ -19,7 +19,14 @@ and match the prompt's energy to it:
 - A celebration, reward, win, milestone, or unlock should feel loud,
   energetic, and fun — be creative and artistic here: richer composition,
   more visual life, less simple. This is where expressiveness earns its
-  keep; lean toward Dynamic hero.
+  keep; lean toward Dynamic hero. Even when the brand mood is calm or
+  restrained, a celebration must never become a single static object — calm
+  and celebratory can both be true. At minimum give the composition a few
+  DISTINCT related elements — different objects that belong with the subject,
+  never the same item cloned, mirrored, or echoed (a quiet floating
+  arrangement of varied calm things tied to the subject is one option, not
+  the only one). This rule is about the composition only: let the moment, not
+  the calm, set its shape.
 - A persistent, utility, status, or navigational element — an icon, a
   marker, a small recurring graphic — should feel clean and calm. It can
   still be finely crafted and detailed, but quiet and restrained, never

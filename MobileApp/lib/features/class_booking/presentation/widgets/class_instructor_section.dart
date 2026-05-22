@@ -1,7 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
-import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
 /// "Instructor" header + bio paragraph next to a circular headshot.
@@ -36,7 +36,7 @@ class _InstructorRow extends StatelessWidget {
       children: [
         Expanded(
           child: Text(
-            detail.instructorBio,
+            detail.classData.instructorBio,
             style: DesignConstants.pBig.copyWith(
               color: DesignConstants.text2nd,
             ),
@@ -44,10 +44,17 @@ class _InstructorRow extends StatelessWidget {
         ),
         ClipOval(
           child: Image(
-            image: ApiImage.classAsset(detail.instructorPfpAsset),
+            image: CachedNetworkImageProvider(
+              detail.classData.instructorImageUrl,
+            ),
             width: _kPfpSize,
             height: _kPfpSize,
             fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => SizedBox(
+              width: _kPfpSize,
+              height: _kPfpSize,
+              child: ColoredBox(color: DesignConstants.card),
+            ),
           ),
         ),
       ],

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 
-/// The pill row across the top of the video screens (All / Explore /
-/// Learn / Fights). Visually only — not wired to any filtering logic
-/// since this is a prototype.
+/// The pill row across the top of the videos screen (All / Education /
+/// Entertainment). Selecting a pill re-filters the feed in place via
+/// [onTabSelected].
 class VideoCategoryTabs extends StatelessWidget {
   const VideoCategoryTabs({
     super.key,

@@ -1,0 +1,25 @@
+company_name: Submission Only No-Gi
+type: No-gi grappling and submission wrestling gym
+videos_desc: |
+  Modern no-gi grappling — fast, leg-lock-inclusive submission wrestling for a
+  competition-minded crowd. Worth surfacing: systematic technique tutorials
+  (especially the leg-lock and back game), elite ADCC and submission-only
+  footage, sharp competitor breakdowns of the modern meta, top grappler
+  interviews on strategy, and competition-day vlogs.
+avoid_desc: |
+  Within-grappling content the gym rejects: gi-purist gatekeeping that dismisses
+  no-gi as lesser, dangerous heel-hook and leg-lock technique taught carelessly
+  without safety framing, and fake-master or street-defense channels masquerading
+  as legitimate instruction.
+searches:
+  - query: no gi leg lock system tutorial
+    tags: [tutorial, educational]
+  - query: ADCC no gi finals highlights
+    tags: [professional, clips, entertainment]
+  - query: modern no gi grappling meta breakdown
+    tags: [informative, educational]
+  - query: no gi submission grappling competition vlog
+    tags: [vlog, behind_the_scenes]
+  - query: Craig Jones no gi strategy interview
+    tags: [interview, informative]
+priority_channels: []

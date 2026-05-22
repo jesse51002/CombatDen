@@ -1,31 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/shared/widgets/api_image.dart';
 
 /// Full-width video recommendation card.
 ///
 /// Used on `VideosScreen` (via featured / "Technique of the Day" wrappers)
-/// and on `SpecificVideosScreen` for each item in the Fighting Lessons feed.
-/// Layout: 16:9 thumbnail with rounded corners, then a row with the
-/// creator's avatar, the video title, and a meta line.
+/// and on the recommendation surfaces. Layout: 16:9 thumbnail with rounded
+/// corners, then a row with the creator's avatar, the video title, and a
+/// meta line. Images are [ImageProvider]s so the caller chooses the source
+/// (live network thumbnails go through `cached_network_image`).
 class VideoReccCard extends StatelessWidget {
   const VideoReccCard({
     super.key,
     required this.title,
     required this.metaLabel,
-    required this.thumbnailAsset,
-    required this.creatorPfpAsset,
+    required this.thumbnail,
+    required this.creatorPfp,
+    this.roundThumbnail = true,
     this.onTap,
   });
 
   final String title;
   final String metaLabel;
-  final String thumbnailAsset;
-  final String creatorPfpAsset;
+  final ImageProvider thumbnail;
+  final ImageProvider creatorPfp;
+
+  /// Rounds the thumbnail's corners. Standalone cards want this; the
+  /// featured card sets it false because its outer surface already rounds
+  /// the top and a rounded thumbnail bottom reads as a notch mid-card.
+  final bool roundThumbnail;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    Widget thumb = AspectRatio(
+      aspectRatio: 16 / 9,
+      child: Image(
+        image: thumbnail,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => ColoredBox(color: DesignConstants.card),
+      ),
+    );
+    if (roundThumbnail) {
+      thumb = ClipRRect(
+        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
+        child: thumb,
+      );
+    }
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -34,20 +55,11 @@ class VideoReccCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Image(
-                image: ApiImage.videoAsset(thumbnailAsset),
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
+          thumb,
           _CreatorRow(
             title: title,
             metaLabel: metaLabel,
-            creatorPfpAsset: creatorPfpAsset,
+            creatorPfp: creatorPfp,
           ),
         ],
       ),
@@ -59,12 +71,12 @@ class _CreatorRow extends StatelessWidget {
   const _CreatorRow({
     required this.title,
     required this.metaLabel,
-    required this.creatorPfpAsset,
+    required this.creatorPfp,
   });
 
   final String title;
   final String metaLabel;
-  final String creatorPfpAsset;
+  final ImageProvider creatorPfp;
 
   static const double _kPfpSize = 55;
 
@@ -78,10 +90,15 @@ class _CreatorRow extends StatelessWidget {
         children: [
           ClipOval(
             child: Image(
-              image: ApiImage.videoAsset(creatorPfpAsset),
+              image: creatorPfp,
               width: _kPfpSize,
               height: _kPfpSize,
               fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => SizedBox(
+                width: _kPfpSize,
+                height: _kPfpSize,
+                child: ColoredBox(color: DesignConstants.card),
+              ),
             ),
           ),
           Expanded(

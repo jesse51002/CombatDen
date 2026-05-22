@@ -1,0 +1,10 @@
+# In-project Poetry virtualenv
+.venv/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local dev secrets (never commit)
+.env
