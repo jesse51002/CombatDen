@@ -99,9 +99,12 @@ class LiteLLMImageGenerator(CostTracking, ImageGenerator):
         raise AssertionError("unreachable: retry loop returns or raises")
 
     async def generate(
-        self, prompt: str, dest: Path, *, model: str, quality: str
+        self, prompt: str, dest: Path, *, model: str, quality: str | None = None
     ) -> AbsolutePath:
         """Generate an image for the prompt and write the PNG to ``dest``.
+
+        ``quality`` is optional (the shared contract): when ``None`` it is
+        omitted from the call and the model uses its own default tier.
 
         Raises:
             ProviderError: the generation call or its payload failed
@@ -115,15 +118,17 @@ class LiteLLMImageGenerator(CostTracking, ImageGenerator):
         )
 
         async def _attempt() -> AbsolutePath:
-            resp = await litellm.aimage_generation(
+            kwargs: dict[str, Any] = dict(
                 model=model,
                 prompt=prompt,
-                quality=quality,
                 size=IMAGE_SIZE,
                 n=1,
                 output_format=OUTPUT_FORMAT,
                 api_key=provider_api_key(model),
             )
+            if quality is not None:
+                kwargs["quality"] = quality
+            resp = await litellm.aimage_generation(**kwargs)
             self._add_cost(litellm_call_cost(resp, model), model)
             image_bytes = base64.b64decode(_b64_payload(resp.data[0]))
             dest.parent.mkdir(parents=True, exist_ok=True)

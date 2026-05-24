@@ -23,6 +23,14 @@ fonts:
   - id: body
     description: Running UI text — buttons, labels, body copy.
 
+icons:
+  - id: home_tab
+    description: Navigation tab that returns to the home screen.
+  - id: search_action
+    description: Action that opens search.
+  - id: celebration_badge
+    description: Celebratory award badge shown when a milestone is hit.
+
 texts:
   - id: booked_screen
     description: CTA shown to the user the moment a session is booked.

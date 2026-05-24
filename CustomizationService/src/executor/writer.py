@@ -46,11 +46,12 @@ class Writer:
 
         logger.debug(
             "wrote provenance + output (cost $%.6f: llm $%.6f, "
-            "image $%.6f, bg $%.6f): %s, %s, %s",
+            "image $%.6f, bg $%.6f, icon $%.6f): %s, %s, %s",
             run_cost.total,
             run_cost.llm,
             run_cost.image_generation,
             run_cost.background_removal,
+            run_cost.icon_generation,
             app_path,
             cust_path,
             output_path,
@@ -63,31 +64,38 @@ class Writer:
 
         ``llm`` = every structured LLM call; ``image_generation`` =
         generate + any corrective edit (one service);
-        ``background_removal`` = the flat PhotoRoom per-call rate.
-        ``by_model`` merges the three services' per-model-id buckets:
-        LLM ids only ever appear on the LLM client, image ids only on the
-        image generator, and ``"photoroom"`` only on the remover, so the
-        buckets are disjoint and a plain merge cannot double-count.
+        ``background_removal`` = the flat PhotoRoom per-call rate;
+        ``icon_generation`` = the flat Recraft per-call rate for any icon
+        slot a curated set couldn't cover. ``by_model`` merges the four
+        services' per-model-id buckets: LLM ids only ever appear on the
+        LLM client, image ids only on the image generator, ``"photoroom"``
+        only on the remover, and ``"recraft"`` only on the icon
+        generator, so the buckets are disjoint and a plain merge cannot
+        double-count.
         """
         llm = round(result.llm.cost, COST_PRECISION)
         image_generation = round(result.image_gen.cost, COST_PRECISION)
         background_removal = round(result.bg_remover.cost, COST_PRECISION)
+        icon_generation = round(result.icon_gen.cost, COST_PRECISION)
         by_model = {
             model: round(amount, COST_PRECISION)
             for service in (
                 result.llm,
                 result.image_gen,
                 result.bg_remover,
+                result.icon_gen,
             )
             for model, amount in service.cost_by_model.items()
         }
         return RunCost(
             total=round(
-                llm + image_generation + background_removal, COST_PRECISION
+                llm + image_generation + background_removal + icon_generation,
+                COST_PRECISION,
             ),
             llm=llm,
             image_generation=image_generation,
             background_removal=background_removal,
+            icon_generation=icon_generation,
             by_model=by_model,
         )
 

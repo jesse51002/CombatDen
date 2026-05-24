@@ -48,10 +48,15 @@ def test_run_context_derives_paths(tmp_path: Path) -> None:
     assert ctx.run_dir.is_dir()
     assert ctx.image_dir.is_dir()
     assert ctx.final_image_dir.is_dir()
+    assert ctx.icon_dir.is_dir()
     assert ctx.app_id == "demo"
 
     img = str(ctx.image_path("hero"))
     assert img.endswith("/final_images/hero.png")
     assert img.startswith("/")
+
+    icon = str(ctx.icon_path("home_tab"))
+    assert icon.endswith("/icons/home_tab.svg")
+    assert icon.startswith("/")
 
     assert str(ctx.output_path()).endswith("output.yaml")

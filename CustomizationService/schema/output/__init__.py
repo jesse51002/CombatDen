@@ -8,6 +8,8 @@ from schema.output.color_value import ColorValue
 from schema.output.derivations import Derivations
 from schema.output.font_output import FontOutput
 from schema.output.font_set import FontSet
+from schema.output.icon_output import IconOutput
+from schema.output.icon_set import IconSet
 from schema.output.image_output import ImageOutput
 from schema.output.image_set import ImageSet
 from schema.output.output import Output
@@ -22,6 +24,8 @@ __all__ = [
     "Derivations",
     "FontOutput",
     "FontSet",
+    "IconOutput",
+    "IconSet",
     "ImageOutput",
     "ImageSet",
     "Output",

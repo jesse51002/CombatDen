@@ -20,17 +20,18 @@ class DependencyKind(str, enum.Enum):
 
     Never appears in any YAML / ``Output`` / schema: the executor injects
     ``COLOR`` onto every image node so the engine treats the colour root
-    like any other dependency. ``FONT`` and ``TEXT`` are here for the
-    same keyspace reason — no node implicitly depends on either today,
-    but each root node still needs a stable graph key and an image slot
-    named ``font`` / ``text`` would shadow it if a future module ever
-    depended on it. New executor-defined dependency kinds (never user
-    slot ids) go here.
+    like any other dependency. ``FONT``, ``TEXT`` and ``ICON`` are here
+    for the same keyspace reason — no node implicitly depends on any of
+    them today, but each root node still needs a stable graph key and an
+    image slot named ``font`` / ``text`` / ``icon`` would shadow it if a
+    future module ever depended on it. New executor-defined dependency
+    kinds (never user slot ids) go here.
     """
 
     COLOR = "color"
     FONT = "font"
     TEXT = "text"
+    ICON = "icon"
 
 
 class Node(ABC):

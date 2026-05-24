@@ -30,9 +30,11 @@ from src.executor.writer import (
 )
 from src.modules.colors.color_models import LLMSlotResponse
 from src.modules.fonts.font_models import LLMFontResponse
+from src.modules.icons.icon_models import LLMIconPrompt, LLMIconResponse
 from src.modules.images.image_models import ImageComplexity, ImagePrompt
 from src.modules.texts.text_models import LLMTextResponse
 from src.shared.interfaces.google_fonts_catalog import GoogleFontMetadata
+from src.shared.interfaces.icon_set_catalog import IconSetCatalogEntry
 
 # Committed fixture tree — never the live ``apps/`` production runs.
 APP_DIR = Path(__file__).resolve().parent / "data" / "apps" / "demo"
@@ -63,16 +65,29 @@ def _palette_oklch(slot_id: str) -> OklchColor:
 _FAKE_LLM_COST = 0.001234
 _FAKE_IMAGE_COST = 0.05
 _FAKE_BG_COST = 0.02
+_FAKE_ICON_COST = 0.04
 
 # Each fake's per-model-id split. Distinct keys per service so the
 # writer's merge is unambiguous and each bucket sums back to its service
-# total (pure model-id keying; PhotoRoom under its synthetic key).
+# total (pure model-id keying; PhotoRoom + Recraft under synthetic keys).
 _FAKE_LLM_BY_MODEL = {
     "anthropic/demo-prompt": _FAKE_LLM_COST * 0.75,
     "gemini/demo-classify": _FAKE_LLM_COST * 0.25,
 }
 _FAKE_IMAGE_BY_MODEL = {"openai/demo-image": _FAKE_IMAGE_COST}
 _FAKE_BG_BY_MODEL = {"photoroom": _FAKE_BG_COST}
+_FAKE_ICON_BY_MODEL = {"recraft": _FAKE_ICON_COST}
+
+# What the fake LLM matches each demo icon slot to: home_tab + search_action
+# resolve within the fake set; celebration_badge has no honest match (None)
+# and routes to the generation path.
+_FAKE_ICON_MATCH: dict[str, str | None] = {
+    "home_tab": "home",
+    "search_action": "search",
+    "celebration_badge": None,
+}
+_FAKE_ICON_SET_ID = "lucide_lite"
+_FAKE_ICON_SET_NAME = "Lucide Lite"
 
 
 class _FakeLLM:
@@ -87,13 +102,15 @@ class _FakeLLM:
         color_slot_ids: list[str],
         font_slot_ids: list[str],
         text_slot_ids: list[str] | None = None,
+        icon_slot_ids: list[str] | None = None,
     ) -> None:
         self._color_slot_ids = color_slot_ids
         self._font_slot_ids = font_slot_ids
-        # Text slots are optional on the fake the same way they are on
-        # AppFormat: a run with no text slots never builds a TextNode,
-        # so the fake never sees a TextSelection schema.
+        # Text + icon slots are optional on the fake the same way they are
+        # on AppFormat: a run with no text/icon slots never builds the
+        # corresponding node, so the fake never sees that schema.
         self._text_slot_ids = text_slot_ids or []
+        self._icon_slot_ids = icon_slot_ids or []
 
     async def complete_structured(
         self, messages, *, schema, model=None
@@ -140,6 +157,40 @@ class _FakeLLM:
             result = schema(
                 **{
                     sid: LLMTextResponse(value=_FAKE_TEXT_VALUE[sid])
+                    for sid in requested
+                }
+            )
+        elif getattr(schema, "__name__", "") == "IconSetSelection":
+            # Set selection (call 1): pick the one fake set. Constructing
+            # the model runs the known-set-id validator (the fake catalog
+            # below exposes exactly this id).
+            result = schema(
+                icon_set=_FAKE_ICON_SET_ID, reason="fits the demo brand"
+            )
+        elif getattr(schema, "__name__", "") == "IconMatch":
+            # Matching (call 2): one LLMIconResponse per icon slot. Matched
+            # slots resolve within the fake set; the unmatched slot returns
+            # None and routes to generation. Constructing the model runs
+            # the set-membership validator.
+            requested = list(schema.model_fields)
+            result = schema(
+                **{
+                    sid: LLMIconResponse(
+                        icon=_FAKE_ICON_MATCH[sid],
+                        match_reason="demo match"
+                        if _FAKE_ICON_MATCH[sid]
+                        else "nothing in the set fits",
+                    )
+                    for sid in requested
+                }
+            )
+        elif getattr(schema, "__name__", "") == "IconPrompt":
+            # Prompt authoring (call 3): one Recraft prompt per unmatched
+            # slot the service asked about.
+            requested = list(schema.model_fields)
+            result = schema(
+                **{
+                    sid: LLMIconPrompt(prompt=f"a monochrome {sid} svg icon")
                     for sid in requested
                 }
             )
@@ -238,16 +289,75 @@ class _FakeBgRemover:
         img.save(dst)
 
 
+class _FakeIconSetCatalog:
+    """In-memory icon set catalog: one set whose icons exist as real SVG
+    files in a temp dir (so ``icon_path`` resolves to a copyable file).
+    Used by the icon module's selection + matching + the node's copy."""
+
+    def __init__(self) -> None:
+        import tempfile
+
+        self._icons = ["home", "search", "settings"]
+        self._dir = Path(tempfile.mkdtemp())
+        for name in self._icons:
+            (self._dir / f"{name}.svg").write_text(
+                "<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8"
+            )
+        self._entry = IconSetCatalogEntry(
+            id=_FAKE_ICON_SET_ID,
+            name=_FAKE_ICON_SET_NAME,
+            vibe="clean modern monochrome line icons",
+            icons=self._icons,
+        )
+
+    async def sets(self) -> list[IconSetCatalogEntry]:
+        return [self._entry]
+
+    async def lookup(self, set_id: str) -> IconSetCatalogEntry | None:
+        return self._entry if set_id == self._entry.id else None
+
+    async def icon_path(
+        self, set_id: str, icon_name: str
+    ) -> AbsolutePath | None:
+        if set_id != self._entry.id:
+            return None
+        p = self._dir / f"{icon_name}.svg"
+        return AbsolutePath(str(p.resolve())) if p.is_file() else None
+
+
+class _FakeIconGenerator:
+    cost = _FAKE_ICON_COST
+    cost_by_model = _FAKE_ICON_BY_MODEL
+
+    async def generate(
+        self,
+        prompt: str,
+        dest: Path,
+        *,
+        model: str,
+        quality: str | None = None,
+    ) -> AbsolutePath:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg'><!-- generated --></svg>",
+            encoding="utf-8",
+        )
+        return AbsolutePath(str(dest.resolve()))
+
+
 def _patch_services(
     monkeypatch,
     color_slot_ids: list[str],
     font_slot_ids: list[str],
     text_slot_ids: list[str] | None = None,
+    icon_slot_ids: list[str] | None = None,
 ) -> None:
     monkeypatch.setattr(
         orchestrator,
         "LiteLLMClient",
-        lambda: _FakeLLM(color_slot_ids, font_slot_ids, text_slot_ids),
+        lambda: _FakeLLM(
+            color_slot_ids, font_slot_ids, text_slot_ids, icon_slot_ids
+        ),
     )
     monkeypatch.setattr(
         orchestrator, "LiteLLMImageGenerator", lambda: _FakeImageGen()
@@ -255,12 +365,20 @@ def _patch_services(
     monkeypatch.setattr(
         orchestrator, "PhotoRoomBackgroundRemover", lambda: _FakeBgRemover()
     )
-    # The orchestrator constructs the catalog from settings — swap it out
-    # for the in-memory fake so the run hits no network.
+    monkeypatch.setattr(
+        orchestrator, "RecraftIconGenerator", lambda: _FakeIconGenerator()
+    )
+    # The orchestrator constructs the catalogs from settings — swap them
+    # out for the in-memory fakes so the run hits no network / no disk.
     monkeypatch.setattr(
         orchestrator,
         "HttpxGoogleFontsCatalog",
         lambda **_kwargs: _FakeGoogleFontsCatalog(),
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "LocalIconSetCatalog",
+        lambda **_kwargs: _FakeIconSetCatalog(),
     )
 
 
@@ -271,6 +389,7 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
         [c.id for c in ctx.app.colors],
         [f.id for f in ctx.app.fonts],
         [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
     )
 
     result = asyncio.run(Pipeline().run(ctx))
@@ -281,6 +400,7 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
     assert result.llm.cost == _FAKE_LLM_COST
     assert result.image_gen.cost == _FAKE_IMAGE_COST
     assert result.bg_remover.cost == _FAKE_BG_COST
+    assert result.icon_gen.cost == _FAKE_ICON_COST
     assert output.app == ctx.app.id
     assert output.display_name == ctx.app.display_name
     # Every declared slot resolved.
@@ -290,6 +410,21 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
     assert set(output.text_set.texts) == {t.id for t in ctx.app.texts}
     for slot_id, text in output.text_set.texts.items():
         assert text.value == _FAKE_TEXT_VALUE[slot_id]
+    # Every icon slot resolved — matched slots carry the chosen set id,
+    # the unmatched slot (no honest match) carries the "generated"
+    # sentinel — and every SVG was written to this run's icons/ dir.
+    assert set(output.icon_set.icons) == {i.id for i in ctx.app.icons}
+    for slot_id, icon in output.icon_set.icons.items():
+        assert icon.icon_key == slot_id
+        p = Path(str(icon.path))
+        assert p.is_absolute() and p.exists()
+        assert p.name == f"{slot_id}.svg"
+        if _FAKE_ICON_MATCH[slot_id] is not None:
+            assert icon.icon_set == _FAKE_ICON_SET_ID
+            assert icon.icon_set_name == _FAKE_ICON_SET_NAME
+        else:
+            assert icon.icon_set == "generated"
+            assert icon.icon_set_name == "Generated"
     assert output.color_set.mode == ctx.cust.colors_direction.mode
     # Each font slot carries the LLM-picked family + the catalog-derived
     # category (the LLM never picks category — it's lifted from the
@@ -338,6 +473,7 @@ def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
         [c.id for c in ctx.app.colors],
         [f.id for f in ctx.app.fonts],
         [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
     )
     result = asyncio.run(Pipeline().run(ctx))
 
@@ -394,6 +530,7 @@ def test_writer_writes_run_cost_breakdown(tmp_path, monkeypatch):
         [c.id for c in ctx.app.colors],
         [f.id for f in ctx.app.fonts],
         [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
     )
     result = asyncio.run(Pipeline().run(ctx))
 
@@ -404,18 +541,22 @@ def test_writer_writes_run_cost_breakdown(tmp_path, monkeypatch):
     assert cost["llm"] == pytest.approx(_FAKE_LLM_COST)
     assert cost["image_generation"] == pytest.approx(_FAKE_IMAGE_COST)
     assert cost["background_removal"] == pytest.approx(_FAKE_BG_COST)
+    assert cost["icon_generation"] == pytest.approx(_FAKE_ICON_COST)
     assert cost["total"] == pytest.approx(
-        _FAKE_LLM_COST + _FAKE_IMAGE_COST + _FAKE_BG_COST
+        _FAKE_LLM_COST + _FAKE_IMAGE_COST + _FAKE_BG_COST + _FAKE_ICON_COST
     )
     # Per-model-id breakdown: every service's buckets merged, keyed by
-    # model id (PhotoRoom under its synthetic key), summing back to total.
+    # model id (PhotoRoom + Recraft under their synthetic keys), summing
+    # back to total.
     by_model = cost["by_model"]
     assert set(by_model) == (
         set(_FAKE_LLM_BY_MODEL)
         | set(_FAKE_IMAGE_BY_MODEL)
         | set(_FAKE_BG_BY_MODEL)
+        | set(_FAKE_ICON_BY_MODEL)
     )
     assert "photoroom" in by_model
+    assert "recraft" in by_model
     # Each bucket is independently rounded to COST_PRECISION (6 dp), so the
     # per-model sum equals total only modulo that rounding (as the RunCost
     # docstring states) — a real double-count/miss would be off by cents.

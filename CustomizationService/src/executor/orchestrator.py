@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import networkx as nx
 from pydantic import BaseModel
 
-from schema import ColorPalette, FontSet, ImageSet, Output, TextSet
+from schema import ColorPalette, FontSet, IconSet, ImageSet, Output, TextSet
 from src.core.config import settings
 from src.core.errors import GraphError
 from src.core.run_context import RunContext
@@ -28,12 +28,15 @@ from src.executor.registry import Graph, ModuleRegistry
 from src.modules.base import DependencyKind, Node
 from src.shared.interfaces.background_remover import BackgroundRemover
 from src.shared.interfaces.google_fonts_catalog import GoogleFontsCatalog
+from src.shared.interfaces.icon_set_catalog import IconSetCatalog
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
 from src.shared.services.background_remover import PhotoRoomBackgroundRemover
 from src.shared.services.google_fonts_catalog import HttpxGoogleFontsCatalog
 from src.shared.services.litellm_image_generator import LiteLLMImageGenerator
 from src.shared.services.llm_client import LiteLLMClient
+from src.shared.services.local_icon_set_catalog import LocalIconSetCatalog
+from src.shared.services.recraft_icon_generator import RecraftIconGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +61,7 @@ class PipelineResult:
     llm: LLMClient
     image_gen: ImageGenerator
     bg_remover: BackgroundRemover
+    icon_gen: ImageGenerator
 
 
 class Pipeline:
@@ -78,6 +82,8 @@ class Pipeline:
         nodes = [node_set.color, node_set.font, *node_set.images]
         if node_set.text is not None:
             nodes.append(node_set.text)
+        if node_set.icon is not None:
+            nodes.append(node_set.icon)
         for node in nodes:
             graph.add_node(node.key, node=node)
         known = {node.key for node in nodes}
@@ -109,11 +115,15 @@ class Pipeline:
         llm = LiteLLMClient()
         image_gen = LiteLLMImageGenerator()
         bg_remover = PhotoRoomBackgroundRemover()
+        icon_gen = RecraftIconGenerator()
         google_fonts: GoogleFontsCatalog = HttpxGoogleFontsCatalog(
             api_key=settings.google_fonts_api_key,
             api_url=settings.google_fonts_api_url,
             ttl_seconds=settings.google_fonts_ttl_seconds,
             request_timeout_seconds=settings.google_fonts_request_timeout_seconds,
+        )
+        icon_catalog: IconSetCatalog = LocalIconSetCatalog(
+            root=settings.icon_sets_dir
         )
 
         node_set = ModuleRegistry(run_ctx).build_all(
@@ -121,6 +131,8 @@ class Pipeline:
             image_gen=image_gen,
             bg_remover=bg_remover,
             google_fonts=google_fonts,
+            icon_catalog=icon_catalog,
+            icon_generator=icon_gen,
         )
         graph = self._build_digraph(node_set)
 
@@ -168,6 +180,7 @@ class Pipeline:
             llm=llm,
             image_gen=image_gen,
             bg_remover=bg_remover,
+            icon_gen=icon_gen,
         )
 
     @staticmethod
@@ -213,6 +226,20 @@ class Pipeline:
                     "text node did not resolve — output has no copy "
                     "overrides"
                 )
+        icon_set = resolved.get(DependencyKind.ICON.value)
+        if icon_set is None:
+            # Icon node either wasn't built (app declared no icon slots —
+            # the registry skipped it) or failed outright. Empty IconSet
+            # is the honest answer either way; the MobileApp falls back to
+            # its bundled icons. Only log a failure when an icon node was
+            # actually expected (the registry skip is the normal case for
+            # apps without icon overrides).
+            icon_set = IconSet(icons={})
+            if run_ctx.app.icons:
+                logger.error(
+                    "icon node did not resolve — output has no icon "
+                    "overrides"
+                )
         image_set = ImageSet(
             images={
                 slot.id: resolved[slot.id]
@@ -228,4 +255,5 @@ class Pipeline:
             color_set=palette,
             font_set=font_set,
             text_set=text_set,
+            icon_set=icon_set,
         )
