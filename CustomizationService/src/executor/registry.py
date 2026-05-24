@@ -25,6 +25,8 @@ from src.modules.icons.icon_node import IconNode
 from src.modules.images.background_service import BackgroundService
 from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_node import ImageNode
+from src.modules.lotties.lottie_library import LottiePresetLibrary
+from src.modules.lotties.lottie_node import LottieNode
 from src.modules.texts.text_node import TextNode
 from src.shared.interfaces.background_remover import BackgroundRemover
 from src.shared.interfaces.google_fonts_catalog import GoogleFontsCatalog
@@ -53,6 +55,7 @@ class Graph(BaseModel):
     text: TextNode | None
     icon: IconNode | None
     images: list[ImageNode]
+    lotties: list[LottieNode]
 
 
 class ModuleRegistry:
@@ -123,14 +126,41 @@ class ModuleRegistry:
             )
             for slot in self._run_ctx.app.images
         ]
+        # The curated preset catalog is global and app-agnostic; load it
+        # once and share across every lottie node (like the classifier
+        # across image nodes). Each lottie node gets ``color`` as an
+        # automatic dependency (the recolour step needs the palette); a
+        # reveal slot adds its ``depends_on`` image so that image's output
+        # is injected and its prompt feeds selection.
+        lotties: list[LottieNode] = []
+        if self._run_ctx.app.lotties:
+            library = LottiePresetLibrary.load()
+            lotties = [
+                LottieNode(
+                    self._run_ctx,
+                    slot=slot,
+                    deps=frozenset({DependencyKind.COLOR.value})
+                    | ({slot.depends_on} if slot.depends_on else frozenset()),
+                    llm=llm,
+                    library=library,
+                )
+                for slot in self._run_ctx.app.lotties
+            ]
         logger.debug(
-            "graph: color=%s, font=%s, text=%s, icon=%s, images=%d",
+            "graph: color=%s, font=%s, text=%s, icon=%s, images=%d, "
+            "lotties=%d",
             color.key,
             font.key,
             text.key if text is not None else None,
             icon.key if icon is not None else None,
             len(images),
+            len(lotties),
         )
         return Graph(
-            color=color, font=font, text=text, icon=icon, images=images
+            color=color,
+            font=font,
+            text=text,
+            icon=icon,
+            images=images,
+            lotties=lotties,
         )

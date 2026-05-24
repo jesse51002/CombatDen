@@ -20,7 +20,15 @@ from dataclasses import dataclass
 import networkx as nx
 from pydantic import BaseModel
 
-from schema import ColorPalette, FontSet, IconSet, ImageSet, Output, TextSet
+from schema import (
+    ColorPalette,
+    FontSet,
+    IconSet,
+    ImageSet,
+    LottieSet,
+    Output,
+    TextSet,
+)
 from src.core.config import settings
 from src.core.errors import GraphError
 from src.core.run_context import RunContext
@@ -79,7 +87,12 @@ class Pipeline:
         # ``text`` is optional: apps with no copy overrides don't get a
         # text node, so it's filtered out of the level-0 sibling set
         # rather than producing a no-op root.
-        nodes = [node_set.color, node_set.font, *node_set.images]
+        nodes = [
+            node_set.color,
+            node_set.font,
+            *node_set.images,
+            *node_set.lotties,
+        ]
         if node_set.text is not None:
             nodes.append(node_set.text)
         if node_set.icon is not None:
@@ -247,6 +260,17 @@ class Pipeline:
                 if slot.id in resolved
             }
         )
+        # Each lottie node that resolved contributes its slot; a slot whose
+        # COLOR dep failed (or, for a reveal, whose image failed) was
+        # skipped and is simply absent — the honest partial answer, same as
+        # images.
+        lottie_set = LottieSet(
+            lotties={
+                slot.id: resolved[slot.id]
+                for slot in run_ctx.app.lotties
+                if slot.id in resolved
+            }
+        )
         return Output(
             app=run_ctx.app.id,
             display_name=run_ctx.app.display_name,
@@ -256,4 +280,5 @@ class Pipeline:
             font_set=font_set,
             text_set=text_set,
             icon_set=icon_set,
+            lottie_set=lottie_set,
         )

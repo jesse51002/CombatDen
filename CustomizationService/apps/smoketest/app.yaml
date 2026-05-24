@@ -78,3 +78,19 @@ texts:
     max_words: 4
     min_chars: 4
     max_chars: 20
+
+# Two icon slots to exercise the full icon flow: one obvious match to the
+# curated set (→ settings) that just copies the SVG, and one concept the set
+# can't honestly cover (a spin bike) that forces a null match and routes to
+# Recraft generation. Keeps the smoke test cheap while hitting both branches.
+icons:
+  - id: profile_settings
+    description: >-
+      The settings / preferences icon in the profile tab — opens app
+      settings and account preferences. A standard, calm gear-style
+      settings affordance, unobtrusive and rounded in line with the brand.
+  - id: class_type_cycling
+    description: >-
+      A stationary indoor cycling / spin-bike icon used to mark a ride
+      class in the schedule. Should clearly read as an exercise bike,
+      gentle and rounded to match the studio's calm, airy aesthetic.

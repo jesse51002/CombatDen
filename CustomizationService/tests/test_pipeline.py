@@ -194,6 +194,18 @@ class _FakeLLM:
                     for sid in requested
                 }
             )
+        elif getattr(schema, "__name__", "") == "LottieSelection":
+            # CALL 1: pick a preset. The closed model stamps the offered
+            # candidate ids; pick the first so the choice is deterministic
+            # and always a real candidate.
+            result = schema(preset_id=schema.candidate_ids[0])
+        elif getattr(schema, "__name__", "") == "LottieRecolor":
+            # CALL 2: map every region of the chosen preset to a palette
+            # key. The model stamps the regions; map each to "primary",
+            # which is always a real palette key (a demo colour slot id).
+            result = schema(
+                region_roles={region: "primary" for region in schema.regions}
+            )
         elif schema is ImagePrompt:
             result = ImagePrompt(
                 prompt="studio shot of the subject on a plain solid background",
@@ -464,6 +476,22 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
         # The removed style/dependency provenance fields are gone.
         assert not hasattr(img, "adherent")
         assert not hasattr(img, "dependency_usage")
+    # Every lottie slot resolved to a preset + region->role map. The map
+    # values are palette role NAMES (keys into the flat palette), never
+    # colour values, and the fields differ by type: a standalone slot
+    # carries neither reveal field; a reveal slot carries both.
+    assert set(output.lottie_set.lotties) == {l.id for l in ctx.app.lotties}
+    palette_keys = set(output.color_set.palette)
+    for lottie in output.lottie_set.lotties.values():
+        assert lottie.preset_id and lottie.preset_file and lottie.display_name
+        assert lottie.region_roles
+        assert set(lottie.region_roles.values()) <= palette_keys
+    standalone = output.lottie_set.lotties["onboarding_pulse"]
+    assert standalone.reveals is None
+    assert standalone.insertion_point is None
+    reveal = output.lottie_set.lotties["streak_reveal"]
+    assert reveal.reveals == "hero"
+    assert reveal.insertion_point is not None
 
 
 def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
@@ -664,6 +692,8 @@ def test_output_back_compat_ignores_removed_fields():
     )
     assert old.image_set.images["hero"].complexity is None
     assert old.cost is None
+    # ``lottie_set`` predates this run too: absent → empty, no error.
+    assert old.lottie_set.lotties == {}
 
     # Legacy run: still carries every removed key — all dropped, no error.
     legacy = Output.model_validate(

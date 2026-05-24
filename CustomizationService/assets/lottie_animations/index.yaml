@@ -1,0 +1,90 @@
+# Global, app-agnostic Lottie preset catalog.
+#
+# Hand-curated animations the pipeline's lottie module selects from — the
+# Lottie analog of the Google Fonts catalog. Validates against
+# schema.lottie_library.LottieLibrary.
+#
+# These are MOCK presets: the .json files in animations/ are stubs so the
+# pipeline is testable before real Lottie files exist. Replace the files
+# (and tune descriptions / regions / insertion points) as real animations
+# are curated; the schema stays the same. Each preset's `file` is a path
+# relative to this directory (e.g. animations/pulse_ring.json).
+#
+# Each preset:
+#   - types: one or more of [standalone, reveal] (a preset can be both)
+#   - recolor_regions: named parts the recolour step maps to palette roles
+#   - insertion_point: REQUIRED iff `reveal` is a type; where the revealed
+#     image composites (frame + normalized x/y anchor + w/h size)
+
+presets:
+  - id: pulse_ring
+    display_name: Pulse Ring
+    description: >-
+      A calm concentric ring that pulses outward once and settles. Quiet —
+      good for idle, status, or a gentle "done" beat.
+    file: animations/pulse_ring.json
+    types: [standalone]
+    recolor_regions: [ring, glow]
+
+  - id: confetti_burst
+    display_name: Confetti Burst
+    description: >-
+      An energetic burst of confetti from the centre. Celebratory — wins,
+      unlocks, milestones.
+    file: animations/confetti_burst.json
+    types: [standalone]
+    recolor_regions: [confetti_primary, confetti_secondary, spark]
+
+  - id: streak_flame
+    display_name: Streak Flame
+    description: >-
+      A single rising flame that loops. Energetic and persistent — streaks,
+      momentum, "on fire" status.
+    file: animations/streak_flame.json
+    types: [standalone]
+    recolor_regions: [flame_core, flame_tip]
+
+  - id: curtain_wipe
+    display_name: Curtain Wipe
+    description: >-
+      A panel slides aside to uncover the asset behind it. Clean, neutral
+      reveal that suits almost any icon.
+    file: animations/curtain_wipe.json
+    types: [reveal]
+    recolor_regions: [curtain, edge_highlight]
+    insertion_point:
+      frame: 12
+      x: 0.5
+      y: 0.5
+      width: 0.7
+      height: 0.7
+
+  - id: spotlight_open
+    display_name: Spotlight Open
+    description: >-
+      A spotlight irises open to reveal the asset in a beam of light.
+      Dramatic reveal for a hero moment.
+    file: animations/spotlight_open.json
+    types: [reveal]
+    recolor_regions: [beam, vignette]
+    insertion_point:
+      frame: 8
+      x: 0.5
+      y: 0.45
+      width: 0.6
+      height: 0.6
+
+  - id: radiant_pop
+    display_name: Radiant Pop
+    description: >-
+      A radial shine that bursts outward. Plays on its own as a flourish OR
+      behind a revealed asset — versatile and bright.
+    file: animations/radiant_pop.json
+    types: [standalone, reveal]
+    recolor_regions: [rays, core_glow]
+    insertion_point:
+      frame: 10
+      x: 0.5
+      y: 0.5
+      width: 0.65
+      height: 0.65
