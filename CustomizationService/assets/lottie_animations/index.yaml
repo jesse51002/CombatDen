@@ -4,11 +4,20 @@
 # Lottie analog of the Google Fonts catalog. Validates against
 # schema.lottie_library.LottieLibrary.
 #
-# These are MOCK presets: the .json files in animations/ are stubs so the
-# pipeline is testable before real Lottie files exist. Replace the files
-# (and tune descriptions / regions / insertion points) as real animations
-# are curated; the schema stays the same. Each preset's `file` is a path
+# PLACEHOLDER ANIMATIONS: the .json files in animations/ are REAL Lottie
+# files (MIT, from github.com/spemer/lottie-animations-json) wired in only
+# so the pipeline can be exercised against genuine Lottie data. They do NOT
+# visually match the slot descriptions yet (e.g. the "confetti_burst" file
+# is an animated tab bar). Each preset's `recolor_regions` are the actual
+# color-bearing layer names found in its file. Replace the files and tune
+# descriptions / regions / insertion points as brand animations are
+# hand-curated; the schema stays the same. Each preset's `file` is a path
 # relative to this directory (e.g. animations/pulse_ring.json).
+#
+# Reveal-only presets (curtain_wipe, spotlight_open) were removed: no
+# consumer composites an image at insertion_point yet, and we are not
+# sourcing reveal animations until that exists. radiant_pop stays
+# reveal-capable so the reveal path remains exercised end-to-end.
 #
 # Each preset:
 #   - types: one or more of [standalone, reveal] (a preset can be both)
@@ -24,7 +33,7 @@ presets:
       good for idle, status, or a gentle "done" beat.
     file: animations/pulse_ring.json
     types: [standalone]
-    recolor_regions: [ring, glow]
+    recolor_regions: [selected_oval, first, second, third]
 
   - id: confetti_burst
     display_name: Confetti Burst
@@ -33,7 +42,7 @@ presets:
       unlocks, milestones.
     file: animations/confetti_burst.json
     types: [standalone]
-    recolor_regions: [confetti_primary, confetti_secondary, spark]
+    recolor_regions: [tab_1, tab_2]
 
   - id: streak_flame
     display_name: Streak Flame
@@ -42,37 +51,7 @@ presets:
       momentum, "on fire" status.
     file: animations/streak_flame.json
     types: [standalone]
-    recolor_regions: [flame_core, flame_tip]
-
-  - id: curtain_wipe
-    display_name: Curtain Wipe
-    description: >-
-      A panel slides aside to uncover the asset behind it. Clean, neutral
-      reveal that suits almost any icon.
-    file: animations/curtain_wipe.json
-    types: [reveal]
-    recolor_regions: [curtain, edge_highlight]
-    insertion_point:
-      frame: 12
-      x: 0.5
-      y: 0.5
-      width: 0.7
-      height: 0.7
-
-  - id: spotlight_open
-    display_name: Spotlight Open
-    description: >-
-      A spotlight irises open to reveal the asset in a beam of light.
-      Dramatic reveal for a hero moment.
-    file: animations/spotlight_open.json
-    types: [reveal]
-    recolor_regions: [beam, vignette]
-    insertion_point:
-      frame: 8
-      x: 0.5
-      y: 0.45
-      width: 0.6
-      height: 0.6
+    recolor_regions: [mini_fab_1, mini_fab_2, mini_fab_3, fab_base]
 
   - id: radiant_pop
     display_name: Radiant Pop
@@ -81,7 +60,8 @@ presets:
       behind a revealed asset — versatile and bright.
     file: animations/radiant_pop.json
     types: [standalone, reveal]
-    recolor_regions: [rays, core_glow]
+    recolor_regions: [ic_fav_stroke, ic_fav_fill, ic_oval]
+    # Placeholder geometry — retune when a real reveal animation is curated.
     insertion_point:
       frame: 10
       x: 0.5
