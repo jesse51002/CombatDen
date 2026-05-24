@@ -18,12 +18,13 @@ class RunCost(BaseModel):
     SVG generation for any icon slot a curated set couldn't cover.
     ``total`` is the sum of the four.
 
-    ``by_model`` is the same total split by litellm model id (provider
-    prefix included), so a run shows exactly what each model spent. The
-    flat-rate background remover and the flat-rate Recraft icon generator
-    have no litellm model id, so they appear under synthetic
-    ``"photoroom"`` / ``"recraft"`` keys; the buckets are disjoint, so
-    ``sum(by_model.values())`` equals ``total`` modulo rounding. It
+    ``by_model`` is the same total split by model id (provider prefix
+    included), so a run shows exactly what each model spent. The flat-rate
+    background remover has no model id, so it appears under a synthetic
+    ``"photoroom"`` key; the Recraft icon generator buckets under its own
+    model id (e.g. ``"recraftv4_1_utility_vector"``). The buckets are
+    disjoint, so ``sum(by_model.values())`` equals ``total`` modulo
+    rounding. It
     defaults to ``{}`` for the same back-compat reason ``Output.cost`` is
     optional: an ``output.yaml`` written before this field must still
     validate.

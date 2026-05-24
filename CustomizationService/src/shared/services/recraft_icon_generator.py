@@ -14,13 +14,13 @@ PNG sizes, whereas Recraft's vector output is SVG text behind a result
 URL. The only Recraft-specific step is parsing the response into SVG
 bytes; everything else mirrors the PhotoRoom client.
 
-Cost: litellm can't price Recraft (raw HTTP), but Recraft's own response
-reports the credits the call consumed (``meta.credits_used``), so the cost
-is derived from that — actual usage, not a hardcoded per-call guess —
-times a published per-credit USD rate (``RECRAFT_USD_PER_CREDIT``). This
-mirrors how litellm prices the other calls from their reported usage; a
-response that carries no usage counts ``$0`` with a warning (the same
-guard ``cost.py`` uses), never a fabricated figure.
+Cost: litellm can't price Recraft (raw HTTP) and its generation response
+doesn't reliably carry per-call usage, so the cost comes from Recraft's
+published per-image price list (``RECRAFT_PRICE_USD``), keyed by the model
+id of the call — the same model id that buckets the per-model cost
+breakdown (not a synthetic provider key). An unknown model id counts
+``$0`` with a warning (the same guard ``cost.py`` uses), never a
+fabricated figure.
 """
 
 from __future__ import annotations
@@ -45,21 +45,34 @@ AUTH_HEADER = "Authorization"
 # The vector style that makes Recraft emit native SVG (vs a raster PNG).
 VECTOR_STYLE = "vector_illustration"
 
-# USD per Recraft API credit. Recraft's API bills in credits at a published
-# rate of 1000 credits = $1 (so $0.001/credit); a vector_illustration image
-# is 80 credits = $0.08, a raster 40 = $0.04 — but we never hardcode the
-# per-image figure: each response reports its own ``credits_used`` and we
-# multiply by this rate, so a model/price change tracks automatically.
-RECRAFT_USD_PER_CREDIT = 0.001
-
-# Where Recraft reports the credits a call consumed, on the response body.
-CREDITS_USED_PATH = ("meta", "credits_used")
-
-# Synthetic model-id key for the per-model cost breakdown: Recraft has no
-# litellm model id, but it is still a paid call the breakdown must show, so
-# it gets its own bucket alongside the model ids — exactly like PhotoRoom's.
-# A provider name, not an app value.
-RECRAFT_MODEL_KEY = "recraft"
+# Published Recraft per-image USD prices, keyed by the model id sent as the
+# request ``model`` (which is also the per-model cost-breakdown bucket key).
+# Recraft bills a flat rate per image by model + output type, and its
+# generation response doesn't reliably carry per-call usage, so we price
+# from this table. Source: recraft.ai/pricing (API tab); credits shown for
+# reference (1000 credits = $1). Vector ids are the SVG path icons use;
+# raster kept for completeness / non-icon callers. Update if Recraft reprices.
+RECRAFT_PRICE_USD: dict[str, float] = {
+    # Recraft V4.1
+    "recraftv4_1": 0.04,  # 40 credits, raster
+    "recraftv4_1_vector": 0.08,  # 80, vector
+    "recraftv4_1_pro": 0.25,  # 250, raster
+    "recraftv4_1_pro_vector": 0.30,  # 300, vector
+    "recraftv4_1_utility": 0.04,  # 40, raster
+    "recraftv4_1_utility_vector": 0.08,  # 80, vector
+    "recraftv4_1_utility_pro": 0.25,  # 250, raster
+    "recraftv4_1_utility_pro_vector": 0.30,  # 300, vector
+    # Recraft V4
+    "recraftv4": 0.04,  # 40, raster
+    "recraftv4_vector": 0.08,  # 80, vector
+    "recraftv4_pro": 0.25,  # 250, raster
+    "recraftv4_pro_vector": 0.30,  # 300, vector
+    # Recraft V3 / V2
+    "recraftv3": 0.04,  # 40, raster
+    "recraftv3_vector": 0.08,  # 80, vector
+    "recraftv2": 0.022,  # 22, raster
+    "recraftv2_vector": 0.044,  # 44, vector
+}
 
 # Recraft vector generations do real work; give them generous headroom.
 REQUEST_TIMEOUT_SECONDS = 120.0
@@ -68,9 +81,9 @@ REQUEST_TIMEOUT_SECONDS = 120.0
 class RecraftIconGenerator(CostTracking, ImageGenerator):
     """Concrete ``ImageGenerator`` that emits SVG icons via the Recraft API.
 
-    Accumulates cost from each call's reported ``credits_used`` (× the
-    per-credit rate) via ``CostTracking``; the writer reads ``cost`` for
-    the run total."""
+    Accumulates cost from the published per-image price table, keyed by
+    model id, via ``CostTracking``; the writer reads ``cost`` for the run
+    total."""
 
     async def generate(
         self, prompt: str, dest: Path, *, model: str, quality: str | None = None
@@ -102,10 +115,10 @@ class RecraftIconGenerator(CostTracking, ImageGenerator):
                     },
                 )
                 resp.raise_for_status()
-                payload = resp.json()
-                # Bill from the credits the response says the call used.
-                self._add_cost(self._call_cost(payload), RECRAFT_MODEL_KEY)
-                svg = await self._read_svg(client, payload)
+                # A 2xx means Recraft accepted and billed the call — price
+                # it from the published table, bucketed under the model id.
+                self._add_cost(self._call_cost(model), model)
+                svg = await self._read_svg(client, resp.json())
 
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(svg)
@@ -116,24 +129,22 @@ class RecraftIconGenerator(CostTracking, ImageGenerator):
         return AbsolutePath(str(dest.resolve()))
 
     @staticmethod
-    def _call_cost(payload: dict) -> float:
-        """USD for one call from its reported ``meta.credits_used``.
+    def _call_cost(model: str) -> float:
+        """Published USD price for one ``model`` image generation.
 
-        Never raises: a response that carries no usable credit count is
-        ``0.0`` with a warning (so a missing figure is visible, not a
-        fabricated price) — the same guard ``litellm_call_cost`` uses.
+        Never raises: a model id absent from the price table counts ``0.0``
+        with a warning (so a missing price is visible, not a fabricated
+        one) — the same guard ``litellm_call_cost`` uses.
         """
-        meta_key, credits_key = CREDITS_USED_PATH
-        credits = (payload.get(meta_key) or {}).get(credits_key)
-        if not isinstance(credits, (int, float)):
+        price = RECRAFT_PRICE_USD.get(model)
+        if price is None:
             logger.warning(
-                "Recraft response carried no numeric %s.%s (%r) — counting $0",
-                meta_key,
-                credits_key,
-                payload.get(meta_key),
+                "no Recraft price for model %r — counting $0 (add it to "
+                "RECRAFT_PRICE_USD)",
+                model,
             )
             return 0.0
-        return float(credits) * RECRAFT_USD_PER_CREDIT
+        return price
 
     @staticmethod
     async def _read_svg(client: httpx.AsyncClient, payload: dict) -> bytes:

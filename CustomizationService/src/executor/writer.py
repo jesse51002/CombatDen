@@ -65,13 +65,13 @@ class Writer:
         ``llm`` = every structured LLM call; ``image_generation`` =
         generate + any corrective edit (one service);
         ``background_removal`` = the flat PhotoRoom per-call rate;
-        ``icon_generation`` = the flat Recraft per-call rate for any icon
-        slot a curated set couldn't cover. ``by_model`` merges the four
-        services' per-model-id buckets: LLM ids only ever appear on the
-        LLM client, image ids only on the image generator, ``"photoroom"``
-        only on the remover, and ``"recraft"`` only on the icon
-        generator, so the buckets are disjoint and a plain merge cannot
-        double-count.
+        ``icon_generation`` = the published Recraft per-image price for any
+        icon slot a curated set couldn't cover. ``by_model`` merges the
+        four services' per-model-id buckets: LLM ids only ever appear on
+        the LLM client, image ids only on the image generator,
+        ``"photoroom"`` only on the remover, and the Recraft model ids only
+        on the icon generator, so the buckets are disjoint and a plain
+        merge cannot double-count.
         """
         llm = round(result.llm.cost, COST_PRECISION)
         image_generation = round(result.image_gen.cost, COST_PRECISION)

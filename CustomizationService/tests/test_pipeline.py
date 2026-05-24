@@ -76,7 +76,7 @@ _FAKE_LLM_BY_MODEL = {
 }
 _FAKE_IMAGE_BY_MODEL = {"openai/demo-image": _FAKE_IMAGE_COST}
 _FAKE_BG_BY_MODEL = {"photoroom": _FAKE_BG_COST}
-_FAKE_ICON_BY_MODEL = {"recraft": _FAKE_ICON_COST}
+_FAKE_ICON_BY_MODEL = {"recraftv4_1_utility_vector": _FAKE_ICON_COST}
 
 # What the fake LLM matches each demo icon slot to: home_tab + search_action
 # resolve within the fake set; celebration_badge has no honest match (None)
@@ -591,7 +591,7 @@ def test_writer_writes_run_cost_breakdown(tmp_path, monkeypatch):
         | set(_FAKE_ICON_BY_MODEL)
     )
     assert "photoroom" in by_model
-    assert "recraft" in by_model
+    assert "recraftv4_1_utility_vector" in by_model
     # Each bucket is independently rounded to COST_PRECISION (6 dp), so the
     # per-model sum equals total only modulo that rounding (as the RunCost
     # docstring states) — a real double-count/miss would be off by cents.

@@ -38,7 +38,7 @@ from src.modules.icons.icon_models import (
 )
 from src.modules.icons.icon_node import IconNode
 from src.shared.services.recraft_icon_generator import (
-    RECRAFT_USD_PER_CREDIT,
+    RECRAFT_PRICE_USD,
     RecraftIconGenerator,
 )
 from src.modules.images.complexity_service import ComplexityClassifier
@@ -1171,17 +1171,18 @@ def test_build_icon_match_model_rejects_non_member() -> None:
     assert ok.a.icon is None
 
 
-def test_recraft_call_cost_from_credits_used() -> None:
-    """Cost is derived from the response's reported credits × the per-credit
-    rate; a response with no usable credit count is $0 (never fabricated)."""
+def test_recraft_call_cost_from_price_table() -> None:
+    """Cost is the published per-image price for the model id; an unknown
+    model id is $0 (never fabricated)."""
     cost = RecraftIconGenerator._call_cost
-    # A vector image is 80 credits → $0.08 at 1000 credits = $1.
-    assert cost({"meta": {"credits_used": 80}}) == pytest.approx(
-        80 * RECRAFT_USD_PER_CREDIT
-    )
-    assert cost({"meta": {"credits_used": 40}}) == pytest.approx(
-        40 * RECRAFT_USD_PER_CREDIT
-    )
-    # No usage reported → $0, not a guess.
-    assert cost({"data": [{"url": "x"}]}) == 0.0
-    assert cost({"meta": {"credits_used": None}}) == 0.0
+    # The icon path's vector model: $0.08.
+    assert cost("recraftv4_1_utility_vector") == pytest.approx(0.08)
+    assert cost("recraftv4_pro_vector") == pytest.approx(0.30)
+    assert cost("recraftv3") == pytest.approx(0.04)
+    assert cost("recraftv2_vector") == pytest.approx(0.044)
+    # Every advertised model id is in the table.
+    assert cost("recraftv4_1_utility_vector") == RECRAFT_PRICE_USD[
+        "recraftv4_1_utility_vector"
+    ]
+    # Unknown model → $0, not a guess.
+    assert cost("recraft_made_up_model") == 0.0
