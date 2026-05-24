@@ -21,6 +21,8 @@ class GymClassCreate(SeedModel):
     class_name: str
     class_description: str | None = None
     max_capacity: int | None = None
+    image_url: str | None = None
+    points_worth: int = 50
     is_active: bool = True
     is_deleted: bool = False
     class_time: time

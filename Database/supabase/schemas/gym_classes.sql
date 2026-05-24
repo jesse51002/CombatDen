@@ -6,6 +6,8 @@ CREATE TABLE gym_classes (
     class_name VARCHAR NOT NULL CHECK (class_name <> ''),
     class_description VARCHAR,
     max_capacity INTEGER CHECK (max_capacity > 0),
+    image_url VARCHAR,
+    points_worth INTEGER NOT NULL DEFAULT 50 CHECK (points_worth > 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
 

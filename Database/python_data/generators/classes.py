@@ -85,6 +85,7 @@ def generate_classes(
                 class_name=tmpl["class_name"],
                 class_description=tmpl["class_description"],
                 max_capacity=max_capacity,
+                points_worth=random.choice([25, 50, 75, 100]),
                 is_active=is_active,
                 class_time=time(hour, minute),
                 duration_minutes=tmpl["duration_minutes"],
