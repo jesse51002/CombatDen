@@ -29,7 +29,7 @@ class QrCodeCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         spacing: DesignConstants.spacingBig,
         children: [
-          QrCodeImage(imageAsset: qrCode.imageAsset),
+          Expanded(child: QrCodeImage(imageAsset: qrCode.imageAsset)),
           Text(
             qrCode.title,
             style: DesignConstants.h1,
