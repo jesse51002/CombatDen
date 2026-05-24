@@ -92,6 +92,7 @@ class IconGenerationService:
                 icon_set=GENERATED_ICON_SET,
                 icon_set_name=GENERATED_ICON_SET_NAME,
                 icon_key=slot.id,
+                prompt=prompts[slot.id],
             )
         return generated
 

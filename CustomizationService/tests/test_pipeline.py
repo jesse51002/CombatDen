@@ -434,9 +434,13 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
         if _FAKE_ICON_MATCH[slot_id] is not None:
             assert icon.icon_set == _FAKE_ICON_SET_ID
             assert icon.icon_set_name == _FAKE_ICON_SET_NAME
+            # Matched (copied) icons carry no generation prompt.
+            assert icon.prompt is None
         else:
             assert icon.icon_set == "generated"
             assert icon.icon_set_name == "Generated"
+            # Generated icons carry the Recraft prompt that produced them.
+            assert icon.prompt
     assert output.color_set.mode == ctx.cust.colors_direction.mode
     # Each font slot carries the LLM-picked family + the catalog-derived
     # category (the LLM never picks category — it's lifted from the

@@ -38,6 +38,10 @@ from src.modules.icons.icon_models import (
     build_icon_match_model,
 )
 from src.modules.icons.icon_node import IconNode
+from src.shared.services.recraft_icon_generator import (
+    RECRAFT_USD_PER_CREDIT,
+    RecraftIconGenerator,
+)
 from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_models import ImageComplexity, ImagePrompt
 from src.modules.images.image_node import ImageNode
@@ -1117,10 +1121,14 @@ def test_icon_node_generation_path(tmp_path: Path) -> None:
     out = asyncio.run(node.run())
 
     assert out.icons["home_tab"].icon_set == "set_a"
+    # Matched icons carry no generation prompt.
+    assert out.icons["home_tab"].prompt is None
     gen_out = out.icons["celebration_badge"]
     assert gen_out.icon_set == GENERATED_ICON_SET
     assert gen_out.icon_set_name == "Generated"
     assert Path(str(gen_out.path)).exists()
+    # The generated icon carries the authored Recraft prompt.
+    assert gen_out.prompt == "a celebration_badge icon"
     assert len(gen.calls) == 1
     assert "IconPrompt" in llm.calls
 
@@ -1158,3 +1166,19 @@ def test_build_icon_match_model_rejects_non_member() -> None:
         model(a=LLMIconResponse(icon="rocket", match_reason="x"))
     ok = model(a=LLMIconResponse(icon=None, match_reason="no match"))
     assert ok.a.icon is None
+
+
+def test_recraft_call_cost_from_credits_used() -> None:
+    """Cost is derived from the response's reported credits × the per-credit
+    rate; a response with no usable credit count is $0 (never fabricated)."""
+    cost = RecraftIconGenerator._call_cost
+    # A vector image is 80 credits → $0.08 at 1000 credits = $1.
+    assert cost({"meta": {"credits_used": 80}}) == pytest.approx(
+        80 * RECRAFT_USD_PER_CREDIT
+    )
+    assert cost({"meta": {"credits_used": 40}}) == pytest.approx(
+        40 * RECRAFT_USD_PER_CREDIT
+    )
+    # No usage reported → $0, not a guess.
+    assert cost({"data": [{"url": "x"}]}) == 0.0
+    assert cost({"meta": {"credits_used": None}}) == 0.0
