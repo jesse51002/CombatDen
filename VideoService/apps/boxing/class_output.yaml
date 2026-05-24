@@ -1,0 +1,46 @@
+company_name: Sweet Science Boxing Club
+app_id: boxing
+# DEMO PROFILE. Instructor names and bios are fabricated placeholders (no real
+# gym behind this brief). Every image_url and instructor_image_url is a real
+# Wikimedia Commons photo, downloaded and visually verified for relevance.
+classes:
+  - name: Fundamentals
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Boxer_training.jpg/1280px-Boxer_training.jpg
+    description: >-
+      Stance, footwork, and the core punches, plus the head movement that keeps
+      you safe. All levels welcome.
+    instructor_name: Coach Frankie DeLuca
+    instructor_bio: >-
+      Old-school boxing coach with 25 years in the corner. Drills the basics
+      until they are second nature.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Mark_Kerr-1593.jpg/960px-Mark_Kerr-1593.jpg
+  - name: Bag Work
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Punching_bag.jpg/1280px-Punching_bag.jpg
+    description: >-
+      Build power, output, and conditioning round after round on the heavy
+      bag. Great workout, real technique.
+    instructor_name: Coach Terrence Ward
+    instructor_bio: >-
+      Former amateur standout who turns bag rounds into conditioning and craft.
+      Relentless about clean punch mechanics.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Ezra_Arenyeka.jpg/960px-Ezra_Arenyeka.jpg
+  - name: Mitt Work
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Fighter_Rosalia_Calla_hits_focus_mitts_with_Manny_Sobral.jpg/1280px-Fighter_Rosalia_Calla_hits_focus_mitts_with_Manny_Sobral.jpg
+    description: >-
+      Sharpen timing and combinations on the mitts with one-on-one coaching
+      and instant feedback.
+    instructor_name: Coach Hassan Reyes
+    instructor_bio: >-
+      Mitt specialist with fast hands and a sharper eye. Reads your timing and
+      builds combinations around it.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/f/f5/Poorya_Sardarian_2024.jpg/960px-Poorya_Sardarian_2024.jpg
+  - name: Sparring
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/USMC-100817-M-3392W-001.jpg/1280px-USMC-100817-M-3392W-001.jpg
+    description: >-
+      Controlled ring rounds to put it together. Mandatory headgear, partner
+      matching by level — control before power.
+    instructor_name: Coach Nadia Cruz
+    instructor_bio: >-
+      Active competitor who runs sparring with strict safety rules and a focus
+      on smart, controlled rounds over winning the gym.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/c/cb/%EC%B5%9C%ED%98%84%EB%AF%B8_%EA%B6%8C%ED%88%AC_%EC%84%A0%EC%88%98.jpg

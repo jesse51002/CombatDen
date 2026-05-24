@@ -1,0 +1,46 @@
+company_name: Arte Suave BJJ
+app_id: bjj
+# DEMO PROFILE. Instructor names and bios are fabricated placeholders (no real
+# gym behind this brief). Every image_url and instructor_image_url is a real
+# Wikimedia Commons photo, downloaded and visually verified for relevance.
+classes:
+  - name: Fundamentals
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Gi_grappling_at_Ginowan_City_Police_Station.jpg/1280px-Gi_grappling_at_Ginowan_City_Police_Station.jpg
+    description: >-
+      Build your base — grips, posture, and the core positions of the gi game,
+      drilled slow then live. All levels welcome; work at your own pace.
+    instructor_name: Prof. Bruno Tavares
+    instructor_bio: >-
+      Third-degree black belt with 18 years on the mats. Obsessed with clean
+      fundamentals and getting new students comfortable fast.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Alfie_Davis_in_2020.jpg/960px-Alfie_Davis_in_2020.jpg
+  - name: Guard Work
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/BJJ-half_guard.jpg/1280px-BJJ-half_guard.jpg
+    description: >-
+      Develop a dangerous guard: sweeps, retention, and submissions off your
+      back. Concept-first, then live reps against resistance.
+    instructor_name: Prof. Renata Klein
+    instructor_bio: >-
+      Brown-to-black competitor and guard specialist who has medaled at IBJJF
+      opens. Teaches the "why" behind every position.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Irina_Zabludina_%28RUS%29_2017.jpg/960px-Irina_Zabludina_%28RUS%29_2017.jpg
+  - name: Takedowns
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/f/f5/Judo_throw.jpg/1280px-Judo_throw.jpg
+    description: >-
+      Get the fight to the ground on your terms — judo and wrestling entries
+      built for the gi, drilled with safe breakfalls first.
+    instructor_name: Coach Marcelo Dias
+    instructor_bio: >-
+      Judo black belt and BJJ brown belt who bridges both worlds. Known for
+      smooth throws and a patient teaching style.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Portrait_Of_MMA_fighter_Hamza_Hamry.jpg/960px-Portrait_Of_MMA_fighter_Hamza_Hamry.jpg
+  - name: Live Rolling
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Jiu_Jitsu.jpg/1280px-Jiu_Jitsu.jpg
+    description: >-
+      Put it all together in controlled live rolls. Partner matching by level —
+      leave the ego at the door and tap early.
+    instructor_name: Coach Yuki Tanaka
+    instructor_bio: >-
+      Active black-belt competitor who runs open mat with a focus on safety,
+      control, and steady progression for every belt.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/c/cb/%EC%B5%9C%ED%98%84%EB%AF%B8_%EA%B6%8C%ED%88%AC_%EC%84%A0%EC%88%98.jpg

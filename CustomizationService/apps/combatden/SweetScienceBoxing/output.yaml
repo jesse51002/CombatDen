@@ -1,0 +1,1312 @@
+app: combatden
+display_name: CombatDen
+design_name: Sweet Science Boxing
+image_set:
+  images:
+    logo_primary:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/logo_primary.png
+      prompt: A circular emblem logo mark, a squared boxing ring viewed straight-on
+        inside a brass ring with the wordmark arc "SWEET SCIENCE BOXING" embossed
+        around its border, taut braided rope and a small corner post centred within,
+        single coherent badge front-facing and perfectly symmetrical, brushed old-brass
+        and laced-leather-red accents, warm low-key incandescent shading on the mark's
+        own surfaces, flat solid pure-black background, premium heritage emblem style
+      complexity: medium
+    rank_belt:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/rank_belt.png
+      prompt: A championship title belt with a broad laced-leather strap and a large
+        central brass medallion embossed with a squared-ring-and-ropes emblem flanked
+        by two smaller brass side plates, straight-on, centred, perfectly symmetrical,
+        aged laced-leather red strap and brushed old-gold brass with subtle engraving,
+        focused warm incandescent light shading the belt's own curved metal and leather
+        grain with deep low-key shadow on its surfaces, flat solid pure-black background,
+        premium heritage emblem style
+      complexity: medium
+    celebration_image:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/celebration_image.png
+      prompt: A brass ring-side bell with its striker mid-ring, a laced red leather
+        boxing glove, and a folded ticket stub with an embossed seal, balanced floating
+        composition with a warm low-key burst of old-gold light radiating from the
+        centre, brushed brass and aged laced leather and taut canvas materials, focused
+        incandescent ring-light shading each object's own surfaces with deep warm
+        shadow, old brass gold and deep boxing-glove red palette, flat solid pure-black
+        background, heritage 3D fight-gym style
+      complexity: high
+    trophy_image:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/trophy_image.png
+      prompt: A weighty brushed-brass boxing trophy on a laced-leather base with a
+        small ring-bell and a single braided rope laurel arcing beside it, balanced
+        floating composition with a controlled warm spark burst from the centre, focused
+        incandescent ring-light glow shading each object's own surfaces, old-gold
+        brass and deep laced-leather red palette, flat solid pure-black background,
+        premium heritage 3D illustration style
+      complexity: high
+    points_stars_image:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/points_stars_image.png
+      prompt: A balanced floating cluster of five-point brass stars at varied sizes
+        and angles, one large hero star front and centre with smaller stars arcing
+        outward in a controlled radial burst, smooth brushed-brass surfaces with softly
+        bevelled facets and a deep laced-leather-red rim catching one star's edge,
+        warm low-key incandescent ring-light glow shading each star's own planes,
+        deep old-gold amber palette, flat solid pure-black background, heritage 3D
+        emblem style
+      complexity: high
+    next_rank_belt_image:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/next_rank_belt_image.png
+      prompt: A championship title belt of a clearly higher tier, a broad laced-leather
+        strap with a large central brass medallion embossed with a squared-ring-and-ropes
+        emblem flanked by two engraved side plates and small inset gem accents, straight-on,
+        centred, perfectly symmetrical, deep oxblood laced-leather strap and richer
+        brushed old-gold brass with finer engraving, focused warm incandescent ring-light
+        shading the belt's own curved metal and leather grain with deep low-key shadow
+        on its surfaces, flat solid pure-black background, premium heritage emblem
+        style
+      complexity: medium
+    giftbox:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/giftbox.png
+      prompt: A closed wrapped gift box with a laced leather-red lid and brushed brass-gold
+        ribbon tied in a crisp bow on top, caught mid-spin in a dynamic floating tilt
+        with a controlled warm burst of light radiating from its seams, weighty premium
+        3D in taut leather and polished brass hardware, focused incandescent ring-light
+        pooling on its own facets with deep low-key shadow on its surfaces, old-gold
+        amber and deep laced-red palette, flat solid pure-black background, heritage
+        3D emblem style
+      complexity: high
+    single_point:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/single_point.png
+      prompt: A single five-point star token, front-facing centred and perfectly symmetrical,
+        smooth brushed-brass surface with softly bevelled facets catching a warm low-key
+        incandescent highlight on its own planes, deep old-gold amber tone, flat solid
+        pure-black background, minimal heritage 3D emblem style
+      complexity: low
+    icon_qrcode:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/icon_qrcode.png
+      prompt: A stylized square QR-code glyph with rounded modules and three corner
+        finder squares, single object front-facing and centred, subtle brushed-brass
+        finish with a faint warm rim light on its own edges, restrained old-gold tone
+        on a deep matte body, flat solid pure-black background, clean minimal app-icon
+        style
+      complexity: low
+    streak_icon:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T144100Z/final_images/streak_icon.png
+      prompt: A bold lightning-bolt mark forged in solid brushed brass, single object
+        front-facing and centred, crisp clean silhouette built for legibility at tiny
+        sizes, soft warm ring-light glow catching its bevelled edges with deep low-key
+        shadow on its own faceted surfaces, old-gold brass palette with a hairline
+        aged-leather red inlay running its length, flat solid pure-black background,
+        premium heritage emblem style
+      complexity: medium
+color_set:
+  mode: dark
+  colors:
+    primary:
+      color:
+        oklch:
+          l: 0.72
+          c: 0.14
+          h: 68.0
+          alpha: null
+        hsl:
+          h: 33.68092114697175
+          s: 71.8938880221778
+          l: 53.0357875571722
+          alpha: null
+        rgb:
+          r: 221
+          g: 146
+          b: 49
+          alpha: null
+        hex: '#dd9231'
+      display_name: Old Brass Gold
+      description: A warm, rich brass-amber drawn from heritage ring hardware and
+        championship metal. Used for primary CTAs, key accent highlights, and any
+        leading brand moment — saturated enough to command attention and hold AA contrast
+        on the deep canvas.
+      derivations:
+        second:
+          oklch:
+            l: 0.72
+            c: 0.14
+            h: 68.0
+            alpha: 0.75
+          hsl:
+            h: 33.68092114697175
+            s: 71.8938880221778
+            l: 53.0357875571722
+            alpha: 0.75
+          rgb:
+            r: 221
+            g: 146
+            b: 49
+            alpha: 0.75
+          hex: '#dd9231bf'
+        third:
+          oklch:
+            l: 0.72
+            c: 0.14
+            h: 68.0
+            alpha: 0.5
+          hsl:
+            h: 33.68092114697175
+            s: 71.8938880221778
+            l: 53.0357875571722
+            alpha: 0.5
+          rgb:
+            r: 221
+            g: 146
+            b: 49
+            alpha: 0.5
+          hex: '#dd923180'
+        card:
+          oklch:
+            l: 0.72
+            c: 0.14
+            h: 68.0
+            alpha: 0.126
+          hsl:
+            h: 33.68092114697175
+            s: 71.8938880221778
+            l: 53.0357875571722
+            alpha: 0.126
+          rgb:
+            r: 221
+            g: 146
+            b: 49
+            alpha: 0.126
+          hex: '#dd923120'
+        popup:
+          oklch:
+            l: 0.222120514490157
+            c: 0.03270063228583166
+            h: 65.96475453242833
+            alpha: null
+          hsl:
+            h: 30.657685621840162
+            s: 58.9676453795731
+            l: 9.23468788058325
+            alpha: null
+          rgb:
+            r: 37
+            g: 24
+            b: 10
+            alpha: null
+          hex: '#25180a'
+        dark:
+          oklch:
+            l: 0.07
+            c: 0.14
+            h: 68.0
+            alpha: null
+          hsl:
+            h: 5.3848788958794795
+            s: 100.0
+            l: 2.241455347742859
+            alpha: null
+          rgb:
+            r: 2
+            g: 1
+            b: 0
+            alpha: null
+          hex: '#020100'
+        light:
+          oklch:
+            l: 0.8824
+            c: 0.14
+            h: 68.0
+            alpha: null
+          hsl:
+            h: 32.0712068084821
+            s: 100.0
+            l: 75.28320961010698
+            alpha: null
+          rgb:
+            r: 255
+            g: 206
+            b: 154
+            alpha: null
+          hex: '#ffce9a'
+        regular_text:
+          oklch:
+            l: 0.13
+            c: 0.012
+            h: 55.0
+            alpha: null
+          hsl:
+            h: 19.860015627938672
+            s: 46.672430856941226
+            l: 2.920112869999489
+            alpha: null
+          rgb:
+            r: 11
+            g: 6
+            b: 4
+            alpha: null
+          hex: '#0b0604'
+    background:
+      color:
+        oklch:
+          l: 0.13
+          c: 0.012
+          h: 55.0
+          alpha: null
+        hsl:
+          h: 19.860015627938672
+          s: 46.672430856941226
+          l: 2.920112869999489
+          alpha: null
+        rgb:
+          r: 11
+          g: 6
+          b: 4
+          alpha: null
+        hex: '#0b0604'
+      display_name: Deep Gym Canvas
+      description: A near-black with the faintest warm-brown undertone, evoking a
+        heritage gym after the last round under low light. Dark enough to feel grounded
+        and atmospheric, but lifted just off true black so cards and elevated sheets
+        can read tonally above it.
+      derivations:
+        second:
+          oklch:
+            l: 0.13
+            c: 0.012
+            h: 55.0
+            alpha: 0.75
+          hsl:
+            h: 19.860015627938672
+            s: 46.672430856941226
+            l: 2.920112869999489
+            alpha: 0.75
+          rgb:
+            r: 11
+            g: 6
+            b: 4
+            alpha: 0.75
+          hex: '#0b0604bf'
+        third:
+          oklch:
+            l: 0.13
+            c: 0.012
+            h: 55.0
+            alpha: 0.5
+          hsl:
+            h: 19.860015627938672
+            s: 46.672430856941226
+            l: 2.920112869999489
+            alpha: 0.5
+          rgb:
+            r: 11
+            g: 6
+            b: 4
+            alpha: 0.5
+          hex: '#0b060480'
+        card:
+          oklch:
+            l: 0.98
+            c: 0.0
+            h: 0.0
+            alpha: 0.13222222222222224
+          hsl:
+            h: 0.0
+            s: 8.439959124068866e-13
+            l: 97.36912701044001
+            alpha: 0.13222222222222224
+          rgb:
+            r: 248
+            g: 248
+            b: 248
+            alpha: 0.13222222222222224
+          hex: '#f8f8f822'
+        popup:
+          oklch:
+            l: 0.273402980376949
+            c: 0.007052797829127999
+            h: 48.18693777960558
+            alpha: null
+          hsl:
+            h: 19.86001562793962
+            s: 7.675591364819781
+            l: 15.408371406346602
+            alpha: null
+          rgb:
+            r: 42
+            g: 38
+            b: 36
+            alpha: null
+          hex: '#2a2624'
+        dark:
+          oklch:
+            l: 0.0546
+            c: 0.012
+            h: 55.0
+            alpha: null
+          hsl:
+            h: 15.035439150724638
+            s: 93.20823293743767
+            l: 0.24975178358874117
+            alpha: null
+          rgb:
+            r: 1
+            g: 0
+            b: 0
+            alpha: null
+          hex: '#010000'
+        light:
+          oklch:
+            l: 0.6345999999999999
+            c: 0.012
+            h: 55.0
+            alpha: null
+          hsl:
+            h: 23.391112214428006
+            s: 5.494037877151141
+            l: 54.18436751929869
+            alpha: null
+          rgb:
+            r: 145
+            g: 137
+            b: 132
+            alpha: null
+          hex: '#918984'
+        regular_text:
+          oklch:
+            l: 0.91
+            c: 0.018
+            h: 72.0
+            alpha: null
+          hsl:
+            h: 32.40471536693476
+            s: 31.624456778331083
+            l: 87.38121335204471
+            alpha: null
+          rgb:
+            r: 233
+            g: 224
+            b: 213
+            alpha: null
+          hex: '#e9e0d5'
+    text:
+      color:
+        oklch:
+          l: 0.91
+          c: 0.018
+          h: 72.0
+          alpha: null
+        hsl:
+          h: 32.40471536693476
+          s: 31.624456778331083
+          l: 87.38121335204471
+          alpha: null
+        rgb:
+          r: 233
+          g: 224
+          b: 213
+          alpha: null
+        hex: '#e9e0d5'
+      display_name: Warm Ring Light White
+      description: A clean off-white with a hairline warmth drawn from the incandescent
+        glow over an old ring. Used for all headings and body copy — highly legible
+        against the deep canvas and never the harshness of pure white.
+      derivations:
+        second:
+          oklch:
+            l: 0.91
+            c: 0.018
+            h: 72.0
+            alpha: 0.75
+          hsl:
+            h: 32.40471536693476
+            s: 31.624456778331083
+            l: 87.38121335204471
+            alpha: 0.75
+          rgb:
+            r: 233
+            g: 224
+            b: 213
+            alpha: 0.75
+          hex: '#e9e0d5bf'
+        third:
+          oklch:
+            l: 0.91
+            c: 0.018
+            h: 72.0
+            alpha: 0.5
+          hsl:
+            h: 32.40471536693476
+            s: 31.624456778331083
+            l: 87.38121335204471
+            alpha: 0.5
+          rgb:
+            r: 233
+            g: 224
+            b: 213
+            alpha: 0.5
+          hex: '#e9e0d580'
+        card:
+          oklch:
+            l: 0.98
+            c: 0.0
+            h: 0.0
+            alpha: 0.13222222222222224
+          hsl:
+            h: 0.0
+            s: 8.439959124068866e-13
+            l: 97.36912701044001
+            alpha: 0.13222222222222224
+          rgb:
+            r: 248
+            g: 248
+            b: 248
+            alpha: 0.13222222222222224
+          hex: '#f8f8f822'
+        popup:
+          oklch:
+            l: 0.273402980376949
+            c: 0.007052797829127999
+            h: 48.18693777960558
+            alpha: null
+          hsl:
+            h: 19.86001562793962
+            s: 7.675591364819781
+            l: 15.408371406346602
+            alpha: null
+          rgb:
+            r: 42
+            g: 38
+            b: 36
+            alpha: null
+          hex: '#2a2624'
+        dark:
+          oklch:
+            l: 0.07
+            c: 0.018
+            h: 72.0
+            alpha: null
+          hsl:
+            h: 21.515274828037047
+            s: 100.0
+            l: 0.4572958734222885
+            alpha: null
+          rgb:
+            r: 2
+            g: 1
+            b: 0
+            alpha: null
+          hex: '#020100'
+        light:
+          oklch:
+            l: 0.9622
+            c: 0.018
+            h: 72.0
+            alpha: null
+          hsl:
+            h: 32.399121875262196
+            s: 69.07276837085506
+            l: 94.14233839047952
+            alpha: null
+          rgb:
+            r: 250
+            g: 241
+            b: 230
+            alpha: null
+          hex: '#faf1e6'
+        regular_text:
+          oklch:
+            l: 0.13
+            c: 0.012
+            h: 55.0
+            alpha: null
+          hsl:
+            h: 19.860015627938672
+            s: 46.672430856941226
+            l: 2.920112869999489
+            alpha: null
+          rgb:
+            r: 11
+            g: 6
+            b: 4
+            alpha: null
+          hex: '#0b0604'
+    accent:
+      color:
+        oklch:
+          l: 0.52
+          c: 0.19
+          h: 22.0
+          alpha: null
+        hsl:
+          h: 353.238146297549
+          s: 70.5469879163238
+          l: 43.655882366374385
+          alpha: null
+        rgb:
+          r: 190
+          g: 33
+          b: 50
+          alpha: null
+        hex: '#be2132'
+      display_name: Laced Leather Red
+      description: A deep, classic boxing-glove red — the colour of aged laced leather,
+        unmistakably a different hue family from the brass primary. Used sparingly
+        as borders, active nav items, active timeframe pills and tab indicators, never
+        as a fill, keeping the dark canvas from becoming monochromatic.
+      derivations:
+        second:
+          oklch:
+            l: 0.52
+            c: 0.19
+            h: 22.0
+            alpha: 0.75
+          hsl:
+            h: 353.238146297549
+            s: 70.5469879163238
+            l: 43.655882366374385
+            alpha: 0.75
+          rgb:
+            r: 190
+            g: 33
+            b: 50
+            alpha: 0.75
+          hex: '#be2132bf'
+        third:
+          oklch:
+            l: 0.52
+            c: 0.19
+            h: 22.0
+            alpha: 0.5
+          hsl:
+            h: 353.238146297549
+            s: 70.5469879163238
+            l: 43.655882366374385
+            alpha: 0.5
+          rgb:
+            r: 190
+            g: 33
+            b: 50
+            alpha: 0.5
+          hex: '#be213280'
+        card:
+          oklch:
+            l: 0.52
+            c: 0.19
+            h: 22.0
+            alpha: 0.126
+          hsl:
+            h: 353.238146297549
+            s: 70.5469879163238
+            l: 43.655882366374385
+            alpha: 0.126
+          rgb:
+            r: 190
+            g: 33
+            b: 50
+            alpha: 0.126
+          hex: '#be213220'
+        popup:
+          oklch:
+            l: 0.18266944132094287
+            c: 0.041261304348401626
+            h: 21.438506688479418
+            alpha: null
+          hsl:
+            h: 359.4477539933593
+            s: 55.373175632089215
+            l: 8.447095359568474
+            alpha: null
+          rgb:
+            r: 33
+            g: 10
+            b: 10
+            alpha: null
+          hex: '#210a0a'
+        dark:
+          oklch:
+            l: 0.07
+            c: 0.19
+            h: 22.0
+            alpha: null
+          hsl:
+            h: 342.5770630156997
+            s: 100.0
+            l: 3.610321157678302
+            alpha: null
+          rgb:
+            r: 4
+            g: 0
+            b: 0
+            alpha: null
+          hex: '#040000'
+        light:
+          oklch:
+            l: 0.7984
+            c: 0.19
+            h: 22.0
+            alpha: null
+          hsl:
+            h: 359.65039568132136
+            s: 100.0
+            l: 82.74147537935195
+            alpha: null
+          rgb:
+            r: 255
+            g: 159
+            b: 156
+            alpha: null
+          hex: '#ff9f9c'
+        regular_text:
+          oklch:
+            l: 0.91
+            c: 0.018
+            h: 72.0
+            alpha: null
+          hsl:
+            h: 32.40471536693476
+            s: 31.624456778331083
+            l: 87.38121335204471
+            alpha: null
+          rgb:
+            r: 233
+            g: 224
+            b: 213
+            alpha: null
+          hex: '#e9e0d5'
+  palette:
+    primary_second:
+      oklch:
+        l: 0.72
+        c: 0.14
+        h: 68.0
+        alpha: 0.75
+      hsl:
+        h: 33.68092114697175
+        s: 71.8938880221778
+        l: 53.0357875571722
+        alpha: 0.75
+      rgb:
+        r: 221
+        g: 146
+        b: 49
+        alpha: 0.75
+      hex: '#dd9231bf'
+    primary_third:
+      oklch:
+        l: 0.72
+        c: 0.14
+        h: 68.0
+        alpha: 0.5
+      hsl:
+        h: 33.68092114697175
+        s: 71.8938880221778
+        l: 53.0357875571722
+        alpha: 0.5
+      rgb:
+        r: 221
+        g: 146
+        b: 49
+        alpha: 0.5
+      hex: '#dd923180'
+    primary_card:
+      oklch:
+        l: 0.72
+        c: 0.14
+        h: 68.0
+        alpha: 0.126
+      hsl:
+        h: 33.68092114697175
+        s: 71.8938880221778
+        l: 53.0357875571722
+        alpha: 0.126
+      rgb:
+        r: 221
+        g: 146
+        b: 49
+        alpha: 0.126
+      hex: '#dd923120'
+    primary_popup:
+      oklch:
+        l: 0.222120514490157
+        c: 0.03270063228583166
+        h: 65.96475453242833
+        alpha: null
+      hsl:
+        h: 30.657685621840162
+        s: 58.9676453795731
+        l: 9.23468788058325
+        alpha: null
+      rgb:
+        r: 37
+        g: 24
+        b: 10
+        alpha: null
+      hex: '#25180a'
+    primary_dark:
+      oklch:
+        l: 0.07
+        c: 0.14
+        h: 68.0
+        alpha: null
+      hsl:
+        h: 5.3848788958794795
+        s: 100.0
+        l: 2.241455347742859
+        alpha: null
+      rgb:
+        r: 2
+        g: 1
+        b: 0
+        alpha: null
+      hex: '#020100'
+    primary_light:
+      oklch:
+        l: 0.8824
+        c: 0.14
+        h: 68.0
+        alpha: null
+      hsl:
+        h: 32.0712068084821
+        s: 100.0
+        l: 75.28320961010698
+        alpha: null
+      rgb:
+        r: 255
+        g: 206
+        b: 154
+        alpha: null
+      hex: '#ffce9a'
+    primary_regular_text:
+      oklch:
+        l: 0.13
+        c: 0.012
+        h: 55.0
+        alpha: null
+      hsl:
+        h: 19.860015627938672
+        s: 46.672430856941226
+        l: 2.920112869999489
+        alpha: null
+      rgb:
+        r: 11
+        g: 6
+        b: 4
+        alpha: null
+      hex: '#0b0604'
+    background_second:
+      oklch:
+        l: 0.13
+        c: 0.012
+        h: 55.0
+        alpha: 0.75
+      hsl:
+        h: 19.860015627938672
+        s: 46.672430856941226
+        l: 2.920112869999489
+        alpha: 0.75
+      rgb:
+        r: 11
+        g: 6
+        b: 4
+        alpha: 0.75
+      hex: '#0b0604bf'
+    background_third:
+      oklch:
+        l: 0.13
+        c: 0.012
+        h: 55.0
+        alpha: 0.5
+      hsl:
+        h: 19.860015627938672
+        s: 46.672430856941226
+        l: 2.920112869999489
+        alpha: 0.5
+      rgb:
+        r: 11
+        g: 6
+        b: 4
+        alpha: 0.5
+      hex: '#0b060480'
+    background_card:
+      oklch:
+        l: 0.98
+        c: 0.0
+        h: 0.0
+        alpha: 0.13222222222222224
+      hsl:
+        h: 0.0
+        s: 8.439959124068866e-13
+        l: 97.36912701044001
+        alpha: 0.13222222222222224
+      rgb:
+        r: 248
+        g: 248
+        b: 248
+        alpha: 0.13222222222222224
+      hex: '#f8f8f822'
+    background_popup:
+      oklch:
+        l: 0.273402980376949
+        c: 0.007052797829127999
+        h: 48.18693777960558
+        alpha: null
+      hsl:
+        h: 19.86001562793962
+        s: 7.675591364819781
+        l: 15.408371406346602
+        alpha: null
+      rgb:
+        r: 42
+        g: 38
+        b: 36
+        alpha: null
+      hex: '#2a2624'
+    background_dark:
+      oklch:
+        l: 0.0546
+        c: 0.012
+        h: 55.0
+        alpha: null
+      hsl:
+        h: 15.035439150724638
+        s: 93.20823293743767
+        l: 0.24975178358874117
+        alpha: null
+      rgb:
+        r: 1
+        g: 0
+        b: 0
+        alpha: null
+      hex: '#010000'
+    background_light:
+      oklch:
+        l: 0.6345999999999999
+        c: 0.012
+        h: 55.0
+        alpha: null
+      hsl:
+        h: 23.391112214428006
+        s: 5.494037877151141
+        l: 54.18436751929869
+        alpha: null
+      rgb:
+        r: 145
+        g: 137
+        b: 132
+        alpha: null
+      hex: '#918984'
+    background_regular_text:
+      oklch:
+        l: 0.91
+        c: 0.018
+        h: 72.0
+        alpha: null
+      hsl:
+        h: 32.40471536693476
+        s: 31.624456778331083
+        l: 87.38121335204471
+        alpha: null
+      rgb:
+        r: 233
+        g: 224
+        b: 213
+        alpha: null
+      hex: '#e9e0d5'
+    text_second:
+      oklch:
+        l: 0.91
+        c: 0.018
+        h: 72.0
+        alpha: 0.75
+      hsl:
+        h: 32.40471536693476
+        s: 31.624456778331083
+        l: 87.38121335204471
+        alpha: 0.75
+      rgb:
+        r: 233
+        g: 224
+        b: 213
+        alpha: 0.75
+      hex: '#e9e0d5bf'
+    text_third:
+      oklch:
+        l: 0.91
+        c: 0.018
+        h: 72.0
+        alpha: 0.5
+      hsl:
+        h: 32.40471536693476
+        s: 31.624456778331083
+        l: 87.38121335204471
+        alpha: 0.5
+      rgb:
+        r: 233
+        g: 224
+        b: 213
+        alpha: 0.5
+      hex: '#e9e0d580'
+    text_card:
+      oklch:
+        l: 0.98
+        c: 0.0
+        h: 0.0
+        alpha: 0.13222222222222224
+      hsl:
+        h: 0.0
+        s: 8.439959124068866e-13
+        l: 97.36912701044001
+        alpha: 0.13222222222222224
+      rgb:
+        r: 248
+        g: 248
+        b: 248
+        alpha: 0.13222222222222224
+      hex: '#f8f8f822'
+    text_popup:
+      oklch:
+        l: 0.273402980376949
+        c: 0.007052797829127999
+        h: 48.18693777960558
+        alpha: null
+      hsl:
+        h: 19.86001562793962
+        s: 7.675591364819781
+        l: 15.408371406346602
+        alpha: null
+      rgb:
+        r: 42
+        g: 38
+        b: 36
+        alpha: null
+      hex: '#2a2624'
+    text_dark:
+      oklch:
+        l: 0.07
+        c: 0.018
+        h: 72.0
+        alpha: null
+      hsl:
+        h: 21.515274828037047
+        s: 100.0
+        l: 0.4572958734222885
+        alpha: null
+      rgb:
+        r: 2
+        g: 1
+        b: 0
+        alpha: null
+      hex: '#020100'
+    text_light:
+      oklch:
+        l: 0.9622
+        c: 0.018
+        h: 72.0
+        alpha: null
+      hsl:
+        h: 32.399121875262196
+        s: 69.07276837085506
+        l: 94.14233839047952
+        alpha: null
+      rgb:
+        r: 250
+        g: 241
+        b: 230
+        alpha: null
+      hex: '#faf1e6'
+    text_regular_text:
+      oklch:
+        l: 0.13
+        c: 0.012
+        h: 55.0
+        alpha: null
+      hsl:
+        h: 19.860015627938672
+        s: 46.672430856941226
+        l: 2.920112869999489
+        alpha: null
+      rgb:
+        r: 11
+        g: 6
+        b: 4
+        alpha: null
+      hex: '#0b0604'
+    accent_second:
+      oklch:
+        l: 0.52
+        c: 0.19
+        h: 22.0
+        alpha: 0.75
+      hsl:
+        h: 353.238146297549
+        s: 70.5469879163238
+        l: 43.655882366374385
+        alpha: 0.75
+      rgb:
+        r: 190
+        g: 33
+        b: 50
+        alpha: 0.75
+      hex: '#be2132bf'
+    accent_third:
+      oklch:
+        l: 0.52
+        c: 0.19
+        h: 22.0
+        alpha: 0.5
+      hsl:
+        h: 353.238146297549
+        s: 70.5469879163238
+        l: 43.655882366374385
+        alpha: 0.5
+      rgb:
+        r: 190
+        g: 33
+        b: 50
+        alpha: 0.5
+      hex: '#be213280'
+    accent_card:
+      oklch:
+        l: 0.52
+        c: 0.19
+        h: 22.0
+        alpha: 0.126
+      hsl:
+        h: 353.238146297549
+        s: 70.5469879163238
+        l: 43.655882366374385
+        alpha: 0.126
+      rgb:
+        r: 190
+        g: 33
+        b: 50
+        alpha: 0.126
+      hex: '#be213220'
+    accent_popup:
+      oklch:
+        l: 0.18266944132094287
+        c: 0.041261304348401626
+        h: 21.438506688479418
+        alpha: null
+      hsl:
+        h: 359.4477539933593
+        s: 55.373175632089215
+        l: 8.447095359568474
+        alpha: null
+      rgb:
+        r: 33
+        g: 10
+        b: 10
+        alpha: null
+      hex: '#210a0a'
+    accent_dark:
+      oklch:
+        l: 0.07
+        c: 0.19
+        h: 22.0
+        alpha: null
+      hsl:
+        h: 342.5770630156997
+        s: 100.0
+        l: 3.610321157678302
+        alpha: null
+      rgb:
+        r: 4
+        g: 0
+        b: 0
+        alpha: null
+      hex: '#040000'
+    accent_light:
+      oklch:
+        l: 0.7984
+        c: 0.19
+        h: 22.0
+        alpha: null
+      hsl:
+        h: 359.65039568132136
+        s: 100.0
+        l: 82.74147537935195
+        alpha: null
+      rgb:
+        r: 255
+        g: 159
+        b: 156
+        alpha: null
+      hex: '#ff9f9c'
+    accent_regular_text:
+      oklch:
+        l: 0.91
+        c: 0.018
+        h: 72.0
+        alpha: null
+      hsl:
+        h: 32.40471536693476
+        s: 31.624456778331083
+        l: 87.38121335204471
+        alpha: null
+      rgb:
+        r: 233
+        g: 224
+        b: 213
+        alpha: null
+      hex: '#e9e0d5'
+    card:
+      oklch:
+        l: 0.98
+        c: 0.0
+        h: 0.0
+        alpha: 0.13222222222222224
+      hsl:
+        h: 0.0
+        s: 8.439959124068866e-13
+        l: 97.36912701044001
+        alpha: 0.13222222222222224
+      rgb:
+        r: 248
+        g: 248
+        b: 248
+        alpha: 0.13222222222222224
+      hex: '#f8f8f822'
+    popup:
+      oklch:
+        l: 0.273402980376949
+        c: 0.007052797829127999
+        h: 48.18693777960558
+        alpha: null
+      hsl:
+        h: 19.86001562793962
+        s: 7.675591364819781
+        l: 15.408371406346602
+        alpha: null
+      rgb:
+        r: 42
+        g: 38
+        b: 36
+        alpha: null
+      hex: '#2a2624'
+    divider:
+      oklch:
+        l: 0.91
+        c: 0.018
+        h: 72.0
+        alpha: 0.113
+      hsl:
+        h: 32.40471536693476
+        s: 31.624456778331083
+        l: 87.38121335204471
+        alpha: 0.113
+      rgb:
+        r: 233
+        g: 224
+        b: 213
+        alpha: 0.113
+      hex: '#e9e0d51d'
+    primary:
+      oklch:
+        l: 0.72
+        c: 0.14
+        h: 68.0
+        alpha: null
+      hsl:
+        h: 33.68092114697175
+        s: 71.8938880221778
+        l: 53.0357875571722
+        alpha: null
+      rgb:
+        r: 221
+        g: 146
+        b: 49
+        alpha: null
+      hex: '#dd9231'
+    background:
+      oklch:
+        l: 0.13
+        c: 0.012
+        h: 55.0
+        alpha: null
+      hsl:
+        h: 19.860015627938672
+        s: 46.672430856941226
+        l: 2.920112869999489
+        alpha: null
+      rgb:
+        r: 11
+        g: 6
+        b: 4
+        alpha: null
+      hex: '#0b0604'
+    text:
+      oklch:
+        l: 0.91
+        c: 0.018
+        h: 72.0
+        alpha: null
+      hsl:
+        h: 32.40471536693476
+        s: 31.624456778331083
+        l: 87.38121335204471
+        alpha: null
+      rgb:
+        r: 233
+        g: 224
+        b: 213
+        alpha: null
+      hex: '#e9e0d5'
+    accent:
+      oklch:
+        l: 0.52
+        c: 0.19
+        h: 22.0
+        alpha: null
+      hsl:
+        h: 353.238146297549
+        s: 70.5469879163238
+        l: 43.655882366374385
+        alpha: null
+      rgb:
+        r: 190
+        g: 33
+        b: 50
+        alpha: null
+      hex: '#be2132'
+font_set:
+  fonts:
+    display:
+      family: Bricolage Grotesque
+      category: sans-serif
+      display_name: Confident Structural Grotesk
+      description: A modern geometric grotesque with architectural precision and athletic
+        confidence — built for headlines with clean, grounded geometry that reads
+        instantly at large sizes. The sharp proportions and confident stem weight
+        carry the brand's earned discipline without the cliché of condensed all-caps
+        gym fonts.
+    body:
+      family: DM Sans
+      category: sans-serif
+      display_name: Refined Geometric Body
+      description: A humanist sans with warm geometric bones and generous x-height,
+        optimised for small-size legibility on dark UI. Quiet enough to stay out of
+        the way of display typography and accents, but with enough character to echo
+        Bricolage Grotesque's structural confidence rather than feeling generic. Strong
+        weight range supports hierarchy without distraction.
+text_set:
+  texts:
+    class_booked_headline:
+      value: You're in
+    reserve_cta:
+      value: Claim your spot
+    wins_title:
+      value: Today's rounds
+    wins_subtitle:
+      value: Sharp work. See you next session.
+    book_next_class_cta:
+      value: Book the next one
+cost:
+  total: 1.027406
+  llm: 0.389551
+  image_generation: 0.437855
+  background_removal: 0.2
+  by_model:
+    anthropic/claude-haiku-4-5: 0.009194
+    anthropic/claude-sonnet-4-6: 0.02268
+    anthropic/claude-opus-4-7: 0.35655
+    gemini/gemini-3.1-flash-lite-preview: 0.001127
+    openai/gpt-image-2: 0.437855
+    photoroom: 0.2

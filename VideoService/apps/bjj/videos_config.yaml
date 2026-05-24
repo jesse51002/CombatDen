@@ -1,0 +1,27 @@
+company_name: Arte Suave BJJ
+type: Brazilian Jiu-Jitsu academy
+videos_desc: |
+  Gi-focused Brazilian Jiu-Jitsu for a technical, studious membership — from
+  white belts learning their first guard retention to competitors sharpening
+  for IBJJF. Worth surfacing: clean step-by-step technique breakdowns, concept
+  videos that explain the "why" behind positions, elite competition footage and
+  submission highlights that show the art at its peak, long-form interviews with
+  respected black belts, and honest belt-journey vlogs that capture the grind.
+avoid_desc: |
+  Within-jiu-jitsu content the academy pushes back on: belt-mill "McDojo"
+  promotions and staged self-defense fantasy, instructors teaching unsafe or
+  flatly incorrect mechanics as gospel, low-credibility "fake master" channels,
+  and contrarian "BJJ doesn't work in a real fight" framing that misrepresents
+  the art.
+searches:
+  - query: bjj guard retention tutorial step by step
+    tags: [tutorial, educational]
+  - query: ADCC 2024 grappling highlights
+    tags: [professional, clips, entertainment]
+  - query: best IBJJF black belt submissions compilation
+    tags: [clips, entertainment, professional]
+  - query: Gordon Ryan jiu jitsu podcast interview
+    tags: [interview, informative]
+  - query: blue belt first year bjj journey vlog
+    tags: [vlog, behind_the_scenes]
+priority_channels: []

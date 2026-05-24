@@ -1,0 +1,46 @@
+company_name: Northside Kickboxing
+app_id: kickboxing
+# DEMO PROFILE. Instructor names and bios are fabricated placeholders (no real
+# gym behind this brief). Every image_url and instructor_image_url is a real
+# Wikimedia Commons photo, downloaded and visually verified for relevance.
+classes:
+  - name: Fundamentals
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Learning_Muay_Thai_with_Royal_Thai_Marines_160213-M-CX588-033.jpg/1280px-Learning_Muay_Thai_with_Royal_Thai_Marines_160213-M-CX588-033.jpg
+    description: >-
+      Stance, footwork, and clean punch-kick combinations — the foundation of
+      ring kickboxing. All levels welcome.
+    instructor_name: Coach Viktor Sava
+    instructor_bio: >-
+      Former amateur kickboxing champion who builds fighters from the stance
+      up. Sticks to fundamentals before flash.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/1/17/Alin_Nechita.jpg
+  - name: Combinations
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Light_Contact_Kickboxing.jpg/1280px-Light_Contact_Kickboxing.jpg
+    description: >-
+      Chain strikes together with speed and timing on the bag and in the air,
+      round after round.
+    instructor_name: Coach Jordan Pike
+    instructor_bio: >-
+      Striking coach with a sharp eye for rhythm and distance. Makes combos
+      click for beginners and competitors alike.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Alfie_Davis_in_2020.jpg/960px-Alfie_Davis_in_2020.jpg
+  - name: Pad Work
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Kicking_Thai_Pads.JPG/1280px-Kicking_Thai_Pads.JPG
+    description: >-
+      Drive power and accuracy into the pads with round-by-round coaching and
+      real conditioning.
+    instructor_name: Coach Reza Amani
+    instructor_bio: >-
+      Pad specialist who keeps rounds fight-realistic and feedback constant.
+      Loves turning raw power into clean technique.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/f/f5/Poorya_Sardarian_2024.jpg/960px-Poorya_Sardarian_2024.jpg
+  - name: Sparring
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/K1_style_kickboxing.jpg/1280px-K1_style_kickboxing.jpg
+    description: >-
+      Controlled ring rounds to test your tools. Mandatory gear, partner
+      matching by level — control over chaos.
+    instructor_name: Coach Mia Novak
+    instructor_bio: >-
+      Active competitor who runs sparring with strict safety standards and a
+      focus on smart, controlled exchanges.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Irina_Zabludina_%28RUS%29_2017.jpg/960px-Irina_Zabludina_%28RUS%29_2017.jpg

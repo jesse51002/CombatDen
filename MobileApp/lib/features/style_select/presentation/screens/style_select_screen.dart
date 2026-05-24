@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:mobile_app/core/app_styles.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/customization/customization_runtime.dart';
 import 'package:mobile_app/customization/data/models/customization_style.dart';
@@ -47,7 +48,14 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
                 if (snapshot.connectionState != ConnectionState.done) {
                   return const _StyleStatus(message: 'Loading styles…');
                 }
-                final styles = snapshot.data ?? const [];
+                // The curated AppStyle list — not the service's full catalog
+                // — decides what's offered; the service only supplies the art.
+                final curatedIds = {
+                  for (final style in kAppStyles) style.designId,
+                };
+                final styles = (snapshot.data ?? const <CustomizationStyle>[])
+                    .where((s) => curatedIds.contains(s.id))
+                    .toList(growable: false);
                 if (snapshot.hasError || styles.isEmpty) {
                   return const _StyleStatus(
                     message: 'No styles available right now.',

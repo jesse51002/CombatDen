@@ -11,7 +11,7 @@ class AppRoutes {
 
   // Videos
   static const String videos = '/videos';
-  static const String videoDetail = '/videos/detail';
+  static const String videoTagList = '/videos/tag';
   static const String videoRecc = '/videos/recc';
 
   // Profile

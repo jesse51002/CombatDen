@@ -12,8 +12,7 @@ import 'package:flutter/widgets.dart';
 /// `Image(image: ApiImage.asset('foo.png'), …)`.
 ///
 /// `.asset` → `assets/images`, `.classAsset` → `assets/classes`,
-/// `.videoAsset` → `assets/videos`, `.rewardAsset` →
-/// `assets/rewards`, `.rankAsset` → `assets/ranks`.
+/// `.rewardAsset` → `assets/rewards`, `.rankAsset` → `assets/ranks`.
 class ApiImage {
   // Private constructor to prevent instantiation.
   ApiImage._();
@@ -23,9 +22,6 @@ class ApiImage {
 
   static ImageProvider classAsset(String fileName) =>
       AssetImage('assets/classes/$fileName');
-
-  static ImageProvider videoAsset(String fileName) =>
-      AssetImage('assets/videos/$fileName');
 
   static ImageProvider rewardAsset(String fileName) =>
       AssetImage('assets/rewards/$fileName');

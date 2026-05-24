@@ -1,6 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/videos/data/mock_videos.dart';
+import 'package:mobile_app/features/videos/data/video.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_recc_header.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/scale_reveal.dart';
@@ -28,7 +29,7 @@ class VideoReccLayout extends StatelessWidget {
   });
 
   final String title;
-  final MockVideo video;
+  final Video video;
   final String ctaLabel;
   final VoidCallback onCtaPressed;
   final VoidCallback onClose;
@@ -56,8 +57,10 @@ class VideoReccLayout extends StatelessWidget {
                   child: VideoReccCard(
                     title: video.title,
                     metaLabel: video.metaLabel,
-                    thumbnailAsset: video.thumbnailAsset,
-                    creatorPfpAsset: video.creatorPfpAsset,
+                    thumbnail: CachedNetworkImageProvider(video.thumbnailUrl),
+                    creatorPfp: CachedNetworkImageProvider(
+                      video.channelAvatarUrl,
+                    ),
                   ),
                 ),
               ),

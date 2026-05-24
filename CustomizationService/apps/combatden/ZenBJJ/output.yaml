@@ -24,13 +24,13 @@ image_set:
       complexity: medium
     celebration_image:
       path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260521T042358Z/final_images/celebration_image.png
-      prompt: A folded jiu-jitsu belt tied in a tight square knot with a small brass-engraved
-        date tag threaded through the weave, balanced floating composition with two
-        short woven gi strips arcing outward from the knot in a controlled grounded
-        burst, matte forged-steel tag and tactile woven belt fabric in deep slate-blue
-        with a single warm championship-brass accent on the tag, low-key directional
-        light pooling on the knot and shading each object's own weave and folds, flat
-        solid pure-black background, grounded tactile 3D illustration style
+      prompt: A forged matte-steel jiu-jitsu belt tied in a clean square knot at the
+        centre, three small brass weave-tiles and a single brass star drifting outward
+        in a balanced floating composition with a focused glow radiating from the
+        knot, woven gi-fabric texture and brushed metal on their own surfaces, low-key
+        directional light with deep controlled shadow shaping each form, forged slate-blue
+        and championship-brass palette, flat solid pure-black background, grounded
+        tactile 3D style
       complexity: high
     trophy_image:
       path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260521T042358Z/final_images/trophy_image.png

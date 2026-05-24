@@ -24,7 +24,7 @@ class ClassScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
-    final classData = args is MockClass ? args : mockMuayThaiDetail.classData;
+    final classData = args is MockClass ? args : fallbackClass;
     final detail = detailFor(classData);
     final gym = mockGym;
 
@@ -53,7 +53,7 @@ class ClassScreen extends StatelessWidget {
                 pointsLabel: gym.pointsLabel,
                 rankBadgeAsset: gym.rankBadgeAsset,
               ),
-              ClassImageBanner(imageAsset: classData.imageAsset),
+              ClassImageBanner(imageUrl: classData.imageUrl),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: DesignConstants.spacingBig,
@@ -94,7 +94,7 @@ class _Body extends StatelessWidget {
         children: [
           ClassMetaSection(detail: detail),
           const SectionDivider(),
-          ClassDetailsSection(description: detail.description),
+          ClassDetailsSection(description: detail.classData.description),
           const SectionDivider(),
           ClassInstructorSection(detail: detail),
           const SectionDivider(),

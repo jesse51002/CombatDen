@@ -75,7 +75,7 @@ class _ProfileBody extends StatelessWidget {
           badgeAsset: profile.nextRankBadgeAsset,
         ),
         const SectionDivider(),
-        LevelUpVideosSection(videos: profile.levelUpVideos),
+        const LevelUpVideosSection(),
       ],
     );
   }

@@ -1,6 +1,17 @@
 import 'dart:math';
 
+import 'package:mobile_app/features/class_booking/data/class_info.dart';
 import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
+
+/// The four daily time slots. The VideoService returns four classes; we keep
+/// these fixed times and loop the classes into them, one per slot.
+const _classTimes = <String>[
+  '9:00am - 9:55am',
+  '11:00am - 11:55am',
+  '6:00pm - 6:55pm',
+  '7:00pm - 7:55pm',
+];
+const _kClassDurationMinutes = 55;
 
 const _weekdayAbbr = <String>[
   '',
@@ -22,18 +33,6 @@ const _weekdayFull = <String>[
   'Friday',
   'Saturday',
   'Sunday',
-];
-
-const _muayThaiImages = <String>[
-  'class_muay_thai_today.png',
-  'class_muay_thai_wed.png',
-  'class_muay_thai_thr.png',
-];
-
-const _bjjImages = <String>[
-  'class_bjj_today.png',
-  'class_bjj_wed.png',
-  'class_bjj_thr.png',
 ];
 
 DateTime _todayMidnight() {
@@ -69,48 +68,27 @@ bool _isClassBooked(int dayOffset, int classIndex) {
       (dayOffset * 3 + classIndex * 2) % 11 == 0;
 }
 
-MockDay dayAt(int dayOffset) {
-  final morningIndex = dayOffset % _muayThaiImages.length;
-  final eveningIndex = (dayOffset + 1) % _muayThaiImages.length;
+/// Builds one day's schedule by looping the live [classes] into the fixed
+/// time slots — class i at slot i. Every day shows the same four classes at
+/// the same times (per-day variation is just the demo attending/booked flags).
+MockDay dayAt(int dayOffset, List<ClassInfo> classes) {
+  final count = min(_classTimes.length, classes.length);
   return MockDay(
     label: formatFullDayLabel(dayOffset),
     classes: [
-      MockClass(
-        name: 'Muay Thai',
-        timeRange: '9:00am - 9:55am',
-        durationMinutes: 55,
-        mentor: 'Andy Zerger',
-        imageAsset: _muayThaiImages[morningIndex],
-        attending: _seededAttending(dayOffset, 0),
-        isBooked: _isClassBooked(dayOffset, 0),
-      ),
-      MockClass(
-        name: 'BJJ NO-GI',
-        timeRange: '11:00am - 11:55am',
-        durationMinutes: 55,
-        mentor: 'Andy Zerger',
-        imageAsset: _bjjImages[morningIndex],
-        attending: _seededAttending(dayOffset, 1),
-        isBooked: _isClassBooked(dayOffset, 1),
-      ),
-      MockClass(
-        name: 'Muay Thai',
-        timeRange: '6:00pm - 6:55pm',
-        durationMinutes: 55,
-        mentor: 'Andy Zerger',
-        imageAsset: _muayThaiImages[eveningIndex],
-        attending: _seededAttending(dayOffset, 2),
-        isBooked: _isClassBooked(dayOffset, 2),
-      ),
-      MockClass(
-        name: 'BJJ NO-GI',
-        timeRange: '7:00pm - 7:55pm',
-        durationMinutes: 55,
-        mentor: 'Andy Zerger',
-        imageAsset: _bjjImages[eveningIndex],
-        attending: _seededAttending(dayOffset, 3),
-        isBooked: _isClassBooked(dayOffset, 3),
-      ),
+      for (var i = 0; i < count; i++)
+        MockClass(
+          name: classes[i].name,
+          timeRange: _classTimes[i],
+          durationMinutes: _kClassDurationMinutes,
+          mentor: classes[i].instructorName,
+          imageUrl: classes[i].imageUrl,
+          description: classes[i].description,
+          instructorBio: classes[i].instructorBio,
+          instructorImageUrl: classes[i].instructorImageUrl,
+          attending: _seededAttending(dayOffset, i),
+          isBooked: _isClassBooked(dayOffset, i),
+        ),
     ],
   );
 }

@@ -1,0 +1,25 @@
+company_name: Bangkok Muay Thai Academy
+type: Muay Thai gym
+videos_desc: |
+  Traditional Muay Thai — the art of eight limbs — taught with respect for its
+  Thai roots and ring craft. Worth surfacing: clinch and technique tutorials,
+  elite stadium and promotion footage that shows the art at the top level,
+  immersive training-camp vlogs from Thailand, breakdowns comparing Muay Thai to
+  other striking styles, and the cleanest knockout and highlight reels.
+avoid_desc: |
+  Within-striking content the academy pushes back on: cardio-kickboxing or
+  generic kickboxing mislabeled as Muay Thai, point-fighting and no-return
+  framing that misses how the art actually scores and clinches, fake
+  "kru"/grandmaster channels, and contrarian "Muay Thai is useless" takes.
+searches:
+  - query: muay thai clinch technique tutorial
+    tags: [tutorial, educational]
+  - query: ONE Championship muay thai highlights
+    tags: [professional, clips, entertainment]
+  - query: training at a muay thai camp in thailand vlog
+    tags: [vlog, behind_the_scenes]
+  - query: muay thai vs kickboxing striking breakdown
+    tags: [informative, educational]
+  - query: best muay thai knockouts compilation
+    tags: [clips, entertainment, fun]
+priority_channels: []

@@ -22,13 +22,13 @@ image_set:
       complexity: medium
     celebration_image:
       path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260521T045545Z/final_images/celebration_image.png
-      prompt: A bold stylized mascot character — a confident cartoon fox in red boxing
-        gloves throwing a forward jab — with a glowing class-pass ticket and a small
-        calendar token floating beside it, balanced floating composition with a controlled
-        neon burst radiating from the centre, glossy modern 3D with vivid acid-lime
-        rim-light and electric-violet edge-glow, crisp neon spotlight shading on each
-        object's own surfaces, acid-lime and electric-violet palette, flat solid pure-black
-        background, kinetic neon-signage 3D illustration style
+      prompt: A glowing neon boxing glove front and centre with a stylized lightning
+        bolt streaking behind it and a small confirmation tick spark to one side,
+        balanced floating composition with a controlled burst of light radiating outward
+        from the centre, glossy 3D surfaces with vivid neon edge-light and rim-glow
+        like LED tubing, crisp stage lighting shading each object's own form, acid-lime
+        and electric-violet palette, flat solid pure-black background, kinetic neon-signage
+        3D style
       complexity: high
     trophy_image:
       path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260521T045545Z/final_images/trophy_image.png

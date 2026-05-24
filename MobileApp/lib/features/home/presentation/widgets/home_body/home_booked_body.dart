@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/features/class_booking/data/class_info.dart';
+import 'package:mobile_app/features/class_booking/data/class_repository.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/home/data/schedule_generator.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/class_schedule_title.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/day_class_group.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/pinned_date_row_delegate.dart';
+import 'package:mobile_app/features/home/presentation/widgets/class_schedule/schedule_status.dart';
 import 'package:mobile_app/features/home/presentation/widgets/upcoming_sessions/upcoming_sessions_card.dart';
 import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 
@@ -41,6 +44,8 @@ class _HomeBookedBodyState extends State<HomeBookedBody>
   late final ScrollController _verticalController;
   late final ScrollController _dateController;
   int _currentDayIndex = 0;
+  List<ClassInfo>? _classes;
+  bool _classesError = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -50,6 +55,14 @@ class _HomeBookedBodyState extends State<HomeBookedBody>
     super.initState();
     _verticalController = ScrollController()..addListener(_onVerticalScroll);
     _dateController = ScrollController();
+    ClassRepository.instance.classes().then(
+      (c) {
+        if (mounted) setState(() => _classes = c);
+      },
+      onError: (_) {
+        if (mounted) setState(() => _classesError = true);
+      },
+    );
   }
 
   @override
@@ -132,11 +145,29 @@ class _HomeBookedBodyState extends State<HomeBookedBody>
               onDateTap: _onDateTap,
             ),
           ),
-          SliverList.builder(
-            itemBuilder: (context, index) => DayClassGroup(day: dayAt(index)),
-          ),
+          _scheduleSliver(),
         ],
       ),
+    );
+  }
+
+  Widget _scheduleSliver() {
+    final classes = _classes;
+    if (_classesError) {
+      return const SliverToBoxAdapter(
+        child: ScheduleStatus(message: "Couldn't load classes right now."),
+      );
+    }
+    if (classes == null) {
+      return const SliverToBoxAdapter(child: ScheduleStatus(loading: true));
+    }
+    if (classes.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: ScheduleStatus(message: 'No classes scheduled.'),
+      );
+    }
+    return SliverList.builder(
+      itemBuilder: (context, index) => DayClassGroup(day: dayAt(index, classes)),
     );
   }
 }

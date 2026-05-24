@@ -1,0 +1,763 @@
+company_name: Smoke Test Gym
+app_id: smoketest
+generated_at: '2026-05-22T05:00:50.051945Z'
+quota_units_estimate: 102
+videos:
+- url: https://www.youtube.com/watch?v=sY79BWdMGGk
+  title: What is Muay Thai? | A Beginner&#39;s Guide
+  description: Let's dive into Muay Thai! From its roots in Thailand to global fame,
+    we'll explore its history, rules, and famous fighters from ...
+  thumbnail_url: https://i.ytimg.com/vi/sY79BWdMGGk/hqdefault.jpg
+  channel_name: Combat Culture
+  channel_url: https://www.youtube.com/channel/UCUNLiEAXZTh8jzv5X0zhhBA
+  channel_avatar_url: https://yt3.ggpht.com/qt7pZJl9iJRI9WolWQcAUY0kRFDZ4UQswAned8VmNvy0-aQGBVbGa74B9G1_zmEIAmwxyz8d4us=s800-c-k-c0x00ffffff-no-rj
+  view_count: 168441
+  like_count: 3051
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 0
+- url: https://www.youtube.com/watch?v=lReh1gcr7ls
+  title: Don&#39;t Start Muay Thai Until You Watch This.
+  description: First day of Muay Thai class, and nervous about what to expect? Today
+    we're going over tips and expectations for your very first ...
+  thumbnail_url: https://i.ytimg.com/vi/lReh1gcr7ls/hqdefault.jpg
+  channel_name: Combat Culture
+  channel_url: https://www.youtube.com/channel/UCUNLiEAXZTh8jzv5X0zhhBA
+  channel_avatar_url: https://yt3.ggpht.com/qt7pZJl9iJRI9WolWQcAUY0kRFDZ4UQswAned8VmNvy0-aQGBVbGa74B9G1_zmEIAmwxyz8d4us=s800-c-k-c0x00ffffff-no-rj
+  view_count: 235237
+  like_count: 6411
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 1
+- url: https://www.youtube.com/watch?v=IFQrFAdDpOk
+  title: Beginner Muay Thai Combo (know this one!)
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/IFQrFAdDpOk/hqdefault.jpg
+  channel_name: Vivek Nakarmi - Pentagon MMA
+  channel_url: https://www.youtube.com/channel/UC8rOKQJRT9NKw8Hb_2spMJw
+  channel_avatar_url: https://yt3.ggpht.com/DLm2afDNet7j9yUkTZ8UfTFydVnqwPIBkJJ9tEqfq2eHAOaCrKDT784mfsYrRsdGisBbfnq_HJA=s800-c-k-c0x00ffffff-no-rj
+  view_count: 337420
+  like_count: 16073
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 2
+- url: https://www.youtube.com/watch?v=vXv6uvrUjKo
+  title: 'Muay Thai Training 101: Full Beginner&#39;s Class'
+  description: Are you thinking about joining a Muay Thai gym or training in Thailand?
+    This personal training session covers what to expect, ...
+  thumbnail_url: https://i.ytimg.com/vi/vXv6uvrUjKo/hqdefault.jpg
+  channel_name: fightTIPS
+  channel_url: https://www.youtube.com/channel/UClKgO_YP3pcIVeav2g_k6hw
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_nYKfkgaERvCmOGSjDDHXmK7oRdEVmfup14dGDWK5KmY1w=s800-c-k-c0x00ffffff-no-rj
+  view_count: 2769886
+  like_count: 89830
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 3
+- url: https://www.youtube.com/watch?v=8FqmLxpz9LU
+  title: Train Muay Thai At Home (No BS)
+  description: Advanced Muay Thai Training for Fighters | Heavy Bag Drills, Combos,
+    Strength & Diet Ready to take your Muay Thai skills to ...
+  thumbnail_url: https://i.ytimg.com/vi/8FqmLxpz9LU/hqdefault.jpg
+  channel_name: 'Fighter_Ryan  '
+  channel_url: https://www.youtube.com/channel/UCjknFxPA9-ZMfOONqa3XeYg
+  channel_avatar_url: https://yt3.ggpht.com/qcUNkKsMsm3QuBJlVNP9drv7VhCPazSHB9ARJ35AcCEWSAcIo_wjtByWefEVlnoWc8A36yyB=s800-c-k-c0x00ffffff-no-rj
+  view_count: 749001
+  like_count: 28578
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 4
+- url: https://www.youtube.com/watch?v=b4_yzaH4JKQ
+  title: The Rules of Muay Thai Boxing - EXPLAINED!
+  description: Ninh explains - The Rules of Muay Thai Boxing. A popular fighting sport
+    from Thailand that is also known as Thai Boxing or Thai ...
+  thumbnail_url: https://i.ytimg.com/vi/b4_yzaH4JKQ/hqdefault.jpg
+  channel_name: Ninh Ly
+  channel_url: https://www.youtube.com/channel/UCTiEIvYaXBTcu2b9viRB7lg
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_kAlLxSF2WqykOWr3kmlFxW1oPjA2G6VhjB_JN1ZmbGsFU=s800-c-k-c0x00ffffff-no-rj
+  view_count: 188805
+  like_count: 4751
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 5
+- url: https://www.youtube.com/watch?v=adj1ZuFm-Yo
+  title: The Beginner&#39;s Guide to Muay Thai Fighting Styles
+  description: Ready to nerd out and dive deep into the world of Muay Thai? In this
+    video, we're breaking down six unique Nak Muay fighting ...
+  thumbnail_url: https://i.ytimg.com/vi/adj1ZuFm-Yo/hqdefault.jpg
+  channel_name: Combat Culture
+  channel_url: https://www.youtube.com/channel/UCUNLiEAXZTh8jzv5X0zhhBA
+  channel_avatar_url: https://yt3.ggpht.com/qt7pZJl9iJRI9WolWQcAUY0kRFDZ4UQswAned8VmNvy0-aQGBVbGa74B9G1_zmEIAmwxyz8d4us=s800-c-k-c0x00ffffff-no-rj
+  view_count: 75938
+  like_count: 2963
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 6
+- url: https://www.youtube.com/watch?v=XECsB8Hd1A4
+  title: Are you a Muay Thai beginner? Then watch this.
+  description: Ready to unlock your full potential and get daily Muay Thai insights?
+    Click the link below to join my EXCLUSIVE Nak Muay ...
+  thumbnail_url: https://i.ytimg.com/vi/XECsB8Hd1A4/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 322192
+  like_count: 8570
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 7
+- url: https://www.youtube.com/watch?v=9Xd-pRC8bOE
+  title: Taekwondo VS Muay Thai👊which one you choosing?
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/9Xd-pRC8bOE/hqdefault.jpg
+  channel_name: Nat Hearn
+  channel_url: https://www.youtube.com/channel/UCKMYdnHrn9DCh3SQpsZWOKA
+  channel_avatar_url: https://yt3.ggpht.com/8ET8Dmin4Uf3ayFECfY4j1n4m9Z4MxvEgEvYMQR2Ofpg27uoigIBI6wyc0H6onpZ9XkwYZyqbg=s800-c-k-c0x00ffffff-no-rj
+  view_count: 3217064
+  like_count: 140658
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 8
+- url: https://www.youtube.com/watch?v=Aeq1SfUJNtI
+  title: Difference between Muay Thai and karate?
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/Aeq1SfUJNtI/hqdefault.jpg
+  channel_name: Nat Hearn
+  channel_url: https://www.youtube.com/channel/UCKMYdnHrn9DCh3SQpsZWOKA
+  channel_avatar_url: https://yt3.ggpht.com/8ET8Dmin4Uf3ayFECfY4j1n4m9Z4MxvEgEvYMQR2Ofpg27uoigIBI6wyc0H6onpZ9XkwYZyqbg=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1122294
+  like_count: null
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 9
+- url: https://www.youtube.com/watch?v=9SJU6IoaCsg
+  title: 'How to KICK properly in Muay Thai⬆️ #muaythai #mma #martialarts #fightsports'
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/9SJU6IoaCsg/hqdefault.jpg
+  channel_name: Vivek Nakarmi - Pentagon MMA
+  channel_url: https://www.youtube.com/channel/UC8rOKQJRT9NKw8Hb_2spMJw
+  channel_avatar_url: https://yt3.ggpht.com/DLm2afDNet7j9yUkTZ8UfTFydVnqwPIBkJJ9tEqfq2eHAOaCrKDT784mfsYrRsdGisBbfnq_HJA=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1981280
+  like_count: 30791
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 10
+- url: https://www.youtube.com/watch?v=kHW09J700XQ
+  title: 'Muay Thai kick tutorials for beginners 🥊 #shorts'
+  description: If you're new to Muay Thai and want to learn the basics, then this
+    video is for you! In this tutorial, I'll show you how to do a basic ...
+  thumbnail_url: https://i.ytimg.com/vi/kHW09J700XQ/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1577958
+  like_count: 61372
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 11
+- url: https://www.youtube.com/watch?v=pvS7R1HfArk
+  title: 'Muay Thai Basics: Jab - AKA Techniques'
+  description: Kru Bird demonstrates the jab for Muay Thai beginners. Keep checking
+    back for a dose of instructional vids from our trainers, ...
+  thumbnail_url: https://i.ytimg.com/vi/pvS7R1HfArk/hqdefault.jpg
+  channel_name: AKA Thailand
+  channel_url: https://www.youtube.com/channel/UCDyUfCyv4n5wXjcjxOnlkZQ
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_lPSBK0L26PPdyViZ6AERozxKbxXzdtDi4x1bJO1_zAO1c=s800-c-k-c0x00ffffff-no-rj
+  view_count: 308793
+  like_count: 4432
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 12
+- url: https://www.youtube.com/watch?v=1ZWTraIQPFE
+  title: Solo Muay Thai Basics - No Equipment Needed - Beginner Muay Thai Techniques
+  description: Essential movements for building a strong Muay Thai foundation are
+    explored in this video. A focus is placed on techniques that ...
+  thumbnail_url: https://i.ytimg.com/vi/1ZWTraIQPFE/hqdefault.jpg
+  channel_name: Kru Bird Muay Thai
+  channel_url: https://www.youtube.com/channel/UCffHXthYvrtt9tHHGvawjSw
+  channel_avatar_url: https://yt3.ggpht.com/3uLs-3ccHjDc3rTTPASQDT6tMkX1kTmFrSAc0ibcJ9N8Xgk_u52BGVrw6CmwpkN8DScZm-5PIMo=s800-c-k-c0x00ffffff-no-rj
+  view_count: 121028
+  like_count: 5570
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 13
+- url: https://www.youtube.com/watch?v=4XpUbUNM4x0
+  title: The Ultimate Muay Thai Home Training Gameplan (NO BS Guide)
+  description: Want to train Muay Thai at home but don't know where to start? This
+    video gives you a complete at-home training plan including ...
+  thumbnail_url: https://i.ytimg.com/vi/4XpUbUNM4x0/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 42517
+  like_count: 2052
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 14
+- url: https://www.youtube.com/watch?v=7WWYpZDUxf4
+  title: 'Muay Thai stance breakdown (great for beginners 👊) #muaythai'
+  description: Learn the perfect Muay Thai stance for beginners in this easy to follow
+    tutorial. This stance will help you get started with Muay Thai ...
+  thumbnail_url: https://i.ytimg.com/vi/7WWYpZDUxf4/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 464251
+  like_count: 24980
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 15
+- url: https://www.youtube.com/watch?v=S7kJ8BA5fn4
+  title: '5 Muay Thai exercises to add to your home workout 💪 #shorts'
+  description: In this video, we're going to show you 5 Muay Thai exercises that you
+    can add to your home workout to strengthen your body and ...
+  thumbnail_url: https://i.ytimg.com/vi/S7kJ8BA5fn4/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1480860
+  like_count: 81780
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 16
+- url: https://www.youtube.com/watch?v=YYkaBFQI47k
+  title: 'Master the Rear Teep in Muay Thai: Step-by-Step Breakdown and Techniques'
+  description: In this video, we break down the mechanics and techniques of the rear
+    teep in Muay Thai. Our expert instructor provides ...
+  thumbnail_url: https://i.ytimg.com/vi/YYkaBFQI47k/hqdefault.jpg
+  channel_name: MMA Step By Step
+  channel_url: https://www.youtube.com/channel/UCr7HuGlagDh4cRw_aheCC9w
+  channel_avatar_url: https://yt3.ggpht.com/7l-KyZpGPVmx0Cfk7nXIhAaXYrvzYyxNggW8XKicVkEn-YaFwrsWBz3I1hJheqSH-QmwO_-l=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1630837
+  like_count: 28101
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 17
+- url: https://www.youtube.com/watch?v=lSy1mBjiqDs
+  title: Muay Thai beginner vs taekwondo guy
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/lSy1mBjiqDs/hqdefault.jpg
+  channel_name: Joshua Iyalla
+  channel_url: https://www.youtube.com/channel/UCl5Ytb0zePABTWOo4kmOyDA
+  channel_avatar_url: https://yt3.ggpht.com/CjTP6dAwHJJyz-h2WiW9TUcfi3yS-io-RBgN_x4KIh8ce_Xjs0-IMdofGZ7k0kMXQOsdjwLR=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1633531
+  like_count: 35994
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 18
+- url: https://www.youtube.com/watch?v=sklsNPxGSs0
+  title: 'Muay Thai Basics: Proper Stance - AKA Techniques'
+  description: Kru Bird demonstrates the proper Muay Thai stance for beginners. Keep
+    checking back for a dose of instructional vids from our ...
+  thumbnail_url: https://i.ytimg.com/vi/sklsNPxGSs0/hqdefault.jpg
+  channel_name: AKA Thailand
+  channel_url: https://www.youtube.com/channel/UCDyUfCyv4n5wXjcjxOnlkZQ
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_lPSBK0L26PPdyViZ6AERozxKbxXzdtDi4x1bJO1_zAO1c=s800-c-k-c0x00ffffff-no-rj
+  view_count: 143244
+  like_count: 2502
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 19
+- url: https://www.youtube.com/watch?v=o5fmEpH7XIo
+  title: Traditional Muay Thai Stance and Rhythm Explained  |  Beginner Basics with
+    Neungsiam Fairtex
+  description: Join us as Golden Era's Neungsiam "Fairtex" Samphusri breaks down the
+    traditional Muay Thai boxing stance. Footwork is an ...
+  thumbnail_url: https://i.ytimg.com/vi/o5fmEpH7XIo/hqdefault.jpg
+  channel_name: Combat Culture
+  channel_url: https://www.youtube.com/channel/UCUNLiEAXZTh8jzv5X0zhhBA
+  channel_avatar_url: https://yt3.ggpht.com/qt7pZJl9iJRI9WolWQcAUY0kRFDZ4UQswAned8VmNvy0-aQGBVbGa74B9G1_zmEIAmwxyz8d4us=s800-c-k-c0x00ffffff-no-rj
+  view_count: 189613
+  like_count: 7931
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 20
+- url: https://www.youtube.com/watch?v=SSat3H4llWU
+  title: What a Beginners Muay Thai Class Looks Like...
+  description: This Is what you can expect from your first Muay Thai Session. Every
+    gym is different but when I teach a Muay Thai beginners ...
+  thumbnail_url: https://i.ytimg.com/vi/SSat3H4llWU/hqdefault.jpg
+  channel_name: Harris MMA
+  channel_url: https://www.youtube.com/channel/UC_Hd3IXmm_iRlRE4luA6B7g
+  channel_avatar_url: https://yt3.ggpht.com/ZIuUNjquz9Pi6dOdhpP0QTlU9CCyQBvLImBVB0dHbuKAnV0_WxXkg2OkOxJ7vI46m24iTvmE=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1874
+  like_count: 53
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 21
+- url: https://www.youtube.com/watch?v=8O4LbKyhWO4
+  title: A Complete Guide To The Muay Thai Clinch For Beginners To Advanced Fighters
+  description: This is a comprehensive guide to the clinch. You can break down each
+    step into a drill. Practice, practice, and practice to get better ...
+  thumbnail_url: https://i.ytimg.com/vi/8O4LbKyhWO4/hqdefault.jpg
+  channel_name: Fairtex Training Center
+  channel_url: https://www.youtube.com/channel/UCTyNctGdpOccuwv0r2Z2GQw
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_kNPBc0_QIcgV7IBrAOD6oS4j-6I7WF2TvzKd3p_qsNe48=s800-c-k-c0x00ffffff-no-rj
+  view_count: 27148
+  like_count: 1532
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 22
+- url: https://www.youtube.com/watch?v=eghUgmkqCYs
+  title: Throw the PERFECT Punch!  |  Beginner Basics with Neungsiam Fairtex
+  description: Join us as Golden Era's Neungsiam "Fairtex" Samphusri breaks down all
+    of the traditional Muay Thai punches. Working with your ...
+  thumbnail_url: https://i.ytimg.com/vi/eghUgmkqCYs/hqdefault.jpg
+  channel_name: Combat Culture
+  channel_url: https://www.youtube.com/channel/UCUNLiEAXZTh8jzv5X0zhhBA
+  channel_avatar_url: https://yt3.ggpht.com/qt7pZJl9iJRI9WolWQcAUY0kRFDZ4UQswAned8VmNvy0-aQGBVbGa74B9G1_zmEIAmwxyz8d4us=s800-c-k-c0x00ffffff-no-rj
+  view_count: 112174
+  like_count: 5082
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 23
+- url: https://www.youtube.com/watch?v=K8lD-48xhWI
+  title: 'The REALEST guide to throwing kicks #muaythai #mma #fighting'
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/K8lD-48xhWI/hqdefault.jpg
+  channel_name: Chris Jereza
+  channel_url: https://www.youtube.com/channel/UCxuP9kRpL9pcaGZK2M8gvIQ
+  channel_avatar_url: https://yt3.ggpht.com/Y4HVqiiVduRTpGdxaWMlKtAm0RLzpStOg8oq0wFiDTsHDIH7Jq71eXLdiagKJb1k4i92R87cIg=s800-c-k-c0x00ffffff-no-rj
+  view_count: 3964763
+  like_count: 267566
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 24
+- url: https://www.youtube.com/watch?v=JC1N8qUTolM
+  title: Boxing vs Muay Thai…
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/JC1N8qUTolM/hqdefault.jpg
+  channel_name: Nat Hearn
+  channel_url: https://www.youtube.com/channel/UCKMYdnHrn9DCh3SQpsZWOKA
+  channel_avatar_url: https://yt3.ggpht.com/8ET8Dmin4Uf3ayFECfY4j1n4m9Z4MxvEgEvYMQR2Ofpg27uoigIBI6wyc0H6onpZ9XkwYZyqbg=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1871691
+  like_count: 43696
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 25
+- url: https://www.youtube.com/watch?v=rqh9pzEd6BM
+  title: Muay Thai Tricks - Hard Hitting Elbows with Yoddecha Sityodtong
+  description: Giving your opponent a different look before setting up your real intent
+    is one strategy that has always been used to great effect by ...
+  thumbnail_url: https://i.ytimg.com/vi/rqh9pzEd6BM/hqdefault.jpg
+  channel_name: Stuart Tomlinson
+  channel_url: https://www.youtube.com/channel/UCpLH5tDGl_QiRJ1eDUTLFxQ
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_n_F0HGBm5L0NyIERFP_RCzcNMVEYsxqunNR1WQBxsrdRQ=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1741069
+  like_count: 42352
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 26
+- url: https://www.youtube.com/watch?v=nAdgqrAzrfs
+  title: 7 Basic Combos Beginners NEED to Know (+Variations)
+  description: 16:17 - 1. Hook - Rear Body/High Kick 2:06 - 2. Cross - Lead Body/High
+    Kick 3:28 - 3. Cross - Rear Body/High Kick 4:23 - 4.
+  thumbnail_url: https://i.ytimg.com/vi/nAdgqrAzrfs/hqdefault.jpg
+  channel_name: 'Jeff Chan MMAShredded '
+  channel_url: https://www.youtube.com/channel/UCt1ZR07apYANZ3MmlbipIXg
+  channel_avatar_url: https://yt3.ggpht.com/UgLtBrEbA23TGaYPy3Ve2GI5d1tfDPo0McxO9NGnFi9HCZNkdW6atCxYGLBr7L7Nk0q4VofqJA=s800-c-k-c0x00ffffff-no-rj
+  view_count: 380815
+  like_count: 12532
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 27
+- url: https://www.youtube.com/watch?v=9jL2yLdPV3s
+  title: 'Power vs Intensity 🔥 #mtkgym #muaythai'
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/9jL2yLdPV3s/hqdefault.jpg
+  channel_name: Muay Thai Kickboxing
+  channel_url: https://www.youtube.com/channel/UCx2_-8u0qZIbNIg7czlNMOg
+  channel_avatar_url: https://yt3.ggpht.com/wxtrY8dFGLR6Pqxw1eXlcGSWQOvSMlummRTNwTt2NE9eA65pulJj3CEZJZmdBU-3_qggP7j_IJE=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1007698
+  like_count: 18829
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 28
+- url: https://www.youtube.com/watch?v=VglKHvHDtPw
+  title: How to Get Started in Muay Thai (or any martial art!) | Beginner Tips for
+    Your First Day at the Gym
+  description: Start your martial arts journey the right way. We talk tips and advice
+    on what you need to get started and what to expect on your ...
+  thumbnail_url: https://i.ytimg.com/vi/VglKHvHDtPw/hqdefault.jpg
+  channel_name: Combat Culture
+  channel_url: https://www.youtube.com/channel/UCUNLiEAXZTh8jzv5X0zhhBA
+  channel_avatar_url: https://yt3.ggpht.com/qt7pZJl9iJRI9WolWQcAUY0kRFDZ4UQswAned8VmNvy0-aQGBVbGa74B9G1_zmEIAmwxyz8d4us=s800-c-k-c0x00ffffff-no-rj
+  view_count: 651151
+  like_count: 22278
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 29
+- url: https://www.youtube.com/watch?v=eQllmC45OaY
+  title: Muay Thai Is Better Than Kickboxing
+  description: 'ufc #mma #joerogan #jre #muaythai #kickboxing #martialarts #mixedmartialarts
+    #shorts #shorts.'
+  thumbnail_url: https://i.ytimg.com/vi/eQllmC45OaY/hqdefault.jpg
+  channel_name: Martial MMA
+  channel_url: https://www.youtube.com/channel/UCV_G1WECR5RZrneyxQtgXFw
+  channel_avatar_url: https://yt3.ggpht.com/asdA_VdwYkPFgrtMFP7A_W6DZ46yLRjuuFNh7exKDS7aM_-Ognnu_g77TXXQI435KcKADr5gEA=s800-c-k-c0x00ffffff-no-rj
+  view_count: 7904033
+  like_count: 345807
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 30
+- url: https://www.youtube.com/watch?v=6QQCVLSbZg8
+  title: Why Muay Thai Fighters Spar Better
+  description: Joe Rogan explains why Muay Thai fighters spar better than many other
+    martial arts. He also explains the importance of play ...
+  thumbnail_url: https://i.ytimg.com/vi/6QQCVLSbZg8/hqdefault.jpg
+  channel_name: OverhandMMA
+  channel_url: https://www.youtube.com/channel/UC1f77BOQHp7p7gcZsedJmAQ
+  channel_avatar_url: https://yt3.ggpht.com/atPB6bOPTAHbpMZaA62xujsCzAWMfYVVg-PWLwY0VCLB-1Vz2QFDVQVTR22MYzzu03AoAOLw9KU=s800-c-k-c0x00ffffff-no-rj
+  view_count: 234610
+  like_count: 9301
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 31
+- url: https://www.youtube.com/watch?v=DEvcvIsI7L4
+  title: Muay Thai Fighter’s Insane Routine
+  description: 'muaythai #joerogan #jre #shorts #short.'
+  thumbnail_url: https://i.ytimg.com/vi/DEvcvIsI7L4/hqdefault.jpg
+  channel_name: Martial MMA
+  channel_url: https://www.youtube.com/channel/UCV_G1WECR5RZrneyxQtgXFw
+  channel_avatar_url: https://yt3.ggpht.com/asdA_VdwYkPFgrtMFP7A_W6DZ46yLRjuuFNh7exKDS7aM_-Ognnu_g77TXXQI435KcKADr5gEA=s800-c-k-c0x00ffffff-no-rj
+  view_count: 10901088
+  like_count: 476838
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 32
+- url: https://www.youtube.com/watch?v=t6WzM5ZnSNY
+  title: 'POV: When Muay Thai fighters spar a boxer'
+  description: 'boxing #shortswithcamilla #martialarts #boxinglifestyle #martialartslifestyle
+    #muaythai #boxer #sparringsession #sparring.'
+  thumbnail_url: https://i.ytimg.com/vi/t6WzM5ZnSNY/hqdefault.jpg
+  channel_name: Joel Iyalla
+  channel_url: https://www.youtube.com/channel/UCYGavBGFkTVS6Bvz7gAvr7g
+  channel_avatar_url: https://yt3.ggpht.com/eRpiPQpyWJXPZGVJO9vB_3VK8wmOTaK7l0llLiZAkvH39mFWd_qUPYJ8cK7m-rHvNz9fp_3q=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1916837
+  like_count: 60602
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 33
+- url: https://www.youtube.com/watch?v=4CQUxL7Ij-Y
+  title: How I Would Train Muay Thai/Kickboxing If I Was A Beginner…
+  description: 'selfimprovement #gym #mindset #mma #muaythai God bless thanks for
+    watching bro Baki workout and diet course ...'
+  thumbnail_url: https://i.ytimg.com/vi/4CQUxL7Ij-Y/hqdefault.jpg
+  channel_name: Anetham
+  channel_url: https://www.youtube.com/channel/UCYpRqjulcK3kZICz73tbn5Q
+  channel_avatar_url: https://yt3.ggpht.com/oZhBjVco8iIWIsz4iiJ7gM68m-bhHiYWowuiliNX6P68_huzarO9o6yVeLjQ2kNKJx3ZPns2=s800-c-k-c0x00ffffff-no-rj
+  view_count: 421663
+  like_count: 17462
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 34
+- url: https://www.youtube.com/watch?v=-PnqL2fkdzc
+  title: Improve Your Kicking Balance and Power With THIS Simple Drill
+  description: Think about how INSANE Saenchai's balance is when he kicks. This is
+    how you get it. Who else should you study to improve your ...
+  thumbnail_url: https://i.ytimg.com/vi/-PnqL2fkdzc/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1090368
+  like_count: 42120
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 35
+- url: https://www.youtube.com/watch?v=-if-gsAdSyg
+  title: A quick Muay Thai kick workout to make you a better fighter 🥊
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/-if-gsAdSyg/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 403094
+  like_count: 21333
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 36
+- url: https://www.youtube.com/watch?v=Jt5R67DsXt0
+  title: You MUST know this essential Muay Thai combo!
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/Jt5R67DsXt0/hqdefault.jpg
+  channel_name: Vivek Nakarmi - Pentagon MMA
+  channel_url: https://www.youtube.com/channel/UC8rOKQJRT9NKw8Hb_2spMJw
+  channel_avatar_url: https://yt3.ggpht.com/DLm2afDNet7j9yUkTZ8UfTFydVnqwPIBkJJ9tEqfq2eHAOaCrKDT784mfsYrRsdGisBbfnq_HJA=s800-c-k-c0x00ffffff-no-rj
+  view_count: 266212
+  like_count: 11371
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 37
+- url: https://www.youtube.com/watch?v=OSb41UA7GA0
+  title: Muay Thai Training - Lead Low Kick to Jump Knee with Kru Four
+  description: More Muay Thai brilliance here from when I was back in Koh Samui recently
+    at the always outstanding @punchitmuaythai I ...
+  thumbnail_url: https://i.ytimg.com/vi/OSb41UA7GA0/hqdefault.jpg
+  channel_name: Stuart Tomlinson
+  channel_url: https://www.youtube.com/channel/UCpLH5tDGl_QiRJ1eDUTLFxQ
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_n_F0HGBm5L0NyIERFP_RCzcNMVEYsxqunNR1WQBxsrdRQ=s800-c-k-c0x00ffffff-no-rj
+  view_count: 4572456
+  like_count: 62018
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 38
+- url: https://www.youtube.com/watch?v=ZWGUEIsjX34
+  title: BEGINNER MUAY THAI MISTAKES 😬
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/ZWGUEIsjX34/hqdefault.jpg
+  channel_name: krekanto
+  channel_url: https://www.youtube.com/channel/UC-ip1HbhD-b8rDGoi5B3MYQ
+  channel_avatar_url: https://yt3.ggpht.com/KmDdlCrRSVr3xnC1SfqJj6hLsonzpgux1tOTqCEtuaOVfe2rsQoam-PMtK8k-qnk1UpdpF_V=s800-c-k-c0x00ffffff-no-rj
+  view_count: 20437
+  like_count: 586
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 39
+- url: https://www.youtube.com/watch?v=XbS2y-4mMVI
+  title: 'How to throw a perfect muay thai kick 🥊 #shorts'
+  description: Learn how to throw a perfect muay thai kick in this easy tutorial.
+    This kick is essential for any muay thai fighter, and with a little ...
+  thumbnail_url: https://i.ytimg.com/vi/XbS2y-4mMVI/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1701558
+  like_count: 51065
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 40
+- url: https://www.youtube.com/watch?v=0RjeEHA-oAk
+  title: 'Easy Muay Thai combos for beginners to learn #shorts'
+  description: In this video, we're going to teach you some easy Muay Thai combos
+    that you can use to learn the basics of Muay Thai.
+  thumbnail_url: https://i.ytimg.com/vi/0RjeEHA-oAk/hqdefault.jpg
+  channel_name: Sean "Muay Thai Guy" Fagan
+  channel_url: https://www.youtube.com/channel/UCpRyzlMgSv7_9eMhq-l3DAw
+  channel_avatar_url: https://yt3.ggpht.com/Rx4Jb1HyJGBguER7wV99ILbPW4a5DLW5jRvIY3nwZSPYBf_GQmBdOoeBKiJbW6gbFmwfabXT=s800-c-k-c0x00ffffff-no-rj
+  view_count: 1702491
+  like_count: 77153
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 41
+- url: https://www.youtube.com/watch?v=7sLw5dHdRG4
+  title: BEGINNER MUAY THAI - Full Class, 30 Minutes // No Equipment
+  description: 'HEY TEAM! Back with our first follow along full Muay Thai class for
+    beginners. ALERT: It took us a good 10 minutes to get the intro ...'
+  thumbnail_url: https://i.ytimg.com/vi/7sLw5dHdRG4/hqdefault.jpg
+  channel_name: 'Martial Spirit: Martial Arts & Fitness'
+  channel_url: https://www.youtube.com/channel/UCsigMq3vbLwjQoinDFgdTFQ
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_l2tgO49vgKSSQcHKUXgh6ZPvCUblbQPqCJzowJj8dN1cU=s800-c-k-c0x00ffffff-no-rj
+  view_count: 2190218
+  like_count: 61809
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 42
+- url: https://www.youtube.com/watch?v=mPnsKMzHNPE
+  title: 'Muay Thai stance SECRETS you need to know! #muaythai #mma #martialarts #fightsports'
+  description: ''
+  thumbnail_url: https://i.ytimg.com/vi/mPnsKMzHNPE/hqdefault.jpg
+  channel_name: Vivek Nakarmi - Pentagon MMA
+  channel_url: https://www.youtube.com/channel/UC8rOKQJRT9NKw8Hb_2spMJw
+  channel_avatar_url: https://yt3.ggpht.com/DLm2afDNet7j9yUkTZ8UfTFydVnqwPIBkJJ9tEqfq2eHAOaCrKDT784mfsYrRsdGisBbfnq_HJA=s800-c-k-c0x00ffffff-no-rj
+  view_count: 56694
+  like_count: 2679
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 43
+- url: https://www.youtube.com/watch?v=AVU2NZd-H2Q
+  title: Superbon | Perfecting the Muay Thai Knee Technique 💥🇹🇭
+  description: Superbon demonstrates precision and power with his Muay Thai knee —
+    controlled, explosive, and beautifully timed. A true ...
+  thumbnail_url: https://i.ytimg.com/vi/AVU2NZd-H2Q/hqdefault.jpg
+  channel_name: T.A.G. Muay Thai
+  channel_url: https://www.youtube.com/channel/UCCPtCYT0bOGm22HaFMNe4RQ
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_ksTTAbLjUpJ1W5NKZ0EYkxJwd1obZ0vChM5tleeGoG59I=s800-c-k-c0x00ffffff-no-rj
+  view_count: 2449761
+  like_count: null
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 44
+- url: https://www.youtube.com/watch?v=0VGI-IQ8Z54
+  title: Muay Thai Basics for Beginners - An Introduction to the Guard, Stance and
+    Rhythm
+  description: 'Shop: https://mtpfightgear.com My Instagram: https://www.instagram.com/muaythaipros/
+    This video walks you through the basic ...'
+  thumbnail_url: https://i.ytimg.com/vi/0VGI-IQ8Z54/hqdefault.jpg
+  channel_name: Muay Thai PROS
+  channel_url: https://www.youtube.com/channel/UCT4rADCrNoOL22-jOWQjSRQ
+  channel_avatar_url: https://yt3.ggpht.com/ytc/AIdro_n5iFvR5oPS5MVkkCQHtsCtCCbVnQvREn0Y9edXiTQUktE=s800-c-k-c0x00ffffff-no-rj
+  view_count: 127195
+  like_count: 2332
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 45
+- url: https://www.youtube.com/watch?v=V8udWxepWqk
+  title: Muay Thai - First day of Muay Thai
+  description: Bangkok Boxing Fitness - Muay Thai, Kickboxing, MMA, Boxing, BJJ FUN
+    & FRIENDLY GROUP WORKOUTS BUILD ...
+  thumbnail_url: https://i.ytimg.com/vi/V8udWxepWqk/hqdefault.jpg
+  channel_name: Bangkok Boxing Fitness
+  channel_url: https://www.youtube.com/channel/UCaphH8kw02Plrkhsp6M0X0w
+  channel_avatar_url: https://yt3.ggpht.com/gpikHGvJ6rMtdYr6MGTB8fvLJU-b0V-tv-e4v_mQxDjn4uvSv6dsAuY5giH5_MNzI3ulI9xSXiA=s800-c-k-c0x00ffffff-no-rj
+  view_count: 9209
+  like_count: 248
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 46
+- url: https://www.youtube.com/watch?v=DRlHv84xymM
+  title: Learn the Perfect Muay Thai Fight Stance in 5 Minutes!
+  description: This beginner tutorial is a visual breakdown of the fundamental stance
+    in Muay Thai. How do you know whether you are a ...
+  thumbnail_url: https://i.ytimg.com/vi/DRlHv84xymM/hqdefault.jpg
+  channel_name: Paul Banasiak @MuayThaiTechnician
+  channel_url: https://www.youtube.com/channel/UCibKtggsc7i3Ot1y0MzY6VQ
+  channel_avatar_url: https://yt3.ggpht.com/jZKJC5-6V2VwSmbM5LfgVz6R0JmwYd--gotmHNqGn7aPzPhsEp6-yGL5gBHx-Xncb7hS6YRyXQ=s800-c-k-c0x00ffffff-no-rj
+  view_count: 35033
+  like_count: 1259
+  tags:
+  - educational
+  - tutorial
+  source_queries:
+  - muay thai for beginners explained
+  relevance_index: 47
