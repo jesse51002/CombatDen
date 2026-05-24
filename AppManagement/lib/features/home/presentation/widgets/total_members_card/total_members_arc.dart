@@ -49,7 +49,7 @@ class _ArcPainter extends CustomPainter {
     final total = active + inactive;
     if (total == 0) return;
 
-    final strokeWidth = size.shortestSide * 0.06;
+    final strokeWidth = size.shortestSide * 0.09; // arc thickness (tunable)
     final rect = Rect.fromCircle(
       center: Offset(size.width / 2, size.height),
       radius: size.shortestSide - strokeWidth,
@@ -59,6 +59,9 @@ class _ArcPainter extends CustomPainter {
     // back up to the right side.
     const startAngle = math.pi;
     const totalSweep = math.pi;
+    // Empty space carved out at the active/inactive join so the round
+    // caps sit inside their own slice instead of overlapping (tunable).
+    const gapAngle = 0.18;
 
     final activeSweep = totalSweep * (active / total);
     final inactiveSweep = totalSweep - activeSweep;
@@ -75,14 +78,22 @@ class _ArcPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
 
-    canvas.drawArc(rect, startAngle, activeSweep, false, activePaint);
-    canvas.drawArc(
-      rect,
-      startAngle + activeSweep,
-      inactiveSweep,
-      false,
-      inactivePaint,
-    );
+    // Carve gapAngle/2 from each side of the join; outer ends stay fixed.
+    final activeDrawSweep = activeSweep - gapAngle / 2;
+    final inactiveDrawSweep = inactiveSweep - gapAngle / 2;
+
+    if (activeDrawSweep > 0) {
+      canvas.drawArc(rect, startAngle, activeDrawSweep, false, activePaint);
+    }
+    if (inactiveDrawSweep > 0) {
+      canvas.drawArc(
+        rect,
+        startAngle + activeSweep + gapAngle / 2,
+        inactiveDrawSweep,
+        false,
+        inactivePaint,
+      );
+    }
   }
 
   @override
