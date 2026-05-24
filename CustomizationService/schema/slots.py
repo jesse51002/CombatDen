@@ -1,4 +1,4 @@
-"""The customizable slot types: `ColorSlot`, `ImageSlot`, `FontSlot`, `TextSlot`."""
+"""The customizable slot types: `ColorSlot`, `ImageSlot`, `FontSlot`, `TextSlot`, `IconSlot`."""
 
 from __future__ import annotations
 
@@ -80,6 +80,21 @@ class FontSlot(SlotBase):
     only thing the LLM is shown, mirroring ``ColorSlot``'s pre-role
     shape. Per-slot role enums are intentionally deferred — pairing /
     legibility rules live in the prompt, not the type.
+    """
+
+
+class IconSlot(SlotBase):
+    """A named icon the pipeline will match to a curated icon set or
+    generate.
+
+    Just ``id`` + ``description`` (inherited): the description is a short
+    natural-language concept ("checkmark", "navigation home tab", "send
+    message") — the only thing the LLM is shown, mirroring ``FontSlot``.
+    The pipeline picks a best-fit icon set by brand vibe, matches each
+    slot to an icon in that set, and generates an SVG for any slot the
+    set can't honestly cover. Icons are monochrome (``currentColor``) so
+    the MobileApp tints them per theme — there is no per-slot colour
+    field.
     """
 
 

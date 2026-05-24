@@ -24,6 +24,7 @@ from src.modules.base import DependencyKind
 _COLOR = DependencyKind.COLOR.value
 _FONT = DependencyKind.FONT.value
 _TEXT = DependencyKind.TEXT.value
+_ICON = DependencyKind.ICON.value
 
 _CUST: dict[str, Any] = {
     "design_direction": {
@@ -54,6 +55,7 @@ def _ctx(
     images: list[dict[str, Any]],
     *,
     texts: list[dict[str, Any]] | None = None,
+    icons: list[dict[str, Any]] | None = None,
 ) -> RunContext:
     payload: dict[str, Any] = {
         "id": "demo",
@@ -64,6 +66,8 @@ def _ctx(
     }
     if texts is not None:
         payload["texts"] = texts
+    if icons is not None:
+        payload["icons"] = icons
     app = AppFormat.model_validate(payload)
     cust = Customization.model_validate(_CUST)
     return RunContext(app, cust, tmp_path)
@@ -75,6 +79,8 @@ def _graph(ctx: RunContext) -> Any:
         image_gen=_Dummy(),
         bg_remover=_Dummy(),
         google_fonts=_Dummy(),
+        icon_catalog=_Dummy(),
+        icon_generator=_Dummy(),
     )
 
 
@@ -107,6 +113,8 @@ def test_build_digraph_levels_dependencies(tmp_path: Path) -> None:
     assert set(graph.predecessors(_FONT)) == set()
     # No text slots → no text node at all (not an orphan with no edges).
     assert _TEXT not in graph.nodes
+    # No icon slots → no icon node either (same skip path).
+    assert _ICON not in graph.nodes
 
 
 def test_build_digraph_includes_text_node_when_app_has_text_slots(
@@ -132,6 +140,28 @@ def test_build_digraph_includes_text_node_when_app_has_text_slots(
     assert gens[0] == sorted([_COLOR, _FONT, _TEXT])
     assert set(graph.predecessors(_TEXT)) == set()
     assert set(graph.successors(_TEXT)) == set()
+
+
+def test_build_digraph_includes_icon_node_when_app_has_icon_slots(
+    tmp_path: Path,
+) -> None:
+    """An app that declares icon slots gets an icon root in the DAG,
+    level-0 alongside colour and font (no colour dependency — icons are
+    monochrome); nothing depends on it."""
+    ctx = _ctx(
+        tmp_path,
+        [{"id": "hero", "description": "a hero"}],
+        icons=[
+            {"id": "home_tab", "description": "home navigation tab"},
+            {"id": "search_action", "description": "open search"},
+        ],
+    )
+    graph = Pipeline._build_digraph(_graph(ctx))
+
+    gens = [sorted(level) for level in nx.topological_generations(graph)]
+    assert gens[0] == sorted([_COLOR, _FONT, _ICON])
+    assert set(graph.predecessors(_ICON)) == set()
+    assert set(graph.successors(_ICON)) == set()
 
 
 def test_build_digraph_rejects_cycle(tmp_path: Path) -> None:

@@ -7,7 +7,7 @@ import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from schema.color_role import ColorRole
-from schema.slots import ColorSlot, FontSlot, ImageSlot, TextSlot
+from schema.slots import ColorSlot, FontSlot, IconSlot, ImageSlot, TextSlot
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -15,11 +15,11 @@ _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 # rejected: a node's resolved-input dict is keyed by these, so an image
 # named "color" would shadow the palette. Source of truth for the values
 # is ``src.modules.base.DependencyKind`` (kept local so schema/ imports no
-# src/ — same reason ColorRole lives in schema/). ``font`` and ``text``
-# are reserved for the same keyspace reason even though no image module
-# depends on either today, so a future ``depends_on: font`` /
-# ``depends_on: text`` doesn't get shadowed.
-_EXECUTOR_NODE_NAMES = frozenset({"color", "font", "text"})
+# src/ — same reason ColorRole lives in schema/). ``font``, ``text`` and
+# ``icon`` are reserved for the same keyspace reason even though no image
+# module depends on any of them today, so a future ``depends_on: font`` /
+# ``depends_on: text`` / ``depends_on: icon`` doesn't get shadowed.
+_EXECUTOR_NODE_NAMES = frozenset({"color", "font", "text", "icon"})
 
 
 def _assert_unique_ids(slots: list, *, kind: str) -> None:
@@ -45,6 +45,7 @@ class AppFormat(BaseModel):
     colors: list[ColorSlot] = Field(default_factory=list)
     fonts: list[FontSlot] = Field(default_factory=list)
     texts: list[TextSlot] = Field(default_factory=list)
+    icons: list[IconSlot] = Field(default_factory=list)
 
     @field_validator("id")
     @classmethod
@@ -152,4 +153,14 @@ class AppFormat(BaseModel):
         the text module's per-request closed response model is keyed
         by slot id."""
         _assert_unique_ids(v, kind="text")
+        return v
+
+    @field_validator("icons")
+    @classmethod
+    def _icons_well_formed(cls, v: list[IconSlot]) -> list[IconSlot]:
+        """Icon-only invariants: unique ids. Same reason as fonts —
+        the icon module's per-request closed matching/prompt response
+        models are keyed by slot id, so a collision would silently
+        overwrite a slot."""
+        _assert_unique_ids(v, kind="icon")
         return v

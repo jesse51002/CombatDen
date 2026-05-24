@@ -12,6 +12,8 @@ from schema.output import (
     Derivations,
     FontOutput,
     FontSet,
+    IconOutput,
+    IconSet,
     ImageOutput,
     ImageSet,
     Output,
@@ -20,7 +22,14 @@ from schema.output import (
     TextSet,
 )
 from schema.primitives import AbsolutePath, HexColor, HslColor, OklchColor, RgbColor
-from schema.slots import ColorSlot, FontSlot, ImageSlot, SlotBase, TextSlot
+from schema.slots import (
+    ColorSlot,
+    FontSlot,
+    IconSlot,
+    ImageSlot,
+    SlotBase,
+    TextSlot,
+)
 
 __all__ = [
     "AbsolutePath",
@@ -41,6 +50,9 @@ __all__ = [
     "FontSlot",
     "HexColor",
     "HslColor",
+    "IconOutput",
+    "IconSet",
+    "IconSlot",
     "ImageOutput",
     "ImageSet",
     "ImageSlot",

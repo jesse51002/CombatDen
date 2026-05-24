@@ -18,12 +18,14 @@ class ImageGenerator(ABC):
 
     @abstractmethod
     async def generate(
-        self, prompt: str, dest: Path, *, model: str, quality: str
+        self, prompt: str, dest: Path, *, model: str, quality: str | None = None
     ) -> AbsolutePath:
-        """Generate -> write PNG at `dest` -> return its absolute path.
+        """Generate -> write the image at `dest` -> return its absolute path.
 
         ``model`` is a per-call concern (provider-prefixed, like the LLM
-        client routes on); ``quality`` is the model's quality tier.
+        client routes on). ``quality`` is the model's quality tier and is
+        OPTIONAL: raster generators (gpt-image) use it; generators with no
+        quality tier (Recraft vector/SVG) leave it ``None``.
         Text-to-image: no input image.
         """
         raise NotImplementedError

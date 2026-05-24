@@ -21,12 +21,14 @@ from src.core.run_context import RunContext
 from src.modules.base import DependencyKind
 from src.modules.colors.color_node import ColorNode
 from src.modules.fonts.font_node import FontNode
+from src.modules.icons.icon_node import IconNode
 from src.modules.images.background_service import BackgroundService
 from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_node import ImageNode
 from src.modules.texts.text_node import TextNode
 from src.shared.interfaces.background_remover import BackgroundRemover
 from src.shared.interfaces.google_fonts_catalog import GoogleFontsCatalog
+from src.shared.interfaces.icon_set_catalog import IconSetCatalog
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
 
@@ -35,13 +37,13 @@ logger = logging.getLogger(__name__)
 
 class Graph(BaseModel):
     """The run's node set: the colour root, the font root, the optional
-    text root, plus one node per image slot.
+    text and icon roots, plus one node per image slot.
 
     A transport container only (nodes are plain classes, hence
     ``arbitrary_types_allowed``); the executor builds the DAG from each
-    node's ``key``/``deps``. ``text`` is ``None`` when the app
-    declares no text slots — the registry skips constructing a text
-    node so an empty-slots run doesn't burn an LLM call on nothing.
+    node's ``key``/``deps``. ``text`` and ``icon`` are ``None`` when the
+    app declares no text / icon slots — the registry skips constructing
+    those nodes so an empty-slots run doesn't burn LLM calls on nothing.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -49,6 +51,7 @@ class Graph(BaseModel):
     color: ColorNode
     font: FontNode
     text: TextNode | None
+    icon: IconNode | None
     images: list[ImageNode]
 
 
@@ -65,6 +68,8 @@ class ModuleRegistry:
         image_gen: ImageGenerator,
         bg_remover: BackgroundRemover,
         google_fonts: GoogleFontsCatalog,
+        icon_catalog: IconSetCatalog,
+        icon_generator: ImageGenerator,
     ) -> Graph:
         """Construct the colour node, the font node, and one image node
         per slot.
@@ -88,6 +93,20 @@ class ModuleRegistry:
             if self._run_ctx.app.texts
             else None
         )
+        # No icon slots → no icon node → no LLM calls (the icon module's
+        # three calls + any Recraft generation). The orchestrator filters
+        # a None icon out of the level-0 sibling set and ``icon_set``
+        # defaults to empty on the assembled Output.
+        icon = (
+            IconNode(
+                self._run_ctx,
+                llm=llm,
+                catalog=icon_catalog,
+                generator=icon_generator,
+            )
+            if self._run_ctx.app.icons
+            else None
+        )
         classifier = ComplexityClassifier(llm=llm)
         background = BackgroundService(bg_remover=bg_remover)
 
@@ -105,10 +124,13 @@ class ModuleRegistry:
             for slot in self._run_ctx.app.images
         ]
         logger.debug(
-            "graph: color=%s, font=%s, text=%s, images=%d",
+            "graph: color=%s, font=%s, text=%s, icon=%s, images=%d",
             color.key,
             font.key,
             text.key if text is not None else None,
+            icon.key if icon is not None else None,
             len(images),
         )
-        return Graph(color=color, font=font, text=text, images=images)
+        return Graph(
+            color=color, font=font, text=text, icon=icon, images=images
+        )

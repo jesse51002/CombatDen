@@ -15,6 +15,8 @@ RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
 IMAGES_DIRNAME = "images"
 # …and only the final, delivered per-slot image lands here.
 FINAL_IMAGES_DIRNAME = "final_images"
+# Per-slot delivered SVG icons (matched from a set or generated) land here.
+ICONS_DIRNAME = "icons"
 OUTPUT_FILENAME = "output.yaml"
 
 
@@ -28,6 +30,7 @@ class RunContext:
     run_dir: Path
     image_dir: Path
     final_image_dir: Path
+    icon_dir: Path
 
     def __init__(
         self,
@@ -47,9 +50,11 @@ class RunContext:
         self.run_dir = out_root / self.app_id / self.run_id
         self.image_dir = self.run_dir / IMAGES_DIRNAME
         self.final_image_dir = self.run_dir / FINAL_IMAGES_DIRNAME
+        self.icon_dir = self.run_dir / ICONS_DIRNAME
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.image_dir.mkdir(parents=True, exist_ok=True)
         self.final_image_dir.mkdir(parents=True, exist_ok=True)
+        self.icon_dir.mkdir(parents=True, exist_ok=True)
         logger.debug("run dir: %s", self.run_dir)
 
     def image_path(self, slot_id: str) -> AbsolutePath:
@@ -60,6 +65,17 @@ class RunContext:
         """
         return AbsolutePath(
             str((self.final_image_dir / f"{slot_id}.png").resolve())
+        )
+
+    def icon_path(self, slot_id: str) -> AbsolutePath:
+        """Absolute path of one slot's delivered SVG icon.
+
+        Lives in ``icons/``; one file per slot, whether the icon was
+        matched from a curated set (copied here) or generated (written
+        here). Icons have no raw/final split — a single output per slot.
+        """
+        return AbsolutePath(
+            str((self.icon_dir / f"{slot_id}.svg").resolve())
         )
 
     def output_path(self) -> Path:

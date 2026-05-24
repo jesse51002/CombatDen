@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +26,19 @@ class Settings(BaseSettings):
     # PhotoRoom via its own httpx client (background removal).
     photoroom_api_key: str
     photoroom_api_url: str = "https://sdk.photoroom.com/v1/segment"
+
+    # Recraft via its own httpx client (SVG icon generation for any icon
+    # slot a curated set can't cover). Not litellm-routed — a direct
+    # client, like PhotoRoom — so the key has no default (fail loud if
+    # absent, matching every other provider key).
+    recraft_api_key: str
+    recraft_api_url: str = "https://external.api.recraft.ai/v1/images/generations"
+
+    # Curated icon-set catalog: the directory holding one subdir per set
+    # (<set_id>/set.yaml + icons/*.svg). Defaults to the repo-shipped
+    # <CustomizationService>/assets/icon_sets/ (resolved relative to this
+    # file so cwd doesn't matter); override to point at an alternate library.
+    icon_sets_dir: Path = Path(__file__).resolve().parents[2] / "assets" / "icon_sets"
 
     # Google Fonts Developer API (https://developers.google.com/fonts/docs/developer_api).
     # Used by GoogleFontsCatalog to fetch + validate font families both at
