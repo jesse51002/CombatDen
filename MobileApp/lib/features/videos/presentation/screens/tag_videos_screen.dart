@@ -11,16 +11,16 @@ import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 
 /// The "view all" destination for a carousel: a scrollable vertical list of
-/// every video carrying one specific [VideoTag], in backend (relevancy)
-/// order. Independent of the home page's top filter. Reached via
-/// `AppRoutes.videoTagList` with the [VideoTag] as the route argument.
+/// every video carrying one specific tag, in backend (relevancy) order.
+/// Independent of the home page's top filter. Reached via
+/// `AppRoutes.videoTagList` with the tag string as the route argument.
 class TagVideosScreen extends StatelessWidget {
   const TagVideosScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final arg = ModalRoute.of(context)?.settings.arguments;
-    final tag = arg is VideoTag ? arg : VideoTag.unknown;
+    final tag = arg is String ? arg : '';
 
     return AppScreenScaffold(
       bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.videos),
@@ -28,7 +28,7 @@ class TagVideosScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingBig,
         children: [
-          _Header(title: tagDisplayName(tag)),
+          _Header(title: displayLabel(tag)),
           Expanded(child: _TagList(tag: tag)),
         ],
       ),
@@ -39,7 +39,7 @@ class TagVideosScreen extends StatelessWidget {
 class _TagList extends StatelessWidget {
   const _TagList({required this.tag});
 
-  final VideoTag tag;
+  final String tag;
 
   @override
   Widget build(BuildContext context) {

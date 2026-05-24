@@ -3,28 +3,17 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/videos/data/video.dart';
 import 'package:mobile_app/features/videos/data/video_feed_repository.dart';
+import 'package:mobile_app/features/videos/data/video_helpers.dart';
+import 'package:mobile_app/features/videos/data/video_selectors.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_category_tabs.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/videos_feed_body.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 
-/// The top filters map onto the server's coarse `big_groups`: All (no
-/// filter), Education, Entertainment.
-const List<String> _kTopFilters = ['All', 'Education', 'Entertainment'];
-
-BigGroup? _scopeForTab(int index) => switch (index) {
-  1 => BigGroup.educational,
-  2 => BigGroup.entertainment,
-  _ => null,
-};
-
-int _tabForScope(BigGroup scope) => switch (scope) {
-  BigGroup.educational => 1,
-  BigGroup.entertainment => 2,
-  _ => 0,
-};
-
+/// The top filters derive from the coarse `big_groups` the loaded feed
+/// actually carries: an `All` tab plus one per distinct group. `null` scope =
+/// the `All` filter.
 class VideosScreen extends StatefulWidget {
   const VideosScreen({super.key});
 
@@ -35,24 +24,24 @@ class VideosScreen extends StatefulWidget {
 class _VideosScreenState extends State<VideosScreen> {
   final VideoFeedRepository _repository = VideoFeedRepository.instance;
   late final Future<List<Video>> _feed = _repository.feed();
-  int _selectedTab = 0;
+  String? _selectedScope;
   bool _appliedInitialFilter = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Honor an initial filter passed by the caller (e.g. the rank page's
-    // "view all" opens straight to Education). Applied once so later taps
+    // "view all" opens straight to 'educational'). Applied once so later taps
     // aren't overridden.
     if (_appliedInitialFilter) return;
     _appliedInitialFilter = true;
     final arg = ModalRoute.of(context)?.settings.arguments;
-    if (arg is BigGroup) _selectedTab = _tabForScope(arg);
+    if (arg is String) _selectedScope = arg;
   }
 
-  void _onTabSelected(int index) {
-    if (index == _selectedTab) return;
-    setState(() => _selectedTab = index);
+  void _onScopeSelected(String? scope) {
+    if (scope == _selectedScope) return;
+    setState(() => _selectedScope = scope);
   }
 
   // Real playback (opening the YouTube url) is a follow-up; no-op for now.
@@ -67,17 +56,13 @@ class _VideosScreenState extends State<VideosScreen> {
         padding: EdgeInsets.only(bottom: DesignConstants.spacingBig),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingBig,
           children: [
-            _Header(
-              tabs: _kTopFilters,
-              selectedIndex: _selectedTab,
-              onTabSelected: _onTabSelected,
-            ),
-            _FeedSection(
+            const _Topbar(),
+            _Body(
               repository: _repository,
               feed: _feed,
-              scope: _scopeForTab(_selectedTab),
+              selectedScope: _selectedScope,
+              onScopeSelected: _onScopeSelected,
               onVideoTap: _openVideo,
             ),
           ],
@@ -87,17 +72,22 @@ class _VideosScreenState extends State<VideosScreen> {
   }
 }
 
-class _FeedSection extends StatelessWidget {
-  const _FeedSection({
+/// The feed area below the topbar: builds the big-group tab strip from the
+/// loaded feed, then the scoped hero + carousels. Tabs live here (not flush
+/// under the topbar in the parent) because they derive from feed data.
+class _Body extends StatelessWidget {
+  const _Body({
     required this.repository,
     required this.feed,
-    required this.scope,
+    required this.selectedScope,
+    required this.onScopeSelected,
     required this.onVideoTap,
   });
 
   final VideoFeedRepository repository;
   final Future<List<Video>> feed;
-  final BigGroup? scope;
+  final String? selectedScope;
+  final ValueChanged<String?> onScopeSelected;
   final ValueChanged<Video> onVideoTap;
 
   @override
@@ -118,10 +108,28 @@ class _FeedSection extends StatelessWidget {
         if (videos.isEmpty) {
           return const _FeedMessage(text: 'No videos yet.');
         }
-        return VideosFeedBody(
-          videos: videos,
-          scope: scope,
-          onVideoTap: onVideoTap,
+
+        final scopes = bigGroupsInFeed(videos);
+        final tabScopes = <String?>[null, ...scopes];
+        final labels = ['All', ...scopes.map(displayLabel)];
+        var selectedIndex = tabScopes.indexOf(selectedScope);
+        if (selectedIndex < 0) selectedIndex = 0;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingBig,
+          children: [
+            VideoCategoryTabs(
+              tabs: labels,
+              selectedIndex: selectedIndex,
+              onTabSelected: (index) => onScopeSelected(tabScopes[index]),
+            ),
+            VideosFeedBody(
+              videos: videos,
+              scope: tabScopes[selectedIndex],
+              onVideoTap: onVideoTap,
+            ),
+          ],
         );
       },
     );
@@ -160,37 +168,19 @@ class _FeedMessage extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.tabs,
-    required this.selectedIndex,
-    required this.onTabSelected,
-  });
-
-  final List<String> tabs;
-  final int selectedIndex;
-  final ValueChanged<int> onTabSelected;
+class _Topbar extends StatelessWidget {
+  const _Topbar();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AppTopbar(
-          mode: AppTopbarMode.nameOnly,
-          showBackButton: false,
-          gymName: mockGymGlobalMma.name,
-          logoAsset: mockGymGlobalMma.logoAsset,
-          streakDays: mockGymGlobalMma.streakDays,
-          pointsLabel: mockGymGlobalMma.pointsLabel,
-          rankBadgeAsset: mockGymGlobalMma.rankBadgeAsset,
-        ),
-        VideoCategoryTabs(
-          tabs: tabs,
-          selectedIndex: selectedIndex,
-          onTabSelected: onTabSelected,
-        ),
-      ],
+    return AppTopbar(
+      mode: AppTopbarMode.nameOnly,
+      showBackButton: false,
+      gymName: mockGymGlobalMma.name,
+      logoAsset: mockGymGlobalMma.logoAsset,
+      streakDays: mockGymGlobalMma.streakDays,
+      pointsLabel: mockGymGlobalMma.pointsLabel,
+      rankBadgeAsset: mockGymGlobalMma.rankBadgeAsset,
     );
   }
 }

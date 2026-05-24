@@ -1,0 +1,46 @@
+company_name: Submission Only No-Gi
+app_id: no_gi
+# DEMO PROFILE. Instructor names and bios are fabricated placeholders (no real
+# gym behind this brief). Every image_url and instructor_image_url is a real
+# Wikimedia Commons photo, downloaded and visually verified for relevance.
+classes:
+  - name: Fundamentals
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/156_365_no-gi_grappling_%284672861418%29.jpg/1280px-156_365_no-gi_grappling_%284672861418%29.jpg
+    description: >-
+      Grips, posture, and the core no-gi positions in rashguard and shorts,
+      drilled slow then live. All levels welcome.
+    instructor_name: Coach Eddie Cole
+    instructor_bio: >-
+      No-gi black belt who strips the game down to what actually works. Calm,
+      detail-driven, beginner-friendly.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Portrait_Of_MMA_fighter_Hamza_Hamry.jpg/960px-Portrait_Of_MMA_fighter_Hamza_Hamry.jpg
+  - name: Leg Locks
+    image_url: https://upload.wikimedia.org/wikipedia/commons/0/0d/%D0%A7%D0%B5%D0%BC%D0%BF%D0%B8%D0%BE%D0%BD%D0%B0%D1%82_%D0%9C%D0%B8%D1%80%D0%B0_%D0%BF%D0%BE_%D0%B3%D1%80%D1%8D%D0%BF%D0%BF%D0%BB%D0%B8%D0%BD%D0%B3%D1%83_%D0%BD%D0%BE%D1%8F%D0%B1%D1%80%D1%8C_2014.jpg
+    description: >-
+      The modern leg-lock game taught safely and systematically — entries,
+      control, and finishes, with tapping early as the rule.
+    instructor_name: Coach Vince Harlan
+    instructor_bio: >-
+      Leg-lock specialist who drills the system step by step and never lets
+      safety take a back seat to flash.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Mark_Kerr-1593.jpg/960px-Mark_Kerr-1593.jpg
+  - name: Wrestling
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/U.S._Army_World_Class_Athlete_Program_wrestler_Sgt._Iris_Smith_%28right%29_defeats_Chinas_Lijun_Yang.jpg/1280px-U.S._Army_World_Class_Athlete_Program_wrestler_Sgt._Iris_Smith_%28right%29_defeats_Chinas_Lijun_Yang.jpg
+    description: >-
+      Takedowns, clinch control, and scrambles to dictate where the match
+      goes. Built for grapplers, not just wrestlers.
+    instructor_name: Coach Dana Mikhailova
+    instructor_bio: >-
+      Freestyle wrestling background turned grappling coach. Teaches takedowns
+      that fit the submission game.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Irina_Zabludina_%28RUS%29_2017.jpg/960px-Irina_Zabludina_%28RUS%29_2017.jpg
+  - name: Live Rolling
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Bjj_no_gi.jpg/1280px-Bjj_no_gi.jpg
+    description: >-
+      Submission-only live rolls that pressure-test your game. Partner matching
+      by level — tap early, learn fast.
+    instructor_name: Coach Andre Sousa
+    instructor_bio: >-
+      Active submission-grappling competitor who runs open mat with a focus on
+      hard but controlled, safe rounds.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Ezra_Arenyeka.jpg/960px-Ezra_Arenyeka.jpg

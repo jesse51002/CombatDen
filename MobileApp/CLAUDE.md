@@ -29,10 +29,12 @@ HTTP API). Architecture, mirroring the customization engine:
   only renders these `designId`s) and which feed the app pulls for the active
   theme. A design absent from the list has no videos (empty state). Base URL
   defaults to `localhost:8002`, overridable with `--dart-define=VIDEO_BASE_URL`.
-- **`data/video.dart`** — the `Video` model (matches the API's `VideoCard`) plus
-  the `VideoTag` (12 genres) and `BigGroup` (educational/entertainment) enums,
-  both with resilient `fromWire` + `unknown` fallback. The fine-grained `tags`
-  and the server-derived coarse `bigGroups` both come down on each video.
+- **`data/video.dart`** — the `Video` model (matches the API's `VideoCard`). The
+  fine-grained `tags` and the server-derived coarse `bigGroups` both come down on
+  each video as plain `List<String>`, taken verbatim from the API. The app owns
+  **no** tag/group enum or vocabulary — the server owns it, the client just
+  renders whatever strings arrive (auto-formatted via `displayLabel`). This is
+  deliberate: there is no closed enum to keep in sync with VideoService.
 - **`data/video_api_client.dart`** — `dio` client, `GET /apps/{videoAppId}/videos`.
 - **`data/video_feed_repository.dart`** — `VideoFeedRepository.instance`, a lazy
   app-wide singleton that resolves the feed from the **active theme** (via
@@ -41,13 +43,14 @@ HTTP API). Architecture, mirroring the customization engine:
   customization locator is package-internal.)
 - **`data/video_selectors.dart`** — pure derivations: top-filter scoping via
   `bigGroups`, one carousel per `tag`, featured = most-viewed, and the picks for
-  the recommendation surfaces. The tag→big-group map mirrors
-  `../VideoService/schema/big_group.py` — keep them in sync.
+  the recommendation surfaces. There is no client-side tag→big-group map: the
+  coarse grouping comes straight from each video's server-sent `big_groups`.
 
-Top filters are `All / Education / Entertainment` (the coarse `big_groups`) and
-filter the home feed **in place**; sub-groups are per-`tag` carousels. Tapping a
-video is a `debugPrint` no-op (real YouTube playback needs `url_launcher`, a
-deliberate follow-up). Mock video data and the old detail screen were deleted.
+Top filters are derived from the distinct `big_groups` present in the loaded
+feed (an `All` tab plus one per group, labels auto-formatted), and filter the
+home feed **in place**; sub-groups are per-`tag` carousels. Tapping a video is a
+`debugPrint` no-op (real YouTube playback needs `url_launcher`, a deliberate
+follow-up). Mock video data and the old detail screen were deleted.
 
 ## Search the web for conventions before designing
 

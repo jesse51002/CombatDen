@@ -1,82 +1,62 @@
 design_direction:
   name: Apex MMA
-  short_desc: >-
-    Master every range — a mixed martial arts gym for the complete fighter, where
-    striking, grappling and the will to compete are forged into one.
-  long_desc: |
-    Apex MMA is a mixed martial arts gym and companion app for people who
-    want the whole game, not one piece of it — strikers learning to
-    wrestle, grapplers learning to bang, and competitors chasing the cage.
-    The audience runs from serious amateurs eyeing their first fight to
-    everyday members who train like fighters because it makes them sharper
-    everywhere else. The brand sits in a deliberate spot: it is a real,
-    modern competition gym with the energy of fight night, but it is NOT a
-    grimy, blood-and-bruises basement that glorifies damage, and it is
-    equally NOT a soft, no-contact "cardio kickboxing" class with no
-    intensity behind it. The point is mastery across every range —
-    disciplined, complete, professional aggression.
-
-    The voice is bold and direct — a head coach who has cornered fights and
-    cuts the fluff: "You put it all together tonight. Same energy next
-    round." Confident, plain-spoken and a little fearless, it credits the
-    work and points at the next test. It must never sound like screaming
-    gym-bro hype ("BEAST MODE, LET'S GO"), saccharine wellness ("you're a
-    champion just for trying"), a sneering tough-guy who belittles
-    beginners, or sterile corporate copy.
-
-    Apex MMA has no mascot, character or figure. Its anchor is the
-    octagon — the eight-sided cage geometry standing for the arena, the
-    test, and a complete fighter with no weak side — carried into the logo
-    and echoed through the object heroes (the championship belt, the
-    trophy, the gift, the point-stars). The celebratory heroes bring the
-    personality through bold, arena-lit, kinetic compositions, never a
-    character. The tiny persistent tokens — the single point-star, the
-    streak mark, the QR check-in icon — stay clean, abstract and
-    razor-legible at small size. The logo stays a clean, professional mark
-    a real gym would use, never a busy illustrated scene.
-
-    Visual system — the shared look every generated asset must wear:
-
-    - Feel: charged, modern and athletic — the focused tension of fighters
-      walking out under the lights. Powerful and precise, coiled rather
-      than chaotic; aggression with control behind it.
-    - Medium & materials: clean, glossy 3D in brushed metal, chrome, taut
-      cage-mesh and championship-gold leather. Engineered and premium, with
-      the octagon geometry living in the structure. Never matte grunge,
-      never pastel softness, never flat clip-art.
-    - Finish & light: a dark arena lit by hard directional spotlights — a
-      bright pool on the canvas, deep falloff into black, a cool rim-light
-      with a hot red key. Dramatic fight-night staging, never moody-grimy
-      and never flat.
-    - Energy by role: celebratory heroes (booking success, the rank belt,
-      trophy, gift, points burst) hit big, kinetic and arena-lit — the
-      walkout, the title shot, earned and explosive. Persistent UI (the
-      logo, the tiny point-star, streak mark, QR) stays clean, sharp and
-      quiet, reading instantly at small size.
-    - Hard nos: no gore or damage clichés (blood, cuts, bruises, snarling
-      faces, skulls); no grimy dark-basement grit, grunge or sweat-stains;
-      nothing cute, cartoon, pastel or bubbly; no mascot, character,
-      creature or face of any kind; no neon-club glow; nothing flat,
-      generic-stock or clip-arty.
+  short_desc: Master every range — a mixed martial arts gym for the complete fighter,
+    where striking, grappling and the will to compete are forged into one.
+  long_desc: "Apex MMA is a mixed martial arts gym and companion app for people who\n\
+    want the whole game, not one piece of it — strikers learning to\nwrestle, grapplers\
+    \ learning to bang, and competitors chasing the cage.\nThe audience runs from\
+    \ serious amateurs eyeing their first fight to\neveryday members who train like\
+    \ fighters because it makes them sharper\neverywhere else. The brand sits in a\
+    \ deliberate spot: it is a real,\nmodern competition gym with the energy of fight\
+    \ night, but it is NOT a\ngrimy, blood-and-bruises basement that glorifies damage,\
+    \ and it is\nequally NOT a soft, no-contact \"cardio kickboxing\" class with no\n\
+    intensity behind it. The point is mastery across every range —\ndisciplined, complete,\
+    \ professional aggression.\n\nThe voice is bold and direct — a head coach who\
+    \ has cornered fights and\ncuts the fluff: \"You put it all together tonight.\
+    \ Same energy next\nround.\" Confident, plain-spoken and a little fearless, it\
+    \ credits the\nwork and points at the next test. It must never sound like screaming\n\
+    gym-bro hype (\"BEAST MODE, LET'S GO\"), saccharine wellness (\"you're a\nchampion\
+    \ just for trying\"), a sneering tough-guy who belittles\nbeginners, or sterile\
+    \ corporate copy.\n\nApex MMA has no mascot, character or figure. Its anchor is\
+    \ the\noctagon — the eight-sided cage geometry standing for the arena, the\ntest,\
+    \ and a complete fighter with no weak side — carried into the logo\nand echoed\
+    \ through the object heroes (the championship belt, the\ntrophy, the gift, the\
+    \ point-stars). The celebratory heroes bring the\npersonality through bold, arena-lit,\
+    \ kinetic compositions, never a\ncharacter. The tiny persistent tokens — the single\
+    \ point-star, the\nstreak mark, the QR check-in icon — stay clean, abstract and\n\
+    razor-legible at small size. The logo stays a clean, professional mark\na real\
+    \ gym would use, never a busy illustrated scene.\n\nVisual system — the shared\
+    \ look every generated asset must wear:\n\n- Feel: charged, modern and athletic\
+    \ — the focused tension of fighters\n  walking out under the lights. Powerful\
+    \ and precise, coiled rather\n  than chaotic; aggression with control behind it.\n\
+    - Medium & materials: clean, glossy 3D in brushed metal, chrome, taut\n  cage-mesh\
+    \ and championship-gold leather. Engineered and premium, with\n  the octagon geometry\
+    \ living in the structure. Never matte grunge,\n  never pastel softness, never\
+    \ flat clip-art.\n- Finish & light: a dark arena lit by hard directional spotlights\
+    \ — a\n  bright pool on the canvas, deep falloff into black, a cool rim-light\n\
+    \  with a hot red key. Dramatic fight-night staging, never moody-grimy\n  and\
+    \ never flat.\n- Energy by role: celebratory heroes (booking success, the rank\
+    \ belt,\n  trophy, gift, points burst) hit big, kinetic and arena-lit — the\n\
+    \  walkout, the title shot, earned and explosive. Persistent UI (the\n  logo,\
+    \ the tiny point-star, streak mark, QR) stays clean, sharp and\n  quiet, reading\
+    \ instantly at small size.\n- Hard nos: no gore or damage clichés (blood, cuts,\
+    \ bruises, snarling\n  faces, skulls); no grimy dark-basement grit, grunge or\
+    \ sweat-stains;\n  nothing cute, cartoon, pastel or bubbly; no mascot, character,\n\
+    \  creature or face of any kind; no neon-club glow; nothing flat,\n  generic-stock\
+    \ or clip-arty.\n"
 colors_direction:
-  description: |
-    A dark, high-contrast palette built on fight-night staging — colour
-    reads as competition energy on a black arena canvas: red corner, blue
-    corner, gold on the line.
-
-    - Primary: a bold, confident competition red for primary CTAs and key
-      accents — the red corner, charged and aggressive without tipping into
-      literal blood. Saturated and powerful, held just clear of glare so it
-      stays usable on the dark canvas.
-    - Background: a deep, near-black with the faintest warm-neutral
-      undertone — a dark arena floor that lets the spotlights and the red
-      lift off it, never a flat pure black, with tonal room for cards and
-      sheets to read.
-    - Text: a clean, slightly cool off-white for headings and body copy —
-      crisp and legible, comfortably above AA against the dark canvas, never
-      a harsh pure white.
-    - Accent: an electric cyan / blue for selections, active states and
-      highlights — the blue corner against the red, a clearly different hue
-      family from the primary, premium and used sparingly on active nav,
-      pills and tabs, never a fill.
+  description: "A dark, high-contrast palette built on fight-night staging — colour\n\
+    reads as competition energy on a black arena canvas: red corner, blue\ncorner,\
+    \ gold on the line.\n\n- Primary: a bold, confident competition red for primary\
+    \ CTAs and key\n  accents — the red corner, charged and aggressive without tipping\
+    \ into\n  literal blood. Saturated and powerful, held just clear of glare so it\n\
+    \  stays usable on the dark canvas.\n- Background: a deep, near-black with the\
+    \ faintest warm-neutral\n  undertone — a dark arena floor that lets the spotlights\
+    \ and the red\n  lift off it, never a flat pure black, with tonal room for cards\
+    \ and\n  sheets to read.\n- Text: a clean, slightly cool off-white for headings\
+    \ and body copy —\n  crisp and legible, comfortably above AA against the dark\
+    \ canvas, never\n  a harsh pure white.\n- Accent: an electric cyan / blue for\
+    \ selections, active states and\n  highlights — the blue corner against the red,\
+    \ a clearly different hue\n  family from the primary, premium and used sparingly\
+    \ on active nav,\n  pills and tabs, never a fill.\n"
   mode: dark

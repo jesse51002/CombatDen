@@ -24,7 +24,7 @@ class LevelUpVideosSection extends StatelessWidget {
         final videos = ready
             ? videosInScope(
                 snapshot.data ?? const <Video>[],
-                BigGroup.educational,
+                'educational',
               )
             : const <Video>[];
         if (videos.isEmpty) return const SizedBox.shrink();
@@ -42,7 +42,7 @@ class LevelUpVideosSection extends StatelessWidget {
                 title: 'Videos to level up',
                 onViewAll: () => Navigator.of(context).pushReplacementNamed(
                   AppRoutes.videos,
-                  arguments: BigGroup.educational,
+                  arguments: 'educational',
                 ),
               ),
             ),

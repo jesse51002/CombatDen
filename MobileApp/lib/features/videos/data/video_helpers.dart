@@ -1,5 +1,3 @@
-import 'package:mobile_app/features/videos/data/video.dart';
-
 /// Compact view-count label: 168441 → "168K", 1_240_000 → "1.2M",
 /// 942 → "942". Returns "" when the count is hidden (null) so callers can
 /// drop the "views" clause entirely.
@@ -17,20 +15,12 @@ String formatViewCount(int? count) {
   return '${label}M';
 }
 
-/// Human-readable carousel/section title for a fine-grained tag. Backend
-/// hands us lowercase wire values; capitalize for display.
-String tagDisplayName(VideoTag tag) => switch (tag) {
-  VideoTag.educational => 'Educational',
-  VideoTag.tutorial => 'Tutorials',
-  VideoTag.informative => 'Informative',
-  VideoTag.news => 'News',
-  VideoTag.review => 'Reviews',
-  VideoTag.interview => 'Interviews',
-  VideoTag.entertainment => 'Entertainment',
-  VideoTag.vlog => 'Vlogs',
-  VideoTag.behindTheScenes => 'Behind the Scenes',
-  VideoTag.professional => 'Pro Footage',
-  VideoTag.clips => 'Clips',
-  VideoTag.fun => 'Fun',
-  VideoTag.unknown => 'More',
-};
+/// Human-readable label for a backend wire value: `behind_the_scenes` →
+/// `Behind The Scenes`. Renders any string the server sends — the app owns no
+/// tag/group vocabulary, so titles and tab labels derive straight from the
+/// wire string.
+String displayLabel(String wire) => wire
+    .split('_')
+    .where((word) => word.isNotEmpty)
+    .map((word) => '${word[0].toUpperCase()}${word.substring(1)}')
+    .join(' ');

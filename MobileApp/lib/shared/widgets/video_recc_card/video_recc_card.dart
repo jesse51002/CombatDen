@@ -3,8 +3,8 @@ import 'package:mobile_app/core/design_constants.dart';
 
 /// Full-width video recommendation card.
 ///
-/// Used on `VideosScreen` (via featured / "Technique of the Day" wrappers)
-/// and on the recommendation surfaces. Layout: 16:9 thumbnail with rounded
+/// Used on `VideosScreen` (via the featured hero wrapper) and on the
+/// recommendation surfaces. Layout: 16:9 thumbnail with rounded
 /// corners, then a row with the creator's avatar, the video title, and a
 /// meta line. Images are [ImageProvider]s so the caller chooses the source
 /// (live network thumbnails go through `cached_network_image`).

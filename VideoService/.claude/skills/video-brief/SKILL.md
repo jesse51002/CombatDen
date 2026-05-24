@@ -394,8 +394,16 @@ list, never the whole `videos_output.yaml`.
 
 **What to remove:** (1) videos negative/contrarian about the gym's discipline or focus
 (e.g. "why muay thai doesn't work"); (2) videos matching the brief's `avoid_desc` (bad
-technique as gospel, low-credibility figures, fake masters). When unsure, **keep** —
-removal must be high-confidence.
+technique as gospel, low-credibility figures, fake masters); (3) **cross-discipline
+comparison videos** that pit the gym's discipline against another style and ask which to
+pick — "X vs Y", "which is better", "difference between X and Y", "which one are you
+choosing" (e.g. "Kickboxing vs Muay Thai: which do you choose?"). These advertise rival
+disciplines and nudge prospects elsewhere, so they work against the gym even when the
+content is neutral. **Keep** videos that merely teach the gym's discipline alongside
+another ("5 moves for defense in Muay Thai *and* Kickboxing") and genuine cross-style
+*fight footage* unless the title frames it as a "which is better" pitch — that line is a
+judgment call, so surface borderline ones to the user rather than removing silently. When
+unsure, **keep** — removal must be high-confidence.
 
 1. Get the compact list (do NOT open `videos_output.yaml` yourself):
    ```
@@ -426,9 +434,18 @@ Replace the mobile app's hardcoded class cards with on-brand ones. Writes
 **Where each field comes from:**
 - `name` + `description` — **you derive** from the gym (Phase 1 `type`), shown for
   approval.
-- `instructor_name` / `instructor_bio` / `instructor_image_url` — **real gym staff
-  data you cannot invent or scrape.** Ask the user for each (a headshot URL too, or
-  they can skip and you use a neutral placeholder). Never fabricate a real person's bio.
+- `instructor_name` / `instructor_bio` / `instructor_image_url` — depends on the brief:
+  - **Real-gym brief (default):** **real gym staff data you cannot invent or scrape.**
+    Ask the user for each (a headshot URL too, or they can skip and you use a neutral
+    placeholder). Never fabricate a real person's bio against a real, named gym.
+  - **Demo / template profile:** when the brief is a demo, template, or
+    discipline-archetype with **no real gym behind it** (the user says so, or it's
+    clearly a stock vertical like `bjj` / `boxing` rather than a named business), you
+    **may fabricate** plausible instructor names + bios without asking — mark the file
+    with a comment that the instructors are placeholders. The `smoketest` profile is the
+    reference for this. The image rule does **not** relax: every headshot is still a
+    real, downloaded-and-viewed photo (reusing a small verified portrait pool across
+    demo profiles is fine).
 - `image_url` — the class background image, **you find and visually verify**.
 
 Steps:

@@ -33,12 +33,15 @@ class Video {
   /// sort key for every list (view count is the secondary tiebreak).
   final int relevanceIndex;
 
-  /// Fine-grained genre tags; drive the per-tag carousels.
-  final List<VideoTag> tags;
+  /// Fine-grained genre tags as the server sends them (lowercase wire
+  /// strings); drive the per-tag carousels. Taken verbatim — the app owns no
+  /// tag vocabulary.
+  final List<String> tags;
 
-  /// Coarse educational/entertainment sort (server-derived from [tags]);
-  /// the home page's top-level grouping. Can contain both.
-  final List<BigGroup> bigGroups;
+  /// Coarse grouping the server derived from [tags] (e.g. `educational` /
+  /// `entertainment`); the home page's top-level filter. Can contain more than
+  /// one. Taken verbatim — the app owns no group vocabulary.
+  final List<String> bigGroups;
 
   /// "Combat Culture ‧ 168K views" (drops the views clause when hidden).
   String get metaLabel {
@@ -62,60 +65,13 @@ class Video {
     );
   }
 
-  static List<VideoTag> _parseTags(dynamic raw) {
-    if (raw is! List) return const [VideoTag.unknown];
-    return raw.whereType<String>().map(VideoTag.fromWire).toList(
-      growable: false,
-    );
-  }
-
-  static List<BigGroup> _parseBigGroups(dynamic raw) {
+  static List<String> _parseTags(dynamic raw) {
     if (raw is! List) return const [];
-    return raw.whereType<String>().map(BigGroup.fromWire).toList(
-      growable: false,
-    );
+    return raw.whereType<String>().toList(growable: false);
   }
-}
 
-/// The 12 content genres (mirrors `../VideoService/schema/video_type.py`),
-/// plus an [unknown] fallback so a new server-side genre never crashes the
-/// parse.
-enum VideoTag {
-  educational,
-  tutorial,
-  informative,
-  news,
-  review,
-  interview,
-  entertainment,
-  vlog,
-  behindTheScenes,
-  professional,
-  clips,
-  fun,
-  unknown;
-
-  /// The lowercase wire value the API serializes.
-  String get wire => switch (this) {
-    VideoTag.behindTheScenes => 'behind_the_scenes',
-    _ => name,
-  };
-
-  static VideoTag fromWire(String raw) => VideoTag.values.firstWhere(
-    (t) => t.wire == raw,
-    orElse: () => VideoTag.unknown,
-  );
-}
-
-/// The coarse two-way sort (mirrors `../VideoService/schema/big_group.py`),
-/// plus an [unknown] fallback.
-enum BigGroup {
-  educational,
-  entertainment,
-  unknown;
-
-  static BigGroup fromWire(String raw) => BigGroup.values.firstWhere(
-    (g) => g.name == raw,
-    orElse: () => BigGroup.unknown,
-  );
+  static List<String> _parseBigGroups(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw.whereType<String>().toList(growable: false);
+  }
 }

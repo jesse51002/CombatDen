@@ -1,0 +1,1312 @@
+app: combatden
+display_name: CombatDen
+design_name: Friction Grappling
+image_set:
+  images:
+    logo_primary:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/logo_primary.png
+      prompt: Two interlocking hook-shaped forms locked and scrambling against each
+        other into a single compact emblem, front-facing, centred, perfectly balanced,
+        matte rubber finish with a cool dry athletic sheen, deep competition teal
+        with one quiet coral edge accent, even airy studio light shading only its
+        own curved surfaces, flat solid pure-white background, clean modern professional
+        logo mark
+      complexity: medium
+    rank_belt:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/rank_belt.png
+      prompt: A sleek modern competition rank band, a flat curved patch-style strip
+        with two interlocking hooked forms locked at its centre as an embossed emblem,
+        straight-on, centred, perfectly symmetrical, matte rubberised band with a
+        subtle technical rashguard weave and a crisp metallic edge trim, deep competition
+        teal with a single coral accent stripe, even airy studio daylight shading
+        its own surfaces, flat solid pure-white background, clean athletic 3D emblem
+        style
+      complexity: medium
+    celebration_image:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/celebration_image.png
+      prompt: An explosive outward burst of no-gi grappling gear from the centre —
+        a folded technical rashguard, a pair of fingerless grips, a compact mouthguard,
+        and a curved slice of grappling mat — scattering kinetically in a balanced
+        floating composition, matte rubber and dry rashguard fabric with a cool athletic
+        sheen, even airy studio daylight shading each object's own surface, deep competition
+        teal with a single coral accent, flat solid pure-white background, clean sporty
+        3D illustration style
+      complexity: high
+    trophy_image:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/trophy_image.png
+      prompt: A sleek modern competition trophy with an interlocking twin-loop grip
+        motif forming its cup and a low geometric plinth, flanked by a few drifting
+        angular shards and crisp spark particles in a balanced floating burst outward
+        from the centre, matte grappling-mat rubber and technical rashguard-weave
+        surfaces with a cool dry athletic sheen, even airy daylight studio light shading
+        each object's own facets, deep competition teal with a single warm friction-coral
+        accent edge, flat solid pure-white background, clean kinetic sporty 3D style
+      complexity: high
+    points_stars_image:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/points_stars_image.png
+      prompt: A balanced floating cluster of five four-point sharp stars with crisp
+        concave facets at varied sizes and angles, one larger hero star centred with
+        smaller stars orbiting outward in a kinetic burst, smooth matte rubber surfaces
+        with a cool dry athletic sheen, even airy studio light shading each star's
+        own facets, deep competition teal with a single warm coral accent star, flat
+        solid pure-white background, clean sporty 3D illustration style
+      complexity: high
+    next_rank_belt_image:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/next_rank_belt_image.png
+      prompt: A sleek modern competition rank band one tier above, a flat curved patch-style
+        strip with two interlocking hooked forms locked at its centre as an embossed
+        emblem, straight-on, centred, perfectly symmetrical, matte rubberised band
+        with a subtle technical rashguard weave and a polished metallic edge trim,
+        deep graphite charcoal with a brushed silver emblem and a single coral accent
+        stripe, even airy studio daylight shading its own surfaces, flat solid pure-white
+        background, clean athletic 3D emblem style
+      complexity: medium
+    giftbox:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/giftbox.png
+      prompt: A wrapped gift box mid-spin with a crisp ribbon and a bold bow on top,
+        caught in dynamic floating motion with a faint kinetic streak trailing one
+        corner, matte grappling-mat rubber body and technical rashguard-fabric ribbon
+        with a cool dry athletic sheen, even airy studio light shading its own facets,
+        deep competition teal box with a confident friction-coral ribbon, flat solid
+        pure-white background, clean sporty 3D hero style
+      complexity: medium
+    single_point:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/single_point.png
+      prompt: A single four-point sharp star token with crisp concave facets, one
+        object front-facing centred and perfectly symmetrical, smooth matte rubber
+        surface with a cool dry athletic sheen, even airy studio light shading its
+        own facets, deep competition teal with a subtle coral edge accent, flat solid
+        pure-white background, clean sporty 3D icon style
+      complexity: low
+    icon_qrcode:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/icon_qrcode.png
+      prompt: A stylized square QR-code glyph with rounded modular squares and three
+        corner finder marks, single object front-facing and perfectly centred, subtle
+        interlocking notch in the central modules hinting at two hooked forms, clean
+        matte rubber finish with a cool dry athletic sheen on its own surface, deep
+        competition teal on a flat solid pure-white background, minimal sporty 3D
+        icon style
+      complexity: low
+    streak_icon:
+      path: /var/home/jm/Documents/CombatDen/codebase/CustomizationService/apps/combatden/20260522T143613Z/final_images/streak_icon.png
+      prompt: A bold lightning-bolt mark with a subtle interlocking notch where the
+        zag hooks back on itself, single object front-facing and centred, matte grappling-mat
+        rubber finish with a faint dry athletic sheen on its own bevelled edge, even
+        airy studio light, deep competition teal with one crisp coral edge accent,
+        flat solid pure-white background, clean sporty 3D icon style
+      complexity: low
+color_set:
+  mode: light
+  colors:
+    primary:
+      color:
+        oklch:
+          l: 0.38
+          c: 0.12
+          h: 196.0
+          alpha: null
+        hsl:
+          h: 181.4207237785008
+          s: 100.0
+          l: 5.841235149852617
+          alpha: null
+        rgb:
+          r: 0
+          g: 77
+          b: 78
+          alpha: null
+        hex: '#004d4e'
+      display_name: Deep Competition Teal
+      description: A deep, saturated athletic teal anchoring primary CTAs, key interactive
+        elements, and the brand's sport-science identity. Dark enough to clear WCAG
+        AA comfortably against the near-white canvas.
+      derivations:
+        second:
+          oklch:
+            l: 0.38
+            c: 0.12
+            h: 196.0
+            alpha: 0.75
+          hsl:
+            h: 181.4207237785008
+            s: 100.0
+            l: 5.841235149852617
+            alpha: 0.75
+          rgb:
+            r: 0
+            g: 77
+            b: 78
+            alpha: 0.75
+          hex: '#004d4ebf'
+        third:
+          oklch:
+            l: 0.38
+            c: 0.12
+            h: 196.0
+            alpha: 0.5
+          hsl:
+            h: 181.4207237785008
+            s: 100.0
+            l: 5.841235149852617
+            alpha: 0.5
+          rgb:
+            r: 0
+            g: 77
+            b: 78
+            alpha: 0.5
+          hex: '#004d4e80'
+        card:
+          oklch:
+            l: 0.38
+            c: 0.12
+            h: 196.0
+            alpha: 0.09
+          hsl:
+            h: 181.4207237785008
+            s: 100.0
+            l: 5.841235149852617
+            alpha: 0.09
+          rgb:
+            r: 0
+            g: 77
+            b: 78
+            alpha: 0.09
+          hex: '#004d4e17'
+        popup:
+          oklch:
+            l: 0.8525313858901565
+            c: 0.020862039176111315
+            h: 202.50553470718904
+            alpha: null
+          hsl:
+            h: 184.38681697122587
+            s: 19.586053580694625
+            l: 79.23073061980861
+            alpha: null
+          rgb:
+            r: 192
+            g: 211
+            b: 212
+            alpha: null
+          hex: '#c0d3d4'
+        dark:
+          oklch:
+            l: 0.1596
+            c: 0.12
+            h: 196.0
+            alpha: null
+          hsl:
+            h: 186.52932815571035
+            s: 100.0
+            l: 0.7467086917453416
+            alpha: null
+          rgb:
+            r: 0
+            g: 17
+            b: 17
+            alpha: null
+          hex: '#001111'
+        light:
+          oklch:
+            l: 0.98
+            c: 0.12
+            h: 196.0
+            alpha: null
+          hsl:
+            h: 180.42752532693203
+            s: 100.0
+            l: 80.88887032295781
+            alpha: null
+          rgb:
+            r: 227
+            g: 255
+            b: 255
+            alpha: null
+          hex: '#e3ffff'
+        regular_text:
+          oklch:
+            l: 0.9
+            c: 0.008
+            h: 210.0
+            alpha: null
+          hsl:
+            h: 189.35074572280672
+            s: 12.375156922702455
+            l: 86.48903236958452
+            alpha: null
+          rgb:
+            r: 216
+            g: 223
+            b: 225
+            alpha: null
+          hex: '#d8dfe1'
+    background:
+      color:
+        oklch:
+          l: 0.9
+          c: 0.008
+          h: 210.0
+          alpha: null
+        hsl:
+          h: 189.35074572280672
+          s: 12.375156922702455
+          l: 86.48903236958452
+          alpha: null
+        rgb:
+          r: 216
+          g: 223
+          b: 225
+          alpha: null
+        hex: '#d8dfe1'
+      display_name: Studio Canvas White
+      description: A bright near-white with the faintest cool teal undertone, evoking
+        a clean modern gym studio. Provides tonal room for elevated surfaces like
+        cards and sheets to read through overlay compositing.
+      derivations:
+        second:
+          oklch:
+            l: 0.9
+            c: 0.008
+            h: 210.0
+            alpha: 0.75
+          hsl:
+            h: 189.35074572280672
+            s: 12.375156922702455
+            l: 86.48903236958452
+            alpha: 0.75
+          rgb:
+            r: 216
+            g: 223
+            b: 225
+            alpha: 0.75
+          hex: '#d8dfe1bf'
+        third:
+          oklch:
+            l: 0.9
+            c: 0.008
+            h: 210.0
+            alpha: 0.5
+          hsl:
+            h: 189.35074572280672
+            s: 12.375156922702455
+            l: 86.48903236958452
+            alpha: 0.5
+          rgb:
+            r: 216
+            g: 223
+            b: 225
+            alpha: 0.5
+          hex: '#d8dfe180'
+        card:
+          oklch:
+            l: 0.08
+            c: 0.0
+            h: 0.0
+            alpha: 0.05
+          hsl:
+            h: 0.0
+            s: 2.622393025555109e-14
+            l: 0.6615040000000002
+            alpha: 0.05
+          rgb:
+            r: 2
+            g: 2
+            b: 2
+            alpha: 0.05
+          hex: '#0202020d'
+        popup:
+          oklch:
+            l: 0.8662383439074968
+            c: 0.007673194493466574
+            h: 210.0000429698597
+            alpha: null
+          hsl:
+            h: 189.350745722808
+            s: 8.922438918014738
+            l: 82.19765595110532
+            alpha: null
+          rgb:
+            r: 206
+            g: 212
+            b: 214
+            alpha: null
+          hex: '#ced4d6'
+        dark:
+          oklch:
+            l: 0.378
+            c: 0.008
+            h: 210.0
+            alpha: null
+          hsl:
+            h: 189.35582979030747
+            s: 5.367371388368271
+            l: 25.355124668767647
+            alpha: null
+          rgb:
+            r: 61
+            g: 67
+            b: 68
+            alpha: null
+          hex: '#3d4344'
+        light:
+          oklch:
+            l: 0.98
+            c: 0.008
+            h: 210.0
+            alpha: null
+          hsl:
+            h: 189.3500891705051
+            s: 54.48488675922047
+            l: 96.86716754017253
+            alpha: null
+          rgb:
+            r: 243
+            g: 250
+            b: 251
+            alpha: null
+          hex: '#f3fafb'
+        regular_text:
+          oklch:
+            l: 0.22
+            c: 0.014
+            h: 220.0
+            alpha: null
+          hsl:
+            h: 194.86321943352678
+            s: 23.162623402479227
+            l: 9.903362267418734
+            alpha: null
+          rgb:
+            r: 19
+            g: 28
+            b: 31
+            alpha: null
+          hex: '#131c1f'
+    text:
+      color:
+        oklch:
+          l: 0.22
+          c: 0.014
+          h: 220.0
+          alpha: null
+        hsl:
+          h: 194.86321943352678
+          s: 23.162623402479227
+          l: 9.903362267418734
+          alpha: null
+        rgb:
+          r: 19
+          g: 28
+          b: 31
+          alpha: null
+        hex: '#131c1f'
+      display_name: Cool Charcoal Ink
+      description: A deep cool near-black with a faint brand-tinted blue undertone,
+        used for all headings and body copy. Sits well above WCAG AA contrast against
+        the light canvas, never reading as flat pure black.
+      derivations:
+        second:
+          oklch:
+            l: 0.22
+            c: 0.014
+            h: 220.0
+            alpha: 0.75
+          hsl:
+            h: 194.86321943352678
+            s: 23.162623402479227
+            l: 9.903362267418734
+            alpha: 0.75
+          rgb:
+            r: 19
+            g: 28
+            b: 31
+            alpha: 0.75
+          hex: '#131c1fbf'
+        third:
+          oklch:
+            l: 0.22
+            c: 0.014
+            h: 220.0
+            alpha: 0.5
+          hsl:
+            h: 194.86321943352678
+            s: 23.162623402479227
+            l: 9.903362267418734
+            alpha: 0.5
+          rgb:
+            r: 19
+            g: 28
+            b: 31
+            alpha: 0.5
+          hex: '#131c1f80'
+        card:
+          oklch:
+            l: 0.08
+            c: 0.0
+            h: 0.0
+            alpha: 0.05
+          hsl:
+            h: 0.0
+            s: 2.622393025555109e-14
+            l: 0.6615040000000002
+            alpha: 0.05
+          rgb:
+            r: 2
+            g: 2
+            b: 2
+            alpha: 0.05
+          hex: '#0202020d'
+        popup:
+          oklch:
+            l: 0.8662383439074968
+            c: 0.007673194493466574
+            h: 210.0000429698597
+            alpha: null
+          hsl:
+            h: 189.350745722808
+            s: 8.922438918014738
+            l: 82.19765595110532
+            alpha: null
+          rgb:
+            r: 206
+            g: 212
+            b: 214
+            alpha: null
+          hex: '#ced4d6'
+        dark:
+          oklch:
+            l: 0.0924
+            c: 0.014
+            h: 220.0
+            alpha: null
+          hsl:
+            h: 199.89979879742634
+            s: 83.78236133993974
+            l: 0.9749424234808728
+            alpha: null
+          rgb:
+            r: 0
+            g: 3
+            b: 5
+            alpha: null
+          hex: '#000305'
+        light:
+          oklch:
+            l: 0.98
+            c: 0.014
+            h: 220.0
+            alpha: null
+          hsl:
+            h: 195.2112682054002
+            s: 100.0
+            l: 96.82446589186782
+            alpha: null
+          rgb:
+            r: 239
+            g: 251
+            b: 255
+            alpha: null
+          hex: '#effbff'
+        regular_text:
+          oklch:
+            l: 0.9
+            c: 0.008
+            h: 210.0
+            alpha: null
+          hsl:
+            h: 189.35074572280672
+            s: 12.375156922702455
+            l: 86.48903236958452
+            alpha: null
+          rgb:
+            r: 216
+            g: 223
+            b: 225
+            alpha: null
+          hex: '#d8dfe1'
+    accent:
+      color:
+        oklch:
+          l: 0.52
+          c: 0.17
+          h: 38.0
+          alpha: null
+        hsl:
+          h: 18.285046300048823
+          s: 99.5476001148567
+          l: 35.57642869940907
+          alpha: null
+        rgb:
+          r: 181
+          g: 55
+          b: 0
+          alpha: null
+        hex: '#b53700'
+      display_name: Friction Coral
+      description: A warm coral-burnt-orange that captures the heat and kinetic energy
+        of a scramble — a clearly distinct hue family from the teal primary. Used
+        sparingly for active nav items, selected pills, and active tab borders, never
+        as a fill, and deep enough to clear AA on the bright canvas.
+      derivations:
+        second:
+          oklch:
+            l: 0.52
+            c: 0.17
+            h: 38.0
+            alpha: 0.75
+          hsl:
+            h: 18.285046300048823
+            s: 99.5476001148567
+            l: 35.57642869940907
+            alpha: 0.75
+          rgb:
+            r: 181
+            g: 55
+            b: 0
+            alpha: 0.75
+          hex: '#b53700bf'
+        third:
+          oklch:
+            l: 0.52
+            c: 0.17
+            h: 38.0
+            alpha: 0.5
+          hsl:
+            h: 18.285046300048823
+            s: 99.5476001148567
+            l: 35.57642869940907
+            alpha: 0.5
+          rgb:
+            r: 181
+            g: 55
+            b: 0
+            alpha: 0.5
+          hex: '#b5370080'
+        card:
+          oklch:
+            l: 0.52
+            c: 0.17
+            h: 38.0
+            alpha: 0.09
+          hsl:
+            h: 18.285046300048823
+            s: 99.5476001148567
+            l: 35.57642869940907
+            alpha: 0.09
+          rgb:
+            r: 181
+            g: 55
+            b: 0
+            alpha: 0.09
+          hex: '#b5370017'
+        popup:
+          oklch:
+            l: 0.8614279418562688
+            c: 0.007364759100880105
+            h: 61.019674420764275
+            alpha: null
+          hsl:
+            h: 26.445193124726494
+            s: 9.207211431377281
+            l: 81.9068980392687
+            alpha: null
+          rgb:
+            r: 213
+            g: 208
+            b: 205
+            alpha: null
+          hex: '#d5d0cd'
+        dark:
+          oklch:
+            l: 0.2184
+            c: 0.17
+            h: 38.0
+            alpha: null
+          hsl:
+            h: 352.4382009609458
+            s: 100.0
+            l: 9.819456447138446
+            alpha: null
+          rgb:
+            r: 52
+            g: 9
+            b: 0
+            alpha: null
+          hex: '#340900'
+        light:
+          oklch:
+            l: 0.98
+            c: 0.17
+            h: 38.0
+            alpha: null
+          hsl:
+            h: 14.202468608076131
+            s: 100.0
+            l: 99.56568524998485
+            alpha: null
+          rgb:
+            r: 255
+            g: 246
+            b: 244
+            alpha: null
+          hex: '#fff6f4'
+        regular_text:
+          oklch:
+            l: 0.9
+            c: 0.008
+            h: 210.0
+            alpha: null
+          hsl:
+            h: 189.35074572280672
+            s: 12.375156922702455
+            l: 86.48903236958452
+            alpha: null
+          rgb:
+            r: 216
+            g: 223
+            b: 225
+            alpha: null
+          hex: '#d8dfe1'
+  palette:
+    primary_second:
+      oklch:
+        l: 0.38
+        c: 0.12
+        h: 196.0
+        alpha: 0.75
+      hsl:
+        h: 181.4207237785008
+        s: 100.0
+        l: 5.841235149852617
+        alpha: 0.75
+      rgb:
+        r: 0
+        g: 77
+        b: 78
+        alpha: 0.75
+      hex: '#004d4ebf'
+    primary_third:
+      oklch:
+        l: 0.38
+        c: 0.12
+        h: 196.0
+        alpha: 0.5
+      hsl:
+        h: 181.4207237785008
+        s: 100.0
+        l: 5.841235149852617
+        alpha: 0.5
+      rgb:
+        r: 0
+        g: 77
+        b: 78
+        alpha: 0.5
+      hex: '#004d4e80'
+    primary_card:
+      oklch:
+        l: 0.38
+        c: 0.12
+        h: 196.0
+        alpha: 0.09
+      hsl:
+        h: 181.4207237785008
+        s: 100.0
+        l: 5.841235149852617
+        alpha: 0.09
+      rgb:
+        r: 0
+        g: 77
+        b: 78
+        alpha: 0.09
+      hex: '#004d4e17'
+    primary_popup:
+      oklch:
+        l: 0.8525313858901565
+        c: 0.020862039176111315
+        h: 202.50553470718904
+        alpha: null
+      hsl:
+        h: 184.38681697122587
+        s: 19.586053580694625
+        l: 79.23073061980861
+        alpha: null
+      rgb:
+        r: 192
+        g: 211
+        b: 212
+        alpha: null
+      hex: '#c0d3d4'
+    primary_dark:
+      oklch:
+        l: 0.1596
+        c: 0.12
+        h: 196.0
+        alpha: null
+      hsl:
+        h: 186.52932815571035
+        s: 100.0
+        l: 0.7467086917453416
+        alpha: null
+      rgb:
+        r: 0
+        g: 17
+        b: 17
+        alpha: null
+      hex: '#001111'
+    primary_light:
+      oklch:
+        l: 0.98
+        c: 0.12
+        h: 196.0
+        alpha: null
+      hsl:
+        h: 180.42752532693203
+        s: 100.0
+        l: 80.88887032295781
+        alpha: null
+      rgb:
+        r: 227
+        g: 255
+        b: 255
+        alpha: null
+      hex: '#e3ffff'
+    primary_regular_text:
+      oklch:
+        l: 0.9
+        c: 0.008
+        h: 210.0
+        alpha: null
+      hsl:
+        h: 189.35074572280672
+        s: 12.375156922702455
+        l: 86.48903236958452
+        alpha: null
+      rgb:
+        r: 216
+        g: 223
+        b: 225
+        alpha: null
+      hex: '#d8dfe1'
+    background_second:
+      oklch:
+        l: 0.9
+        c: 0.008
+        h: 210.0
+        alpha: 0.75
+      hsl:
+        h: 189.35074572280672
+        s: 12.375156922702455
+        l: 86.48903236958452
+        alpha: 0.75
+      rgb:
+        r: 216
+        g: 223
+        b: 225
+        alpha: 0.75
+      hex: '#d8dfe1bf'
+    background_third:
+      oklch:
+        l: 0.9
+        c: 0.008
+        h: 210.0
+        alpha: 0.5
+      hsl:
+        h: 189.35074572280672
+        s: 12.375156922702455
+        l: 86.48903236958452
+        alpha: 0.5
+      rgb:
+        r: 216
+        g: 223
+        b: 225
+        alpha: 0.5
+      hex: '#d8dfe180'
+    background_card:
+      oklch:
+        l: 0.08
+        c: 0.0
+        h: 0.0
+        alpha: 0.05
+      hsl:
+        h: 0.0
+        s: 2.622393025555109e-14
+        l: 0.6615040000000002
+        alpha: 0.05
+      rgb:
+        r: 2
+        g: 2
+        b: 2
+        alpha: 0.05
+      hex: '#0202020d'
+    background_popup:
+      oklch:
+        l: 0.8662383439074968
+        c: 0.007673194493466574
+        h: 210.0000429698597
+        alpha: null
+      hsl:
+        h: 189.350745722808
+        s: 8.922438918014738
+        l: 82.19765595110532
+        alpha: null
+      rgb:
+        r: 206
+        g: 212
+        b: 214
+        alpha: null
+      hex: '#ced4d6'
+    background_dark:
+      oklch:
+        l: 0.378
+        c: 0.008
+        h: 210.0
+        alpha: null
+      hsl:
+        h: 189.35582979030747
+        s: 5.367371388368271
+        l: 25.355124668767647
+        alpha: null
+      rgb:
+        r: 61
+        g: 67
+        b: 68
+        alpha: null
+      hex: '#3d4344'
+    background_light:
+      oklch:
+        l: 0.98
+        c: 0.008
+        h: 210.0
+        alpha: null
+      hsl:
+        h: 189.3500891705051
+        s: 54.48488675922047
+        l: 96.86716754017253
+        alpha: null
+      rgb:
+        r: 243
+        g: 250
+        b: 251
+        alpha: null
+      hex: '#f3fafb'
+    background_regular_text:
+      oklch:
+        l: 0.22
+        c: 0.014
+        h: 220.0
+        alpha: null
+      hsl:
+        h: 194.86321943352678
+        s: 23.162623402479227
+        l: 9.903362267418734
+        alpha: null
+      rgb:
+        r: 19
+        g: 28
+        b: 31
+        alpha: null
+      hex: '#131c1f'
+    text_second:
+      oklch:
+        l: 0.22
+        c: 0.014
+        h: 220.0
+        alpha: 0.75
+      hsl:
+        h: 194.86321943352678
+        s: 23.162623402479227
+        l: 9.903362267418734
+        alpha: 0.75
+      rgb:
+        r: 19
+        g: 28
+        b: 31
+        alpha: 0.75
+      hex: '#131c1fbf'
+    text_third:
+      oklch:
+        l: 0.22
+        c: 0.014
+        h: 220.0
+        alpha: 0.5
+      hsl:
+        h: 194.86321943352678
+        s: 23.162623402479227
+        l: 9.903362267418734
+        alpha: 0.5
+      rgb:
+        r: 19
+        g: 28
+        b: 31
+        alpha: 0.5
+      hex: '#131c1f80'
+    text_card:
+      oklch:
+        l: 0.08
+        c: 0.0
+        h: 0.0
+        alpha: 0.05
+      hsl:
+        h: 0.0
+        s: 2.622393025555109e-14
+        l: 0.6615040000000002
+        alpha: 0.05
+      rgb:
+        r: 2
+        g: 2
+        b: 2
+        alpha: 0.05
+      hex: '#0202020d'
+    text_popup:
+      oklch:
+        l: 0.8662383439074968
+        c: 0.007673194493466574
+        h: 210.0000429698597
+        alpha: null
+      hsl:
+        h: 189.350745722808
+        s: 8.922438918014738
+        l: 82.19765595110532
+        alpha: null
+      rgb:
+        r: 206
+        g: 212
+        b: 214
+        alpha: null
+      hex: '#ced4d6'
+    text_dark:
+      oklch:
+        l: 0.0924
+        c: 0.014
+        h: 220.0
+        alpha: null
+      hsl:
+        h: 199.89979879742634
+        s: 83.78236133993974
+        l: 0.9749424234808728
+        alpha: null
+      rgb:
+        r: 0
+        g: 3
+        b: 5
+        alpha: null
+      hex: '#000305'
+    text_light:
+      oklch:
+        l: 0.98
+        c: 0.014
+        h: 220.0
+        alpha: null
+      hsl:
+        h: 195.2112682054002
+        s: 100.0
+        l: 96.82446589186782
+        alpha: null
+      rgb:
+        r: 239
+        g: 251
+        b: 255
+        alpha: null
+      hex: '#effbff'
+    text_regular_text:
+      oklch:
+        l: 0.9
+        c: 0.008
+        h: 210.0
+        alpha: null
+      hsl:
+        h: 189.35074572280672
+        s: 12.375156922702455
+        l: 86.48903236958452
+        alpha: null
+      rgb:
+        r: 216
+        g: 223
+        b: 225
+        alpha: null
+      hex: '#d8dfe1'
+    accent_second:
+      oklch:
+        l: 0.52
+        c: 0.17
+        h: 38.0
+        alpha: 0.75
+      hsl:
+        h: 18.285046300048823
+        s: 99.5476001148567
+        l: 35.57642869940907
+        alpha: 0.75
+      rgb:
+        r: 181
+        g: 55
+        b: 0
+        alpha: 0.75
+      hex: '#b53700bf'
+    accent_third:
+      oklch:
+        l: 0.52
+        c: 0.17
+        h: 38.0
+        alpha: 0.5
+      hsl:
+        h: 18.285046300048823
+        s: 99.5476001148567
+        l: 35.57642869940907
+        alpha: 0.5
+      rgb:
+        r: 181
+        g: 55
+        b: 0
+        alpha: 0.5
+      hex: '#b5370080'
+    accent_card:
+      oklch:
+        l: 0.52
+        c: 0.17
+        h: 38.0
+        alpha: 0.09
+      hsl:
+        h: 18.285046300048823
+        s: 99.5476001148567
+        l: 35.57642869940907
+        alpha: 0.09
+      rgb:
+        r: 181
+        g: 55
+        b: 0
+        alpha: 0.09
+      hex: '#b5370017'
+    accent_popup:
+      oklch:
+        l: 0.8614279418562688
+        c: 0.007364759100880105
+        h: 61.019674420764275
+        alpha: null
+      hsl:
+        h: 26.445193124726494
+        s: 9.207211431377281
+        l: 81.9068980392687
+        alpha: null
+      rgb:
+        r: 213
+        g: 208
+        b: 205
+        alpha: null
+      hex: '#d5d0cd'
+    accent_dark:
+      oklch:
+        l: 0.2184
+        c: 0.17
+        h: 38.0
+        alpha: null
+      hsl:
+        h: 352.4382009609458
+        s: 100.0
+        l: 9.819456447138446
+        alpha: null
+      rgb:
+        r: 52
+        g: 9
+        b: 0
+        alpha: null
+      hex: '#340900'
+    accent_light:
+      oklch:
+        l: 0.98
+        c: 0.17
+        h: 38.0
+        alpha: null
+      hsl:
+        h: 14.202468608076131
+        s: 100.0
+        l: 99.56568524998485
+        alpha: null
+      rgb:
+        r: 255
+        g: 246
+        b: 244
+        alpha: null
+      hex: '#fff6f4'
+    accent_regular_text:
+      oklch:
+        l: 0.9
+        c: 0.008
+        h: 210.0
+        alpha: null
+      hsl:
+        h: 189.35074572280672
+        s: 12.375156922702455
+        l: 86.48903236958452
+        alpha: null
+      rgb:
+        r: 216
+        g: 223
+        b: 225
+        alpha: null
+      hex: '#d8dfe1'
+    card:
+      oklch:
+        l: 0.08
+        c: 0.0
+        h: 0.0
+        alpha: 0.05
+      hsl:
+        h: 0.0
+        s: 2.622393025555109e-14
+        l: 0.6615040000000002
+        alpha: 0.05
+      rgb:
+        r: 2
+        g: 2
+        b: 2
+        alpha: 0.05
+      hex: '#0202020d'
+    popup:
+      oklch:
+        l: 0.8662383439074968
+        c: 0.007673194493466574
+        h: 210.0000429698597
+        alpha: null
+      hsl:
+        h: 189.350745722808
+        s: 8.922438918014738
+        l: 82.19765595110532
+        alpha: null
+      rgb:
+        r: 206
+        g: 212
+        b: 214
+        alpha: null
+      hex: '#ced4d6'
+    divider:
+      oklch:
+        l: 0.22
+        c: 0.014
+        h: 220.0
+        alpha: 0.19
+      hsl:
+        h: 194.86321943352678
+        s: 23.162623402479227
+        l: 9.903362267418734
+        alpha: 0.19
+      rgb:
+        r: 19
+        g: 28
+        b: 31
+        alpha: 0.19
+      hex: '#131c1f30'
+    primary:
+      oklch:
+        l: 0.38
+        c: 0.12
+        h: 196.0
+        alpha: null
+      hsl:
+        h: 181.4207237785008
+        s: 100.0
+        l: 5.841235149852617
+        alpha: null
+      rgb:
+        r: 0
+        g: 77
+        b: 78
+        alpha: null
+      hex: '#004d4e'
+    background:
+      oklch:
+        l: 0.9
+        c: 0.008
+        h: 210.0
+        alpha: null
+      hsl:
+        h: 189.35074572280672
+        s: 12.375156922702455
+        l: 86.48903236958452
+        alpha: null
+      rgb:
+        r: 216
+        g: 223
+        b: 225
+        alpha: null
+      hex: '#d8dfe1'
+    text:
+      oklch:
+        l: 0.22
+        c: 0.014
+        h: 220.0
+        alpha: null
+      hsl:
+        h: 194.86321943352678
+        s: 23.162623402479227
+        l: 9.903362267418734
+        alpha: null
+      rgb:
+        r: 19
+        g: 28
+        b: 31
+        alpha: null
+      hex: '#131c1f'
+    accent:
+      oklch:
+        l: 0.52
+        c: 0.17
+        h: 38.0
+        alpha: null
+      hsl:
+        h: 18.285046300048823
+        s: 99.5476001148567
+        l: 35.57642869940907
+        alpha: null
+      rgb:
+        r: 181
+        g: 55
+        b: 0
+        alpha: null
+      hex: '#b53700'
+font_set:
+  fonts:
+    display:
+      family: Syne
+      category: sans-serif
+      display_name: Athletic Grotesk
+      description: A geometric sans with confident weight and a distinctly modern,
+        kinetic character — the kind of sharp, precise letterforms that read athletic
+        without resorting to the reflex condensed-all-caps. Works at display sizes
+        (24–64px) to carry celebration and hero screens (Class Booked, Rank, Points,
+        Streak) with energy and premium polish, never gym-hype bluster. The strong
+        geometric construction mirrors the interlocking-grip motif of the brand.
+    body:
+      family: IBM Plex Sans
+      category: sans-serif
+      display_name: Technical Humanist
+      description: 'A humanist sans with generous x-height, open counters and a quiet,
+        professional presence — built for legibility at 13–18px in long UI sessions.
+        Strong weight ladder (Regular through Bold) supports hierarchy without noise.
+        Tabular-friendly numerals suit the info bar stacking rank / streak / points
+        counters side-by-side. Pairs confidently with Syne because the two share a
+        modern, performance-driven mood but inhabit clearly different roles: one announces,
+        the other informs, neither fights the other.'
+text_set:
+  texts:
+    class_booked_headline:
+      value: Locked in
+    reserve_cta:
+      value: Reserve your spot
+    wins_title:
+      value: Today's work
+    wins_subtitle:
+      value: Every scramble sharpens you
+    book_next_class_cta:
+      value: Roll again
+cost:
+  total: 0.979514
+  llm: 0.388709
+  image_generation: 0.390805
+  background_removal: 0.2
+  by_model:
+    anthropic/claude-haiku-4-5: 0.009653
+    anthropic/claude-sonnet-4-6: 0.02253
+    anthropic/claude-opus-4-7: 0.35541
+    gemini/gemini-3.1-flash-lite-preview: 0.001116
+    openai/gpt-image-2: 0.390805
+    photoroom: 0.2

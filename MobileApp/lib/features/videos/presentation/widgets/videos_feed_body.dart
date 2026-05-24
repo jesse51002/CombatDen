@@ -9,7 +9,7 @@ import 'package:mobile_app/features/videos/presentation/widgets/video_carousel_s
 
 /// The vertically-stacked feed below the topbar / tabs on `VideosScreen`,
 /// derived live from the loaded [videos] and the active [scope]: a featured
-/// hero, an optional Technique-of-the-Day block, then one carousel per tag.
+/// hero, then one carousel per tag.
 class VideosFeedBody extends StatelessWidget {
   const VideosFeedBody({
     super.key,
@@ -19,16 +19,12 @@ class VideosFeedBody extends StatelessWidget {
   });
 
   final List<Video> videos;
-  final BigGroup? scope;
+  final String? scope;
   final ValueChanged<Video> onVideoTap;
 
   @override
   Widget build(BuildContext context) {
     final featured = featuredVideo(videos, scope);
-    // Technique of the Day is an educational moment — hidden under the
-    // Entertainment filter, and skipped when it would just echo the hero.
-    final technique =
-        scope == BigGroup.entertainment ? null : techniqueOfTheDay(videos);
     final sections = tagSections(videos, scope);
 
     if (featured == null && sections.isEmpty) {
@@ -54,17 +50,9 @@ class VideosFeedBody extends StatelessWidget {
               onTap: () => onVideoTap(featured),
             ),
           ),
-        if (technique != null && technique.url != featured?.url)
-          _PaddedSection(
-            child: _TitledFeatured(
-              title: 'Technique of the Day',
-              video: technique,
-              onTap: () => onVideoTap(technique),
-            ),
-          ),
         for (final section in sections)
           VideoCarouselSection(
-            title: tagDisplayName(section.tag),
+            title: displayLabel(section.tag),
             videos: section.videos,
             onViewAllTap: () => Navigator.of(context).pushNamed(
               AppRoutes.videoTagList,
@@ -89,30 +77,6 @@ class _PaddedSection extends StatelessWidget {
         horizontal: DesignConstants.screenHorizontalPadding,
       ),
       child: child,
-    );
-  }
-}
-
-class _TitledFeatured extends StatelessWidget {
-  const _TitledFeatured({
-    required this.title,
-    required this.video,
-    required this.onTap,
-  });
-
-  final String title;
-  final Video video;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Text(title, style: DesignConstants.h2),
-        FeaturedVideoCard(video: video, onTap: onTap),
-      ],
     );
   }
 }

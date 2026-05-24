@@ -39,9 +39,12 @@ const String _kDefaultVideoBaseUrl = String.fromEnvironment(
 /// `videoAppId` to its real feed as they're generated. [AppConfig.designId]
 /// (the default-loaded design) must stay represented here.
 const List<AppStyle> kAppStyles = [
-  AppStyle(designId: 'StrikeKickboxing', videoAppId: 'smoketest'),
-  AppStyle(designId: 'KillerMuayThai', videoAppId: 'smoketest'),
-  AppStyle(designId: 'ZenBJJ', videoAppId: 'smoketest'),
+  AppStyle(designId: 'StrikeKickboxing', videoAppId: 'cardio_kickboxing'),
+  AppStyle(designId: 'KillerMuayThai', videoAppId: 'muay_thai'),
+  AppStyle(designId: 'ZenBJJ', videoAppId: 'bjj'),
+  AppStyle(designId: 'ApexMMA', videoAppId: 'mma'),
+  AppStyle(designId: 'FrictionGrappling', videoAppId: 'no_gi'),
+  AppStyle(designId: 'SweetScienceBoxing', videoAppId: 'boxing'),
 ];
 
 /// The curated style for [designId], or null when the design isn't one of

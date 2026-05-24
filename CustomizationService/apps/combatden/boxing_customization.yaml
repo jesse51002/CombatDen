@@ -1,0 +1,83 @@
+design_direction:
+  name: Sweet Science Boxing
+  short_desc: >-
+    Hands up, chin down — a boxing gym built on the sweet science, where footwork,
+    timing and craft beat raw power every round.
+  long_desc: |
+    Sweet Science Boxing is a boxing gym and companion app rooted in the
+    craft of the sport — "the sweet science" of distance, timing, footwork
+    and the counter, not just throwing hard. The audience runs from total
+    beginners learning to hold their hands up to seasoned amateurs sharpening
+    their game, drawn by the discipline and rhythm of real boxing. The brand
+    sits in a deliberate spot: it carries the heritage and grit of a classic
+    fight gym, but elevated and refined — so it is NOT the loud, neon,
+    after-work fitness-boxing club chasing a party vibe, and it is equally
+    NOT a grimy, glorified-violence basement trading on blood and menace.
+    This is the timeless, earned craft of boxing: leather, rope, the bell,
+    and the quiet respect of people who put in the rounds.
+
+    The voice is seasoned and understated — a veteran trainer who says a lot
+    in a few words: "Sharp work tonight. Hands up, chin down — see you
+    tomorrow." Economical, grounded and warm under the gruffness, it
+    respects the craft and the grind without ever shouting. It must never
+    sound like screaming gym-bro hype, saccharine wellness, a barking drill
+    sergeant, or hollow corporate sales-speak.
+
+    Sweet Science Boxing has no mascot. Its anchor is the squared circle —
+    the ring ropes and corner geometry, with the brass ring-bell and laced
+    leather glove as recurring object notes — standing for the arena, the
+    round, and earned craft. It is carried into the logo and echoed through
+    the object heroes (the championship title belt, the trophy, the gift,
+    the point-stars). The celebratory heroes bring the personality through
+    warm, heritage-lit, weighty compositions, never a character. The tiny
+    persistent tokens — the single point-star, the streak mark, the QR
+    check-in icon — stay clean, abstract and razor-legible at small size.
+    The logo stays a clean, professional mark a real gym would use, never a
+    busy illustrated scene.
+
+    Visual system — the shared look every generated asset must wear:
+
+    - Feel: timeless, grounded and earned — the quiet weight of an old
+      fight gym with the craft kept sharp. Heritage and discipline, solid
+      and unhurried, never frantic and never soft.
+    - Medium & materials: warm, premium 3D in laced leather, brushed brass,
+      braided ring-rope, taut canvas and chalk. Tactile, weighty and
+      vintage-athletic, with the squared-circle geometry in the structure.
+      Never neon, never plastic candy, never pastel softness, never flat
+      clip-art.
+    - Finish & light: warm and low-key — a focused incandescent pool like
+      the light over a ring, deep but not harsh shadow, an old-gold glow on
+      brass and leather. Atmospheric heritage staging, never grimy-grim and
+      never flat.
+    - Energy by role: celebratory heroes (booking success, the title belt,
+      trophy, gift, points burst) land with solid, grounded weight and a
+      warm earned glow — the bell, the raised glove, the title won, never
+      confetti chaos. Persistent UI (the logo, the tiny point-star, streak
+      mark, QR) stays clean, precise and quiet, reading instantly at small
+      size.
+    - Hard nos: no gore or menace clichés (blood, cuts, snarling faces,
+      skulls); no grimy dark-basement grit, grunge or sweat-stains; no
+      neon, RGB or club-glow energy; nothing cute, cartoon, pastel or
+      bubbly; no mascot, character, creature or face of any kind; nothing
+      flat, generic-stock or clip-arty.
+colors_direction:
+  description: |
+    A dark, warm palette built on heritage craft — colour reads as old
+    brass and laced leather under a warm ring light, weighty and earned
+    against a deep canvas.
+
+    - Primary: a warm brass / amber-gold for primary CTAs and key accents —
+      the ring bell and old-gold heritage note, rich and premium, saturated
+      enough to lead and comfortably above AA on the dark canvas, never a
+      pale or washed-out yellow.
+    - Background: a deep, near-black with the faintest warm-brown undertone
+      — a dim heritage gym after the last round, never a flat pure black,
+      with tonal room for cards and sheets to lift off it.
+    - Text: a warm off-white for headings and body copy — clean and
+      readable with a faint warmth, comfortably above AA against the dark
+      canvas, never a harsh pure white.
+    - Accent: a deep classic boxing-glove red for selections, active states
+      and highlights — the laced leather glove, a clearly different hue
+      family from the brass primary, premium and used sparingly on active
+      nav, pills and tabs, never a fill.
+  mode: dark

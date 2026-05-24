@@ -6,8 +6,8 @@ import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 
 /// Big featured video — `VideoReccCard` wrapped in a card surface with a
-/// full-width "Play" CTA underneath. Used both for the very top hero on
-/// `VideosScreen` and for the "Technique of the Day" block.
+/// full-width "Play" CTA underneath. Used for the very top hero on
+/// `VideosScreen`.
 class FeaturedVideoCard extends StatelessWidget {
   const FeaturedVideoCard({super.key, required this.video, this.onTap});
 

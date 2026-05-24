@@ -1,0 +1,46 @@
+company_name: Pulse Cardio Kickboxing
+app_id: cardio_kickboxing
+# DEMO PROFILE. Instructor names and bios are fabricated placeholders (no real
+# gym behind this brief). Every image_url and instructor_image_url is a real
+# Wikimedia Commons photo, downloaded and visually verified for relevance.
+classes:
+  - name: Cardio Burn
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Aerobics_class.jpg/1280px-Aerobics_class.jpg
+    description: >-
+      A high-energy, music-driven kickboxing workout that torches calories.
+      No experience needed — just bring the energy.
+    instructor_name: Coach Tara Lindgren
+    instructor_bio: >-
+      Group fitness instructor who makes every class feel like a party. Expert
+      at scaling moves so everyone keeps moving.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/7/74/Nigora_Tursunkulova%2C_June_2021.jpg
+  - name: Combos
+    image_url: https://upload.wikimedia.org/wikipedia/commons/d/d7/Cardio_Boxing_Group_Fitness_Class.JPG
+    description: >-
+      Learn punch-kick combos and throw them in fast, sweaty rounds. All
+      fitness levels, zero pressure.
+    instructor_name: Coach Jess Moreno
+    instructor_bio: >-
+      Choreographs combos that are easy to learn and hard to stop. Keeps the
+      vibe upbeat and the heart rate up.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/c/cb/%EC%B5%9C%ED%98%84%EB%AF%B8_%EA%B6%8C%ED%88%AC_%EC%84%A0%EC%88%98.jpg
+  - name: Bag Blast
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Punching_bag.jpg/1280px-Punching_bag.jpg
+    description: >-
+      Unleash on the bag for a full-body, stress-melting burn. Beginner
+      friendly — gloves on, worries off.
+    instructor_name: Coach Sam Ortega
+    instructor_bio: >-
+      Brings boundless energy to bag rounds and a knack for getting nervous
+      first-timers swinging with confidence.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Alfie_Davis_in_2020.jpg/960px-Alfie_Davis_in_2020.jpg
+  - name: HIIT Conditioning
+    image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/Fitness_training_improves_run_times_%288276718%29.jpg/1280px-Fitness_training_improves_run_times_%288276718%29.jpg
+    description: >-
+      Kickboxing-style intervals that build endurance and strength fast. Scale
+      every round to your own pace.
+    instructor_name: Coach Priya Anand
+    instructor_bio: >-
+      Conditioning coach who designs intervals that push you without breaking
+      you. Big believer in scaling, not skipping.
+    instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/d/df/Meerim_Momunova%2C_September_2017.jpg
