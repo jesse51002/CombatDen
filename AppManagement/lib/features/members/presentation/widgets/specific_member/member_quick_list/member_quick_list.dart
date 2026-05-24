@@ -10,7 +10,7 @@ import 'package:app_management/shared/widgets/member_list_item.dart';
 /// between members without going back to the full Members list.
 ///
 /// Holds a search box and a vertically scrollable list of member
-/// rows (avatar + name).
+/// rows (name).
 class MemberQuickList extends StatelessWidget {
   final List<Member> members;
 
@@ -53,7 +53,6 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) {
     return MemberListItem(
       name: member.fullName,
-      avatarAsset: member.avatarAsset,
       onTap: () => Navigator.pushReplacementNamed(
         context,
         AppRoutes.memberDetail,

@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:app_management/core/constants/design_constants.dart';
 
 /// Circular progress arc — a "donut" ring showing a single percentage
-/// against a muted track. Used by Growth's Monthly Churn / Trial
-/// Conversion donut tiles. Sized to fill its parent — wrap in a
-/// `SizedBox` to control dimensions.
+/// against a muted track. Used by Growth's Monthly Churn donut tiles.
+/// Sized to fill its parent — wrap in a `SizedBox` to control
+/// dimensions.
 ///
 /// `progress` is clamped to `0.0..1.0`. The arc starts at the top
 /// (12 o'clock) and sweeps clockwise.

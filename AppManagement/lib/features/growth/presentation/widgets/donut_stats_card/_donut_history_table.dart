@@ -5,9 +5,8 @@ import 'package:app_management/features/growth/data/mock_growth.dart';
 import 'package:app_management/shared/widgets/app_data_table.dart';
 import 'package:app_management/shared/widgets/section_card.dart';
 
-/// 2-column nested table used inside the Monthly Churn / Trial
-/// Conversion cards: month label + the metric value (e.g.
-/// "9% (11 members)").
+/// 2-column nested table used inside the Monthly Churn card: month
+/// label + the metric value (e.g. "9% (11 members)").
 class DonutHistoryTable extends StatelessWidget {
   final String valueColumnLabel;
   final List<DonutStatRow> rows;

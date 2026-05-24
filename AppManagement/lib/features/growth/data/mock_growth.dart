@@ -88,7 +88,7 @@ const GrowthRevenue kMockGrowthRevenue = GrowthRevenue(
   inactiveMembers: 31,
 );
 
-// Order matches Figma: Total / Trial / New / Lost.
+// Order matches Figma: Total / New / Lost.
 final List<GrowthKpi> kMockGrowthKpis = [
   GrowthKpi(
     label: 'Total Members',
@@ -96,13 +96,6 @@ final List<GrowthKpi> kMockGrowthKpis = [
     value: '140',
     deltaLabel: '+11%',
     comparisonLabel: 'vs 124 last month',
-  ),
-  GrowthKpi(
-    label: 'Trial Members',
-    icon: Icons.card_giftcard,
-    value: '24',
-    deltaLabel: '+20%',
-    comparisonLabel: 'vs 5 last month',
   ),
   GrowthKpi(
     label: 'New Members',
@@ -131,6 +124,19 @@ const List<String> kMockMembersTrendXLabels = [
 ];
 
 const List<int> kMockMembersTrendYTicks = [140, 70, 0];
+
+/// Normalized (0.0..1.0) y-values for the Members-over-time line, one
+/// per entry in [kMockMembersTrendXLabels]. 1.0 maps to the top tick
+/// (140), 0.0 to the bottom (0). Drives the drawn trend line.
+const List<double> kMockMembersTrendSeries = [
+  0.05,
+  0.13,
+  0.20,
+  0.34,
+  0.47,
+  0.62,
+  0.96,
+];
 
 const List<MembersMonthRow> kMockMembersMonthRows = [
   MembersMonthRow(
@@ -190,26 +196,4 @@ const List<DonutStatRow> kMockChurnRows = [
   DonutStatRow(month: 'January 2025', value: '5% (6 members)'),
   DonutStatRow(month: 'December 2025', value: '14% (20 members)'),
   DonutStatRow(month: 'November 2025', value: '6% (4 members)'),
-];
-
-// ---- Trial Conversion donut card ----
-final DonutChartData kMockConversionLast30 = DonutChartData(
-  progress: 0.64,
-  headline: '64%',
-  subLabel: 'In Last 30 days',
-  color: DesignConstants.primaryColor,
-);
-
-final DonutChartData kMockConversionGymAverage = DonutChartData(
-  progress: 0.52,
-  headline: '52%',
-  subLabel: 'Gym Average',
-  color: DesignConstants.primaryColor,
-);
-
-const List<DonutStatRow> kMockConversionRows = [
-  DonutStatRow(month: 'February 2026', value: '64% (16 members)'),
-  DonutStatRow(month: 'January 2025', value: '52% (9 members)'),
-  DonutStatRow(month: 'December 2025', value: '42% (10 members)'),
-  DonutStatRow(month: 'November 2025', value: '65% (17 members)'),
 ];

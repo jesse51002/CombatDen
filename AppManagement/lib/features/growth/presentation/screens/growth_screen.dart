@@ -15,9 +15,9 @@ import 'package:app_management/shared/widgets/app_shell.dart';
 /// Figma: file `q04PCZ3W9syMik34JRtRbL`, node `5001:3206`.
 /// Stack (top to bottom):
 ///   1. Total Members hero card (active/inactive arc) — reused from Home
-///   2. Four KPI tiles: Total / Trial / New / Lost
+///   2. Three KPI tiles: Total / New / Lost
 ///   3. Wide Members card with date-range pill, trend chart, breakdown table
-///   4. Two-column row: Monthly Churn + Trial Conversion donut cards
+///   4. Full-width Monthly Churn donut card
 class GrowthScreen extends StatelessWidget {
   const GrowthScreen({super.key});
 
@@ -34,43 +34,15 @@ class GrowthScreen extends StatelessWidget {
             TotalMembersCard(stats: kMockMemberStats),
             KpiStrip(kpis: kMockGrowthKpis),
             const MembersCard(),
-            const _BottomRow(),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomRow extends StatelessWidget {
-  const _BottomRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          Expanded(
-            child: DonutStatsCard(
+            DonutStatsCard(
               title: 'Monthly Churn',
               last30: kMockChurnLast30,
               gymAverage: kMockChurnGymAverage,
               tableValueColumnLabel: 'Churn',
               rows: kMockChurnRows,
             ),
-          ),
-          Expanded(
-            child: DonutStatsCard(
-              title: 'Trial Conversion',
-              last30: kMockConversionLast30,
-              gymAverage: kMockConversionGymAverage,
-              tableValueColumnLabel: 'Conversion',
-              rows: kMockConversionRows,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

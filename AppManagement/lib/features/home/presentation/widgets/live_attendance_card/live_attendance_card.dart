@@ -103,27 +103,12 @@ class _NameCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        ClipOval(
-          child: Image.asset(
-            entry.avatarAsset,
-            width: 30,
-            height: 30,
-            fit: BoxFit.cover,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            entry.fullName,
-            overflow: TextOverflow.ellipsis,
-            style: DesignConstants.h3.copyWith(
-              color: DesignConstants.text,
-            ),
-          ),
-        ),
-      ],
+    return Text(
+      entry.fullName,
+      overflow: TextOverflow.ellipsis,
+      style: DesignConstants.h3.copyWith(
+        color: DesignConstants.text,
+      ),
     );
   }
 }

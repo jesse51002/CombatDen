@@ -12,14 +12,13 @@ enum MemberRank { silver, gold, bronze, unknown }
 
 /// Membership lifecycle status. Drives any future status pill / filter
 /// logic. Field names match what the API will hand us.
-enum MemberStatus { active, trial, frozen, unknown }
+enum MemberStatus { active, frozen, unknown }
 
 class Member {
   final String id;
   final String firstName;
   final String lastName;
   final String email;
-  final String avatarAsset;
   final MemberRank rank;
   final MemberStatus status;
   final int lastClassDaysAgo;
@@ -29,7 +28,6 @@ class Member {
     required this.firstName,
     required this.lastName,
     required this.email,
-    required this.avatarAsset,
     required this.rank,
     required this.status,
     required this.lastClassDaysAgo,
@@ -42,19 +40,16 @@ class Member {
 /// will return these as a single aggregate; for now they're hardcoded.
 class MembersSummary {
   final int active;
-  final int trial;
   final int frozen;
 
   const MembersSummary({
     required this.active,
-    required this.trial,
     required this.frozen,
   });
 }
 
 const MembersSummary kMockMembersSummary = MembersSummary(
   active: 85,
-  trial: 6,
   frozen: 3,
 );
 
@@ -66,7 +61,6 @@ const List<Member> kMockMembers = [
     firstName: 'Lily',
     lastName: 'Altega',
     email: 'lillymthree@gmail.com',
-    avatarAsset: 'assets/images/pfp_lily_altega.png',
     rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 3,
@@ -76,7 +70,6 @@ const List<Member> kMockMembers = [
     firstName: 'Ben',
     lastName: 'Ama',
     email: 'ben.ama@gmail.com',
-    avatarAsset: 'assets/images/pfp_ben_ama.png',
     rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 11,
@@ -86,7 +79,6 @@ const List<Member> kMockMembers = [
     firstName: 'Timothy',
     lastName: 'Tom',
     email: 'tim.tom@outlook.com',
-    avatarAsset: 'assets/images/pfp_timothy_tom.png',
     rank: MemberRank.bronze,
     status: MemberStatus.active,
     lastClassDaysAgo: 5,
@@ -96,7 +88,6 @@ const List<Member> kMockMembers = [
     firstName: 'Sylvia',
     lastName: 'Crivia',
     email: 'sylvia.crivia@protonmail.com',
-    avatarAsset: 'assets/images/pfp_sylvia_crivia.png',
     rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 12,
@@ -106,7 +97,6 @@ const List<Member> kMockMembers = [
     firstName: 'Amy',
     lastName: 'Traver',
     email: 'amy.traver@gmail.com',
-    avatarAsset: 'assets/images/pfp_amy_traver.png',
     rank: MemberRank.bronze,
     status: MemberStatus.frozen,
     lastClassDaysAgo: 18,
@@ -116,7 +106,6 @@ const List<Member> kMockMembers = [
     firstName: 'Marcus',
     lastName: 'Pell',
     email: 'marcuspell@gmail.com',
-    avatarAsset: 'assets/images/pfp_lily_altega.png',
     rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 2,
@@ -126,7 +115,6 @@ const List<Member> kMockMembers = [
     firstName: 'Dion',
     lastName: 'Reyes',
     email: 'dion.reyes@hey.com',
-    avatarAsset: 'assets/images/pfp_ben_ama.png',
     rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 9,
@@ -136,9 +124,8 @@ const List<Member> kMockMembers = [
     firstName: 'Kim',
     lastName: 'Baranov',
     email: 'kim.b@gmail.com',
-    avatarAsset: 'assets/images/pfp_timothy_tom.png',
     rank: MemberRank.bronze,
-    status: MemberStatus.trial,
+    status: MemberStatus.active,
     lastClassDaysAgo: 5,
   ),
   Member(
@@ -146,7 +133,6 @@ const List<Member> kMockMembers = [
     firstName: 'Priya',
     lastName: 'Shah',
     email: 'priya.shah@gmail.com',
-    avatarAsset: 'assets/images/pfp_sylvia_crivia.png',
     rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 13,
@@ -156,7 +142,6 @@ const List<Member> kMockMembers = [
     firstName: 'Jordan',
     lastName: 'Vega',
     email: 'jvega@gmail.com',
-    avatarAsset: 'assets/images/pfp_amy_traver.png',
     rank: MemberRank.bronze,
     status: MemberStatus.active,
     lastClassDaysAgo: 19,
@@ -166,7 +151,6 @@ const List<Member> kMockMembers = [
     firstName: 'Ravi',
     lastName: 'Okafor',
     email: 'ravi.okafor@gmail.com',
-    avatarAsset: 'assets/images/pfp_ben_ama.png',
     rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 1,
@@ -176,7 +160,6 @@ const List<Member> kMockMembers = [
     firstName: 'Nora',
     lastName: 'Linwood',
     email: 'nora.linwood@gmail.com',
-    avatarAsset: 'assets/images/pfp_lily_altega.png',
     rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 7,
@@ -186,9 +169,8 @@ const List<Member> kMockMembers = [
     firstName: 'Hugo',
     lastName: 'Marchetti',
     email: 'hugo.m@gmail.com',
-    avatarAsset: 'assets/images/pfp_timothy_tom.png',
     rank: MemberRank.bronze,
-    status: MemberStatus.trial,
+    status: MemberStatus.active,
     lastClassDaysAgo: 4,
   ),
   Member(
@@ -196,7 +178,6 @@ const List<Member> kMockMembers = [
     firstName: 'Aiko',
     lastName: 'Tanaka',
     email: 'aiko.tanaka@gmail.com',
-    avatarAsset: 'assets/images/pfp_sylvia_crivia.png',
     rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 14,
@@ -206,7 +187,6 @@ const List<Member> kMockMembers = [
     firstName: 'Diego',
     lastName: 'Salinas',
     email: 'diego.salinas@gmail.com',
-    avatarAsset: 'assets/images/pfp_amy_traver.png',
     rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 6,
@@ -216,7 +196,6 @@ const List<Member> kMockMembers = [
     firstName: 'Emma',
     lastName: 'Whitfield',
     email: 'emmawhit@gmail.com',
-    avatarAsset: 'assets/images/pfp_lily_altega.png',
     rank: MemberRank.bronze,
     status: MemberStatus.active,
     lastClassDaysAgo: 21,
@@ -226,7 +205,6 @@ const List<Member> kMockMembers = [
     firstName: 'Owen',
     lastName: 'Brennan',
     email: 'owen.brennan@gmail.com',
-    avatarAsset: 'assets/images/pfp_ben_ama.png',
     rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 3,
@@ -236,7 +214,6 @@ const List<Member> kMockMembers = [
     firstName: 'Zara',
     lastName: 'Mehmood',
     email: 'zara.m@gmail.com',
-    avatarAsset: 'assets/images/pfp_sylvia_crivia.png',
     rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 10,
@@ -246,7 +223,6 @@ const List<Member> kMockMembers = [
     firstName: 'Felix',
     lastName: 'Donovan',
     email: 'felix.donovan@gmail.com',
-    avatarAsset: 'assets/images/pfp_timothy_tom.png',
     rank: MemberRank.bronze,
     status: MemberStatus.frozen,
     lastClassDaysAgo: 24,
@@ -256,7 +232,6 @@ const List<Member> kMockMembers = [
     firstName: 'Sana',
     lastName: 'Aldridge',
     email: 'sana.a@gmail.com',
-    avatarAsset: 'assets/images/pfp_amy_traver.png',
     rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 8,
