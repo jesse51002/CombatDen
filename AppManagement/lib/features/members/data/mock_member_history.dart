@@ -80,7 +80,6 @@ class DemoMember {
   final String fullName;
   final String statusLabel;
   final String email;
-  final String avatarAsset;
   final String rankLabel;
   final String rankIconAsset;
 
@@ -88,7 +87,6 @@ class DemoMember {
     required this.fullName,
     required this.statusLabel,
     required this.email,
-    required this.avatarAsset,
     required this.rankLabel,
     required this.rankIconAsset,
   });
@@ -98,7 +96,6 @@ const DemoMember kMockDemoMember = DemoMember(
   fullName: 'Justin Stemmons',
   statusLabel: 'Active',
   email: 'juston_stemmons@gmail.com',
-  avatarAsset: 'assets/images/pfp_justin_stemmons.png',
   rankLabel: 'Silver (Amateur)',
   rankIconAsset: 'assets/images/rank_silver_belt.png',
 );

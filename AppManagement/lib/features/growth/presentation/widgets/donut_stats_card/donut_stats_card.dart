@@ -6,8 +6,9 @@ import 'package:app_management/features/growth/presentation/widgets/donut_stats_
 import 'package:app_management/features/growth/presentation/widgets/donut_stats_card/_donut_stat.dart';
 import 'package:app_management/shared/widgets/section_card.dart';
 
-/// Generic "two donuts + history table" card used twice on Growth:
-/// once for Monthly Churn, once for Trial Conversion.
+/// "Two donuts + history table" card used on Growth for Monthly Churn.
+/// The two donuts sit side by side, with the history table filling the
+/// remaining width.
 class DonutStatsCard extends StatelessWidget {
   final String title;
   final DonutChartData last30;
@@ -59,25 +60,23 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          spacing: DesignConstants.spacingBig,
-          children: [
-            DonutStat(data: last30),
-            DonutStat(data: gymAverage),
-          ],
-        ),
-        Expanded(
-          child: DonutHistoryTable(
-            valueColumnLabel: tableValueColumnLabel,
-            rows: rows,
+    // IntrinsicHeight lets the donuts stretch to the table's height; each
+    // donut is kept square (AspectRatio 1) so the rings grow to fill it.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingBig,
+        children: [
+          AspectRatio(aspectRatio: 1, child: DonutStat(data: last30)),
+          AspectRatio(aspectRatio: 1, child: DonutStat(data: gymAverage)),
+          Expanded(
+            child: DonutHistoryTable(
+              valueColumnLabel: tableValueColumnLabel,
+              rows: rows,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -12,7 +12,7 @@ import 'package:app_management/shared/widgets/app_shell.dart';
 ///
 /// Figma: file `q04PCZ3W9syMik34JRtRbL`, node `3132:3574`.
 /// Composition (top to bottom):
-///   1. "Members" title + summary subtitle (active / trial / frozen).
+///   1. "Members" title + summary subtitle (active / frozen).
 ///   2. Search box + "Add New Member" primary button.
 ///   3. "Add Filter +" pill.
 ///   4. Tappable table of members — Name / Contact / Rank / Last Class.

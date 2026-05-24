@@ -4,7 +4,7 @@ import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/growth/data/mock_growth.dart';
 import 'package:app_management/features/growth/presentation/widgets/kpi_tiles/kpi_tile.dart';
 
-/// Horizontal strip of four KPI tiles (Total / Trial / New / Lost).
+/// Horizontal strip of three KPI tiles (Total / New / Lost).
 class KpiStrip extends StatelessWidget {
   final List<GrowthKpi> kpis;
 

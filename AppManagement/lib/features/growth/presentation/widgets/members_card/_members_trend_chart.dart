@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/growth/data/mock_growth.dart';
 
-/// Static chart visual for Members-over-time. The line itself is a
-/// pre-rendered Figma bitmap (prototype only — when this graduates,
-/// swap to a real chart library). Y-axis tick labels and X-axis month
-/// labels are real Flutter widgets so they re-flow with the design
-/// system.
+/// Chart visual for Members-over-time. The line is drawn with a
+/// [CustomPainter] as a smooth spline through [kMockMembersTrendSeries]
+/// (mirrors MobileApp's profile `RatingGraph`). Y-axis tick labels and
+/// X-axis month labels are real Flutter widgets so they re-flow with
+/// the design system.
 class MembersTrendChart extends StatelessWidget {
   const MembersTrendChart({super.key});
 
@@ -38,9 +38,12 @@ class _ChartBody extends StatelessWidget {
         Expanded(
           child: SizedBox(
             height: MembersTrendChart._chartHeight,
-            child: Image.asset(
-              'assets/images/growth_members_chart.png',
-              fit: BoxFit.fill,
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _MembersTrendLinePainter(
+                series: kMockMembersTrendSeries,
+                color: DesignConstants.primaryColor,
+              ),
             ),
           ),
         ),
@@ -63,6 +66,65 @@ class _ChartBody extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Draws [series] (normalized 0..1 y-values, evenly spaced on x) as a
+/// smooth Catmull-Rom spline. Stroke-only, no fill, no point markers —
+/// matching MobileApp's profile `RatingGraph`.
+class _MembersTrendLinePainter extends CustomPainter {
+  final List<double> series;
+  final Color color;
+
+  // Chart line weight. The shared design system has no line-stroke
+  // token; MobileApp's RatingGraph hardcodes the same 3px locally.
+  static const double _strokeWidth = 3;
+
+  _MembersTrendLinePainter({required this.series, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (series.length < 2) return;
+
+    final points = <Offset>[
+      for (var i = 0; i < series.length; i++)
+        Offset(
+          size.width * (i / (series.length - 1)),
+          size.height * (1 - series[i].clamp(0.0, 1.0)),
+        ),
+    ];
+
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = i == 0 ? points[0] : points[i - 1];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i + 2 < points.length ? points[i + 2] : points[i + 1];
+
+      final cp1 = Offset(
+        p1.dx + (p2.dx - p0.dx) / 6,
+        p1.dy + (p2.dy - p0.dy) / 6,
+      );
+      final cp2 = Offset(
+        p2.dx - (p3.dx - p1.dx) / 6,
+        p2.dy - (p3.dy - p1.dy) / 6,
+      );
+
+      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
+    }
+
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_MembersTrendLinePainter old) =>
+      old.color != color || old.series != series;
 }
 
 class _XAxisLabels extends StatelessWidget {

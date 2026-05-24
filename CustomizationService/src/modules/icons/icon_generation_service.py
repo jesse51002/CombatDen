@@ -32,9 +32,7 @@ from src.shared.interfaces.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
-ICON_PROMPT_RULE_PATH = (
-    Path(__file__).parent / "prompts" / "icon_prompt_rule.md"
-)
+ICON_PROMPT_RULE_PATH = Path(__file__).parent / "prompts" / "icon_prompt_rule.md"
 
 # Model for the batch prompt-authoring call. Haiku, per the owner: cheap
 # and plenty for turning a slot description + brand vibe into a Recraft
@@ -116,9 +114,7 @@ class IconGenerationService:
         slot_ids = [slot.id for slot in unmatched]
         template = ICON_PROMPT_RULE_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
-        inventory = "\n".join(
-            f"- {slot.id}: {slot.description}" for slot in unmatched
-        )
+        inventory = "\n".join(f"- {slot.id}: {slot.description}" for slot in unmatched)
         instruction = Template(template).safe_substitute(
             name=design.name,
             short=design.short_desc,

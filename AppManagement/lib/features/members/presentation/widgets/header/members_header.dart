@@ -20,7 +20,6 @@ class MembersHeader extends StatelessWidget {
         Text('Members', style: DesignConstants.big2),
         Text(
           '${summary.active} active members, '
-          '${summary.trial} trial members, '
           '${summary.frozen} frozen members',
           style: DesignConstants.h1Regular.copyWith(
             color: DesignConstants.text2nd,
