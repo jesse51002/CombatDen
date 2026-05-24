@@ -15,3 +15,5 @@ apps/*/2*/
 # Vendored ColorMcp source is committed; build outputs are regenerated
 vendor/colormcp/node_modules/
 vendor/colormcp/dist/
+
+assets/**/*
