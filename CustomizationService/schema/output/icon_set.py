@@ -19,17 +19,26 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from schema.output.icon_attribution import IconAttribution
 from schema.output.icon_output import IconOutput
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class IconSet(BaseModel):
-    """Every resolved icon slot, keyed by snake_case slot id."""
+    """Every resolved icon slot, keyed by snake_case slot id.
+
+    ``attribution`` is the run-wide credit field the group was designed to
+    grow into: set when the chosen curated set's licence requires a visible
+    credit (CC BY 4.0) and icons were copied from it; ``None`` for permissive
+    sets that need none. Optional/defaulted so existing ``output.yaml`` files
+    keep validating.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
     icons: dict[str, IconOutput] = Field(default_factory=dict)
+    attribution: IconAttribution | None = None
 
     @field_validator("icons")
     @classmethod

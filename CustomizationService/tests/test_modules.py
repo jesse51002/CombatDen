@@ -1022,9 +1022,16 @@ class _IconStubCatalog:
         icons: list[str],
         *,
         on_disk: list[str] | None = None,
+        license: str | None = None,
+        attribution: str | None = None,
     ) -> None:
         self._entry = IconSetCatalogEntry(
-            id="set_a", name="Set A", vibe="clean", icons=icons
+            id="set_a",
+            name="Set A",
+            vibe="clean",
+            icons=icons,
+            license=license,
+            attribution=attribution,
         )
         self._dir = tmp_path / "iconsrc"
         self._dir.mkdir(parents=True, exist_ok=True)
@@ -1073,10 +1080,18 @@ def _icon_node(
     matches: dict[str, str | None],
     catalog_icons: list[str],
     on_disk: list[str] | None = None,
+    license: str | None = None,
+    attribution: str | None = None,
 ) -> tuple[IconNode, _IconStubLLM, _IconStubGen]:
     llm = _IconStubLLM(chosen_set="set_a", matches=matches)
     gen = _IconStubGen()
-    catalog = _IconStubCatalog(ctx.run_dir, catalog_icons, on_disk=on_disk)
+    catalog = _IconStubCatalog(
+        ctx.run_dir,
+        catalog_icons,
+        on_disk=on_disk,
+        license=license,
+        attribution=attribution,
+    )
     node = IconNode(ctx, llm=llm, catalog=catalog, generator=gen)
     return node, llm, gen
 
@@ -1134,6 +1149,72 @@ def test_icon_node_generation_path(tmp_path: Path) -> None:
     assert Path(str(gen_out.path)).exists()
     assert len(gen.calls) == 1
     assert "IconPrompt" in llm.calls
+
+
+def test_icon_node_records_attribution_for_cc_by_set(tmp_path: Path) -> None:
+    """A chosen set whose licence requires credit (it declares an
+    ``attribution`` notice) and from which an icon was actually copied
+    surfaces that credit on ``IconSet.attribution``."""
+    ctx = _run_ctx(tmp_path)
+    notice = "Set A by Someone (CC BY 4.0) — https://example.test/by/4.0"
+    node, _, _ = _icon_node(
+        ctx,
+        matches={
+            "home_tab": "home",
+            "search_action": "search",
+            "celebration_badge": "badge",
+        },
+        catalog_icons=["home", "search", "badge"],
+        license="CC-BY-4.0",
+        attribution=notice,
+    )
+    out = asyncio.run(node.run())
+
+    assert out.attribution is not None
+    assert out.attribution.icon_set == "set_a"
+    assert out.attribution.license == "CC-BY-4.0"
+    assert out.attribution.notice == notice
+
+
+def test_icon_node_no_attribution_for_permissive_set(tmp_path: Path) -> None:
+    """A permissive set (no ``attribution`` notice) owes no credit, so
+    ``IconSet.attribution`` stays ``None`` even with matched icons."""
+    ctx = _run_ctx(tmp_path)
+    node, _, _ = _icon_node(
+        ctx,
+        matches={
+            "home_tab": "home",
+            "search_action": "search",
+            "celebration_badge": "badge",
+        },
+        catalog_icons=["home", "search", "badge"],
+        license="MIT",
+    )
+    out = asyncio.run(node.run())
+
+    assert out.attribution is None
+
+
+def test_icon_node_no_attribution_when_nothing_matched(tmp_path: Path) -> None:
+    """A CC-BY set chosen but matched by nothing (all slots generated)
+    copies no licensed icon, so owes no credit."""
+    ctx = _run_ctx(tmp_path)
+    node, _, _ = _icon_node(
+        ctx,
+        matches={
+            "home_tab": None,
+            "search_action": None,
+            "celebration_badge": None,
+        },
+        catalog_icons=["home"],
+        license="CC-BY-4.0",
+        attribution="Set A (CC BY 4.0)",
+    )
+    out = asyncio.run(node.run())
+
+    assert out.attribution is None
+    # the slots still resolved via generation
+    assert out.icons["home_tab"].icon_set == "set_a"
 
 
 def test_icon_node_fail_soft_drops_slot_with_missing_svg(

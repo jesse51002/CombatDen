@@ -1,0 +1,5 @@
+# Generated icon sets are NOT committed here. They are bulk SVGs rebuilt
+# from pinned sources by scripts/fetch_icon_sets/run.py (or dragged in
+# manually). Only lucide_lite — the committed smoke-test fixture — is tracked.
+/*/
+!/lucide_lite/

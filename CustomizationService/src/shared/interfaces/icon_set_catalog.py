@@ -39,8 +39,13 @@ class IconSetCatalogEntry(BaseModel):
     on disk, which the concrete catalog checks, not this model).
 
     ``extra="ignore"`` so a curated ``set.yaml`` can carry presentation
-    keys the pipeline doesn't read (licence, author, homepage) without
-    breaking validation.
+    keys the pipeline doesn't read (author, homepage, source) without
+    breaking validation. ``license`` and ``attribution`` ARE read: a set
+    whose licence requires a visible credit (e.g. CC BY 4.0) carries an
+    ``attribution`` notice, which the icon node copies onto the produced
+    ``IconSet.attribution`` so the app can surface it. Both are optional —
+    permissive sets (MIT/ISC/Apache) omit ``attribution`` and may omit
+    ``license``.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -49,6 +54,8 @@ class IconSetCatalogEntry(BaseModel):
     name: str
     vibe: str
     icons: list[str]
+    license: str | None = None
+    attribution: str | None = None
 
     @field_validator("id")
     @classmethod
