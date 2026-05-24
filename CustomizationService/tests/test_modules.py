@@ -31,7 +31,6 @@ from src.modules.images.background_service import (
     BG_MAX_ATTEMPTS,
     BackgroundService,
 )
-from src.modules.icons.icon_generation_service import GENERATED_ICON_SET
 from src.modules.icons.icon_models import (
     LLMIconPrompt,
     LLMIconResponse,
@@ -1005,7 +1004,7 @@ class _IconStubLLM:
         if name == "IconPrompt":
             return schema(
                 **{
-                    sid: LLMIconPrompt(prompt=f"a {sid} icon")
+                    sid: LLMIconPrompt(name=f"{sid}_icon", prompt=f"a {sid} icon")
                     for sid in schema.model_fields
                 }
             )
@@ -1099,8 +1098,10 @@ def test_icon_node_matched_only_skips_generation(tmp_path: Path) -> None:
     assert set(out.icons) == set(matches)
     for sid, ic in out.icons.items():
         assert ic.icon_set == "set_a"
-        assert ic.icon_set_name == "Set A"
+        # Matched icon_name is the set icon's short-name the LLM picked.
+        assert ic.icon_name == matches[sid]
         assert ic.icon_key == sid
+        assert ic.prompt is None
         assert Path(str(ic.path)).exists()
     assert gen.calls == []
     assert "IconPrompt" not in llm.calls
@@ -1108,7 +1109,8 @@ def test_icon_node_matched_only_skips_generation(tmp_path: Path) -> None:
 
 def test_icon_node_generation_path(tmp_path: Path) -> None:
     """An unmatched slot routes to generation: one batch prompt call, one
-    Recraft call, the "generated" sentinel on its output."""
+    Recraft call. The generated icon still belongs to the chosen set
+    (icon_set == the set id), with an AI-authored icon_name + prompt."""
     ctx = _run_ctx(tmp_path)
     matches = {
         "home_tab": "home",
@@ -1124,11 +1126,12 @@ def test_icon_node_generation_path(tmp_path: Path) -> None:
     # Matched icons carry no generation prompt.
     assert out.icons["home_tab"].prompt is None
     gen_out = out.icons["celebration_badge"]
-    assert gen_out.icon_set == GENERATED_ICON_SET
-    assert gen_out.icon_set_name == "Generated"
-    assert Path(str(gen_out.path)).exists()
-    # The generated icon carries the authored Recraft prompt.
+    # Generated icon belongs to the chosen set, not a "generated" sentinel.
+    assert gen_out.icon_set == "set_a"
+    # AI-authored short icon name + the Recraft prompt that produced it.
+    assert gen_out.icon_name == "celebration_badge_icon"
     assert gen_out.prompt == "a celebration_badge icon"
+    assert Path(str(gen_out.path)).exists()
     assert len(gen.calls) == 1
     assert "IconPrompt" in llm.calls
 

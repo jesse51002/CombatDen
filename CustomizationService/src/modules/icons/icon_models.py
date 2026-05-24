@@ -51,11 +51,14 @@ class LLMIconResponse(BaseModel):
 class LLMIconPrompt(BaseModel):
     """What the LLM returns for one unmatched slot during prompt authoring.
 
-    A single Recraft prompt string describing the SVG icon to generate.
+    ``name`` is a short icon name (snake_case-ish, the kind a real icon set
+    uses) the generated icon is recorded under; ``prompt`` is the Recraft
+    prompt describing the SVG icon to generate.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    name: str
     prompt: str
 
 

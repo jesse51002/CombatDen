@@ -119,7 +119,7 @@ class IconMatchingService:
         return IconOutput(
             path=run_ctx.icon_path(slot_id),
             icon_set=chosen.id,
-            icon_set_name=chosen.name,
+            icon_name=icon_name,
             icon_key=slot_id,
         )
 

@@ -6,15 +6,17 @@ icon set or GENERATED via Recraft when no set icon honestly fit. The
 shape is uniform so the MobileApp consumes both the same way:
 
 - ``path``: absolute path of the SVG written for this slot.
-- ``icon_set``: the chosen set's id for a matched icon; the sentinel
-  ``"generated"`` for a generated one.
-- ``icon_set_name``: the set's human display name for a matched icon;
-  ``"Generated"`` for a generated one.
+- ``icon_set``: the chosen set's id — for matched AND generated icons
+  alike (a generated icon is drawn to fit that set's style, so it still
+  belongs to the set).
+- ``icon_name``: the icon's own name within the set. For a matched icon
+  it's the set icon's short-name; for a generated one it's a short
+  AI-authored icon name (snake_case-ish).
 - ``icon_key``: the user's slot id (the concept they asked for).
 - ``prompt``: the Recraft prompt used to generate the SVG — set only for
   GENERATED icons; ``None`` for matched ones (a set icon was copied, no
-  prompt). Optional like ``ImageOutput.complexity``: older/matched
-  entries omit it.
+  prompt), which is also how a consumer tells the two apart. Optional
+  like ``ImageOutput.complexity``: older/matched entries omit it.
 
 ``extra="ignore"`` (not the package-wide ``forbid``) is the same
 deliberate exception ``FontOutput`` / ``ImageOutput`` make: this group is
@@ -36,11 +38,11 @@ class IconOutput(BaseModel):
 
     path: AbsolutePath
     icon_set: str
-    icon_set_name: str
+    icon_name: str
     icon_key: str
     prompt: str | None = None
 
-    @field_validator("icon_set", "icon_set_name", "icon_key")
+    @field_validator("icon_set", "icon_name", "icon_key")
     @classmethod
     def _non_empty(cls, v: str) -> str:
         if not v.strip():

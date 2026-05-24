@@ -190,7 +190,10 @@ class _FakeLLM:
             requested = list(schema.model_fields)
             result = schema(
                 **{
-                    sid: LLMIconPrompt(prompt=f"a monochrome {sid} svg icon")
+                    sid: LLMIconPrompt(
+                        name=f"{sid}_icon",
+                        prompt=f"a monochrome {sid} svg icon",
+                    )
                     for sid in requested
                 }
             )
@@ -431,15 +434,15 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
         p = Path(str(icon.path))
         assert p.is_absolute() and p.exists()
         assert p.name == f"{slot_id}.svg"
+        # icon_set is the chosen set id for matched AND generated icons.
+        assert icon.icon_set == _FAKE_ICON_SET_ID
         if _FAKE_ICON_MATCH[slot_id] is not None:
-            assert icon.icon_set == _FAKE_ICON_SET_ID
-            assert icon.icon_set_name == _FAKE_ICON_SET_NAME
-            # Matched (copied) icons carry no generation prompt.
+            # Matched: icon_name is the set icon's short-name; no prompt.
+            assert icon.icon_name == _FAKE_ICON_MATCH[slot_id]
             assert icon.prompt is None
         else:
-            assert icon.icon_set == "generated"
-            assert icon.icon_set_name == "Generated"
-            # Generated icons carry the Recraft prompt that produced them.
+            # Generated: AI-authored icon_name + the Recraft prompt.
+            assert icon.icon_name == f"{slot_id}_icon"
             assert icon.prompt
     assert output.color_set.mode == ctx.cust.colors_direction.mode
     # Each font slot carries the LLM-picked family + the catalog-derived

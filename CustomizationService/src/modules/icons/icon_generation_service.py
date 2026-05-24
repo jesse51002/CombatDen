@@ -25,7 +25,8 @@ from string import Template
 
 from schema import IconOutput, IconSlot
 from src.core.run_context import RunContext
-from src.modules.icons.icon_models import build_icon_prompt_model
+from src.modules.icons.icon_models import LLMIconPrompt, build_icon_prompt_model
+from src.shared.interfaces.icon_set_catalog import IconSetCatalogEntry
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
 
@@ -44,12 +45,6 @@ ICON_PROMPT_MODEL = "anthropic/claude-haiku-4-5"
 # a direct (non-litellm) client, so this carries no provider prefix.
 RECRAFT_MODEL = "recraftv3"
 
-# Provenance for a generated (not matched) icon. ``icon_set`` is a free
-# string on IconOutput, so a non-id sentinel is legal; the MobileApp
-# treats "generated" as "no source set".
-GENERATED_ICON_SET = "generated"
-GENERATED_ICON_SET_NAME = "Generated"
-
 
 class IconGenerationService:
     """Authors Recraft prompts for unmatched icon slots (one batch call)
@@ -60,25 +55,32 @@ class IconGenerationService:
         self._generator = generator
 
     async def resolve(
-        self, run_ctx: RunContext, unmatched: list[IconSlot]
+        self,
+        run_ctx: RunContext,
+        chosen: IconSetCatalogEntry,
+        unmatched: list[IconSlot],
     ) -> dict[str, IconOutput]:
         """Generate an SVG for every unmatched slot; return their outputs.
 
-        One batch LLM call authors all the Recraft prompts, then each slot
-        is generated into the run dir. A slot whose generation fails is
-        dropped (logged), never aborting the rest. Returns ``{}`` when
-        there's nothing to generate (no LLM call made).
+        One batch LLM call authors all the icon names + Recraft prompts,
+        then each slot is generated into the run dir. The generated icon
+        still belongs to ``chosen`` (it's drawn to fit that set's style),
+        so its ``icon_set`` is the chosen set id and ``icon_name`` is the
+        AI-authored short name. A slot whose generation fails is dropped
+        (logged), never aborting the rest. Returns ``{}`` when there's
+        nothing to generate (no LLM call made).
         """
         if not unmatched:
             return {}
-        prompts = await self._author_prompts(run_ctx, unmatched)
+        authored = await self._author_prompts(run_ctx, unmatched)
 
         generated: dict[str, IconOutput] = {}
         for slot in unmatched:
             dest = Path(str(run_ctx.icon_path(slot.id)))
+            spec = authored[slot.id]
             try:
                 await self._generator.generate(
-                    prompts[slot.id], dest, model=RECRAFT_MODEL
+                    spec.prompt, dest, model=RECRAFT_MODEL
                 )
             except Exception as exc:  # noqa: BLE001 — fail soft per slot
                 logger.warning(
@@ -89,10 +91,10 @@ class IconGenerationService:
                 continue
             generated[slot.id] = IconOutput(
                 path=run_ctx.icon_path(slot.id),
-                icon_set=GENERATED_ICON_SET,
-                icon_set_name=GENERATED_ICON_SET_NAME,
+                icon_set=chosen.id,
+                icon_name=spec.name,
                 icon_key=slot.id,
-                prompt=prompts[slot.id],
+                prompt=spec.prompt,
             )
         return generated
 
@@ -102,14 +104,15 @@ class IconGenerationService:
         unmatched: list[IconSlot],
         *,
         model: str = ICON_PROMPT_MODEL,
-    ) -> dict[str, str]:
-        """One batch LLM call authoring a Recraft prompt per unmatched slot.
+    ) -> dict[str, LLMIconPrompt]:
+        """One batch LLM call authoring an icon name + Recraft prompt per
+        unmatched slot.
 
         Builds the instruction (rule + brand brief + the unmatched-slot
         inventory, substituted into the prompt-authoring ``.md`` template —
         whose rule bakes in the monochrome / ``currentColor`` / single-
         weight SVG guidance), runs the one structured call, and returns
-        ``{slot_id: prompt}``."""
+        ``{slot_id: LLMIconPrompt}`` (each carrying ``name`` + ``prompt``)."""
         slot_ids = [slot.id for slot in unmatched]
         template = ICON_PROMPT_RULE_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
@@ -127,4 +130,4 @@ class IconGenerationService:
             schema=build_icon_prompt_model(slot_ids),
             model=model,
         )
-        return {sid: getattr(resolved, sid).prompt for sid in slot_ids}
+        return {sid: getattr(resolved, sid) for sid in slot_ids}

@@ -27,8 +27,11 @@ Write each prompt as a tight, concrete visual description of the icon —
 the subject and its style — not a sentence about the brand. Name the
 concept plainly ("a paper-plane send icon", "a celebratory medal badge").
 
-OUTPUT. For EACH slot return an object with one field:
+OUTPUT. For EACH slot return an object with two fields:
 
+- `name`: a short icon name for the thing you're drawing — the kind of
+  name a real icon set uses (e.g. `trophy`, `medal`, `paper_plane`), not
+  the slot id and not a sentence. Lowercase, snake_case, 1-3 words.
 - `prompt`: the Recraft prompt string for that slot's SVG icon, carrying
   the non-negotiables above.
 

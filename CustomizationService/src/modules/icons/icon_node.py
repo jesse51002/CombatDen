@@ -56,5 +56,7 @@ class IconNode(Node):
         merge the two halves into the ``IconSet``."""
         chosen = await self._selection.select(self._run_ctx)
         matched, unmatched = await self._matching.match(self._run_ctx, chosen)
-        generated = await self._generation.resolve(self._run_ctx, unmatched)
+        generated = await self._generation.resolve(
+            self._run_ctx, chosen, unmatched
+        )
         return IconSet(icons={**matched, **generated})
