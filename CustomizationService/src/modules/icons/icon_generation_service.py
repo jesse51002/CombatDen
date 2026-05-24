@@ -31,9 +31,7 @@ from src.shared.interfaces.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
-ICON_PROMPT_RULE_PATH = (
-    Path(__file__).parent / "prompts" / "icon_prompt_rule.md"
-)
+ICON_PROMPT_RULE_PATH = Path(__file__).parent / "prompts" / "icon_prompt_rule.md"
 
 # Model for the batch prompt-authoring call. Haiku, per the owner: cheap
 # and plenty for turning a slot description + brand vibe into a Recraft
@@ -42,7 +40,7 @@ ICON_PROMPT_MODEL = "anthropic/claude-haiku-4-5"
 
 # Recraft's own model id, sent in the generation request body. Recraft is
 # a direct (non-litellm) client, so this carries no provider prefix.
-RECRAFT_MODEL = "recraftv3"
+RECRAFT_MODEL = "recraftv4_1_utility_vector"
 
 # Provenance for a generated (not matched) icon. ``icon_set`` is a free
 # string on IconOutput, so a non-id sentinel is legal; the MobileApp
@@ -113,9 +111,7 @@ class IconGenerationService:
         slot_ids = [slot.id for slot in unmatched]
         template = ICON_PROMPT_RULE_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
-        inventory = "\n".join(
-            f"- {slot.id}: {slot.description}" for slot in unmatched
-        )
+        inventory = "\n".join(f"- {slot.id}: {slot.description}" for slot in unmatched)
         instruction = Template(template).safe_substitute(
             name=design.name,
             short=design.short_desc,
