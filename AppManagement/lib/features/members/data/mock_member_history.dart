@@ -30,14 +30,14 @@ const List<RedeemedReward> kMockRedeemedRewards = [
   ),
   RedeemedReward(
     gymName: 'Global MMA',
-    rewardName: 'Global MMA T-Shirt',
+    rewardName: 'Gym t-shirt',
     costLabel: 'Free',
-    imageAsset: 'assets/images/reward_global_mma_tshirt.png',
+    imageAsset: 'assets/images/reward_gym_tshirt.png',
   ),
   RedeemedReward(
-    gymName: 'Venom',
-    rewardName: 'Boxing Gloves',
-    costLabel: '\$20 off',
+    gymName: 'Global MMA',
+    rewardName: 'Boxing gloves',
+    costLabel: '10% off',
     imageAsset: 'assets/images/reward_boxing_gloves.png',
   ),
 ];

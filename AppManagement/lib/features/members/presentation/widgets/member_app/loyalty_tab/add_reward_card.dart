@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:app_management/features/members/data/mock_member_app_preview.dart';
+import 'package:app_management/features/members/data/mock_loyalty.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/section_card.dart';
 
-/// One tile in the "Add more rewards" 2x2 grid — a reward template the
-/// admin can add to the live store.
+/// One starter in the "Add your own" grid: a reward template the admin
+/// can drop into the store and then configure.
 class AddRewardCard extends StatelessWidget {
   final RewardTemplate template;
 
@@ -16,19 +16,19 @@ class AddRewardCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SectionCard(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
-            spacing: DesignConstants.spacingSmall,
+            spacing: DesignConstants.spacingLarge,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: DesignConstants.spacingMedium,
+                  spacing: DesignConstants.spacingSmall,
                   children: [
-                    Text(template.brand, style: DesignConstants.h3),
-                    Text(template.title, style: DesignConstants.p),
+                    Text(template.title, style: DesignConstants.h3),
                     if (template.subtitle != null)
                       Text(
                         template.subtitle!,
@@ -41,12 +41,9 @@ class AddRewardCard extends StatelessWidget {
               ),
               ClipOval(
                 child: SizedBox(
-                  height: 100,
-                  width: 100,
-                  child: Image.asset(
-                    template.imageAsset,
-                    fit: BoxFit.cover,
-                  ),
+                  height: 72,
+                  width: 72,
+                  child: Image.asset(template.imageAsset, fit: BoxFit.cover),
                 ),
               ),
             ],
@@ -54,7 +51,7 @@ class AddRewardCard extends StatelessWidget {
           AppOutlineButton(
             text: 'Add',
             fullWidth: true,
-            onPressed: () => debugPrint('TODO: in-preview action'),
+            onPressed: () => debugPrint('TODO: add reward template'),
           ),
         ],
       ),
