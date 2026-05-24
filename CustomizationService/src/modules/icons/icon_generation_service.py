@@ -43,7 +43,7 @@ ICON_PROMPT_MODEL = "anthropic/claude-haiku-4-5"
 
 # Recraft's own model id, sent in the generation request body. Recraft is
 # a direct (non-litellm) client, so this carries no provider prefix.
-RECRAFT_MODEL = "recraftv3"
+RECRAFT_MODEL = "recraftv4_1_utility_vector"
 
 
 class IconGenerationService:
