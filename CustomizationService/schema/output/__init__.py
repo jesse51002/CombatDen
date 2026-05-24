@@ -12,6 +12,8 @@ from schema.output.icon_output import IconOutput
 from schema.output.icon_set import IconSet
 from schema.output.image_output import ImageOutput
 from schema.output.image_set import ImageSet
+from schema.output.lottie_output import LottieOutput
+from schema.output.lottie_set import LottieSet
 from schema.output.output import Output
 from schema.output.run_cost import RunCost
 from schema.output.text_output import TextOutput
@@ -28,6 +30,8 @@ __all__ = [
     "IconSet",
     "ImageOutput",
     "ImageSet",
+    "LottieOutput",
+    "LottieSet",
     "Output",
     "RunCost",
     "TextOutput",
