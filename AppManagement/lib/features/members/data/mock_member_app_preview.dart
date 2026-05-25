@@ -18,5 +18,5 @@ class MemberAppPreviewData {
 
 const MemberAppPreviewData kMockMemberAppPreview = MemberAppPreviewData(
   gymName: 'Apex MMA',
-  gymLogoAsset: 'assets/images/apex_mma_logo.png',
+  gymLogoAsset: 'assets/images/apexmma-logo-simple.png',
 );

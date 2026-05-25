@@ -110,9 +110,9 @@ class _Logo extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
         child: Image.asset(
-          'assets/images/apex_mma_logo.png',
-          width: 56,
-          height: 56,
+          'assets/images/apexmma-logo-simple.png',
+          width: 64,
+          height: 64,
         ),
       ),
     );
