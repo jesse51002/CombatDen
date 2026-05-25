@@ -38,8 +38,8 @@ class DesignConstants {
 
 
   // Design values
-  static const double radiusBig = 32.0;
-  static const double radiusSmall = 16.0;
+  static const double radiusBig = 12.0;
+  static const double radiusSmall = 8.0;
 
   static const double paddingBig = 32;
   static const double paddingSmall = 16;
