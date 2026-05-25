@@ -29,7 +29,8 @@ class SidebarNavItem extends StatelessWidget {
         ? DesignConstants.text
         : DesignConstants.text2nd;
     if (isPrimary) {
-      color = DesignConstants.primaryColor;
+      // Lighter accent so the icon+label stay AA-legible on the dark sidebar.
+      color = DesignConstants.lightPrimary;
     }
 
     return InkWell(
