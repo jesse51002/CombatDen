@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase. It is the **gym admin web app** — staff/owners managing their gym from a browser.
 
 - This is a **web-only Flutter app** (no Android, no iOS) — mirrors `../FlutterCRM/`'s platform setup.
-- **No backend.** No Supabase, no API client, no HTTP, no auth.
+- **Backend is off-limits with ONE carve-out.** No Supabase, no auth, no general-purpose API client. The single exception is the **read-only VideoService feed** — see *VideoService carve-out* below. Everything else stays mock-only; do not add HTTP, clients, or live data to any other screen without asking first.
 - **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller).
 - **No real data.** Every list, every card, every detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
@@ -16,12 +16,23 @@ The whole point is to make screens that **look right** so the design can be eval
 
 **Theme/design rules are NOT relaxed because this is a prototype.** See *Theming System* below.
 
+## VideoService carve-out (the one live backend call)
+
+This prototype makes exactly **one** real network call, and it is deliberate. The member-app **videos tab** pulls its feed live from the VideoService so the admin previews real thumbnails and titles instead of mock art.
+
+- **Scope:** read-only, one endpoint — `GET /apps/{videoAppId}/videos`. No writes, no auth, no other endpoints. `videoAppId` defaults to `mma` (Apex MMA).
+- **Where it lives:** `lib/features/members/data/video_api_client.dart` (`VideoApiClient`, wraps `package:http`) feeds `member_feed_section.dart`, which is the **only** place a `StatefulWidget` + `FutureBuilder` driving a network call is allowed. Models live in `lib/features/members/data/video_feed.dart` (`Video.fromJson`).
+- **Dependency:** the VideoService (sibling, see below) must be running. Base URL defaults to `http://localhost:8002`; override at launch with `--dart-define=VIDEO_BASE_URL=http://<host>:<port>`.
+- **Failure behavior:** the call has a 5s timeout and degrades quietly (empty feed) so the rest of the demo never breaks if the service is down.
+- **`http` is whitelisted for this call only.** It is NOT the signal that the app is graduating out of prototype mode (that signal is still `flutter_bloc` / `dio` / `supabase_flutter`). Do **not** reuse `VideoApiClient` or `package:http` to wire any other screen to a backend — every other list/card/detail stays on co-located mock data per the rules above. Widening this carve-out is a decision for the user, not a default.
+
 ## Sibling repos in this monorepo
 
 - `../FlutterCRM/` — staff/CRM web app, **fully wired** (BLoC + Supabase + Stripe). Source of truth for the design system and most shared widget patterns. When this app graduates, it follows FlutterCRM's stack.
 - `../MobileApp/` — member-facing mobile prototype, same visual-only model as this app. Shared widget candidates often live here too.
 - `../LandingPage/` — React marketing site. Not a Flutter sibling, but its `COPY` dict and design choices may inform copy/voice for admin screens. Read `../LandingPage/CLAUDE.md` if you're writing user-facing strings that should match marketing voice.
 - `../Database/` — Supabase schemas and `openapi.json`. Irrelevant while we're prototype-only, but model field names should already match what the API will eventually return so the future swap is mechanical.
+- `../VideoService/` — the read-only video feed backend this app's videos tab calls live (see *VideoService carve-out* above). Its `videos_config.yaml` is the source of truth for the feed; `Video.fromJson` must track the shape it serves. Must be running for the videos tab to populate.
 
 ## Search the web for conventions before designing
 
@@ -269,8 +280,9 @@ Direct equivalents if you don't want the Makefile:
 Current dependencies (intentionally minimal):
 - `google_fonts` — for Hanken Grotesk via `GoogleFonts.hankenGrotesk()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
+- `http` — **for the VideoService carve-out only** (see above). It backs `VideoApiClient` and nothing else. Adding `http` to any other client is not allowed; reach for the user first.
 
-If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in.
+If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in. (`http` being present is **not** that signal — it is the scoped exception above, not the start of the real-data stack.)
 
 ## What changes when this becomes real
 
