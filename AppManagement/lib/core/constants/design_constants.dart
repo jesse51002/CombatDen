@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class DesignConstants {
-  static const Color primaryColor = Color(0xFFFF6C2D);
+  static const Color primaryColor = Color(0xFF2A67BD);
   static final Color primaryColor50 = primaryColor.withValues(alpha: 0.5);
   static final Color primaryColor25 = primaryColor.withValues(alpha: 0.25);
   static final Color primaryColor10 = primaryColor.withValues(alpha: 0.1);
 
-  static final Color darkPrimary = Color(0xFF692F16);
+  /// Lighter sapphire — for accent-colored TEXT and icons on dark surfaces
+  /// (passes WCAG AA). Use [primaryColor] for fills, borders, and arcs.
+  static const Color lightPrimary = Color(0xFF5E93E1);
 
-  static const Color backgroundColor = Color(0xFF121619);
+  static final Color darkPrimary = Color(0xFF274777);
 
-  static const Color text = Color(0xFFF4F3EE);
+  static const Color backgroundColor = Color(0xFF141920);
+
+  static const Color text = Color(0xFFE9EBEE);
   static final Color text2nd = text.withValues(alpha: 0.75);
   static final Color text3rd = text.withValues(alpha: 0.50);
 
@@ -21,16 +25,16 @@ class DesignConstants {
     text.withValues(alpha: 0.05)
     );
 
-  static const Color hyperlink = Color(0xFF83C7FF);
-  static const Color goodGreen = Color(0xFF74F394);
-  static const Color okYellow = Color(0xFFCCCE44);
-  static const Color badRed = Color(0xFFF94A4D);
+  static const Color hyperlink = Color(0xFF83ADEA);
+  static const Color goodGreen = Color(0xFF7CB48F);
+  static const Color okYellow = Color(0xFFCBAD6D);
+  static const Color badRed = Color(0xFFCC6660);
 
-  static final Color yellowDark = Color(0xFF83852F).withValues(alpha: 0.25);
-  static final Color greenDark = Color(0xFF0E7A29).withValues(alpha: 0.25);
-  static final Color purpleDark = Color(0xFF744373).withValues(alpha: 0.25);
-  static final Color blueDark = Color(0xFF425E67).withValues(alpha: 0.25);
-  static final Color redDark = Color(0xFF6D2C22).withValues(alpha: 0.25);
+  static final Color yellowDark = Color(0xFF6D5B35).withValues(alpha: 0.25);
+  static final Color greenDark = Color(0xFF395F47).withValues(alpha: 0.25);
+  static final Color purpleDark = Color(0xFF5A4E72).withValues(alpha: 0.25);
+  static final Color blueDark = Color(0xFF405677).withValues(alpha: 0.25);
+  static final Color redDark = Color(0xFF7C423E).withValues(alpha: 0.25);
 
 
   // Design values
@@ -56,7 +60,9 @@ class DesignConstants {
   static const double sideNavWidth = 100.0;
   static const double tableRowHeight = 35.0;
 
-  static final TextStyle baseFont = GoogleFonts.jura();
+  static final TextStyle baseFont = GoogleFonts.hankenGrotesk(
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
 
   /// H1 text style (light, 30)
   static final TextStyle h1 = baseFont.copyWith(
@@ -93,7 +99,7 @@ class DesignConstants {
   );
 
   /// Paragraph text style (regular, 12)
-  static final TextStyle p = TextStyle(
+  static final TextStyle p = baseFont.copyWith(
     fontWeight: FontWeight.w400,
     fontSize: 12,
     color: text,

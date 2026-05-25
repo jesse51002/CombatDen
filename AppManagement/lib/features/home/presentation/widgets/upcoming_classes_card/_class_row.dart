@@ -46,7 +46,7 @@ class _ClassDetails extends StatelessWidget {
         ? '${scheduledClass.name} (In Session)'
         : scheduledClass.name;
     final nameColor = inSession
-        ? DesignConstants.primaryColor
+        ? DesignConstants.lightPrimary
         : DesignConstants.text;
 
     return Column(
@@ -84,7 +84,7 @@ class _BookedCount extends StatelessWidget {
   Widget build(BuildContext context) {
     final isLive = scheduledClass.checkedInCount != null;
     final color = isLive
-        ? DesignConstants.primaryColor
+        ? DesignConstants.lightPrimary
         : DesignConstants.text2nd;
     final text = isLive
         ? '${scheduledClass.checkedInCount} checked in'

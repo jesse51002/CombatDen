@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 
-/// Primary action button with orange background.
+/// Primary action button with sapphire accent background.
 ///
 /// Fully rounded by default with [DesignConstants]
 /// styling. All visual properties are customizable.

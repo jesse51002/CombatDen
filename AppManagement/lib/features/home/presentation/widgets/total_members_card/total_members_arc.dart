@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:app_management/core/constants/design_constants.dart';
 
 /// Semicircular arc that visualises the active/inactive split of total
-/// members. The bright orange portion = active members, the dark portion
+/// members. The sapphire portion = active members, the dark portion
 /// = inactive. Sized to fill its parent — wrap in a `SizedBox` to control
 /// dimensions.
 class TotalMembersArc extends StatelessWidget {

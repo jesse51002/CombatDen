@@ -5,7 +5,7 @@ import 'package:app_management/features/schedule/data/mock_schedule.dart';
 
 /// A single class block placed inside one cell of the schedule grid.
 ///
-/// Visual: card-tinted rounded rectangle with an orange bottom border,
+/// Visual: card-tinted rounded rectangle with a sapphire accent bottom border,
 /// time label on top in [DesignConstants.text2nd] and class name below
 /// in [DesignConstants.text].
 class ScheduleClassBlockTile extends StatelessWidget {

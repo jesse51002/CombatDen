@@ -2,7 +2,7 @@
 ///
 /// Classes are grouped by day (e.g. "Today", "Wed 19", "Thr 20") in the
 /// UI. The first class of the first group can be flagged `inSession` to
-/// highlight it in primary orange. Field names mirror what a real API
+/// highlight it in the primary accent. Field names mirror what a real API
 /// would return so the future swap to a repository is mechanical.
 class ScheduledClass {
   final String id;

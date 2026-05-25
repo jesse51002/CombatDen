@@ -5,7 +5,7 @@ import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/shared/widgets/app_primary_button.dart';
 
 /// Top control row above the members table: a fully-rounded search box
-/// on the left and the orange "Add New Member" CTA on the right.
+/// on the left and the accent "Add New Member" CTA on the right.
 class MembersSearchRow extends StatelessWidget {
   final VoidCallback onAddMember;
   final ValueChanged<String> onSearchChanged;
