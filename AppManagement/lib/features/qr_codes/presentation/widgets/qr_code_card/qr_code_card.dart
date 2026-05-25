@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/qr_codes/data/mock_qr_codes.dart';
 import 'package:app_management/features/qr_codes/presentation/widgets/qr_code_card/qr_code_image.dart';
-import 'package:app_management/shared/widgets/app_primary_button.dart';
-import 'package:app_management/shared/widgets/section_card.dart';
+import 'package:app_management/shared/widgets/app_outline_button.dart';
 
-/// One QR-code panel: image + title + Print button.
-///
-/// Figma `3132:2329` / `3132:2334`. Card is the standard `SectionCard`
-/// surface; inside it stacks the QR image, the label, and the primary
-/// "Print" CTA with `spacingBig` between them (matches the Figma 32px
-/// gap).
+/// One printable QR-code row: a modest thumbnail on the left, the title
+/// and description in the middle, and a Print action on the right. Sits
+/// on the page; no card chrome.
 class QrCodeCard extends StatelessWidget {
   final QrCode qrCode;
 
@@ -19,36 +16,41 @@ class QrCodeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      padding: const EdgeInsets.symmetric(
-        horizontal: DesignConstants.paddingBig,
-        vertical: DesignConstants.paddingBig,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          Expanded(child: QrCodeImage(imageAsset: qrCode.imageAsset)),
-          Text(
-            qrCode.title,
-            style: DesignConstants.h1,
-            textAlign: TextAlign.center,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        SizedBox(
+          width: 120,
+          height: 120,
+          child: QrCodeImage(imageAsset: qrCode.imageAsset),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              Text(qrCode.title, style: DesignConstants.h1),
+              Text(
+                qrCode.description,
+                style: DesignConstants.p.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+            ],
           ),
-          AppPrimaryButton(
-            text: 'Print',
-            fullWidth: true,
-            textStyle: DesignConstants.h1,
-            padding: const EdgeInsets.symmetric(
-              horizontal: DesignConstants.paddingBig,
-              vertical: DesignConstants.spacingMedium,
-            ),
-            onPressed: () => debugPrint(
-              'TODO: print ${qrCode.id} QR code',
-            ),
+        ),
+        AppOutlineButton(
+          text: 'Print',
+          icon: Icon(
+            Symbols.print_sharp,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.text,
+            size: 18,
           ),
-        ],
-      ),
+          onPressed: () => debugPrint('TODO: print ${qrCode.id} QR code'),
+        ),
+      ],
     );
   }
 }

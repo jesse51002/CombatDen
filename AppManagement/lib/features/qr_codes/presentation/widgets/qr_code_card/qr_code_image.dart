@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 
-/// Square QR code image with rounded corners.
-///
-/// Per Figma the image is 400x400 with `radiusBig` rounded corners and
-/// fills the available width up to that cap.
+/// Square QR-code thumbnail with `radiusSmall` rounded corners. Sized by
+/// its parent (a `SizedBox` in the QR row), so it stays a modest preview
+/// rather than filling the viewport.
 class QrCodeImage extends StatelessWidget {
   final String imageAsset;
 
@@ -17,7 +16,7 @@ class QrCodeImage extends StatelessWidget {
       aspectRatio: 1,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(
-          DesignConstants.radiusBig,
+          DesignConstants.radiusSmall,
         ),
         child: Image.asset(imageAsset, fit: BoxFit.cover),
       ),

@@ -3,12 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/qr_codes/data/mock_qr_codes.dart';
 import 'package:app_management/features/qr_codes/presentation/widgets/qr_code_card/qr_code_card.dart';
+import 'package:app_management/shared/widgets/hairline.dart';
 
-/// Side-by-side row of QR code cards.
-///
-/// Figma `3132:2328`: each card claims an equal share of the row width
-/// with a `spacingBig` gap between them. Cards stretch to the available
-/// height of the body so the QR image scales with the viewport.
+/// Vertical list of printable QR-code rows, separated by hairline rules.
 class QrCodesGrid extends StatelessWidget {
   final List<QrCode> qrCodes;
 
@@ -16,13 +13,15 @@ class QrCodesGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final children = <Widget>[];
+    for (var i = 0; i < qrCodes.length; i++) {
+      if (i > 0) children.add(const Hairline());
+      children.add(QrCodeCard(qrCode: qrCodes[i]));
+    }
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
-      children: [
-        for (final qr in qrCodes)
-          Expanded(child: QrCodeCard(qrCode: qr)),
-      ],
+      children: children,
     );
   }
 }

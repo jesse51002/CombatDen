@@ -6,12 +6,9 @@ import 'package:app_management/features/qr_codes/data/mock_qr_codes.dart';
 import 'package:app_management/features/qr_codes/presentation/widgets/qr_codes_grid.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
 
-/// QR Codes screen — gym-printable sign-up + check-in QR codes.
-///
-/// Figma: file `q04PCZ3W9syMik34JRtRbL`, node `3132:2322`.
-/// Composition (top to bottom):
-///   1. "QR Codes" page title
-///   2. Row of QR code cards (each card = QR image + label + Print)
+/// QR Codes screen — printable sign-up + check-in codes for the gym.
+/// A tidy list of printable assets: each row is a modest QR preview with
+/// its purpose and a Print action.
 class QrCodesScreen extends StatelessWidget {
   const QrCodesScreen({super.key});
 
@@ -19,16 +16,27 @@ class QrCodesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppShell(
       activeRoute: AppRoutes.qrCodes,
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(DesignConstants.paddingBig),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           spacing: DesignConstants.spacingBig,
           children: [
-            Text('QR Codes', style: DesignConstants.big2),
-            Expanded(
-              child: QrCodesGrid(qrCodes: kMockQrCodes),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: DesignConstants.spacingSmall,
+              children: [
+                Text('QR Codes', style: DesignConstants.big2),
+                Text(
+                  'Print these and post them at your front desk. '
+                  'Members scan to sign up or check in.',
+                  style: DesignConstants.p.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+              ],
             ),
+            QrCodesGrid(qrCodes: kMockQrCodes),
           ],
         ),
       ),
