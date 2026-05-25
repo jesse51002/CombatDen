@@ -8,9 +8,12 @@ import 'package:app_management/features/members/presentation/widgets/specific_me
 import 'package:app_management/features/members/presentation/widgets/specific_member/rank_section/rank_section.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/retention_section/retention_section.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/rewards_section/rewards_section.dart';
+import 'package:app_management/shared/widgets/hairline.dart';
+import 'package:app_management/shared/widgets/subtitle_section.dart';
 
 /// The member profile: back link, profile header, rank/retention grids,
-/// and recently-redeemed-rewards list. Sits on the page; no card chrome.
+/// and recently-redeemed-rewards list, separated by hairline rules. Sits
+/// on the page; no card chrome.
 class MemberProfileCard extends StatelessWidget {
   final DemoMember member;
   final MemberDetailStats stats;
@@ -31,8 +34,17 @@ class MemberProfileCard extends StatelessWidget {
       children: [
         BackLink(onTap: () => _onBack(context)),
         ProfileHeader(member: member),
-        RankSection(member: member, stats: stats),
-        RetentionSection(stats: stats),
+        const Hairline(),
+        SubtitleSection(
+          title: 'Info',
+          child: RetentionSection(stats: stats),
+        ),
+        const Hairline(),
+        SubtitleSection(
+          title: 'Rank',
+          child: RankSection(member: member, stats: stats),
+        ),
+        const Hairline(),
         RewardsSection(rewards: rewards),
       ],
     );

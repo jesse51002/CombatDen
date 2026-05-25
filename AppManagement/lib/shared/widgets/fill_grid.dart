@@ -29,12 +29,16 @@ class FillGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (minItemWidth == null) return _grid(columns);
+    if (minItemWidth == null) {
+      return _grid(math.max(1, math.min(columns, children.length)));
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final fit = ((width + spacing) / (minItemWidth! + spacing)).floor();
-        return _grid(math.max(1, fit));
+        // Never reserve more columns than there are items, so a short row
+        // stretches to fill the width instead of leaving a ragged gap.
+        return _grid(math.max(1, math.min(fit, children.length)));
       },
     );
   }
