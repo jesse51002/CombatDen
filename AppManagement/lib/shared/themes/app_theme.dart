@@ -4,16 +4,16 @@ import 'package:app_management/core/constants/design_constants.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData get dark {
-    final colorScheme = ColorScheme.dark(
+  static ThemeData get light {
+    final colorScheme = ColorScheme.light(
       primary: DesignConstants.primaryColor,
-      onPrimary: DesignConstants.text,
+      onPrimary: DesignConstants.backgroundColor,
       secondary: DesignConstants.darkPrimary,
-      onSecondary: DesignConstants.text,
+      onSecondary: DesignConstants.backgroundColor,
       surface: DesignConstants.backgroundColor,
       onSurface: DesignConstants.text,
       error: DesignConstants.badRed,
-      onError: DesignConstants.text,
+      onError: DesignConstants.backgroundColor,
     );
 
     final textTheme = TextTheme(
@@ -32,7 +32,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: DesignConstants.backgroundColor,
       textTheme: textTheme,

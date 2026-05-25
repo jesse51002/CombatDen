@@ -12,8 +12,8 @@ description: >-
   (company name as open text, gym type, persona, culture, what it teaches/
   believes/rejects, priority channels), recommending researched options but
   never picking; from those facts it DERIVES the video output, composes
-  videos_desc + avoid_desc (shown for approval), drafts exactly 5 search prompts
-  spread broadly across the eleven VideoType genres (WITHOUT showing the
+  videos_desc + avoid_desc (shown for approval), drafts exactly 5 query-only
+  search prompts spanning a broad range of content types (WITHOUT showing the
   queries), Pydantic-validates, and writes apps/<app_id>/videos_config.yaml.
   Then it OFFERS, each gated by a yes/no, PHASE 2 fetch (run the YouTube Data API
   batch -> videos_output.yaml; warns about ~1-2k quota units), PHASE 3 audit
@@ -45,12 +45,11 @@ All four phases below; the bulk of this doc is Phase 1 because it's the hardest.
 You produce a `videos_config.yaml` that round-trips against the `VideosConfig` Pydantic
 model (`schema/videos_config.py`). It captures, for a single company, the business and
 the *kinds* of YouTube videos worth surfacing — plus a curated list of **exactly 5
-search prompts** that span the content spectrum, each tagged with one or more
-`VideoType` genres.
+search prompts** that span the content spectrum.
 
-This brief is *intent plus concrete searches*. The searches are the literal queries the
-Phase 2 batch feeds to the YouTube Data API. Your job is to make the search set sharp,
-varied, and genuinely tuned to the company, not a flat template.
+This brief is *intent plus concrete searches*. The searches are **query-only** — the
+literal queries the Phase 2 batch feeds to the YouTube Data API. Your job is to make the
+search set sharp, varied, and genuinely tuned to the company, not a flat template.
 
 ## The writable surface (the whole of it)
 
@@ -61,14 +60,25 @@ fails validation**:
 - `type` — the business / niche type, e.g. "Muay Thai gym", "specialty coffee roaster"
   (non-empty)
 - `videos_desc` — prose: the kinds of videos worth surfacing for this company (non-empty)
-- `avoid_desc` — prose: **within-niche** content to exclude (non-empty). These are
-  expert-level, specific avoids someone *in* the niche would recognize — bad technique
-  taught as gospel, low-credibility figures, a wrong framing of the craft — **not**
-  obviously-unrelated topics (a Muay Thai gym saying "no cycling videos" is useless; "no
-  channels teaching no-return kicks" is the point).
-- `searches` — a list of **exactly 5** items, each with:
+- `avoid_desc` — prose: **within-niche** content to exclude (non-empty). A
+  downstream classifier judges each video against this text using **only the video's title
+  and description**, so every avoid must pass **two tests**:
+  1. **Specific** — a concrete thing, not an abstract category. "fake master channels",
+     "self-defense fantasy", "McDojo content", "bad technique" are all **too broad** — they
+     name a vibe, not a video. Name the actual technique, claim, phrasing, or format.
+  2. **Verifiable from a title/description** — something the classifier could actually spot
+     in the title or description. "low-credibility instructors" isn't verifiable from a
+     title; *"videos claiming one move guarantees a street-fight win"* or *"titles like
+     'deadliest [technique]' / 'the ONE move that always works'"* is.
+
+  Good (BJJ): "videos teaching heel hooks with no mention of control/tapping safety;
+  titles promising a guaranteed street-fight finish; 'BJJ is useless in a real fight'
+  debate/reaction videos." Bad (useless): "fake masters, McDojos, self-defense fantasy,
+  bad mechanics." And **not** obviously-unrelated topics (a Muay Thai gym excluding
+  "cycling videos" is pointless). When in doubt, ask: *could I tell this video matches just
+  by reading its title and description?* If not, rewrite it until you can.
+- `searches` — a list of **exactly 5** items, each with just:
   - `query` — the literal YouTube search prompt (non-empty)
-  - `tags` — a **non-empty** list of `VideoType` values (`schema/video_type.py`)
 - `priority_channels` — an optional list of channels the company wants prioritized
   (their own and/or ones they like): free-form strings — a name, `@handle`, or URL. May
   be empty. A later step resolves and weights these deterministically; here you just
@@ -95,12 +105,11 @@ Then **you derive the rest** from those gym facts:
 So: ask for the gym facts (incl. channels), derive the video fields, get the two
 *descriptions* approved, write the searches un-gated.
 
-The eleven `VideoType` values are fixed: `entertainment`, `educational`, `tutorial`,
-`informative`, `news`, `interview`, `vlog`, `behind_the_scenes`,
-`professional`, `clips`, `fun`. See `references/video_types.md` for what each means and
-example search shapes. **`professional` means pros/elite competitors performing the
-craft at the top level** (e.g. pro fight footage, championship play) — NOT corporate /
-high-production video.
+The nine `VideoType` genres span: `educational`, `analysis`, `entertainment`, `news`,
+`interview`, `vlog`, `professional`, `clips`, `memes`. See `references/video_types.md` for
+what each means and example search shapes.
+**`professional` means pros/elite competitors performing the craft at the top level**
+(e.g. pro fight footage, championship play) — NOT corporate / high-production video.
 
 ## Operating principles (load-bearing)
 
@@ -119,8 +128,8 @@ fact from inference and never say "I'll go with X unless you object."
 The **video output** is derived, with a split on review:
 - `videos_desc` / `avoid_desc` — you infer them from the gym facts, then show them back
   for the user's approval before writing (the descriptions gate).
-- `searches` — you infer and write them without an approval gate (the user asked for
-  exactly this).
+- `searches` — you infer and write the query strings without an approval gate (the user
+  asked for exactly this).
 
 The shape is: ask for the inputs, derive the outputs, get the two descriptions approved.
 
@@ -183,18 +192,16 @@ or has already assumed the answer. Offer real branches (e.g. "hardcore fight tea
 "welcoming and social" vs "technical and studious" vs "competition-driven"), not a
 checklist of synonyms. Each answer should meaningfully narrow what the next question asks.
 
-### 5. Spread the searches broadly across the genres
+### 5. Spread the searches broadly across the content spectrum
 
-The single most important output behaviour: the 5 searches must be spread **as broadly
-as possible across the eleven `VideoType` genres** — no genre should dominate the set.
-With only 5 searches over 11 genres you **can't** hit every genre, so prioritise breadth:
-aim to cover **5+ distinct genres** (multi-tag searches help), reaching across the five
-clusters — teach
-(educational/tutorial), enjoy (entertainment/clips/fun), trust (informative/news),
-human (vlog/interview/behind_the_scenes), and peak (professional). Do not let the gym's
-"main thing" (e.g. technique for a how-to gym) crowd out the rest — the value of the set
-is its breadth. Tag each search with **every** genre that genuinely applies — multi-tag is
-normal — but make sure the *primary* genres are well spread across the list.
+The single most important output behaviour: the 5 queries must be written to surface
+content spread **as broadly as possible across the nine `VideoType` genres** — no one
+kind should dominate what comes back. Breadth lives in the *queries themselves*: word
+them so the set reaches across the five clusters — teach (educational/analysis), enjoy
+(entertainment/clips/memes), inform (news), human (vlog/interview), and peak
+(professional). With only 5 queries you **can't** target every genre, so aim a distinct
+query at **5+ of those content types**. Do not let the gym's "main thing" (e.g. technique
+for a how-to gym) crowd out the rest — the value of the set is its breadth.
 
 ## Step 0 — Locate the company
 
@@ -206,8 +213,8 @@ normal — but make sure the *primary* genres are well spread across the list.
 3. **New company:** the user supplies a snake_case `app_id` for the directory.
 4. Read `apps/combatden/videos_config.yaml` and `references/video_types.md` for **voice
    and structure calibration only** — the house register (a tight `videos_desc`, a sharp
-   `avoid_desc`, concrete multi-tagged `query` strings). Never copy their content; the
-   company is the user's.
+   `avoid_desc`, concrete `query` strings). Never copy their content; the company is the
+   user's.
 5. Summarize back (prose, not a question): the company id and that you'll ask a few quick
    questions about the gym, then build the video list for them.
 
@@ -250,12 +257,17 @@ every option a *distinct branch*, never five shades of one idea.
   first", "movement for longevity, no ego", "strength through consistency")? This is the
   heart of the brief. Derive the options from the vibe + persona already given.
 - **What it rejects / doesn't believe** *(single- or multi-select → its anti-philosophy)*.
-  The sharp, specific flip side — the approaches, framings, or bad habits *within the
-  field* the gym pushes back on (e.g. "ego lifting", "McDojo belt-factories",
-  "cardio-class theatre dressed up as the real thing", "deadly-street-self-defense
-  fantasy"). Seed these from the failure modes implied by its philosophy. Keep it to
-  in-world distinctions an insider would draw, not obviously-unrelated topics. You will
-  turn this directly into `avoid_desc`.
+  The sharp flip side — the approaches, framings, or bad habits *within the field* the gym
+  pushes back on. Let the user answer in their **own natural language** — broad is exactly
+  what to expect ("McDojo stuff", "ego lifting", "self-defense fantasy"). You **may and
+  should** ask a clarifying question to understand what they *mean* — "when you say McDojo,
+  is it the belt-selling, the unrealistic technique, or the marketing?" — that's
+  understanding their values, which is the whole point of the interview. What you must
+  **never** do is ask them about **videos or titles** — never "what should we exclude" or
+  "what would such a video be called." They think about their gym and what they dislike,
+  never about video metadata; turning their meaning into concrete, title-verifiable avoids
+  is **your** job at the derive step. Keep it to in-world distinctions, not
+  obviously-unrelated topics.
 - **Priority channels** *(open text → `priority_channels`, optional)*. Ask whether there
   are specific YouTube channels they want prioritized — **their own channel and/or
   channels they like and trust**. Free-form: a name, `@handle`, or URL; collect as many
@@ -271,29 +283,39 @@ Once you understand the gym, you build everything else with **no further video q
 1. **Derive `videos_desc`** from the gym's type, persona, culture, and philosophy — prose
    describing the kinds of videos worth surfacing for *this* gym, in the house voice
    (tight, concrete — see the combatden example).
-2. **Derive `avoid_desc`** directly from the "what it rejects" answer — the within-niche
-   content the gym would not want, as concrete insider distinctions (not unrelated topics).
+2. **Derive `avoid_desc`** — this is **your reasoning work, not the user's**. They handed
+   you a natural-language want ("no McDojo stuff", "nothing that says BJJ is useless");
+   silently translate each one into the concrete, title/description-verifiable form a
+   classifier can actually act on (it sees only the title + description). Reason it through:
+   *what would a video the gym hates actually look like — what claim, phrasing, technique,
+   or format would show in its title or description?* e.g. "McDojo" → "videos selling
+   fast-track belt promotions or guaranteed-rank programs"; "self-defense fantasy" →
+   "titles promising one move guarantees a street-fight win / 'deadliest [technique]'";
+   "BJJ is useless" → "'BJJ doesn't work in a real fight' debate/reaction videos". Every
+   avoid must be **specific AND verifiable from a title/description** (see writable-surface
+   rules); drop anything that survives only as a vibe. The user never sees or thinks about
+   this translation — they just get an `avoid_desc` that captures what they meant.
 3. **Descriptions gate.** Show the composed `videos_desc` and `avoid_desc` back to the
    user (one `AskUserQuestion`) and get approve / revise. This is the **only** content
    approval — the search queries are *not* shown (next step). Loop here until approved.
 4. **Draft exactly 5 searches** yourself. Write concrete `query` strings — real phrases
    someone would type into YouTube, specific to this gym's world — **spread broadly across
-   the eleven `VideoType` genres** (principle 5). Tag each with every genre that applies.
-   Do **not** show the queries to the user for approval, and do not ask them to review or
-   pick them — composing a well-spread set from the gym's identity is your job.
+   the content spectrum** (principle 5). Do **not** show the queries to the user for
+   approval, and do not ask them to review or pick them — composing a well-spread set
+   from the gym's identity is your job.
 5. **Assemble** the full `videos_config.yaml`: the four scalar/prose fields, then the
-   `searches:` list, then `priority_channels` (the channels the user named, verbatim;
-   omit the key or use `[]` if none). Use literal block scalars (`|`) for the multi-line
-   `videos_desc` / `avoid_desc`, and inline `tags: [a, b]` lists, exactly as the combatden
-   example does.
+   `searches:` list (each item just a `query`), then `priority_channels` (the channels the
+   user named, verbatim; omit the key or use `[]` if none). Use literal block scalars
+   (`|`) for the multi-line `videos_desc` / `avoid_desc`, exactly as the combatden example
+   does.
 6. **Round-trip validate** before writing. Per `CLAUDE.md` (the `poetry run` mandate —
    never bare `python3` / `.venv/bin/*`):
    ```
    poetry run python -c "import sys,yaml; from schema.videos_config import VideosConfig; VideosConfig.model_validate(yaml.safe_load(open(sys.argv[1])))" <path>
    ```
    On failure, surface the Pydantic error **verbatim** and fix it yourself (a common one:
-   not exactly 5 searches, or a search with empty `tags`) — re-draft and
-   re-validate; never drag the user into a query you mis-wrote.
+   not exactly 5 searches) — re-draft and re-validate; never drag the user into a query
+   you mis-wrote.
 7. **Confirm the write path** (`apps/<app_id>/videos_config.yaml`) via `AskUserQuestion`;
    never default the location.
 8. **Write once the descriptions are approved and the path is confirmed.** Re-run the
@@ -317,17 +339,20 @@ Once you understand the gym, you build everything else with **no further video q
 - Never read the question plan in order as a script — rebuild each question and its
   options from what the user has already said.
 - Never think out loud or narrate your process; output only what the user wants to read.
-- Never write more or fewer than **exactly 5** searches, and never leave a search with an
-  empty `tags` list.
-- Never cluster the searches in one or two genres — spread them **broadly** across the
-  eleven `VideoType` genres, covering 5+ distinct genres (principle 5). Don't let the
-  gym's main thing crowd out the rest.
+- Never write more or fewer than **exactly 5** searches.
+- Never cluster the searches in one or two kinds of content — word the queries to surface
+  a spread **broadly** across the nine `VideoType` genres, reaching 5+ distinct content
+  types (principle 5). Don't let the gym's main thing crowd out the rest.
 - Never write vague `query` strings ("good videos", "cool stuff") — every query must be a
   concrete phrase someone would actually type into YouTube.
 - Never fill `avoid_desc` with obviously-unrelated topics (a Muay Thai gym excluding
-  "cooking videos") — avoids must be specific, within-niche distinctions drawn from the
-  gym's "what it rejects" answer (wrong technique, low-credibility figures, mislabelled
-  adjacent styles).
+  "cooking videos").
+- Never write **vague / abstract** avoids — "fake masters", "McDojo content", "self-defense
+  fantasy", "bad technique", "low-credibility instructors" are useless: they name a vibe,
+  not a video, and a classifier reading only a title + description can't act on them. Every
+  avoid must be **specific AND verifiable from a title/description** (the concrete claim,
+  phrasing, technique, or format you'd actually see). Test each one: "could I tell a video
+  matches just from its title and description?" — if no, rewrite it.
 - Never invent the `professional` genre as corporate/high-production — it means pros
   performing the craft at the top level.
 - Always show `videos_desc` and `avoid_desc` back for approval at the end (the
@@ -360,10 +385,9 @@ Once you understand the gym, you build everything else with **no further video q
    empty if none, not padded with my own suggestions.
 5. Derived `videos_desc` and `avoid_desc` from the gym facts (avoid = the "what it
    rejects" answer), in the house voice, and **showed them back for approval**.
-6. Drafted **exactly 5** concrete `query` strings, spread **broadly** across the eleven
-   `VideoType` genres (5+ distinct), each tagged with every applicable genre — without
-   showing them for approval.
-7. `poetry run` round-trip validation passed (count == 5, every search has ≥1 tag).
+6. Drafted **exactly 5** concrete `query` strings, spread **broadly** across the nine
+   `VideoType` genres (5+ distinct content types) — without showing them for approval.
+7. `poetry run` round-trip validation passed (count == 5).
 8. User explicitly chose / confirmed the write path.
 9. Confirmed with the absolute path + a one-line recap.
 

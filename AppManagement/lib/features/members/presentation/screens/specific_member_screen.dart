@@ -4,9 +4,10 @@ import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
 import 'package:app_management/features/members/data/mock_member_history.dart';
 import 'package:app_management/features/members/data/mock_members.dart';
-import 'package:app_management/features/members/presentation/widgets/specific_member/member_profile_card.dart';
+import 'package:app_management/features/members/presentation/widgets/specific_member/member_profile.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/member_quick_list/member_quick_list.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
+import 'package:app_management/shared/widgets/hairline.dart';
 
 /// Member detail screen.
 ///
@@ -30,13 +31,13 @@ class SpecificMemberScreen extends StatelessWidget {
               padding: const EdgeInsets.all(
                 DesignConstants.paddingBig,
               ),
-              child: MemberProfileCard(
+              child: MemberProfile(
                 member: kMockDemoMember,
                 stats: kMockMemberDetailStats,
-                rewards: kMockRedeemedRewards,
               ),
             ),
           ),
+          const Hairline(vertical: true),
           MemberQuickList(members: kMockMembers),
         ],
       ),

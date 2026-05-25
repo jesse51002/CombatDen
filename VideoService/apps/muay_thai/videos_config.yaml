@@ -13,13 +13,8 @@ avoid_desc: |
   "kru"/grandmaster channels, and contrarian "Muay Thai is useless" takes.
 searches:
   - query: muay thai clinch technique tutorial
-    tags: [tutorial, educational]
   - query: ONE Championship muay thai highlights
-    tags: [professional, clips, entertainment]
   - query: training at a muay thai camp in thailand vlog
-    tags: [vlog, behind_the_scenes]
   - query: muay thai vs kickboxing striking breakdown
-    tags: [informative, educational]
   - query: best muay thai knockouts compilation
-    tags: [clips, entertainment, fun]
 priority_channels: []

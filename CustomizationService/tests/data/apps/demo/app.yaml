@@ -23,6 +23,23 @@ fonts:
   - id: body
     description: Running UI text — buttons, labels, body copy.
 
+icons:
+  - id: home_tab
+    description: Navigation tab that returns to the home screen.
+  - id: search_action
+    description: Action that opens search.
+  - id: celebration_badge
+    description: Celebratory award badge shown when a milestone is hit.
+
+lotties:
+  - id: onboarding_pulse
+    description: Ambient looping animation on the onboarding splash screen.
+    required_type: standalone
+  - id: streak_reveal
+    description: Plays behind the streak badge as it pops into view.
+    required_type: reveal
+    depends_on: hero
+
 texts:
   - id: booked_screen
     description: CTA shown to the user the moment a session is booked.

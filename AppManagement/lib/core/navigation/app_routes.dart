@@ -9,6 +9,8 @@ class AppRoutes {
   static const String memberDetail = '/members/detail';
   static const String memberAppPreview = '/members/app-preview';
   static const String schedule = '/schedule';
+  static const String scheduleAddClass = '/schedule/class/new';
+  static const String scheduleEditClass = '/schedule/class/edit';
   static const String qrCodes = '/qr-codes';
   static const String growth = '/growth';
 

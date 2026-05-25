@@ -98,6 +98,8 @@ class SectionsBar extends StatelessWidget {
   }
 }
 
+/// Apex MMA logo. An image asset, so swapping in a real gym logo is a
+/// one-line change (drop the file in assets/images/ and update the path).
 class _Logo extends StatelessWidget {
   const _Logo();
 
@@ -105,10 +107,13 @@ class _Logo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: DesignConstants.spacingMedium),
-      child: Text(
-        'COMBAT\nDEN',
-        textAlign: TextAlign.center,
-        style: DesignConstants.h2.copyWith(fontWeight: FontWeight.w900),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+        child: Image.asset(
+          'assets/images/apexmma-logo-simple.png',
+          width: 64,
+          height: 64,
+        ),
       ),
     );
   }

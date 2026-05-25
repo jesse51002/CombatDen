@@ -7,6 +7,8 @@ import 'package:app_management/features/members/presentation/screens/member_app_
 import 'package:app_management/features/members/presentation/screens/members_screen.dart';
 import 'package:app_management/features/members/presentation/screens/specific_member_screen.dart';
 import 'package:app_management/features/qr_codes/presentation/screens/qr_codes_screen.dart';
+import 'package:app_management/features/schedule/data/mock_schedule.dart';
+import 'package:app_management/features/schedule/presentation/screens/class_form_screen.dart';
 import 'package:app_management/features/schedule/presentation/screens/schedule_screen.dart';
 import 'package:app_management/shared/themes/app_theme.dart';
 
@@ -19,7 +21,7 @@ class AppManagementRoot extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CombatDen Admin',
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
       debugShowCheckedModeBanner: false,
       initialRoute: AppRoutes.home,
       routes: {
@@ -28,6 +30,9 @@ class AppManagementRoot extends StatelessWidget {
         AppRoutes.memberDetail: (_) => const SpecificMemberScreen(),
         AppRoutes.memberAppPreview: (_) => const MemberAppScreen(),
         AppRoutes.schedule: (_) => const ScheduleScreen(),
+        AppRoutes.scheduleAddClass: (_) => const ClassFormScreen(),
+        AppRoutes.scheduleEditClass: (_) =>
+            ClassFormScreen(existing: kSampleClass),
         AppRoutes.qrCodes: (_) => const QrCodesScreen(),
         AppRoutes.growth: (_) => const GrowthScreen(),
       },

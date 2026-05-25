@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
@@ -8,28 +7,28 @@ import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/shared/widgets/branded_image.dart';
+import 'package:mobile_app/customization/theme/theme_image.dart';
+import 'package:mobile_app/customization/theme/lottie/theme_reveal_lottie.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 
 // Per-screen layout/timing math, file-scoped per CLAUDE.md's _k carve-out.
-const Duration _kBoltEntrance = Duration(milliseconds: 420);
-const Duration _kBoltHold = Duration(milliseconds: 600);
-const Duration _kBoltFade = Duration(milliseconds: 320);
-const Duration _kLottieFadeOut = Duration(milliseconds: 240);
-const double _kBoltSize = 240;
 const double _kLottieSize = 320;
-const double _kBoltStartScale = 0.5;
-// Fraction of the Lottie's runtime at which the static icon starts entering
-// (so the icon emerges *out of* the lightning strike, not after it).
-const double _kIconTriggerProgress = 0.75;
+// Fraction of the strike's runtime at which the streak icon pops out (so it
+// emerges *out of* the lightning, not after it). Used on the bundled
+// fallback; a real reveal preset's insertion_point overrides it.
+const double _kRevealAt = 0.75;
+// Fallback reveal rect (normalised, 0..1, top-left origin) — a centred 60%
+// box the streak icon pops into when no preset insertion_point exists.
+const double _kRevealX = 0.2;
+const double _kRevealY = 0.2;
+const double _kRevealWidth = 0.6;
+const double _kRevealHeight = 0.6;
 const String _kLottieAsset = 'assets/animations/lightning_neon.json';
 
-/// Layered celebration. The Lottie lightning strike plays in brand color;
-/// halfway through, the 3D bolt icon enters with a bold scale + fade pop
-/// *over* the still-playing strike. When the Lottie completes it fades out,
-/// leaving the icon at full opacity. The icon then holds, fades, and the
-/// week-count + "week streak" + small subtitle + week strip cascade in as
-/// one centered focal block.
+/// Layered celebration. A `ThemeRevealLottie` plays the lightning strike (brand
+/// recoloured) and pops the streak icon out of it partway through; when the
+/// strike finishes, the week-count + "week streak" + subtitle + week strip
+/// cascade in as one centered focal block.
 class StreakBody extends StatefulWidget {
   const StreakBody({super.key, required this.stats, this.controller});
 
@@ -40,73 +39,26 @@ class StreakBody extends StatefulWidget {
   State<StreakBody> createState() => _StreakBodyState();
 }
 
-class _StreakBodyState extends State<StreakBody> with TickerProviderStateMixin {
-  late final AnimationController _lottieCtrl = AnimationController(vsync: this);
-  late final AnimationController _entranceCtrl = AnimationController(
-    vsync: this,
-    duration: _kBoltEntrance,
-  );
-  late final AnimationController _exitCtrl = AnimationController(
-    vsync: this,
-    duration: _kBoltFade,
-  );
-  late final AnimationController _lottieFadeCtrl = AnimationController(
-    vsync: this,
-    duration: _kLottieFadeOut,
-  );
-
-  bool _iconEntered = false;
+class _StreakBodyState extends State<StreakBody> {
   bool _showStats = false;
 
   @override
   void initState() {
     super.initState();
-    _lottieCtrl
-      ..addListener(_onLottieTick)
-      ..addStatusListener(_onLottieStatus);
     widget.controller?.registerSkipHandler(_skipToFinal);
   }
 
-  void _skipToFinal() {
-    if (_showStats) return;
-    _lottieCtrl.stop();
-    _entranceCtrl.stop();
-    _exitCtrl.stop();
-    _lottieFadeCtrl.stop();
+  void _skipToFinal() => _toStats();
+
+  void _toStats() {
+    if (!mounted || _showStats) return;
     setState(() => _showStats = true);
     widget.controller?.markDone();
-  }
-
-  void _onLottieTick() {
-    if (_iconEntered) return;
-    if (_lottieCtrl.value < _kIconTriggerProgress) return;
-    setState(() => _iconEntered = true);
-    _entranceCtrl.forward();
-  }
-
-  void _onLottieStatus(AnimationStatus status) {
-    if (status != AnimationStatus.completed || !mounted) return;
-    _lottieFadeCtrl.forward();
-    Future.delayed(_kBoltHold, () {
-      if (!mounted) return;
-      _exitCtrl.forward().whenComplete(() {
-        if (!mounted) return;
-        setState(() => _showStats = true);
-        widget.controller?.markDone();
-      });
-    });
   }
 
   @override
   void dispose() {
     widget.controller?.clearSkipHandler();
-    _lottieCtrl
-      ..removeListener(_onLottieTick)
-      ..removeStatusListener(_onLottieStatus)
-      ..dispose();
-    _entranceCtrl.dispose();
-    _exitCtrl.dispose();
-    _lottieFadeCtrl.dispose();
     super.dispose();
   }
 
@@ -115,80 +67,28 @@ class _StreakBodyState extends State<StreakBody> with TickerProviderStateMixin {
     if (_showStats) {
       return _StatsContent(stats: widget.stats);
     }
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        if (_iconEntered)
-          _IconHero(entranceCtrl: _entranceCtrl, exitCtrl: _exitCtrl),
-        FadeTransition(
-          opacity: ReverseAnimation(_lottieFadeCtrl),
-          child: IgnorePointer(child: _LottieIntro(controller: _lottieCtrl)),
-        ),
-      ],
-    );
-  }
-}
-
-class _LottieIntro extends StatelessWidget {
-  const _LottieIntro({required this.controller});
-
-  final AnimationController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final brand = DesignConstants.primaryColor;
+    // ThemeRevealLottie plays the strike and pops the streak icon out of it; when
+    // the strike finishes we cross into the stats cascade.
     return SizedBox(
       width: _kLottieSize,
       height: _kLottieSize,
-      child: Lottie.asset(
-        _kLottieAsset,
-        controller: controller,
-        fit: BoxFit.contain,
-        onLoaded: (composition) {
-          controller
-            ..duration = composition.duration
-            ..forward();
-        },
-        delegates: LottieDelegates(
-          values: [
-            ValueDelegate.color(const ['**'], value: brand),
-            ValueDelegate.strokeColor(const ['**'], value: brand),
-          ],
+      child: ThemeRevealLottie(
+        slot: CombatDenSlots.streakCelebration,
+        fallbackAsset: _kLottieAsset,
+        fallbackRevealAt: _kRevealAt,
+        fallbackX: _kRevealX,
+        fallbackY: _kRevealY,
+        fallbackWidth: _kRevealWidth,
+        fallbackHeight: _kRevealHeight,
+        onComplete: _toStats,
+        revealedImage: Image(
+          image: ThemeImage.image(
+            CombatDenSlots.streakIcon,
+            fallback: ApiImage.asset('streak_icon.png'),
+          ),
+          fit: BoxFit.contain,
         ),
       ),
-    );
-  }
-}
-
-class _IconHero extends StatelessWidget {
-  const _IconHero({required this.entranceCtrl, required this.exitCtrl});
-
-  final AnimationController entranceCtrl;
-  final AnimationController exitCtrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([entranceCtrl, exitCtrl]),
-      builder: (context, _) {
-        final inT = Curves.easeOutQuart.transform(entranceCtrl.value);
-        final outT = Curves.easeOutQuart.transform(exitCtrl.value);
-        final opacity = inT * (1.0 - outT);
-        final scale = _kBoltStartScale + (1.0 - _kBoltStartScale) * inT;
-        return Opacity(
-          opacity: opacity,
-          child: Transform.scale(
-            scale: scale,
-            child: BrandedImage(
-              slot: CombatDenSlots.streakIcon,
-              fallback: ApiImage.asset('streak_icon.png'),
-              width: _kBoltSize,
-              height: _kBoltSize,
-              fit: BoxFit.contain,
-            ),
-          ),
-        );
-      },
     );
   }
 }

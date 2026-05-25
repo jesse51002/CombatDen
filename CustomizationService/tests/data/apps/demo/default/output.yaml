@@ -4,6 +4,9 @@ design_name: Demo App
 image_set:
   images:
     hero:
+      overwrite_specs:
+        specs: ''
+        image_to_image: null
       path: /fixture/demo/default/final_images/hero.png
       prompt: A bold demo hero illustration on a flat solid background.
       complexity: medium
@@ -11,6 +14,9 @@ color_set:
   mode: dark
   colors:
     primary:
+      overwrite_specs:
+        specs: ''
+        image_to_image: null
       color:
         oklch:
           l: 0.705
@@ -151,6 +157,9 @@ color_set:
             alpha: null
           hex: '#12171a'
     background:
+      overwrite_specs:
+        specs: ''
+        image_to_image: null
       color:
         oklch:
           l: 0.2
@@ -291,6 +300,9 @@ color_set:
             alpha: null
           hex: '#f0eeeb'
     text:
+      overwrite_specs:
+        specs: ''
+        image_to_image: null
       color:
         oklch:
           l: 0.9500000000000001
@@ -431,6 +443,9 @@ color_set:
             alpha: null
           hex: '#12171a'
     accent:
+      overwrite_specs:
+        specs: ''
+        image_to_image: null
       color:
         oklch:
           l: 0.75
@@ -1166,3 +1181,13 @@ color_set:
         b: 204
         alpha: null
       hex: '#2ac4cc'
+font_set:
+  fonts: {}
+text_set:
+  texts: {}
+icon_set:
+  icons: {}
+  attribution: null
+lottie_set:
+  lotties: {}
+cost: null

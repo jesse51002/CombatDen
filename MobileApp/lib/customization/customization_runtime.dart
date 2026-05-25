@@ -28,6 +28,8 @@ class CustomizationRuntime {
     required List<String> expectedImages,
     required List<String> expectedFonts,
     required List<String> expectedText,
+    required List<String> expectedIcons,
+    required List<String> expectedLotties,
   }) async {
     if (!getIt.isRegistered<CustomizationService>()) {
       getIt.registerLazySingleton<CustomizationApiClient>(
@@ -43,6 +45,8 @@ class CustomizationRuntime {
           expectedImageKeys: expectedImages,
           expectedFontKeys: expectedFonts,
           expectedTextKeys: expectedText,
+          expectedIconKeys: expectedIcons,
+          expectedLottieKeys: expectedLotties,
         ),
       );
     }

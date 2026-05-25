@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
+import 'package:app_management/core/navigation/app_routes.dart';
 import 'package:app_management/features/schedule/presentation/widgets/header/date_range_pill.dart';
 import 'package:app_management/features/schedule/presentation/widgets/header/month_navigator.dart';
 import 'package:app_management/shared/widgets/app_primary_button.dart';
@@ -38,7 +39,8 @@ class ScheduleHeaderBar extends StatelessWidget {
         ),
         AppPrimaryButton(
           text: 'Add New Class',
-          onPressed: () => debugPrint('TODO: new class flow'),
+          onPressed: () =>
+              Navigator.pushNamed(context, AppRoutes.scheduleAddClass),
           textStyle: DesignConstants.h2,
           padding: const EdgeInsets.symmetric(
             horizontal: DesignConstants.paddingBig,

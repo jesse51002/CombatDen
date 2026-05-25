@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/shared/widgets/nav/app_nav_item.dart';
@@ -49,6 +50,7 @@ class AppBottomNavBar extends StatelessWidget {
                 (tab) => Expanded(
                   child: AppNavItem(
                     icon: _iconFor(tab),
+                    iconSlot: _iconSlotFor(tab),
                     label: _labelFor(tab),
                     isActive: tab == selected,
                     onTap: () => _handleTap(context, tab),
@@ -76,6 +78,15 @@ class AppBottomNavBar extends StatelessWidget {
       AppBottomNavTab.rank => Symbols.military_tech_sharp,
       AppBottomNavTab.reward => Symbols.card_giftcard_sharp,
       AppBottomNavTab.videos => Symbols.smart_display_sharp,
+    };
+  }
+
+  String _iconSlotFor(AppBottomNavTab tab) {
+    return switch (tab) {
+      AppBottomNavTab.home => CombatDenSlots.navHome,
+      AppBottomNavTab.rank => CombatDenSlots.navRank,
+      AppBottomNavTab.reward => CombatDenSlots.navReward,
+      AppBottomNavTab.videos => CombatDenSlots.navVideos,
     };
   }
 

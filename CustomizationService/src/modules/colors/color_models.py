@@ -116,6 +116,8 @@ def build_color_response_model(
     *,
     roles: dict[str, ColorRole | None],
     dark_mode: bool,
+    fixed_bg: OklchColor | None = None,
+    fixed_text: OklchColor | None = None,
 ) -> type[BaseModel]:
     """Closed per-request wire schema: one required ``LLMSlotResponse``
     per slot, plus the deterministic colour contract inlined as the
@@ -156,13 +158,26 @@ def build_color_response_model(
             f"got {text_ids}"
         )
     bg_id, text_id = bg_ids[0], text_ids[0]
+    # On a partial regen the call may exclude background and/or text; their
+    # prior (fixed) values are fed in so the cross-slot AA contract still
+    # holds against what is actually preserved. A slot present in this call
+    # is validated for chroma/lightness; a fixed one already passed when it
+    # was first made, so only its AA pairing is re-checked.
+    bg_present = bg_id in slot_ids
+    text_present = text_id in slot_ids
 
     def _validate(self: BaseModel) -> BaseModel:
-        bg = getattr(self, bg_id).oklch
-        text = getattr(self, text_id).oklch
+        bg = getattr(self, bg_id).oklch if bg_present else fixed_bg
+        text = getattr(self, text_id).oklch if text_present else fixed_text
 
         # Chroma: low but never pure gray/black (impeccable: faint hued tint).
-        for sid, color in ((bg_id, bg), (text_id, text)):
+        # Only for slots actually being generated in this call.
+        present = []
+        if bg_present:
+            present.append((bg_id, bg))
+        if text_present:
+            present.append((text_id, text))
+        for sid, color in present:
             if not CHROMA_MIN_TINT <= color.c <= CHROMA_MAX_NEUTRAL:
                 raise ValueError(
                     f"colour contract: the '{sid}' colour "
@@ -178,22 +193,27 @@ def build_color_response_model(
         # NOT checked — the bg clamp in ColorCorrectionService is its
         # sole authority, so a near-extreme background is corrected
         # rather than re-asked or failed.
-        if dark_mode:
-            if text.l < DARK_MODE_TEXT_L_MIN:
-                raise ValueError(
-                    f"colour contract: dark mode — the '{text_id}' text "
-                    f"(L={text.l:.3f}) must have lightness ≥ "
-                    f"{DARK_MODE_TEXT_L_MIN}. Make it near-white."
-                )
-        else:
-            if text.l > LIGHT_MODE_TEXT_L_MAX:
-                raise ValueError(
-                    f"colour contract: light mode — the '{text_id}' text "
-                    f"(L={text.l:.3f}) must have lightness ≤ "
-                    f"{LIGHT_MODE_TEXT_L_MAX}. Make it near-black."
-                )
+        if text_present:
+            if dark_mode:
+                if text.l < DARK_MODE_TEXT_L_MIN:
+                    raise ValueError(
+                        f"colour contract: dark mode — the '{text_id}' text "
+                        f"(L={text.l:.3f}) must have lightness ≥ "
+                        f"{DARK_MODE_TEXT_L_MIN}. Make it near-white."
+                    )
+            else:
+                if text.l > LIGHT_MODE_TEXT_L_MAX:
+                    raise ValueError(
+                        f"colour contract: light mode — the '{text_id}' text "
+                        f"(L={text.l:.3f}) must have lightness ≤ "
+                        f"{LIGHT_MODE_TEXT_L_MAX}. Make it near-black."
+                    )
 
         # WCAG AA contrast between background and text — via coloraide.
+        # Skipped only if neither is available (a partial call that touches
+        # neither and was given no fixed context — the caller's contract).
+        if bg is None or text is None:
+            return self
         ratio = bg.contrast(text)
         if ratio < MIN_CONTRAST_AA:
             raise ValueError(

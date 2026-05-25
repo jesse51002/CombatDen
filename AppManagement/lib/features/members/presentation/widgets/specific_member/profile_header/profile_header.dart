@@ -5,9 +5,8 @@ import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/members/data/mock_member_history.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/profile_header/profile_action_buttons.dart';
 
-/// Top of the SpecificMember card: round avatar, name with status
-/// suffix, email with copy affordance, and the row of three outlined
-/// action buttons.
+/// Top of the SpecificMember card: name with status suffix, email with
+/// copy affordance, and the row of three outlined action buttons.
 class ProfileHeader extends StatelessWidget {
   final DemoMember member;
 
@@ -18,27 +17,9 @@ class ProfileHeader extends StatelessWidget {
     return Column(
       spacing: DesignConstants.spacingLarge,
       children: [
-        _Avatar(asset: member.avatarAsset),
         _NameAndEmail(member: member),
         const ProfileActionButtons(),
       ],
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  final String asset;
-  const _Avatar({required this.asset});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipOval(
-      child: Image.asset(
-        asset,
-        width: 200,
-        height: 200,
-        fit: BoxFit.cover,
-      ),
     );
   }
 }
@@ -54,7 +35,9 @@ class _NameAndEmail extends StatelessWidget {
       children: [
         Text(
           '${member.fullName} (${member.statusLabel})',
-          style: DesignConstants.h1,
+          style: DesignConstants.big2.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
           textAlign: TextAlign.center,
         ),
         _EmailRow(email: member.email),
@@ -83,7 +66,7 @@ class _EmailRow extends StatelessWidget {
           onTap: () => debugPrint('TODO: copy email "$email"'),
           child: Icon(
             Symbols.content_copy_sharp,
-            size: 20,
+            size: DesignConstants.iconSizeMedium,
             color: DesignConstants.text2nd,
             weight: DesignConstants.iconWeight,
           ),

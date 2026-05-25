@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator
 
 from schema.complexity import Complexity
+from schema.output.node_output import NodeOutput
 from schema.primitives import AbsolutePath
 
 
-class ImageOutput(BaseModel):
+class ImageOutput(NodeOutput):
     """One generated image: where it is, the prompt that made it, and the
     complexity tier that picked the generator's quality.
 

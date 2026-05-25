@@ -2,27 +2,28 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
-import 'package:app_management/features/members/data/mock_member_app_preview.dart';
-import 'package:app_management/features/members/presentation/widgets/member_app/gym_logo/gym_logo_card.dart';
-import 'package:app_management/features/members/presentation/widgets/member_app/gym_type/gym_type_card.dart';
-import 'package:app_management/features/members/presentation/widgets/member_app/rewards/rewards_store_card.dart';
+import 'package:app_management/features/members/presentation/widgets/member_app/loyalty_tab/loyalty_tab.dart';
+import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_tab.dart';
+import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/videos_tab.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
+import 'package:app_management/shared/widgets/view_switcher.dart';
 
-/// Admin-side preview / configurator for what the member sees in the
-/// CombatDen mobile app.
-///
-/// Figma: file `q04PCZ3W9syMik34JRtRbL`, node `3132:3427`.
-/// Composition (top to bottom):
-///   1. Gym logo + name card with "Edit Name / Logo".
-///   2. Gym Type card — admin picks MMA / Judo / Boxing / Karate.
-///   3. In-app Rewards Store card — points tiers + Add-more grid.
-class MemberAppScreen extends StatelessWidget {
+/// Admin-side configurator for the member-facing CombatDen app, split
+/// into three tabs: Theme, Videos, and the Loyalty Program.
+class MemberAppScreen extends StatefulWidget {
   const MemberAppScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    const data = kMockMemberAppPreview;
+  State<MemberAppScreen> createState() => _MemberAppScreenState();
+}
 
+class _MemberAppScreenState extends State<MemberAppScreen> {
+  int _tabIndex = 0;
+
+  static const List<String> _labels = ['Theme', 'Videos', 'Loyalty'];
+
+  @override
+  Widget build(BuildContext context) {
     return AppShell(
       activeRoute: AppRoutes.memberAppPreview,
       child: SingleChildScrollView(
@@ -31,15 +32,16 @@ class MemberAppScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingBig,
           children: [
-            GymLogoCard(
-              gymName: data.gymName,
-              logoAsset: data.gymLogoAsset,
+            ViewSwitcher(
+              labels: _labels,
+              selectedIndex: _tabIndex,
+              onSelected: (i) => setState(() => _tabIndex = i),
             ),
-            GymTypeCard(selected: data.selectedGymType),
-            RewardsStoreCard(
-              rewards: data.rewards,
-              addableRewards: data.addableRewards,
-            ),
+            switch (_tabIndex) {
+              1 => const VideosTab(),
+              2 => const LoyaltyTab(),
+              _ => const ThemeTab(),
+            },
           ],
         ),
       ),

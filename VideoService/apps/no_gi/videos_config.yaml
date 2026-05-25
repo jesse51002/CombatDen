@@ -13,13 +13,8 @@ avoid_desc: |
   as legitimate instruction.
 searches:
   - query: no gi leg lock system tutorial
-    tags: [tutorial, educational]
   - query: ADCC no gi finals highlights
-    tags: [professional, clips, entertainment]
   - query: modern no gi grappling meta breakdown
-    tags: [informative, educational]
   - query: no gi submission grappling competition vlog
-    tags: [vlog, behind_the_scenes]
   - query: Craig Jones no gi strategy interview
-    tags: [interview, informative]
 priority_channels: []

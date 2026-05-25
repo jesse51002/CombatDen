@@ -46,7 +46,7 @@ class SidebarNavItem extends StatelessWidget {
               Icon(
                 icon,
                 color: color,
-                size: 24,
+                size: DesignConstants.iconSizeLarge,
                 weight: DesignConstants.iconWeight,
               ),
               Text(

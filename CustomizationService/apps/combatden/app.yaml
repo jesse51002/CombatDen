@@ -233,3 +233,66 @@ texts:
     max_words: 5
     min_chars: 8
     max_chars: 28
+
+# The persistent bottom-nav tab icons — the most repeated, brand-defining
+# glyphs in the member app (present on Home, Rank/Profile, Rewards and
+# Videos). Monochrome; the MobileApp tints them per theme (active = accent,
+# inactive = muted text), so no colour belongs here. Each falls back to a
+# Material Symbol in the app if the pipeline doesn't supply one.
+icons:
+  - id: nav_home
+    description: >-
+      The Home tab icon in the persistent bottom navigation bar — the first,
+      left-most tab and the app's default landing destination (upcoming
+      sessions, the day's schedule). A calm, instantly-legible house glyph
+      that reads as "home / dashboard" at ~24px. Functional and permanent,
+      never celebratory; must stay sharp and unambiguous when small and when
+      shown in both an active (highlighted) and inactive (muted) state.
+  - id: nav_rank
+    description: >-
+      The Rank tab icon in the persistent bottom navigation bar — opens the
+      profile / rank screen where the user sees their current belt tier,
+      rating graph and progress to the next rank. Should read as achievement
+      / earned status (a medal, badge or ranking mark) at ~24px, matching the
+      gym's progression theme. Permanent navigation utility, not a
+      celebration; legible and clear in both active and inactive states.
+  - id: nav_reward
+    description: >-
+      The Reward tab icon in the persistent bottom navigation bar — opens the
+      points store / rewards area where earned points are redeemed. Should
+      read unmistakably as a reward or gift (a gift box, present or token) at
+      ~24px, tying into the app's points-and-rewards language. A calm,
+      functional navigation affordance; clear and sharp in active and
+      inactive states.
+  - id: nav_videos
+    description: >-
+      The Videos tab icon in the persistent bottom navigation bar — opens the
+      technique / level-up video library. Should read as "play / watch
+      videos" (a play affordance or media glyph) at ~24px. Functional
+      navigation, never celebratory; must stay legible and obvious at small
+      size in both active and inactive states.
+
+# Two standalone celebration animations for the member app's two real
+# animation moments. Standalone = plays on its own; neither reveals or
+# depends on an image, so neither sets depends_on. The MobileApp recolours
+# each preset's regions to the live palette at render time and falls back to
+# a bundled .json if the pipeline doesn't supply one.
+lotties:
+  - id: booking_celebration
+    description: >-
+      A celebratory burst that plays on the ClassBookedScreen the moment a
+      booking succeeds — a short, energetic flourish around the "Class
+      Booked" beat, directly tied to the booking-success payoff. Standalone
+      and self-contained: it does not reveal or depend on any image. Peak
+      congratulatory energy: "you're in, your spot is locked".
+    required_type: standalone
+  - id: streak_celebration
+    description: >-
+      The animation hero of the post-class Streak screen (the 1st post-class
+      card) — an energetic, momentum-themed flourish (a strike or rising
+      flame feel) that plays as the streak is celebrated. It REVEALS the
+      streak icon: the badge pops out of the strike partway through. Reveal
+      type, depending on the streak_icon image it composites. Persistent,
+      driving, "keep it going" energy.
+    required_type: reveal
+    depends_on: streak_icon

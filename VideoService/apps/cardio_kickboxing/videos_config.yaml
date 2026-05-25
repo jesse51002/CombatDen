@@ -13,13 +13,8 @@ avoid_desc: |
   promise unrealistic results.
 searches:
   - query: 30 minute cardio kickboxing workout at home
-    tags: [tutorial, educational]
   - query: fun cardio kickboxing class highlights
-    tags: [entertainment, fun, clips]
   - query: does cardio kickboxing work for weight loss
-    tags: [informative, educational]
   - query: my cardio kickboxing fitness transformation journey
-    tags: [vlog]
   - query: best beginner kickboxing combos for fitness
-    tags: [tutorial, fun]
 priority_channels: []

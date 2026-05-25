@@ -14,10 +14,12 @@ validate (stale keys dropped, not rejected).
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator
+
+from schema.output.node_output import NodeOutput
 
 
-class TextOutput(BaseModel):
+class TextOutput(NodeOutput):
     """One slot's resolved copy: the rewritten string the brand will ship."""
 
     model_config = ConfigDict(extra="ignore")

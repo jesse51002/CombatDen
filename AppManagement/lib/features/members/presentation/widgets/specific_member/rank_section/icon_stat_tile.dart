@@ -19,7 +19,7 @@ class IconStatTile extends StatelessWidget {
     required this.icon,
     required this.value,
     required this.caption,
-    this.iconSize = 30,
+    this.iconSize = DesignConstants.iconSizeBig,
     this.valueColor,
   });
 

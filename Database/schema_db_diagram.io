@@ -122,6 +122,8 @@ Table gym_classes {
   class_name varchar [not null]
   class_description varchar
   max_capacity integer
+  image_url varchar
+  points_worth integer [not null, default: 50]
   is_active boolean [not null, default: true]
   is_deleted boolean [not null, default: false]
   class_time time [not null]

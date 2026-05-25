@@ -19,7 +19,7 @@ videos_desc: Videos worth surfacing.
 avoid_desc: Content to avoid.
 searches:
 """ + "".join(
-    f"  - query: demo search {i}\n    tags: [educational]\n" for i in range(10)
+    f"  - query: demo search {i}\n" for i in range(10)
 )
 
 
@@ -38,7 +38,7 @@ videos:
     channel_avatar_url: https://yt3.ggpht.com/pfp
     view_count: 1000
     like_count: 50
-    tags: [educational]
+    tag: educational
     source_queries: [demo search]
     relevance_index: 0
 """

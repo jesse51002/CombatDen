@@ -34,6 +34,10 @@ OUTPUT_FILENAME = "output.yaml"
 # intermediates) is never served — by contract, not by guesswork.
 FINAL_IMAGES_DIRNAME = "final_images"
 IMAGE_SUFFIX = ".png"
+# Per-slot monochrome SVGs the icon module writes into the run dir; one
+# fixed rule (`<run_dir>/icons/<slot_id>.svg`), same discipline as images.
+ICONS_DIRNAME = "icons"
+ICON_SUFFIX = ".svg"
 # The image slot a style picker shows as each style's card art.
 CELEBRATION_SLOT = "celebration_image"
 
@@ -54,8 +58,18 @@ class OutputService:
     tree without monkeypatching ``settings.apps_root``.
     """
 
-    def __init__(self, apps_root: Path) -> None:
+    def __init__(
+        self,
+        apps_root: Path,
+        lottie_library_root: Path | None = None,
+    ) -> None:
         self._apps_root = apps_root
+        # Defaulted (not required) so existing callers/tests that build
+        # `OutputService(apps_root=...)` keep working; the lottie endpoint
+        # is the only consumer.
+        self._lottie_library_root = (
+            lottie_library_root or settings.lottie_library_root
+        )
 
     async def load(self, app_id: str, run_id: str) -> Output:
         """The run's validated ``output.yaml``.
@@ -116,6 +130,73 @@ class OutputService:
                 "is incomplete"
             )
         return image
+
+    async def icon_file(
+        self, app_id: str, run_id: str, slot_id: str
+    ) -> Path:
+        """The on-disk SVG for one declared icon slot.
+
+        Exactly ``<run_dir>/icons/<slot_id>.svg`` — the one place the icon
+        module writes a slot's resolved (matched or generated) SVG. Same
+        three-case 404 contract as :meth:`image_file`: malformed slot id,
+        slot not declared in the run's ``output.yaml``, or declared but its
+        SVG is absent (an incomplete run).
+        """
+        if not _ID_PATTERN.match(slot_id):
+            raise NotFoundError(f"invalid slot id {slot_id!r}")
+        output = await self.load(app_id, run_id)
+        if slot_id not in output.icon_set.icons:
+            raise NotFoundError(
+                f"icon slot {slot_id!r} is not declared in run "
+                f"{app_id}/{run_id}"
+            )
+        icon = (
+            self._safe_run_dir(app_id, run_id)
+            / ICONS_DIRNAME
+            / f"{slot_id}{ICON_SUFFIX}"
+        )
+        if not icon.is_file():
+            raise NotFoundError(
+                f"icon slot {slot_id!r} is declared but its SVG is missing "
+                f"from {ICONS_DIRNAME}/ — run {app_id}/{run_id} is incomplete"
+            )
+        return icon
+
+    async def lottie_file(
+        self, app_id: str, run_id: str, slot_id: str
+    ) -> Path:
+        """The on-disk preset ``.json`` for one declared lottie slot.
+
+        A lottie slot resolves to a preset from the GLOBAL library, not a
+        per-run artifact, so the file is resolved against
+        ``lottie_library_root`` using the slot's ``preset_file``
+        (library-relative, e.g. ``animations/confetti_burst.json``) — never
+        the run dir. Path-traversal guarded like :meth:`_safe_run_dir`.
+        Same three-case 404 contract: malformed slot id, slot not declared,
+        or its preset file absent from the library.
+        """
+        if not _ID_PATTERN.match(slot_id):
+            raise NotFoundError(f"invalid slot id {slot_id!r}")
+        output = await self.load(app_id, run_id)
+        lottie = output.lottie_set.lotties.get(slot_id)
+        if lottie is None:
+            raise NotFoundError(
+                f"lottie slot {slot_id!r} is not declared in run "
+                f"{app_id}/{run_id}"
+            )
+        library_root = self._lottie_library_root.resolve()
+        preset = (library_root / lottie.preset_file).resolve()
+        if library_root not in preset.parents:
+            raise NotFoundError(
+                f"lottie slot {slot_id!r} preset path "
+                f"{lottie.preset_file!r} escapes the library root"
+            )
+        if not preset.is_file():
+            raise NotFoundError(
+                f"lottie slot {slot_id!r} preset {lottie.preset_file!r} is "
+                "missing from the library"
+            )
+        return preset
 
     async def list_styles(self, app_id: str) -> list[StyleSummary]:
         """The app's named, selectable styles — one per run directory
@@ -194,5 +275,8 @@ def output_service() -> OutputService:
     ``settings.apps_root`` after the first hit."""
     global _DEFAULT
     if _DEFAULT is None:
-        _DEFAULT = OutputService(apps_root=settings.apps_root)
+        _DEFAULT = OutputService(
+            apps_root=settings.apps_root,
+            lottie_library_root=settings.lottie_library_root,
+        )
     return _DEFAULT

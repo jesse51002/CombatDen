@@ -1,8 +1,10 @@
 [project]
 name = "videoservice"
 version = "0.1.0"
-description = "Temporary demo service: author a per-company videos_config.yaml (business + the kinds of YouTube videos worth surfacing + 10-20 tagged search prompts) and serve it over a read-only API. Querying YouTube is a later manual batch script."
-requires-python = ">=3.13,<4.0"
+description = "Temporary demo service: author a per-company videos_config.yaml (business + the kinds of YouTube videos worth surfacing + query-only search prompts), fetch matching videos via the YouTube Data API, classify each one (genre + keep/drop verdict) with a Gemma model, and serve it over a read-only API."
+# Capped below 3.14 because litellm (a hard dep, for the classification pass)
+# does not support 3.14. Use Python 3.13 for the venv.
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "pydantic>=2.0,<3.0",
     "pydantic-settings>=2.0,<3.0",
@@ -10,6 +12,7 @@ dependencies = [
     "fastapi (>=0.136.1,<0.137.0)",
     "uvicorn[standard] (>=0.47.0,<0.48.0)",
     "google-api-python-client (>=2.196.0,<3.0.0)",
+    "litellm (>=1.86,<2.0)",
 ]
 
 [tool.poetry]

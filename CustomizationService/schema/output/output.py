@@ -8,7 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from schema.output.color_palette import ColorPalette
 from schema.output.font_set import FontSet
+from schema.output.icon_set import IconSet
 from schema.output.image_set import ImageSet
+from schema.output.lottie_set import LottieSet
 from schema.output.run_cost import RunCost
 from schema.output.text_set import TextSet
 
@@ -39,6 +41,11 @@ class Output(BaseModel):
     overrides). An empty ``text_set.texts`` is also the honest answer
     when the app declared no text slots, so the MobileApp's fallback
     path (use the bundled default string) is one branch, not two.
+    ``icon_set`` follows the same shape — every fresh run sets it, older
+    files predate it and default to an empty ``IconSet()`` (no icon
+    overrides; the app falls back to its bundled icons). ``lottie_set``
+    follows the identical shape — older files predate it and default to
+    an empty ``LottieSet(lotties={})``.
 
     ``extra="ignore"`` (not the package-wide ``forbid``) is a deliberate
     exception, matching ``ImageOutput`` / ``ColorPalette`` / ``ImageSet``:
@@ -54,6 +61,10 @@ class Output(BaseModel):
     color_set: ColorPalette
     font_set: FontSet = Field(default_factory=lambda: FontSet(fonts={}))
     text_set: TextSet = Field(default_factory=TextSet)
+    icon_set: IconSet = Field(default_factory=IconSet)
+    lottie_set: LottieSet = Field(
+        default_factory=lambda: LottieSet(lotties={})
+    )
     cost: RunCost | None = None
 
     @field_validator("app")

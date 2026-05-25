@@ -19,6 +19,7 @@ from schema import (
     Customization,
     ImageOutput,
     OklchColor,
+    OverwriteSpecs,
 )
 from src.core.errors import ProviderError
 from src.core.run_context import RunContext
@@ -31,9 +32,21 @@ from src.modules.images.background_service import (
     BG_MAX_ATTEMPTS,
     BackgroundService,
 )
+from src.modules.icons.icon_models import (
+    LLMIconPrompt,
+    LLMIconResponse,
+    build_icon_match_model,
+)
+from src.modules.icons.icon_node import IconNode
+from src.shared.services.recraft_icon_generator import (
+    RECRAFT_PRICE_USD,
+    RecraftIconGenerator,
+)
 from src.modules.images.complexity_service import ComplexityClassifier
 from src.modules.images.image_models import ImageComplexity, ImagePrompt
 from src.modules.images.image_node import ImageNode
+from schema import AbsolutePath
+from src.shared.interfaces.icon_set_catalog import IconSetCatalogEntry
 
 _COLOR = DependencyKind.COLOR.value
 
@@ -331,7 +344,12 @@ def test_color_prompt_is_data_driven(tmp_path: Path) -> None:
         ColorSchemeService,
     )
 
-    prompt = ColorSchemeService._build_prompt(ctx)
+    prompt = ColorSchemeService._build_prompt(
+        ctx,
+        target_ids=[slot.id for slot in ctx.app.colors],
+        fixed={},
+        overwrite_specs=OverwriteSpecs(),
+    )
     template = COLOR_PROMPT_PATH.read_text(encoding="utf-8")
 
     # The .md template is app-agnostic: slots are deferred to a placeholder,
@@ -936,7 +954,12 @@ def test_font_prompt_is_data_driven(tmp_path: Path) -> None:
     )
 
     ctx = _run_ctx(tmp_path)
-    prompt = FontSelectionService._build_prompt(ctx)
+    prompt = FontSelectionService._build_prompt(
+        ctx,
+        target_ids=[slot.id for slot in ctx.app.fonts],
+        fixed={},
+        overwrite_specs=OverwriteSpecs(),
+    )
     template = FONT_PROMPT_PATH.read_text(encoding="utf-8")
 
     # Slots are deferred to a placeholder; no slot description baked in.
@@ -951,3 +974,307 @@ def test_font_prompt_is_data_driven(tmp_path: Path) -> None:
     assert ctx.cust.design_direction.name in prompt
     for slot in ctx.app.fonts:
         assert f"- {slot.id}: {slot.description}" in prompt
+
+
+# --- icon node ------------------------------------------------------------
+
+
+class _IconStubLLM:
+    """Stub LLMClient for the icon node: dispatches the three icon
+    schemas by ``__name__`` and records which calls were made."""
+
+    cost = 0.0
+    cost_by_model: dict[str, float] = {}
+
+    def __init__(
+        self, *, chosen_set: str, matches: dict[str, str | None]
+    ) -> None:
+        self._chosen = chosen_set
+        self._matches = matches
+        self.calls: list[str] = []
+
+    async def complete(self, *a: Any, **k: Any) -> Any:
+        raise AssertionError("complete() not expected in these tests")
+
+    async def complete_structured(
+        self, messages: list[dict], *, schema: Any, **kw: Any
+    ) -> Any:
+        name = getattr(schema, "__name__", "")
+        self.calls.append(name)
+        if name == "IconSetSelection":
+            return schema(icon_set=self._chosen, reason="best fit")
+        if name == "IconMatch":
+            return schema(
+                **{
+                    sid: LLMIconResponse(
+                        icon=self._matches[sid], match_reason="m"
+                    )
+                    for sid in schema.model_fields
+                }
+            )
+        if name == "IconPrompt":
+            return schema(
+                **{
+                    sid: LLMIconPrompt(name=f"{sid}_icon", prompt=f"a {sid} icon")
+                    for sid in schema.model_fields
+                }
+            )
+        raise AssertionError(f"unexpected schema {name!r}")
+
+
+class _IconStubCatalog:
+    """In-memory catalog: one set whose listed icons exist on disk (minus
+    any explicitly withheld via ``on_disk``, to exercise the copy-miss
+    fail-soft path)."""
+
+    def __init__(
+        self,
+        tmp_path: Path,
+        icons: list[str],
+        *,
+        on_disk: list[str] | None = None,
+        license: str | None = None,
+        attribution: str | None = None,
+    ) -> None:
+        self._entry = IconSetCatalogEntry(
+            id="set_a",
+            name="Set A",
+            vibe="clean",
+            icons=icons,
+            license=license,
+            attribution=attribution,
+        )
+        self._dir = tmp_path / "iconsrc"
+        self._dir.mkdir(parents=True, exist_ok=True)
+        for n in on_disk if on_disk is not None else icons:
+            (self._dir / f"{n}.svg").write_text("<svg/>", encoding="utf-8")
+
+    async def sets(self) -> list[IconSetCatalogEntry]:
+        return [self._entry]
+
+    async def lookup(self, set_id: str) -> IconSetCatalogEntry | None:
+        return self._entry if set_id == self._entry.id else None
+
+    async def icon_path(
+        self, set_id: str, icon_name: str
+    ) -> AbsolutePath | None:
+        if set_id != self._entry.id:
+            return None
+        p = self._dir / f"{icon_name}.svg"
+        return AbsolutePath(str(p.resolve())) if p.is_file() else None
+
+
+class _IconStubGen:
+    cost = 0.0
+    cost_by_model: dict[str, float] = {}
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Path]] = []
+
+    async def generate(
+        self,
+        prompt: str,
+        dest: Path,
+        *,
+        model: str,
+        quality: str | None = None,
+    ) -> AbsolutePath:
+        self.calls.append((prompt, dest))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text("<svg/>", encoding="utf-8")
+        return AbsolutePath(str(dest.resolve()))
+
+
+def _icon_node(
+    ctx: RunContext,
+    *,
+    matches: dict[str, str | None],
+    catalog_icons: list[str],
+    on_disk: list[str] | None = None,
+    license: str | None = None,
+    attribution: str | None = None,
+) -> tuple[IconNode, _IconStubLLM, _IconStubGen]:
+    llm = _IconStubLLM(chosen_set="set_a", matches=matches)
+    gen = _IconStubGen()
+    catalog = _IconStubCatalog(
+        ctx.run_dir,
+        catalog_icons,
+        on_disk=on_disk,
+        license=license,
+        attribution=attribution,
+    )
+    node = IconNode(ctx, llm=llm, catalog=catalog, generator=gen)
+    return node, llm, gen
+
+
+def test_icon_node_matched_only_skips_generation(tmp_path: Path) -> None:
+    """When every slot matches within the set, no generation happens —
+    no Recraft call and no prompt-authoring LLM call."""
+    ctx = _run_ctx(tmp_path)
+    matches = {
+        "home_tab": "home",
+        "search_action": "search",
+        "celebration_badge": "badge",
+    }
+    node, llm, gen = _icon_node(
+        ctx, matches=matches, catalog_icons=["home", "search", "badge"]
+    )
+    out = asyncio.run(node.run())
+
+    assert set(out.icons) == set(matches)
+    for sid, ic in out.icons.items():
+        assert ic.icon_set == "set_a"
+        # Matched icon_name is the set icon's short-name the LLM picked.
+        assert ic.icon_name == matches[sid]
+        assert ic.icon_key == sid
+        assert ic.prompt is None
+        assert Path(str(ic.path)).exists()
+    assert gen.calls == []
+    assert "IconPrompt" not in llm.calls
+
+
+def test_icon_node_generation_path(tmp_path: Path) -> None:
+    """An unmatched slot routes to generation: one batch prompt call, one
+    Recraft call. The generated icon still belongs to the chosen set
+    (icon_set == the set id), with an AI-authored icon_name + prompt."""
+    ctx = _run_ctx(tmp_path)
+    matches = {
+        "home_tab": "home",
+        "search_action": "search",
+        "celebration_badge": None,
+    }
+    node, llm, gen = _icon_node(
+        ctx, matches=matches, catalog_icons=["home", "search"]
+    )
+    out = asyncio.run(node.run())
+
+    assert out.icons["home_tab"].icon_set == "set_a"
+    # Matched icons carry no generation prompt.
+    assert out.icons["home_tab"].prompt is None
+    gen_out = out.icons["celebration_badge"]
+    # Generated icon belongs to the chosen set, not a "generated" sentinel.
+    assert gen_out.icon_set == "set_a"
+    # AI-authored short icon name + the Recraft prompt that produced it.
+    assert gen_out.icon_name == "celebration_badge_icon"
+    assert gen_out.prompt == "a celebration_badge icon"
+    assert Path(str(gen_out.path)).exists()
+    assert len(gen.calls) == 1
+    assert "IconPrompt" in llm.calls
+
+
+def test_icon_node_records_attribution_for_cc_by_set(tmp_path: Path) -> None:
+    """A chosen set whose licence requires credit (it declares an
+    ``attribution`` notice) and from which an icon was actually copied
+    surfaces that credit on ``IconSet.attribution``."""
+    ctx = _run_ctx(tmp_path)
+    notice = "Set A by Someone (CC BY 4.0) — https://example.test/by/4.0"
+    node, _, _ = _icon_node(
+        ctx,
+        matches={
+            "home_tab": "home",
+            "search_action": "search",
+            "celebration_badge": "badge",
+        },
+        catalog_icons=["home", "search", "badge"],
+        license="CC-BY-4.0",
+        attribution=notice,
+    )
+    out = asyncio.run(node.run())
+
+    assert out.attribution is not None
+    assert out.attribution.icon_set == "set_a"
+    assert out.attribution.license == "CC-BY-4.0"
+    assert out.attribution.notice == notice
+
+
+def test_icon_node_no_attribution_for_permissive_set(tmp_path: Path) -> None:
+    """A permissive set (no ``attribution`` notice) owes no credit, so
+    ``IconSet.attribution`` stays ``None`` even with matched icons."""
+    ctx = _run_ctx(tmp_path)
+    node, _, _ = _icon_node(
+        ctx,
+        matches={
+            "home_tab": "home",
+            "search_action": "search",
+            "celebration_badge": "badge",
+        },
+        catalog_icons=["home", "search", "badge"],
+        license="MIT",
+    )
+    out = asyncio.run(node.run())
+
+    assert out.attribution is None
+
+
+def test_icon_node_no_attribution_when_nothing_matched(tmp_path: Path) -> None:
+    """A CC-BY set chosen but matched by nothing (all slots generated)
+    copies no licensed icon, so owes no credit."""
+    ctx = _run_ctx(tmp_path)
+    node, _, _ = _icon_node(
+        ctx,
+        matches={
+            "home_tab": None,
+            "search_action": None,
+            "celebration_badge": None,
+        },
+        catalog_icons=["home"],
+        license="CC-BY-4.0",
+        attribution="Set A (CC BY 4.0)",
+    )
+    out = asyncio.run(node.run())
+
+    assert out.attribution is None
+    # the slots still resolved via generation
+    assert out.icons["home_tab"].icon_set == "set_a"
+
+
+def test_icon_node_fail_soft_drops_slot_with_missing_svg(
+    tmp_path: Path,
+) -> None:
+    """A matched icon whose SVG is missing on disk is dropped (fail-soft),
+    the rest still resolve."""
+    ctx = _run_ctx(tmp_path)
+    matches = {
+        "home_tab": "home",
+        "search_action": "search",
+        "celebration_badge": "badge",
+    }
+    # 'home' is in the set's vocabulary (so matching validates) but has no
+    # SVG on disk → its copy raises → the slot is dropped.
+    node, _llm, _gen = _icon_node(
+        ctx,
+        matches=matches,
+        catalog_icons=["home", "search", "badge"],
+        on_disk=["search", "badge"],
+    )
+    out = asyncio.run(node.run())
+
+    assert "home_tab" not in out.icons
+    assert set(out.icons) == {"search_action", "celebration_badge"}
+
+
+def test_build_icon_match_model_rejects_non_member() -> None:
+    """A matched icon outside the chosen set's vocabulary fails validation
+    (re-rides the structured-output retry loop); a null pick is allowed."""
+    model = build_icon_match_model(["a"], icon_names=frozenset({"home"}))
+    with pytest.raises(ValidationError):
+        model(a=LLMIconResponse(icon="rocket", match_reason="x"))
+    ok = model(a=LLMIconResponse(icon=None, match_reason="no match"))
+    assert ok.a.icon is None
+
+
+def test_recraft_call_cost_from_price_table() -> None:
+    """Cost is the published per-image price for the model id; an unknown
+    model id is $0 (never fabricated)."""
+    cost = RecraftIconGenerator._call_cost
+    # The icon path's vector model: $0.08.
+    assert cost("recraftv4_1_utility_vector") == pytest.approx(0.08)
+    assert cost("recraftv4_pro_vector") == pytest.approx(0.30)
+    assert cost("recraftv3") == pytest.approx(0.04)
+    assert cost("recraftv2_vector") == pytest.approx(0.044)
+    # Every advertised model id is in the table.
+    assert cost("recraftv4_1_utility_vector") == RECRAFT_PRICE_USD[
+        "recraftv4_1_utility_vector"
+    ]
+    # Unknown model → $0, not a guess.
+    assert cost("recraft_made_up_model") == 0.0

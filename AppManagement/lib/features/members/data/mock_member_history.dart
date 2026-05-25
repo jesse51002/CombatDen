@@ -5,43 +5,6 @@
 // chosen to match the eventual API shape so the swap to repositories
 // is mechanical.
 
-/// A reward the member has redeemed in the gym's loyalty program.
-class RedeemedReward {
-  final String gymName;
-  final String rewardName;
-  final String costLabel;
-  final String imageAsset;
-
-  const RedeemedReward({
-    required this.gymName,
-    required this.rewardName,
-    required this.costLabel,
-    required this.imageAsset,
-  });
-}
-
-/// Three recently-redeemed rewards used by the demo member.
-const List<RedeemedReward> kMockRedeemedRewards = [
-  RedeemedReward(
-    gymName: 'Global MMA',
-    rewardName: 'Bring a friend to a class',
-    costLabel: 'Free',
-    imageAsset: 'assets/images/reward_bring_friend.png',
-  ),
-  RedeemedReward(
-    gymName: 'Global MMA',
-    rewardName: 'Global MMA T-Shirt',
-    costLabel: 'Free',
-    imageAsset: 'assets/images/reward_global_mma_tshirt.png',
-  ),
-  RedeemedReward(
-    gymName: 'Venom',
-    rewardName: 'Boxing Gloves',
-    costLabel: '\$20 off',
-    imageAsset: 'assets/images/reward_boxing_gloves.png',
-  ),
-];
-
 /// Aggregate counters surfaced under the rank/retention grids on the
 /// SpecificMember screen. The real API will return one bundle per
 /// member; today these are hardcoded for the demo.
@@ -80,7 +43,6 @@ class DemoMember {
   final String fullName;
   final String statusLabel;
   final String email;
-  final String avatarAsset;
   final String rankLabel;
   final String rankIconAsset;
 
@@ -88,7 +50,6 @@ class DemoMember {
     required this.fullName,
     required this.statusLabel,
     required this.email,
-    required this.avatarAsset,
     required this.rankLabel,
     required this.rankIconAsset,
   });
@@ -98,7 +59,6 @@ const DemoMember kMockDemoMember = DemoMember(
   fullName: 'Justin Stemmons',
   statusLabel: 'Active',
   email: 'juston_stemmons@gmail.com',
-  avatarAsset: 'assets/images/pfp_justin_stemmons.png',
   rankLabel: 'Silver (Amateur)',
   rankIconAsset: 'assets/images/rank_silver_belt.png',
 );

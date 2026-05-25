@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/customization/theme/theme_icon.dart';
 
-/// A single icon-over-label navigation target. Used in both top-level
-/// navigation (the bottom nav bar) and any side/inline nav grid. Mirrors
-/// the FlutterCRM `sidebar_nav_item.dart` pattern.
+/// A single icon-over-label navigation target. Used in top-level
+/// navigation (the bottom nav bar). Mirrors the FlutterCRM
+/// `sidebar_nav_item.dart` pattern.
+///
+/// The icon is CustomizationService-overridable via `ThemeIcon.widget`: it
+/// draws the tenant SVG for [iconSlot] when present and falls back to [icon]
+/// (a `Symbols.*_sharp`) otherwise.
 class AppNavItem extends StatelessWidget {
   const AppNavItem({
     super.key,
     required this.icon,
+    required this.iconSlot,
     required this.label,
     this.isActive = false,
     this.onTap,
     this.isPrimary = false,
   });
 
+  /// `Symbols.*_sharp` fallback drawn when [iconSlot] has no override.
   final IconData icon;
+
+  /// Customization slot id for the brandable icon (see `CombatDenSlots`).
+  final String iconSlot;
   final String label;
   final bool isActive;
   final VoidCallback? onTap;
@@ -38,11 +48,12 @@ class AppNavItem extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             spacing: DesignConstants.spacingTiny,
             children: [
-              Icon(
-                icon,
+              ThemeIcon.widget(
+                context,
+                slot: iconSlot,
+                fallback: icon,
                 color: textColor,
                 size: DesignConstants.iconSizeMd,
-                weight: DesignConstants.iconWeight,
               ),
               Text(
                 label,

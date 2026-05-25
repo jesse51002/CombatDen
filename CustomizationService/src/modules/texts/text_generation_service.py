@@ -30,7 +30,7 @@ import logging
 from pathlib import Path
 from string import Template
 
-from schema import TextOutput, TextSet, TextSlot
+from schema import OverwriteSpecs, TextOutput, TextSet, TextSlot
 from src.core.run_context import RunContext
 from src.modules.texts.text_models import (
     LLMTextResponse,
@@ -65,9 +65,15 @@ class TextGenerationService:
         self._llm = llm
 
     async def resolve(
-        self, run_ctx: RunContext, *, model: str = TEXT_MODEL
+        self,
+        run_ctx: RunContext,
+        *,
+        model: str = TEXT_MODEL,
+        only: set[str] | None = None,
+        fixed: dict[str, TextOutput] | None = None,
+        overwrite_specs: OverwriteSpecs | None = None,
     ) -> TextSet:
-        """Resolve every text slot the app declares.
+        """Resolve the requested text slots.
 
         Walks up to ``MAX_RETRIES`` rounds: each round asks the LLM for
         every slot still pending, then keeps the ones whose returned
@@ -75,18 +81,36 @@ class TextGenerationService:
         carry into the next round with the rejected attempt + the
         violation message folded into the prompt.
 
+        ``only`` scopes the call to a subset of slot ids (a partial regen);
+        ``fixed`` supplies the already-written copy shown as fixed context so
+        the rewrites stay consistent in voice; ``overwrite_specs`` is the
+        call's single steering string, stamped onto each returned
+        ``TextOutput``. With all three unset every declared slot is resolved —
+        the full-run behavior.
+
         Returns a ``TextSet`` that may be partial: a slot is present
         only if a satisfying value was found within the retry budget.
         """
-        slots = list(run_ctx.app.texts)
-        if not slots:
-            # App declared no text slots — nothing to do. (The registry
-            # is the primary skip path; this is defense-in-depth so a
-            # direct service call with no slots is still safe.)
+        target = (
+            [s for s in run_ctx.app.texts if s.id in only]
+            if only is not None
+            else list(run_ctx.app.texts)
+        )
+        if not target:
+            # No slots requested — nothing to do. (The registry / node is
+            # the primary skip path; this is defense-in-depth.)
             return TextSet(texts={})
+        target_ids = {s.id for s in target}
+        specs = overwrite_specs or OverwriteSpecs()
+        # Fixed context is the prior copy for slots NOT being rewritten.
+        fixed_context = {
+            sid: out.value
+            for sid, out in (fixed or {}).items()
+            if sid not in target_ids
+        }
 
         results: dict[str, str] = {}
-        pending: list[TextSlot] = slots
+        pending: list[TextSlot] = target
         prior_attempts: dict[str, str] = {}
         prior_violations: dict[str, list[str]] = {}
 
@@ -97,6 +121,8 @@ class TextGenerationService:
                 prior_attempts=prior_attempts,
                 prior_violations=prior_violations,
                 model=model,
+                fixed_context=fixed_context,
+                overwrite_specs=specs,
             )
             still_violating: list[TextSlot] = []
             prior_attempts = {}
@@ -128,7 +154,10 @@ class TextGenerationService:
             )
 
         return TextSet(
-            texts={sid: TextOutput(value=v) for sid, v in results.items()}
+            texts={
+                sid: TextOutput(value=v, overwrite_specs=specs)
+                for sid, v in results.items()
+            }
         )
 
     async def _call_llm(
@@ -139,10 +168,12 @@ class TextGenerationService:
         prior_attempts: dict[str, str],
         prior_violations: dict[str, list[str]],
         model: str,
+        fixed_context: dict[str, str],
+        overwrite_specs: OverwriteSpecs,
     ) -> LLMTextResponse:
         """One structured call: closed schema keyed by the ``slots`` ids,
-        prompt built from the brand brief + slot inventory + (on retry)
-        prior attempts and the violations to fix."""
+        prompt built from the brand brief + fixed context + slot inventory
+        (+ on retry the prior attempts and the violations to fix)."""
         slot_ids = [slot.id for slot in slots]
         response_model = build_text_response_model(slot_ids)
         prompt = self._build_prompt(
@@ -150,6 +181,8 @@ class TextGenerationService:
             slots,
             prior_attempts=prior_attempts,
             prior_violations=prior_violations,
+            fixed_context=fixed_context,
+            overwrite_specs=overwrite_specs,
         )
         return await self._llm.complete_structured(
             [{"role": "user", "content": prompt}],
@@ -195,17 +228,31 @@ class TextGenerationService:
         *,
         prior_attempts: dict[str, str],
         prior_violations: dict[str, list[str]],
+        fixed_context: dict[str, str],
+        overwrite_specs: OverwriteSpecs,
     ) -> str:
-        """Rule + brand brief + slot inventory (+ retry block on retry),
-        substituted into the one ``.md`` template (``safe_substitute``
-        tolerates a stray ``$``)."""
+        """Rule + brand brief + fixed context + slot inventory (+ retry block
+        on retry), substituted into the one ``.md`` template
+        (``safe_substitute`` tolerates a stray ``$``). The call's steering note
+        (instruction + rejected attempts) is appended over the slots; fixed
+        slots are listed as voice-consistency context only."""
         template = TEXT_PROMPT_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
-        inventory = "\n".join(
+        lines = [
             f"- {slot.id}: {slot.description} | "
             f"{slot.min_words}-{slot.max_words} words, "
             f"{slot.min_chars}-{slot.max_chars} chars"
             for slot in slots
+        ]
+        note = overwrite_specs.prompt_note()
+        if note:
+            lines.append(f"\n{note}")
+        inventory = "\n".join(lines)
+        fixed_block = (
+            "\n".join(
+                f"- {sid}: {value!r}" for sid, value in fixed_context.items()
+            )
+            or "(none — fresh copy)"
         )
         if prior_attempts:
             lines = ["Your previous attempt failed length validation:", ""]
@@ -232,5 +279,6 @@ class TextGenerationService:
             short=design.short_desc,
             long=design.long_desc,
             slots=inventory,
+            fixed_context=fixed_block,
             prior_attempts_block=prior_attempts_block,
         )

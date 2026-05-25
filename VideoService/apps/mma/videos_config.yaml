@@ -1,25 +1,27 @@
-company_name: Apex MMA
-type: Mixed martial arts gym
+company_name: ApexMMA
+type: MMA gym (full mixed martial arts)
 videos_desc: |
-  All-ranges mixed martial arts for members who want the complete game — striking,
-  wrestling, and submissions stitched together. Worth surfacing: fundamentals
-  explainers that frame how the phases connect, high-level fight breakdowns and
-  technique analysis, elite professional fight footage and finishes, training-camp
-  day-in-the-life vlogs, and credible news on the sport's biggest events.
+  A hardcore MMA fight gym for committed hobbyists who train like fighters.
+  Worth surfacing: well-rounded MMA technique breakdowns that connect striking,
+  wrestling, and BJJ (takedown setups, cage clinch work, ground-and-pound,
+  scrambles); hard-sparring and fight-camp footage from real MMA teams; elite
+  UFC and other top-promotion highlights and full-fight breakdowns; coach
+  interviews and pro-fighter vlogs on training culture and weight cuts; and
+  serious S&C / conditioning content built for MMA fighters.
 avoid_desc: |
-  Within-MMA content the gym rejects: backyard and unsanctioned street brawls
-  passed off as "MMA", fake or staged knockout compilations, low-credibility
-  "deadly technique" channels promising one-move finishes, and content
-  normalizing dangerous weight cuts or reckless training as how the sport works.
+  Within-MMA content the gym pushes back on: videos arguing one discipline
+  alone is enough for MMA ("you only need boxing", "BJJ is all you need in a
+  fight", "pure wrestlers dominate MMA"); titles selling a single flashy move
+  as a guaranteed fight-finisher ("the ONE move that always works in MMA",
+  "deadliest submission/kick", "this spinning move beats everyone");
+  guaranteed-street-fight-finish clickbait and fake "master" / no-touch
+  knockout content; and cardio- or fitness-MMA workouts marketed as actual
+  fight training ("MMA cardio workout" / "MMA bootcamp" framed as fight prep
+  with no sparring or pressure).
 searches:
-  - query: mma fundamentals for beginners explained
-    tags: [educational, tutorial]
-  - query: UFC knockouts of the year compilation
-    tags: [clips, entertainment, professional]
-  - query: best UFC title fight full highlights
-    tags: [professional, clips]
-  - query: mma fighter training camp day in the life
-    tags: [vlog, behind_the_scenes]
-  - query: UFC news this week breakdown
-    tags: [news, informative]
+  - query: mma striking to takedown setup tutorial
+  - query: ufc fight breakdown technique analysis
+  - query: ufc title fight full highlights
+  - query: inside mma fight camp training week vlog
+  - query: best mma knockouts compilation
 priority_channels: []

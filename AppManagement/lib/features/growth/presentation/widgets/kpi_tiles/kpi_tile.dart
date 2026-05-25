@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:app_management/shared/widgets/section_card.dart';
 
-/// One stat tile in the KPI strip on Growth — title + icon at the top,
+/// One stat in the KPI strip on Growth — title + icon at the top,
 /// big number with delta badge, then a "vs N last month" caption.
+/// No card chrome: the strip separates stats with thin vertical rules.
 class KpiTile extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -24,22 +24,19 @@ class KpiTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          _Title(label: label, icon: icon),
-          _ValueRow(value: value, deltaLabel: deltaLabel),
-          Text(
-            comparisonLabel,
-            style: DesignConstants.p.copyWith(
-              color: DesignConstants.text2nd,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        _Title(label: label, icon: icon),
+        _ValueRow(value: value, deltaLabel: deltaLabel),
+        Text(
+          comparisonLabel,
+          style: DesignConstants.p.copyWith(
+            color: DesignConstants.text2nd,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -62,7 +59,7 @@ class _Title extends StatelessWidget {
         Icon(
           icon,
           weight: DesignConstants.iconWeight,
-          color: DesignConstants.text,
+          color: DesignConstants.text2nd,
         ),
       ],
     );
@@ -100,16 +97,16 @@ class _DeltaBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: DesignConstants.paddingSmall,
+        horizontal: DesignConstants.spacingMedium,
         vertical: DesignConstants.spacingSmall,
       ),
       decoration: BoxDecoration(
         color: DesignConstants.primaryColor25,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
+        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       ),
       child: Text(
         label,
-        style: DesignConstants.p.copyWith(
+        style: DesignConstants.pSmall.copyWith(
           color: DesignConstants.text,
         ),
       ),

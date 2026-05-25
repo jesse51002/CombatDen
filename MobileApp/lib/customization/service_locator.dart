@@ -4,6 +4,6 @@ import 'package:get_it/get_it.dart';
 ///
 /// App code never touches this — bootstrap via
 /// `CustomizationRuntime.initialize`. It exists only so the
-/// context-free resolvers (`BrandColor` / `BrandImage`) can
+/// context-free resolvers (`ThemeColor` / `ThemeImage`) can
 /// reach the loaded `CustomizationService` from anywhere.
 final GetIt getIt = GetIt.instance;

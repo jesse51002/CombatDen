@@ -29,7 +29,7 @@ videos:
     channel_avatar_url: a
     view_count: 1000
     like_count: 50
-    tags: [tutorial]
+    tag: educational
     source_queries: [teep]
     relevance_index: 0
   - url: https://www.youtube.com/watch?v=dropme
@@ -41,7 +41,7 @@ videos:
     channel_avatar_url: a
     view_count: 2000
     like_count: 5
-    tags: [informative]
+    tag: analysis
     source_queries: [does muay thai work]
     relevance_index: 1
 """

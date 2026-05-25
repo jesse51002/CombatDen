@@ -62,7 +62,7 @@ class _ChevronButton extends StatelessWidget {
         child: Icon(
           icon,
           weight: DesignConstants.iconWeight,
-          size: 30,
+          size: DesignConstants.iconSizeBig,
           color: DesignConstants.text,
         ),
       ),

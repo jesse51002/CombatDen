@@ -137,5 +137,8 @@ Brand name: $name
 In short: $short
 In depth: $long
 
---- Font slots to fill ---
+--- Already-chosen fonts (FIXED: do NOT return these; make your picks sit in harmony with them) ---
+$fixed_context
+
+--- Font slots to fill (return an object for ONLY these; honor any "user note" as a direct instruction for that slot) ---
 $slots

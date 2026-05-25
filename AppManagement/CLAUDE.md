@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase. It is the **gym admin web app** — staff/owners managing their gym from a browser.
 
 - This is a **web-only Flutter app** (no Android, no iOS) — mirrors `../FlutterCRM/`'s platform setup.
-- **No backend.** No Supabase, no API client, no HTTP, no auth.
+- **Backend is off-limits with ONE carve-out.** No Supabase, no auth, no general-purpose API client. The single exception is the **read-only VideoService feed** — see *VideoService carve-out* below. Everything else stays mock-only; do not add HTTP, clients, or live data to any other screen without asking first.
 - **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller).
 - **No real data.** Every list, every card, every detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
@@ -16,43 +16,23 @@ The whole point is to make screens that **look right** so the design can be eval
 
 **Theme/design rules are NOT relaxed because this is a prototype.** See *Theming System* below.
 
+## VideoService carve-out (the one live backend call)
+
+This prototype makes exactly **one** real network call, and it is deliberate. The member-app **videos tab** pulls its feed live from the VideoService so the admin previews real thumbnails and titles instead of mock art.
+
+- **Scope:** read-only, one endpoint — `GET /apps/{videoAppId}/videos`. No writes, no auth, no other endpoints. `videoAppId` defaults to `mma` (Apex MMA).
+- **Where it lives:** `lib/features/members/data/video_api_client.dart` (`VideoApiClient`, wraps `package:http`) feeds `member_feed_section.dart`, which is the **only** place a `StatefulWidget` + `FutureBuilder` driving a network call is allowed. Models live in `lib/features/members/data/video_feed.dart` (`Video.fromJson`).
+- **Dependency:** the VideoService (sibling, see below) must be running. Base URL defaults to `http://localhost:8002`; override at launch with `--dart-define=VIDEO_BASE_URL=http://<host>:<port>`.
+- **Failure behavior:** the call has a 5s timeout and degrades quietly (empty feed) so the rest of the demo never breaks if the service is down.
+- **`http` is whitelisted for this call only.** It is NOT the signal that the app is graduating out of prototype mode (that signal is still `flutter_bloc` / `dio` / `supabase_flutter`). Do **not** reuse `VideoApiClient` or `package:http` to wire any other screen to a backend — every other list/card/detail stays on co-located mock data per the rules above. Widening this carve-out is a decision for the user, not a default.
+
 ## Sibling repos in this monorepo
 
 - `../FlutterCRM/` — staff/CRM web app, **fully wired** (BLoC + Supabase + Stripe). Source of truth for the design system and most shared widget patterns. When this app graduates, it follows FlutterCRM's stack.
 - `../MobileApp/` — member-facing mobile prototype, same visual-only model as this app. Shared widget candidates often live here too.
 - `../LandingPage/` — React marketing site. Not a Flutter sibling, but its `COPY` dict and design choices may inform copy/voice for admin screens. Read `../LandingPage/CLAUDE.md` if you're writing user-facing strings that should match marketing voice.
 - `../Database/` — Supabase schemas and `openapi.json`. Irrelevant while we're prototype-only, but model field names should already match what the API will eventually return so the future swap is mechanical.
-
-## Always use the Figma MCP plugin before designing
-
-**Never design from memory and never guess at a layout.** Before writing widget code for any screen or component:
-
-1. **Look up the screen in `figma/inventory.yaml`.** That file holds every known frame — name, `file_key`, `node_id`. Use it instead of asking the user to paste the URL again. If the screen isn't in the inventory, ask the user for the Figma URL and **add it to `figma/inventory.yaml` in the same change** so the next person doesn't have to ask.
-2. Call `mcp__plugin_figma_figma__get_design_context` with the `file_key` and `node_id` from the inventory to fetch the design.
-3. Call `mcp__plugin_figma_figma__get_screenshot` whenever you need to verify pixel placement, spacing, color, or visual fidelity. Use it liberally.
-4. Re-fetch as many times as needed during implementation. **It is better to look at Figma five times than to ship one screen that's wrong.** Round-tripping Figma is cheap; rebuilding a screen because you guessed the spacing is not.
-5. Use the `figma:figma-implement-design` skill when translating a Figma frame into Flutter code.
-6. The Figma MCP returns React/Tailwind. Adapt to Flutter + DesignConstants — never paste hex codes, font sizes, or pixel values from the Figma export directly into widget code. Map every Figma token to its closest existing `DesignConstants.*` value.
-7. If a value in Figma has no DesignConstants equivalent, **stop and ask the user.** Do not invent a new constant. Do not silently inline a magic number.
-
-If you find yourself writing widget code without the Figma context loaded in this conversation, stop and load it.
-
-### Figma rate-limit rule — NEVER make things up
-
-If a Figma MCP call returns a rate-limit error ("tool call limit reached", HTTP 429, or similar), **wait 30 seconds and retry the same call**. Retry up to **3 times** total. If it's still rate-limited after the 3rd retry, **stop the task and report it as blocked**. Do not proceed.
-
-**Never ever ever make up a layout because Figma is unavailable.** Not from convention, not from "the existing visual language", not from "what good apps usually do for this", not from your training data. The Figma frame is the source of truth. If you can't see it, you can't build it. Ship nothing rather than ship a guess.
-
-This rule applies to every screen, every component, every variant — individually. One rate-limited screen does not give you license to guess at the others. Stop, report which screens were unreachable, and let the user decide.
-
-### Figma asset download rule
-
-Figma asset URLs from the MCP plugin **expire after 7 days**. Whenever a Figma frame contains bitmap images — gym logos, photos, raster icons, custom illustrations — **download them to `assets/images/<descriptive_snake_case_name>.png`** and register `assets/images/` in `pubspec.yaml`. Reference them via `Image.asset('assets/images/...')`.
-
-- **Never hotlink** Figma asset URLs (`https://www.figma.com/api/mcp/asset/...`) from widget code. They will silently 404 in a week.
-- **Never use `NetworkImage`** for Figma-sourced visuals. Same reason.
-- The only icons that bypass this rule are ones Figma is rendering as a system glyph that already exists in Material Symbols (chevrons, person/user, simple arrows, common UI icons). Those become `Symbols.*_sharp` per the icon rule above.
-- When choosing the local filename, use a name that survives the design changing — `gym_logo_global_mma.png`, not `rectangle_10.png`.
+- `../VideoService/` — the read-only video feed backend this app's videos tab calls live (see *VideoService carve-out* above). Its `videos_config.yaml` is the source of truth for the feed; `Video.fromJson` must track the shape it serves. Must be running for the videos tab to populate.
 
 ## Search the web for conventions before designing
 
@@ -79,21 +59,21 @@ How to apply:
 **CRITICAL: ALWAYS Use DesignConstants**
 
 - **EVERY widget MUST import and use `package:app_management/core/constants/design_constants.dart`.**
-- **NEVER hardcode colors** — no `Colors.red`, no inline `Color(0xFF...)`, no copy-pasted Figma hex codes.
+- **NEVER hardcode colors** — no `Colors.red`, no inline `Color(0xFF...)`, no copy-pasted hex codes.
 - **NEVER hardcode font properties** — no inline `fontFamily`, no inline `fontSize`, no inline `fontWeight`. Use the text styles in `DesignConstants` (`h1`, `h2`, `h3`, `p`, `pBig`, `pSmall`, etc.).
 - **NEVER hardcode spacing, padding, radius, or border widths.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorderSize`.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/radius/padding, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
-- **`design_constants.dart` is IMMUTABLE.** Do not add, remove, rename, or change any value in it. If a needed token doesn't exist, use the closest existing constant or stop and ask. **NEVER create new design constants without explicit permission.**
-- This file is **byte-for-byte identical** with `../FlutterCRM/lib/core/constants/design_constants.dart` and `../MobileApp/lib/core/constants/design_constants.dart`. If a token is added in any one repo, mirror it to the other two in the same change. They will eventually be extracted into a shared package.
+- **`design_constants.dart` is this app's own design system and may be edited deliberately.** AppManagement has **forked** its tokens to its own identity (warm light theme, sapphire accent, Hanken Grotesk, tight 12/8 corners, de-carded layout). It is **no longer immutable** and **no longer byte-for-byte identical** with `../FlutterCRM/` or `../MobileApp/` — do **NOT** mirror token changes to them. Keep all token changes centralized in this file (so one edit reskins the whole app) and add/rename tokens only when the design genuinely needs it. See `DESIGN.md` for the system.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
-**Icons: Use Material Symbols**
+**Icons: Prefer Material Symbols, Material `Icons.*` allowed**
 
-- **ALWAYS use `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart`.
-- **NEVER use `Icons.*`** from Flutter's built-in Material icons.
-- **ALWAYS set `weight: DesignConstants.iconWeight`** on every `Icon()` widget.
-- Good: `Icon(Symbols.person_sharp, weight: DesignConstants.iconWeight)`
-- Bad: `Icon(Icons.person)`
+- **Default to `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart` — they're the design system's primary glyph set and carry the variable `weight` axis the look depends on.
+- **`Icons.*` from Flutter's built-in Material icons is permitted.** The design system is its own fork now and isn't locked to a single icon family; `Icons.*` values are plain `IconData` and are fine to use directly — including stored on plain mock-data models. There's no need to round-trip them back to `Symbols.*` at render time.
+- **Set `weight: DesignConstants.iconWeight` on `Symbols.*_sharp` icons** (it drives their stroke weight). Plain `Icons.*` glyphs don't honor the weight axis, so it's a no-op there — don't bother.
+- **NEVER hardcode `size:` on any `Icon()`** (either family). Use `DesignConstants.iconSize*` — `iconSizeBig` (32), `iconSizeLarge` (24), `iconSizeMedium` (20, the default), `iconSizeSmall` (18), `iconSizeTiny` (16). Same Big→Tiny cadence as `spacing*`. If a size doesn't match one, snap to the nearest token or ask before adding a new one.
+- Good: `Icon(Symbols.person_sharp, size: DesignConstants.iconSizeMedium, weight: DesignConstants.iconWeight)`
+- Also fine: `Icon(Icons.person, size: DesignConstants.iconSizeMedium)`
 
 **App Theme**
 
@@ -128,7 +108,8 @@ How to apply:
 
 **Formatting**
 - Max 80 characters per line.
-- `dart format` for consistent formatting.
+- **Hand-format. Do NOT run `dart format` / `make format` in this app.** The repo isn't format-clean, so a blanket format rewrites ~60 files — including the deliberately-forked `design_constants.dart` — and buries your actual change in churn. Match the surrounding style by hand instead.
+- **`flutter analyze` (`make analyze`) is the gate, not formatting.** Keep it clean before committing.
 - Trailing commas on multi-line widget trees for clean diffs.
 
 **Type Hints**
@@ -255,7 +236,7 @@ lib/
 ├── main.dart
 ├── core/
 │   └── constants/
-│       └── design_constants.dart   # IMMUTABLE — copied from FlutterCRM
+│       └── design_constants.dart   # this app's forked design system
 ├── features/
 │   └── <feature>/
 │       ├── data/
@@ -272,8 +253,8 @@ lib/
 ## Development Commands
 
 - `make run` — serve the web app on `http://localhost:8081` (port chosen to avoid colliding with FlutterCRM on `8080`).
-- `make analyze` — static analysis. **Must be clean before committing.**
-- `make format` — `dart format lib test`.
+- `make analyze` — static analysis. **Must be clean before committing — this is the gate.**
+- `make format` — `dart format lib test`. **Avoid in this app** (see *Formatting* above): the repo isn't format-clean, so it churns ~60 files including the forked `design_constants.dart`. Hand-format instead.
 - `make test` — run all tests.
 - `make get` — `flutter pub get`.
 - `make clean` / `make reset` — clean build artifacts / clean + get.
@@ -299,10 +280,11 @@ Direct equivalents if you don't want the Makefile:
 - Dev dependencies: `flutter pub add --dev <package>`.
 
 Current dependencies (intentionally minimal):
-- `google_fonts` — for Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
+- `google_fonts` — for Hanken Grotesk via `GoogleFonts.hankenGrotesk()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
+- `http` — **for the VideoService carve-out only** (see above). It backs `VideoApiClient` and nothing else. Adding `http` to any other client is not allowed; reach for the user first.
 
-If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in.
+If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in. (`http` being present is **not** that signal — it is the scoped exception above, not the start of the real-data stack.)
 
 ## What changes when this becomes real
 
@@ -319,4 +301,4 @@ Until that work happens, none of those concerns belong in this repo.
 
 ---
 
-**Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability. And always look at Figma first.**
+**Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**

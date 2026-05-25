@@ -24,6 +24,7 @@ from scripts.youtube_batch.client import QuotaExceededError, YouTubeClient
 from scripts.youtube_batch.config import batch_settings
 from scripts.youtube_batch.transform import (
     SearchHit,
+    VideoStats,
     build_outputs,
     parse_channel_avatars,
     parse_search_response,
@@ -56,7 +57,7 @@ def run(
     for i, search in enumerate(config.searches, start=1):
         logger.info("[%d/%d] searching: %s", i, len(config.searches), search.query)
         response = client.search(search.query, max_results=max_results, lang=lang)
-        hits.extend(parse_search_response(response, search.query, search.tags))
+        hits.extend(parse_search_response(response, search.query))
 
     video_ids = _unique([hit.video_id for hit in hits])
     channel_ids = _unique([hit.channel_id for hit in hits])
@@ -65,7 +66,7 @@ def run(
         len(hits), len(config.searches), len(video_ids), len(channel_ids),
     )
 
-    stats: dict[str, tuple[int | None, int | None]] = {}
+    stats: dict[str, VideoStats] = {}
     for response in client.fetch_video_stats(video_ids):
         stats.update(parse_video_stats(response))
     avatars: dict[str, str] = {}

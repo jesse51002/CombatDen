@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel
 
-from src.core.run_context import RunContext
+from src.core.run_context import RUN_ID_FORMAT, RunContext
 from src.executor.orchestrator import PipelineResult
-from schema import RunCost
+from schema import (
+    ExpansionCostLog,
+    ExpansionEntry,
+    ExpansionKind,
+    OverwriteSpecs,
+    RunCost,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +53,84 @@ class Writer:
 
         logger.debug(
             "wrote provenance + output (cost $%.6f: llm $%.6f, "
-            "image $%.6f, bg $%.6f): %s, %s, %s",
+            "image $%.6f, bg $%.6f, icon $%.6f): %s, %s, %s",
             run_cost.total,
             run_cost.llm,
             run_cost.image_generation,
             run_cost.background_removal,
+            run_cost.icon_generation,
             app_path,
             cust_path,
             output_path,
+        )
+
+    def write_expansion(
+        self,
+        result: PipelineResult,
+        run_ctx: RunContext,
+        *,
+        original_cost: RunCost | None,
+        kind: ExpansionKind,
+        overwrite_specs: OverwriteSpecs | None = None,
+    ) -> None:
+        """Write a reopen-time pass (expand or regenerate) back in place.
+
+        Two files change, no others:
+
+        - ``output.yaml`` is re-dumped from the merged ``Output`` (the seeded
+          done nodes plus whatever this pass (re)generated), but its ``cost``
+          block is set to ``original_cost`` — the figure carried forward from
+          the file we loaded — so the original full-run cost is preserved
+          untouched, never overwritten with this pass's partial spend.
+        - ``expansion_cost.yaml`` gains one appended ``ExpansionEntry``
+          recording *this* pass: its ``kind`` (expand vs regenerate), when it
+          ran, which node keys it (re)generated, the per-slot
+          ``overwrite_specs`` applied, and what those calls cost (the fresh
+          paid services accumulated only this pass's spend).
+
+        The dir's ``app.yaml`` / ``customization.yaml`` are left alone — they
+        are the inputs the caller curated, not artifacts this writer owns.
+        """
+        output = result.output.model_copy(update={"cost": original_cost})
+        self._dump_model(output, run_ctx.output_path())
+
+        ledger_path = run_ctx.expansion_cost_path()
+        log = self._load_expansion_log(ledger_path)
+        pass_cost = self._run_cost(result)
+        log.expansions.append(
+            ExpansionEntry(
+                kind=kind,
+                expanded_at=datetime.now(timezone.utc).strftime(
+                    RUN_ID_FORMAT
+                ),
+                generated=sorted(result.generated),
+                overwrite_specs=overwrite_specs or OverwriteSpecs(),
+                cost=pass_cost,
+            )
+        )
+        self._dump_model(log, ledger_path)
+
+        logger.debug(
+            "%s %s: generated %s (pass cost $%.6f); ledger now %d entr%s",
+            kind.value,
+            run_ctx.run_dir,
+            sorted(result.generated),
+            pass_cost.total,
+            len(log.expansions),
+            "y" if len(log.expansions) == 1 else "ies",
+        )
+
+    @staticmethod
+    def _load_expansion_log(path: Path) -> ExpansionCostLog:
+        """The run's existing spend ledger, or an empty one if never expanded.
+
+        An empty/whitespace ``expansion_cost.yaml`` parses to ``None``; treat
+        that the same as absent — a fresh, empty log to append to.
+        """
+        if not path.is_file():
+            return ExpansionCostLog()
+        return ExpansionCostLog.model_validate(
+            yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         )
 
     @staticmethod
@@ -63,31 +140,38 @@ class Writer:
 
         ``llm`` = every structured LLM call; ``image_generation`` =
         generate + any corrective edit (one service);
-        ``background_removal`` = the flat PhotoRoom per-call rate.
-        ``by_model`` merges the three services' per-model-id buckets:
-        LLM ids only ever appear on the LLM client, image ids only on the
-        image generator, and ``"photoroom"`` only on the remover, so the
-        buckets are disjoint and a plain merge cannot double-count.
+        ``background_removal`` = the flat PhotoRoom per-call rate;
+        ``icon_generation`` = the published Recraft per-image price for any
+        icon slot a curated set couldn't cover. ``by_model`` merges the
+        four services' per-model-id buckets: LLM ids only ever appear on
+        the LLM client, image ids only on the image generator,
+        ``"photoroom"`` only on the remover, and the Recraft model ids only
+        on the icon generator, so the buckets are disjoint and a plain
+        merge cannot double-count.
         """
         llm = round(result.llm.cost, COST_PRECISION)
         image_generation = round(result.image_gen.cost, COST_PRECISION)
         background_removal = round(result.bg_remover.cost, COST_PRECISION)
+        icon_generation = round(result.icon_gen.cost, COST_PRECISION)
         by_model = {
             model: round(amount, COST_PRECISION)
             for service in (
                 result.llm,
                 result.image_gen,
                 result.bg_remover,
+                result.icon_gen,
             )
             for model, amount in service.cost_by_model.items()
         }
         return RunCost(
             total=round(
-                llm + image_generation + background_removal, COST_PRECISION
+                llm + image_generation + background_removal + icon_generation,
+                COST_PRECISION,
             ),
             llm=llm,
             image_generation=image_generation,
             background_removal=background_removal,
+            icon_generation=icon_generation,
             by_model=by_model,
         )
 

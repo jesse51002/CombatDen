@@ -9,13 +9,14 @@ serializes as a plain dict for the frontend to read as a map.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator
 
 from schema.output.color_value import ColorValue
 from schema.output.derivations import Derivations
+from schema.output.node_output import NodeOutput
 
 
-class ColorOutput(BaseModel):
+class ColorOutput(NodeOutput):
     """One resolved colour: its value (in every format), prose, and the
     deterministic derivations the client uses as-is."""
 

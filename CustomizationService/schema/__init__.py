@@ -5,22 +5,43 @@ from schema.color_mode import ColorMode
 from schema.color_role import ColorRole
 from schema.complexity import Complexity
 from schema.customization import ColorsDirection, Customization, DesignDirection
+from schema.lottie_library import InsertionPoint, LottieLibrary, LottiePreset
+from schema.lottie_type import LottieType
 from schema.output import (
     ColorOutput,
     ColorPalette,
     ColorValue,
     Derivations,
+    ExpansionCostLog,
+    ExpansionEntry,
+    ExpansionKind,
     FontOutput,
     FontSet,
+    IconAttribution,
+    IconOutput,
+    IconSet,
     ImageOutput,
     ImageSet,
+    ImageToImage,
+    LottieOutput,
+    LottieSet,
+    NodeOutput,
     Output,
+    OverwriteSpecs,
     RunCost,
     TextOutput,
     TextSet,
 )
 from schema.primitives import AbsolutePath, HexColor, HslColor, OklchColor, RgbColor
-from schema.slots import ColorSlot, FontSlot, ImageSlot, SlotBase, TextSlot
+from schema.slots import (
+    ColorSlot,
+    FontSlot,
+    IconSlot,
+    ImageSlot,
+    LottieSlot,
+    SlotBase,
+    TextSlot,
+)
 
 __all__ = [
     "AbsolutePath",
@@ -36,16 +57,33 @@ __all__ = [
     "Customization",
     "Derivations",
     "DesignDirection",
+    "ExpansionCostLog",
+    "ExpansionEntry",
+    "ExpansionKind",
     "FontOutput",
     "FontSet",
     "FontSlot",
     "HexColor",
     "HslColor",
+    "IconAttribution",
+    "IconOutput",
+    "IconSet",
+    "IconSlot",
     "ImageOutput",
     "ImageSet",
     "ImageSlot",
+    "InsertionPoint",
+    "LottieLibrary",
+    "LottieOutput",
+    "LottiePreset",
+    "LottieSet",
+    "ImageToImage",
+    "LottieSlot",
+    "LottieType",
+    "NodeOutput",
     "OklchColor",
     "Output",
+    "OverwriteSpecs",
     "RgbColor",
     "RunCost",
     "SlotBase",
