@@ -8,11 +8,11 @@
 /// in the service `apps/<app>/app.yaml`.
 ///
 /// Colours are consumed via `DesignConstants` (which calls
-/// `BrandColor.color(slot, fallback:)`); images via
-/// `BrandImage.of(slot)` — usually through the `BrandedImage`
-/// widget. Fonts are consumed via `BrandFont.style(slot,
+/// `ThemeColor.color(slot, fallback:)`); images via
+/// `ThemeImage.image(slot, fallback:)` at the call site.
+/// Fonts are consumed via `ThemeFont.style(slot,
 /// fallbackFamily:)`. Texts are consumed via
-/// `BrandText.value(slot, fallback:)`.
+/// `ThemeText.value(slot, fallback:)`.
 ///
 /// To retarget the engine for another app: write a sibling
 /// manifest and change the wiring in `service_locator.dart`.
@@ -83,7 +83,7 @@ class CombatDenSlots {
   ];
 
   // ---- Icon slots ----
-  // The persistent bottom-nav tab icons. Consumed via `BrandedIcon`
+  // The persistent bottom-nav tab icons. Consumed via `ThemeIcon.widget`
   // (slot + `Symbols.*_sharp` fallback) in `AppBottomNavBar`.
   static const String navHome = 'nav_home';
   static const String navRank = 'nav_rank';
@@ -99,7 +99,7 @@ class CombatDenSlots {
 
   // ---- Lottie slots ----
   // The two member-app celebration animations. Consumed via
-  // `BrandedLottie` (slot + bundled `.json` fallback).
+  // `ThemeLottie` (slot + bundled `.json` fallback).
   static const String bookingCelebration = 'booking_celebration';
   static const String streakCelebration = 'streak_celebration';
 

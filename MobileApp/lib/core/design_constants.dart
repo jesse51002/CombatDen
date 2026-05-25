@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'package:mobile_app/core/app_slots.dart';
-import 'package:mobile_app/customization/brand_color.dart';
-import 'package:mobile_app/customization/brand_derivation.dart';
-import 'package:mobile_app/customization/brand_font.dart';
+import 'package:mobile_app/customization/theme/theme_color.dart';
+import 'package:mobile_app/customization/theme/theme_derivation.dart';
+import 'package:mobile_app/customization/theme/theme_font.dart';
 import 'package:mobile_app/customization/data/models/color_mode.dart';
 
 class DesignConstants {
@@ -32,23 +32,23 @@ class DesignConstants {
   /// flat palette; this only drives Material's discrete
   /// light/dark `ColorScheme` in `AppTheme.forCanvas()`.
   static bool get isLightCanvas =>
-      BrandColor.mode(fallback: ColorMode.dark).isLight;
+      ThemeColor.mode(fallback: ColorMode.dark).isLight;
 
   // === Brand colours (base slots) ===
-  // Resolved live from the customization engine via BrandColor;
+  // Resolved live from the customization engine via ThemeColor;
   // the const fallback is the CombatDen palette, used verbatim
   // when no customization is loaded.
-  static Color get primaryColor => BrandColor.color(
+  static Color get primaryColor => ThemeColor.color(
     CombatDenSlots.primary,
     fallback: _fallbackPrimary,
   );
 
-  static Color get backgroundColor => BrandColor.color(
+  static Color get backgroundColor => ThemeColor.color(
     CombatDenSlots.background,
     fallback: _fallbackBackground,
   );
 
-  static Color get text => BrandColor.color(
+  static Color get text => ThemeColor.color(
     CombatDenSlots.text,
     fallback: _fallbackText,
   );
@@ -57,7 +57,7 @@ class DesignConstants {
   /// Marks "where you are" (active nav item, active timeframe pill,
   /// active tab), distinct from `primaryColor` which marks agency
   /// ("what to tap").
-  static Color get accent => BrandColor.color(
+  static Color get accent => ThemeColor.color(
     CombatDenSlots.accent,
     fallback: _fallbackAccent,
   );
@@ -67,16 +67,16 @@ class DesignConstants {
   // pre-computed variants (`second`/`third`/`card`/`popup`/`dark`/
   // `light`/`regular_text`). The local fallback expressions only fire
   // when the derivation is absent.
-  static Color get primaryColor50 => BrandColor.color(
+  static Color get primaryColor50 => ThemeColor.color(
     CombatDenSlots.primary,
-    derivation: BrandDerivation.third,
+    derivation: ThemeDerivation.third,
     fallback: _fallbackPrimary.withValues(alpha: 0.5),
   );
 
   /// Darker primary — tracks the branded primary on the wire.
-  static Color get darkPrimary => BrandColor.color(
+  static Color get darkPrimary => ThemeColor.color(
     CombatDenSlots.primary,
-    derivation: BrandDerivation.dark,
+    derivation: ThemeDerivation.dark,
     fallback: _darkPrimaryFallback,
   );
 
@@ -89,9 +89,9 @@ class DesignConstants {
 
   /// A primary-tinted surface (brand card), mode-agnostic: 9% alpha
   /// over the canvas, sourced from `primary.card`.
-  static Color get primaryCard => BrandColor.color(
+  static Color get primaryCard => ThemeColor.color(
     CombatDenSlots.primary,
-    derivation: BrandDerivation.card,
+    derivation: ThemeDerivation.card,
     fallback: _fallbackPrimary.withValues(alpha: 0.09),
   );
 
@@ -100,40 +100,40 @@ class DesignConstants {
   /// `primary.regular_text`: the pipeline picks the body text colour
   /// when it clears WCAG AA on the primary fill, otherwise the
   /// background colour. Falls back to the body text colour.
-  static Color get primaryButtonText => BrandColor.color(
+  static Color get primaryButtonText => ThemeColor.color(
     CombatDenSlots.primary,
-    derivation: BrandDerivation.regularText,
+    derivation: ThemeDerivation.regularText,
     fallback: _fallbackText,
   );
 
-  static Color get text2nd => BrandColor.color(
+  static Color get text2nd => ThemeColor.color(
     CombatDenSlots.text,
-    derivation: BrandDerivation.second,
+    derivation: ThemeDerivation.second,
     fallback: _fallbackText.withValues(alpha: 0.75),
   );
 
-  static Color get text3rd => BrandColor.color(
+  static Color get text3rd => ThemeColor.color(
     CombatDenSlots.text,
-    derivation: BrandDerivation.third,
+    derivation: ThemeDerivation.third,
     fallback: _fallbackText.withValues(alpha: 0.50),
   );
 
   /// Elevated surface tint — translucent so layered surfaces
   /// auto-lighten by compositing over whatever sits behind them.
-  static Color get card => BrandColor.paletteEntry(
+  static Color get card => ThemeColor.paletteEntry(
     'card',
     fallback: _liveSurfaceFallback,
   );
 
   /// Opaque modal surface — content cannot bleed through.
-  static Color get popup => BrandColor.paletteEntry(
+  static Color get popup => ThemeColor.paletteEntry(
     'popup',
     fallback: Color.alphaBlend(_liveSurfaceFallback, backgroundColor),
   );
 
   /// A separating line — keyed to `text` with alpha rising as the
   /// background lightens.
-  static Color get divider => BrandColor.paletteEntry(
+  static Color get divider => ThemeColor.paletteEntry(
     'divider',
     fallback: text.withValues(
       alpha: (0.10 + 0.10 * HSLColor.fromColor(backgroundColor).lightness)
@@ -212,12 +212,12 @@ class DesignConstants {
   // they re-resolve `text` / `bodyFont` / `displayFont` on every read, so
   // headings re-theme with the rest of the app when the customization
   // changes.
-  static TextStyle get displayFont => BrandFont.style(
+  static TextStyle get displayFont => ThemeFont.style(
     CombatDenSlots.fontDisplay,
     fallbackFamily: _fallbackFontFamily,
   );
 
-  static TextStyle get bodyFont => BrandFont.style(
+  static TextStyle get bodyFont => ThemeFont.style(
     CombatDenSlots.fontBody,
     fallbackFamily: _fallbackFontFamily,
   );

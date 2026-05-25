@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/customization/widgets/branded_icon.dart';
+import 'package:mobile_app/customization/theme/theme_icon.dart';
 
 /// A single icon-over-label navigation target. Used in top-level
 /// navigation (the bottom nav bar). Mirrors the FlutterCRM
 /// `sidebar_nav_item.dart` pattern.
 ///
-/// The icon is a CustomizationService-overridable `BrandedIcon`: it draws
-/// the tenant SVG for [iconSlot] when present and falls back to [icon]
+/// The icon is CustomizationService-overridable via `ThemeIcon.widget`: it
+/// draws the tenant SVG for [iconSlot] when present and falls back to [icon]
 /// (a `Symbols.*_sharp`) otherwise.
 class AppNavItem extends StatelessWidget {
   const AppNavItem({
@@ -48,7 +48,8 @@ class AppNavItem extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             spacing: DesignConstants.spacingTiny,
             children: [
-              BrandedIcon(
+              ThemeIcon.widget(
+                context,
                 slot: iconSlot,
                 fallback: icon,
                 color: textColor,

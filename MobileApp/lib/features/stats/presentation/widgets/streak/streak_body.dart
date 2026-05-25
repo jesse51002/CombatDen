@@ -7,8 +7,8 @@ import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/customization/widgets/branded_image.dart';
-import 'package:mobile_app/customization/widgets/reveal_lottie.dart';
+import 'package:mobile_app/customization/theme/theme_image.dart';
+import 'package:mobile_app/customization/theme/lottie/theme_reveal_lottie.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 
 // Per-screen layout/timing math, file-scoped per CLAUDE.md's _k carve-out.
@@ -17,9 +17,15 @@ const double _kLottieSize = 320;
 // emerges *out of* the lightning, not after it). Used on the bundled
 // fallback; a real reveal preset's insertion_point overrides it.
 const double _kRevealAt = 0.75;
+// Fallback reveal rect (normalised, 0..1, top-left origin) — a centred 60%
+// box the streak icon pops into when no preset insertion_point exists.
+const double _kRevealX = 0.2;
+const double _kRevealY = 0.2;
+const double _kRevealWidth = 0.6;
+const double _kRevealHeight = 0.6;
 const String _kLottieAsset = 'assets/animations/lightning_neon.json';
 
-/// Layered celebration. A `RevealLottie` plays the lightning strike (brand
+/// Layered celebration. A `ThemeRevealLottie` plays the lightning strike (brand
 /// recoloured) and pops the streak icon out of it partway through; when the
 /// strike finishes, the week-count + "week streak" + subtitle + week strip
 /// cascade in as one centered focal block.
@@ -61,19 +67,27 @@ class _StreakBodyState extends State<StreakBody> {
     if (_showStats) {
       return _StatsContent(stats: widget.stats);
     }
-    // RevealLottie plays the strike and pops the streak icon out of it; when
+    // ThemeRevealLottie plays the strike and pops the streak icon out of it; when
     // the strike finishes we cross into the stats cascade.
-    return RevealLottie(
-      slot: CombatDenSlots.streakCelebration,
-      fallbackAsset: _kLottieAsset,
+    return SizedBox(
       width: _kLottieSize,
       height: _kLottieSize,
-      revealProgress: _kRevealAt,
-      onComplete: _toStats,
-      revealedImage: BrandedImage(
-        slot: CombatDenSlots.streakIcon,
-        fallback: ApiImage.asset('streak_icon.png'),
-        fit: BoxFit.contain,
+      child: ThemeRevealLottie(
+        slot: CombatDenSlots.streakCelebration,
+        fallbackAsset: _kLottieAsset,
+        fallbackRevealAt: _kRevealAt,
+        fallbackX: _kRevealX,
+        fallbackY: _kRevealY,
+        fallbackWidth: _kRevealWidth,
+        fallbackHeight: _kRevealHeight,
+        onComplete: _toStats,
+        revealedImage: Image(
+          image: ThemeImage.image(
+            CombatDenSlots.streakIcon,
+            fallback: ApiImage.asset('streak_icon.png'),
+          ),
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }

@@ -6,9 +6,9 @@ import 'package:mobile_app/customization/service_locator.dart';
 /// (e.g. "Dance with us" instead of "Reserve your spot"). Falls
 /// back to [fallback] when no customization is loaded, the slot is
 /// absent or empty, or DI is not set up (tests). Never throws.
-class BrandText {
+class ThemeText {
   // Private constructor to prevent instantiation
-  BrandText._();
+  ThemeText._();
 
   static String value(
     String slot, {

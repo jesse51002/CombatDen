@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/customization/brand_text.dart';
+import 'package:mobile_app/customization/theme/theme_text.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 
@@ -20,7 +20,7 @@ class ClassReserveFooter extends StatelessWidget {
         Padding(
           padding: EdgeInsets.all(DesignConstants.paddingBig),
           child: AppPrimaryButton(
-            text: BrandText.value(
+            text: ThemeText.value(
               CombatDenSlots.reserveCta,
               fallback: 'Reserve your spot',
             ),

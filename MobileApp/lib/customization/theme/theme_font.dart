@@ -11,9 +11,9 @@ import 'package:mobile_app/customization/service_locator.dart';
 /// customization is loaded, the slot is absent, or DI is not set up
 /// (tests). Never throws — a family the `google_fonts` package
 /// can't resolve degrades to a bare system-font `TextStyle`.
-class BrandFont {
+class ThemeFont {
   // Private constructor to prevent instantiation
-  BrandFont._();
+  ThemeFont._();
 
   static TextStyle style(
     String slot, {

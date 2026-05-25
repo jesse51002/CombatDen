@@ -10,13 +10,13 @@ import 'package:mobile_app/customization/service_locator.dart';
 /// DI is not set up (tests). Never throws. Used inside
 /// `DesignConstants`, so every `DesignConstants.X` call site is
 /// branded with zero plumbing.
-class BrandColor {
+class ThemeColor {
   // Private constructor to prevent instantiation
-  BrandColor._();
+  ThemeColor._();
 
   /// Resolves a colour slot. With no [derivation], returns the
   /// base colour. With [derivation] set (e.g.
-  /// `BrandDerivation.card`), returns that pre-computed variant
+  /// `ThemeDerivation.card`), returns that pre-computed variant
   /// from `colors[key].derivations`. Returns [fallback] on any
   /// miss — never throws.
   static Color color(
@@ -43,7 +43,7 @@ class BrandColor {
   /// is absent, or DI is not set up.
   ///
   /// For a base-slot + derivation pair, prefer
-  /// `BrandColor.color(slot, derivation: ...)` — that goes through
+  /// `ThemeColor.color(slot, derivation: ...)` — that goes through
   /// the typed slot map and is symmetric with the rest of the
   /// resolver. Use [paletteEntry] only for the orphan tokens
   /// (`card` / `popup` / `divider`) which have no base slot.

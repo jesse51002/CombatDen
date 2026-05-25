@@ -11,12 +11,12 @@
 /// The values are plain `String`s — they are what the wire and the
 /// `CustomizationColor.derivations` map are keyed by — so this
 /// class is a typed accessor, not an enum. Passing
-/// `BrandDerivation.card` into `BrandColor.color(...)` is the same
+/// `ThemeDerivation.card` into `ThemeColor.color(...)` is the same
 /// as passing the literal `'card'`, but a typo in the literal
 /// won't surface until runtime.
-class BrandDerivation {
+class ThemeDerivation {
   // Private constructor to prevent instantiation
-  BrandDerivation._();
+  ThemeDerivation._();
 
   static const String second = 'second';
   static const String third = 'third';

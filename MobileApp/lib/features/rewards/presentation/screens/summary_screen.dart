@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/app_slots.dart';
-import 'package:mobile_app/customization/brand_text.dart';
+import 'package:mobile_app/customization/theme/theme_text.dart';
 import 'package:mobile_app/features/videos/data/video_selectors.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_recc_flow.dart';
 
@@ -15,7 +15,7 @@ class SummaryScreen extends StatelessWidget {
     return VideoReccFlow(
       title: 'Drill of the Day',
       selectVideo: drillOfTheDay,
-      ctaLabel: BrandText.value(
+      ctaLabel: ThemeText.value(
         CombatDenSlots.bookNextClassCta,
         fallback: 'Book your next class',
       ),

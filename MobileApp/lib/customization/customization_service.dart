@@ -61,8 +61,8 @@ class CustomizationService extends ChangeNotifier {
 
   /// Loads disk last-good, then refreshes from the network
   /// (hard 5s cap), then warns loudly about any missing expected
-  /// slots. Awaited before `runApp`, so `BrandColor` /
-  /// `BrandImage` resolve branded values from the first frame.
+  /// slots. Awaited before `runApp`, so `ThemeColor` /
+  /// `ThemeImage` resolve branded values from the first frame.
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
 

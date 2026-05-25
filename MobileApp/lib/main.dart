@@ -48,7 +48,7 @@ class MobileAppRoot extends StatelessWidget {
   Widget build(BuildContext context) {
     // Rebuild the whole app when the active customization changes, so a
     // live style switch (CustomizationRuntime.selectDesign) re-themes
-    // everything: AppTheme + DesignConstants re-resolve, BrandImage slots
+    // everything: AppTheme + DesignConstants re-resolve, ThemeImage slots
     // re-fetch. The builder runs on first load too (harmless no-op).
     return ListenableBuilder(
       listenable: CustomizationRuntime.changes,

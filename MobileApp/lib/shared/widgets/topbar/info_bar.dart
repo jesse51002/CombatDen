@@ -3,7 +3,7 @@ import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/customization/widgets/branded_image.dart';
+import 'package:mobile_app/customization/theme/theme_image.dart';
 
 class InfoBar extends StatelessWidget {
   const InfoBar({
@@ -86,9 +86,11 @@ class _RankItem extends StatelessWidget {
     return SizedBox(
       height: 30,
       child: Center(
-        child: BrandedImage(
-          slot: CombatDenSlots.rankBelt,
-          fallback: ApiImage.rankAsset(asset),
+        child: Image(
+          image: ThemeImage.image(
+            CombatDenSlots.rankBelt,
+            fallback: ApiImage.rankAsset(asset),
+          ),
           width: 39,
           height: 24,
           fit: BoxFit.contain,
@@ -124,9 +126,8 @@ class _IconValueItem extends StatelessWidget {
         spacing: DesignConstants.spacingSmall,
         children: [
           Text(value, style: DesignConstants.p),
-          BrandedImage(
-            slot: slot,
-            fallback: ApiImage.asset(asset),
+          Image(
+            image: ThemeImage.image(slot, fallback: ApiImage.asset(asset)),
             width: assetWidth,
             height: assetHeight,
             fit: BoxFit.contain,
@@ -145,9 +146,11 @@ class _QrCodeItem extends StatelessWidget {
     return SizedBox(
       height: 30,
       child: Center(
-        child: BrandedImage(
-          slot: CombatDenSlots.iconQrcode,
-          fallback: ApiImage.asset('icon_qrcode.png'),
+        child: Image(
+          image: ThemeImage.image(
+            CombatDenSlots.iconQrcode,
+            fallback: ApiImage.asset('icon_qrcode.png'),
+          ),
           height: 30,
           fit: BoxFit.contain,
         ),

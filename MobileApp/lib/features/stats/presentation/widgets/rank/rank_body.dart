@@ -4,7 +4,7 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/customization/widgets/branded_image.dart';
+import 'package:mobile_app/customization/theme/theme_image.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 
 // Per-screen layout/timing math, file-scoped per CLAUDE.md's _k carve-out.
@@ -147,9 +147,11 @@ class _RankBodyState extends State<RankBody>
     double stackW,
     double stackH,
   ) {
-    final image = BrandedImage(
-      slot: CombatDenSlots.rankBelt,
-      fallback: ApiImage.rankAsset(widget.stats.beltAsset),
+    final image = Image(
+      image: ThemeImage.image(
+        CombatDenSlots.rankBelt,
+        fallback: ApiImage.rankAsset(widget.stats.beltAsset),
+      ),
       fit: BoxFit.contain,
     );
 
