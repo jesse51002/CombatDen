@@ -85,7 +85,7 @@ class _OptionChip extends StatelessWidget {
                 ? DesignConstants.backgroundColor
                 : DesignConstants.text3rd,
             weight: DesignConstants.iconWeight,
-            size: 18,
+            size: DesignConstants.iconSizeSmall,
           ),
           Text(
             option.label,

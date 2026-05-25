@@ -67,7 +67,7 @@ class _DescBlock extends StatelessWidget {
               icon,
               color: iconColor,
               weight: DesignConstants.iconWeight,
-              size: 24,
+              size: DesignConstants.iconSizeLarge,
             ),
             Text(heading, style: DesignConstants.h2),
           ],

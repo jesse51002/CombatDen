@@ -29,7 +29,7 @@ class MemberContactCell extends StatelessWidget {
           ),
           child: Icon(
             Symbols.content_copy_sharp,
-            size: 16,
+            size: DesignConstants.iconSizeTiny,
             color: DesignConstants.text2nd,
             weight: DesignConstants.iconWeight,
           ),

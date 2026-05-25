@@ -71,8 +71,9 @@ How to apply:
 - **Default to `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart` — they're the design system's primary glyph set and carry the variable `weight` axis the look depends on.
 - **`Icons.*` from Flutter's built-in Material icons is permitted.** The design system is its own fork now and isn't locked to a single icon family; `Icons.*` values are plain `IconData` and are fine to use directly — including stored on plain mock-data models. There's no need to round-trip them back to `Symbols.*` at render time.
 - **Set `weight: DesignConstants.iconWeight` on `Symbols.*_sharp` icons** (it drives their stroke weight). Plain `Icons.*` glyphs don't honor the weight axis, so it's a no-op there — don't bother.
-- Good: `Icon(Symbols.person_sharp, weight: DesignConstants.iconWeight)`
-- Also fine: `Icon(Icons.person)`
+- **NEVER hardcode `size:` on any `Icon()`** (either family). Use `DesignConstants.iconSize*` — `iconSizeBig` (32), `iconSizeLarge` (24), `iconSizeMedium` (20, the default), `iconSizeSmall` (18), `iconSizeTiny` (16). Same Big→Tiny cadence as `spacing*`. If a size doesn't match one, snap to the nearest token or ask before adding a new one.
+- Good: `Icon(Symbols.person_sharp, size: DesignConstants.iconSizeMedium, weight: DesignConstants.iconWeight)`
+- Also fine: `Icon(Icons.person, size: DesignConstants.iconSizeMedium)`
 
 **App Theme**
 

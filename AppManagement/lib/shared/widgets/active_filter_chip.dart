@@ -50,7 +50,7 @@ class ActiveFilterChip extends StatelessWidget {
               onTap: onRemoved,
               child: Icon(
                 Symbols.close_sharp,
-                size: 14,
+                size: DesignConstants.iconSizeTiny,
                 color: DesignConstants.text3rd,
                 weight: DesignConstants.iconWeight,
               ),

@@ -43,7 +43,7 @@ class AgentInputBar extends StatelessWidget {
               Symbols.send_sharp,
               color: DesignConstants.primaryColor,
               weight: DesignConstants.iconWeight,
-              size: 20,
+              size: DesignConstants.iconSizeMedium,
             ),
           ),
         ],

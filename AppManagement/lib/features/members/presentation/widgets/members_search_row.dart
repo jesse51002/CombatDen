@@ -51,7 +51,7 @@ class _SearchBox extends StatelessWidget {
             Symbols.search_sharp,
             weight: DesignConstants.iconWeight,
             color: DesignConstants.text3rd,
-            size: 20,
+            size: DesignConstants.iconSizeMedium,
           ),
           Expanded(
             child: TextField(

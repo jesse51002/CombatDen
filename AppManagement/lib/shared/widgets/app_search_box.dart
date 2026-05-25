@@ -44,7 +44,7 @@ class AppSearchBox extends StatelessWidget {
         prefixIcon: Icon(
           Symbols.search_sharp,
           color: DesignConstants.text3rd,
-          size: 20,
+          size: DesignConstants.iconSizeMedium,
           weight: DesignConstants.iconWeight,
         ),
         filled: true,

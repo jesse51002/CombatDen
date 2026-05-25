@@ -45,7 +45,7 @@ class _LastClassTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconStatTile(
       icon: Symbols.schedule_sharp,
-      iconSize: 40,
+      iconSize: DesignConstants.iconSizeBig,
       value: '${stats.lastClassDaysAgo} days ago',
       caption: 'Last Class',
       valueColor: DesignConstants.goodGreen,
@@ -61,7 +61,7 @@ class _StreakTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconStatTile(
       icon: Symbols.bolt_sharp,
-      iconSize: 40,
+      iconSize: DesignConstants.iconSizeBig,
       value: '${stats.classStreakWeeks} weeks',
       caption: 'Class Streak',
       valueColor: DesignConstants.goodGreen,
@@ -77,7 +77,7 @@ class _PointsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconStatTile(
       icon: Symbols.star_sharp,
-      iconSize: 40,
+      iconSize: DesignConstants.iconSizeBig,
       value: '${stats.pointsBalance} points',
       caption: 'Points Balance',
     );
@@ -92,7 +92,7 @@ class _VideosTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconStatTile(
       icon: Symbols.play_arrow_sharp,
-      iconSize: 40,
+      iconSize: DesignConstants.iconSizeBig,
       value: '${stats.videosWatched} videos',
       caption: 'Videos Watched',
     );

@@ -66,7 +66,7 @@ class _EmailRow extends StatelessWidget {
           onTap: () => debugPrint('TODO: copy email "$email"'),
           child: Icon(
             Symbols.content_copy_sharp,
-            size: 20,
+            size: DesignConstants.iconSizeMedium,
             color: DesignConstants.text2nd,
             weight: DesignConstants.iconWeight,
           ),

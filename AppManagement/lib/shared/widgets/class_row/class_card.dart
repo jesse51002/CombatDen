@@ -92,7 +92,7 @@ class _ImagePlaceholder extends StatelessWidget {
       child: Center(
         child: Icon(
           Symbols.image_sharp,
-          size: 32,
+          size: DesignConstants.iconSizeBig,
           color: DesignConstants.text3rd,
           weight: DesignConstants.iconWeight,
         ),

@@ -25,7 +25,7 @@ class BackLink extends StatelessWidget {
         children: [
           Icon(
             Symbols.chevron_left_sharp,
-            size: 20,
+            size: DesignConstants.iconSizeMedium,
             color: color,
             weight: DesignConstants.iconWeight,
           ),
