@@ -126,9 +126,8 @@ class _Pill extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: DesignConstants.pSmall.copyWith(
+        style: DesignConstants.pSmallBold.copyWith(
           color: DesignConstants.backgroundColor,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );

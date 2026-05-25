@@ -79,9 +79,7 @@ class _ValueRow extends StatelessWidget {
       children: [
         Text(
           value,
-          style: DesignConstants.big2.copyWith(
-            fontWeight: FontWeight.w300,
-          ),
+          style: DesignConstants.big2Light,
         ),
         _DeltaBadge(label: deltaLabel),
       ],

@@ -22,9 +22,7 @@ class MembersSection extends StatelessWidget {
         Center(
           child: Text(
             '140 members',
-            style: DesignConstants.big2.copyWith(
-              fontWeight: FontWeight.w300,
-            ),
+            style: DesignConstants.big2Light,
           ),
         ),
         MembersTrendChart(),
