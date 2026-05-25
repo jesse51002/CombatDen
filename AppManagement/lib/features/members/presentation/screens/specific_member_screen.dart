@@ -7,6 +7,7 @@ import 'package:app_management/features/members/data/mock_members.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/member_profile_card.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/member_quick_list/member_quick_list.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
+import 'package:app_management/shared/widgets/hairline.dart';
 
 /// Member detail screen.
 ///
@@ -37,6 +38,7 @@ class SpecificMemberScreen extends StatelessWidget {
               ),
             ),
           ),
+          const Hairline(vertical: true),
           MemberQuickList(members: kMockMembers),
         ],
       ),

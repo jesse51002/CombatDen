@@ -19,8 +19,7 @@ class MemberQuickList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 280,
-      color: DesignConstants.card,
+      width: 220,
       padding: const EdgeInsets.all(DesignConstants.paddingBig),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
