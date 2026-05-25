@@ -52,8 +52,7 @@ How to apply:
 - **NEVER hardcode font properties** — no inline `fontFamily`, no inline `fontSize`, no inline `fontWeight`. Use the text styles in `DesignConstants` (`h1`, `h2`, `h3`, `p`, `pBig`, `pSmall`, etc.).
 - **NEVER hardcode spacing, padding, radius, or border widths.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorderSize`.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/radius/padding, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
-- **`design_constants.dart` is IMMUTABLE.** Do not add, remove, rename, or change any value in it. If a needed token doesn't exist, use the closest existing constant or stop and ask. **NEVER create new design constants without explicit permission.**
-- This file is **byte-for-byte identical** with `../FlutterCRM/lib/core/constants/design_constants.dart` and `../MobileApp/lib/core/constants/design_constants.dart`. If a token is added in any one repo, mirror it to the other two in the same change. They will eventually be extracted into a shared package.
+- **`design_constants.dart` is this app's own design system and may be edited deliberately.** AppManagement has **forked** its tokens to its own identity (warm light theme, sapphire accent, Hanken Grotesk, tight 12/8 corners, de-carded layout). It is **no longer immutable** and **no longer byte-for-byte identical** with `../FlutterCRM/` or `../MobileApp/` — do **NOT** mirror token changes to them. Keep all token changes centralized in this file (so one edit reskins the whole app) and add/rename tokens only when the design genuinely needs it. See `DESIGN.md` for the system.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
 **Icons: Use Material Symbols**
@@ -224,7 +223,7 @@ lib/
 ├── main.dart
 ├── core/
 │   └── constants/
-│       └── design_constants.dart   # IMMUTABLE — copied from FlutterCRM
+│       └── design_constants.dart   # this app's forked design system
 ├── features/
 │   └── <feature>/
 │       ├── data/
@@ -268,7 +267,7 @@ Direct equivalents if you don't want the Makefile:
 - Dev dependencies: `flutter pub add --dev <package>`.
 
 Current dependencies (intentionally minimal):
-- `google_fonts` — for Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
+- `google_fonts` — for Hanken Grotesk via `GoogleFonts.hankenGrotesk()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
 
 If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in.
