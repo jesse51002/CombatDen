@@ -14,10 +14,10 @@ const double _kCardTitleHeight = 42;
 /// One member redemption awaiting desk confirmation: the reward art the
 /// member sees, who requested it and when, and a button to open the
 /// confirm dialog. Visual so staff recognize the reward at a glance.
-class PendingApprovalCard extends StatelessWidget {
+class RedemptionCard extends StatelessWidget {
   final PendingRedemption redemption;
 
-  const PendingApprovalCard({super.key, required this.redemption});
+  const RedemptionCard({super.key, required this.redemption});
 
   @override
   Widget build(BuildContext context) {

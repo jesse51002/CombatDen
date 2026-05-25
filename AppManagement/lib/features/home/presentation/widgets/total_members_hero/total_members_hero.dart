@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/home/data/mock_member_stats.dart';
-import 'package:app_management/features/home/presentation/widgets/total_members_card/_subgroup_legend_dot.dart';
-import 'package:app_management/features/home/presentation/widgets/total_members_card/total_members_arc.dart';
+import 'package:app_management/features/home/presentation/widgets/total_members_hero/_subgroup_legend_dot.dart';
+import 'package:app_management/features/home/presentation/widgets/total_members_hero/total_members_arc.dart';
 
 /// Total-members hero — large semicircular arc with the total count and
 /// an active/inactive legend. Sits on the page; no card chrome.
-class TotalMembersCard extends StatelessWidget {
+class TotalMembersHero extends StatelessWidget {
   final MemberStatsSummary stats;
 
-  const TotalMembersCard({super.key, required this.stats});
+  const TotalMembersHero({super.key, required this.stats});
 
   @override
   Widget build(BuildContext context) {

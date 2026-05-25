@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/growth/data/mock_growth.dart';
-import 'package:app_management/features/growth/presentation/widgets/donut_stats_card/_donut_history_table.dart';
-import 'package:app_management/features/growth/presentation/widgets/donut_stats_card/_donut_stat.dart';
+import 'package:app_management/features/growth/presentation/widgets/donut_stats_section/_donut_history_table.dart';
+import 'package:app_management/features/growth/presentation/widgets/donut_stats_section/_donut_stat.dart';
 
 /// "Two donuts + history table" section used on Growth for Monthly Churn.
 /// The two donuts sit side by side, with the history table filling the
 /// remaining width. Sits on the page; no card chrome.
-class DonutStatsCard extends StatelessWidget {
+class DonutStatsSection extends StatelessWidget {
   final String title;
   final DonutChartData last30;
   final DonutChartData gymAverage;
   final String tableValueColumnLabel;
   final List<DonutStatRow> rows;
 
-  const DonutStatsCard({
+  const DonutStatsSection({
     super.key,
     required this.title,
     required this.last30,

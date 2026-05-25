@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
 import 'package:app_management/features/qr_codes/data/mock_qr_codes.dart';
-import 'package:app_management/features/qr_codes/presentation/widgets/qr_codes_grid.dart';
+import 'package:app_management/features/qr_codes/presentation/widgets/qr_codes_list.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
 
 /// QR Codes screen — printable sign-up + check-in codes for the gym.
@@ -36,7 +36,7 @@ class QrCodesScreen extends StatelessWidget {
                 ),
               ],
             ),
-            QrCodesGrid(qrCodes: kMockQrCodes),
+            QrCodesList(qrCodes: kMockQrCodes),
           ],
         ),
       ),

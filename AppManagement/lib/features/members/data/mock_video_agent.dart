@@ -41,7 +41,7 @@ class ChoiceOption {
 
 const List<AgentTurn> kMockAgentConversation = [
   AgentPrompt(
-    "Let's tune Global MMA's video feed. I'll ask a few questions about "
+    "Let's tune Apex MMA's video feed. I'll ask a few questions about "
     'the gym, then regenerate the content focus and the searches that '
     'fill the feed.',
   ),

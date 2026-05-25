@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/growth/data/mock_growth.dart';
-import 'package:app_management/features/growth/presentation/widgets/members_card/_date_range_pill.dart';
-import 'package:app_management/features/growth/presentation/widgets/members_card/_members_breakdown_table.dart';
-import 'package:app_management/features/growth/presentation/widgets/members_card/_members_trend_chart.dart';
+import 'package:app_management/features/growth/presentation/widgets/members_section/_date_range_pill.dart';
+import 'package:app_management/features/growth/presentation/widgets/members_section/_members_breakdown_table.dart';
+import 'package:app_management/features/growth/presentation/widgets/members_section/_members_trend_chart.dart';
 
 /// Full-width "Members" section on Growth — title row with a date-range
 /// pill, big "140 members" total, the trend chart, then the per-month
 /// breakdown table. Sits on the page; no card chrome.
-class MembersCard extends StatelessWidget {
-  const MembersCard({super.key});
+class MembersSection extends StatelessWidget {
+  const MembersSection({super.key});
 
   @override
   Widget build(BuildContext context) {

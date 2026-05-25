@@ -104,7 +104,7 @@ class MockVideosData {
 
 const MockVideosData kMockVideos = MockVideosData(
   brief: VideoBrief(
-    companyName: 'Global MMA',
+    companyName: 'Apex MMA',
     type: 'Mixed martial arts gym',
     videosDesc:
         'Mixed martial arts taught as one complete game: striking, '
@@ -147,9 +147,9 @@ const MockVideosData kMockVideos = MockVideosData(
     priorityChannels: ['UFC', 'BJJ Fanatics'],
   ),
   introVideo: ManagedVideo(
-    title: 'Welcome to Global MMA',
+    title: 'Welcome to Apex MMA',
     thumbnailAsset: 'assets/images/class_muay_thai_session.png',
-    channelName: 'Global MMA',
+    channelName: 'Apex MMA',
     channelAvatarAsset: 'assets/images/pfp_amy_traver.png',
     viewCount: null,
     category: 'Intro',
@@ -158,7 +158,7 @@ const MockVideosData kMockVideos = MockVideosData(
     ManagedVideo(
       title: 'Coach Justin: guard retention seminar',
       thumbnailAsset: 'assets/images/class_bjj_nogi_today.png',
-      channelName: 'Global MMA',
+      channelName: 'Apex MMA',
       channelAvatarAsset: 'assets/images/pfp_justin_stemmons.png',
       viewCount: null,
       category: 'Custom',
@@ -166,7 +166,7 @@ const MockVideosData kMockVideos = MockVideosData(
     ManagedVideo(
       title: 'Fight night recap: our team at Regionals',
       thumbnailAsset: 'assets/images/class_muay_thai_wed.png',
-      channelName: 'Global MMA',
+      channelName: 'Apex MMA',
       channelAvatarAsset: 'assets/images/pfp_sylvia_crivia.png',
       viewCount: 3400,
       category: 'Custom',

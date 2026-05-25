@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/features/members/data/mock_loyalty.dart';
-import 'package:app_management/features/members/presentation/widgets/member_app/loyalty_tab/pending_approval_card.dart';
+import 'package:app_management/features/members/presentation/widgets/member_app/loyalty_tab/redemption_card.dart';
 import 'package:app_management/shared/widgets/fill_grid.dart';
 import 'package:app_management/shared/widgets/subtitle_section.dart';
 
@@ -9,11 +9,11 @@ import 'package:app_management/shared/widgets/subtitle_section.dart';
 /// reward art. Pending ones offer Review & confirm; approved ones show an
 /// "Approved" marker. Defaults to the member-app's pending queue; pass
 /// [redemptions] + [title] to reuse it elsewhere (e.g. one member's history).
-class PendingApprovalSection extends StatelessWidget {
+class RedemptionsSection extends StatelessWidget {
   final List<PendingRedemption> redemptions;
   final String title;
 
-  const PendingApprovalSection({
+  const RedemptionsSection({
     super.key,
     this.redemptions = kMockPendingRedemptions,
     this.title = 'Pending Redemption Approval',
@@ -26,7 +26,7 @@ class PendingApprovalSection extends StatelessWidget {
       child: FillGrid(
         minItemWidth: 240,
         children: [
-          for (final r in redemptions) PendingApprovalCard(redemption: r),
+          for (final r in redemptions) RedemptionCard(redemption: r),
         ],
       ),
     );

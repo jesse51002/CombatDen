@@ -10,7 +10,7 @@ import 'package:app_management/features/members/data/video_feed.dart';
 ///
 /// Base URL defaults to localhost; override at launch with
 /// `--dart-define=VIDEO_BASE_URL=http://<host>:8002`. The gym's feed is
-/// keyed by [videoAppId] (Global MMA -> `mma`).
+/// keyed by [videoAppId] (Apex MMA -> `mma`).
 class VideoApiClient {
   VideoApiClient({String? baseUrl, this.videoAppId = _kDefaultVideoAppId})
     : baseUrl = baseUrl ?? _kDefaultBaseUrl;

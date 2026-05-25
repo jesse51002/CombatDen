@@ -6,7 +6,7 @@ import 'package:app_management/features/home/data/mock_attendance.dart';
 import 'package:app_management/features/home/data/mock_member_stats.dart';
 import 'package:app_management/features/home/data/mock_upcoming_classes.dart';
 import 'package:app_management/features/home/presentation/widgets/live_attendance_card/live_attendance_card.dart';
-import 'package:app_management/features/home/presentation/widgets/total_members_card/total_members_card.dart';
+import 'package:app_management/features/home/presentation/widgets/total_members_hero/total_members_hero.dart';
 import 'package:app_management/features/home/presentation/widgets/upcoming_classes_card/upcoming_classes_card.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
 import 'package:app_management/shared/widgets/hairline.dart';
@@ -32,7 +32,7 @@ class HomeScreen extends StatelessWidget {
           spacing: DesignConstants.spacingBig,
           children: [
             Text('Dashboard', style: DesignConstants.big2),
-            TotalMembersCard(stats: kMockMemberStats),
+            TotalMembersHero(stats: kMockMemberStats),
             const Hairline(),
             const _DashboardColumns(),
           ],
