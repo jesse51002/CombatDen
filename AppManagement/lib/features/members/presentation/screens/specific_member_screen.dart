@@ -34,7 +34,6 @@ class SpecificMemberScreen extends StatelessWidget {
               child: MemberProfileCard(
                 member: kMockDemoMember,
                 stats: kMockMemberDetailStats,
-                rewards: kMockRedeemedRewards,
               ),
             ),
           ),

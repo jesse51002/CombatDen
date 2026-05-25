@@ -5,21 +5,28 @@ import 'package:app_management/features/members/presentation/widgets/member_app/
 import 'package:app_management/shared/widgets/fill_grid.dart';
 import 'package:app_management/shared/widgets/subtitle_section.dart';
 
-/// "Pending Redemption Approval" — members waiting for the admin to
-/// confirm a reward at the desk, shown as a visual grid so staff
-/// recognize the reward art. Tapping a card opens the confirm dialog.
+/// A grid of reward redemptions, shown as visual cards so staff recognize the
+/// reward art. Pending ones offer Review & confirm; approved ones show an
+/// "Approved" marker. Defaults to the member-app's pending queue; pass
+/// [redemptions] + [title] to reuse it elsewhere (e.g. one member's history).
 class PendingApprovalSection extends StatelessWidget {
-  const PendingApprovalSection({super.key});
+  final List<PendingRedemption> redemptions;
+  final String title;
+
+  const PendingApprovalSection({
+    super.key,
+    this.redemptions = kMockPendingRedemptions,
+    this.title = 'Pending Redemption Approval',
+  });
 
   @override
   Widget build(BuildContext context) {
     return SubtitleSection(
-      title: 'Pending Redemption Approval',
+      title: title,
       child: FillGrid(
         minItemWidth: 240,
         children: [
-          for (final r in kMockPendingRedemptions)
-            PendingApprovalCard(redemption: r),
+          for (final r in redemptions) PendingApprovalCard(redemption: r),
         ],
       ),
     );

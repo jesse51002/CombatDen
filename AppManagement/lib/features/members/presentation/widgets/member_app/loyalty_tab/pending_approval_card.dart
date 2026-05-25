@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/members/data/mock_loyalty.dart';
@@ -67,11 +68,31 @@ class PendingApprovalCard extends StatelessWidget {
                     InfoRow(label: 'Requested', value: r.requestedAt),
                   ],
                 ),
-                AppPrimaryButton(
-                  text: 'Review & confirm',
-                  fullWidth: true,
-                  onPressed: () => RewardConfirmDialog.show(context, r),
-                ),
+                if (r.approved)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    spacing: DesignConstants.spacingSmall,
+                    children: [
+                      Icon(
+                        Symbols.check_circle_sharp,
+                        color: DesignConstants.goodGreen,
+                        weight: DesignConstants.iconWeight,
+                        size: 20,
+                      ),
+                      Text(
+                        'Approved',
+                        style: DesignConstants.h2.copyWith(
+                          color: DesignConstants.goodGreen,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  AppPrimaryButton(
+                    text: 'Review & confirm',
+                    fullWidth: true,
+                    onPressed: () => RewardConfirmDialog.show(context, r),
+                  ),
               ],
             ),
           ),

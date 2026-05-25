@@ -5,48 +5,6 @@
 // chosen to match the eventual API shape so the swap to repositories
 // is mechanical.
 
-/// A reward the member has redeemed in the gym's loyalty program.
-class RedeemedReward {
-  final String gymName;
-  final String rewardName;
-  final String costLabel;
-  final int pointsSpent;
-  final String imageAsset;
-
-  const RedeemedReward({
-    required this.gymName,
-    required this.rewardName,
-    required this.costLabel,
-    required this.pointsSpent,
-    required this.imageAsset,
-  });
-}
-
-/// Three recently-redeemed rewards used by the demo member.
-const List<RedeemedReward> kMockRedeemedRewards = [
-  RedeemedReward(
-    gymName: 'Global MMA',
-    rewardName: 'Bring a friend to a class',
-    costLabel: 'Free',
-    pointsSpent: 750,
-    imageAsset: 'assets/images/reward_bring_friend.png',
-  ),
-  RedeemedReward(
-    gymName: 'Global MMA',
-    rewardName: 'Gym t-shirt',
-    costLabel: 'Free',
-    pointsSpent: 1500,
-    imageAsset: 'assets/images/reward_gym_tshirt.png',
-  ),
-  RedeemedReward(
-    gymName: 'Global MMA',
-    rewardName: 'Boxing gloves',
-    costLabel: '10% off',
-    pointsSpent: 3000,
-    imageAsset: 'assets/images/reward_boxing_gloves.png',
-  ),
-];
-
 /// Aggregate counters surfaced under the rank/retention grids on the
 /// SpecificMember screen. The real API will return one bundle per
 /// member; today these are hardcoded for the demo.
