@@ -46,7 +46,7 @@ class QrCodeRow extends StatelessWidget {
             Symbols.print_sharp,
             weight: DesignConstants.iconWeight,
             color: DesignConstants.text,
-            size: 18,
+            size: DesignConstants.iconSizeSmall,
           ),
           onPressed: () => debugPrint('TODO: print ${qrCode.id} QR code'),
         ),

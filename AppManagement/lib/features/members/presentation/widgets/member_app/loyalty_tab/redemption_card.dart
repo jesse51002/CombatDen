@@ -74,7 +74,7 @@ class RedemptionCard extends StatelessWidget {
                         Symbols.check_circle_sharp,
                         color: DesignConstants.goodGreen,
                         weight: DesignConstants.iconWeight,
-                        size: 20,
+                        size: DesignConstants.iconSizeMedium,
                       ),
                       Text(
                         'Approved',

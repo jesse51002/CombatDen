@@ -40,7 +40,7 @@ class DateRangePill extends StatelessWidget {
             Icon(
               Symbols.expand_more_sharp,
               weight: DesignConstants.iconWeight,
-              size: 16,
+              size: DesignConstants.iconSizeTiny,
               color: DesignConstants.text,
             ),
           ],

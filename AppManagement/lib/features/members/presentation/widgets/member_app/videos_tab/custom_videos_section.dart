@@ -36,7 +36,7 @@ class CustomVideosSection extends StatelessWidget {
               Symbols.add_sharp,
               color: DesignConstants.text,
               weight: DesignConstants.iconWeight,
-              size: 20,
+              size: DesignConstants.iconSizeMedium,
             ),
             onPressed: () => debugPrint('TODO: add custom video'),
           ),

@@ -60,8 +60,9 @@ How to apply:
 - **ALWAYS use `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart`.
 - **NEVER use `Icons.*`** from Flutter's built-in Material icons.
 - **ALWAYS set `weight: DesignConstants.iconWeight`** on every `Icon()` widget.
-- Good: `Icon(Symbols.person_sharp, weight: DesignConstants.iconWeight)`
-- Bad: `Icon(Icons.person)`
+- **NEVER hardcode `size:`** on an `Icon()`. Use `DesignConstants.iconSize*` — `iconSizeBig` (32), `iconSizeLarge` (24), `iconSizeMedium` (20, the default), `iconSizeSmall` (18), `iconSizeTiny` (16). Same Big→Tiny cadence as `spacing*`. If a size doesn't match one, snap to the nearest token or ask before adding a new one.
+- Good: `Icon(Symbols.person_sharp, size: DesignConstants.iconSizeMedium, weight: DesignConstants.iconWeight)`
+- Bad: `Icon(Icons.person)` / `Icon(Symbols.person_sharp, size: 20)`
 
 **App Theme**
 

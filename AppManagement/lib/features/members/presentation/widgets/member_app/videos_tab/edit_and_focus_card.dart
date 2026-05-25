@@ -58,7 +58,7 @@ class _EditPanel extends StatelessWidget {
               Symbols.auto_awesome_sharp,
               color: DesignConstants.primaryColor,
               weight: DesignConstants.iconWeight,
-              size: 32,
+              size: DesignConstants.iconSizeBig,
             ),
             Text('Edit with Agent', style: DesignConstants.h2),
           ],

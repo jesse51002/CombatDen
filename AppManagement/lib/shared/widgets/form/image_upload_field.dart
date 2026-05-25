@@ -74,7 +74,7 @@ class _UploadPrompt extends StatelessWidget {
         children: [
           Icon(
             Symbols.add_photo_alternate_sharp,
-            size: 32,
+            size: DesignConstants.iconSizeBig,
             color: DesignConstants.text3rd,
             weight: DesignConstants.iconWeight,
           ),

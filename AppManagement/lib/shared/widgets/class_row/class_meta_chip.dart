@@ -23,7 +23,7 @@ class ClassMetaChip extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Icon(icon, size: 16, color: color, weight: DesignConstants.iconWeight),
+        Icon(icon, size: DesignConstants.iconSizeTiny, color: color, weight: DesignConstants.iconWeight),
         Text(text, style: DesignConstants.p.copyWith(color: color)),
       ],
     );

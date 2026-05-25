@@ -50,6 +50,13 @@ class DesignConstants {
   static final double buttonBorder = 2;
   static final double iconWeight = 300.0;
 
+  // Icon sizes — same Big→Tiny cadence as spacing. Medium (20) is the default.
+  static const double iconSizeBig = 32;
+  static const double iconSizeLarge = 24;
+  static const double iconSizeMedium = 20;
+  static const double iconSizeSmall = 18;
+  static const double iconSizeTiny = 16;
+
   static const double buttonBorderSize = 3.0;
   static const double screenHorizontalPadding = 16.0;
 

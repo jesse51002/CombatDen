@@ -218,7 +218,7 @@ class _ViewAllButton extends StatelessWidget {
             Symbols.chevron_right_sharp,
             color: DesignConstants.primaryColor,
             weight: DesignConstants.iconWeight,
-            size: 18,
+            size: DesignConstants.iconSizeSmall,
           ),
         ],
       ),
