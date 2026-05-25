@@ -6,9 +6,8 @@ import 'package:app_management/features/home/data/mock_attendance.dart';
 import 'package:app_management/shared/widgets/app_data_table.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/app_primary_button.dart';
-import 'package:app_management/shared/widgets/section_card.dart';
 
-/// Left-hand panel under the hero card: live class roster with a
+/// Left-hand panel under the hero: live class roster with a
 /// "Check In Member" / "View all" footer.
 class LiveAttendanceCard extends StatelessWidget {
   final List<AttendanceEntry> entries;
@@ -23,20 +22,18 @@ class LiveAttendanceCard extends StatelessWidget {
         ? 0
         : ((checkedIn / entries.length) * 100).round();
 
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          _Header(
-            checkedIn: checkedIn,
-            notArrived: notArrived,
-            percent: percent,
-          ),
-          _AttendanceTable(entries: entries),
-          _Footer(),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        _Header(
+          checkedIn: checkedIn,
+          notArrived: notArrived,
+          percent: percent,
+        ),
+        _AttendanceTable(entries: entries),
+        _Footer(),
+      ],
     );
   }
 }

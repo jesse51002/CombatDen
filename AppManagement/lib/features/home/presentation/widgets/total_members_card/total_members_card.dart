@@ -4,10 +4,9 @@ import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/home/data/mock_member_stats.dart';
 import 'package:app_management/features/home/presentation/widgets/total_members_card/_subgroup_legend_dot.dart';
 import 'package:app_management/features/home/presentation/widgets/total_members_card/total_members_arc.dart';
-import 'package:app_management/shared/widgets/section_card.dart';
 
-/// Top hero card on the dashboard — large semicircular arc with the
-/// total-members count and an active/inactive legend.
+/// Total-members hero — large semicircular arc with the total count and
+/// an active/inactive legend. Sits on the page; no card chrome.
 class TotalMembersCard extends StatelessWidget {
   final MemberStatsSummary stats;
 
@@ -15,15 +14,13 @@ class TotalMembersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          _ArcWithCount(stats: stats),
-          _LegendRow(stats: stats),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        _ArcWithCount(stats: stats),
+        _LegendRow(stats: stats),
+      ],
     );
   }
 }

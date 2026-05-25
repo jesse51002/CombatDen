@@ -9,6 +9,7 @@ import 'package:app_management/features/growth/presentation/widgets/members_card
 import 'package:app_management/features/home/data/mock_member_stats.dart';
 import 'package:app_management/features/home/presentation/widgets/total_members_card/total_members_card.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
+import 'package:app_management/shared/widgets/hairline.dart';
 
 /// Growth (analytics) screen.
 ///
@@ -35,9 +36,9 @@ class GrowthScreen extends StatelessWidget {
           children: [
             TotalMembersCard(stats: kMockMemberStats),
             KpiStrip(kpis: kMockGrowthKpis),
-            const _SectionRule(),
+            const Hairline(),
             const MembersCard(),
-            const _SectionRule(),
+            const Hairline(),
             DonutStatsCard(
               title: 'Monthly Churn',
               last30: kMockChurnLast30,
@@ -49,15 +50,5 @@ class GrowthScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-/// Full-width hairline separating major sections on the page.
-class _SectionRule extends StatelessWidget {
-  const _SectionRule();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(height: 1, color: DesignConstants.divider);
   }
 }

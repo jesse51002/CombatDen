@@ -9,6 +9,7 @@ import 'package:app_management/features/home/presentation/widgets/live_attendanc
 import 'package:app_management/features/home/presentation/widgets/total_members_card/total_members_card.dart';
 import 'package:app_management/features/home/presentation/widgets/upcoming_classes_card/upcoming_classes_card.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
+import 'package:app_management/shared/widgets/hairline.dart';
 
 /// Admin dashboard / landing screen.
 ///
@@ -32,6 +33,7 @@ class HomeScreen extends StatelessWidget {
           children: [
             Text('Dashboard', style: DesignConstants.big2),
             TotalMembersCard(stats: kMockMemberStats),
+            const Hairline(),
             const _DashboardColumns(),
           ],
         ),
@@ -56,6 +58,7 @@ class _DashboardColumns extends StatelessWidget {
           Expanded(
             child: LiveAttendanceCard(entries: kMockLiveAttendance),
           ),
+          const Hairline(vertical: true),
           Expanded(
             child: UpcomingClassesCard(dayGroups: kMockUpcomingClasses),
           ),
