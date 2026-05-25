@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/members/data/mock_member_history.dart';
@@ -8,9 +9,9 @@ import 'package:app_management/features/members/presentation/widgets/member_app/
 // name wraps to one line or two (mirrors the member-app reward card).
 const double _kTitleHeight = 42;
 
-/// One redeemed reward, in the same card format as the member-app rewards
-/// store: image hero with the cost overlaid, then the reward name and the
-/// gym it came from.
+/// One already-redeemed reward, in the member-app reward-card format: image
+/// hero with the cost pill, the reward name, the points spent, and a big
+/// "Approved" marker (these have already cleared admin approval).
 class RedeemedRewardCard extends StatelessWidget {
   final RedeemedReward reward;
 
@@ -63,6 +64,24 @@ class RedeemedRewardCard extends StatelessWidget {
                       color: DesignConstants.primaryColor,
                     ),
                     textAlign: TextAlign.center,
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    spacing: DesignConstants.spacingSmall,
+                    children: [
+                      Icon(
+                        Symbols.check_circle_sharp,
+                        color: DesignConstants.goodGreen,
+                        weight: DesignConstants.iconWeight,
+                        size: 20,
+                      ),
+                      Text(
+                        'Approved',
+                        style: DesignConstants.h2.copyWith(
+                          color: DesignConstants.goodGreen,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

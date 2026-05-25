@@ -7,6 +7,7 @@ import 'package:app_management/features/members/presentation/widgets/specific_me
 import 'package:app_management/features/members/presentation/widgets/specific_member/profile_header/profile_header.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/rank_section/rank_section.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/retention_section/retention_section.dart';
+import 'package:app_management/features/members/presentation/widgets/member_app/loyalty_tab/pending_approval_section.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/rewards_section/rewards_section.dart';
 import 'package:app_management/shared/widgets/hairline.dart';
 import 'package:app_management/shared/widgets/subtitle_section.dart';
@@ -44,6 +45,8 @@ class MemberProfileCard extends StatelessWidget {
           title: 'Rank',
           child: RankSection(member: member, stats: stats),
         ),
+        const Hairline(),
+        const PendingApprovalSection(),
         const Hairline(),
         RewardsSection(rewards: rewards),
       ],
