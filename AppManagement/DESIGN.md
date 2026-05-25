@@ -1,123 +1,207 @@
-<!-- SEED — re-run /impeccable document once the redesign has code, to capture the actual tokens, generate the DESIGN.json sidecar, and replace the placeholders below. -->
 ---
 name: AppManagement
-description: Gym admin web app — a calm, premium control room for the member-retention engine.
+description: Gym admin web app — a calm, premium, daylit control desk for the member-retention engine.
+colors:
+  paper: "#F6F3EE"
+  ink: "#27231E"
+  sapphire: "#2A67BD"
+  deep-sapphire: "#274777"
+  status-good: "#1D7D3E"
+  status-warn: "#915C08"
+  status-bad: "#B6322D"
+  link: "#0E5CAF"
+typography:
+  display:
+    fontFamily: "Hanken Grotesk, sans-serif"
+    fontSize: "32px"
+    fontWeight: 600
+    letterSpacing: "0"
+  headline:
+    fontFamily: "Hanken Grotesk, sans-serif"
+    fontSize: "24px"
+    fontWeight: 700
+    letterSpacing: "-0.02em"
+  title:
+    fontFamily: "Hanken Grotesk, sans-serif"
+    fontSize: "16px"
+    fontWeight: 600
+  label:
+    fontFamily: "Hanken Grotesk, sans-serif"
+    fontSize: "13px"
+    fontWeight: 600
+  body:
+    fontFamily: "Hanken Grotesk, sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+    letterSpacing: "0.03em"
+rounded:
+  sm: "8px"
+  md: "12px"
+spacing:
+  tiny: "2px"
+  small: "4px"
+  medium: "8px"
+  large: "16px"
+  big: "32px"
+components:
+  button-primary:
+    backgroundColor: "{colors.sapphire}"
+    textColor: "{colors.paper}"
+    rounded: "{rounded.md}"
+    padding: "8px 16px"
+  button-outline:
+    textColor: "{colors.ink}"
+    rounded: "{rounded.md}"
+    padding: "8px 16px"
+  object-card:
+    backgroundColor: "{colors.ink}"
+    rounded: "{rounded.md}"
 ---
 
 # Design System: AppManagement
 
-## Overview
+## 1. Overview
 
-**Creative North Star: "The Quiet Control Room"**
+**Creative North Star: "The Daylit Control Desk"**
 
-A dim, premium control room seen after hours. The surfaces are deep, desaturated slate;
-nothing glows for its own sake. A single jewel-tone light draws the eye to the one thing that
-needs attention right now: a retention signal trending the wrong way, a member due for a
-rank promotion, a rewards balance about to convert. Authority comes from stillness and
-restraint, not from alarm or athletic intensity. The owner glances at it between classes and
-trusts it instantly.
+A calm, well-lit front desk you trust at a glance. Warm paper, near-black ink, and a single
+sapphire accent that marks the one thing needing attention. The surface is quiet and
+premium; structure comes from whitespace, thin hairline rules, and type hierarchy, not from
+boxing every section in a card. The owner glances between classes and reads the retention
+engine (attendance, ranks, points, rewards, redemptions) in seconds.
 
-This system is built for **legibility under glance**, not density. The retention engine
-(attendance, ranks/divisions, points, rewards, content) is the subject; the chrome recedes so
-the data reads in seconds. It is **vertical-neutral** by mandate: it must feel as right behind
-a pilates studio as behind a BJJ gym, so it carries no combat-sports coding, no athletic
-aggression, and no wellness-spa cliche.
+It is **vertical-neutral** by mandate: it must feel as right behind a pilates studio as a BJJ
+gym, so it carries no combat-sports coding (no fists, cages, aggressive type) and no
+wellness-spa cliche. Because these screens double as a sales artifact, polish is load-bearing
+on every surface, including ones no one would screenshot.
 
-It explicitly rejects the look of the incumbent gym CRMs (Mindbody, PushPress, Zen Planner),
-the spreadsheet wall of uniform-weight data, and the generic Bootstrap-y SaaS dashboard. If a
-viewer could say "a template made that," the screen has failed. Because these screens double
-as a sales artifact, polish is load-bearing on every surface, including ones no one would
-screenshot.
+It explicitly rejects the incumbent gym CRMs (Mindbody, PushPress, Zen Planner), spreadsheet
+density, and the generic Bootstrap-y SaaS dashboard. If a viewer could say "a template made
+that," the screen has failed.
 
 **Key Characteristics:**
-- Deep desaturated slate base; warm-tinted neutrals, never pure black or white.
-- One jewel-tone accent, used rarely and meaningfully.
-- A single humanist sans; hierarchy from weight and scale, never from switching fonts.
-- Restrained, responsive motion that degrades cleanly under `prefers-reduced-motion`.
-- Calm, confident, credible. The opposite of a spreadsheet and the opposite of a neon dashboard.
+- Warm paper background, warm-ink text; never pure white or black.
+- One sapphire accent, used sparingly and meaningfully.
+- A single humanist sans (Hanken Grotesk) with tabular figures; hierarchy from weight + scale.
+- De-carded: sections live on the page, separated by hairlines; cards are reserved for
+  discrete, repeated objects (reward / redemption / class cards).
+- Tight 12 / 8px corners. Calm, confident, credible.
 
-## Colors
+## 2. Colors
 
-A near-monochrome slate field with one jewel-tone voice and a small, desaturated set of
-semantic status hues for retention data. Exact values are resolved at implementation; the
-*relationships* below are normative.
+A warm near-monochrome paper field with one sapphire voice and a small, deliberately darkened
+set of semantic status hues that read on light.
 
 ### Primary
-- **Jewel Accent** `[to be resolved during implementation — candidates: deep emerald or sapphire; pick one, not both]`: the single point of attention. Active nav, the primary action on a screen, the one figure that matters most. Never decorative.
+- **Sapphire** (`#2A67BD`): the single accent. Active nav, primary action, focus rings,
+  progress arcs, chart series, the one figure that matters. As a fill it carries a paper
+  label; as text/icons on paper it reads at 5:1.
+
+### Secondary
+- **Deep Sapphire** (`#274777`): the darker companion (the donut "inactive" arc, the Material
+  `secondary` slot). Quiet, recedes behind the primary.
+
+### Tertiary — Semantic Status (functional, darkened for paper)
+- **Good** (`#1D7D3E`): on-track / checked-in / streak alive.
+- **Warn** (`#915C08`): at-risk / slipping (amber, not yellow, so it reads on paper).
+- **Bad** (`#B6322D`): churn-risk / error.
+- **Link** (`#0E5CAF`): hyperlinks (email, etc.).
 
 ### Neutral
-- **Deep Slate (background)** `[to be resolved]`: the room. Deep, desaturated, warm-tinted toward the accent hue (chroma ~0.005–0.01). Never `#000`.
-- **Raised Slate (surfaces/containers)** `[to be resolved]`: one or two lightness steps above background for cards, panels, table rows that need separation.
-- **Ink (primary text)** `[to be resolved]`: warm off-white, never pure `#fff`. Tinted toward the accent hue.
-- **Muted Ink (secondary text / labels)** `[to be resolved]`: reduced-opacity ink for supporting copy, column headers, captions.
-- **Hairline (borders/dividers)** `[to be resolved]`: low-contrast slate for full borders and 1px dividers only.
-
-### Tertiary — Semantic Status (functional, not brand)
-- **Good / On-track** `[to be resolved — desaturated green]`: retention healthy, streak alive, rank progressing.
-- **Watch / At-risk** `[to be resolved — desaturated amber]`: attendance slipping, reward expiring.
-- **Critical / Churn-risk** `[to be resolved — desaturated red]`: member likely to quit, action needed.
-- These stay muted so they read as data, not alarm, and never compete with the Jewel Accent for "the one light."
+- **Paper** (`#F6F3EE`): the surface. Warm off-white, never `#fff`. Also doubles as the
+  knockout label color on sapphire fills.
+- **Ink** (`#27231E`): primary text. Warm near-black, never `#000`. `text2nd` / `text3rd` are
+  ink at 75% / 50% for secondary and muted copy.
+- **Panel** (ink @ 10%): the only "surface" tint, used as the background of discrete object
+  cards, the sidebar rail, and small controls (search box, pills). Hairlines/dividers use this
+  same low-contrast tint.
 
 ### Named Rules
-**The One Light Rule.** The Jewel Accent appears on ≤10% of any given screen. It marks the single thing that most needs the owner's attention. Its rarity is the signal: spend it and you spend the owner's eye. Status hues are functional and exempt, but they are desaturated so they never read as a second accent.
+**The One Light Rule.** Sapphire appears on ≤10% of any screen; it marks the single most
+important thing. Status hues are functional and exempt but stay muted so they never read as a
+second accent.
 
-**The Tinted Neutral Rule.** No pure black, no pure white. Every neutral is tinted toward the accent hue (chroma 0.005–0.01). Pure greys read as the generic-SaaS dashboard this system rejects.
+**The Tinted Neutral Rule.** No pure black, no pure white. Paper and ink are both warm-tinted.
 
-## Typography
+## 3. Typography
 
-**Display Font:** `[single humanist sans — family chosen at implementation]`
-**Body Font:** same family.
-**Label/Mono Font:** the same sans; tabular figures for numeric columns and metrics.
+**Display / Body Font:** Hanken Grotesk (humanist sans), with `sans-serif` fallback.
+**Numerals:** tabular figures everywhere, so columns and metrics align.
 
-**Character:** One warm, humanist sans does all the work. Humanist (not geometric) so it reads as crafted and approachable rather than the cold geometric grotesque of generic SaaS. Calm, legible at small sizes, confident at large.
+**Character:** one warm humanist sans does all the work, crafted and approachable rather than
+the cold geometric grotesque of generic SaaS.
 
 ### Hierarchy
-- **Display** (`[bold, large clamp, tight line-height]`): the one big figure or screen title. Used sparingly.
-- **Headline** (`[semibold]`): section titles (the "Title → Content" boundary in the spacing cascade).
-- **Title** (`[medium/semibold]`): card and group headers.
-- **Body** (`[regular]`): default reading text; cap measured text at 65–75ch.
-- **Label** (`[medium, slightly looser tracking, optional uppercase]`): table column headers, chips, metadata, captions. Use tabular figures wherever numbers align in columns.
+- **Display** (`big2`, 600, 32px): the one big figure or the member name. Used sparingly.
+- **Headline** (`h1`, 700, 24px, -0.02em): page titles, member name.
+- **Title** (`h2`, 600, 16px): section titles, card titles.
+- **Label** (`h3`, 600, 13px): table headers, chips, metadata.
+- **Body** (`p`, 400, 12px, 0.03em): default reading text; cap measured text at 65–75ch.
 
 ### Named Rules
-**The Weight-Not-Family Rule.** Hierarchy comes from weight and scale within the single family, never from switching typefaces. Keep ≥1.25 scale ratio between steps; flat scales read as a spreadsheet.
+**The Weight-Not-Family Rule.** Hierarchy comes from weight and scale within Hanken Grotesk,
+never from switching typefaces. Keep ≥1.25 scale steps; flat scales read as a spreadsheet.
 
-## Elevation
+## 4. Elevation
 
-Mostly flat, with depth conveyed by **tonal layering**, not drop shadows. Slate surfaces step up in lightness as they come forward (background → raised surface → floating). Resting surfaces cast no shadow.
-
-### Shadow Vocabulary
-- **Floating only** `[exact value to be resolved]`: a soft, low shadow reserved for *transient* surfaces that genuinely leave the plane — menus, popovers, dialogs. Never on resting cards or table rows.
+Flat. Depth comes from **whitespace, hairline rules, and tonal panels**, not drop shadows.
+Page sections sit directly on the paper, separated by 32px rhythm and 1px `Hairline` rules
+(horizontal between stacked sections, vertical between side-by-side panes). The only raised
+surface is a discrete object card (ink @ 10% panel, 12px corners); even those are flat at
+rest. Shadows are reserved for genuinely transient surfaces (menus, dialogs).
 
 ### Named Rules
-**The Flat-At-Rest Rule.** Surfaces are flat by default; depth is a tonal step, not a shadow. A shadow is a response to transience (a thing floating above the page), never decoration. If a resting card has a drop shadow, it is wrong.
+**The De-Card Rule.** Do not box a page section in a card. Cards are only for discrete,
+repeated *objects* (a reward, a redemption, a class). Sections are structured by space +
+hairlines + titles. Nested cards are always wrong.
 
-## Components
+## 5. Components
 
-No component system has been built for the new direction yet (seed). The next scan-mode pass
-should capture and re-skin the existing shared primitives in `lib/shared/widgets/` to this
-spec — notably `AppDataTable` (the canonical table; do not handroll rows/dividers),
-`app_primary_button` / `app_outline_button`, `app_search_box`, `filter_bar` / `filter_pills`,
-`section_card`, `info_row` / `info_table`, `view_switcher`, and `app_shell` (the side nav).
-Re-skin these; do not fork parallel versions.
+### Buttons
+- **Shape:** 12px corners (`radiusBig`).
+- **Primary:** sapphire fill, **paper** label (knockout), used for the one main action.
+- **Outline:** 2px ink border, ink label, transparent fill, for secondary actions (Print,
+  Edit, Promote, View all).
 
-## Do's and Don'ts
+### Hairline
+- A 1px rule in the panel tint. Horizontal separates stacked sections; `vertical: true`
+  separates side-by-side columns (dashboard panes, KPI stats, the member rail).
+
+### Object Cards (reward / redemption / class)
+- Panel background (ink @ 10%), 12px corners, image hero on top with a sapphire **price pill**
+  (top-right), then centered title, points in sapphire, and a status/action footer
+  ("Review & confirm" when pending, a green "Approved" when done). Laid out in a `FillGrid`
+  that caps columns at item count so a short row fills the width.
+
+### Pills / Chips
+- Small rounded (`radiusSmall`) tints: the sapphire price pill (paper label), the muted
+  sapphire KPI delta chip, the filter pills (sapphire fill + paper label when selected).
+
+### Tables
+- `AppDataTable` only (header row + hairline-separated rows). Status values are colored text
+  (good/warn/bad), never filled cells. Numerals are tabular.
+
+### Navigation
+- Left rail (panel tint), the Apex MMA mark on top, then icon + label items. Active item is
+  ink; the primary "Add New Member" CTA is sapphire.
+
+## 6. Do's and Don'ts
 
 ### Do:
-- **Do** keep the Jewel Accent to ≤10% of any screen (the One Light Rule); let it mark the single most important thing.
-- **Do** tint every neutral toward the accent hue; never use `#000` or `#fff`.
-- **Do** build hierarchy from weight and scale in one humanist sans (the Weight-Not-Family Rule), with ≥1.25 scale steps.
-- **Do** convey depth with tonal slate steps; keep resting surfaces flat (the Flat-At-Rest Rule).
-- **Do** use the spacing cascade (`spacingLarge → spacingMedium → spacingSmall`) so gap size communicates relationship; split widgets at the Title→Content boundary.
-- **Do** keep status hues desaturated so retention data reads as information, not alarm.
-- **Do** respect `prefers-reduced-motion`: motion is responsive feedback (hover, expand, tab change), never required choreography.
-- **Do** hold text and meaningful UI to WCAG AA contrast against the slate background.
+- **Do** keep sapphire to ≤10% of a screen; let it mark the single most important thing.
+- **Do** separate sections with whitespace + hairlines + titles, not cards (the De-Card Rule).
+- **Do** reserve cards for discrete repeated objects (reward / redemption / class cards).
+- **Do** tint every neutral; paper not `#fff`, ink not `#000`.
+- **Do** build hierarchy from weight + scale in Hanken Grotesk; use tabular figures for data.
+- **Do** put a **paper** label on sapphire fills, and use **sapphire** for accent text on paper.
+- **Do** hold text + meaningful UI to WCAG AA; respect `prefers-reduced-motion`.
 
 ### Don't:
-- **Don't** look like the incumbent gym CRMs (Mindbody, PushPress, Zen Planner) — no dense, dated, operational back-office clutter.
-- **Don't** produce spreadsheet density — walls of tiny, uniform-weight data with no hierarchy. The retention engine is read, not deciphered.
-- **Don't** fall into generic SaaS admin — no Bootstrap-y grey cards, blue hyperlinks, default-everything dashboards, or the hero-metric-with-gradient cliché.
-- **Don't** use combat-sports machismo — no fight imagery, cage motifs, or aggressive condensed display type. Off-brand for the generalized class-based-gym positioning.
-- **Don't** use a colored `border-left`/`border-right` greater than 1px as an accent stripe; use full borders, background tints, or leading figures instead.
-- **Don't** use gradient text (`background-clip: text`), decorative glassmorphism, or identical icon-heading-text card grids.
-- **Don't** reach for a modal as the first thought; exhaust inline and progressive alternatives first.
-- **Don't** add a second accent. If a screen seems to need one, the layout, not the palette, is the problem.
+- **Don't** look like the incumbent gym CRMs (Mindbody, PushPress, Zen Planner), dense, dated
+  operational clutter.
+- **Don't** produce spreadsheet density, walls of uniform-weight data with no hierarchy.
+- **Don't** fall into generic SaaS admin, grey cards, blue hyperlinks, default-everything,
+  the hero-metric-with-gradient cliche.
+- **Don't** use combat-sports machismo, fight imagery, cages, aggressive condensed type.
+- **Don't** box page sections in cards or nest cards. Don't add a second accent.
+- **Don't** use side-stripe borders, gradient text, or decorative glassmorphism.

@@ -98,6 +98,9 @@ class SectionsBar extends StatelessWidget {
   }
 }
 
+/// Apex MMA brand mark: a glove symbol over a tight wordmark. Owned art
+/// (no third-party logo) so it's safe to ship in demos; swap the icon for
+/// `Image.asset('assets/images/<logo>.png')` once the gym provides one.
 class _Logo extends StatelessWidget {
   const _Logo();
 
@@ -105,10 +108,22 @@ class _Logo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: DesignConstants.spacingMedium),
-      child: Text(
-        'COMBAT\nDEN',
-        textAlign: TextAlign.center,
-        style: DesignConstants.h2.copyWith(fontWeight: FontWeight.w900),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingTiny,
+        children: [
+          Icon(
+            Symbols.sports_mma_sharp,
+            color: DesignConstants.primaryColor,
+            weight: DesignConstants.iconWeight,
+            size: 36,
+          ),
+          Text(
+            'APEX\nMMA',
+            textAlign: TextAlign.center,
+            style: DesignConstants.h2.copyWith(fontWeight: FontWeight.w900),
+          ),
+        ],
       ),
     );
   }
