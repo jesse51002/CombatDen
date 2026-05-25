@@ -169,12 +169,6 @@ class LiteLLMClient(CostTracking, LLMClient):
         """One chat turn via litellm → the message dict. ``model`` is
         required and carries the provider prefix (litellm routes on it).
         Raises ``ProviderError`` on a transport/litellm failure."""
-
-        """
-        logger.debug(
-            "complete input → %s:\n\n%s\n", model, _render(messages)
-        )
-        """
         kwargs = self._completion_kwargs(model, messages)
         if tools is not None:
             kwargs["tools"] = tools
@@ -206,15 +200,6 @@ class LiteLLMClient(CostTracking, LLMClient):
             kwargs = self._completion_kwargs(model, convo)
             kwargs["response_format"] = schema
 
-            """
-            logger.debug(
-                "complete_structured input → %s %s (attempt %d):\n\n%s\n",
-                model,
-                schema.__name__,
-                attempt + 1,
-                _render(convo),
-            )
-            """
             resp = await self._acompletion(kwargs, model)
             # Every attempt is a billed call — count each, not just the
             # one that finally validates.
