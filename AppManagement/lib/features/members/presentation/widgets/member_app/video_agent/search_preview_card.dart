@@ -67,7 +67,7 @@ class _TagChip extends StatelessWidget {
       child: Text(
         label,
         style: DesignConstants.pSmall.copyWith(
-          color: DesignConstants.primaryColor,
+          color: DesignConstants.lightPrimary,
         ),
       ),
     );

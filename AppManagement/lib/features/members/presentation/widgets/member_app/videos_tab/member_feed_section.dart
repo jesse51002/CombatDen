@@ -211,7 +211,7 @@ class _ViewAllButton extends StatelessWidget {
           Text(
             'View all',
             style: DesignConstants.p.copyWith(
-              color: DesignConstants.primaryColor,
+              color: DesignConstants.lightPrimary,
             ),
           ),
           Icon(

@@ -54,7 +54,7 @@ class PendingApprovalCard extends StatelessWidget {
                 Text(
                   '${formatRewardPoints(r.pointsCost)} pts',
                   style: DesignConstants.h2.copyWith(
-                    color: DesignConstants.primaryColor,
+                    color: DesignConstants.lightPrimary,
                   ),
                   textAlign: TextAlign.center,
                 ),

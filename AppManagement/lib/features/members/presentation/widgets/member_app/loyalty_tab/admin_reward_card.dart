@@ -56,7 +56,7 @@ class AdminRewardCard extends StatelessWidget {
                 Text(
                   '${formatRewardPoints(reward.pointsCost)} pts',
                   style: DesignConstants.h2.copyWith(
-                    color: DesignConstants.primaryColor,
+                    color: DesignConstants.lightPrimary,
                   ),
                   textAlign: TextAlign.center,
                 ),
