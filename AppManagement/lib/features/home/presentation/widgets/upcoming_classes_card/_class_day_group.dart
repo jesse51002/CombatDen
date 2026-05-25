@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
+import 'package:app_management/core/navigation/app_routes.dart';
 import 'package:app_management/features/home/data/mock_upcoming_classes.dart';
-import 'package:app_management/features/home/presentation/widgets/upcoming_classes_card/_class_row.dart';
+import 'package:app_management/shared/widgets/class_row/class_row.dart';
 
 /// One day section inside the Upcoming Classes card: day label header
 /// followed by the list of classes for that day, each separated by a
@@ -32,8 +33,19 @@ class _ClassesList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[];
-    for (var i = 0; i < group.classes.length; i++) {
-      children.add(ClassRow(scheduledClass: group.classes[i]));
+    for (final c in group.classes) {
+      children.add(
+        ClassRow(
+          name: c.name,
+          timeLabel: '${c.startTime} - ${c.endTime} (${c.durationLabel})',
+          instructorName: c.instructorName,
+          imageAsset: c.imageAsset,
+          attendingCount: c.attendingCount,
+          checkedInCount: c.checkedInCount,
+          inSession: c.inSession,
+          onTap: () => Navigator.pushNamed(context, AppRoutes.schedule),
+        ),
+      );
       children.add(Container(height: 1, color: DesignConstants.divider));
     }
 

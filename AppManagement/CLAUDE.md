@@ -23,37 +23,6 @@ The whole point is to make screens that **look right** so the design can be eval
 - `../LandingPage/` — React marketing site. Not a Flutter sibling, but its `COPY` dict and design choices may inform copy/voice for admin screens. Read `../LandingPage/CLAUDE.md` if you're writing user-facing strings that should match marketing voice.
 - `../Database/` — Supabase schemas and `openapi.json`. Irrelevant while we're prototype-only, but model field names should already match what the API will eventually return so the future swap is mechanical.
 
-## Always use the Figma MCP plugin before designing
-
-**Never design from memory and never guess at a layout.** Before writing widget code for any screen or component:
-
-1. **Look up the screen in `figma/inventory.yaml`.** That file holds every known frame — name, `file_key`, `node_id`. Use it instead of asking the user to paste the URL again. If the screen isn't in the inventory, ask the user for the Figma URL and **add it to `figma/inventory.yaml` in the same change** so the next person doesn't have to ask.
-2. Call `mcp__plugin_figma_figma__get_design_context` with the `file_key` and `node_id` from the inventory to fetch the design.
-3. Call `mcp__plugin_figma_figma__get_screenshot` whenever you need to verify pixel placement, spacing, color, or visual fidelity. Use it liberally.
-4. Re-fetch as many times as needed during implementation. **It is better to look at Figma five times than to ship one screen that's wrong.** Round-tripping Figma is cheap; rebuilding a screen because you guessed the spacing is not.
-5. Use the `figma:figma-implement-design` skill when translating a Figma frame into Flutter code.
-6. The Figma MCP returns React/Tailwind. Adapt to Flutter + DesignConstants — never paste hex codes, font sizes, or pixel values from the Figma export directly into widget code. Map every Figma token to its closest existing `DesignConstants.*` value.
-7. If a value in Figma has no DesignConstants equivalent, **stop and ask the user.** Do not invent a new constant. Do not silently inline a magic number.
-
-If you find yourself writing widget code without the Figma context loaded in this conversation, stop and load it.
-
-### Figma rate-limit rule — NEVER make things up
-
-If a Figma MCP call returns a rate-limit error ("tool call limit reached", HTTP 429, or similar), **wait 30 seconds and retry the same call**. Retry up to **3 times** total. If it's still rate-limited after the 3rd retry, **stop the task and report it as blocked**. Do not proceed.
-
-**Never ever ever make up a layout because Figma is unavailable.** Not from convention, not from "the existing visual language", not from "what good apps usually do for this", not from your training data. The Figma frame is the source of truth. If you can't see it, you can't build it. Ship nothing rather than ship a guess.
-
-This rule applies to every screen, every component, every variant — individually. One rate-limited screen does not give you license to guess at the others. Stop, report which screens were unreachable, and let the user decide.
-
-### Figma asset download rule
-
-Figma asset URLs from the MCP plugin **expire after 7 days**. Whenever a Figma frame contains bitmap images — gym logos, photos, raster icons, custom illustrations — **download them to `assets/images/<descriptive_snake_case_name>.png`** and register `assets/images/` in `pubspec.yaml`. Reference them via `Image.asset('assets/images/...')`.
-
-- **Never hotlink** Figma asset URLs (`https://www.figma.com/api/mcp/asset/...`) from widget code. They will silently 404 in a week.
-- **Never use `NetworkImage`** for Figma-sourced visuals. Same reason.
-- The only icons that bypass this rule are ones Figma is rendering as a system glyph that already exists in Material Symbols (chevrons, person/user, simple arrows, common UI icons). Those become `Symbols.*_sharp` per the icon rule above.
-- When choosing the local filename, use a name that survives the design changing — `gym_logo_global_mma.png`, not `rectangle_10.png`.
-
 ## Search the web for conventions before designing
 
 When the UX question is "how do good apps usually present X?" — login flows, empty states, error states, onboarding, pull-to-refresh, list/detail patterns, settings screens, paywalls, billing screens, permission prompts, password reset, account deletion, etc. — **search the web first.** Look at what proven web apps actually ship (Stripe Dashboard, Linear, Notion, Vercel, Intercom admin, etc.). Don't guess.
@@ -79,7 +48,7 @@ How to apply:
 **CRITICAL: ALWAYS Use DesignConstants**
 
 - **EVERY widget MUST import and use `package:app_management/core/constants/design_constants.dart`.**
-- **NEVER hardcode colors** — no `Colors.red`, no inline `Color(0xFF...)`, no copy-pasted Figma hex codes.
+- **NEVER hardcode colors** — no `Colors.red`, no inline `Color(0xFF...)`, no copy-pasted hex codes.
 - **NEVER hardcode font properties** — no inline `fontFamily`, no inline `fontSize`, no inline `fontWeight`. Use the text styles in `DesignConstants` (`h1`, `h2`, `h3`, `p`, `pBig`, `pSmall`, etc.).
 - **NEVER hardcode spacing, padding, radius, or border widths.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorderSize`.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/radius/padding, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
@@ -319,4 +288,4 @@ Until that work happens, none of those concerns belong in this repo.
 
 ---
 
-**Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability. And always look at Figma first.**
+**Remember: Code is read more often than written. Prioritize clarity, modularity, and maintainability.**
