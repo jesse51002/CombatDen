@@ -7,13 +7,13 @@ import 'package:app_management/core/constants/design_constants.dart';
 /// identity carries from grid to detail (mirrors the member app).
 class RewardImageHero extends StatelessWidget {
   final String imageAsset;
-  final String priceLabel;
+  final String? priceLabel;
   final BorderRadius? borderRadius;
 
   const RewardImageHero({
     super.key,
     required this.imageAsset,
-    required this.priceLabel,
+    this.priceLabel,
     this.borderRadius,
   });
 
@@ -25,11 +25,12 @@ class RewardImageHero extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Image.asset(imageAsset, fit: BoxFit.cover),
-          Positioned(
-            top: DesignConstants.spacingMedium,
-            right: DesignConstants.spacingMedium,
-            child: RewardPriceTag(label: priceLabel),
-          ),
+          if (priceLabel != null)
+            Positioned(
+              top: DesignConstants.spacingMedium,
+              right: DesignConstants.spacingMedium,
+              child: RewardPriceTag(label: priceLabel!),
+            ),
         ],
       ),
     );

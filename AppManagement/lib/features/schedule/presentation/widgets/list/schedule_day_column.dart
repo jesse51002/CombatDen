@@ -40,7 +40,7 @@ class _DayCards extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingLarge,
+      spacing: DesignConstants.spacingBig,
       children: [
         for (final e in group.classes)
           ClassCard(

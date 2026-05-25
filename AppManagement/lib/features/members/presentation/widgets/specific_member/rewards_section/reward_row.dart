@@ -35,7 +35,6 @@ class RedeemedRewardCard extends StatelessWidget {
           children: [
             RewardImageHero(
               imageAsset: reward.imageAsset,
-              priceLabel: reward.costLabel,
             ),
             Padding(
               padding: const EdgeInsets.all(DesignConstants.paddingSmall),
@@ -58,9 +57,9 @@ class RedeemedRewardCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    reward.gymName,
-                    style: DesignConstants.p.copyWith(
-                      color: DesignConstants.text2nd,
+                    reward.costLabel,
+                    style: DesignConstants.h2.copyWith(
+                      color: DesignConstants.primaryColor,
                     ),
                     textAlign: TextAlign.center,
                   ),
