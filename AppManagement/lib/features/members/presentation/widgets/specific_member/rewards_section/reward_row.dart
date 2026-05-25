@@ -35,6 +35,7 @@ class RedeemedRewardCard extends StatelessWidget {
           children: [
             RewardImageHero(
               imageAsset: reward.imageAsset,
+              priceLabel: reward.costLabel,
             ),
             Padding(
               padding: const EdgeInsets.all(DesignConstants.paddingSmall),
@@ -57,7 +58,7 @@ class RedeemedRewardCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    reward.costLabel,
+                    '${formatRewardPoints(reward.pointsSpent)} pts',
                     style: DesignConstants.h2.copyWith(
                       color: DesignConstants.primaryColor,
                     ),
