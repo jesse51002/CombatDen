@@ -220,24 +220,21 @@ class _RemoveButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: DesignConstants.redDark,
-          foregroundColor: DesignConstants.text,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(
-            horizontal: DesignConstants.paddingSmall,
-            vertical: DesignConstants.spacingMedium,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-          ),
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: DesignConstants.redDark,
+        foregroundColor: DesignConstants.text,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(
+          horizontal: DesignConstants.paddingSmall,
+          vertical: DesignConstants.spacingMedium,
         ),
-        child: Text('Remove', style: DesignConstants.h3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
+        ),
       ),
+      child: Text('Remove', style: DesignConstants.h3),
     );
   }
 }

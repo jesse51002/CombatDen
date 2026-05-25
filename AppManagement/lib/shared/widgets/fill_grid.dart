@@ -48,7 +48,6 @@ class FillGrid extends StatelessWidget {
     for (var start = 0; start < children.length; start += cols) {
       final cells = <Widget>[];
       for (var col = 0; col < cols; col++) {
-        if (col > 0) cells.add(SizedBox(width: spacing));
         final index = start + col;
         cells.add(
           Expanded(
@@ -59,7 +58,11 @@ class FillGrid extends StatelessWidget {
         );
       }
       rows.add(
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: cells),
+        Row(
+          spacing: spacing,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: cells,
+        ),
       );
     }
     return Column(
