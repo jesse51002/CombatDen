@@ -57,6 +57,10 @@ class DesignConstants {
   static const double sideNavWidth = 100.0;
   static const double tableRowHeight = 35.0;
 
+  // Two lines of h2, so every reward card's title block is the same height
+  // whether the title wraps to one line or two.
+  static const double rewardCardTitleHeight = 42;
+
   static final TextStyle baseFont = GoogleFonts.hankenGrotesk(
     fontFeatures: const [FontFeature.tabularFigures()],
   );

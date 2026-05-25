@@ -8,9 +8,6 @@ import 'package:app_management/features/members/presentation/widgets/member_app/
 import 'package:app_management/shared/widgets/app_primary_button.dart';
 import 'package:app_management/shared/widgets/info_row.dart';
 
-// Two lines of h2 so every card's title block is the same height.
-const double _kCardTitleHeight = 42;
-
 /// One member redemption awaiting desk confirmation: the reward art the
 /// member sees, who requested it and when, and a button to open the
 /// confirm dialog. Visual so staff recognize the reward at a glance.
@@ -40,7 +37,7 @@ class RedemptionCard extends StatelessWidget {
               spacing: DesignConstants.spacingMedium,
               children: [
                 SizedBox(
-                  height: _kCardTitleHeight,
+                  height: DesignConstants.rewardCardTitleHeight,
                   child: Align(
                     alignment: Alignment.topCenter,
                     child: Text(

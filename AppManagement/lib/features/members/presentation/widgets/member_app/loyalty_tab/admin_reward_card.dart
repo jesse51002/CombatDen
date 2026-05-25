@@ -6,10 +6,6 @@ import 'package:app_management/features/members/presentation/widgets/member_app/
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/app_primary_button.dart';
 
-// Reserve two lines of h2 so every card's title block is the same height
-// whether the title wraps to one line or two (mirrors the member app).
-const double _kCardTitleHeight = 42;
-
 /// One reward in the admin's points store: the member-facing card art,
 /// title, and points cost, with Edit / Remove actions for the admin.
 class AdminRewardCard extends StatelessWidget {
@@ -41,7 +37,7 @@ class AdminRewardCard extends StatelessWidget {
               spacing: DesignConstants.spacingMedium,
               children: [
                 SizedBox(
-                  height: _kCardTitleHeight,
+                  height: DesignConstants.rewardCardTitleHeight,
                   child: Align(
                     alignment: Alignment.topCenter,
                     child: Text(
