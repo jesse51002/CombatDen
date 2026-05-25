@@ -84,6 +84,10 @@ class DesignConstants {
   static final TextStyle big1 = h2.copyWith(fontSize: 160);
   static final TextStyle big2 = h2.copyWith(fontSize: 32);
 
+  static final TextStyle big2Bold = big2.copyWith(fontWeight: FontWeight.w700);
+  static final TextStyle big2Light =
+      big2.copyWith(fontWeight: FontWeight.w300);
+
   /// H2 text style (light, 18)
   static final TextStyle h2 = baseFont.copyWith(
     fontWeight: FontWeight.w600,
@@ -116,6 +120,9 @@ class DesignConstants {
 
   static final TextStyle pBig = p.copyWith(fontSize: 16);
   static final TextStyle pSmall = p.copyWith(fontSize: 11);
+
+  static final TextStyle pSmallBold =
+      pSmall.copyWith(fontWeight: FontWeight.w700);
 
   // Private constructor to prevent instantiation
   DesignConstants._();
