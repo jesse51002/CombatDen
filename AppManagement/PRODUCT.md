@@ -45,13 +45,14 @@ hardcoded mock data) built for demos and design iteration during pre-build sales
 also doubles as a live sales artifact — screens get screenshotted to sell. Design rigor is
 not relaxed because it's a prototype.
 
-**Note on visual direction:** AppManagement is being given a fresh, standalone visual
-identity. It is intentionally forking its design system away from the sibling member app and
-FlutterCRM (which share an immutable token file today). The fork is deliberate: the admin
-tool is staff-facing and lives in a different context than what members see, so it does not
-have to wear the members' skin. The "byte-for-byte identical design_constants" rule in
-CLAUDE.md does not bind this repo going forward; the tokens here will be rebuilt around the
-new direction once one is approved.
+**Note on visual direction:** AppManagement has a fresh, standalone visual identity, forked
+from the sibling member app and FlutterCRM (which share an immutable token file). The fork is
+deliberate: the admin tool is staff-facing and lives in a different context than what members
+see, so it does not have to wear the members' skin. The "byte-for-byte identical
+design_constants" rule in CLAUDE.md no longer binds this repo. The shipped direction is a warm
+light theme (paper + ink) with a single sapphire accent, Hanken Grotesk, tight corners, and a
+de-carded layout (sections separated by hairlines, cards reserved for discrete objects). Full
+spec in DESIGN.md.
 
 ## Brand Personality
 
