@@ -8,7 +8,9 @@ $preset
 
 ## Regions to recolour
 
-Map every one of these regions — all of them, each exactly once:
+Map every one of these regions — all of them, each exactly once. Each line
+is `region_name — what that colour does in the animation`. Use the
+description, not just the name, to judge the region's role:
 
 $regions
 
@@ -28,7 +30,8 @@ $palette
 ## How to choose
 
 - Map each region to the palette key whose colour best fits that region's
-  role in the animation (a glow, a spark, a background field, an edge).
+  role in the animation, as given by its description (a glow, a spark, a
+  background field, an edge).
 - Prefer a softer derived key (a `_third`, `_light`, `_card` variant, or a
   shared surface) over a harsh, fully-saturated base colour when the
   region is large or ambient — a full-strength base tone can be jarring as

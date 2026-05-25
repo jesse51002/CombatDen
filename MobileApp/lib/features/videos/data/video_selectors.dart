@@ -10,9 +10,8 @@ import 'package:mobile_app/features/videos/data/video.dart';
 
 /// Tag wire values the recommendation heuristics below special-case. Plain
 /// server strings, not a closed vocabulary — just the few referenced here.
-const String _kTutorial = 'tutorial';
 const String _kEducational = 'educational';
-const String _kInformative = 'informative';
+const String _kAnalysis = 'analysis';
 
 /// Sorts by backend relevancy (relevanceIndex asc, 0 = top hit), with view
 /// count as the secondary tiebreak. The single source of ordering for every
@@ -92,22 +91,22 @@ List<({String tag, List<Video> videos})> tagSections(
   ];
 }
 
-/// Post-class "Drill of the Day": the 2nd-ranked tutorial so it doesn't echo
-/// the featured tutorial; falls back to the top educational, then any.
+/// Post-class "Drill of the Day": the 2nd-ranked educational video so it
+/// doesn't echo a featured one; falls back to the top analysis, then any.
 Video? drillOfTheDay(List<Video> videos) {
   final ranked = sortByRelevance(videos);
-  final tutorials = ranked
-      .where((v) => v.tags.contains(_kTutorial))
+  final educational = ranked
+      .where((v) => v.tags.contains(_kEducational))
       .toList(growable: false);
-  if (tutorials.length >= 2) return tutorials[1];
-  return _firstWithTag(ranked, _kEducational) ?? _firstOrNull(ranked);
+  if (educational.length >= 2) return educational[1];
+  return _firstWithTag(ranked, _kAnalysis) ?? _firstOrNull(ranked);
 }
 
-/// Post-booking "Video Before Class": top-ranked educational/informative.
+/// Post-booking "Video Before Class": top-ranked educational/analysis.
 Video? videoBeforeClass(List<Video> videos) {
   final ranked = sortByRelevance(videos);
   return _firstWithTag(ranked, _kEducational) ??
-      _firstWithTag(ranked, _kInformative) ??
+      _firstWithTag(ranked, _kAnalysis) ??
       _firstOrNull(ranked);
 }
 

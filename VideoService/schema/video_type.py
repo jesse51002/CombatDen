@@ -14,16 +14,14 @@ import enum
 class VideoType(str, enum.Enum):
     """A YouTube content genre. Searches carry one or more of these."""
 
-    ENTERTAINMENT = "entertainment"          # broad watch-for-fun content in the niche
-    EDUCATIONAL = "educational"              # teaching concepts, explainers, courses
-    TUTORIAL = "tutorial"                    # step-by-step how-to / technique
-    INFORMATIVE = "informative"              # facts, breakdowns, analysis, deep dives
-    NEWS = "news"                            # current events, announcements, updates
-    INTERVIEW = "interview"                  # podcasts, Q&A, conversations with figures
-    VLOG = "vlog"                            # day-in-the-life, personal journeys
-    BEHIND_THE_SCENES = "behind_the_scenes"  # process, making-of, business/gym operations
-    PROFESSIONAL = "professional"            # PROS practising the craft at the top level —
-                                             # pro/elite athletes & competitors performing,
-                                             # pro competition footage (NOT corporate video)
-    CLIPS = "clips"                          # short highlights, moments, compilations
-    FUN = "fun"                              # memes, lighthearted, funny moments
+    EDUCATIONAL = "educational"  # teaching a techinque or concept.
+    ANALYSIS = (
+        "analysis"  # Post analysis of content, usually with the goal of educating.
+    )
+    ENTERTAINMENT = "entertainment"  # broad watch-for-fun content in the niche
+    NEWS = "news"  # Current events, announcements, updates
+    INTERVIEW = "interview"  # podcasts, Q&A, conversations with figures
+    VLOG = "vlog"  # day-in-the-life, personal journeys
+    PROFESSIONAL = "professional"  # pro/elite athletes & competitors performing, Specifically full matches or highlights from a specific event.
+    CLIPS = "clips"  # A single video clip of a short moment or highlight or a video with multiple short moments or highlights
+    Memes = "memes"  # Memes, lighthearted, funny moments

@@ -1,5 +1,6 @@
-"""The read-only endpoints: list companies, one company's full brief, and its
-search list (optionally filtered by video type)."""
+"""The read-only endpoints: list companies, one company's full brief, its
+search list, its fetched videos (optionally filtered by video type), and its
+class cards."""
 
 from __future__ import annotations
 
@@ -67,23 +68,17 @@ async def get_config(app_id: str) -> VideosConfig:
 @videos_router.get(
     "/{app_id}/searches",
     response_model=list[VideoSearch],
-    summary="Get a company's search prompts, optionally filtered by video type",
+    summary="Get a company's search prompts",
     responses={
-        200: {
-            "description": (
-                "The company's search prompts; when `video_type` is given, "
-                "only searches whose `tags` include it"
-            )
-        },
+        200: {"description": "The company's search prompts"},
         404: {"description": "No such company"},
         422: {"description": "Brief exists but its videos_config.yaml is stale"},
     },
 )
-async def get_searches(
-    app_id: str, video_type: VideoType | None = None
-) -> list[VideoSearch]:
-    """Return a company's searches. With ``?video_type=<enum>``, return only
-    searches tagged with that genre."""
+async def get_searches(app_id: str) -> list[VideoSearch]:
+    """Return a company's searches. Searches are query-only — genre is decided
+    per-video by the classification pass, so there is no video_type filter
+    here (use ``/videos?video_type=`` for that)."""
     try:
         config = await videos_service().load(app_id)
     except NotFoundError as exc:
@@ -101,9 +96,7 @@ async def get_searches(
             detail="Failed to load searches",
         ) from None
 
-    if video_type is None:
-        return config.searches
-    return [s for s in config.searches if video_type in s.tags]
+    return config.searches
 
 
 @videos_router.get(
@@ -113,8 +106,9 @@ async def get_searches(
     responses={
         200: {
             "description": (
-                "The company's video feed (slim, frontend-only fields); when "
-                "`video_type` is given, only videos whose `tags` include it"
+                "The company's video feed (slim, frontend-only fields), "
+                "excluding off-niche videos (classifier `is_good == False`); "
+                "when `video_type` is given, only videos with that genre tag"
             )
         },
         404: {"description": "No such company, or it has no videos_output.yaml yet"},
@@ -124,8 +118,9 @@ async def get_searches(
 async def get_videos(
     app_id: str, video_type: VideoType | None = None
 ) -> VideosFeed:
-    """Return a company's fetched videos. With ``?video_type=<enum>``, return
-    only videos tagged with that genre."""
+    """Return a company's fetched videos, **excluding off-niche ones** (the
+    classifier's ``is_good == False``); unclassified videos still serve. With
+    ``?video_type=<enum>``, return only videos with that genre tag."""
     try:
         output = await videos_service().load_output(app_id)
     except NotFoundError as exc:
@@ -143,9 +138,13 @@ async def get_videos(
             detail="Failed to load videos",
         ) from None
 
-    videos = output.videos
+    # Off-niche videos (the classifier's `is_good == False`) are never served —
+    # the verdict is enforced here, not on the client. Unclassified videos
+    # (`is_good is None`, i.e. classify hasn't run) still serve, so a freshly
+    # fetched feed isn't empty.
+    videos = [v for v in output.videos if v.is_good is not False]
     if video_type is not None:
-        videos = [v for v in videos if video_type in v.tags]
+        videos = [v for v in videos if v.tag == video_type]
     # VideoOutput -> VideoCard projection (drops desc/likes/source_queries) via
     # from_attributes on the slim models.
     return VideosFeed(

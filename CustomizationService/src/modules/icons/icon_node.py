@@ -38,6 +38,12 @@ from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
 
 
+def _matched(icons: dict[str, IconOutput]) -> dict[str, IconOutput]:
+    """The copied (matched) icons — those with no generation ``prompt``;
+    only these can owe a set's attribution credit."""
+    return {sid: out for sid, out in icons.items() if out.prompt is None}
+
+
 class IconNode(Node):
     """The icon node. ``run() -> IconSet``. No dependencies."""
 
@@ -48,10 +54,18 @@ class IconNode(Node):
         llm: LLMClient,
         catalog: IconSetCatalog,
         generator: ImageGenerator,
+        seed: dict[str, IconOutput] | None = None,
+        overwrite_specs: str = "",
     ) -> None:
         super().__init__(
-            run_ctx, key=DependencyKind.ICON.value, deps=frozenset()
+            run_ctx,
+            key=DependencyKind.ICON.value,
+            deps=frozenset(),
+            declared_slots={slot.id for slot in run_ctx.app.icons},
+            seed=seed,
+            overwrite_specs=overwrite_specs,
         )
+        self._catalog = catalog
         self._selection = IconSetSelectionService(llm, catalog)
         self._matching = IconMatchingService(llm, catalog)
         self._generation = IconGenerationService(llm, generator)
@@ -59,15 +73,63 @@ class IconNode(Node):
     async def run(self) -> IconSet:
         """Select a set, match (+ copy) every slot, generate the misses,
         merge the two halves into the ``IconSet`` and attach any credit the
-        chosen set's licence requires."""
-        chosen = await self._selection.select(self._run_ctx)
-        matched, unmatched = await self._matching.match(self._run_ctx, chosen)
-        generated = await self._generation.resolve(
-            self._run_ctx, chosen, unmatched
+        chosen set's licence requires.
+
+        Fresh run (empty seed): select a set and resolve every slot. Reopen:
+        keep the seed's chosen set (so the family doesn't shift), re-match/
+        -generate only the dirty slots — steered by ``overwrite_specs`` or
+        missing from the seed — and keep every non-dirty icon verbatim.
+        Attribution is recomputed from the (unchanged) set and the matched
+        icons, so the slot-level seed never has to carry that run-wide field.
+        Nothing dirty ⇒ the seed icons are returned, no LLM call."""
+        dirty = self.dirty()
+        self.regenerated = dirty
+        chosen = await self._reuse_or_select(self.seed)
+        if not dirty:
+            icons: dict[str, IconOutput] = dict(self.seed)  # type: ignore[arg-type]
+            return IconSet(
+                icons=icons,
+                attribution=self._attribution(chosen, _matched(icons)),
+            )
+        matched, unmatched = await self._matching.match(
+            self._run_ctx,
+            chosen,
+            only=dirty,
+            fixed=self.seed,  # type: ignore[arg-type]
+            overwrite_specs=self.overwrite_specs,
         )
+        generated = await self._generation.resolve(
+            self._run_ctx,
+            chosen,
+            unmatched,
+            overwrite_specs=self.overwrite_specs,
+        )
+        merged = {**self.seed, **self._stamp({**matched, **generated})}
         return IconSet(
-            icons={**matched, **generated},
-            attribution=self._attribution(chosen, matched),
+            icons=merged, attribution=self._attribution(chosen, _matched(merged))
+        )
+
+    def _stamp(self, icons: dict[str, IconOutput]) -> dict[str, IconOutput]:
+        """Stamp each icon with the steering it was (re)made under."""
+        return {
+            sid: out.model_copy(
+                update={"overwrite_specs": self.overwrite_specs}
+            )
+            for sid, out in icons.items()
+        }
+
+    async def _reuse_or_select(
+        self, seed: dict[str, IconOutput]
+    ) -> IconSetCatalogEntry:
+        """The set the seeded icons belong to (so a partial regen stays
+        in-family), looked up in the catalog. Falls back to selecting fresh
+        when there is no seed (fresh run) or the set can't be resolved."""
+        set_id = next((o.icon_set for o in seed.values()), None)
+        entry = (
+            await self._catalog.lookup(set_id) if set_id is not None else None
+        )
+        return entry if entry is not None else await self._selection.select(
+            self._run_ctx
         )
 
     @staticmethod

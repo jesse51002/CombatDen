@@ -7,7 +7,13 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # This file is <root>/src/api/config.py; runs live in <root>/apps.
-_DEFAULT_APPS_ROOT = Path(__file__).resolve().parent.parent.parent / "apps"
+_ROOT = Path(__file__).resolve().parent.parent.parent
+_DEFAULT_APPS_ROOT = _ROOT / "apps"
+# The global Lottie preset library. A lottie output references a preset by
+# library-relative path (e.g. ``animations/confetti_burst.json``); the
+# delivery endpoint resolves it against this root. Presets are shared across
+# tenants, so they live here, not under a per-run dir.
+_DEFAULT_LOTTIE_LIBRARY_ROOT = _ROOT / "assets" / "lottie_animations"
 
 
 class Settings(BaseSettings):
@@ -17,6 +23,9 @@ class Settings(BaseSettings):
 
     # Root that holds `<app_id>/<run_id>/output.yaml` + images.
     apps_root: Path = _DEFAULT_APPS_ROOT
+    # Root of the global Lottie preset library the lottie endpoint serves
+    # from (preset files are shared across tenants, not per-run).
+    lottie_library_root: Path = _DEFAULT_LOTTIE_LIBRARY_ROOT
     # No auth: the emulator hits this directly. `["*"]` keeps it open.
     cors_origins: list[str] = ["*"]
 

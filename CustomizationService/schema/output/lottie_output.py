@@ -22,14 +22,15 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator
 
 from schema.lottie_library import InsertionPoint
+from schema.output.node_output import NodeOutput
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-class LottieOutput(BaseModel):
+class LottieOutput(NodeOutput):
     """One slot's resolved animation: the chosen preset + recolour map."""
 
     model_config = ConfigDict(extra="ignore")

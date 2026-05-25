@@ -19,6 +19,7 @@ from schema import (
     Customization,
     ImageOutput,
     OklchColor,
+    OverwriteSpecs,
 )
 from src.core.errors import ProviderError
 from src.core.run_context import RunContext
@@ -343,7 +344,12 @@ def test_color_prompt_is_data_driven(tmp_path: Path) -> None:
         ColorSchemeService,
     )
 
-    prompt = ColorSchemeService._build_prompt(ctx)
+    prompt = ColorSchemeService._build_prompt(
+        ctx,
+        target_ids=[slot.id for slot in ctx.app.colors],
+        fixed={},
+        overwrite_specs=OverwriteSpecs(),
+    )
     template = COLOR_PROMPT_PATH.read_text(encoding="utf-8")
 
     # The .md template is app-agnostic: slots are deferred to a placeholder,
@@ -948,7 +954,12 @@ def test_font_prompt_is_data_driven(tmp_path: Path) -> None:
     )
 
     ctx = _run_ctx(tmp_path)
-    prompt = FontSelectionService._build_prompt(ctx)
+    prompt = FontSelectionService._build_prompt(
+        ctx,
+        target_ids=[slot.id for slot in ctx.app.fonts],
+        fixed={},
+        overwrite_specs=OverwriteSpecs(),
+    )
     template = FONT_PROMPT_PATH.read_text(encoding="utf-8")
 
     # Slots are deferred to a placeholder; no slot description baked in.

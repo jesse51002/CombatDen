@@ -26,12 +26,13 @@ since-removed keys must still validate (stale keys dropped, not rejected).
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator
 
+from schema.output.node_output import NodeOutput
 from schema.primitives import AbsolutePath
 
 
-class IconOutput(BaseModel):
+class IconOutput(NodeOutput):
     """One slot's resolved icon: the SVG path plus its source provenance."""
 
     model_config = ConfigDict(extra="ignore")

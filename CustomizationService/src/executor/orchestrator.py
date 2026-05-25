@@ -27,6 +27,7 @@ from schema import (
     ImageSet,
     LottieSet,
     Output,
+    OverwriteSpecs,
     TextSet,
 )
 from src.core.config import settings
@@ -63,6 +64,14 @@ class PipelineResult:
     to aggregate the run total. A dataclass (not a Pydantic model) so it
     holds the live service instances without per-field isinstance
     enforcement.
+
+    ``generated`` is the set of slot ids this pass actually (re)made — the
+    union of each node's ``regenerated``. For a full run that is every slot;
+    for a reopen pass it is only the dirty (steered or missing) slots, the
+    rest being returned from the seed untouched. Because the paid services are
+    freshly constructed per ``run()``, their accumulated cost is exactly the
+    spend for ``generated`` — what the expand/regen writer records in
+    ``expansion_cost.yaml``.
     """
 
     output: Output
@@ -70,6 +79,7 @@ class PipelineResult:
     image_gen: ImageGenerator
     bg_remover: BackgroundRemover
     icon_gen: ImageGenerator
+    generated: frozenset[str]
 
 
 class Pipeline:
@@ -121,10 +131,26 @@ class Pipeline:
         async with sem:
             return await node.run()
 
-    async def run(self, run_ctx: RunContext) -> PipelineResult:
+    async def run(
+        self,
+        run_ctx: RunContext,
+        *,
+        seed: dict[str, BaseModel] | None = None,
+        overwrite_specs: OverwriteSpecs | None = None,
+    ) -> PipelineResult:
         """Resolve every node level-by-level, assemble the ``Output``, and
         return it alongside the paid services so the writer can total
-        their cost."""
+        their cost.
+
+        Reopen-time regeneration is entirely a node concern; the executor
+        stays domain-blind. ``seed`` (slot id → that slot's saved per-item
+        output) is the sole control of what's re-made — a node regenerates any
+        declared slot absent from its seed slice and returns the rest verbatim
+        (no LLM/provider spend). ``overwrite_specs`` is the call's single
+        steering string, stamped onto whatever is re-made. An empty ``seed``
+        ⇒ every node regenerates every slot, a normal full run.
+        ``PipelineResult.generated`` is the union of the slot ids the nodes
+        actually re-made."""
         llm = LiteLLMClient()
         image_gen = LiteLLMImageGenerator()
         bg_remover = PhotoRoomBackgroundRemover()
@@ -146,10 +172,13 @@ class Pipeline:
             google_fonts=google_fonts,
             icon_catalog=icon_catalog,
             icon_generator=icon_gen,
+            overwrite_specs=overwrite_specs,
+            seed=seed,
         )
         graph = self._build_digraph(node_set)
 
         resolved: dict[str, BaseModel] = {}
+        generated: set[str] = set()
         skipped: set[str] = set()
         sem = asyncio.Semaphore(MAX_CONCURRENT_MODULES)
 
@@ -161,10 +190,16 @@ class Pipeline:
             ]
             if not batch:
                 continue
-            # The executor injects each node's resolved dependency outputs
-            # just before running it (each node runs exactly once).
+            # Inject each node's available dependency outputs. A node that is
+            # only assembling from its seed needs none; one that regenerates
+            # reads them — and was skipped above if a dependency it needs
+            # failed, so injecting just what resolved is safe.
             for node in batch:
-                node.inputs = {dep: resolved[dep] for dep in node.deps}
+                node.inputs = {
+                    dep: resolved[dep]
+                    for dep in node.deps
+                    if dep in resolved
+                }
             logger.debug(
                 "running level: %s", [node.key for node in batch]
             )
@@ -174,18 +209,24 @@ class Pipeline:
             )
             for node, result in zip(batch, results):
                 if isinstance(result, Exception):
-                    # One bad node must not lose finished work: skip only
-                    # its transitive dependents, keep the rest.
+                    # One bad node must not lose finished work. Skip only the
+                    # dependents that would actually REGENERATE (they need the
+                    # failed output); a dependent that is merely reassembling
+                    # its seed needs nothing and still runs.
                     logger.warning(
-                        "node %s failed (%s); skipping its dependents",
+                        "node %s failed (%s); skipping its regenerating "
+                        "dependents",
                         node.key,
                         result,
                     )
-                    skipped |= set(
-                        nx.descendants(graph, node.key)
-                    ) | {node.key}
+                    skipped |= {
+                        dep
+                        for dep in nx.descendants(graph, node.key)
+                        if graph.nodes[dep]["node"].dirty()
+                    } | {node.key}
                 else:
                     resolved[node.key] = result
+                    generated |= node.regenerated
 
         output = self._assemble(run_ctx, resolved)
         return PipelineResult(
@@ -194,6 +235,7 @@ class Pipeline:
             image_gen=image_gen,
             bg_remover=bg_remover,
             icon_gen=icon_gen,
+            generated=frozenset(generated),
         )
 
     @staticmethod

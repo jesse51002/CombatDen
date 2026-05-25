@@ -21,7 +21,7 @@ import shutil
 from pathlib import Path
 from string import Template
 
-from schema import IconOutput, IconSlot
+from schema import IconOutput, IconSlot, OverwriteSpecs
 from src.core.run_context import RunContext
 from src.modules.icons.icon_models import build_icon_match_model
 from src.shared.interfaces.icon_set_catalog import (
@@ -55,6 +55,9 @@ class IconMatchingService:
         chosen: IconSetCatalogEntry,
         *,
         model: str = ICON_MATCH_MODEL,
+        only: set[str] | None = None,
+        fixed: dict[str, IconOutput] | None = None,
+        overwrite_specs: OverwriteSpecs | None = None,
     ) -> tuple[dict[str, IconOutput], list[IconSlot]]:
         """Run the matching call, copy each matched SVG into the run dir.
 
@@ -62,13 +65,32 @@ class IconMatchingService:
         slot matched within ``chosen`` (its SVG copied into the run dir),
         and the slots nothing in the set honestly fit (for the caller to
         generate). A matched slot whose SVG can't be copied is dropped.
+
+        ``only`` scopes the call to a subset of slots (a partial regen);
+        ``fixed`` is the prior icons shown as fixed context so the new picks
+        stay coherent with what's kept; ``overwrite_specs`` is the per-slot
+        steering surfaced in the prompt. With all unset every icon slot is
+        matched (full run).
         """
-        slots = list(run_ctx.app.icons)
+        slots = [
+            s
+            for s in run_ctx.app.icons
+            if only is None or s.id in only
+        ]
         response_model = build_icon_match_model(
             [s.id for s in slots], icon_names=frozenset(chosen.icons)
         )
         messages = [
-            {"role": "user", "content": self._build_prompt(run_ctx, chosen)}
+            {
+                "role": "user",
+                "content": self._build_prompt(
+                    run_ctx,
+                    chosen,
+                    target_slots=slots,
+                    fixed=fixed or {},
+                    overwrite_specs=overwrite_specs or OverwriteSpecs(),
+                ),
+            }
         ]
         resolved = await self._llm.complete_structured(
             messages, schema=response_model, model=model
@@ -125,15 +147,33 @@ class IconMatchingService:
 
     @staticmethod
     def _build_prompt(
-        run_ctx: RunContext, chosen: IconSetCatalogEntry
+        run_ctx: RunContext,
+        chosen: IconSetCatalogEntry,
+        *,
+        target_slots: list[IconSlot],
+        fixed: dict[str, IconOutput],
+        overwrite_specs: OverwriteSpecs,
     ) -> str:
-        """Rule + brand brief + icon-slot inventory + the chosen set's
-        vibe and icon vocabulary, substituted into the one ``.md``
-        template."""
+        """Rule + brand brief + fixed-context + the slots to match + the
+        chosen set's vibe and icon vocabulary, substituted into the one
+        ``.md`` template. The call's steering note (instruction + rejected
+        attempts) is appended over the slots being matched; fixed slots
+        (already resolved, not re-matched) are listed as context."""
         template = ICON_MATCH_PROMPT_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
-        inventory = "\n".join(
-            f"- {slot.id}: {slot.description}" for slot in run_ctx.app.icons
+        target_ids = {s.id for s in target_slots}
+        lines = [f"- {s.id}: {s.description}" for s in target_slots]
+        note = overwrite_specs.prompt_note()
+        if note:
+            lines.append(f"\n{note}")
+        inventory = "\n".join(lines)
+        fixed_lines = [
+            f"- {sid}: {out.icon_name}"
+            for sid, out in fixed.items()
+            if sid not in target_ids
+        ]
+        fixed_context = (
+            "\n".join(fixed_lines) if fixed_lines else "(none — fresh set)"
         )
         icons = ", ".join(chosen.icons)
         return Template(template).safe_substitute(
@@ -141,6 +181,7 @@ class IconMatchingService:
             short=design.short_desc,
             long=design.long_desc,
             slots=inventory,
+            fixed_context=fixed_context,
             set_name=chosen.name,
             set_vibe=chosen.vibe.strip(),
             icons=icons,

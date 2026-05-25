@@ -17,6 +17,7 @@ from string import Template
 from schema.lottie_library import LottiePreset
 from schema.lottie_type import LottieType
 from schema.output.image_output import ImageOutput
+from schema.output.overwrite_specs import OverwriteSpecs
 from schema.slots import LottieSlot
 from src.core.errors import ProviderError
 from src.core.run_context import RunContext
@@ -56,8 +57,13 @@ class LottieSelectionService:
         candidates: list[LottiePreset],
         revealed: ImageOutput | None,
         model: str = LOTTIE_SELECTION_MODEL,
+        overwrite_specs: OverwriteSpecs | None = None,
     ) -> LottiePreset:
-        """Pick one preset for ``slot`` from ``candidates``."""
+        """Pick one preset for ``slot`` from ``candidates``.
+
+        ``overwrite_specs`` is the call's steering (e.g. "slower, calmer", plus
+        any rejected picks) surfaced in the prompt on a reopen-time
+        regeneration; an empty default on a fresh run."""
         if not candidates:
             raise ProviderError(
                 f"no lottie preset in the library carries the required "
@@ -67,7 +73,13 @@ class LottieSelectionService:
         response_model = build_selection_model(
             candidate_ids=list(by_id)
         )
-        prompt = self._build_prompt(run_ctx, slot, candidates, revealed)
+        prompt = self._build_prompt(
+            run_ctx,
+            slot,
+            candidates,
+            revealed,
+            overwrite_specs or OverwriteSpecs(),
+        )
         pick = await self._llm.complete_structured(
             [{"role": "user", "content": prompt}],
             schema=response_model,
@@ -82,8 +94,10 @@ class LottieSelectionService:
         slot: LottieSlot,
         candidates: list[LottiePreset],
         revealed: ImageOutput | None,
+        overwrite_specs: OverwriteSpecs,
     ) -> str:
-        """Rule + brand brief + slot + candidate listing (+ reveal block)."""
+        """Rule + brand brief + slot + candidate listing (+ reveal block, +
+        override note)."""
         template = SELECTION_PROMPT_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
         listing = "\n".join(
@@ -96,6 +110,8 @@ class LottieSelectionService:
             )
         else:
             revealed_block = ""
+        note = overwrite_specs.prompt_note()
+        overwrite_block = f"\n{note}\n" if note else ""
         return Template(template).safe_substitute(
             name=design.name,
             short=design.short_desc,
@@ -103,4 +119,5 @@ class LottieSelectionService:
             slot=slot.description,
             candidates=listing,
             revealed_block=revealed_block,
+            overwrite_block=overwrite_block,
         )

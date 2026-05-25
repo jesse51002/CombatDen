@@ -6,9 +6,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-from pydantic import ValidationError
-
 from schema import VideoOutput, VideosOutput
 
 
@@ -23,7 +20,7 @@ def _video() -> dict:
         "channel_avatar_url": "https://yt3.ggpht.com/avatar",
         "view_count": 412903,
         "like_count": 11820,
-        "tags": ["tutorial", "educational"],
+        "tag": "educational",
         "source_queries": ["how to throw a teep kick step by step"],
         "relevance_index": 0,
     }
@@ -41,7 +38,7 @@ def _output() -> dict:
 
 def test_video_output_round_trips() -> None:
     video = VideoOutput.model_validate(_video())
-    assert video.tags  # non-empty
+    assert video.tag is not None
     assert video.view_count == 412903
 
 
@@ -69,11 +66,24 @@ def test_extra_keys_are_ignored_not_rejected() -> None:
     assert not hasattr(video, "dislike_count")
 
 
-def test_empty_tags_rejected() -> None:
+def test_untagged_allowed_before_classification() -> None:
+    # The batch writes videos untagged; the classification pass fills the tag.
     doc = _video()
-    doc["tags"] = []
-    with pytest.raises(ValidationError):
-        VideoOutput.model_validate(doc)
+    del doc["tag"]
+    video = VideoOutput.model_validate(doc)
+    assert video.tag is None
+    assert video.is_good is None  # not yet classified
+
+
+def test_classification_fields_round_trip() -> None:
+    doc = _video()
+    doc["tag"] = "clips"
+    doc["is_good"] = False
+    doc["duration_seconds"] = 95
+    video = VideoOutput.model_validate(doc)
+    assert video.tag.value == "clips"
+    assert video.is_good is False
+    assert video.duration_seconds == 95
 
 
 def test_videos_default_to_empty_list() -> None:

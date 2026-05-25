@@ -13,13 +13,8 @@ avoid_desc: |
   supplement or training bro-science.
 searches:
   - query: boxing footwork drills tutorial
-    tags: [tutorial, educational]
   - query: greatest boxing knockouts of all time
-    tags: [clips, entertainment, professional]
   - query: best boxing title fight full highlights
-    tags: [professional, clips]
   - query: boxing trainer mitt work behind the scenes
-    tags: [behind_the_scenes, educational]
   - query: boxing news weigh in this week
-    tags: [news, informative]
 priority_channels: []

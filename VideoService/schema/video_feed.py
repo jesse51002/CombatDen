@@ -15,7 +15,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from schema.big_group import BigGroup, big_groups_for_tags
+from schema.big_group import BigGroup, big_group_for
 from schema.video_type import VideoType
 
 
@@ -31,16 +31,22 @@ class VideoCard(BaseModel):
     channel_url: str
     channel_avatar_url: str
     view_count: int | None = None  # the "views" label; None when hidden
+    duration_seconds: int | None = None  # runtime; for a length badge
     # 0 = top search hit; lower is more relevant. For secondary sorting.
     relevance_index: int = Field(ge=0)
-    tags: list[VideoType] = Field(min_length=1)  # fine-grained genre tags
+    # The video's single genre tag, assigned by the classification pass. None
+    # until a feed is classified; clients group on it.
+    tag: VideoType | None = None
+    # The classifier's keep/drop verdict; clients filter off-niche videos.
+    # None until classified.
+    is_good: bool | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def big_groups(self) -> list[BigGroup]:
+    def big_group(self) -> BigGroup | None:
         """The coarse educational/entertainment sort — the frontend's primary
-        grouping. Derived from `tags`; a video can be in both."""
-        return big_groups_for_tags(self.tags)
+        grouping. Derived from `tag`; None until classified."""
+        return big_group_for(self.tag) if self.tag is not None else None
 
 
 class VideosFeed(BaseModel):

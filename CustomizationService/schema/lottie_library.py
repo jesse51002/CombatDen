@@ -40,13 +40,47 @@ class InsertionPoint(BaseModel):
     height: float
 
 
+class RecolorRegion(BaseModel):
+    """One color-bearing region of an animation the recolor step tints.
+
+    ``name`` is the literal layer name in the Lottie file (snake_case);
+    ``description`` says what that color *does* in the animation — the core
+    fill, an outer ring, an edge stroke, an ambient field — so the recolor
+    LLM can map it to the right palette role on purpose rather than guessing
+    from an opaque layer name.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    description: str
+
+    @field_validator("name")
+    @classmethod
+    def _name_is_snake_case(cls, v: str) -> str:
+        if not _ID_PATTERN.match(v):
+            raise ValueError(
+                f"recolor region {v!r} must be snake_case "
+                "(lowercase, digits, underscores; must start with a letter)"
+            )
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def _description_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("RecolorRegion.description must be non-empty")
+        return v
+
+
 class LottiePreset(BaseModel):
     """One curated animation in the global library.
 
     ``types`` is a list because a single preset can serve as both a
     ``standalone`` and a ``reveal`` animation. ``recolor_regions`` names
-    the parts of the animation the pipeline maps to palette roles; the
-    recolor LLM call assigns each region a palette key. A reveal-capable
+    the parts of the animation the pipeline maps to palette roles, each with
+    a description of what that color does that is fed to the recolor prompt;
+    the recolor LLM call assigns each region a palette key. A reveal-capable
     preset must declare its single ``insertion_point``.
     """
 
@@ -60,7 +94,7 @@ class LottiePreset(BaseModel):
     # loader / the consuming app).
     file: str
     types: list[LottieType]
-    recolor_regions: list[str]
+    recolor_regions: list[RecolorRegion]
     # Required iff ``REVEAL`` is among ``types`` (enforced below). A
     # standalone-only preset leaves it unset.
     insertion_point: InsertionPoint | None = None
@@ -95,17 +129,19 @@ class LottiePreset(BaseModel):
 
     @field_validator("recolor_regions")
     @classmethod
-    def _regions_snake_case_unique(cls, v: list[str]) -> list[str]:
-        if len(v) != len(set(v)):
-            dupes = sorted({r for r in v if v.count(r) > 1})
+    def _regions_non_empty_unique(
+        cls, v: list[RecolorRegion]
+    ) -> list[RecolorRegion]:
+        # Per-name snake_case + non-empty description are enforced on
+        # ``RecolorRegion`` itself; here we only guard the list as a whole.
+        if not v:
+            raise ValueError(
+                "LottiePreset.recolor_regions must list at least one region"
+            )
+        names = [r.name for r in v]
+        if len(names) != len(set(names)):
+            dupes = sorted({n for n in names if names.count(n) > 1})
             raise ValueError(f"duplicate recolor_regions: {dupes}")
-        for region in v:
-            if not _ID_PATTERN.match(region):
-                raise ValueError(
-                    f"recolor region {region!r} must be snake_case "
-                    "(lowercase, digits, underscores; must start with a "
-                    "letter)"
-                )
         return v
 
     @model_validator(mode="after")

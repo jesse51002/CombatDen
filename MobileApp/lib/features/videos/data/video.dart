@@ -17,6 +17,7 @@ class Video {
     required this.relevanceIndex,
     required this.tags,
     required this.bigGroups,
+    this.isGood,
   });
 
   final String url;
@@ -33,15 +34,20 @@ class Video {
   /// sort key for every list (view count is the secondary tiebreak).
   final int relevanceIndex;
 
-  /// Fine-grained genre tags as the server sends them (lowercase wire
-  /// strings); drive the per-tag carousels. Taken verbatim — the app owns no
-  /// tag vocabulary.
+  /// The video's genre. The API sends a single `tag` string (lowercase wire
+  /// value); we hold it as a one-element list so the per-tag carousel grouping
+  /// stays list-based. Empty until the feed is classified. Taken verbatim — the
+  /// app owns no tag vocabulary.
   final List<String> tags;
 
-  /// Coarse grouping the server derived from [tags] (e.g. `educational` /
-  /// `entertainment`); the home page's top-level filter. Can contain more than
-  /// one. Taken verbatim — the app owns no group vocabulary.
+  /// Coarse grouping the server derived from the tag (e.g. `educational` /
+  /// `entertainment`); the home page's top-level filter. The API sends a single
+  /// `big_group` string, held as a one-element list. Taken verbatim.
   final List<String> bigGroups;
+
+  /// The classifier's keep/drop verdict (off-niche videos come down `false`);
+  /// null until the feed is classified.
+  final bool? isGood;
 
   /// "Combat Culture ‧ 168K views" (drops the views clause when hidden).
   String get metaLabel {
@@ -60,18 +66,15 @@ class Video {
       viewCount: json['view_count'] as int?,
       // Missing → sort last (least relevant).
       relevanceIndex: (json['relevance_index'] as int?) ?? 1 << 30,
-      tags: _parseTags(json['tags']),
-      bigGroups: _parseBigGroups(json['big_groups']),
+      isGood: json['is_good'] as bool?,
+      // The API sends a single `tag` / `big_group` string; wrap each into a
+      // one-element list so the list-based carousel grouping keeps working.
+      tags: _wrap(json['tag']),
+      bigGroups: _wrap(json['big_group']),
     );
   }
 
-  static List<String> _parseTags(dynamic raw) {
-    if (raw is! List) return const [];
-    return raw.whereType<String>().toList(growable: false);
-  }
-
-  static List<String> _parseBigGroups(dynamic raw) {
-    if (raw is! List) return const [];
-    return raw.whereType<String>().toList(growable: false);
-  }
+  /// A non-empty wire string → a one-element list; anything else → empty.
+  static List<String> _wrap(dynamic raw) =>
+      raw is String && raw.isNotEmpty ? [raw] : const [];
 }

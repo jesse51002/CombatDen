@@ -21,7 +21,13 @@
 #
 # Each preset:
 #   - types: one or more of [standalone, reveal] (a preset can be both)
-#   - recolor_regions: named parts the recolour step maps to palette roles
+#   - recolor_regions: the colour-bearing parts the recolour step maps to
+#     palette roles. Each is `{name, description}`: `name` is the literal
+#     layer name in the .json; `description` says what that colour does in
+#     the animation and is fed to the recolour prompt so the agent maps it
+#     to the right role on purpose. Descriptions are best-effort against the
+#     placeholder files — retune them alongside the files / regions when real
+#     brand animations are curated.
 #   - insertion_point: REQUIRED iff `reveal` is a type; where the revealed
 #     image composites (frame + normalized x/y anchor + w/h size)
 
@@ -33,7 +39,24 @@ presets:
       good for idle, status, or a gentle "done" beat.
     file: animations/pulse_ring.json
     types: [standalone]
-    recolor_regions: [selected_oval, first, second, third]
+    recolor_regions:
+      - name: selected_oval
+        description: >-
+          The solid disc at the centre of the pulse — the visual core the
+          rings emanate from. The dominant, on-brand element; carries the
+          strongest colour.
+      - name: first
+        description: >-
+          The innermost expanding ring, hugging the core; reads as a primary
+          accent edge close to the centre.
+      - name: second
+        description: >-
+          The middle expanding ring, between core and outer edge; a softer
+          mid-tone step as the pulse spreads.
+      - name: third
+        description: >-
+          The outermost expanding ring as it fades out; large and ambient,
+          so it wants a gentle, low-saturation tone.
 
   - id: confetti_burst
     display_name: Confetti Burst
@@ -42,7 +65,16 @@ presets:
       unlocks, milestones.
     file: animations/confetti_burst.json
     types: [standalone]
-    recolor_regions: [tab_1, tab_2]
+    recolor_regions:
+      - name: tab_1
+        description: >-
+          The first family of confetti pieces flung from the centre; one of
+          the two main colour groups in the burst — give it a bright, lead
+          brand tone.
+      - name: tab_2
+        description: >-
+          The second family of confetti pieces; the contrasting colour group
+          that plays against tab_1 to give the burst its festive variety.
 
   - id: streak_flame
     display_name: Streak Flame
@@ -51,7 +83,23 @@ presets:
       momentum, "on fire" status.
     file: animations/streak_flame.json
     types: [standalone]
-    recolor_regions: [mini_fab_1, mini_fab_2, mini_fab_3, fab_base]
+    recolor_regions:
+      - name: mini_fab_1
+        description: >-
+          The hottest inner tongue of the flame, nearest the base; the
+          brightest, most saturated part of the fire.
+      - name: mini_fab_2
+        description: >-
+          The mid layer of the flame rising above the core; a step softer
+          than the inner tongue.
+      - name: mini_fab_3
+        description: >-
+          The outermost tip of the flame as it tapers and fades; the faintest
+          flame colour, wants a light tone.
+      - name: fab_base
+        description: >-
+          The grounding shape the flame rises from — a steady base/anchor
+          rather than fire; a calmer surface tone, not full-strength.
 
   - id: radiant_pop
     display_name: Radiant Pop
@@ -60,7 +108,19 @@ presets:
       behind a revealed asset — versatile and bright.
     file: animations/radiant_pop.json
     types: [standalone, reveal]
-    recolor_regions: [ic_fav_stroke, ic_fav_fill, ic_oval]
+    recolor_regions:
+      - name: ic_fav_stroke
+        description: >-
+          The crisp outline/edge of the central icon — a thin, defining
+          stroke that wants a strong, legible accent against the fill.
+      - name: ic_fav_fill
+        description: >-
+          The filled body of the central icon sitting inside the stroke; the
+          main solid colour of the popping shape.
+      - name: ic_oval
+        description: >-
+          The radial shine/halo bursting outward behind the icon; large and
+          ambient, so it wants a soft, low-saturation glow tone.
     # Placeholder geometry — retune when a real reveal animation is curated.
     insertion_point:
       frame: 10
@@ -68,3 +128,46 @@ presets:
       y: 0.5
       width: 0.65
       height: 0.65
+
+  # --- Curated brand animations (the real files the MobileApp ships) ---
+  # Unlike the placeholders above, these are the actual animations the app
+  # uses today; their layer names were normalised to a single snake_case
+  # name on import so one recolor region tints the whole shape (the app
+  # currently tints them wholesale with the brand colour).
+
+  - id: lightning_strike
+    display_name: Lightning Strike
+    description: >-
+      An energetic neon lightning bolt that strikes in. Momentum / streak /
+      "on fire" energy — and reveal-capable: an earned asset (e.g. a streak
+      badge) pops out of the strike. Plays on the post-class Streak screen.
+    file: animations/lightning_neon.json
+    types: [standalone, reveal]
+    recolor_regions:
+      - name: bolt
+        description: >-
+          The entire lightning bolt — every stroke shares one electric
+          colour. The single dominant, lead brand tone of the animation.
+    # Matches the in-app choreography: the revealed asset enters ~75% of the
+    # way through the strike (frame 68 of 90 @ 30fps), centred, at ~0.75 of
+    # the animation box (the 240px icon inside the 320px strike).
+    insertion_point:
+      frame: 68
+      x: 0.125
+      y: 0.125
+      width: 0.75
+      height: 0.75
+
+  - id: checkmark
+    display_name: Checkmark
+    description: >-
+      A clean checkmark that draws itself on. Success / confirmation /
+      "done" — plays the instant an action commits (e.g. a booking
+      succeeds). Standalone; it does not reveal an asset.
+    file: animations/done.json
+    types: [standalone]
+    recolor_regions:
+      - name: checkmark
+        description: >-
+          The checkmark stroke — the single colour of the tick. The
+          animation's one brand tone.

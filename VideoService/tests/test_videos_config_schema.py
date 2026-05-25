@@ -1,5 +1,6 @@
 """Round-trip every example videos_config.yaml against the model, plus the
-min/max/non-empty-tags bounds the contract promises."""
+search-count bounds the contract promises. Searches are query-only — genre is
+assigned per-video by the classification pass, not in the brief."""
 
 from __future__ import annotations
 
@@ -35,10 +36,7 @@ def _base_doc() -> dict:
         "type": "Test niche",
         "videos_desc": "Videos worth surfacing.",
         "avoid_desc": "Content to avoid.",
-        "searches": [
-            {"query": f"test search {i}", "tags": ["educational"]}
-            for i in range(10)
-        ],
+        "searches": [{"query": f"test search {i}"} for i in range(10)],
     }
 
 
@@ -50,15 +48,11 @@ def test_examples_exist() -> None:
 def test_example_round_trips(path: Path) -> None:
     config = VideosConfig.model_validate(yaml.safe_load(path.read_text()))
 
-    # 1-20 searches, each with at least one tag.
-    assert 1 <= len(config.searches) <= 20
+    # At least one search, each a non-empty query (no tags — query-only).
+    assert len(config.searches) >= 1
     for search in config.searches:
         assert search.query.strip()
-        assert search.tags, f"search {search.query!r} has no tags"
-
-    # The set should span the spectrum, not cluster in one or two genres.
-    distinct = {tag for search in config.searches for tag in search.tags}
-    assert len(distinct) >= 6, f"only {len(distinct)} distinct VideoType tags"
+        assert not hasattr(search, "tags")
 
 
 def test_empty_searches_rejected() -> None:
@@ -68,25 +62,10 @@ def test_empty_searches_rejected() -> None:
         VideosConfig.model_validate(doc)
 
 
-def test_too_many_searches_rejected() -> None:
+def test_search_tags_rejected() -> None:
+    # A stray `tags` on a search now fails (searches are query-only, extra=forbid).
     doc = _base_doc()
-    doc["searches"] = [
-        {"query": f"q{i}", "tags": ["fun"]} for i in range(21)
-    ]
-    with pytest.raises(ValidationError):
-        VideosConfig.model_validate(doc)
-
-
-def test_empty_tags_rejected() -> None:
-    doc = _base_doc()
-    doc["searches"][0]["tags"] = []
-    with pytest.raises(ValidationError):
-        VideosConfig.model_validate(doc)
-
-
-def test_unknown_video_type_rejected() -> None:
-    doc = _base_doc()
-    doc["searches"][0]["tags"] = ["not_a_real_genre"]
+    doc["searches"][0]["tags"] = ["educational"]
     with pytest.raises(ValidationError):
         VideosConfig.model_validate(doc)
 
@@ -99,8 +78,8 @@ def test_extra_key_rejected() -> None:
 
 
 def test_video_type_serializes_to_lowercase() -> None:
-    assert VideoType.BEHIND_THE_SCENES.value == "behind_the_scenes"
     assert VideoType.PROFESSIONAL.value == "professional"
+    assert VideoType.Memes.value == "memes"
 
 
 def test_priority_channels_defaults_to_empty() -> None:

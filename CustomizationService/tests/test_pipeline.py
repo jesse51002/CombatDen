@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 import yaml
 from PIL import Image
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_script(rel_path: str) -> ModuleType:
+    """Import a standalone ``scripts/**/run.py`` by path for main()-testing."""
+    path = _REPO_ROOT / rel_path
+    spec = importlib.util.spec_from_file_location(
+        rel_path.replace("/", "_").removesuffix(".py"), path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 from schema import (
     AbsolutePath,
@@ -121,6 +137,8 @@ class _FakeLLM:
             # LLM only emits oklch + prose; derivations, hsl, rgb, and the
             # flat palette are computed post-call by the derivation service).
             # Constructing the model runs the deterministic contract.
+            # Iterate the schema's fields (not the full slot list) so a
+            # partial regen — a scoped subset schema — is handled too.
             result = schema(
                 **{
                     sid: LLMSlotResponse(
@@ -128,7 +146,7 @@ class _FakeLLM:
                         display_name=f"{sid} tone",
                         description="on-brand demo colour",
                     )
-                    for sid in self._color_slot_ids
+                    for sid in schema.model_fields
                 }
             )
         elif getattr(schema, "__name__", "") == "FontSelection":
@@ -136,6 +154,8 @@ class _FakeLLM:
             # font slot. Constructing the model runs the Google-Fonts
             # membership validator — the fake catalog below contains the
             # families we hand back here.
+            # Iterate the schema's fields (not the full slot list) so a
+            # partial regen — a scoped subset schema — is handled too.
             result = schema(
                 **{
                     sid: LLMFontResponse(
@@ -143,7 +163,7 @@ class _FakeLLM:
                         display_name=f"{sid} pick",
                         description=f"on-brand demo font for {sid}",
                     )
-                    for sid in self._font_slot_ids
+                    for sid in schema.model_fields
                 }
             )
         elif getattr(schema, "__name__", "") == "TextSelection":
@@ -286,6 +306,20 @@ class _FakeImageGen:
     ) -> AbsolutePath:
         dest.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (64, 64), (10, 10, 10)).save(dest)
+        return AbsolutePath(str(dest.resolve()))
+
+    async def edit(
+        self,
+        prompt: str,
+        source: Path,
+        dest: Path,
+        *,
+        model: str,
+        quality: str | None = None,
+    ) -> AbsolutePath:
+        assert source.is_file()  # edit reads the current image
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (64, 64), (20, 20, 20)).save(dest)
         return AbsolutePath(str(dest.resolve()))
 
 
@@ -600,6 +634,384 @@ def test_writer_writes_run_cost_breakdown(tmp_path, monkeypatch):
     reloaded = Output.model_validate(raw)
     assert reloaded.cost.total == pytest.approx(cost["total"])
     assert reloaded.cost.by_model == pytest.approx(by_model)
+
+
+def test_run_with_full_seed_generates_nothing(tmp_path, monkeypatch):
+    """A second pass seeded with a complete prior run runs no node and
+    reassembles the identical Output (the expand no-op: no spend)."""
+    from src.executor.seed import build_seed
+
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    full = asyncio.run(Pipeline().run(ctx))
+    seed = build_seed(ctx.app, full.output)
+
+    again = asyncio.run(Pipeline().run(ctx, seed=seed))
+
+    assert again.generated == frozenset()
+    assert again.output == full.output
+
+
+def test_run_with_seed_injects_done_dep_into_generated_node(
+    tmp_path, monkeypatch
+):
+    """Seed everything except the image: the image node still runs and
+    consumes the seeded colour palette as its input. If the seeded colour
+    weren't injected, the image node's run() would fail on a missing dep —
+    so a clean run proves the injection."""
+    from src.executor.seed import build_seed
+
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    full = asyncio.run(Pipeline().run(ctx))
+    seed = {
+        k: v for k, v in build_seed(ctx.app, full.output).items() if k != "hero"
+    }
+
+    res = asyncio.run(Pipeline().run(ctx, seed=seed))
+
+    assert res.generated == frozenset({"hero"})
+    assert "hero" in res.output.image_set.images
+
+
+def test_font_partial_regen_preserves_siblings_and_steers(tmp_path, monkeypatch):
+    """Reopen a done run and regenerate only the 'display' font with a spec:
+    the font node re-runs, 'body' is kept verbatim, 'display' carries the
+    steering, and no other slot regenerates."""
+    from schema import OverwriteSpecs
+    from src.executor.seed import build_seed
+
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    full = asyncio.run(Pipeline().run(ctx))
+
+    seed = build_seed(ctx.app, full.output)
+    seed.pop("display")  # drop the target so it re-rolls
+    specs = OverwriteSpecs(specs="make it more elegant")
+    res = asyncio.run(Pipeline().run(ctx, seed=seed, overwrite_specs=specs))
+
+    # Only the 'display' slot re-ran (slot-level).
+    assert res.generated == frozenset({"display"})
+    # 'body' (non-dirty) is the seeded object, verbatim.
+    assert res.output.font_set.fonts["body"] == full.output.font_set.fonts["body"]
+    # 'display' (dirty) carries the steering it was regenerated under.
+    assert (
+        res.output.font_set.fonts["display"].overwrite_specs.specs
+        == "make it more elegant"
+    )
+
+
+def test_color_partial_regen_preserves_siblings_and_steers(
+    tmp_path, monkeypatch
+):
+    """Regenerate only the 'primary' colour: the colour node re-runs but
+    background/text/accent are kept verbatim and 'primary' carries the
+    steering — the deterministic-preservation guarantee that keeps every
+    image keyed to the untouched colours valid."""
+    from schema import OverwriteSpecs
+    from src.executor.seed import build_seed
+
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    full = asyncio.run(Pipeline().run(ctx))
+
+    seed = build_seed(ctx.app, full.output)
+    seed.pop("primary")  # drop the target so it re-rolls
+    specs = OverwriteSpecs(specs="warmer")
+    res = asyncio.run(Pipeline().run(ctx, seed=seed, overwrite_specs=specs))
+
+    assert res.generated == frozenset({"primary"})
+    for sid in ("background", "text", "accent"):
+        assert (
+            res.output.color_set.colors[sid]
+            == full.output.color_set.colors[sid]
+        )
+    assert (
+        res.output.color_set.colors["primary"].overwrite_specs.specs
+        == "warmer"
+    )
+
+
+def test_regen_script_regenerates_named_slot(tmp_path, monkeypatch):
+    """The regen script reopens a run, re-makes one colour slot, preserves
+    the rest, and appends a REGENERATE ledger entry with the steering."""
+    _patch_services(
+        monkeypatch,
+        ["primary", "background", "text", "accent"],
+        ["display", "body"],
+        ["booked_screen", "cancel_cta", "home_greeting"],
+        ["home_tab", "search_action", "celebration_badge"],
+    )
+    # Build a real run dir: <tmp>/demo/run1 with app/cust/output.yaml.
+    ctx = RunContext(_run_ctx(tmp_path).app, _run_ctx(tmp_path).cust, tmp_path,
+                     run_id="run1")
+    full = asyncio.run(Pipeline().run(ctx))
+    Writer().write(full, ctx)
+
+    regen = _load_script("scripts/regen/run.py")
+    rc = asyncio.run(
+        regen.main(
+            ["--run-dir", str(ctx.run_dir), "--slot", "primary",
+             "--spec", "warmer"]
+        )
+    )
+    assert rc == 0
+
+    out = Output.model_validate(yaml.safe_load(ctx.output_path().read_text()))
+    assert out.color_set.colors["primary"].overwrite_specs.specs == "warmer"
+    assert out.color_set.colors["accent"] == full.output.color_set.colors[
+        "accent"
+    ]
+    from schema import ExpansionCostLog, ExpansionKind
+
+    ledger = ExpansionCostLog.model_validate(
+        yaml.safe_load(ctx.expansion_cost_path().read_text())
+    )
+    assert ledger.expansions[-1].kind is ExpansionKind.REGENERATE
+    assert ledger.expansions[-1].overwrite_specs.specs == "warmer"
+
+
+def test_regen_script_rejects_image_slot(tmp_path, monkeypatch):
+    """Image slots are out of scope for the generic regen script."""
+    _patch_services(
+        monkeypatch,
+        ["primary", "background", "text", "accent"],
+        ["display", "body"],
+        ["booked_screen", "cancel_cta", "home_greeting"],
+        ["home_tab", "search_action", "celebration_badge"],
+    )
+    ctx = RunContext(_run_ctx(tmp_path).app, _run_ctx(tmp_path).cust, tmp_path,
+                     run_id="run1")
+    full = asyncio.run(Pipeline().run(ctx))
+    Writer().write(full, ctx)
+
+    regen = _load_script("scripts/regen/run.py")
+    image_id = ctx.app.images[0].id
+    with pytest.raises(SystemExit, match="regen_image"):
+        asyncio.run(
+            regen.main(["--run-dir", str(ctx.run_dir), "--slot", image_id])
+        )
+
+
+def _full_run_dir(tmp_path, monkeypatch):
+    """A real run dir (<tmp>/demo/run1) with output.yaml + a final image,
+    produced by a full fake-service run, for the image regen tests."""
+    base = _run_ctx(tmp_path)
+    ctx = RunContext(base.app, base.cust, tmp_path, run_id="run1")
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    full = asyncio.run(Pipeline().run(ctx))
+    Writer().write(full, ctx)
+    return ctx
+
+
+def test_regen_image_create_new_preserves_prior_numbered(tmp_path, monkeypatch):
+    """regen_image --mode create_new regenerates just the image, keeps the
+    prior as a numbered file in images/, and logs a REGENERATE entry."""
+    from schema import ExpansionCostLog, ExpansionKind
+
+    ctx = _full_run_dir(tmp_path, monkeypatch)
+    image_id = ctx.app.images[0].id
+    assert (ctx.run_dir / "final_images" / f"{image_id}.png").is_file()
+
+    regen = _load_script("scripts/regen_image/run.py")
+    rc = asyncio.run(
+        regen.main(
+            ["--run-dir", str(ctx.run_dir), "--slot", image_id,
+             "--spec", "brighter", "--mode", "create_new"]
+        )
+    )
+    assert rc == 0
+    # Prior image kept (numbered) in images/ — no history in output.yaml.
+    assert (ctx.run_dir / "images" / f"{image_id}.v1.png").is_file()
+
+    out = Output.model_validate(yaml.safe_load(ctx.output_path().read_text()))
+    assert out.image_set.images[image_id].overwrite_specs.specs == "brighter"
+    ledger = ExpansionCostLog.model_validate(
+        yaml.safe_load(ctx.expansion_cost_path().read_text())
+    )
+    assert ledger.expansions[-1].kind is ExpansionKind.REGENERATE
+    assert ledger.expansions[-1].generated == [image_id]
+    assert ledger.expansions[-1].overwrite_specs.image_to_image is None
+
+
+def test_regen_image_edit_current_uses_edit_path(tmp_path, monkeypatch):
+    """regen_image --mode edit_current_image edits the current image (records
+    image_to_image on the stamped specs)."""
+    ctx = _full_run_dir(tmp_path, monkeypatch)
+    image_id = ctx.app.images[0].id
+
+    regen = _load_script("scripts/regen_image/run.py")
+    rc = asyncio.run(
+        regen.main(
+            ["--run-dir", str(ctx.run_dir), "--slot", image_id,
+             "--spec", "darker background", "--mode", "edit_current_image"]
+        )
+    )
+    assert rc == 0
+    out = Output.model_validate(yaml.safe_load(ctx.output_path().read_text()))
+    img = out.image_set.images[image_id]
+    assert img.overwrite_specs.specs == "darker background"
+    assert img.overwrite_specs.image_to_image is not None  # edit, not create
+
+
+def test_edit_customization_targeted_edit(tmp_path):
+    """edit_customization applies only the given flags, preserves the rest,
+    and re-validates before writing."""
+    import shutil
+
+    src = APP_DIR / "customization.yaml"
+    f = tmp_path / "customization.yaml"
+    shutil.copy(src, f)
+    original = Customization.model_validate(yaml.safe_load(src.read_text()))
+
+    edit = _load_script("scripts/edit_customization/run.py")
+    rc = edit.main(["--file", str(f), "--name", "New Name", "--mode", "dark"])
+    assert rc == 0
+
+    out = Customization.model_validate(yaml.safe_load(f.read_text()))
+    assert out.design_direction.name == "New Name"  # changed
+    assert out.colors_direction.mode.value == "dark"  # changed
+    # An un-passed field is preserved verbatim.
+    assert (
+        out.design_direction.long_desc
+        == original.design_direction.long_desc
+    )
+
+
+def test_edit_customization_missing_file_exits(tmp_path):
+    """A missing file is a clean SystemExit, not a traceback."""
+    edit = _load_script("scripts/edit_customization/run.py")
+    with pytest.raises(SystemExit, match="no such file"):
+        edit.main(["--file", str(tmp_path / "nope.yaml"), "--name", "X"])
+
+
+def test_expand_with_updated_app_yaml_adds_slot(tmp_path, monkeypatch):
+    """expand --app-yaml uses an UPDATED inventory (not the run's snapshot):
+    a slot added to it is generated, the rest preserved, and the run dir's
+    snapshot is refreshed to match."""
+    ctx = _full_run_dir(tmp_path, monkeypatch)
+
+    # Updated inventory: the live app.yaml plus one new image slot.
+    app_data = yaml.safe_load((APP_DIR / "app.yaml").read_text())
+    app_data["images"].append(
+        {"id": "extra_hero", "description": "a second hero image"}
+    )
+    updated = tmp_path / "updated_app.yaml"
+    updated.write_text(yaml.safe_dump(app_data))
+
+    expand = _load_script("scripts/expand/run.py")
+    rc = asyncio.run(
+        expand.main(
+            ["--run-dir", str(ctx.run_dir), "--app-yaml", str(updated)]
+        )
+    )
+    assert rc == 0
+
+    out = Output.model_validate(yaml.safe_load(ctx.output_path().read_text()))
+    assert "extra_hero" in out.image_set.images  # new slot filled
+    assert "hero" in out.image_set.images  # original preserved
+    # The run dir's snapshot is refreshed to the inventory it now reflects.
+    snap = AppFormat.model_validate(
+        yaml.safe_load((ctx.run_dir / "app.yaml").read_text())
+    )
+    assert "extra_hero" in {s.id for s in snap.images}
+
+
+def test_write_expansion_preserves_cost_and_appends_ledger(
+    tmp_path, monkeypatch
+):
+    """write_expansion keeps output.yaml's original cost untouched and
+    records this pass's spend + generated keys in expansion_cost.yaml."""
+    from schema import ExpansionCostLog, ExpansionKind, OverwriteSpecs
+    from src.executor.seed import build_seed
+
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    # Full run + normal write so output.yaml carries the original cost.
+    full = asyncio.run(Pipeline().run(ctx))
+    Writer().write(full, ctx)
+    original = Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    )
+    assert original.cost is not None
+
+    # Regenerate only the image (seed everything else).
+    seed = {
+        k: v for k, v in build_seed(ctx.app, full.output).items() if k != "hero"
+    }
+    expanded = asyncio.run(Pipeline().run(ctx, seed=seed))
+    Writer().write_expansion(
+        expanded,
+        ctx,
+        original_cost=original.cost,
+        kind=ExpansionKind.REGENERATE,
+        overwrite_specs=OverwriteSpecs(specs="darker background"),
+    )
+
+    # output.yaml: cost block is the ORIGINAL, byte-for-byte.
+    after = Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    )
+    assert after.cost == original.cost
+
+    # expansion_cost.yaml: one entry, this pass's kind + generated + spend.
+    ledger = ExpansionCostLog.model_validate(
+        yaml.safe_load(ctx.expansion_cost_path().read_text())
+    )
+    assert len(ledger.expansions) == 1
+    entry = ledger.expansions[0]
+    assert entry.kind is ExpansionKind.REGENERATE
+    assert entry.generated == ["hero"]
+    assert entry.overwrite_specs.specs == "darker background"
+    assert entry.cost.image_generation == pytest.approx(_FAKE_IMAGE_COST)
+
+    # A second pass appends rather than overwrites.
+    Writer().write_expansion(
+        expanded,
+        ctx,
+        original_cost=original.cost,
+        kind=ExpansionKind.REGENERATE,
+    )
+    ledger2 = ExpansionCostLog.model_validate(
+        yaml.safe_load(ctx.expansion_cost_path().read_text())
+    )
+    assert len(ledger2.expansions) == 2
 
 
 def test_run_cost_by_model_back_compat():

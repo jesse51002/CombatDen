@@ -51,7 +51,8 @@ class LottieRecolorService:
         """Map every region of ``preset`` to a palette key."""
         palette_keys = frozenset(palette.palette.keys())
         response_model = build_recolor_model(
-            regions=preset.recolor_regions, palette_keys=palette_keys
+            regions=[r.name for r in preset.recolor_regions],
+            palette_keys=palette_keys,
         )
         prompt = self._build_prompt(preset, palette)
         result = await self._llm.complete_structured(
@@ -66,7 +67,12 @@ class LottieRecolorService:
         """Preset + region list + the full palette vocabulary (keys, values
         and the semantic role descriptions) substituted into the rule."""
         template = RECOLOR_PROMPT_PATH.read_text(encoding="utf-8")
-        regions = "\n".join(f"  - {region}" for region in preset.recolor_regions)
+        # Each line names the region and says what that color does, so the
+        # LLM maps it to a palette role on purpose, not from the bare layer
+        # name.
+        regions = "\n".join(
+            f"  - {r.name} — {r.description}" for r in preset.recolor_regions
+        )
         # Semantic descriptions for the base roles (helps the LLM avoid
         # picking a harsh base colour when a softer derived key fits).
         role_meanings = "\n".join(

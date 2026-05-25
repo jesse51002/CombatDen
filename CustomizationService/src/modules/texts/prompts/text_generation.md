@@ -72,5 +72,8 @@ Brand name: $name
 In short: $short
 In depth: $long
 
---- Text slots to fill ---
+--- Already-written copy (FIXED: do NOT return these; keep your rewrites consistent in voice with them) ---
+$fixed_context
+
+--- Text slots to fill (return an object for ONLY these; honor any "user note") ---
 $slots

@@ -6,7 +6,10 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from schema import AbsolutePath, AppFormat, Customization
+from schema import AbsolutePath, AppFormat, Customization, Output
+
+from src.core.errors import PipelineError
+from src.core.util import load_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,13 @@ FINAL_IMAGES_DIRNAME = "final_images"
 # Per-slot delivered SVG icons (matched from a set or generated) land here.
 ICONS_DIRNAME = "icons"
 OUTPUT_FILENAME = "output.yaml"
+# The two input artifacts copied into a run dir as provenance; the in-place
+# scripts (expand, regen) read them back as the run's contract.
+APP_FILENAME = "app.yaml"
+CUSTOMIZATION_FILENAME = "customization.yaml"
+# Append-only spend ledger for `expand` passes (see schema ExpansionCostLog).
+# Sits beside output.yaml; absent until a run is first expanded.
+EXPANSION_COST_FILENAME = "expansion_cost.yaml"
 
 
 class RunContext:
@@ -37,16 +47,25 @@ class RunContext:
         app: AppFormat,
         cust: Customization,
         out_root: Path,
+        run_id: str | None = None,
     ) -> None:
         """Store the models and create this run's directory + image folder.
 
-        The run id is a UTC timestamp, so runs sort chronologically; the
-        run folder is ``<out_root>/<app_id>/<run_id>``.
+        The run folder is ``<out_root>/<app_id>/<run_id>``. A fresh run
+        leaves ``run_id`` unset and gets a UTC timestamp, so runs sort
+        chronologically. Passing an existing ``run_id`` instead targets
+        that directory in place (the ``mkdir(exist_ok=True)`` calls below
+        are then harmless no-ops) — this is how ``expand`` reopens a saved
+        run to seed its done nodes and generate only what's missing.
         """
         self.app = app
         self.cust = cust
         self.app_id = app.id
-        self.run_id = datetime.now(timezone.utc).strftime(RUN_ID_FORMAT)
+        self.run_id = (
+            run_id
+            if run_id is not None
+            else datetime.now(timezone.utc).strftime(RUN_ID_FORMAT)
+        )
         self.run_dir = out_root / self.app_id / self.run_id
         self.image_dir = self.run_dir / IMAGES_DIRNAME
         self.final_image_dir = self.run_dir / FINAL_IMAGES_DIRNAME
@@ -81,3 +100,51 @@ class RunContext:
     def output_path(self) -> Path:
         """Path to this run's ``output.yaml``."""
         return self.run_dir / OUTPUT_FILENAME
+
+    def expansion_cost_path(self) -> Path:
+        """Path to this run's ``expansion_cost.yaml`` spend ledger."""
+        return self.run_dir / EXPANSION_COST_FILENAME
+
+
+def load_run(
+    run_dir: Path, *, app_yaml: Path | None = None
+) -> tuple[AppFormat, Customization, Output]:
+    """Validate and load an existing run dir's three YAML artifacts.
+
+    The shared entry for the in-place scripts (``expand``, ``regen``)
+    that reopen a saved run. Checks the dir holds ``app.yaml``,
+    ``customization.yaml`` and ``output.yaml``, and that the app id matches
+    the app-level directory name — so the dir really is
+    ``<out_root>/<app_id>/<run_id>`` and ``RunContext(run_id=...)`` will
+    target it correctly. Raises ``PipelineError`` for a missing dir/file or
+    an id mismatch; model validation raises its own ``ValidationError``.
+
+    ``app_yaml`` overrides where the slot inventory is read from: the run
+    dir's ``app.yaml`` is a frozen *snapshot* from when the run was made, so
+    to expand against an **updated** inventory (a slot added to the live
+    ``app.yaml``) the caller passes its path here. ``customization.yaml`` and
+    ``output.yaml`` are always the run's own.
+    """
+    if not run_dir.is_dir():
+        raise PipelineError(f"not a directory: {run_dir}")
+    for name in (APP_FILENAME, CUSTOMIZATION_FILENAME, OUTPUT_FILENAME):
+        if not (run_dir / name).is_file():
+            raise PipelineError(f"missing {name} in {run_dir}")
+    app_path = app_yaml if app_yaml is not None else run_dir / APP_FILENAME
+    if not app_path.is_file():
+        raise PipelineError(f"no such app.yaml: {app_path}")
+
+    app = AppFormat.model_validate(load_yaml(app_path))
+    cust = Customization.model_validate(
+        load_yaml(run_dir / CUSTOMIZATION_FILENAME)
+    )
+    output = Output.model_validate(load_yaml(run_dir / OUTPUT_FILENAME))
+
+    app_dir_name = run_dir.parent.name
+    if app.id != app_dir_name:
+        raise PipelineError(
+            f"app id {app.id!r} in {APP_FILENAME} does not match the app "
+            f"directory name {app_dir_name!r} ({run_dir.parent}); is "
+            "--run-dir pointing at <out_root>/<app_id>/<run_id>?"
+        )
+    return app, cust, output

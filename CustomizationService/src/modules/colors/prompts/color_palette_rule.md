@@ -86,5 +86,8 @@ In depth: $long
 Colour direction: $colour_direction
 Dark mode: $dark_mode
 
---- Colour slots to fill ---
+--- Already-chosen colours (FIXED: do NOT return these; they stay exactly as-is — harmonize your picks with them) ---
+$fixed_context
+
+--- Colour slots to fill (return an object for ONLY these; honor any "user note" as a direct instruction for that slot) ---
 $slots

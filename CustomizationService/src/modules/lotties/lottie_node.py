@@ -44,8 +44,17 @@ class LottieNode(Node):
         deps: frozenset[str],
         llm: LLMClient,
         library: LottiePresetLibrary,
+        seed: dict[str, LottieOutput] | None = None,
+        overwrite_specs: str = "",
     ) -> None:
-        super().__init__(run_ctx, key=slot.id, deps=deps)
+        super().__init__(
+            run_ctx,
+            key=slot.id,
+            deps=deps,
+            declared_slots={slot.id},
+            seed=seed,
+            overwrite_specs=overwrite_specs,
+        )
         self._slot = slot
         self._library = library
         self._selection = LottieSelectionService(llm)
@@ -54,7 +63,15 @@ class LottieNode(Node):
     async def run(self) -> LottieOutput:
         """Resolve this slot: select a preset, then map its regions to
         palette roles. Trusted fields (file, display name, insertion
-        point) are lifted off the chosen preset, never from the LLM."""
+        point) are lifted off the chosen preset, never from the LLM.
+
+        A per-slot node: if this slot is seeded and not overridden (nothing
+        dirty), the seeded output is returned verbatim — no LLM calls. Else it
+        is regenerated, with any ``overwrite_specs`` steering the selection."""
+        dirty = self.dirty()
+        self.regenerated = dirty
+        if not dirty:
+            return self.seed[self._slot.id]  # type: ignore[return-value]
         palette = self.inputs[DependencyKind.COLOR.value]
         revealed: ImageOutput | None = (
             self.inputs[self._slot.depends_on]  # type: ignore[assignment]
@@ -67,6 +84,7 @@ class LottieNode(Node):
             slot=self._slot,
             candidates=candidates,
             revealed=revealed,
+            overwrite_specs=self.overwrite_specs,
         )
         region_roles = await self._recolor.resolve(
             self._run_ctx, preset=preset, palette=palette
@@ -79,4 +97,5 @@ class LottieNode(Node):
             region_roles=region_roles,
             reveals=self._slot.depends_on,
             insertion_point=preset.insertion_point if is_reveal else None,
+            overwrite_specs=self.overwrite_specs,
         )

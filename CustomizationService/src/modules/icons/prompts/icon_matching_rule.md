@@ -41,5 +41,8 @@ Name: $set_name
 Vibe: $set_vibe
 Icons in this set: $icons
 
---- Icon slots to match ---
+--- Already-resolved icons (FIXED: do NOT return these; keep your matches consistent with them) ---
+$fixed_context
+
+--- Icon slots to match (match ONLY these; honor any "user note" as a direct instruction for that slot) ---
 $slots

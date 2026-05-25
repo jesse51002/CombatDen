@@ -23,7 +23,7 @@ import logging
 from pathlib import Path
 from string import Template
 
-from schema import IconOutput, IconSlot
+from schema import IconOutput, IconSlot, OverwriteSpecs
 from src.core.run_context import RunContext
 from src.modules.icons.icon_models import LLMIconPrompt, build_icon_prompt_model
 from src.shared.interfaces.icon_set_catalog import IconSetCatalogEntry
@@ -57,6 +57,8 @@ class IconGenerationService:
         run_ctx: RunContext,
         chosen: IconSetCatalogEntry,
         unmatched: list[IconSlot],
+        *,
+        overwrite_specs: OverwriteSpecs | None = None,
     ) -> dict[str, IconOutput]:
         """Generate an SVG for every unmatched slot; return their outputs.
 
@@ -70,7 +72,9 @@ class IconGenerationService:
         """
         if not unmatched:
             return {}
-        authored = await self._author_prompts(run_ctx, unmatched)
+        authored = await self._author_prompts(
+            run_ctx, unmatched, overwrite_specs=overwrite_specs or OverwriteSpecs()
+        )
 
         generated: dict[str, IconOutput] = {}
         for slot in unmatched:
@@ -102,6 +106,7 @@ class IconGenerationService:
         unmatched: list[IconSlot],
         *,
         model: str = ICON_PROMPT_MODEL,
+        overwrite_specs: OverwriteSpecs | None = None,
     ) -> dict[str, LLMIconPrompt]:
         """One batch LLM call authoring an icon name + Recraft prompt per
         unmatched slot.
@@ -110,11 +115,17 @@ class IconGenerationService:
         inventory, substituted into the prompt-authoring ``.md`` template —
         whose rule bakes in the monochrome / ``currentColor`` / single-
         weight SVG guidance), runs the one structured call, and returns
-        ``{slot_id: LLMIconPrompt}`` (each carrying ``name`` + ``prompt``)."""
+        ``{slot_id: LLMIconPrompt}`` (each carrying ``name`` + ``prompt``).
+        ``overwrite_specs`` surfaces the call's steering note."""
+        specs = overwrite_specs or OverwriteSpecs()
         slot_ids = [slot.id for slot in unmatched]
         template = ICON_PROMPT_RULE_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
-        inventory = "\n".join(f"- {slot.id}: {slot.description}" for slot in unmatched)
+        lines = [f"- {slot.id}: {slot.description}" for slot in unmatched]
+        note = specs.prompt_note()
+        if note:
+            lines.append(f"\n{note}")
+        inventory = "\n".join(lines)
         instruction = Template(template).safe_substitute(
             name=design.name,
             short=design.short_desc,

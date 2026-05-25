@@ -22,6 +22,7 @@ from src.core.run_context import RunContext
 from src.modules.base import DependencyKind, Node
 from src.modules.images.background_service import BackgroundService
 from src.modules.images.complexity_service import ComplexityClassifier
+from src.modules.images.image_edit_service import ImageEditService
 from src.modules.images.image_models import ImagePrompt
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
@@ -84,13 +85,23 @@ class ImageNode(Node):
         image_gen: ImageGenerator,
         classifier: ComplexityClassifier,
         background: BackgroundService,
+        seed: dict[str, ImageOutput] | None = None,
+        overwrite_specs: str = "",
     ) -> None:
-        super().__init__(run_ctx, key=slot.id, deps=deps)
+        super().__init__(
+            run_ctx,
+            key=slot.id,
+            deps=deps,
+            declared_slots={slot.id},
+            seed=seed,
+            overwrite_specs=overwrite_specs,
+        )
         self._slot = slot
         self._llm = llm
         self._image_gen = image_gen
         self._classifier = classifier
         self._background = background
+        self._edit = ImageEditService(llm)
 
     async def run(self, *, prompt_model: str = IMAGE_PROMPT_MODEL) -> ImageOutput:
         """Resolve this slot end to end: deps → prompt → classify →
@@ -100,8 +111,23 @@ class ImageNode(Node):
         to compare models). Complexity classification picks the generator's
         quality tier. Declared image dependencies are folded into the
         prompt as style reference only; the background pass — delegated to
-        ``BackgroundService`` — runs on the generated image."""
+        ``BackgroundService`` — runs on the generated image.
+
+        A per-slot node: a seeded, un-overridden image (nothing dirty) is
+        returned verbatim with no generation — so reopening a run to change
+        one thing never re-bills every untouched image."""
+        dirty = self.dirty()
+        self.regenerated = dirty
+        if not dirty:
+            return self.seed[self._slot.id]  # type: ignore[return-value]
         palette = self.inputs[DependencyKind.COLOR.value]
+        # Image-to-image: when the steering carries an ``image_to_image`` and
+        # a current image exists, edit it (change only what was asked) rather
+        # than generate a fresh scene.
+        if self.overwrite_specs.image_to_image is not None:
+            source = Path(str(self._run_ctx.image_path(self._slot.id)))
+            if source.is_file():
+                return await self._edit_current(palette, source)
         image_deps: dict[str, ImageOutput] = {
             dep_id: self.inputs[dep_id]  # type: ignore[misc]
             for dep_id in self._slot.depends_on
@@ -119,6 +145,33 @@ class ImageNode(Node):
             path=self._run_ctx.image_path(self._slot.id),
             prompt=prompt,
             complexity=complexity,
+            overwrite_specs=self.overwrite_specs,
+        )
+
+    async def _edit_current(
+        self, palette: Any, source: Path
+    ) -> ImageOutput:
+        """Image-to-image: author the edit instruction (the change only) and
+        edit ``source`` in place, then run the same background pass. The
+        prompt recorded is the edit instruction; complexity is ``None`` (no
+        classify on an edit)."""
+        instruction = await self._edit.author(
+            self._run_ctx,
+            slot=self._slot,
+            palette=palette,
+            change=self.overwrite_specs.specs,
+        )
+        raw = self._run_ctx.image_dir / f"{self._slot.id}.edit{RAW_SUFFIX}"
+        await self._image_gen.edit(
+            instruction, source, raw, model=IMAGE_GEN_MODEL
+        )
+        final = Path(str(self._run_ctx.image_path(self._slot.id)))
+        await self._background.run(raw, final)
+        return ImageOutput(
+            path=self._run_ctx.image_path(self._slot.id),
+            prompt=instruction,
+            complexity=None,
+            overwrite_specs=self.overwrite_specs,
         )
 
     async def _build_prompt(

@@ -13,6 +13,25 @@ choice for the user is not.
 
 ---
 
+## Iron-clad rule: never hand-edit a produced run
+
+A run directory's **produced artifacts** — `output.yaml`, `expansion_cost.yaml`,
+and the files under `final_images/` / `images/` / `icons/` — are **never edited
+by hand**. To change anything in an existing run you use the scripts:
+`scripts/expand` (fill not-yet-done slots), `scripts/regen` (re-make
+colour/font/text/icon/lottie slots), `scripts/regen_image` (images),
+`scripts/edit_customization` (a validated, targeted edit of the brief
+`customization.yaml`), or a full pipeline run (`src/cli.py`). The brief is the
+one editable *input* — and even it goes through `edit_customization` (which
+re-validates), not raw text munging; `app.yaml` is architect-owned.
+
+If a change someone wants **cannot** be expressed through those scripts, do NOT
+work around it by editing an artifact — say so plainly and surface it as a
+feature to add to the pipeline. A missing capability is a feature request,
+never a manual edit.
+
+---
+
 ## Core principle: app-agnostic
 
 Nothing app-specific lives in Python code. App-specific configuration
@@ -96,6 +115,25 @@ models, or touch threading/concurrency — the **executor** owns iteration
 and is the only place parallelism may later be added (a bounded gather),
 with zero module changes. A module that loops slots or returns a
 "set of everything" is the smell; push that loop up into the executor.
+
+### A module's `run()` returns its full output
+
+Each module returns its **complete, self-contained output exactly as it
+lands in `output.yaml`** — never a partial, a diff, a delta, or a handle
+to fetch the rest. The node-return-type ⇄ output-group mapping is 1:1:
+`ColorNode → ColorPalette` (= `color_set`), `FontNode → FontSet`
+(= `font_set`), `ImageNode → ImageOutput` (= `image_set.images[id]`),
+`LottieNode → LottieOutput` (= `lottie_set.lotties[id]`), and so on.
+
+**Why this is a hard invariant, not a style note:** the `expand` flow
+(`scripts/expand/run.py`, `src/executor/seed.py`) reconstructs the
+executor's start-state by validating each saved `output.yaml` group
+straight back into the model its node returns, then seeds the DAG with the
+done nodes and runs only what's missing. A module that returned less than
+its full output couldn't be seeded from a saved run — it would force a
+re-run (and re-spend) of work already done. Keep every new module
+round-trippable this way: whatever `run()` returns must be everything
+needed to reconstruct that node as done, with no side channel.
 
 ---
 

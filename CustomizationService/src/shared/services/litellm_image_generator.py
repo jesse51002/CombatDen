@@ -138,3 +138,49 @@ class LiteLLMImageGenerator(CostTracking, ImageGenerator):
         return await self._call_with_retry(
             _attempt, what="generation", model=model
         )
+
+    async def edit(
+        self,
+        prompt: str,
+        source: Path,
+        dest: Path,
+        *,
+        model: str,
+        quality: str | None = None,
+    ) -> AbsolutePath:
+        """Image-to-image edit of ``source`` per ``prompt`` (the change only),
+        via ``litellm.aimage_edit``; write the PNG to ``dest``.
+
+        Same retry/cost discipline as ``generate``. The source bytes are read
+        fresh inside each attempt so a retry never reuses a spent handle.
+        """
+        logger.debug(
+            "image edit input → %s (quality=%s) on %s:\n\n%s\n",
+            model,
+            quality,
+            source,
+            prompt,
+        )
+
+        async def _attempt() -> AbsolutePath:
+            with open(source, "rb") as handle:
+                kwargs: dict[str, Any] = dict(
+                    model=model,
+                    prompt=prompt,
+                    image=handle,
+                    size=IMAGE_SIZE,
+                    n=1,
+                    api_key=provider_api_key(model),
+                )
+                if quality is not None:
+                    kwargs["quality"] = quality
+                resp = await litellm.aimage_edit(**kwargs)
+            self._add_cost(litellm_call_cost(resp, model), model)
+            image_bytes = base64.b64decode(_b64_payload(resp.data[0]))
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(image_bytes)
+            return AbsolutePath(str(dest.resolve()))
+
+        return await self._call_with_retry(
+            _attempt, what="edit", model=model
+        )

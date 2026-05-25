@@ -14,10 +14,12 @@ keys dropped, not rejected).
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import ConfigDict, field_validator
+
+from schema.output.node_output import NodeOutput
 
 
-class FontOutput(BaseModel):
+class FontOutput(NodeOutput):
     """One slot's resolved Google Font: the family plus the human prose."""
 
     model_config = ConfigDict(extra="ignore")

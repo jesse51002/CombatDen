@@ -9,20 +9,21 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from schema.video_type import VideoType
-
 
 class VideoSearch(BaseModel):
-    """One YouTube search prompt plus its content-genre tags."""
+    """One YouTube search prompt.
+
+    A search no longer carries genre tags: the query's tags were a poor proxy
+    for what a video actually is. Genre is now decided per-video by the
+    classification pass (``scripts/classify``) from the video's real content,
+    not from the search that surfaced it.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     # The literal search prompt; this is what the later batch script feeds to
     # YouTube. Non-empty.
     query: str = Field(min_length=1)
-    # One or more genre tags. A single search can legitimately span genres
-    # (e.g. a how-to that is also entertaining), so this is a non-empty list.
-    tags: list[VideoType] = Field(min_length=1)
 
 
 class VideosConfig(BaseModel):
@@ -36,7 +37,7 @@ class VideosConfig(BaseModel):
     avoid_desc: str = Field(min_length=2)  # prose: content to avoid / exclude
     # At least one search; still capped at 20 and ideally spread across the
     # VideoType spectrum.
-    searches: list[VideoSearch] = Field(min_length=1, max_length=20)
+    searches: list[VideoSearch] = Field(min_length=1)
     # Channels the company wants prioritized — their own and/or ones they like.
     # Free-form for now (a name, @handle, or URL); a later step will resolve and
     # weight these deterministically. Optional: not every company has any.

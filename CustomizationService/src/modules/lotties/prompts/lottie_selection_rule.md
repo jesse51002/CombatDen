@@ -11,7 +11,7 @@ $long
 ## The slot this animation fills
 
 $slot
-$revealed_block
+$revealed_block$overwrite_block
 ## Candidate animations
 
 Choose exactly one of these by its id. Each line is `id: name — description`:

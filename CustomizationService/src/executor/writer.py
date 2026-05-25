@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel
 
-from src.core.run_context import RunContext
+from src.core.run_context import RUN_ID_FORMAT, RunContext
 from src.executor.orchestrator import PipelineResult
-from schema import RunCost
+from schema import (
+    ExpansionCostLog,
+    ExpansionEntry,
+    ExpansionKind,
+    OverwriteSpecs,
+    RunCost,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +62,75 @@ class Writer:
             app_path,
             cust_path,
             output_path,
+        )
+
+    def write_expansion(
+        self,
+        result: PipelineResult,
+        run_ctx: RunContext,
+        *,
+        original_cost: RunCost | None,
+        kind: ExpansionKind,
+        overwrite_specs: OverwriteSpecs | None = None,
+    ) -> None:
+        """Write a reopen-time pass (expand or regenerate) back in place.
+
+        Two files change, no others:
+
+        - ``output.yaml`` is re-dumped from the merged ``Output`` (the seeded
+          done nodes plus whatever this pass (re)generated), but its ``cost``
+          block is set to ``original_cost`` — the figure carried forward from
+          the file we loaded — so the original full-run cost is preserved
+          untouched, never overwritten with this pass's partial spend.
+        - ``expansion_cost.yaml`` gains one appended ``ExpansionEntry``
+          recording *this* pass: its ``kind`` (expand vs regenerate), when it
+          ran, which node keys it (re)generated, the per-slot
+          ``overwrite_specs`` applied, and what those calls cost (the fresh
+          paid services accumulated only this pass's spend).
+
+        The dir's ``app.yaml`` / ``customization.yaml`` are left alone — they
+        are the inputs the caller curated, not artifacts this writer owns.
+        """
+        output = result.output.model_copy(update={"cost": original_cost})
+        self._dump_model(output, run_ctx.output_path())
+
+        ledger_path = run_ctx.expansion_cost_path()
+        log = self._load_expansion_log(ledger_path)
+        pass_cost = self._run_cost(result)
+        log.expansions.append(
+            ExpansionEntry(
+                kind=kind,
+                expanded_at=datetime.now(timezone.utc).strftime(
+                    RUN_ID_FORMAT
+                ),
+                generated=sorted(result.generated),
+                overwrite_specs=overwrite_specs or OverwriteSpecs(),
+                cost=pass_cost,
+            )
+        )
+        self._dump_model(log, ledger_path)
+
+        logger.debug(
+            "%s %s: generated %s (pass cost $%.6f); ledger now %d entr%s",
+            kind.value,
+            run_ctx.run_dir,
+            sorted(result.generated),
+            pass_cost.total,
+            len(log.expansions),
+            "y" if len(log.expansions) == 1 else "ies",
+        )
+
+    @staticmethod
+    def _load_expansion_log(path: Path) -> ExpansionCostLog:
+        """The run's existing spend ledger, or an empty one if never expanded.
+
+        An empty/whitespace ``expansion_cost.yaml`` parses to ``None``; treat
+        that the same as absent — a fresh, empty log to append to.
+        """
+        if not path.is_file():
+            return ExpansionCostLog()
+        return ExpansionCostLog.model_validate(
+            yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         )
 
     @staticmethod

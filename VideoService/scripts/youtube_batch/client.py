@@ -64,8 +64,12 @@ class YouTubeClient:
         )
 
     def fetch_video_stats(self, video_ids: Sequence[str]) -> list[dict]:
-        """``videos.list`` (statistics) for ids, batched 50 at a time."""
-        return self._batched(video_ids, part="statistics", what="video stats")
+        """``videos.list`` (statistics + contentDetails) for ids, batched 50 at
+        a time. ``contentDetails`` rides along free — quota is per call, not per
+        part — and carries the ISO 8601 ``duration``."""
+        return self._batched(
+            video_ids, part="statistics,contentDetails", what="video stats"
+        )
 
     def fetch_channel_avatars(self, channel_ids: Sequence[str]) -> list[dict]:
         """``channels.list`` (snippet) for ids, batched 50 at a time."""
@@ -76,14 +80,14 @@ class YouTubeClient:
     ) -> list[dict]:
         """Run the relevant list() call over 50-id chunks; one unit per chunk.
 
-        ``part`` selects the resource: 'statistics' -> videos.list,
-        'snippet' -> channels.list."""
+        ``part`` selects the resource: a 'statistics'(+contentDetails) part ->
+        videos.list, 'snippet' -> channels.list."""
         responses: list[dict] = []
         for chunk in _chunks(ids, MAX_IDS_PER_CALL):
             self._quota_units += LIST_UNITS
             collection = (
                 self._youtube.videos()
-                if part == "statistics"
+                if "statistics" in part
                 else self._youtube.channels()
             )
             # No maxResults here: videos.list / channels.list reject it when an

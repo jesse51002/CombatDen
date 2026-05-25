@@ -35,9 +35,18 @@ class VideoOutput(BaseModel):
     channel_avatar_url: str  # the creator's profile picture
     view_count: int | None = None  # None when stats are hidden
     like_count: int | None = None  # None when likes are hidden
-    # Union of genre tags from every query that surfaced this video. This is the
-    # frontend grouping / category key.
-    tags: list[VideoType] = Field(min_length=1)
+    # Total runtime in seconds (from videos.list contentDetails). None when the
+    # API didn't report a duration (e.g. a live broadcast). Fed to the
+    # classifier as a signal and rendered as a length badge by clients.
+    duration_seconds: int | None = None
+    # The video's single genre, assigned by the classification pass from the
+    # video's actual content (NOT from the search that surfaced it). None until
+    # `scripts/classify` runs; it then sets exactly one tag.
+    tag: VideoType | None = None
+    # Whether this video belongs in the company's feed — the classification
+    # pass's quality/relevance verdict. None until classified; clients filter
+    # on it (off-niche videos are kept, not dropped).
+    is_good: bool | None = None
     # The literal search query (or queries) that surfaced this video — useful
     # for tracing why a video is here and for data checks.
     source_queries: list[str] = Field(min_length=1)

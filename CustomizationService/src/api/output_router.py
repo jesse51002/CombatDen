@@ -127,6 +127,95 @@ async def get_image(
 
 
 @output_router.get(
+    "/{app_id}/{run_id}/icons/{slot_id}",
+    response_class=FileResponse,
+    summary="Stream one icon slot's SVG",
+    responses={
+        200: {
+            "content": {"image/svg+xml": {}},
+            "description": "The SVG bytes",
+        },
+        404: {"description": "No such app/run/slot or icon file"},
+        422: {"description": "Run exists but its output.yaml is stale"},
+    },
+)
+async def get_icon(
+    app_id: str, run_id: str, slot_id: str
+) -> FileResponse:
+    """Stream the resolved monochrome SVG for one declared icon slot."""
+    try:
+        path = await output_service().icon_file(app_id, run_id, slot_id)
+        return FileResponse(path, media_type="image/svg+xml")
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except InvalidRunError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to serve icon %s/%s/%s",
+            app_id,
+            run_id,
+            slot_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to serve icon",
+        ) from None
+
+
+@output_router.get(
+    "/{app_id}/{run_id}/lotties/{slot_id}",
+    response_class=FileResponse,
+    summary="Stream one lottie slot's preset JSON",
+    responses={
+        200: {
+            "content": {"application/json": {}},
+            "description": "The Lottie preset JSON bytes",
+        },
+        404: {"description": "No such app/run/slot or preset file"},
+        422: {"description": "Run exists but its output.yaml is stale"},
+    },
+)
+async def get_lottie(
+    app_id: str, run_id: str, slot_id: str
+) -> FileResponse:
+    """Stream the global-library preset JSON for one declared lottie slot.
+    The recolour map and reveal metadata ride on the run's
+    ``GET /apps/{app}/{run}`` payload (``lotties[slot]``); this endpoint
+    serves only the preset bytes."""
+    try:
+        path = await output_service().lottie_file(app_id, run_id, slot_id)
+        return FileResponse(path, media_type="application/json")
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except InvalidRunError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to serve lottie %s/%s/%s",
+            app_id,
+            run_id,
+            slot_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to serve lottie",
+        ) from None
+
+
+@output_router.get(
     "/{app_id}/{run_id}/fonts/{slot_id}",
     response_model=FontDeliveryResponse,
     summary="Get the deliverable Google Font payload for one font slot",
