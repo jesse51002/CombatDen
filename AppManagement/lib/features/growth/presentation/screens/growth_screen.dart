@@ -12,12 +12,14 @@ import 'package:app_management/shared/widgets/app_shell.dart';
 
 /// Growth (analytics) screen.
 ///
-/// Figma: file `q04PCZ3W9syMik34JRtRbL`, node `5001:3206`.
+/// Sections sit directly on the page, separated by whitespace and thin
+/// hairline rules — not boxed in cards. Only the Total Members hero (reused
+/// from Home) is still carded for now.
 /// Stack (top to bottom):
-///   1. Total Members hero card (active/inactive arc) — reused from Home
-///   2. Three KPI tiles: Total / New / Lost
-///   3. Wide Members card with date-range pill, trend chart, breakdown table
-///   4. Full-width Monthly Churn donut card
+///   1. Total Members hero (active/inactive arc) — reused from Home
+///   2. KPI stat row: Total / New / Lost, split by vertical rules
+///   3. Members section: date-range pill, trend chart, breakdown table
+///   4. Monthly Churn donuts + history
 class GrowthScreen extends StatelessWidget {
   const GrowthScreen({super.key});
 
@@ -33,7 +35,9 @@ class GrowthScreen extends StatelessWidget {
           children: [
             TotalMembersCard(stats: kMockMemberStats),
             KpiStrip(kpis: kMockGrowthKpis),
+            const _SectionRule(),
             const MembersCard(),
+            const _SectionRule(),
             DonutStatsCard(
               title: 'Monthly Churn',
               last30: kMockChurnLast30,
@@ -45,5 +49,15 @@ class GrowthScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Full-width hairline separating major sections on the page.
+class _SectionRule extends StatelessWidget {
+  const _SectionRule();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(height: 1, color: DesignConstants.divider);
   }
 }

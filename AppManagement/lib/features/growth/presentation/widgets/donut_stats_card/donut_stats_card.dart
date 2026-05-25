@@ -4,11 +4,10 @@ import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/growth/data/mock_growth.dart';
 import 'package:app_management/features/growth/presentation/widgets/donut_stats_card/_donut_history_table.dart';
 import 'package:app_management/features/growth/presentation/widgets/donut_stats_card/_donut_stat.dart';
-import 'package:app_management/shared/widgets/section_card.dart';
 
-/// "Two donuts + history table" card used on Growth for Monthly Churn.
+/// "Two donuts + history table" section used on Growth for Monthly Churn.
 /// The two donuts sit side by side, with the history table filling the
-/// remaining width.
+/// remaining width. Sits on the page; no card chrome.
 class DonutStatsCard extends StatelessWidget {
   final String title;
   final DonutChartData last30;
@@ -27,20 +26,18 @@ class DonutStatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          Text(title, style: DesignConstants.h1),
-          _Body(
-            last30: last30,
-            gymAverage: gymAverage,
-            tableValueColumnLabel: tableValueColumnLabel,
-            rows: rows,
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        Text(title, style: DesignConstants.h1),
+        _Body(
+          last30: last30,
+          gymAverage: gymAverage,
+          tableValueColumnLabel: tableValueColumnLabel,
+          rows: rows,
+        ),
+      ],
     );
   }
 }
