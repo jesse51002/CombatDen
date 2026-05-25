@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/members/data/mock_member_app_preview.dart';
@@ -23,11 +22,15 @@ class GymBrandingSection extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             spacing: DesignConstants.spacingBig,
             children: [
-              Icon(
-                Symbols.sports_mma_sharp,
-                color: DesignConstants.primaryColor,
-                weight: DesignConstants.iconWeight,
-                size: 120,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(
+                  DesignConstants.radiusBig,
+                ),
+                child: Image.asset(
+                  data.gymLogoAsset,
+                  width: 140,
+                  height: 140,
+                ),
               ),
               Text(data.gymName, style: DesignConstants.big2),
               AppOutlineButton(
