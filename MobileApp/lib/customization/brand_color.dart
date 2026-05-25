@@ -57,6 +57,28 @@ class BrandColor {
     return getIt<CustomizationService>().current?.palette[key] ?? fallback;
   }
 
+  /// Resolves an arbitrary palette ROLE key to a colour, checking both
+  /// stores: the flat [palette] (derived/shared tokens like
+  /// `primary_third`, `card`) AND the typed [colors] map (base roles like
+  /// `primary`, `accent`, which are NOT flattened into the palette).
+  /// Returns [fallback] on any miss — never throws.
+  ///
+  /// This is the resolver for keys whose store isn't known up front — e.g.
+  /// a lottie `region_roles` value, which the recolour LLM may set to
+  /// either a base role or a derived key. For known base-slot lookups use
+  /// [color]; for known orphan tokens use [paletteEntry].
+  static Color token(
+    String key, {
+    required Color fallback,
+  }) {
+    if (!getIt.isRegistered<CustomizationService>()) {
+      return fallback;
+    }
+    final current = getIt<CustomizationService>().current;
+    if (current == null) return fallback;
+    return current.palette[key] ?? current.colors[key]?.color ?? fallback;
+  }
+
   /// The loaded customization's light/dark mode. Same contract as
   /// [color]: returns [fallback] when no customization is loaded or
   /// DI is not set up (tests). Never throws.

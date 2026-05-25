@@ -34,6 +34,8 @@ Future<void> main() async {
     expectedImages: CombatDenSlots.expectedImages,
     expectedFonts: CombatDenSlots.expectedFonts,
     expectedText: CombatDenSlots.expectedText,
+    expectedIcons: CombatDenSlots.expectedIcons,
+    expectedLotties: CombatDenSlots.expectedLotties,
   );
 
   runApp(const MobileAppRoot());

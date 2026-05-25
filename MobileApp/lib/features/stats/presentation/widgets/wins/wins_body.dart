@@ -8,7 +8,7 @@ import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/sparkle_burst.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/shared/widgets/branded_image.dart';
+import 'package:mobile_app/customization/widgets/branded_image.dart';
 
 /// Trophy hero with one-shot sparkle burst, "Today's wins" header, and the
 /// three info tiles cascading in left-to-right.

@@ -4,7 +4,7 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/home/data/mock_upcoming_sessions.dart';
 import 'package:mobile_app/features/home/presentation/widgets/upcoming_sessions/upcoming_session_row.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/shared/widgets/branded_image.dart';
+import 'package:mobile_app/customization/widgets/branded_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
 class UpcomingSessionsCard extends StatelessWidget {

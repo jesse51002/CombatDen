@@ -31,6 +31,8 @@ class CustomizationService extends ChangeNotifier {
     required this.expectedImageKeys,
     required this.expectedFontKeys,
     required this.expectedTextKeys,
+    required this.expectedIconKeys,
+    required this.expectedLottieKeys,
   });
 
   final CustomizationApiClient _apiClient;
@@ -41,6 +43,8 @@ class CustomizationService extends ChangeNotifier {
   final List<String> expectedImageKeys;
   final List<String> expectedFontKeys;
   final List<String> expectedTextKeys;
+  final List<String> expectedIconKeys;
+  final List<String> expectedLottieKeys;
 
   static const String _prefsKey = 'customization_last_good_json';
   static const String _selectedDesignKey = 'customization_selected_design_id';
@@ -151,6 +155,8 @@ class CustomizationService extends ChangeNotifier {
     final images = _current?.images ?? const {};
     final fonts = _current?.fonts ?? const {};
     final texts = _current?.texts ?? const {};
+    final icons = _current?.icons ?? const {};
+    final lotties = _current?.lotties ?? const {};
     final missingColors = expectedColorKeys
         .where((k) => colors[k]?.color == null)
         .toList();
@@ -163,10 +169,18 @@ class CustomizationService extends ChangeNotifier {
     final missingTexts = expectedTextKeys
         .where((k) => (texts[k] ?? '').isEmpty)
         .toList();
+    final missingIcons = expectedIconKeys
+        .where((k) => (icons[k] ?? '').isEmpty)
+        .toList();
+    final missingLotties = expectedLottieKeys
+        .where((k) => (lotties[k]?.url ?? '').isEmpty)
+        .toList();
     if (missingColors.isEmpty &&
         missingImages.isEmpty &&
         missingFonts.isEmpty &&
-        missingTexts.isEmpty) {
+        missingTexts.isEmpty &&
+        missingIcons.isEmpty &&
+        missingLotties.isEmpty) {
       return;
     }
 
@@ -183,6 +197,10 @@ class CustomizationService extends ChangeNotifier {
       '${missingFonts.isEmpty ? "-" : missingFonts.join(", ")}\n'
       '  texts missing : '
       '${missingTexts.isEmpty ? "-" : missingTexts.join(", ")}\n'
+      '  icons missing : '
+      '${missingIcons.isEmpty ? "-" : missingIcons.join(", ")}\n'
+      '  lotties missing: '
+      '${missingLotties.isEmpty ? "-" : missingLotties.join(", ")}\n'
       '========================================================\n',
     );
   }

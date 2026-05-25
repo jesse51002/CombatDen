@@ -81,4 +81,30 @@ class CombatDenSlots {
     winsSubtitle,
     bookNextClassCta,
   ];
+
+  // ---- Icon slots ----
+  // The persistent bottom-nav tab icons. Consumed via `BrandedIcon`
+  // (slot + `Symbols.*_sharp` fallback) in `AppBottomNavBar`.
+  static const String navHome = 'nav_home';
+  static const String navRank = 'nav_rank';
+  static const String navReward = 'nav_reward';
+  static const String navVideos = 'nav_videos';
+
+  static const List<String> expectedIcons = [
+    navHome,
+    navRank,
+    navReward,
+    navVideos,
+  ];
+
+  // ---- Lottie slots ----
+  // The two member-app celebration animations. Consumed via
+  // `BrandedLottie` (slot + bundled `.json` fallback).
+  static const String bookingCelebration = 'booking_celebration';
+  static const String streakCelebration = 'streak_celebration';
+
+  static const List<String> expectedLotties = [
+    bookingCelebration,
+    streakCelebration,
+  ];
 }

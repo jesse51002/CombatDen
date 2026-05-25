@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mobile_app/customization/data/models/color_mode.dart';
 import 'package:mobile_app/customization/data/models/customization_color.dart';
+import 'package:mobile_app/customization/data/models/lottie_override.dart';
 
 /// A loaded, resolved customization. App-agnostic: colours,
 /// images, fonts and texts are typed-value maps keyed by slot id
@@ -37,6 +38,15 @@ class Customization extends Equatable {
   /// back to whatever the call site declares as its default.
   final Map<String, String> texts;
 
+  /// Slot -> SVG fetch URL. Flat on the wire, exactly like [images]
+  /// (icons are monochrome SVGs the app tints per theme). Absent
+  /// slots fall back to the call site's `Symbols.*_sharp`.
+  final Map<String, String> icons;
+
+  /// Slot -> lottie override (preset URL + region→role recolour map).
+  /// Absent slots fall back to the call site's bundled `.json`.
+  final Map<String, LottieOverride> lotties;
+
   const Customization({
     required this.app,
     required this.displayName,
@@ -46,6 +56,8 @@ class Customization extends Equatable {
     required this.images,
     required this.fonts,
     required this.texts,
+    required this.icons,
+    required this.lotties,
   });
 
   factory Customization.fromJson(Map<String, dynamic> json) {
@@ -68,6 +80,8 @@ class Customization extends Equatable {
       images: _parseStringMap(json['images']),
       fonts: _parseStringMap(json['fonts']),
       texts: _parseTexts(textsRaw),
+      icons: _parseStringMap(json['icons']),
+      lotties: _parseMap(json['lotties'], LottieOverride.fromJson),
     );
   }
 
@@ -86,6 +100,10 @@ class Customization extends Equatable {
       'texts': {
         for (final e in texts.entries) e.key: {'value': e.value},
       },
+    },
+    'icons': Map<String, String>.from(icons),
+    'lotties': {
+      for (final e in lotties.entries) e.key: e.value.toJson(),
     },
   };
 
@@ -144,6 +162,16 @@ class Customization extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [app, displayName, colorMode, colors, palette, images, fonts, texts];
+  List<Object?> get props => [
+    app,
+    displayName,
+    colorMode,
+    colors,
+    palette,
+    images,
+    fonts,
+    texts,
+    icons,
+    lotties,
+  ];
 }

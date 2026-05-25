@@ -9,7 +9,7 @@ import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/shared/widgets/branded_image.dart';
+import 'package:mobile_app/customization/widgets/branded_image.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 
 // Per-screen layout/timing math, file-scoped per CLAUDE.md's _k carve-out.
