@@ -66,13 +66,13 @@ How to apply:
 - **`design_constants.dart` is this app's own design system and may be edited deliberately.** AppManagement has **forked** its tokens to its own identity (warm light theme, sapphire accent, Hanken Grotesk, tight 12/8 corners, de-carded layout). It is **no longer immutable** and **no longer byte-for-byte identical** with `../FlutterCRM/` or `../MobileApp/` — do **NOT** mirror token changes to them. Keep all token changes centralized in this file (so one edit reskins the whole app) and add/rename tokens only when the design genuinely needs it. See `DESIGN.md` for the system.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
-**Icons: Use Material Symbols**
+**Icons: Prefer Material Symbols, Material `Icons.*` allowed**
 
-- **ALWAYS use `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart`.
-- **NEVER use `Icons.*`** from Flutter's built-in Material icons.
-- **ALWAYS set `weight: DesignConstants.iconWeight`** on every `Icon()` widget.
+- **Default to `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart` — they're the design system's primary glyph set and carry the variable `weight` axis the look depends on.
+- **`Icons.*` from Flutter's built-in Material icons is permitted.** The design system is its own fork now and isn't locked to a single icon family; `Icons.*` values are plain `IconData` and are fine to use directly — including stored on plain mock-data models. There's no need to round-trip them back to `Symbols.*` at render time.
+- **Set `weight: DesignConstants.iconWeight` on `Symbols.*_sharp` icons** (it drives their stroke weight). Plain `Icons.*` glyphs don't honor the weight axis, so it's a no-op there — don't bother.
 - Good: `Icon(Symbols.person_sharp, weight: DesignConstants.iconWeight)`
-- Bad: `Icon(Icons.person)`
+- Also fine: `Icon(Icons.person)`
 
 **App Theme**
 
@@ -107,7 +107,8 @@ How to apply:
 
 **Formatting**
 - Max 80 characters per line.
-- `dart format` for consistent formatting.
+- **Hand-format. Do NOT run `dart format` / `make format` in this app.** The repo isn't format-clean, so a blanket format rewrites ~60 files — including the deliberately-forked `design_constants.dart` — and buries your actual change in churn. Match the surrounding style by hand instead.
+- **`flutter analyze` (`make analyze`) is the gate, not formatting.** Keep it clean before committing.
 - Trailing commas on multi-line widget trees for clean diffs.
 
 **Type Hints**
@@ -251,8 +252,8 @@ lib/
 ## Development Commands
 
 - `make run` — serve the web app on `http://localhost:8081` (port chosen to avoid colliding with FlutterCRM on `8080`).
-- `make analyze` — static analysis. **Must be clean before committing.**
-- `make format` — `dart format lib test`.
+- `make analyze` — static analysis. **Must be clean before committing — this is the gate.**
+- `make format` — `dart format lib test`. **Avoid in this app** (see *Formatting* above): the repo isn't format-clean, so it churns ~60 files including the forked `design_constants.dart`. Hand-format instead.
 - `make test` — run all tests.
 - `make get` — `flutter pub get`.
 - `make clean` / `make reset` — clean build artifacts / clean + get.
