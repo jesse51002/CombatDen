@@ -36,7 +36,7 @@ class AppPrimaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg =
         backgroundColor ?? DesignConstants.primaryColor;
-    final fg = textColor ?? DesignConstants.text;
+    final fg = textColor ?? DesignConstants.backgroundColor;
     final style = (textStyle ?? DesignConstants.h3)
         .copyWith(color: fg);
     final radius =

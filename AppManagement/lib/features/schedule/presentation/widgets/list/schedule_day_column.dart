@@ -22,7 +22,7 @@ class ScheduleDayColumn extends StatelessWidget {
           group.dayLabel,
           style: DesignConstants.h2.copyWith(
             color: group.isToday
-                ? DesignConstants.lightPrimary
+                ? DesignConstants.primaryColor
                 : DesignConstants.text,
           ),
         ),

@@ -21,7 +21,7 @@ class AppManagementRoot extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CombatDen Admin',
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
       debugShowCheckedModeBanner: false,
       initialRoute: AppRoutes.home,
       routes: {

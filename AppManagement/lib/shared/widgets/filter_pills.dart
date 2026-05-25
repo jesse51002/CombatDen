@@ -64,7 +64,9 @@ class _Pill extends StatelessWidget {
         child: Text(
           label,
           style: DesignConstants.pBig.copyWith(
-            color: isSelected ? DesignConstants.text : DesignConstants.text2nd,
+            color: isSelected
+                ? DesignConstants.backgroundColor
+                : DesignConstants.text2nd,
           ),
         ),
       ),

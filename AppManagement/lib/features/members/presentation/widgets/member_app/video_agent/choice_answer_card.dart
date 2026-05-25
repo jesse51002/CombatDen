@@ -81,14 +81,18 @@ class _OptionChip extends StatelessWidget {
             selected
                 ? Symbols.check_circle_sharp
                 : Symbols.radio_button_unchecked_sharp,
-            color: selected ? DesignConstants.text : DesignConstants.text3rd,
+            color: selected
+                ? DesignConstants.backgroundColor
+                : DesignConstants.text3rd,
             weight: DesignConstants.iconWeight,
             size: 18,
           ),
           Text(
             option.label,
             style: DesignConstants.p.copyWith(
-              color: selected ? DesignConstants.text : DesignConstants.text2nd,
+              color: selected
+                  ? DesignConstants.backgroundColor
+                  : DesignConstants.text2nd,
             ),
           ),
         ],

@@ -69,7 +69,9 @@ class _DayChip extends StatelessWidget {
         child: Text(
           label,
           style: DesignConstants.p.copyWith(
-            color: selected ? DesignConstants.text : DesignConstants.text2nd,
+            color: selected
+                ? DesignConstants.backgroundColor
+                : DesignConstants.text2nd,
           ),
         ),
       ),

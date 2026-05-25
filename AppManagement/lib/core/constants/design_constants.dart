@@ -7,15 +7,12 @@ class DesignConstants {
   static final Color primaryColor25 = primaryColor.withValues(alpha: 0.25);
   static final Color primaryColor10 = primaryColor.withValues(alpha: 0.1);
 
-  /// Lighter sapphire — for accent-colored TEXT and icons on dark surfaces
-  /// (passes WCAG AA). Use [primaryColor] for fills, borders, and arcs.
-  static const Color lightPrimary = Color(0xFF5E93E1);
-
   static final Color darkPrimary = Color(0xFF274777);
 
-  static const Color backgroundColor = Color(0xFF141920);
+  // Warm-stone light theme: paper background, warm near-black ink.
+  static const Color backgroundColor = Color(0xFFF6F3EE);
 
-  static const Color text = Color(0xFFE9EBEE);
+  static const Color text = Color(0xFF27231E);
   static final Color text2nd = text.withValues(alpha: 0.75);
   static final Color text3rd = text.withValues(alpha: 0.50);
 
@@ -25,10 +22,10 @@ class DesignConstants {
     text.withValues(alpha: 0.05)
     );
 
-  static const Color hyperlink = Color(0xFF83ADEA);
-  static const Color goodGreen = Color(0xFF7CB48F);
-  static const Color okYellow = Color(0xFFCBAD6D);
-  static const Color badRed = Color(0xFFCC6660);
+  static const Color hyperlink = Color(0xFF0E5CAF);
+  static const Color goodGreen = Color(0xFF1D7D3E);
+  static const Color okYellow = Color(0xFF915C08);
+  static const Color badRed = Color(0xFFB6322D);
 
   static final Color yellowDark = Color(0xFF6D5B35).withValues(alpha: 0.25);
   static final Color greenDark = Color(0xFF395F47).withValues(alpha: 0.25);

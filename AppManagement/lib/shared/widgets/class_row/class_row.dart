@@ -60,7 +60,7 @@ class _ClassDetails extends StatelessWidget {
     final nameLabel =
         row.inSession ? '${row.name} (In Session)' : row.name;
     final nameColor = row.inSession
-        ? DesignConstants.lightPrimary
+        ? DesignConstants.primaryColor
         : DesignConstants.text;
     final isLive = row.checkedInCount != null;
 

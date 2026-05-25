@@ -76,7 +76,7 @@ class RewardConfirmDialog extends StatelessWidget {
                     Text(
                       '${formatRewardPoints(r.pointsCost)} pts',
                       style: DesignConstants.h2.copyWith(
-                        color: DesignConstants.lightPrimary,
+                        color: DesignConstants.primaryColor,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -135,7 +135,7 @@ class _VerificationBlock extends StatelessWidget {
         Text(
           code,
           style: DesignConstants.big2.copyWith(
-            color: DesignConstants.lightPrimary,
+            color: DesignConstants.primaryColor,
             fontWeight: FontWeight.w700,
           ),
           textAlign: TextAlign.center,

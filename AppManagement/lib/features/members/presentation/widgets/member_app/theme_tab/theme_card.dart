@@ -90,7 +90,7 @@ class _ActiveBadge extends StatelessWidget {
       ),
       child: Icon(
         Symbols.check_sharp,
-        color: DesignConstants.text,
+        color: DesignConstants.backgroundColor,
         weight: DesignConstants.iconWeight,
         size: 18,
       ),
