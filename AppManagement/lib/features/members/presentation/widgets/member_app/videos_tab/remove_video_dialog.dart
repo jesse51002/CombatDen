@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
+import 'package:app_management/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/app_primary_button.dart';
 import 'package:app_management/shared/widgets/custom_text_field.dart';
@@ -45,69 +46,56 @@ class _RemoveVideoDialogState extends State<RemoveVideoDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: DesignConstants.popup,
-      insetPadding: const EdgeInsets.symmetric(
-        horizontal: DesignConstants.paddingSmall,
-        vertical: DesignConstants.paddingBig,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: Padding(
-          padding: const EdgeInsets.all(DesignConstants.paddingSmall),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: DesignConstants.spacingLarge,
-            children: [
-              Text('Remove this video?', style: DesignConstants.h2),
-              Text(
-                widget.videoTitle,
-                style: DesignConstants.p.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-              ),
-              if (widget.teachAgent) ...[
-                Text(
-                  "Tell the agent why. It'll learn to keep videos like this "
-                  'out of the feed automatically next time, so you never have '
-                  'to remove it again.',
-                  style: DesignConstants.p.copyWith(
-                    color: DesignConstants.text2nd,
-                  ),
-                ),
-                CustomTextField(
-                  controller: _reasonController,
-                  label: 'Why remove it? (optional)',
-                  hintText: 'e.g. wrong discipline, off-topic, too graphic',
-                ),
-              ],
-              Row(
-                spacing: DesignConstants.spacingMedium,
-                children: [
-                  Expanded(
-                    child: AppOutlineButton(
-                      text: 'Cancel',
-                      fullWidth: true,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                  Expanded(
-                    child: AppPrimaryButton(
-                      text: 'Remove',
-                      fullWidth: true,
-                      backgroundColor: DesignConstants.redDark,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    return AppDialog(
+      title: 'Remove this video?',
+      showCloseButton: false,
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          Text(
+            widget.videoTitle,
+            style: DesignConstants.p.copyWith(
+              color: DesignConstants.text2nd,
+            ),
           ),
-        ),
+          if (widget.teachAgent) ...[
+            Text(
+              "Tell the agent why. It'll learn to keep videos like this "
+              'out of the feed automatically next time, so you never have '
+              'to remove it again.',
+              style: DesignConstants.p.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+            CustomTextField(
+              controller: _reasonController,
+              label: 'Why remove it? (optional)',
+              hintText: 'e.g. wrong discipline, off-topic, too graphic',
+            ),
+          ],
+        ],
+      ),
+      actions: Row(
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          Expanded(
+            child: AppOutlineButton(
+              text: 'Cancel',
+              fullWidth: true,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          Expanded(
+            child: AppPrimaryButton(
+              text: 'Remove',
+              fullWidth: true,
+              backgroundColor: DesignConstants.redDark,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ],
       ),
     );
   }
