@@ -1,0 +1,18 @@
+{
+  "name": "lottie-helper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Lottie preset helper: preview/tune popup animations (insertion point, speed, looping), recolour by colour group, and convert to slots (sid + theme) via relottie for dotLottie runtime theming.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@lottiefiles/dotlottie-web": "^0.74.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
