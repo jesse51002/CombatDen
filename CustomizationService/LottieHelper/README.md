@@ -16,10 +16,15 @@ Self-contained — does **not** depend on CustomizationService or any other syst
   final frame before restarting so the end state is readable. Not emitted to YAML.
 - **Colour groups**: clusters the file's colours (solids + gradient stops) into
   groups with a tunable `merge` threshold. Each group gets a swatch (recolour it
-  live), a name, and a description — these become the preset's `recolor_regions`.
-- **YAML**: drafts an `index.yaml` preset block (id/name/file/types/speed +
-  `recolor_regions` with names, descriptions, and the group→layer mapping, plus
-  `insertion_point.hold_seconds` for reveal presets).
+  live), a name, and a description — these become the preset's `recolor_regions`,
+  each with the literal `layers` (the Lottie `nm` names) the colour lives on.
+- **YAML**: drafts a standalone per-animation `config.yaml` (top-level
+  id/display_name/description/file/types/speed + `recolor_regions` with names,
+  descriptions, and the real `layers` field the pipeline bakes onto, plus
+  `insertion_point.hold_seconds` for reveal presets). Save it as
+  `assets/lottie_animations/<id>/config.yaml`, beside the animation `.json`
+  (`file` is the bare json filename, relative to that folder) — not a block under
+  a `presets:` list.
 
 ## How rendering & recolour work
 

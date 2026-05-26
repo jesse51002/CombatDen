@@ -146,11 +146,8 @@ class _DoneIntro extends StatelessWidget {
         slot: ShowcaseSlots.bookingCelebration,
         fallbackAsset: ShowcaseAsset.animation('done.json'),
         controller: controller,
-        onLoaded: (composition) {
-          controller
-            ..duration = composition.duration
-            ..forward();
-        },
+        // ThemeLottie sets the (speed-scaled) duration on load; just play.
+        onLoaded: (composition) => controller.forward(),
       ),
     );
   }

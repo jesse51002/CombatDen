@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
 from types import ModuleType
 
@@ -36,6 +37,7 @@ from schema import (
     Output,
     RunCost,
 )
+from src.api.schema.output_response import OutputResponse
 from src.core.run_context import RunContext
 from src.executor import orchestrator
 from src.executor.orchestrator import Pipeline
@@ -431,6 +433,39 @@ def _patch_services(
     )
 
 
+def _first_layer_solid_color(
+    data: dict, layer_name: str
+) -> list[float] | None:
+    """The first solid fill/stroke colour array on the named layer of a
+    baked lottie json (recursing nested group items). Used to assert the
+    bake recoloured the right layer."""
+
+    def walk(shapes: object) -> list[float] | None:
+        if not isinstance(shapes, list):
+            return None
+        for shape in shapes:
+            if not isinstance(shape, dict):
+                continue
+            if shape.get("ty") in ("fl", "st"):
+                c = shape.get("c", {})
+                k = c.get("k")
+                if c.get("a") == 1 and isinstance(k, list) and k:
+                    k = k[0].get("s")
+                if isinstance(k, list) and len(k) >= 3:
+                    return k
+            found = walk(shape.get("it"))
+            if found is not None:
+                return found
+        return None
+
+    for layer in data.get("layers", []):
+        if isinstance(layer, dict) and layer.get("nm") == layer_name:
+            found = walk(layer.get("shapes"))
+            if found is not None:
+                return found
+    return None
+
+
 def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
     ctx = _run_ctx(tmp_path)
     _patch_services(
@@ -517,22 +552,50 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
         # The removed style/dependency provenance fields are gone.
         assert not hasattr(img, "adherent")
         assert not hasattr(img, "dependency_usage")
-    # Every lottie slot resolved to a preset + region->role map. The map
-    # values are palette role NAMES (keys into the flat palette), never
-    # colour values, and the fields differ by type: a standalone slot
-    # carries neither reveal field; a reveal slot carries both.
+    # Every lottie slot resolved to a preset, baked a recoloured json into
+    # the run dir, and lifted the preset's playback args. region_roles is
+    # kept for provenance (palette role NAMES, never colour values); the
+    # reveal fields differ by type: a standalone slot carries none of them,
+    # a reveal slot carries reveals + insertion_point + hold_seconds.
     assert set(output.lottie_set.lotties) == {l.id for l in ctx.app.lotties}
     palette_keys = set(output.color_set.palette)
     for lottie in output.lottie_set.lotties.values():
         assert lottie.preset_id and lottie.preset_file and lottie.display_name
         assert lottie.region_roles
         assert set(lottie.region_roles.values()) <= palette_keys
+        assert lottie.speed > 0
+        # The baked file landed in the run dir and is valid JSON.
+        baked = Path(str(lottie.path))
+        assert baked.parent == ctx.lottie_dir
+        assert json.loads(baked.read_text())  # parses, non-empty
     standalone = output.lottie_set.lotties["onboarding_pulse"]
     assert standalone.reveals is None
     assert standalone.insertion_point is None
+    assert standalone.hold_seconds is None
     reveal = output.lottie_set.lotties["streak_reveal"]
     assert reveal.reveals == "hero"
     assert reveal.insertion_point is not None
+    assert reveal.hold_seconds is not None and reveal.hold_seconds > 0
+    # The bake actually recoloured the named layer: the fake recolour maps
+    # every region to "primary", so the standalone's "checkmark" layer must
+    # carry the resolved primary rgb (0..1 floats) on its stroke colour.
+    primary = output.color_set.palette["primary"].rgb
+    want = [primary.r / 255.0, primary.g / 255.0, primary.b / 255.0]
+    baked = json.loads(Path(str(standalone.path)).read_text())
+    got = _first_layer_solid_color(baked, "checkmark")
+    assert got is not None
+    assert [round(c, 5) for c in got[:3]] == [round(c, 5) for c in want]
+    # The wire projection carries playback args (speed/hold_seconds) and a
+    # fetch URL, not a recolour map — the colour is baked into the served
+    # file. (Reuses the real Output above; no separate API fixture needed.)
+    wire = OutputResponse.from_output(output, ctx.app_id, ctx.run_id)
+    assert set(wire.lotties) == set(output.lottie_set.lotties)
+    wire_reveal = wire.lotties["streak_reveal"]
+    assert wire_reveal.url.endswith("/lotties/streak_reveal")
+    assert wire_reveal.speed > 0
+    assert wire_reveal.hold_seconds is not None
+    assert not hasattr(wire_reveal, "region_roles")
+    assert wire.lotties["onboarding_pulse"].hold_seconds is None
 
 
 def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):

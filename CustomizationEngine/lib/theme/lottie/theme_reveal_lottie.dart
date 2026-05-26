@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
@@ -81,6 +83,10 @@ class _ThemeRevealLottieState extends State<ThemeRevealLottie>
   bool _revealed = false;
   bool _completed = false;
 
+  /// Pending hold-then-end timer (reveal slots with a `hold_seconds`). Cut on
+  /// dispose so it never fires after teardown.
+  Timer? _holdTimer;
+
   /// Point on the timeline (0..1) at which the image pops in. Starts at the
   /// caller's [ThemeRevealLottie.fallbackRevealAt] (the fallback timing) and
   /// is overridden by the preset's insertion_point once the lottie loads.
@@ -98,16 +104,43 @@ class _ThemeRevealLottieState extends State<ThemeRevealLottie>
     if (_revealed || !mounted) return;
     if (_ctrl.value >= _revealAt) {
       setState(() => _revealed = true);
+      _startHold();
     }
   }
 
+  /// Once the image is revealed, honour the preset's `hold_seconds`: hold for
+  /// that long, then stop the animation (cutting it short if it has not
+  /// finished) and finish. With no hold (the bundled-fallback / no-backend
+  /// case) the animation plays its natural single pass and `_onStatus`
+  /// finishes it.
+  void _startHold() {
+    final hold = ThemeLottie.resolve(widget.slot)?.holdSeconds;
+    if (hold == null) return;
+    _holdTimer = Timer(
+      Duration(milliseconds: (hold * 1000).round()),
+      () {
+        if (!mounted) return;
+        _ctrl.stop();
+        _finish();
+      },
+    );
+  }
+
   void _onStatus(AnimationStatus status) {
-    if (_completed || status != AnimationStatus.completed) return;
+    if (status == AnimationStatus.completed) _finish();
+  }
+
+  /// Fire [ThemeRevealLottie.onComplete] exactly once (whichever of the
+  /// natural end or the hold timer comes first).
+  void _finish() {
+    if (_completed) return;
     _completed = true;
     widget.onComplete?.call();
   }
 
   void _onLoaded(LottieComposition composition) {
+    // Duration (speed-scaled) is set by ThemeLottie before this runs; here we
+    // only compute the reveal point and start playback.
     final insertion = ThemeLottie.resolve(widget.slot)?.insertionPoint;
     if (insertion != null && composition.durationFrames > 0) {
       final raw =
@@ -115,13 +148,12 @@ class _ThemeRevealLottieState extends State<ThemeRevealLottie>
           composition.durationFrames;
       _revealAt = raw.clamp(0.0, 1.0);
     }
-    _ctrl
-      ..duration = composition.duration
-      ..forward();
+    _ctrl.forward();
   }
 
   @override
   void dispose() {
+    _holdTimer?.cancel();
     _ctrl
       ..removeListener(_onTick)
       ..removeStatusListener(_onStatus)
