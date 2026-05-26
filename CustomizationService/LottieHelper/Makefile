@@ -4,14 +4,6 @@
 install:
 	npm install
 
-# Dev server with hot reload (prints a localhost URL).
-dev:
+run:
 	npm run dev
 
-# Production bundle -> dist/
-build:
-	npm run build
-
-# Serve the built dist/
-preview:
-	npm run preview
