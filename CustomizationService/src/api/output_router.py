@@ -172,23 +172,24 @@ async def get_icon(
 @output_router.get(
     "/{app_id}/{run_id}/lotties/{slot_id}",
     response_class=FileResponse,
-    summary="Stream one lottie slot's preset JSON",
+    summary="Stream one lottie slot's baked JSON",
     responses={
         200: {
             "content": {"application/json": {}},
-            "description": "The Lottie preset JSON bytes",
+            "description": "The baked Lottie JSON bytes",
         },
-        404: {"description": "No such app/run/slot or preset file"},
+        404: {"description": "No such app/run/slot or baked file"},
         422: {"description": "Run exists but its output.yaml is stale"},
     },
 )
 async def get_lottie(
     app_id: str, run_id: str, slot_id: str
 ) -> FileResponse:
-    """Stream the global-library preset JSON for one declared lottie slot.
-    The recolour map and reveal metadata ride on the run's
-    ``GET /apps/{app}/{run}`` payload (``lotties[slot]``); this endpoint
-    serves only the preset bytes."""
+    """Stream the baked, recoloured animation JSON for one declared lottie
+    slot (``<run>/lotties/<slot>.json``). The colour is baked in at pipeline
+    time, so this serves the play-ready file; the playback metadata (speed,
+    reveal/insertion point, hold) rides on the run's
+    ``GET /apps/{app}/{run}`` payload (``lotties[slot]``)."""
     try:
         path = await output_service().lottie_file(app_id, run_id, slot_id)
         return FileResponse(path, media_type="application/json")

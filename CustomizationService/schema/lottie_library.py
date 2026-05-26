@@ -2,8 +2,11 @@
 
 A hand-curated library of animation presets that the lottie module
 selects from — the Lottie analog of the Google Fonts catalog the font
-module picks against. Files live under ``assets/lottie_animations/``;
-``index.yaml`` there validates against ``LottieLibrary``.
+module picks against. Each preset is its own folder under
+``assets/lottie_animations/<preset_id>/`` holding a ``config.yaml`` (this
+model) beside the animation ``.json``; the loader scans the folders, so a
+``LottiePreset`` is validated directly per file (there is no list wrapper —
+the way ``IconSetCatalogEntry`` is one-per-``set.yaml``).
 
 The catalog is an INPUT contract, so it keeps the package-wide
 ``extra="forbid"`` (a typo in a preset entry must fail loudly), unlike
@@ -38,22 +41,41 @@ class InsertionPoint(BaseModel):
     y: float
     width: float
     height: float
+    # Reveal dwell: after the image appears, it (and the animation) hold for
+    # this many seconds, then both end — the playing animation is cut short
+    # if it has not finished. Reveal-only, which is why it lives on the
+    # insertion point (a standalone preset has neither).
+    hold_seconds: float
+
+    @field_validator("hold_seconds")
+    @classmethod
+    def _hold_seconds_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(
+                f"InsertionPoint.hold_seconds must be > 0; got {v!r}"
+            )
+        return v
 
 
 class RecolorRegion(BaseModel):
     """One color-bearing region of an animation the recolor step tints.
 
-    ``name`` is the literal layer name in the Lottie file (snake_case);
-    ``description`` says what that color *does* in the animation — the core
-    fill, an outer ring, an edge stroke, an ambient field — so the recolor
-    LLM can map it to the right palette role on purpose rather than guessing
-    from an opaque layer name.
+    ``name`` is a snake_case region id (what the recolor LLM maps to a
+    palette role); ``description`` says what that color *does* in the
+    animation — the core fill, an outer ring, an edge stroke, an ambient
+    field — so the recolor LLM can map it to the right palette role on
+    purpose rather than guessing. ``layers`` is the set of **literal Lottie
+    layer names** (the ``nm`` strings, verbatim — NOT snake_case) whose
+    colours belong to this region; the bake step recolours every solid /
+    gradient fill and stroke on exactly those layers. It is required and
+    non-empty: without it the bake would not know which layers to touch.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
     description: str
+    layers: list[str]
 
     @field_validator("name")
     @classmethod
@@ -70,6 +92,18 @@ class RecolorRegion(BaseModel):
     def _description_non_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("RecolorRegion.description must be non-empty")
+        return v
+
+    @field_validator("layers")
+    @classmethod
+    def _layers_non_empty(cls, v: list[str]) -> list[str]:
+        # Literal layer names, kept verbatim (Lottie ``nm`` strings can be
+        # any case / spacing) — only emptiness is rejected, not their shape.
+        if not v or any(not name.strip() for name in v):
+            raise ValueError(
+                "RecolorRegion.layers must list at least one non-empty "
+                "layer name"
+            )
         return v
 
 
@@ -89,15 +123,25 @@ class LottiePreset(BaseModel):
     id: str
     display_name: str
     description: str
-    # Library-relative path to the .lottie/.json file, e.g.
-    # ``pulse_ring.json`` (resolved against the library root by the
-    # loader / the consuming app).
+    # Animation ``.json`` filename, resolved against the preset's OWN folder
+    # (``<library_root>/<id>/<file>``) by the loader — e.g. ``pulse_ring.json``,
+    # not a library-relative path.
     file: str
     types: list[LottieType]
+    # Playback multiplier the app applies to the animation duration (2.0 =>
+    # plays in half the time). Lifted onto the output and the wire.
+    speed: float = 1.0
     recolor_regions: list[RecolorRegion]
     # Required iff ``REVEAL`` is among ``types`` (enforced below). A
     # standalone-only preset leaves it unset.
     insertion_point: InsertionPoint | None = None
+
+    @field_validator("speed")
+    @classmethod
+    def _speed_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError(f"LottiePreset.speed must be > 0; got {v!r}")
+        return v
 
     @field_validator("id")
     @classmethod
@@ -163,22 +207,3 @@ class LottiePreset(BaseModel):
                 "insertion_point"
             )
         return self
-
-
-class LottieLibrary(BaseModel):
-    """The whole catalog: every curated preset, with unique ids."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    presets: list[LottiePreset]
-
-    @field_validator("presets")
-    @classmethod
-    def _unique_preset_ids(
-        cls, v: list[LottiePreset]
-    ) -> list[LottiePreset]:
-        ids = [p.id for p in v]
-        if len(ids) != len(set(ids)):
-            dupes = sorted({i for i in ids if ids.count(i) > 1})
-            raise ValueError(f"duplicate preset ids: {dupes}")
-        return v

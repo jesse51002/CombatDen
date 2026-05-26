@@ -1,29 +1,31 @@
 import 'package:equatable/equatable.dart';
 
 /// A loaded lottie override for one slot. Mirrors the API's `LottieWire`:
-/// where to fetch the preset `.json` ([url]) plus the recolour /reveal
-/// metadata the app applies at render time.
+/// where to fetch the baked `.json` ([url]) plus the playback metadata the
+/// app renders with.
 ///
-/// [regionRoles] maps a Lottie layer name to a palette ROLE key (never a
-/// resolved colour) — the app resolves the key against its own live
-/// palette so a palette shift re-tints the animation for free. [reveals]
-/// and [insertionPoint] are set only for reveal-type slots (both `null`
-/// for the standalone slots this app uses today). Parsing is resilient:
-/// an absent/malformed field degrades to `{}` / `null`, never throwing.
+/// The colour is baked into the served file by the pipeline, so there is no
+/// recolour map — the app plays the animation as-is at [speed]. [reveals],
+/// [insertionPoint] and [holdSeconds] are set only for reveal-type slots
+/// (all `null` for the standalone slots this app uses today). Parsing is
+/// resilient: an absent/malformed field degrades to a sensible default,
+/// never throwing.
 class LottieOverride extends Equatable {
   const LottieOverride({
     required this.url,
-    required this.regionRoles,
+    this.speed = 1.0,
     this.reveals,
     this.insertionPoint,
+    this.holdSeconds,
   });
 
-  /// Slot URL of the preset `.json` (still relative on the wire; the
+  /// Slot URL of the baked `.json` (still relative on the wire; the
   /// resolver absolutises it). Empty means "no usable override".
   final String url;
 
-  /// Layer name -> palette role key (e.g. `core_fill` -> `primary`).
-  final Map<String, String> regionRoles;
+  /// Playback multiplier applied to the animation duration (2.0 => plays in
+  /// half the time). Defaults to 1.0.
+  final double speed;
 
   /// Reveal slots only: the image slot id this animation reveals.
   final String? reveals;
@@ -31,37 +33,40 @@ class LottieOverride extends Equatable {
   /// Reveal slots only: where the revealed image composites.
   final LottieInsertionPoint? insertionPoint;
 
+  /// Reveal slots only: how long (seconds) the revealed image holds before
+  /// it and the animation end (the animation is cut short if still playing).
+  final double? holdSeconds;
+
   factory LottieOverride.fromJson(Map<String, dynamic> json) {
+    final speed = json['speed'];
+    final hold = json['hold_seconds'];
     return LottieOverride(
       url: (json['url'] as String?) ?? '',
-      regionRoles: _parseRegionRoles(json['region_roles']),
+      speed: speed is num && speed > 0 ? speed.toDouble() : 1.0,
       reveals: json['reveals'] as String?,
       insertionPoint: LottieInsertionPoint.tryFromJson(
         json['insertion_point'],
       ),
+      holdSeconds: hold is num && hold > 0 ? hold.toDouble() : null,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'url': url,
-    'region_roles': Map<String, String>.from(regionRoles),
+    'speed': speed,
     if (reveals != null) 'reveals': reveals,
     if (insertionPoint != null) 'insertion_point': insertionPoint!.toJson(),
+    if (holdSeconds != null) 'hold_seconds': holdSeconds,
   };
 
-  static Map<String, String> _parseRegionRoles(Object? raw) {
-    if (raw is! Map) return const {};
-    final result = <String, String>{};
-    raw.forEach((key, value) {
-      if (key is String && value is String && value.isNotEmpty) {
-        result[key] = value;
-      }
-    });
-    return result;
-  }
-
   @override
-  List<Object?> get props => [url, regionRoles, reveals, insertionPoint];
+  List<Object?> get props => [
+    url,
+    speed,
+    reveals,
+    insertionPoint,
+    holdSeconds,
+  ];
 }
 
 /// Where a reveal preset composites the revealed image, normalised to the

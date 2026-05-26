@@ -173,7 +173,7 @@
 <body>
 <header>
   <h1>Lottie Preset Preview</h1>
-  <p>Load a Lottie + a reveal image, loop it, drag the insertion point until the reveal looks right, then copy the <code>index.yaml</code> block. Mirrors the app's ThemeRevealLottie (top-left origin, 0..1 rect, reveal at a frame).</p>
+  <p>Load a Lottie + a reveal image, loop it, drag the insertion point until the reveal looks right, then copy the <code>config.yaml</code>. Mirrors the app's ThemeRevealLottie (top-left origin, 0..1 rect, reveal at a frame).</p>
 </header>
 
 <div class="wrap">
@@ -281,14 +281,14 @@
     </div>
 
     <div class="panel" style="margin-top:20px;">
-      <h2>Preset → index.yaml</h2>
+      <h2>Preset → config.yaml</h2>
       <div class="meta-grid">
         <label for="pId">id</label>
-        <input id="pId" type="text" placeholder="lightning_strike" />
+        <input id="pId" type="text" placeholder="lightning" />
         <label for="pName">display_name</label>
         <input id="pName" type="text" placeholder="Lightning Strike" />
         <label for="pFile">file</label>
-        <input id="pFile" type="text" placeholder="animations/lightning_neon.json" />
+        <input id="pFile" type="text" placeholder="lightning_neon.json" />
         <label for="pDesc">description</label>
         <textarea id="pDesc" placeholder="What the animation does and when it plays."></textarea>
         <label>types</label>
@@ -300,7 +300,7 @@
       <textarea id="yaml" readonly spellcheck="false"></textarea>
       <div class="btnbar">
         <button class="primary" id="copyYaml">Copy YAML</button>
-        <span class="hint">Paste under <code>presets:</code> in <code>assets/lottie_animations/index.yaml</code>. <code>insertion_point</code> is emitted only when <em>reveal</em> is checked.</span>
+        <span class="hint">Save as <code>assets/lottie_animations/&lt;id&gt;/config.yaml</code>, beside the <code>.json</code>. <code>insertion_point</code> is emitted only when <em>reveal</em> is checked.</span>
       </div>
     </div>
   </div>

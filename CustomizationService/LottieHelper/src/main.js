@@ -381,10 +381,17 @@ function foldBlock(text, contentIndent) {
   return ">-\n" + lines.map((l) => contentIndent + l).join("\n");
 }
 
+// Emit the standalone per-animation `config.yaml` (one preset per file,
+// validated directly into `schema.lottie_library.LottiePreset`). It goes in
+// the preset's own folder beside the `.json`:
+//   assets/lottie_animations/<id>/config.yaml
+//   assets/lottie_animations/<id>/<file>.json
+// so `file` is the bare json filename (relative to the folder), and the
+// top-level keys are NOT indented under a `presets:` list.
 function renderYaml() {
   const id = $("pId").value.trim() || "preset_id";
   const name = $("pName").value.trim() || "Display Name";
-  const file = $("pFile").value.trim() || "animations/file.json";
+  const file = $("pFile").value.trim() || "file.json";
   const desc = $("pDesc").value.trim() || "TODO: what this animation does.";
   const types = [];
   if ($("tStandalone").checked) types.push("standalone");
@@ -392,37 +399,39 @@ function renderYaml() {
   const typeStr = types.length ? `[${types.join(", ")}]` : "[standalone]";
 
   let out = "";
-  out += `  - id: ${id}\n`;
-  out += `    display_name: ${name}\n`;
-  out += `    description: ${foldBlock(desc, "      ")}\n`;
-  out += `    file: ${file}\n`;
-  out += `    types: ${typeStr}\n`;
-  // speed is a NEW field (not yet in schema.lottie_library — wire it in later).
-  out += `    speed: ${fmt(val("speed"))}\n`;
-  out += `    recolor_regions:\n`;
+  out += `id: ${id}\n`;
+  out += `display_name: ${name}\n`;
+  out += `description: ${foldBlock(desc, "  ")}\n`;
+  out += `file: ${file}\n`;
+  out += `types: ${typeStr}\n`;
+  out += `speed: ${fmt(val("speed"))}\n`;
+  out += `recolor_regions:\n`;
   if (colorGroups.length) {
     for (const g of colorGroups) {
       const rname = groupNames[g.key] || g.suggested;
       const rdesc = groupDescs[g.key] || `TODO: the ${g.avgHex} group (${g.count} uses) — what this colour does in the animation.`;
-      out += `      - name: ${rname}\n`;
-      out += `        description: ${foldBlock(rdesc, "          ")}\n`;
-      // group → the actual Lottie layer names this colour lives on (the keys the
-      // app tints by). Emitted as a comment so it stays schema-valid.
-      out += `        # layers: ${g.layers && g.layers.length ? g.layers.join(", ") : "(none named)"}\n`;
+      out += `  - name: ${rname}\n`;
+      out += `    description: ${foldBlock(rdesc, "      ")}\n`;
+      // The actual Lottie layer names this colour group lives on — a real,
+      // required field: the pipeline bakes the colour onto exactly these
+      // layers. Empty until you load a file / name the layers (the schema
+      // rejects an empty list, on purpose).
+      const layers = g.layers && g.layers.length ? `[${g.layers.join(", ")}]` : "[]  # TODO: name the layer(s)";
+      out += `    layers: ${layers}\n`;
     }
   } else {
-    out += `      # load a Lottie to populate colour groups\n`;
+    out += `  # load a Lottie to populate colour groups\n`;
   }
   if ($("tReveal").checked) {
-    out += `    insertion_point:\n`;
-    out += `      frame: ${Math.round(val("frame"))}\n`;
-    out += `      x: ${fmt(cornerLeft())}\n`;
-    out += `      y: ${fmt(cornerTop())}\n`;
-    out += `      width: ${fmt(val("w"))}\n`;
-    out += `      height: ${fmt(val("h"))}\n`;
+    out += `insertion_point:\n`;
+    out += `  frame: ${Math.round(val("frame"))}\n`;
+    out += `  x: ${fmt(cornerLeft())}\n`;
+    out += `  y: ${fmt(cornerTop())}\n`;
+    out += `  width: ${fmt(val("w"))}\n`;
+    out += `  height: ${fmt(val("h"))}\n`;
     // hold_seconds: how long the revealed image stays before it (and the
-    // animation) end. NEW field — wire into schema.lottie_library alongside speed.
-    out += `      hold_seconds: ${fmt(val("hold"))}\n`;
+    // animation) end.
+    out += `  hold_seconds: ${fmt(val("hold"))}\n`;
   }
   $("yaml").value = out;
 }
