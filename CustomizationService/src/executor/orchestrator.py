@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 from dataclasses import dataclass
 
 import networkx as nx
@@ -31,8 +32,8 @@ from schema import (
     TextSet,
 )
 from src.core.config import settings
-from src.core.errors import GraphError
-from src.core.run_context import RunContext
+from src.core.errors import GraphError, PipelineError
+from src.core.run_context import OUTPUT_ROOT_DIRNAME, RunContext
 from src.executor.registry import Graph, ModuleRegistry
 from src.modules.base import DependencyKind, Node
 from src.shared.interfaces.background_remover import BackgroundRemover
@@ -131,6 +132,70 @@ class Pipeline:
         async with sem:
             return await node.run()
 
+    @staticmethod
+    def _overwrite_existing(run_ctx: RunContext) -> None:
+        """Clear a run dir's produced artifacts before a full overwrite re-run.
+
+        Only the *produced* artifacts are removed — ``output.yaml``,
+        ``expansion_cost.yaml`` and the ``images/`` / ``final_images/`` /
+        ``icons/`` trees; the run's editable *inputs* (``app.yaml``,
+        ``customization.yaml``) are kept, because the run regenerates from them.
+        A fresh run dir (no produced artifacts) is a no-op — nothing to clear.
+
+        Two safety rails make this destructive step impossible to point at the
+        wrong place: every target is a path *derived from* ``run_ctx`` (never an
+        arbitrary path) and must resolve strictly inside the run dir; and the
+        run dir itself must sit under an ``apps`` output root. Either failing
+        aborts the run rather than deleting anything.
+        """
+        produced = [
+            run_ctx.output_path(),
+            run_ctx.expansion_cost_path(),
+            run_ctx.image_dir,
+            run_ctx.final_image_dir,
+            run_ctx.icon_dir,
+        ]
+        asset_dirs = (
+            run_ctx.image_dir,
+            run_ctx.final_image_dir,
+            run_ctx.icon_dir,
+        )
+        has_artifacts = run_ctx.output_path().exists() or any(
+            d.is_dir() and any(d.iterdir()) for d in asset_dirs
+        )
+        if not has_artifacts:
+            return
+
+        run_dir = run_ctx.run_dir.resolve()
+        # ``<root>/<app_id>/<run_id>`` → the grandparent is the output root.
+        if run_dir.parent.parent.name != OUTPUT_ROOT_DIRNAME:
+            raise PipelineError(
+                f"refusing to overwrite {run_dir}: run dir is not under an "
+                f"{OUTPUT_ROOT_DIRNAME!r} output root (safety guard)"
+            )
+        logger.warning(
+            "overwriting existing run %s: clearing produced artifacts and "
+            "regenerating ALL slots (incl. images) from this run's brief — "
+            "this spends money",
+            run_dir,
+        )
+        for path in produced:
+            resolved = path.resolve()
+            if run_dir not in resolved.parents:
+                # Derived paths are always inside run_dir; a target that isn't
+                # means something is wrong — skip it rather than delete it.
+                logger.error(
+                    "skipping clear of %s: outside run dir %s", resolved, run_dir
+                )
+                continue
+            if resolved.is_dir():
+                shutil.rmtree(resolved)
+                resolved.mkdir(parents=True, exist_ok=True)
+                logger.info("cleared %s/", resolved.name)
+            elif resolved.exists():
+                resolved.unlink()
+                logger.info("cleared %s", resolved.name)
+
     async def run(
         self,
         run_ctx: RunContext,
@@ -151,6 +216,12 @@ class Pipeline:
         ⇒ every node regenerates every slot, a normal full run.
         ``PipelineResult.generated`` is the union of the slot ids the nodes
         actually re-made."""
+        # A full (unseeded) run pointed at an existing run dir is an in-place
+        # re-run: clear its produced artifacts first so it's a clean overwrite.
+        # Seeded passes (expand/regen) reopen a run to *keep* most of it, so
+        # they must never clear — hence keying on the seed.
+        if not seed:
+            self._overwrite_existing(run_ctx)
         llm = LiteLLMClient()
         image_gen = LiteLLMImageGenerator()
         bg_remover = PhotoRoomBackgroundRemover()

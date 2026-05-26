@@ -364,6 +364,18 @@ Then:
    `apps/<app_id>/customization.yaml`. Re-run the validation against the
    written file as a final integrity check. Confirm with the absolute path
    written and a one-line recap (name, mode, app id).
+7. **Surface the run command** (a suggestion only — do NOT run it yourself).
+   After the write, show the ready-to-run pipeline command so the user can
+   generate the app, including a `--run-name` so the run folder is named up
+   front instead of a UTC timestamp:
+   ```
+   poetry run python -m src \
+       --app-yaml apps/<app_id>/app.yaml \
+       --customization-yaml apps/<app_id>/customization.yaml \
+       --run-name <suggested-name>
+   ```
+   Suggest a sensible `<suggested-name>` (e.g. the gym slug). Generation spends
+   money and is the user's call — this skill only authors the brief.
 
 ## Anti-patterns
 
@@ -424,3 +436,5 @@ Then:
 10. `poetry run` round-trip validation passed.
 11. User explicitly chose / confirmed the write path.
 12. Confirmed with the absolute path + a one-line recap.
+13. Surfaced the run command (with `--run-name`) as a suggestion — did not run
+    generation.

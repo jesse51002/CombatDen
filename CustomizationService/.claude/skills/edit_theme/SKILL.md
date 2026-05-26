@@ -1,8 +1,9 @@
 ---
 name: edit_theme
 description: >-
-  Change the theme of an existing customization run, in place — three levers:
-  (1) re-make specific slots, (2) edit the brand brief, (3) fill missing slots.
+  Change the theme of an existing customization run, in place — four levers:
+  (1) re-make specific slots, (2) edit the brand brief, (3) fill missing slots,
+  (4) full in-place re-run (regenerate the whole run, incl. images).
   Use this skill whenever the user wants to adjust an apps/<app_id>/<run_id>/
   run without a full re-generation: "regenerate the primary colour warmer",
   "re-roll the display font", "redo the booking headline", "make the accent and
@@ -13,17 +14,23 @@ description: >-
   scripts/edit_customization/run.py (flattened --name / --short-desc /
   --long-desc / --colors-description / --mode); or "finish this run", "it's
   missing the icons", "I added a slot, generate just it", "resume" → fill the
-  not-yet-done slots via scripts/expand/run.py. regen preserves every slot you
-  don't name and harmonises the ones you do; edit_customization re-validates
-  the brief before writing; expand only generates what's absent. IMAGES are NOT
-  handled here — they have their own regen_image skill/script (create-new vs
-  edit-current). Trigger on anything "tweak / re-roll / restyle / re-brief /
-  finish this run" shaped, even when not named.
+  not-yet-done slots via scripts/expand/run.py; or "regenerate the whole run",
+  "re-roll everything", "redo this run from scratch in place" → a full in-place
+  re-run via the normal pipeline (src/cli.py) pointed at the existing run folder
+  with --run-name, regenerating EVERY slot (incl. images) and overwriting the
+  folder. regen preserves every slot you don't name and harmonises the ones you
+  do; edit_customization re-validates the brief before writing; expand only
+  generates what's absent. The per-slot levers (regen/expand) do NOT touch
+  images — those have their own regen_image skill/script (create-new vs
+  edit-current) — but the full in-place re-run does. Trigger on anything
+  "tweak / re-roll / restyle / re-brief / finish this run / regenerate
+  everything" shaped, even when not named.
 ---
 
 # edit_theme — change a run's theme in place
 
-Three levers on an existing run, never a full re-generation:
+Four levers on an existing run. The first three are surgical (never a full
+re-generation); the fourth IS a full re-generation, in place.
 
 1. **Re-make slots** — `scripts/regen/run.py`: re-roll one or more
    **colour / font / text / icon / lottie** slots. Everything you don't name
@@ -37,12 +44,17 @@ Three levers on an existing run, never a full re-generation:
    declared in `app.yaml` but absent from `output.yaml` (resume a partial run,
    or add a slot to the dir's `app.yaml` and fill just it). Everything already
    present is preserved.
+4. **Full in-place re-run** — a normal pipeline run (`src/cli.py`) pointed at
+   the existing run folder via `--run-name`: regenerates **every slot, images
+   included**, and overwrites the folder. This is "regenerate the whole run
+   based on what it has". See Lever D.
 
 Pin down *which run*, *which lever*, and the specifics; confirm spend for any
 generation; run the script; report. **Re-make and fill spend money** (the LLM
 calls for the slots produced, plus any provider cost their module incurs);
 editing the brief is **free** (no model calls) but **only takes effect when you
-then regenerate**.
+then regenerate**; the **full in-place re-run spends the most** — it remakes
+everything.
 
 ## IRON-CLAD RULE — change runs only through the scripts
 
@@ -127,6 +139,31 @@ as-is (the resume case). It prints what it will fill, exits cleanly with no
 spend if nothing is missing, and appends an `expand` entry to
 `expansion_cost.yaml`.
 
+## Lever D — full in-place re-run (regenerate the whole run)
+"Regenerate this run from what it has." Unlike A–C, this re-makes **every slot,
+images included**, and **overwrites the whole folder**. It's just a normal
+pipeline run (`src/cli.py`) whose `--run-name` is the existing run id, so it
+lands back in the same directory:
+```
+poetry run python -m src \
+    --app-yaml apps/<app_id>/<run_id>/app.yaml \
+    --customization-yaml apps/<app_id>/<run_id>/customization.yaml \
+    --run-name <run_id>
+```
+- **`--app-yaml` choice:** point at the run's **own snapshot**
+  (`apps/<app_id>/<run_id>/app.yaml`) for a faithful re-roll of what the run
+  has, or at the **live** `apps/<app_id>/app.yaml` to also pick up manifest
+  (slot-inventory / description) changes.
+- The pipeline detects the existing artifacts, **logs a `WARNING`, clears the
+  produced artifacts** (`output.yaml`, `expansion_cost.yaml`, `images/`,
+  `final_images/`, `icons/`) — keeping the `app.yaml` / `customization.yaml`
+  inputs — and regenerates. **No interactive confirmation**: it warns and logs
+  progress, then proceeds. A safety rail refuses if the run dir isn't under an
+  `apps/` output root.
+- It **spends the most** of any lever (everything is re-made). Tell the user
+  that and which folder will be overwritten *before* you launch it; the warning
+  is the gate, there is no prompt.
+
 ## Report
 Say which slots regenerated + the pass cost, or which brief fields changed.
 Offer to open affected outputs. A re-roll is just running again (LLM output
@@ -137,7 +174,11 @@ varies); a fundamentally-off look means steering (`--spec`) or a brief edit.
   `images/` / `icons/`; never raw-edit `customization.yaml` — use
   `edit_customization`. Unsupported ⇒ tell the user (feature request).
 - Never guess the run dir, the slots, or the brief field — ask when ambiguous.
-- Never run a re-make without confirming the spend first.
-- Never regenerate an image here — that's `regen_image`.
+- Never run a per-slot re-make (Lever A) without confirming the spend first.
+  Lever D (full in-place re-run) is the deliberate exception: it has **no
+  interactive gate** — the pipeline's `WARNING` is the gate — but you still tell
+  the user which folder gets overwritten and that it spends, before launching.
+- Per-slot levers never regenerate images — that's `regen_image`. Only Lever D
+  (a full pipeline run) re-makes images, by design.
 - Never claim a brief edit took effect on its own — it needs a `regen`/full run.
 - Never use bare `python3` / `.venv/bin/*` — `poetry run` only.
