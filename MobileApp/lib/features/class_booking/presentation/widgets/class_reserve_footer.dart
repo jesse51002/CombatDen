@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/customization/theme/theme_text.dart';
+import 'package:customization_engine/theme/theme_text.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 

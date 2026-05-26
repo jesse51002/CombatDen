@@ -1,0 +1,12 @@
+# Miscellaneous
+*.log
+.DS_Store
+
+# Flutter/Dart/Pub related
+.dart_tool/
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+build/
+.pub-cache/
+.pub/

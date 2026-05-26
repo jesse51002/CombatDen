@@ -35,9 +35,7 @@ class _NameAndEmail extends StatelessWidget {
       children: [
         Text(
           '${member.fullName} (${member.statusLabel})',
-          style: DesignConstants.big2.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+          style: DesignConstants.big2Bold,
           textAlign: TextAlign.center,
         ),
         _EmailRow(email: member.email),

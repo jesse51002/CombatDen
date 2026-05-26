@@ -29,9 +29,7 @@ class DonutStat extends StatelessWidget {
             children: [
               Text(
                 data.headline,
-                style: DesignConstants.big2.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: DesignConstants.big2Bold,
               ),
               Text(
                 data.subLabel,

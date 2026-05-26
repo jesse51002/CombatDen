@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase.
 
-- **Mostly no backend.** No Supabase, no auth. **Two features are live exceptions** that do real read-only HTTP via `dio` + disk-cached `cached_network_image`: the **customization engine** (`lib/customization/`, fetches the tenant's branding) and the **videos feature** (`lib/features/videos/`, fetches the tenant's feed from the VideoService — see *Videos feature is live* below). Don't add HTTP anywhere else without asking.
+- **Mostly no backend.** No Supabase, no auth. **Two features are live exceptions** that do real read-only HTTP via `dio` + disk-cached `cached_network_image`: the **customization engine** (the shared `customization_engine` package, `../CustomizationEngine`, fetches the tenant's branding) and the **videos feature** (`lib/features/videos/`, fetches the tenant's feed from the VideoService — see *Videos feature is live* below). Don't add HTTP anywhere else without asking.
 - **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller). The live features fetch via `FutureBuilder` + a cached repository, not a state framework.
 - **No real data, except the live features above.** Every other list, card, and detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
@@ -108,7 +108,7 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 - **`_kFoo` private file-scoped constants are also allowed for scroll-position math, sliver / pinned-header heights, and pure layout arithmetic that has no `DesignConstants` equivalent.** Examples: `_kTopbarHeight = 268`, `_kDateRowHeight = 50`, `_kCardWidth = 258`. The carve-out is for *layout math that is intrinsically per-screen and not a fungible design token*. If the same number appears across multiple screens or controls, it's not a `_k` candidate — escalate to add a `DesignConstants` token instead.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/padding/radius/border/divider/icon-size, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
 - **`design_constants.dart` is runtime-driven, not immutable.** The brand colours (`primaryColor`, `backgroundColor`, `text`, `accent`) are static getters that resolve live from the loaded tenant customization via `BrandColor.color(slot, fallback: <const CombatDen default>)`. Derived shades (`primaryColor50/25/10`, `darkPrimary`, `text2nd/3rd`, `card`, `popup`, `divider`) are getters off those bases. Status/semantic colours (`goodGreen`, `okYellow`, `badRed`, `hyperlink`, the `*Dark` variants) stay hardcoded and are NOT brandable. The const fallback is the CombatDen palette, used verbatim when no customization is loaded. Do not hand-edit token values or the `BrandColor` wiring, and do not add/rename tokens without explicit permission.
-- The customization **engine** (`lib/customization/`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/app_slots.dart` (`CombatDenSlots`) is missing. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is no longer byte-identical with FlutterCRM, which was reverted; this app is the customization host.)
+- The customization **engine** (the shared `customization_engine` package, imported as `package:customization_engine/...`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/app_slots.dart` (`CombatDenSlots`) is missing. The engine was extracted from this app's old `lib/customization/` so AppManagement can share it for the live theme preview; this app injects its `CombatDenSlots` manifest + `AppConfig` into `CustomizationRuntime.initialize`. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is no longer byte-identical with FlutterCRM, which was reverted; this app is the customization host.)
 - Images: the `BrandImage` widget is URL-first — a bundled-asset filename that maps to a customization slot renders the fetched image (disk-cached via `cached_network_image`) and falls back to the bundled asset otherwise. Call sites are unchanged.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
@@ -245,6 +245,7 @@ Helper functions (formatters, display builders) live in their own `_helpers.dart
 - Good: `Column(spacing: DesignConstants.spacingLarge, children: [...])`
 - Bad: `SizedBox(height: 16)` between Column children.
 - If children need different spacing, restructure into nested Column/Row groups with uniform `spacing:` on each — do not fall back to SizedBox.
+- **Exception — `ListView.separated`:** a `SizedBox` returned from its `separatorBuilder` is **fine and encouraged**. The rule targets one-off `SizedBox`es wedged between `Column`/`Row` children; `ListView.separated` has no `spacing:` parameter, so its `separatorBuilder` is the idiomatic, intended way to gap list items. Keep the height on a `DesignConstants.spacing*` constant. (Use a plain `ListView` + `Column(spacing:)` only when the list is small and you don't need lazy item-building — but `ListView.separated` is not a violation.)
 - **Never use `margin`** on Container/DecoratedBox for spacing between widgets — use the parent's `spacing:` instead.
 - **Never use `Padding` to create a gap between sibling widgets** — gaps belong to the parent's `spacing:` parameter, not to either of the two siblings. Padding is only for the *inside* of a single widget (screen-edge containment, internal content padding within a card, etc.). If you find yourself adding `EdgeInsets.only(top: ...)` to make space below a previous widget, stop — that's a gap, not padding. Wrap the siblings in a `Column`/`Row` with `spacing:`. For sliver layouts where you can't share a Column (e.g. between a `SliverPersistentHeader` and a `SliverList`), prefer combining adjacent `SliverToBoxAdapter`s into a single Column with `spacing:` rather than padding each one separately.
 - If a repeated spacing pattern doesn't match an existing constant, extract a helper. Do not scatter magic numbers.
@@ -328,7 +329,7 @@ lib/
 │   ├── app_config.dart             # active tenant + designId (preset)
 │   ├── app_routes.dart             # named-route constants + builder map
 │   ├── app_slots.dart              # CombatDenSlots: expected colour/image slots
-│   └── design_constants.dart       # runtime-driven via BrandColor (customization engine)
+│   └── design_constants.dart       # runtime-driven via the customization_engine package
 ├── features/
 │   └── <feature>/
 │       ├── data/
@@ -367,6 +368,7 @@ lib/
 Current dependencies (intentionally minimal):
 - `google_fonts` — for Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
+- `customization_engine` (path dep, `../CustomizationEngine`) — the shared white-label runtime extracted from this app's old `lib/customization/`. It carries the live-feature deps (`dio`, `lottie`, `flutter_svg`, `cached_network_image`, `get_it`, `shared_preferences`) that back the customization engine; those are the documented live exceptions, not the start of the real-data stack.
 
 If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in.
 

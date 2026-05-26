@@ -25,11 +25,9 @@ import itertools
 import logging
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
-import yaml
-
+from schema.verdict_reason import VerdictReason
 from schema.video_classification import VideoClassification
 from schema.video_output import VideoOutput
 from schema.videos_config import VideosConfig
@@ -46,21 +44,40 @@ logger = logging.getLogger(__name__)
 
 # scripts/classify/run.py -> <root>/apps
 _DEFAULT_APPS_ROOT = Path(__file__).resolve().parent.parent.parent / "apps"
-DEFAULT_OUTPUT_FILENAME = "videos_output.yaml"
 # Max videos classified at once. Flash-Lite's rate limits comfortably allow
 # this; raise with care + 429 backoff if you push much higher.
 CONCURRENCY = 8
 
 
 def _apply(video: VideoOutput, verdict: VideoClassification) -> VideoOutput:
-    """A copy of ``video`` carrying the model's verdict."""
-    return video.model_copy(update={"tag": verdict.tag, "is_good": verdict.is_good})
+    """A copy of ``video`` carrying the model's verdict. ``reason`` is None when
+    the LLM kept it, ``LLM_CLASSIFIED_BAD`` when it rejected it."""
+    reason = None if verdict.is_good else VerdictReason.LLM_CLASSIFIED_BAD
+    return video.model_copy(
+        update={"tag": verdict.tag, "is_good": verdict.is_good, "reason": reason}
+    )
 
 
 def _failed(video: VideoOutput) -> VideoOutput:
     """A copy of ``video`` marked not-good after a classification failure —
     kept (not dropped) so the failure is visible, with no genre."""
-    return video.model_copy(update={"tag": None, "is_good": False})
+    return video.model_copy(
+        update={"tag": None, "is_good": False, "reason": VerdictReason.ERRORED_OUT}
+    )
+
+
+def _has_transcript(video: VideoOutput) -> bool:
+    return bool(video.transcript and video.transcript.strip())
+
+
+def _skipped_no_transcript(video: VideoOutput) -> VideoOutput:
+    """A transcript-less video, marked not-good WITHOUT an LLM call. The
+    transcript is the classifier's quality signal, so a video without one never
+    reaches the quality gate — it can't be validated, so it's flagged
+    ``is_good=False`` (kept on disk, but the API never serves it)."""
+    return video.model_copy(
+        update={"tag": None, "is_good": False, "reason": VerdictReason.NO_TRANSCRIPT}
+    )
 
 
 async def _classify_one(
@@ -121,19 +138,26 @@ async def run(
     app_id: str,
     *,
     apps_root: Path,
-    out_filename: str,
     model: str,
-) -> Path:
-    """Classify the company's fetched videos and write the output. Returns path."""
+) -> None:
+    """Classify the company's fetched videos and rewrite each per-video file."""
     service = VideosService(apps_root=apps_root)
     brief = await service.load(app_id)
     output = await service.load_output(app_id)
 
     llm = LiteLLMClient()
     classifier = VideoClassifier(llm=llm)
-    total = len(output.videos)
+
+    # The transcript is the quality gate: a video without one never reaches the
+    # LLM. It's flagged is_good=False instead (no genre), so it isn't served and
+    # no classification cost is spent on it.
+    classifiable = [v for v in output.videos if _has_transcript(v)]
+    skipped = [v for v in output.videos if not _has_transcript(v)]
+    total = len(classifiable)
     logger.info(
-        "classifying %d videos with %s (concurrency %d)", total, model, CONCURRENCY
+        "classifying %d videos with %s (concurrency %d); skipping %d without a "
+        "transcript (flagged is_good=False, not sent to the LLM)",
+        total, model, CONCURRENCY, len(skipped),
     )
 
     # Up to CONCURRENCY videos in flight at once; gather preserves input order in
@@ -146,7 +170,7 @@ async def run(
             _classify_one(
                 classifier, video, brief, model, sem, total, counter, started
             )
-            for video in output.videos
+            for video in classifiable
         )
     )
     elapsed = time.monotonic() - started
@@ -154,42 +178,37 @@ async def run(
     classified = [video for video, _ in results]
     failures = sum(1 for _, failed in results if failed)
     kept = sum(1 for v in classified if v.is_good)
-    classified_output = output.model_copy(
-        update={
-            "generated_at": datetime.now(output.generated_at.tzinfo),
-            "videos": classified,
-        }
-    )
-    out_path = apps_root / app_id / out_filename
-    out_path.write_text(
-        yaml.safe_dump(
-            classified_output.model_dump(mode="json"),
-            sort_keys=False,
-            allow_unicode=True,
-            default_flow_style=False,
-        ),
-        encoding="utf-8",
+    # Per-video partial update: each file gets its tag/is_good rewritten; the
+    # manifest keeps its fetch metadata (incl. generated_at) and just gains the
+    # run's cost. Transcript-less videos are written too, flagged is_good=False
+    # without ever hitting the LLM.
+    for video in classified:
+        await service.save_video(app_id, video)
+    for video in skipped:
+        await service.save_video(app_id, _skipped_no_transcript(video))
+    await service.save_manifest(
+        app_id, output.model_copy(update={"classification_cost_usd": llm.cost})
     )
     logger.info(
-        "classified %d videos -> %d good, %d not-good, %d failures "
-        "in %.1fs (%.2fs/video avg); est. cost ~$%.4f; wrote %s",
+        "classified %d videos -> %d good, %d not-good, %d failures; "
+        "skipped %d (no transcript) in %.1fs (%.2fs/classified avg); "
+        "est. cost ~$%.4f; wrote %s/videos/",
         total,
         kept,
         total - kept,
         failures,
+        len(skipped),
         elapsed,
         elapsed / total if total else 0.0,
         llm.cost,
-        out_path,
+        apps_root / app_id,
     )
-    return out_path
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app-id", required=True, help="company id under apps/")
     parser.add_argument("--apps-root", type=Path, default=_DEFAULT_APPS_ROOT)
-    parser.add_argument("--out", default=DEFAULT_OUTPUT_FILENAME)
     parser.add_argument("--model", default=VIDEO_CLASSIFY_MODEL)
     args = parser.parse_args(argv)
 
@@ -205,7 +224,6 @@ def main(argv: list[str] | None = None) -> int:
             run(
                 args.app_id,
                 apps_root=args.apps_root,
-                out_filename=args.out,
                 model=args.model,
             )
         )

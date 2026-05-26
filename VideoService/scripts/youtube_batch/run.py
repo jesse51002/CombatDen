@@ -17,8 +17,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
-
 from schema.video_output import VideosOutput
 from scripts.youtube_batch.client import QuotaExceededError, YouTubeClient
 from scripts.youtube_batch.config import batch_settings
@@ -36,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 # scripts/youtube_batch/run.py -> <root>/apps
 _DEFAULT_APPS_ROOT = Path(__file__).resolve().parent.parent.parent / "apps"
-DEFAULT_OUTPUT_FILENAME = "videos_output.yaml"
 DEFAULT_MAX_RESULTS = 50
 DEFAULT_LANG = "en"
 
@@ -46,11 +43,11 @@ def _unique(values: list[str]) -> list[str]:
     return [v for v in dict.fromkeys(values) if v]
 
 
-def run(
-    app_id: str, *, apps_root: Path, out_filename: str, lang: str, max_results: int
-) -> Path:
-    """Execute the brief's searches and write the output YAML. Returns the path."""
-    config = asyncio.run(VideosService(apps_root=apps_root).load(app_id))
+def run(app_id: str, *, apps_root: Path, lang: str, max_results: int) -> None:
+    """Execute the brief's searches and persist the feed (manifest + one file
+    per video) via the store."""
+    service = VideosService(apps_root=apps_root)
+    config = asyncio.run(service.load(app_id))
     client = YouTubeClient(batch_settings().youtube_api_key)
 
     hits: list[SearchHit] = []
@@ -77,32 +74,22 @@ def run(
         company_name=config.company_name,
         app_id=app_id,
         generated_at=datetime.now(timezone.utc),
+        queries=[search.query for search in config.searches],
         quota_units_estimate=client.quota_units,
         videos=build_outputs(hits, avatars, stats),
     )
 
-    out_path = apps_root / app_id / out_filename
-    out_path.write_text(
-        yaml.safe_dump(
-            output.model_dump(mode="json"),
-            sort_keys=False,
-            allow_unicode=True,
-            default_flow_style=False,
-        ),
-        encoding="utf-8",
-    )
+    asyncio.run(service.save_output(app_id, output))
     logger.info(
-        "wrote %d videos to %s (~%d quota units)",
-        len(output.videos), out_path, output.quota_units_estimate,
+        "wrote %d videos to %s/videos/ (~%d quota units)",
+        len(output.videos), apps_root / app_id, output.quota_units_estimate,
     )
-    return out_path
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app-id", required=True, help="company id under apps/")
     parser.add_argument("--apps-root", type=Path, default=_DEFAULT_APPS_ROOT)
-    parser.add_argument("--out", default=DEFAULT_OUTPUT_FILENAME)
     parser.add_argument("--lang", default=DEFAULT_LANG)
     parser.add_argument("--max-results", type=int, default=DEFAULT_MAX_RESULTS)
     args = parser.parse_args(argv)
@@ -112,7 +99,6 @@ def main(argv: list[str] | None = None) -> int:
         run(
             args.app_id,
             apps_root=args.apps_root,
-            out_filename=args.out,
             lang=args.lang,
             max_results=args.max_results,
         )

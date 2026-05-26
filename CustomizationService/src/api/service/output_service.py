@@ -28,15 +28,18 @@ from schema import Output
 from src.api.config import settings
 from src.api.errors import InvalidRunError, NotFoundError
 from src.api.schema.style_summary import StyleSummary
+from src.core.run_context import (
+    FINAL_IMAGES_DIRNAME,
+    ICONS_DIRNAME,
+    OUTPUT_FILENAME,
+)
 
-OUTPUT_FILENAME = "output.yaml"
-# The one place a delivered per-slot PNG lives. `images/` (raw + cutout
-# intermediates) is never served — by contract, not by guesswork.
-FINAL_IMAGES_DIRNAME = "final_images"
+# Run-dir layout — `output.yaml`, `final_images/` (the one place a delivered
+# per-slot PNG lives; `images/` raw+cutout intermediates are never served) and
+# `icons/` (per-slot SVGs) — is owned by src.core.run_context. The pipeline
+# writes runs against those constants, so the API reads them back from the same
+# source rather than redefining them.
 IMAGE_SUFFIX = ".png"
-# Per-slot monochrome SVGs the icon module writes into the run dir; one
-# fixed rule (`<run_dir>/icons/<slot_id>.svg`), same discipline as images.
-ICONS_DIRNAME = "icons"
 ICON_SUFFIX = ".svg"
 # The image slot a style picker shows as each style's card art.
 CELEBRATION_SLOT = "celebration_image"

@@ -13,7 +13,13 @@ from schema.video_classification import VideoClassification
 from schema.video_output import VideoOutput
 from schema.video_type import VideoType
 from schema.videos_config import VideosConfig
-from src.classification.video_classifier import VideoClassifier, format_duration
+from src.classification.video_classifier import (
+    NO_TRANSCRIPT_PLACEHOLDER,
+    TRANSCRIPT_CHAR_BUDGET,
+    VideoClassifier,
+    format_duration,
+    truncate_transcript,
+)
 from src.shared.interfaces.llm_client import LLMClient, ModelT
 
 
@@ -47,7 +53,7 @@ def _brief() -> VideosConfig:
     )
 
 
-def _video() -> VideoOutput:
+def _video(*, transcript: str | None = None) -> VideoOutput:
     return VideoOutput(
         url="https://www.youtube.com/watch?v=abc",
         title="Dominate the Muay Thai Clinch",
@@ -59,6 +65,7 @@ def _video() -> VideoOutput:
         duration_seconds=330,
         source_queries=["muay thai clinch tutorial"],
         relevance_index=0,
+        transcript=transcript,
     )
 
 
@@ -75,6 +82,34 @@ def test_classify_returns_verdict_and_passes_context() -> None:
     assert "Bangkok Muay Thai Academy" in prompt
     assert "Dominate the Muay Thai Clinch" in prompt
     assert "5m30s" in prompt  # formatted duration
+    assert "muay thai clinch tutorial" in prompt  # the brief's search query (intent)
+
+
+def test_classify_includes_transcript_when_present() -> None:
+    stub = _StubLLM(VideoClassification(is_good=True, tag=VideoType.EDUCATIONAL))
+    classifier = VideoClassifier(llm=stub)
+    asyncio.run(
+        classifier.classify(
+            _video(transcript="grab the plum, drive the knee"), _brief(), model="m"
+        )
+    )
+    assert "grab the plum, drive the knee" in stub.last_messages[0]["content"]
+
+
+def test_classify_falls_back_to_placeholder_without_transcript() -> None:
+    stub = _StubLLM(VideoClassification(is_good=True, tag=VideoType.EDUCATIONAL))
+    classifier = VideoClassifier(llm=stub)
+    asyncio.run(classifier.classify(_video(transcript=None), _brief(), model="m"))
+    assert NO_TRANSCRIPT_PLACEHOLDER in stub.last_messages[0]["content"]
+
+
+def test_truncate_transcript() -> None:
+    assert truncate_transcript(None) == NO_TRANSCRIPT_PLACEHOLDER
+    assert truncate_transcript("   ") == NO_TRANSCRIPT_PLACEHOLDER
+    assert truncate_transcript("short") == "short"
+    clipped = truncate_transcript("x" * (TRANSCRIPT_CHAR_BUDGET + 1000))
+    assert clipped.endswith("(transcript truncated)")
+    assert len(clipped) <= TRANSCRIPT_CHAR_BUDGET + 40
 
 
 def test_format_duration() -> None:

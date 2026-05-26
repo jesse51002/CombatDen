@@ -53,10 +53,7 @@ class _ArcWithCount extends StatelessWidget {
               children: [
                 Text(
                   '${stats.total}',
-                  style: DesignConstants.big2.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: DesignConstants.text,
-                  ),
+                  style: DesignConstants.big2Bold,
                 ),
                 Text(
                   'Total Members',

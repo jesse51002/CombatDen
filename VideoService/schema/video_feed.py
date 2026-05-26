@@ -50,11 +50,20 @@ class VideoCard(BaseModel):
 
 
 class VideosFeed(BaseModel):
-    """A company's served video feed: the slim, public projection."""
+    """A company's served video feed: one page of the slim, public projection.
+
+    The endpoint paginates with ``limit``/``offset``: ``videos`` is the current
+    page (after the ``is_good``/``video_type``/``big_group`` filters), and
+    ``total`` is how many videos matched the filters before slicing — so the
+    client can compute how many pages remain.
+    """
 
     model_config = ConfigDict(extra="ignore", from_attributes=True)
 
     company_name: str
     app_id: str
     generated_at: datetime
+    total: int = Field(ge=0)  # videos matching the filters, before pagination
+    limit: int = Field(ge=1)  # page size that produced `videos`
+    offset: int = Field(ge=0)  # start index of this page
     videos: list[VideoCard] = Field(default_factory=list)

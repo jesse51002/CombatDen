@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:mobile_app/core/app_slots.dart';
-import 'package:mobile_app/customization/theme/theme_color.dart';
-import 'package:mobile_app/customization/theme/theme_derivation.dart';
-import 'package:mobile_app/customization/theme/theme_font.dart';
-import 'package:mobile_app/customization/data/models/color_mode.dart';
+import 'package:customization_engine/theme/theme_color.dart';
+import 'package:customization_engine/theme/theme_derivation.dart';
+import 'package:customization_engine/theme/theme_font.dart';
+import 'package:customization_engine/data/models/color_mode.dart';
 
 class DesignConstants {
   // Private constructor to prevent instantiation

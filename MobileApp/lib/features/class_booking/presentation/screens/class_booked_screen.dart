@@ -5,13 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
-import 'package:mobile_app/customization/theme/theme_text.dart';
+import 'package:customization_engine/theme/theme_text.dart';
 import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/animation/scale_reveal.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/customization/theme/theme_image.dart';
-import 'package:mobile_app/customization/theme/lottie/theme_lottie.dart';
+import 'package:customization_engine/theme/theme_image.dart';
+import 'package:customization_engine/theme/lottie/theme_lottie.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 

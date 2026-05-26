@@ -99,17 +99,15 @@ class _VerificationBlock extends StatelessWidget {
       children: [
         Text(
           'VERIFICATION CODE',
-          style: DesignConstants.pSmall.copyWith(
+          style: DesignConstants.pSmallBold.copyWith(
             color: DesignConstants.text2nd,
-            fontWeight: FontWeight.w700,
           ),
           textAlign: TextAlign.center,
         ),
         Text(
           code,
-          style: DesignConstants.big2.copyWith(
+          style: DesignConstants.big2Bold.copyWith(
             color: DesignConstants.primaryColor,
-            fontWeight: FontWeight.w700,
           ),
           textAlign: TextAlign.center,
         ),
