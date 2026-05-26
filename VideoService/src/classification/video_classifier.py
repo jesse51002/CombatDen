@@ -3,8 +3,10 @@
 Mirrors ``CustomizationService``'s ``ComplexityClassifier`` — one structured LLM
 call per video, schema in / verdict out, with ``complete_structured``'s
 validate-and-retry loop handling a malformed reply. The genre and keep/drop
-verdict come from the video's real content (title + description + runtime)
-judged against the company brief, not from the search that surfaced it.
+verdict come from the video's real content (title + description + runtime +
+transcript) judged against the company brief, not from the search that surfaced
+it. The transcript is stored whole on ``VideoOutput`` but truncated here to keep
+the prompt bounded; videos without one fall back to title + description.
 """
 
 from __future__ import annotations
@@ -30,6 +32,28 @@ VIDEO_CLASSIFICATION_PROMPT_PATH = (
 # cheap, supports native structured output, and routes on the gemini provider
 # key (see src/core/config.py + provider_keys).
 VIDEO_CLASSIFY_MODEL = "gemini/gemini-2.5-flash-lite"
+
+# How much transcript to feed the classifier. The full transcript is stored on
+# the video; the prompt only needs the start to judge genre/relevance, so we cap
+# at ~3-4k tokens (~4 chars/token) of the head. Keeps a 3-hour podcast from
+# blowing up cost/context while every normal video passes through whole.
+TRANSCRIPT_CHAR_BUDGET = 14000
+# Shown in place of the transcript when a video has none (no captions / fetch
+# failed / transcripts pass not run) so the prompt reads cleanly and the model
+# knows to lean on the title + description.
+NO_TRANSCRIPT_PLACEHOLDER = "(no transcript available — judge from the title and description)"
+
+
+def truncate_transcript(text: str | None) -> str:
+    """The transcript clipped to ``TRANSCRIPT_CHAR_BUDGET`` head characters, or
+    the placeholder when there is none. A clipped transcript gets a trailing
+    marker so the model knows it was cut."""
+    if not text or not text.strip():
+        return NO_TRANSCRIPT_PLACEHOLDER
+    text = text.strip()
+    if len(text) <= TRANSCRIPT_CHAR_BUDGET:
+        return text
+    return text[:TRANSCRIPT_CHAR_BUDGET].rstrip() + "\n…(transcript truncated)"
 
 
 def format_duration(seconds: int | None) -> str:
@@ -70,9 +94,11 @@ class VideoClassifier:
             type=brief.type,
             videos_desc=brief.videos_desc,
             avoid_desc=brief.avoid_desc,
+            queries="\n".join(f"- {s.query}" for s in brief.searches),
             title=video.title,
             description=video.description,
             duration=format_duration(video.duration_seconds),
+            transcript=truncate_transcript(video.transcript),
         )
         result = await self._llm.complete_structured(
             [{"role": "user", "content": instruction}],

@@ -48,6 +48,14 @@ def test_videos_output_round_trips() -> None:
     assert len(output.videos) == 1
 
 
+def test_manifest_queries_default_and_round_trip() -> None:
+    doc = _output()
+    del doc["videos"]
+    assert VideosOutput.model_validate(doc).queries == []  # default empty
+    doc["queries"] = ["bjj fundamentals", "white belt vlog"]
+    assert VideosOutput.model_validate(doc).queries == ["bjj fundamentals", "white belt vlog"]
+
+
 def test_hidden_counts_are_none() -> None:
     doc = _video()
     del doc["view_count"]
@@ -90,3 +98,33 @@ def test_videos_default_to_empty_list() -> None:
     doc = _output()
     del doc["videos"]
     assert VideosOutput.model_validate(doc).videos == []
+
+
+def test_transcript_defaults_none_and_is_last_field() -> None:
+    # Untouched by the batch / classify; filled by the transcripts pass.
+    assert VideoOutput.model_validate(_video()).transcript is None
+    # Declared last so it lands at the bottom of each per-video file.
+    assert list(VideoOutput.model_fields)[-1] == "transcript"
+
+
+def test_transcript_round_trips() -> None:
+    doc = _video()
+    doc["transcript"] = "welcome back to the channel, today we work the teep..."
+    video = VideoOutput.model_validate(doc)
+    assert video.transcript.startswith("welcome back")
+
+
+def test_transcript_error_defaults_none_and_round_trips() -> None:
+    assert VideoOutput.model_validate(_video()).transcript_error is None
+    doc = _video()
+    doc["transcript_error"] = "AgeRestricted"
+    assert VideoOutput.model_validate(doc).transcript_error == "AgeRestricted"
+
+
+def test_reason_defaults_none_and_round_trips() -> None:
+    assert VideoOutput.model_validate(_video()).reason is None
+    doc = _video()
+    doc["is_good"] = False
+    doc["reason"] = "no_transcript"
+    video = VideoOutput.model_validate(doc)
+    assert video.reason.value == "no_transcript"

@@ -8,3 +8,6 @@ __pycache__/
 
 # Local dev secrets (never commit)
 .env
+
+# Generated preview HTML (scripts/preview.py) — sits next to each app's YAMLs
+apps/*/preview.html

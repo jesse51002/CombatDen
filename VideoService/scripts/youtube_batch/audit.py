@@ -1,15 +1,15 @@
-"""Audit helpers for `videos_output.yaml` — used by the `audit-output` skill so
-the LLM reasons over a **compact title list** instead of loading the whole output
-file into context.
+"""Audit helpers for a company's fetched feed — used by the `audit-output` skill
+so the LLM reasons over a **compact title list** instead of loading every video
+into context.
 
     # compact list: one `<video_id>\t<title>\t<channel>` line per video
     poetry run python -m scripts.youtube_batch.audit list --app-id combatden
 
-    # drop videos by id; survivors rewritten in place, removed ones logged
+    # drop videos by id; their per-video files are deleted, removals logged
     poetry run python -m scripts.youtube_batch.audit remove --app-id combatden \
         --ids VIDEOID1,VIDEOID2 --reason "negative about muay thai"
 
-`remove` rewrites `videos_output.yaml` with the survivors (so the API serves the
+`remove` deletes each video's `videos/<id>.yaml` file (so the API serves the
 clean set immediately) and appends each removed video — plus the reason and a
 timestamp — to `videos_output.removed.yaml` for transparency and recovery.
 """
@@ -21,22 +21,16 @@ import asyncio
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 
 import yaml
 
 from schema.video_output import VideoOutput
 from src.api.service.videos_service import VideosService
+from src.shared.util.video_id import video_id_from_url
 
 # scripts/youtube_batch/audit.py -> <root>/apps
 _DEFAULT_APPS_ROOT = Path(__file__).resolve().parent.parent.parent / "apps"
-OUTPUT_FILENAME = "videos_output.yaml"
 REMOVED_FILENAME = "videos_output.removed.yaml"
-
-
-def video_id_from_url(url: str) -> str:
-    """The YouTube video id from a watch URL (its `v` query param)."""
-    return (parse_qs(urlparse(url).query).get("v") or [""])[0]
 
 
 def partition_videos(
@@ -77,8 +71,9 @@ def list_titles(app_id: str, apps_root: Path) -> None:
 def remove_videos(
     app_id: str, apps_root: Path, ids: list[str], reason: str
 ) -> None:
-    """Drop the given video ids from videos_output.yaml; log the removals."""
-    output = asyncio.run(VideosService(apps_root=apps_root).load_output(app_id))
+    """Delete the given videos' per-video files; log the removals."""
+    service = VideosService(apps_root=apps_root)
+    output = asyncio.run(service.load_output(app_id))
     remove_ids = {i.strip() for i in ids if i.strip()}
 
     kept, removed = partition_videos(output.videos, remove_ids)
@@ -90,8 +85,12 @@ def remove_videos(
         return
 
     app_dir = apps_root / app_id
-    survivors = output.model_copy(update={"videos": kept})
-    _dump(survivors.model_dump(mode="json"), app_dir / OUTPUT_FILENAME)
+
+    async def _delete_all() -> None:
+        for video in removed:
+            await service.delete_video(app_id, video_id_from_url(video.url))
+
+    asyncio.run(_delete_all())
 
     now = datetime.now(timezone.utc).isoformat()
     log = _load_removed_log(app_dir / REMOVED_FILENAME)
@@ -102,7 +101,7 @@ def remove_videos(
         log.append(record)
     _dump({"removed": log}, app_dir / REMOVED_FILENAME)
 
-    print(f"removed {len(removed)}, kept {len(kept)} -> {OUTPUT_FILENAME}")
+    print(f"removed {len(removed)}, kept {len(kept)} (deleted from videos/)")
 
 
 def main(argv: list[str] | None = None) -> int:

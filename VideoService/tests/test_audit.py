@@ -1,57 +1,58 @@
-"""Audit helpers: video-id parsing, kept/removed partition, and the in-place
-rewrite + removed-sidecar that `remove_videos` performs."""
+"""Audit helpers: video-id parsing, kept/removed partition, and the per-video
+file deletion + removed-sidecar that `remove_videos` performs."""
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
-from schema import VideosOutput
+from schema import VideoOutput, VideosOutput
+from src.api.service.videos_service import VideosService
 from scripts.youtube_batch.audit import (
     partition_videos,
     remove_videos,
     video_id_from_url,
 )
 
-_OUTPUT_YAML = """\
-company_name: Demo Gym
-app_id: demo
-generated_at: 2026-05-22T00:00:00Z
-quota_units_estimate: 102
-videos:
-  - url: https://www.youtube.com/watch?v=keepme
-    title: How to Throw a Teep Kick
-    description: d
-    thumbnail_url: t
-    channel_name: Muay Thai Guy
-    channel_url: cu
-    channel_avatar_url: a
-    view_count: 1000
-    like_count: 50
-    tag: educational
-    source_queries: [teep]
-    relevance_index: 0
-  - url: https://www.youtube.com/watch?v=dropme
-    title: Why Muay Thai Doesn't Work
-    description: d
-    thumbnail_url: t
-    channel_name: Contrarian Channel
-    channel_url: cu
-    channel_avatar_url: a
-    view_count: 2000
-    like_count: 5
-    tag: analysis
-    source_queries: [does muay thai work]
-    relevance_index: 1
-"""
+
+def _video(vid: str, title: str, *, relevance: int) -> VideoOutput:
+    return VideoOutput(
+        url=f"https://www.youtube.com/watch?v={vid}",
+        title=title,
+        description="d",
+        thumbnail_url="t",
+        channel_name="Some Channel",
+        channel_url="cu",
+        channel_avatar_url="a",
+        view_count=1000,
+        like_count=50,
+        source_queries=["q"],
+        relevance_index=relevance,
+    )
+
+
+_OUTPUT = VideosOutput(
+    company_name="Demo Gym",
+    app_id="demo",
+    generated_at=datetime(2026, 5, 22, tzinfo=timezone.utc),
+    quota_units_estimate=102,
+    videos=[
+        _video("keepme", "How to Throw a Teep Kick", relevance=0),
+        _video("dropme", "Why Muay Thai Doesn't Work", relevance=1),
+    ],
+)
 
 
 def _seed(tmp_path: Path) -> Path:
-    app_dir = tmp_path / "demo"
-    app_dir.mkdir()
-    (app_dir / "videos_output.yaml").write_text(_OUTPUT_YAML)
+    asyncio.run(VideosService(apps_root=tmp_path).save_output("demo", _OUTPUT))
     return tmp_path
+
+
+def _video_ids(apps_root: Path) -> list[str]:
+    return asyncio.run(VideosService(apps_root=apps_root).list_video_ids("demo"))
 
 
 def test_video_id_from_url() -> None:
@@ -61,21 +62,17 @@ def test_video_id_from_url() -> None:
 
 
 def test_partition_preserves_order() -> None:
-    output = VideosOutput.model_validate(yaml.safe_load(_OUTPUT_YAML))
-    kept, removed = partition_videos(output.videos, {"dropme"})
+    kept, removed = partition_videos(_OUTPUT.videos, {"dropme"})
     assert [video_id_from_url(v.url) for v in kept] == ["keepme"]
     assert [video_id_from_url(v.url) for v in removed] == ["dropme"]
 
 
-def test_remove_rewrites_output_and_logs_sidecar(tmp_path: Path) -> None:
+def test_remove_deletes_file_and_logs_sidecar(tmp_path: Path) -> None:
     apps_root = _seed(tmp_path)
     remove_videos("demo", apps_root, ["dropme"], reason="negative about muay thai")
 
-    # Survivors rewritten in place, still schema-valid.
-    out = VideosOutput.model_validate(
-        yaml.safe_load((apps_root / "demo" / "videos_output.yaml").read_text())
-    )
-    assert [video_id_from_url(v.url) for v in out.videos] == ["keepme"]
+    # The dropped video's file is gone; the survivor remains.
+    assert _video_ids(apps_root) == ["keepme"]
 
     # Removed video logged with its reason.
     removed_doc = yaml.safe_load(

@@ -6,15 +6,28 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
-from schema import ClassOutput, VideoSearch, VideosConfig, VideosFeed, VideoType
+from schema import (
+    BigGroup,
+    ClassOutput,
+    VideoSearch,
+    VideosConfig,
+    VideosFeed,
+    VideoType,
+)
+from schema.big_group import big_group_for
 from src.api.errors import InvalidConfigError, NotFoundError
 from src.api.service.videos_service import videos_service
 
 logger = logging.getLogger(__name__)
 
 videos_router = APIRouter(prefix="/apps", tags=["videos"])
+
+# Page size when the client doesn't ask: mobile-feed friendly, capped so one
+# request can't pull the whole feed.
+DEFAULT_LIMIT = 20
+MAX_LIMIT = 100
 
 
 @videos_router.get(
@@ -102,25 +115,40 @@ async def get_searches(app_id: str) -> list[VideoSearch]:
 @videos_router.get(
     "/{app_id}/videos",
     response_model=VideosFeed,
-    summary="Get a company's fetched videos, optionally filtered by video type",
+    summary="Get a page of a company's fetched videos, optionally filtered",
     responses={
         200: {
             "description": (
-                "The company's video feed (slim, frontend-only fields), "
-                "excluding off-niche videos (classifier `is_good == False`); "
-                "when `video_type` is given, only videos with that genre tag"
+                "A page of the company's video feed (slim, frontend-only "
+                "fields), excluding off-niche videos (classifier "
+                "`is_good == False`); `total` is the match count before "
+                "pagination. `video_type` filters to one genre tag, `big_group` "
+                "to the coarse educational/entertainment split"
             )
         },
+        400: {"description": "`video_type` and `big_group` are mutually exclusive"},
         404: {"description": "No such company, or it has no videos_output.yaml yet"},
-        422: {"description": "Output exists but its videos_output.yaml is stale"},
+        422: {"description": "Output is stale, or bad limit/offset"},
     },
 )
 async def get_videos(
-    app_id: str, video_type: VideoType | None = None
+    app_id: str,
+    video_type: VideoType | None = None,
+    big_group: BigGroup | None = None,
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
 ) -> VideosFeed:
-    """Return a company's fetched videos, **excluding off-niche ones** (the
-    classifier's ``is_good == False``); unclassified videos still serve. With
-    ``?video_type=<enum>``, return only videos with that genre tag."""
+    """Return one page of a company's fetched videos, **excluding off-niche
+    ones** (the classifier's ``is_good == False``); unclassified videos still
+    serve. Filter with **either** ``?video_type=<genre>`` (one tag) **or**
+    ``?big_group=<educational|entertainment>`` (the coarse split) — supplying
+    both is a 400. Paginate with ``?limit=`` (default 20, max 100) and
+    ``?offset=``; ``total`` reports how many videos matched before slicing."""
+    if video_type is not None and big_group is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="video_type and big_group are mutually exclusive; pass at most one",
+        )
     try:
         output = await videos_service().load_output(app_id)
     except NotFoundError as exc:
@@ -145,13 +173,24 @@ async def get_videos(
     videos = [v for v in output.videos if v.is_good is not False]
     if video_type is not None:
         videos = [v for v in videos if v.tag == video_type]
-    # VideoOutput -> VideoCard projection (drops desc/likes/source_queries) via
-    # from_attributes on the slim models.
+    elif big_group is not None:
+        # A genre filter excludes unclassified videos (tag is None -> no group).
+        videos = [
+            v for v in videos if v.tag is not None and big_group_for(v.tag) == big_group
+        ]
+
+    total = len(videos)
+    page = videos[offset : offset + limit]
+    # VideoOutput -> VideoCard projection (drops desc/likes/transcript/
+    # source_queries) via from_attributes on the slim models.
     return VideosFeed(
         company_name=output.company_name,
         app_id=output.app_id,
         generated_at=output.generated_at,
-        videos=videos,
+        total=total,
+        limit=limit,
+        offset=offset,
+        videos=page,
     )
 
 
