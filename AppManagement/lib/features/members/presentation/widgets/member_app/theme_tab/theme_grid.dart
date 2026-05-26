@@ -46,6 +46,9 @@ class ThemeGrid extends StatelessWidget {
                   final active = CustomizationRuntime.activeDesignId;
                   return ListView.separated(
                     itemCount: styles.length,
+                    // ListView.separated has no `spacing:`; the separator
+                    // builder is the only way to gap its items, so SizedBox
+                    // here is intentional, not a spacing-rule violation.
                     separatorBuilder: (_, _) => const SizedBox(
                       height: DesignConstants.spacingMedium,
                     ),

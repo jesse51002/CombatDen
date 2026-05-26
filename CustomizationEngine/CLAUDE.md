@@ -52,7 +52,9 @@ different language; the name collision is why this package is
 
 Follows the same conventions as `../MobileApp/CLAUDE.md`: `Symbols.*_sharp`
 icons with `weight`/`size`, `spacing:` on Column/Row (never `SizedBox` for
-gaps), small focused widgets (<150 lines/file), package imports
+gaps between Column/Row children — but a `SizedBox` in a
+`ListView.separated` `separatorBuilder` is fine, it has no `spacing:`),
+small focused widgets (<150 lines/file), package imports
 (`package:customization_engine/...`), trailing commas, full null safety. Keep
 `flutter analyze` clean — it's the gate.
 

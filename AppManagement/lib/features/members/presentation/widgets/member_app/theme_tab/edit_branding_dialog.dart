@@ -23,5 +23,5 @@ Future<String?> showEditBrandingDialog(
     primaryLabel: 'Save',
     primaryOnPressed: () => Navigator.of(context).pop(controller.text),
     secondaryOnPressed: () => Navigator.of(context).pop(),
-  );
+  ).whenComplete(controller.dispose);
 }
