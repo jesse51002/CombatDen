@@ -13,6 +13,14 @@ flow, a moment. That context is for your understanding only: NEVER copy
 placement, screen names, app flow, or usage wording into the `prompt`. The
 prompt is the art piece, not the app around it.
 
+When the subject names example objects (an "e.g. …" list), treat them as
+illustrative starting points, NOT a closed set or a mandate. Read the asset's
+underlying meaning and pick the object that best fits this brand — choosing a
+different, equally fitting object that isn't on the list is encouraged, not a
+deviation. Reproduce a specific named object literally ONLY when the subject
+says it MUST be (or MUST read as) that thing; otherwise the list is there to
+spark ideas, not to fence them in.
+
 Read the asset's emotional register from the subject and how it is used,
 and match the prompt's energy to it:
 
