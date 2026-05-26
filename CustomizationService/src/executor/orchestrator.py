@@ -138,9 +138,10 @@ class Pipeline:
 
         Only the *produced* artifacts are removed — ``output.yaml``,
         ``expansion_cost.yaml`` and the ``images/`` / ``final_images/`` /
-        ``icons/`` trees; the run's editable *inputs* (``app.yaml``,
-        ``customization.yaml``) are kept, because the run regenerates from them.
-        A fresh run dir (no produced artifacts) is a no-op — nothing to clear.
+        ``icons/`` / ``lotties/`` trees; the run's editable *inputs*
+        (``app.yaml``, ``customization.yaml``) are kept, because the run
+        regenerates from them. A fresh run dir (no produced artifacts) is a
+        no-op — nothing to clear.
 
         Two safety rails make this destructive step impossible to point at the
         wrong place: every target is a path *derived from* ``run_ctx`` (never an
@@ -148,18 +149,17 @@ class Pipeline:
         run dir itself must sit under an ``apps`` output root. Either failing
         aborts the run rather than deleting anything.
         """
-        produced = [
-            run_ctx.output_path(),
-            run_ctx.expansion_cost_path(),
-            run_ctx.image_dir,
-            run_ctx.final_image_dir,
-            run_ctx.icon_dir,
-        ]
         asset_dirs = (
             run_ctx.image_dir,
             run_ctx.final_image_dir,
             run_ctx.icon_dir,
+            run_ctx.lottie_dir,
         )
+        produced = [
+            run_ctx.output_path(),
+            run_ctx.expansion_cost_path(),
+            *asset_dirs,
+        ]
         has_artifacts = run_ctx.output_path().exists() or any(
             d.is_dir() and any(d.iterdir()) for d in asset_dirs
         )
