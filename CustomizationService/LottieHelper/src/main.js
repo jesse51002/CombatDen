@@ -12,6 +12,7 @@ let totalFrames = 0;
 let colorGroups = [];     // [{key, avgHex, count, members:Set<hex>, suggested}]
 let currentFrame = 0;     // current playback frame (0-based)
 let originalData = null;  // pristine parsed Lottie JSON — recolor source of truth
+let originalText = null;  // raw uploaded JSON text — saved verbatim (lossless) on Save
 let loadedName = null;    // filename, for the status line
 let freshLoad = false;    // true only on a new file load
 // ---- playback-cycle state (manual loop: reveal hold + pre-loop pause) ------
@@ -446,6 +447,36 @@ $("copyYaml").addEventListener("click", () => {
   setTimeout(() => (b.textContent = t), 1000);
 });
 
+// Save the designed preset straight into the repo's preset library via the
+// dev-server endpoint (see vite.config.js). Writes the verbatim loaded
+// animation JSON (NOT the recoloured preview — the pipeline bakes the palette
+// at runtime) plus the generated config.yaml. Only works under `npm run dev`.
+$("savePreset").addEventListener("click", async () => {
+  const btn = $("savePreset");
+  if (!originalText) { $("status").textContent = "Load a Lottie before saving."; return; }
+  renderYaml(); // ensure $("yaml") reflects the current form
+  const id = $("pId").value.trim();
+  const file = $("pFile").value.trim();
+  if (!id || id === "preset_id") { $("status").textContent = "Set a preset id before saving."; return; }
+  if (!file || file === "file.json" || !file.endsWith(".json")) {
+    $("status").textContent = "Set a .json file name before saving."; return;
+  }
+  try {
+    const res = await fetch("/api/save-preset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, file, yaml: $("yaml").value, animation: originalText }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { $("status").textContent = "Save failed: " + (data.error || res.statusText); return; }
+    const t = btn.textContent; btn.textContent = "Saved ✓";
+    setTimeout(() => (btn.textContent = t), 1000);
+    $("status").textContent = (data.overwritten ? "Overwrote " : "Saved to ") + data.path + data.file;
+  } catch (err) {
+    $("status").textContent = "Save failed: " + err.message;
+  }
+});
+
 
 // ---- loaders -------------------------------------------------------------
 $("lottieFile").addEventListener("change", (e) => {
@@ -456,6 +487,7 @@ $("lottieFile").addEventListener("change", (e) => {
     let data;
     try { data = JSON.parse(reader.result); }
     catch (err) { $("status").textContent = "Not valid JSON: " + err.message; return; }
+    originalText = reader.result; // keep the exact bytes for a lossless Save
     loadFile(data, f.name);
   };
   reader.readAsText(f);
@@ -482,7 +514,7 @@ $("clearLottie").addEventListener("click", () => {
   clearCycleTimers();
   revealStarted = false; cycleEnded = false;
   $("lottieFile").value = "";
-  originalData = null; loadedName = null;
+  originalData = null; originalText = null; loadedName = null;
   firstFrame = 0; totalFrames = 0; currentFrame = 0;
   regroup(); // originalData is null → clears groups + renders empty
   $("status").textContent = "No animation loaded.";
