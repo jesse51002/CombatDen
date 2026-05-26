@@ -3,8 +3,8 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:mobile_app/core/app_styles.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/customization/customization_runtime.dart';
-import 'package:mobile_app/customization/data/models/customization_style.dart';
+import 'package:customization_engine/customization_runtime.dart';
+import 'package:customization_engine/data/models/customization_style.dart';
 import 'package:mobile_app/features/style_select/presentation/widgets/style_list/style_list.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 

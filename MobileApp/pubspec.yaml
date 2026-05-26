@@ -29,6 +29,8 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   cached_network_image: ^3.4.1
+  customization_engine:
+    path: ../CustomizationEngine
   dio: ^5.9.2
   equatable: ^2.0.8
   flutter:

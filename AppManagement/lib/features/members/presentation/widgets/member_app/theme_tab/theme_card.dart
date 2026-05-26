@@ -2,24 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:app_management/features/members/data/mock_app_themes.dart';
+import 'package:customization_engine/customization_runtime.dart';
+import 'package:customization_engine/data/models/customization_style.dart';
 
-/// A tappable theme preset: its celebration image as a 3:2 hero with the
-/// display name below. The active theme shows a check badge and an
-/// orange border. Tapping switches the live theme (no-op in prototype).
+// Small thumbnail — the theme list is secondary to the phone, so cards are
+// compact rows rather than big hero tiles.
+const double _kThumbWidth = 72;
+const double _kThumbHeight = 48;
+
+/// A compact, tappable theme row: a small celebration thumbnail, the theme
+/// name, and a check when active. Tapping switches the LIVE preview theme
+/// via the customization engine, so the phone re-themes instantly.
 class ThemeCard extends StatelessWidget {
-  final AppThemeOption theme;
+  final CustomizationStyle style;
   final bool isActive;
 
-  const ThemeCard({super.key, required this.theme, required this.isActive});
+  const ThemeCard({super.key, required this.style, required this.isActive});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => debugPrint('TODO: select theme ${theme.id}'),
+      onTap: () => CustomizationRuntime.selectDesign(style.id),
       child: Container(
-        clipBehavior: Clip.antiAlias,
+        padding: const EdgeInsets.all(DesignConstants.spacingMedium),
         decoration: BoxDecoration(
           color: DesignConstants.card,
           borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
@@ -30,22 +36,25 @@ class ThemeCard extends StatelessWidget {
                 )
               : null,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
+          spacing: DesignConstants.spacingMedium,
           children: [
-            _ThemeHero(
-              imageAsset: theme.celebrationImageAsset,
-              isActive: isActive,
-            ),
-            Padding(
-              padding: const EdgeInsets.all(DesignConstants.paddingSmall),
+            _Thumb(imageUrl: style.celebrationImageUrl),
+            Expanded(
               child: Text(
-                theme.displayName,
-                style: DesignConstants.h2,
-                textAlign: TextAlign.center,
+                style.displayName,
+                style: DesignConstants.h3,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (isActive)
+              Icon(
+                Symbols.check_circle_sharp,
+                color: DesignConstants.primaryColor,
+                weight: DesignConstants.iconWeight,
+                size: DesignConstants.iconSizeMedium,
+              ),
           ],
         ),
       ),
@@ -53,46 +62,46 @@ class ThemeCard extends StatelessWidget {
   }
 }
 
-class _ThemeHero extends StatelessWidget {
-  final String imageAsset;
-  final bool isActive;
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.imageUrl});
 
-  const _ThemeHero({required this.imageAsset, required this.isActive});
+  final String imageUrl;
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 1.5,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset(imageAsset, fit: BoxFit.contain),
-          if (isActive)
-            Positioned(
-              top: DesignConstants.spacingMedium,
-              right: DesignConstants.spacingMedium,
-              child: _ActiveBadge(),
-            ),
-        ],
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+      child: SizedBox(
+        width: _kThumbWidth,
+        height: _kThumbHeight,
+        child: imageUrl.isEmpty
+            ? const _ThumbPlaceholder()
+            : Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const _ThumbPlaceholder(),
+                loadingBuilder: (context, child, progress) =>
+                    progress == null ? child : const _ThumbPlaceholder(),
+              ),
       ),
     );
   }
 }
 
-class _ActiveBadge extends StatelessWidget {
+class _ThumbPlaceholder extends StatelessWidget {
+  const _ThumbPlaceholder();
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(DesignConstants.spacingSmall),
-      decoration: BoxDecoration(
-        color: DesignConstants.primaryColor,
-        shape: BoxShape.circle,
-      ),
-      child: Icon(
-        Symbols.check_sharp,
-        color: DesignConstants.backgroundColor,
-        weight: DesignConstants.iconWeight,
-        size: DesignConstants.iconSizeSmall,
+    return ColoredBox(
+      color: DesignConstants.backgroundColor,
+      child: Center(
+        child: Icon(
+          Symbols.image_sharp,
+          color: DesignConstants.text3rd,
+          weight: DesignConstants.iconWeight,
+          size: DesignConstants.iconSizeMedium,
+        ),
       ),
     );
   }

@@ -7,8 +7,8 @@ import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/customization/theme/theme_image.dart';
-import 'package:mobile_app/customization/theme/lottie/theme_reveal_lottie.dart';
+import 'package:customization_engine/theme/theme_image.dart';
+import 'package:customization_engine/theme/lottie/theme_reveal_lottie.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 
 // Per-screen layout/timing math, file-scoped per CLAUDE.md's _k carve-out.

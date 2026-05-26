@@ -1,0 +1,39 @@
+name: customization_engine
+description: >
+  Shared white-label customization runtime: fetches a tenant's resolved
+  branding (colours, fonts, images, icons, text, lotties) and exposes the
+  brand-overridable resolvers (ThemeColor/Image/Icon/Font/Text/Lottie) plus a
+  set of preview "showcase" screens. Consumed by MobileApp (the member app) and
+  AppManagement (the admin live-preview). Distinct from the top-level
+  CustomizationService, which is the Python pipeline that GENERATES the configs
+  this package consumes.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  cached_network_image: ^3.4.1
+  dio: ^5.9.2
+  equatable: ^2.0.8
+  flutter:
+    sdk: flutter
+  flutter_cache_manager: ^3.4.1
+  flutter_svg: ^2.0.10
+  get_it: ^9.2.1
+  google_fonts: ^8.1.0
+  lottie: ^3.3.3
+  material_symbols_icons: ^4.2928.1
+  shared_preferences: ^2.5.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/animations/
+    - assets/images/

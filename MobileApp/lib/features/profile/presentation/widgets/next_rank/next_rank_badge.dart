@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:mobile_app/customization/theme/theme_image.dart';
+import 'package:customization_engine/theme/theme_image.dart';
 
 const double _kBadgeSize = 100;
 const double _kImageInset = 22;
