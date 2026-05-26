@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/customization/data/models/customization_style.dart';
+import 'package:customization_engine/data/models/customization_style.dart';
 import 'package:mobile_app/features/style_select/presentation/widgets/style_card/style_card.dart';
 
 /// Vertical list of selectable styles. Large celebration images read

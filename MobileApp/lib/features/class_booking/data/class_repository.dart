@@ -1,6 +1,6 @@
 import 'package:mobile_app/core/app_config.dart';
 import 'package:mobile_app/core/app_styles.dart';
-import 'package:mobile_app/customization/customization_runtime.dart';
+import 'package:customization_engine/customization_runtime.dart';
 import 'package:mobile_app/features/class_booking/data/class_api_client.dart';
 import 'package:mobile_app/features/class_booking/data/class_info.dart';
 

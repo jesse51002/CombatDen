@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/loyalty_tab/loyalty_tab.dart';
-import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_tab.dart';
+import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/live_theme_preview_tab.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/videos_tab.dart';
 import 'package:app_management/shared/widgets/app_shell.dart';
 import 'package:app_management/shared/widgets/view_switcher.dart';
@@ -26,7 +26,7 @@ class _MemberAppScreenState extends State<MemberAppScreen> {
   Widget build(BuildContext context) {
     return AppShell(
       activeRoute: AppRoutes.memberAppPreview,
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.all(DesignConstants.paddingBig),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -37,11 +37,16 @@ class _MemberAppScreenState extends State<MemberAppScreen> {
               selectedIndex: _tabIndex,
               onSelected: (i) => setState(() => _tabIndex = i),
             ),
-            switch (_tabIndex) {
-              1 => const VideosTab(),
-              2 => const LoyaltyTab(),
-              _ => const ThemeTab(),
-            },
+            // The Theme tab is a full-height layout (the phone fills the
+            // space, the theme list scrolls on its own). The other tabs keep
+            // their own scroll.
+            Expanded(
+              child: switch (_tabIndex) {
+                1 => const SingleChildScrollView(child: VideosTab()),
+                2 => const SingleChildScrollView(child: LoyaltyTab()),
+                _ => const LiveThemePreviewTab(),
+              },
+            ),
           ],
         ),
       ),

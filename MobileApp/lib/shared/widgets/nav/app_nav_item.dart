@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/customization/theme/theme_icon.dart';
+import 'package:customization_engine/theme/theme_icon.dart';
 
 /// A single icon-over-label navigation target. Used in top-level
 /// navigation (the bottom nav bar). Mirrors the FlutterCRM

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase. It is the **gym admin web app** — staff/owners managing their gym from a browser.
 
 - This is a **web-only Flutter app** (no Android, no iOS) — mirrors `../FlutterCRM/`'s platform setup.
-- **Backend is off-limits with ONE carve-out.** No Supabase, no auth, no general-purpose API client. The single exception is the **read-only VideoService feed** — see *VideoService carve-out* below. Everything else stays mock-only; do not add HTTP, clients, or live data to any other screen without asking first.
+- **Backend is off-limits with TWO read-only carve-outs.** No Supabase, no auth, no general-purpose API client. The two deliberate exceptions are the **read-only VideoService feed** and the **read-only CustomizationService theme catalog + live preview** — see *VideoService carve-out* and *CustomizationService carve-out* below. Everything else stays mock-only; do not add HTTP, clients, or live data to any other screen without asking first.
 - **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller).
 - **No real data.** Every list, every card, every detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
@@ -24,7 +24,18 @@ This prototype makes exactly **one** real network call, and it is deliberate. Th
 - **Where it lives:** `lib/features/members/data/video_api_client.dart` (`VideoApiClient`, wraps `package:http`) feeds `member_feed_section.dart`, which is the **only** place a `StatefulWidget` + `FutureBuilder` driving a network call is allowed. Models live in `lib/features/members/data/video_feed.dart` (`Video.fromJson`).
 - **Dependency:** the VideoService (sibling, see below) must be running. Base URL defaults to `http://localhost:8002`; override at launch with `--dart-define=VIDEO_BASE_URL=http://<host>:<port>`.
 - **Failure behavior:** the call has a 5s timeout and degrades quietly (empty feed) so the rest of the demo never breaks if the service is down.
-- **`http` is whitelisted for this call only.** It is NOT the signal that the app is graduating out of prototype mode (that signal is still `flutter_bloc` / `dio` / `supabase_flutter`). Do **not** reuse `VideoApiClient` or `package:http` to wire any other screen to a backend — every other list/card/detail stays on co-located mock data per the rules above. Widening this carve-out is a decision for the user, not a default.
+- **`http` is whitelisted for this call only.** Do **not** reuse `VideoApiClient` or `package:http` to wire any other screen to a backend — every other list/card/detail stays on co-located mock data per the rules above. Widening this carve-out is a decision for the user, not a default. (The CustomizationService carve-out below does NOT use `http`; it goes through the `customization_engine` package's own `dio` client.)
+
+## CustomizationService carve-out (live theme preview)
+
+The member-app **Theme tab** (`member_app_screen.dart` → `LiveThemePreviewTab`) is a **live theme preview**: a phone frame renders branded member-app showcase screens that re-theme the instant the admin picks a theme, with the animated ones looping. This is the second deliberate live backend dependency, and it is **read-only**.
+
+- **How it works:** the tab depends on the shared **`customization_engine`** package (path dep, `../CustomizationEngine`). That package owns the real customization runtime + the four showcase widgets (Home, Booking, Stats, Rewards). The tab calls `CustomizationRuntime.initialize(appId: 'combatden', designId: 'ApexMMA', …ShowcaseSlots…)` once (lazily, in `LiveThemePreviewTab.initState` — idempotent), `CustomizationRuntime.fetchStyles()` for the theme catalog, and `CustomizationRuntime.selectDesign(id)` on tap.
+- **Scope:** read-only. The engine fetches the resolved branding + the catalog (`GET /apps/{appId}/styles`) and per-style assets from the CustomizationService. **No writes, no persistence** — picking a theme drives only the in-session preview; it does not save the gym's choice anywhere (that's future work needing a DB table + a FastApiBackend endpoint).
+- **Where it lives:** `lib/features/members/presentation/widgets/member_app/theme_tab/` (`live_theme_preview_tab.dart`, `theme_preview_pane.dart`, `theme_grid.dart`, `theme_card.dart`) + the shared `lib/shared/widgets/phone_frame.dart`. The catalog model is the engine's `CustomizationStyle` (no AppManagement-side model — we consume the engine's, DRY). The two `StatefulWidget`s here (`LiveThemePreviewTab`, `_MemberFeedSection`) are allowed by the StatefulWidget rule.
+- **Dependency:** the CustomizationService (top-level Python pipeline's read-only API) must be running. Base URL defaults to `http://localhost:8000`; override at launch with `--dart-define=CUST_BASE_URL=http://<host>:<port>`.
+- **Failure behavior:** the engine's resolvers never throw — they fall back to bundled defaults. The catalog grid degrades quietly (an error message, no crash) if the service is down, and the phone still renders the fallback look.
+- **Two design systems coexist, intentionally.** Inside the phone frame the showcase uses the engine's *tenant-brand* tokens (the member-app look); everything around it uses AppManagement's own forked `DesignConstants`. No collision — different package URIs. Don't try to make the preview match the admin chrome; it's previewing the *member* app.
 
 ## Sibling repos in this monorepo
 
@@ -283,8 +294,9 @@ Current dependencies (intentionally minimal):
 - `google_fonts` — for Hanken Grotesk via `GoogleFonts.hankenGrotesk()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
 - `http` — **for the VideoService carve-out only** (see above). It backs `VideoApiClient` and nothing else. Adding `http` to any other client is not allowed; reach for the user first.
+- `customization_engine` (path dep, `../CustomizationEngine`) — **for the live theme preview carve-out only** (see *CustomizationService carve-out* above). It is the shared white-label runtime + showcase screens. It transitively pulls in `dio`, `lottie`, `flutter_svg`, `cached_network_image`, and `get_it`. **This is a named, user-approved exception scoped to the theme preview feature** — those transitive packages are NOT a license to wire `dio` into other screens or to start the real-data stack. Do not import them directly elsewhere.
 
-If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in. (`http` being present is **not** that signal — it is the scoped exception above, not the start of the real-data stack.)
+If you find yourself wanting to add `flutter_bloc`, `supabase_flutter`, or anything else from the FlutterCRM stack — or to use the transitive `dio` for a new client — **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in. (`http` and the `customization_engine` dependency being present are **not** that signal — they are the scoped exceptions above, not the start of the real-data stack.)
 
 ## What changes when this becomes real
 

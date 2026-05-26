@@ -18,7 +18,7 @@ import 'package:mobile_app/features/style_select/presentation/screens/style_sele
 import 'package:mobile_app/features/videos/presentation/screens/tag_videos_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/video_recc_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/videos_screen.dart';
-import 'package:mobile_app/customization/customization_runtime.dart';
+import 'package:customization_engine/customization_runtime.dart';
 import 'package:mobile_app/shared/themes/app_theme.dart';
 
 Future<void> main() async {
