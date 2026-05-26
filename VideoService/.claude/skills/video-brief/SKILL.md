@@ -31,7 +31,8 @@ description: >-
 This is the **one skill that drives the whole gym-video setup**, in four phases:
 
 1. **Author the brief** (always) — interview the gym, write `videos_config.yaml`.
-2. **Fetch** (offer) — run the YouTube Data API batch → `videos_output.yaml`.
+2. **Fetch** (offer) — run the YouTube Data API batch → the per-app feed
+   (`videos_output.yaml` manifest + one `videos/<id>.yaml` per video).
 3. **Audit** (offer) — remove videos that work against the gym.
 4. **Class images** (offer) — write `apps/<app_id>/class_output.yaml`: 4 on-brand
    class cards (name + horizontal image).
@@ -443,7 +444,7 @@ unsure, **keep** — removal must be high-confidence.
    poetry run python -m scripts.youtube_batch.audit remove --app-id <app_id> \
        --ids id1,id2,id3 --reason "negative about <discipline> / avoid_desc"
    ```
-   This rewrites `videos_output.yaml` with the survivors (the API serves the clean set
+   This deletes the dropped videos' per-video files (the API serves the clean set
    immediately) and logs the removed videos + reasons to `videos_output.removed.yaml`
    (recoverable). Report removed-vs-kept and the removed titles.
 
@@ -536,4 +537,5 @@ Steps:
   **viewed** — every single image is validated by eye (Phase 4 step 3).
 - Never use random-placeholder image services (picsum, placekitten, etc.) — they return
   unrelated photos. Source real, relevant images (Wikimedia Commons) and verify them.
-- Never edit `videos_output.yaml` by hand — go through the audit `remove` script.
+- Never edit the feed files by hand (the `videos_output.yaml` manifest or any
+  `videos/<id>.yaml`) — go through the audit `remove` script.

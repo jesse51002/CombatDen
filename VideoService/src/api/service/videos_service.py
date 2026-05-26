@@ -1,5 +1,12 @@
-"""VideosService — filesystem reads behind the API: list companies and load
-one company's validated `videos_config.yaml`.
+"""VideosService — the filesystem store behind the API and the batch scripts.
+
+Reads companies and their briefs, and owns the **split-file feed layout**: each
+app's fetched feed is a metadata-only manifest (``videos_output.yaml``, a
+``VideosManifest``) plus one file per video under ``videos/`` (a ``VideoOutput``,
+with its full transcript as the last key). ``load_output`` reassembles a single
+``VideosOutput`` from the two so consumers keep seeing one aggregate; the write
+helpers (``save_output``/``save_video``/``delete_video``) keep the layout in one
+place. Centralising it here eases the eventual fold into ``FastApiBackend``.
 
 Company-agnostic: ``app_id`` is an opaque, pattern-checked string. The
 ``apps_root`` is injected so tests can point the service at a fixture tree
@@ -15,15 +22,33 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from schema import ClassOutput, VideosConfig, VideosOutput
+from schema import ClassOutput, VideoOutput, VideosConfig, VideosManifest, VideosOutput
 from src.api.config import settings
 from src.api.errors import InvalidConfigError, NotFoundError
+from src.shared.util.video_id import video_id_from_url
 
 CONFIG_FILENAME = "videos_config.yaml"
+# The per-app run manifest (metadata only); the videos themselves live one per
+# file under VIDEOS_DIRNAME/.
 OUTPUT_FILENAME = "videos_output.yaml"
+VIDEOS_DIRNAME = "videos"
 CLASS_FILENAME = "class_output.yaml"
 # snake_case company ids; also a path-traversal guard (no dots or slashes).
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+# YouTube video ids — the per-video filename stem; also a path-traversal guard
+# (no dots or slashes, so it can't escape the videos/ directory).
+_VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _dump_yaml(data: object, path: Path) -> None:
+    """Write ``data`` as YAML the way every writer in this service does
+    (insertion order preserved, unicode kept, block style)."""
+    path.write_text(
+        yaml.safe_dump(
+            data, sort_keys=False, allow_unicode=True, default_flow_style=False
+        ),
+        encoding="utf-8",
+    )
 
 
 class VideosService:
@@ -73,26 +98,115 @@ class VideosService:
             ) from exc
 
     async def load_output(self, app_id: str) -> VideosOutput:
-        """The company's validated ``videos_output.yaml`` (the batch result).
+        """The company's fetched feed, reassembled from the manifest plus every
+        per-video file under ``videos/`` into one ``VideosOutput``.
 
         Missing company, or a brief that hasn't been run through the batch
-        script yet (no output file) -> ``NotFoundError`` (404). A file that is
-        present but unparseable or stale -> ``InvalidConfigError`` (422).
+        script yet (no manifest) -> ``NotFoundError`` (404). A manifest or a
+        per-video file that is present but unparseable or stale ->
+        ``InvalidConfigError`` (422). Videos are returned in a deterministic
+        ``(relevance_index, video_id)`` order so pagination is stable.
         """
-        output_file = self._safe_app_dir(app_id) / OUTPUT_FILENAME
-        if not output_file.is_file():
+        app_dir = self._safe_app_dir(app_id)
+        manifest_file = app_dir / OUTPUT_FILENAME
+        if not manifest_file.is_file():
             raise NotFoundError(
                 f"no {OUTPUT_FILENAME} for {app_id!r}; run the batch script first"
             )
         try:
-            return VideosOutput.model_validate(
-                yaml.safe_load(output_file.read_text())
+            manifest = VideosManifest.model_validate(
+                yaml.safe_load(manifest_file.read_text())
             )
+            videos = [
+                VideoOutput.model_validate(yaml.safe_load(f.read_text()))
+                for f in sorted((app_dir / VIDEOS_DIRNAME).glob("*.yaml"))
+            ]
         except (yaml.YAMLError, ValidationError) as exc:
             raise InvalidConfigError(
-                f"company {app_id!r} has a {OUTPUT_FILENAME} but it does not "
-                "match the current schema; regenerate it"
+                f"company {app_id!r} has a {OUTPUT_FILENAME} (or a per-video "
+                "file) that does not match the current schema; regenerate it"
             ) from exc
+        videos.sort(key=lambda v: (v.relevance_index, video_id_from_url(v.url)))
+        return VideosOutput(**manifest.model_dump(), videos=videos)
+
+    async def save_output(self, app_id: str, output: VideosOutput) -> None:
+        """Persist a whole fetched feed: write the manifest and one file per
+        video, replacing any previous feed for this app. Used by the YouTube
+        batch — a fresh fetch is a full replacement, so stale per-video files
+        from a prior run are cleared first (the ``videos_output.removed.yaml``
+        audit log is untouched)."""
+        app_dir = self._safe_app_dir(app_id)
+        videos_dir = app_dir / VIDEOS_DIRNAME
+        videos_dir.mkdir(parents=True, exist_ok=True)
+        for stale in videos_dir.glob("*.yaml"):
+            stale.unlink()
+        self._write_manifest(app_dir, output)
+        for video in output.videos:
+            self._write_video(app_dir, video)
+
+    async def save_manifest(self, app_id: str, output: VideosOutput) -> None:
+        """Rewrite just the run manifest (metadata: counts, costs) from
+        ``output``'s fields, leaving every per-video file untouched. Used by the
+        classify pass to record its cost without rewriting the feed."""
+        self._write_manifest(self._safe_app_dir(app_id), output)
+
+    async def save_video(self, app_id: str, video: VideoOutput) -> None:
+        """Write (or overwrite) one video's file, leaving the manifest and every
+        other video untouched. The cheap partial update the transcripts and
+        classify passes use so they never rewrite the whole feed."""
+        self._write_video(self._safe_app_dir(app_id), video)
+
+    async def list_video_ids(self, app_id: str) -> list[str]:
+        """The video ids that have a per-video file, sorted. Empty when the app
+        has no ``videos/`` directory yet."""
+        videos_dir = self._safe_app_dir(app_id) / VIDEOS_DIRNAME
+        if not videos_dir.is_dir():
+            return []
+        return sorted(f.stem for f in videos_dir.glob("*.yaml"))
+
+    async def load_video(self, app_id: str, video_id: str) -> VideoOutput:
+        """One video by id. Missing -> ``NotFoundError``; stale ->
+        ``InvalidConfigError``."""
+        video_file = self._video_path(app_id, video_id)
+        if not video_file.is_file():
+            raise NotFoundError(f"no video {video_id!r} for {app_id!r}")
+        try:
+            return VideoOutput.model_validate(yaml.safe_load(video_file.read_text()))
+        except (yaml.YAMLError, ValidationError) as exc:
+            raise InvalidConfigError(
+                f"video {video_id!r} for {app_id!r} does not match the current "
+                "schema; regenerate it"
+            ) from exc
+
+    async def delete_video(self, app_id: str, video_id: str) -> bool:
+        """Remove one video's file. Returns whether a file was actually
+        removed (False when nothing matched the id)."""
+        video_file = self._video_path(app_id, video_id)
+        if not video_file.is_file():
+            return False
+        video_file.unlink()
+        return True
+
+    def _write_manifest(self, app_dir: Path, output: VideosOutput) -> None:
+        """Write the metadata-only manifest from ``output``'s non-video fields."""
+        manifest = VideosManifest.model_validate(output.model_dump(exclude={"videos"}))
+        _dump_yaml(manifest.model_dump(mode="json"), app_dir / OUTPUT_FILENAME)
+
+    def _write_video(self, app_dir: Path, video: VideoOutput) -> None:
+        """Write one ``VideoOutput`` to ``videos/<video_id>.yaml``."""
+        video_id = video_id_from_url(video.url)
+        if not video_id:
+            raise InvalidConfigError(f"video has no id in its url: {video.url!r}")
+        videos_dir = app_dir / VIDEOS_DIRNAME
+        videos_dir.mkdir(parents=True, exist_ok=True)
+        _dump_yaml(video.model_dump(mode="json"), videos_dir / f"{video_id}.yaml")
+
+    def _video_path(self, app_id: str, video_id: str) -> Path:
+        """``apps_root/app_id/videos/<video_id>.yaml`` — id pattern-checked so it
+        can't escape the videos directory."""
+        if not _VIDEO_ID_PATTERN.match(video_id):
+            raise NotFoundError(f"no video {video_id!r}")
+        return self._safe_app_dir(app_id) / VIDEOS_DIRNAME / f"{video_id}.yaml"
 
     async def load_classes(self, app_id: str) -> ClassOutput:
         """The company's validated ``class_output.yaml`` (4 branded class cards).
