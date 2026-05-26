@@ -14,6 +14,15 @@ let currentFrame = 0;     // current playback frame (0-based)
 let originalData = null;  // pristine parsed Lottie JSON — recolor source of truth
 let loadedName = null;    // filename, for the status line
 let freshLoad = false;    // true only on a new file load
+// ---- playback-cycle state (manual loop: reveal hold + pre-loop pause) ------
+// We drive looping ourselves (dotLottie loop is off) so we can hold the
+// revealed image for `hold` seconds — ending the animation early when the hold
+// expires — and then sit on the final frame for `pause` seconds before
+// restarting, so the end state is readable instead of snapping back instantly.
+let holdTimer = null;     // fires endCycle() when the reveal hold elapses
+let loopTimer = null;     // fires restartCycle() after the pre-loop pause
+let revealStarted = false;// hold already started this cycle (one-shot per loop)
+let cycleEnded = false;   // image dismissed + animation halted, awaiting restart
 const groupOverrides = {};// group key -> new hex (live recolour)
 const groupNames = {};    // group key -> user-typed region name
 const groupDescs = {};    // group key -> user-typed region description
@@ -25,10 +34,12 @@ const revealBox = $("revealBox");
 
 // ---- value helpers -------------------------------------------------------
 const sliders = {
-  frame: $("frame"), x: $("x"), y: $("y"), w: $("w"), h: $("h"), speed: $("speed"),
+  frame: $("frame"), x: $("x"), y: $("y"), w: $("w"), h: $("h"),
+  speed: $("speed"), hold: $("hold"), pause: $("pause"),
 };
 const outs = {
-  frame: $("frameOut"), x: $("xOut"), y: $("yOut"), w: $("wOut"), h: $("hOut"), speed: $("speedOut"),
+  frame: $("frameOut"), x: $("xOut"), y: $("yOut"), w: $("wOut"), h: $("hOut"),
+  speed: $("speedOut"), hold: $("holdOut"), pause: $("pauseOut"),
 };
 const val = (k) => parseFloat(sliders[k].value);
 const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, "").replace(/\.$/, ""));
@@ -41,6 +52,8 @@ function syncOuts() {
   outs.w.textContent = fmt(val("w"));
   outs.h.textContent = fmt(val("h"));
   outs.speed.textContent = fmt(val("speed"));
+  outs.hold.textContent = fmt(val("hold")) + "s";
+  outs.pause.textContent = fmt(val("pause")) + "s";
 }
 
 // ---- reveal positioning (mirrors _PlacedReveal: left=x*w, top=y*h, etc.) --
@@ -61,14 +74,51 @@ function positionOverlay() {
   }
 }
 
+// reveal frame is stored absolute (matches YAML); compare against relative current.
+const insertionRel = () => Math.round(val("frame")) - firstFrame;
+const hasReveal = () => !!overlay.getAttribute("src"); // an image is loaded to reveal
+
 function updateRevealVisibility() {
-  const hasImg = !!overlay.getAttribute("src");
+  const hasImg = hasReveal();
   overlay.style.display = hasImg ? "block" : "none";
   if (!hasImg) { overlay.classList.remove("revealed"); return; }
-  // reveal frame is stored absolute (matches YAML); compare against relative current.
+  // Once the hold has elapsed (cycleEnded) the image stays dismissed through the
+  // pre-loop pause regardless of frame, so tuning sliders can't re-pop it.
+  if (cycleEnded) { overlay.classList.remove("revealed"); return; }
   // Adding/removing .revealed plays / snaps-back the ScaleReveal pop.
-  const insertionRel = Math.round(val("frame")) - firstFrame;
-  overlay.classList.toggle("revealed", currentFrame >= insertionRel);
+  overlay.classList.toggle("revealed", currentFrame >= insertionRel());
+}
+
+// ---- manual loop controller ----------------------------------------------
+const holdMs = () => Math.max(0, val("hold")) * 1000;   // reveal image dwell time
+const pauseMs = () => Math.max(0, val("pause")) * 1000; // pre-loop freeze (preview only)
+function clearCycleTimers() {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
+}
+
+// The reveal hold has elapsed (or, with no image, the animation finished):
+// dismiss the image and halt playback wherever it is — this is the "ends early"
+// cut — then schedule the next cycle behind the pre-loop pause.
+function endCycle() {
+  clearCycleTimers();
+  cycleEnded = true;
+  overlay.classList.remove("revealed");
+  if (anim) anim.pause(); // freeze on the current frame so the end state is visible
+  scheduleLoop();
+}
+
+function scheduleLoop() {
+  if (!$("loopChk").checked) return; // loop off: stay frozen on the end state
+  loopTimer = setTimeout(restartCycle, pauseMs());
+}
+
+function restartCycle() {
+  loopTimer = null;
+  revealStarted = false;
+  cycleEnded = false;
+  overlay.classList.remove("revealed");
+  if (anim) { anim.setFrame(firstFrame); anim.play(); }
 }
 
 function refresh() {
@@ -82,7 +132,13 @@ function refresh() {
 Object.values(sliders).forEach((s) => s.addEventListener("input", refresh));
 $("outlineChk").addEventListener("change", (e) =>
   revealBox.style.display = e.target.checked ? "block" : "none");
-$("loopChk").addEventListener("change", (e) => { if (anim) anim.setLoop(e.target.checked); });
+// Looping is driven manually (see the cycle controller), so the checkbox only
+// gates whether we restart after a cycle. Turning it on while frozen kicks off
+// the next cycle immediately.
+$("loopChk").addEventListener("change", (e) => {
+  if (e.target.checked) { if (cycleEnded) restartCycle(); }
+  else clearCycleTimers();
+});
 $("thresh").addEventListener("input", () => { $("threshOut").textContent = String(threshVal()); regroup(); });
 window.addEventListener("resize", () => { positionOverlay(); });
 
@@ -364,6 +420,9 @@ function renderYaml() {
     out += `      y: ${fmt(cornerTop())}\n`;
     out += `      width: ${fmt(val("w"))}\n`;
     out += `      height: ${fmt(val("h"))}\n`;
+    // hold_seconds: how long the revealed image stays before it (and the
+    // animation) end. NEW field — wire into schema.lottie_library alongside speed.
+    out += `      hold_seconds: ${fmt(val("hold"))}\n`;
   }
   $("yaml").value = out;
 }
@@ -411,6 +470,8 @@ $("clearImg").addEventListener("click", () => {
 
 $("clearLottie").addEventListener("click", () => {
   if (anim) { anim.destroy(); anim = null; }
+  clearCycleTimers();
+  revealStarted = false; cycleEnded = false;
   $("lottieFile").value = "";
   originalData = null; loadedName = null;
   firstFrame = 0; totalFrames = 0; currentFrame = 0;
@@ -424,12 +485,16 @@ $("clearLottie").addEventListener("click", () => {
 // this keeps originalData pristine for the next recolour pass.
 function createAnim(data) {
   if (anim) { anim.destroy(); anim = null; }
+  clearCycleTimers();
+  revealStarted = false;
+  cycleEnded = false;
 
+  // loop is OFF — we manage looping ourselves (reveal hold + pre-loop pause).
   anim = new DotLottie({
     canvas: $("lottie"),
     data: JSON.parse(JSON.stringify(data)),
     autoplay: true,
-    loop: $("loopChk").checked,
+    loop: false,
     speed: val("speed"),
     renderConfig: { autoResize: true, devicePixelRatio: window.devicePixelRatio || 1 },
   });
@@ -455,6 +520,27 @@ function createAnim(data) {
   anim.addEventListener("frame", (e) => {
     currentFrame = e.currentFrame;
     updateRevealVisibility();
+    // Start the reveal hold the first time we cross the insertion frame. When it
+    // elapses the image and the animation end together (possibly cutting the
+    // animation short — "ends early if it needs to").
+    if (hasReveal() && !revealStarted && !cycleEnded && currentFrame >= insertionRel()) {
+      revealStarted = true;
+      holdTimer = setTimeout(endCycle, holdMs());
+    }
+  });
+
+  // Animation reached its last frame (loop is off).
+  anim.addEventListener("complete", () => {
+    if (cycleEnded) return;
+    if (hasReveal()) {
+      // A reveal hold owns the cycle end. If the hold hasn't started yet (the
+      // insertion frame is the very last frame), start it now; otherwise just
+      // freeze on the final frame with the image up until the hold expires.
+      if (!revealStarted) { revealStarted = true; holdTimer = setTimeout(endCycle, holdMs()); }
+    } else {
+      // Standalone: no image to hold — pause on the end state, then loop.
+      endCycle();
+    }
   });
 }
 

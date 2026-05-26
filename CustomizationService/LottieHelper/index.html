@@ -223,6 +223,12 @@
         <input id="speed" type="range" min="0.1" max="2" step="0.05" value="1" />
         <output id="speedOut">1</output>
       </div>
+      <p class="controls-note"><em>pause</em> holds the final frame this long before looping — a <strong>preview aid only</strong> (not in the YAML), so you can read the end state instead of it snapping back instantly.</p>
+      <div class="row">
+        <label for="pause">pause</label>
+        <input id="pause" type="range" min="0" max="3" step="0.1" value="1" />
+        <output id="pauseOut">1s</output>
+      </div>
     </div>
 
     <div class="panel" style="margin-top:20px;">
@@ -230,7 +236,7 @@
       <div class="toggles">
         <label><input type="checkbox" id="outlineChk" /> Outline reveal box</label>
       </div>
-      <p class="controls-note">The image pops in at <em>frame</em> (scale 0.5→1 + fade, 260ms ease-out — the app's ScaleReveal) and stays until the loop restarts. <em>x</em>/<em>y</em> are the image <strong>centre</strong>; the YAML below converts to the app's top-left corner.</p>
+      <p class="controls-note">The image pops in at <em>frame</em> (scale 0.5→1 + fade, 260ms ease-out — the app's ScaleReveal), holds for <em>hold</em> seconds, then the image and the animation end together (the animation is cut short if the hold expires before it finishes). <em>x</em>/<em>y</em> are the image <strong>centre</strong>; the YAML below converts to the app's top-left corner.</p>
       <div class="row">
         <label for="frame">frame</label>
         <input id="frame" type="range" min="0" max="100" step="1" value="0" />
@@ -255,6 +261,11 @@
         <label for="h">height</label>
         <input id="h" type="range" min="0" max="1" step="0.005" value="0.75" />
         <output id="hOut">0.75</output>
+      </div>
+      <div class="row">
+        <label for="hold">hold</label>
+        <input id="hold" type="range" min="0.2" max="6" step="0.1" value="2" />
+        <output id="holdOut">2s</output>
       </div>
     </div>
 
