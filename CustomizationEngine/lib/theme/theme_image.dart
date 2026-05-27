@@ -3,12 +3,15 @@ import 'package:flutter/widgets.dart';
 
 import 'package:customization_engine/customization_service.dart';
 import 'package:customization_engine/service_locator.dart';
+import 'package:customization_engine/theme/fallback_image_provider.dart';
 
 /// App-agnostic image resolver. Mirrors `ThemeColor.color` /
 /// `ThemeText.value`: looks up a slot id in the loaded customization
 /// and returns a network [ImageProvider] for it, falling back to the
 /// caller's bundled [fallback] when there is no customization (DI not
-/// set up, nothing loaded, slot absent, or empty URL). Never throws.
+/// set up, nothing loaded, slot absent, or empty URL) AND when a present
+/// slot's network bytes fail to load (404, timeout, corrupt). Never throws
+/// and never renders a broken image — see [FallbackImageProvider].
 ///
 /// Normally returns a disk-cached [CachedNetworkImageProvider]. When the
 /// service is in `livePreview` mode (admin live preview) it returns a
@@ -39,12 +42,16 @@ class ThemeImage {
     final raw = service.current?.images[slot] ?? '';
     if (raw.isEmpty) return fallback;
     final url = service.resolveImageUrl(raw);
-    if (service.livePreview) {
-      // Plain RAM-only provider — no disk cache to litter on repeated dev
-      // reloads. The URL already carries the server's content-hash `?v=`
-      // token, so it busts correctly whenever the asset's bytes change.
-      return NetworkImage(url);
-    }
-    return CachedNetworkImageProvider(url);
+    final ImageProvider base = service.livePreview
+        // Plain RAM-only provider — no disk cache to litter on repeated dev
+        // reloads. The URL already carries the server's content-hash `?v=`
+        // token, so it busts correctly whenever the asset's bytes change.
+        ? NetworkImage(url)
+        : CachedNetworkImageProvider(url);
+    // The CustomizationService is a best-effort live override: if these
+    // network bytes fail (404, timeout, corrupt) the resolver degrades to
+    // the caller's bundled [fallback] — a bad override asset must never
+    // surface as a thrown HttpException or a broken image box in the app.
+    return FallbackImageProvider(base, fallback);
   }
 }
