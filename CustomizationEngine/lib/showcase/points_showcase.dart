@@ -10,7 +10,7 @@ import 'package:customization_engine/showcase/showcase_tokens.dart';
 import 'package:customization_engine/showcase/support/count_up_text.dart';
 import 'package:customization_engine/showcase/support/showcase_scaffold.dart';
 import 'package:customization_engine/showcase/support/staggered_reveal.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
 import 'package:customization_engine/theme/theme_image.dart';
 
 // Per-screen layout/timing math — clone of MobileApp's points_body _k consts.

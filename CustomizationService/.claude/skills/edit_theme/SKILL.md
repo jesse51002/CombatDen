@@ -33,7 +33,7 @@ Four levers on an existing run. The first three are surgical (never a full
 re-generation); the fourth IS a full re-generation, in place.
 
 1. **Re-make slots** — `scripts/regen/run.py`: re-roll one or more
-   **colour / font / text / icon / lottie** slots. Everything you don't name
+   **colour / font / text / icon** slots. Everything you don't name
    is preserved **verbatim**; the kept slots are shown to the model as fixed
    context so the re-made ones harmonise (colour re-checks WCAG-AA against the
    fixed background/text).
@@ -93,7 +93,7 @@ slots, or which brief field is meant is ambiguous, ask (`AskUserQuestion`).
 ## Lever A — re-make slots (`regen`)
 1. Locate the run dir `apps/<app_id>/<run_id>/` (holds `app.yaml`,
    `customization.yaml`, `output.yaml`); ask if unnamed.
-2. Identify the slot id(s) — colour/font/text/icon/lottie (the script lists
+2. Identify the slot id(s) — colour/font/text/icon (the script lists
    valid ones on a wrong id; or read `app.yaml`). Confirm any described-in-words
    slot.
 3. Confirm spend, then from the package root (`poetry run` mandate in

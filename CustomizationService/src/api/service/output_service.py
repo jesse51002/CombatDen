@@ -31,19 +31,17 @@ from src.api.schema.style_summary import StyleSummary
 from src.core.run_context import (
     FINAL_IMAGES_DIRNAME,
     ICONS_DIRNAME,
-    LOTTIES_DIRNAME,
     OUTPUT_FILENAME,
 )
 
 # Run-dir layout — `output.yaml`, `final_images/` (the one place a delivered
-# per-slot PNG lives; `images/` raw+cutout intermediates are never served),
-# `icons/` (per-slot SVGs) and `lotties/` (per-slot baked animation JSONs) — is
+# per-slot PNG lives; `images/` raw+cutout intermediates are never served)
+# and `icons/` (per-slot SVGs) — is
 # owned by src.core.run_context. The pipeline writes runs against those
 # constants, so the API reads them back from the same source rather than
 # redefining them.
 IMAGE_SUFFIX = ".png"
 ICON_SUFFIX = ".svg"
-LOTTIE_SUFFIX = ".json"
 # The image slot a style picker shows as each style's card art.
 CELEBRATION_SLOT = "celebration_image"
 
@@ -157,39 +155,6 @@ class OutputService:
                 f"from {ICONS_DIRNAME}/ — run {app_id}/{run_id} is incomplete"
             )
         return icon
-
-    async def lottie_file(
-        self, app_id: str, run_id: str, slot_id: str
-    ) -> Path:
-        """The on-disk baked ``.json`` for one declared lottie slot.
-
-        Exactly ``<run_dir>/lotties/<slot_id>.json`` — the one place the
-        lottie module writes a slot's baked, fully-recoloured animation
-        (the colour is baked in at pipeline time, so the served file plays
-        as-is). Same three-case 404 contract as :meth:`icon_file`: malformed
-        slot id, slot not declared in the run's ``output.yaml``, or declared
-        but its baked JSON is absent (an incomplete run).
-        """
-        if not _ID_PATTERN.match(slot_id):
-            raise NotFoundError(f"invalid slot id {slot_id!r}")
-        output = await self.load(app_id, run_id)
-        if slot_id not in output.lottie_set.lotties:
-            raise NotFoundError(
-                f"lottie slot {slot_id!r} is not declared in run "
-                f"{app_id}/{run_id}"
-            )
-        lottie = (
-            self._safe_run_dir(app_id, run_id)
-            / LOTTIES_DIRNAME
-            / f"{slot_id}{LOTTIE_SUFFIX}"
-        )
-        if not lottie.is_file():
-            raise NotFoundError(
-                f"lottie slot {slot_id!r} is declared but its baked JSON is "
-                f"missing from {LOTTIES_DIRNAME}/ — run {app_id}/{run_id} is "
-                "incomplete"
-            )
-        return lottie
 
     async def list_styles(self, app_id: str) -> list[StyleSummary]:
         """The app's named, selectable styles — one per run directory

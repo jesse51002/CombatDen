@@ -22,9 +22,4 @@ class EngineTokens {
   /// Last-resort icon tint when no colour and no ambient `IconTheme` apply.
   /// The live default resolves `ThemeColor.token('text', ...)` against this.
   static const Color fallbackIconColor = Color(0xFFF4F3EE);
-
-  /// Last-resort brand colour for the Lottie wildcard/region tint when no
-  /// customization is loaded. The live value resolves
-  /// `ThemeColor.token('primary', ...)` against this.
-  static const Color fallbackBrand = Color(0xFFFF6C2D);
 }

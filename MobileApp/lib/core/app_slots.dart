@@ -96,15 +96,4 @@ class CombatDenSlots {
     navReward,
     navVideos,
   ];
-
-  // ---- Lottie slots ----
-  // The two member-app celebration animations. Consumed via
-  // `ThemeLottie` (slot + bundled `.json` fallback).
-  static const String bookingCelebration = 'booking_celebration';
-  static const String streakCelebration = 'streak_celebration';
-
-  static const List<String> expectedLotties = [
-    bookingCelebration,
-    streakCelebration,
-  ];
 }

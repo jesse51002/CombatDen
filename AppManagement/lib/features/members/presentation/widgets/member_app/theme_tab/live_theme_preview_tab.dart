@@ -36,7 +36,6 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
     expectedFonts: ShowcaseSlots.expectedFonts,
     expectedText: ShowcaseSlots.expectedText,
     expectedIcons: ShowcaseSlots.expectedIcons,
-    expectedLotties: ShowcaseSlots.expectedLotties,
     // Live preview: RAM-only image provider (no disk-cache litter on dev
     // reloads). A page reload re-fetches the config and content-hashed
     // `?v=` URLs pick up any asset edits.

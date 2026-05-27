@@ -35,7 +35,6 @@ Future<void> main() async {
     expectedFonts: CombatDenSlots.expectedFonts,
     expectedText: CombatDenSlots.expectedText,
     expectedIcons: CombatDenSlots.expectedIcons,
-    expectedLotties: CombatDenSlots.expectedLotties,
   );
 
   runApp(const MobileAppRoot());

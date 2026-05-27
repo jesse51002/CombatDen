@@ -5,8 +5,6 @@ from schema.color_mode import ColorMode
 from schema.color_role import ColorRole
 from schema.complexity import Complexity
 from schema.customization import ColorsDirection, Customization, DesignDirection
-from schema.lottie_library import InsertionPoint, LottiePreset
-from schema.lottie_type import LottieType
 from schema.output import (
     ColorOutput,
     ColorPalette,
@@ -23,8 +21,6 @@ from schema.output import (
     ImageOutput,
     ImageSet,
     ImageToImage,
-    LottieOutput,
-    LottieSet,
     NodeOutput,
     Output,
     OverwriteSpecs,
@@ -38,7 +34,6 @@ from schema.slots import (
     FontSlot,
     IconSlot,
     ImageSlot,
-    LottieSlot,
     SlotBase,
     TextSlot,
 )
@@ -72,13 +67,7 @@ __all__ = [
     "ImageOutput",
     "ImageSet",
     "ImageSlot",
-    "InsertionPoint",
-    "LottieOutput",
-    "LottiePreset",
-    "LottieSet",
     "ImageToImage",
-    "LottieSlot",
-    "LottieType",
     "NodeOutput",
     "OklchColor",
     "Output",

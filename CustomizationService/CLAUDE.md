@@ -19,7 +19,7 @@ A run directory's **produced artifacts** — `output.yaml`, `expansion_cost.yaml
 and the files under `final_images/` / `images/` / `icons/` — are **never edited
 by hand**. To change anything in an existing run you use the scripts:
 `scripts/expand` (fill not-yet-done slots), `scripts/regen` (re-make
-colour/font/text/icon/lottie slots), `scripts/regen_image` (images),
+colour/font/text/icon slots), `scripts/regen_image` (images),
 `scripts/edit_customization` (a validated, targeted edit of the brief
 `customization.yaml`), or a full pipeline run (`src/cli.py`). The brief is the
 one editable *input* — and even it goes through `edit_customization` (which
@@ -123,7 +123,7 @@ lands in `output.yaml`** — never a partial, a diff, a delta, or a handle
 to fetch the rest. The node-return-type ⇄ output-group mapping is 1:1:
 `ColorNode → ColorPalette` (= `color_set`), `FontNode → FontSet`
 (= `font_set`), `ImageNode → ImageOutput` (= `image_set.images[id]`),
-`LottieNode → LottieOutput` (= `lottie_set.lotties[id]`), and so on.
+and so on.
 
 **Why this is a hard invariant, not a style note:** the `expand` flow
 (`scripts/expand/run.py`, `src/executor/seed.py`) reconstructs the

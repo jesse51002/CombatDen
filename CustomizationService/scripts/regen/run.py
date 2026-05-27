@@ -2,7 +2,7 @@
 free-text steering.
 
 Reopens a produced run directory and re-makes just the slot(s) you name —
-a colour, font, text, icon, or lottie slot — while keeping everything else
+a colour, font, text, or icon slot — while keeping everything else
 byte-for-byte. Every other node is seeded from the saved ``output.yaml`` and
 skipped; the targeted slots' nodes re-run with the prior shown as fixed
 context, so an atomic node (colour/font/text/icon) regenerates only the
@@ -53,7 +53,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="regen",
         description=(
-            "Regenerate one or more colour/font/text/icon/lottie slots of an "
+            "Regenerate one or more colour/font/text/icon slots of an "
             "existing run in place, preserving everything else. Images use "
             "regen_image."
         ),

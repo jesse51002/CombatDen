@@ -26,7 +26,6 @@ from schema import (
     FontSet,
     IconSet,
     ImageSet,
-    LottieSet,
     Output,
     OverwriteSpecs,
     TextSet,
@@ -102,7 +101,6 @@ class Pipeline:
             node_set.color,
             node_set.font,
             *node_set.images,
-            *node_set.lotties,
         ]
         if node_set.text is not None:
             nodes.append(node_set.text)
@@ -138,7 +136,7 @@ class Pipeline:
 
         Only the *produced* artifacts are removed — ``output.yaml``,
         ``expansion_cost.yaml`` and the ``images/`` / ``final_images/`` /
-        ``icons/`` / ``lotties/`` trees; the run's editable *inputs*
+        ``icons/`` trees; the run's editable *inputs*
         (``app.yaml``, ``customization.yaml``) are kept, because the run
         regenerates from them. A fresh run dir (no produced artifacts) is a
         no-op — nothing to clear.
@@ -153,7 +151,6 @@ class Pipeline:
             run_ctx.image_dir,
             run_ctx.final_image_dir,
             run_ctx.icon_dir,
-            run_ctx.lottie_dir,
         )
         produced = [
             run_ctx.output_path(),
@@ -373,17 +370,6 @@ class Pipeline:
                 if slot.id in resolved
             }
         )
-        # Each lottie node that resolved contributes its slot; a slot whose
-        # COLOR dep failed (or, for a reveal, whose image failed) was
-        # skipped and is simply absent — the honest partial answer, same as
-        # images.
-        lottie_set = LottieSet(
-            lotties={
-                slot.id: resolved[slot.id]
-                for slot in run_ctx.app.lotties
-                if slot.id in resolved
-            }
-        )
         return Output(
             app=run_ctx.app.id,
             display_name=run_ctx.app.display_name,
@@ -393,5 +379,4 @@ class Pipeline:
             font_set=font_set,
             text_set=text_set,
             icon_set=icon_set,
-            lottie_set=lottie_set,
         )

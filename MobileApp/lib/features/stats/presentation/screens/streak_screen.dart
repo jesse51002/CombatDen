@@ -28,6 +28,10 @@ class _StreakScreenState extends State<StreakScreen> {
       controller: _controller,
       body: StreakBody(stats: mockStreakStats, controller: _controller),
       ctaLabel: 'Continue',
+      onClose: () => Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.home,
+        (r) => false,
+      ),
       onCtaPressed: () => Navigator.of(
         context,
       ).pushReplacementNamed(AppRoutes.postClassRank),

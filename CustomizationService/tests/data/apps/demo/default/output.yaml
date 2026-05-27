@@ -1188,6 +1188,4 @@ text_set:
 icon_set:
   icons: {}
   attribution: null
-lottie_set:
-  lotties: {}
 cost: null

@@ -13,13 +13,7 @@ class ShowcaseAsset {
   ShowcaseAsset._();
 
   static const String _images = 'packages/customization_engine/assets/images/';
-  static const String _animations =
-      'packages/customization_engine/assets/animations/';
 
   /// An [ImageProvider] for a packaged image, e.g. `streak_icon.png`.
   static ImageProvider image(String file) => AssetImage('$_images$file');
-
-  /// The asset path string for a packaged Lottie `.json`, for
-  /// `ThemeLottie(fallbackAsset: ...)` / `ThemeRevealLottie(fallbackAsset:)`.
-  static String animation(String file) => '$_animations$file';
 }

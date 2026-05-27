@@ -184,7 +184,7 @@ class Writer:
         API will serve, so an edited asset gets a changed ``?v=`` URL.
 
         Hashes the *served* file by slot id — ``final_images/<slot>.png``,
-        ``icons/<slot>.svg``, ``lotties/<slot>.json`` (the same paths the API
+        ``icons/<slot>.svg`` (the same paths the API
         streams) — not the recorded ``path``, so a moved run dir still hashes
         correctly. Identical bytes hash identically, so an unchanged slot keeps
         a stable URL and only genuinely-changed assets bust their cache.
@@ -196,10 +196,6 @@ class Writer:
         for slot_id, icon in output.icon_set.icons.items():
             icon.version = self._content_version(
                 Path(str(run_ctx.icon_path(slot_id)))
-            )
-        for slot_id, lottie in output.lottie_set.lotties.items():
-            lottie.version = self._content_version(
-                Path(str(run_ctx.lottie_path(slot_id)))
             )
 
     @staticmethod

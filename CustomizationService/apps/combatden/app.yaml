@@ -295,31 +295,3 @@ icons:
       videos" at ~24px (e.g. a play triangle, a film/clapper, a media tile —
       brand's choice). Functional navigation, never celebratory; must stay
       legible and obvious at small size in both active and inactive states.
-
-# Two standalone celebration animations for the member app's two real
-# animation moments. Standalone = plays on its own; neither reveals or
-# depends on an image, so neither sets depends_on. The MobileApp recolours
-# each preset's regions to the live palette at render time and falls back to
-# a bundled .json if the pipeline doesn't supply one.
-lotties:
-  - id: booking_celebration
-    description: >-
-      A celebratory burst that plays on the ClassBookedScreen the moment a
-      booking succeeds — a short, energetic flourish around the "Class
-      Booked" beat, directly tied to the booking-success payoff (e.g. a
-      confetti burst, expanding rings, a checkmark drawing on, a spark
-      shower — the brand's own motion language). Standalone and
-      self-contained: it does not reveal or depend on any image. Peak
-      congratulatory energy: "you're in, your spot is locked".
-    required_type: standalone
-  - id: streak_celebration
-    description: >-
-      The animation hero of the post-class Streak screen (the 1st post-class
-      card) — an energetic, momentum-themed flourish (a build / surge of
-      "keep it going" energy, the brand's own motion language — e.g. a flame
-      flare, a rising surge, an energy ring, sparks building) that plays as
-      the streak is celebrated. It REVEALS the streak icon: the icon pops out
-      partway through the flourish. Reveal type, depending on the streak_icon
-      image it composites. Persistent, driving, "keep it going" energy.
-    required_type: reveal
-    depends_on: streak_icon

@@ -8,7 +8,7 @@ This file guides Claude Code when working in this package.
 white-label customization **runtime**: it fetches a tenant's resolved branding
 from the CustomizationService API at startup, disk-caches the last-good copy,
 and exposes brand-overridable resolvers (`ThemeColor`, `ThemeImage`,
-`ThemeIcon`, `ThemeFont`, `ThemeText`, `ThemeLottie`, `ThemeRevealLottie`) plus
+`ThemeIcon`, `ThemeFont`, `ThemeText`) plus
 a set of **showcase** preview screens (`lib/showcase/`).
 
 It was extracted from `../MobileApp/lib/customization/` so two systems can share
@@ -33,7 +33,7 @@ different language; the name collision is why this package is
   parameter — never reach into a consuming app.
   - Enforce: `grep -rn 'package:mobile_app\|package:app_management' lib` must be
     empty.
-- **Brand values resolve LIVE.** Colours/fonts/images/text/icons/lotties come
+- **Brand values resolve LIVE.** Colours/fonts/images/text/icons come
   from the loaded customization via the resolvers; the only hardcoded values are
   the const CombatDen fallbacks (in `EngineTokens` / `ShowcaseTokens`) used when
   nothing is loaded. Resolvers never throw.

@@ -9,17 +9,14 @@ import 'package:customization_engine/showcase/support/count_up_text.dart';
 import 'package:customization_engine/showcase/support/showcase_scaffold.dart';
 import 'package:customization_engine/showcase/support/staggered_reveal.dart';
 import 'package:customization_engine/showcase/support/streak_week_strip.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
-import 'package:customization_engine/theme/lottie/theme_reveal_lottie.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/scale_reveal.dart';
 import 'package:customization_engine/theme/theme_image.dart';
 
 // Per-screen layout/timing math (clone of MobileApp's streak_body _k consts).
-const double _kLottieSize = 320;
-const double _kRevealAt = 0.75;
-const double _kRevealX = 0.2;
-const double _kRevealY = 0.2;
-const double _kRevealWidth = 0.6;
-const double _kRevealHeight = 0.6;
+const double _kIconSize = 320;
+// How long the streak icon dwells after its reveal before the stats cascade.
+const Duration _kRevealHold = Duration(milliseconds: 900);
 
 // How long the stats statement holds before the strike replays.
 const Duration _kStatsHold = Duration(milliseconds: 2600);
@@ -38,9 +35,8 @@ const List<ShowcaseStreakDay> _kWeekDays = [
 ];
 
 /// Exact visual clone of the member app's post-class **streak celebration**
-/// (`StreakScreen` / `StreakBody`): a brand-recoloured lightning strike pops
-/// the streak icon out of itself, then the week count + "week streak" +
-/// subtitle + week strip cascade in. Loops.
+/// (`StreakScreen` / `StreakBody`): the streak icon scale-reveals in, then the
+/// week count + "week streak" + subtitle + week strip cascade in. Loops.
 class StatsShowcase extends StatefulWidget {
   const StatsShowcase({super.key, this.loop = true, this.onCycleComplete});
 
@@ -53,8 +49,22 @@ class StatsShowcase extends StatefulWidget {
 
 class _StatsShowcaseState extends State<StatsShowcase> {
   bool _showStats = false;
-  int _cycle = 0; // re-keying the strike rebuilds + restarts it
+  int _cycle = 0; // re-keying the reveal rebuilds + restarts it
   Timer? _hold;
+  Timer? _revealTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startReveal();
+  }
+
+  void _startReveal() {
+    _revealTimer = Timer(
+      CelebrationTimings.revealDuration + _kRevealHold,
+      _toStats,
+    );
+  }
 
   void _toStats() {
     if (!mounted || _showStats) return;
@@ -70,11 +80,13 @@ class _StatsShowcaseState extends State<StatsShowcase> {
       _showStats = false;
       _cycle++;
     });
+    _startReveal();
   }
 
   @override
   void dispose() {
     _hold?.cancel();
+    _revealTimer?.cancel();
     super.dispose();
   }
 
@@ -85,26 +97,18 @@ class _StatsShowcaseState extends State<StatsShowcase> {
         padding: const EdgeInsets.symmetric(
           vertical: ShowcaseTokens.spacingBig,
         ),
-        child: Center(child: _showStats ? const _StatsContent() : _strike()),
+        child: Center(child: _showStats ? const _StatsContent() : _reveal()),
       ),
     );
   }
 
-  Widget _strike() {
+  Widget _reveal() {
     return SizedBox(
-      width: _kLottieSize,
-      height: _kLottieSize,
-      child: ThemeRevealLottie(
+      width: _kIconSize,
+      height: _kIconSize,
+      child: ScaleReveal(
         key: ValueKey(_cycle),
-        slot: ShowcaseSlots.streakCelebration,
-        fallbackAsset: ShowcaseAsset.animation('lightning_neon.json'),
-        fallbackRevealAt: _kRevealAt,
-        fallbackX: _kRevealX,
-        fallbackY: _kRevealY,
-        fallbackWidth: _kRevealWidth,
-        fallbackHeight: _kRevealHeight,
-        onComplete: _toStats,
-        revealedImage: Image(
+        child: Image(
           image: ThemeImage.image(
             ShowcaseSlots.streakIcon,
             fallback: ShowcaseAsset.image('streak_icon.png'),

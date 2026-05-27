@@ -1,5 +1,5 @@
 """The customizable slot types: `ColorSlot`, `ImageSlot`, `FontSlot`,
-`TextSlot`, `IconSlot`, `LottieSlot`."""
+`TextSlot`, `IconSlot`."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from schema.color_role import ColorRole
-from schema.lottie_type import LottieType
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -150,39 +149,4 @@ class TextSlot(SlotBase):
             self.min_words = self.max_words
         if self.min_chars > self.max_chars:
             self.min_chars = self.max_chars
-        return self
-
-
-class LottieSlot(SlotBase):
-    """A named animation slot resolved to ONE preset from the global
-    Lottie library, plus a region->palette-role recolour map.
-
-    ``required_type`` is the animation type this slot needs; only library
-    presets carrying that tag are offered to the selection LLM.
-
-    ``depends_on`` is set ONLY for reveal slots and names the IMAGE slot
-    id this animation reveals (the revealed image's prompt is fed to the
-    selection call so it can pick a fitting reveal). Standalone slots
-    leave it ``None``. The cross-reference check (the image id exists)
-    lives on ``AppFormat`` — a slot in isolation can't see the image
-    list; only the standalone/reveal consistency is checked here.
-    """
-
-    required_type: LottieType
-    depends_on: str | None = None
-
-    @model_validator(mode="after")
-    def _reveal_depends_consistency(self) -> "LottieSlot":
-        if self.required_type is LottieType.REVEAL and self.depends_on is None:
-            raise ValueError(
-                f"reveal lottie slot {self.id!r} must set depends_on "
-                "(the image slot id it reveals)"
-            )
-        if (
-            self.required_type is LottieType.STANDALONE
-            and self.depends_on is not None
-        ):
-            raise ValueError(
-                f"standalone lottie slot {self.id!r} must not set depends_on"
-            )
         return self

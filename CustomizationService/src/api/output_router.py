@@ -184,57 +184,6 @@ async def get_icon(
 
 
 @output_router.get(
-    "/{app_id}/{run_id}/lotties/{slot_id}",
-    response_class=FileResponse,
-    summary="Stream one lottie slot's baked JSON",
-    responses={
-        200: {
-            "content": {"application/json": {}},
-            "description": "The baked Lottie JSON bytes",
-        },
-        404: {"description": "No such app/run/slot or baked file"},
-        422: {"description": "Run exists but its output.yaml is stale"},
-    },
-)
-async def get_lottie(
-    app_id: str, run_id: str, slot_id: str
-) -> FileResponse:
-    """Stream the baked, recoloured animation JSON for one declared lottie
-    slot (``<run>/lotties/<slot>.json``). The colour is baked in at pipeline
-    time, so this serves the play-ready file; the playback metadata (speed,
-    reveal/insertion point, hold) rides on the run's
-    ``GET /apps/{app}/{run}`` payload (``lotties[slot]``)."""
-    try:
-        path = await output_service().lottie_file(app_id, run_id, slot_id)
-        return FileResponse(
-            path,
-            media_type="application/json",
-            headers=_ASSET_CACHE_CONTROL,
-        )
-    except NotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from None
-    except InvalidRunError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to serve lottie %s/%s/%s",
-            app_id,
-            run_id,
-            slot_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to serve lottie",
-        ) from None
-
-
-@output_router.get(
     "/{app_id}/{run_id}/fonts/{slot_id}",
     response_model=FontDeliveryResponse,
     summary="Get the deliverable Google Font payload for one font slot",
