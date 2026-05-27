@@ -3,8 +3,8 @@
 A node steered by a free-text ``overwrite_specs`` records that instruction
 on the slot it produced, so a later reader (the end-user agent) can see
 *what made this slot* and re-steer it. The field lives on a shared base so
-all six per-item outputs carry it uniformly — ``ColorOutput``, ``FontOutput``,
-``TextOutput``, ``IconOutput``, ``ImageOutput``, ``LottieOutput``.
+all per-item outputs carry it uniformly — ``ColorOutput``, ``FontOutput``,
+``TextOutput``, ``IconOutput``, ``ImageOutput``.
 
 Per-slot, not per-node: the atomic nodes (colour/font/text/icon) resolve
 every slot in one call, but the override is recorded against the single

@@ -8,7 +8,7 @@ import 'package:customization_engine/showcase/showcase_tokens.dart';
 import 'package:customization_engine/showcase/support/showcase_primary_button.dart';
 import 'package:customization_engine/showcase/support/showcase_scaffold.dart';
 import 'package:customization_engine/showcase/support/staggered_reveal.dart';
-import 'package:customization_engine/theme/lottie/scale_reveal.dart';
+import 'package:customization_engine/theme/animation/scale_reveal.dart';
 import 'package:customization_engine/theme/theme_image.dart';
 import 'package:customization_engine/theme/theme_text.dart';
 

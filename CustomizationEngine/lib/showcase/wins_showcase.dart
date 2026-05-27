@@ -10,7 +10,7 @@ import 'package:customization_engine/showcase/showcase_slots.dart';
 import 'package:customization_engine/showcase/showcase_tokens.dart';
 import 'package:customization_engine/showcase/support/showcase_scaffold.dart';
 import 'package:customization_engine/showcase/support/staggered_reveal.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
 import 'package:customization_engine/theme/theme_image.dart';
 import 'package:customization_engine/theme/theme_text.dart';
 

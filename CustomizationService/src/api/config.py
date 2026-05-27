@@ -16,9 +16,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Root that holds `<app_id>/<run_id>/output.yaml` + images. Lottie slots
-    # are served as baked per-run files from here too (``<run>/lotties/``), so
-    # there is no separate library root on the delivery side.
+    # Root that holds `<app_id>/<run_id>/output.yaml` + images.
     apps_root: Path = _DEFAULT_APPS_ROOT
     # No auth: the emulator hits this directly. `["*"]` keeps it open.
     cors_origins: list[str] = ["*"]

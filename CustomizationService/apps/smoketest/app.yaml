@@ -94,16 +94,3 @@ icons:
       A stationary indoor cycling / spin-bike icon used to mark a ride
       class in the schedule. Should clearly read as an exercise bike,
       gentle and rounded to match the studio's calm, airy aesthetic.
-
-# One standalone animation to exercise the full lottie flow (preset
-# selection + region→palette-role recolour) without ballooning cost.
-# Standalone = plays on its own; it must NOT set depends_on.
-lotties:
-  - id: booking_celebration_burst
-    description: >-
-      A celebratory burst that plays on the ClassBookedScreen the moment a
-      booking succeeds — a short, energetic flourish around the "Class
-      Booked" beat. Standalone and self-contained: it does not reveal or
-      depend on any image. Peak congratulatory energy: "you're in, your
-      spot is locked".
-    required_type: standalone

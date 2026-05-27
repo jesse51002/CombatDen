@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:customization_engine/showcase/showcase_tokens.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
 
 /// Showcase clone of MobileApp's `SparkleHero`: sparkles scattered around a
 /// hero accent (the "YOU EARNED / 3,400 / POINTS" block). Each entry is

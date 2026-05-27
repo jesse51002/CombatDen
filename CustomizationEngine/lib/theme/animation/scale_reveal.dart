@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
 
 /// One-shot scale + fade entrance. Fires once on `initState` after [delay].
 /// Pairs with [StaggeredReveal] when a more dramatic entrance is wanted —

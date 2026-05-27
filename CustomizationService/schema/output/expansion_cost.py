@@ -31,7 +31,7 @@ class ExpansionEntry(BaseModel):
     ``expanded_at`` is the UTC stamp of the pass (same ``%Y%m%dT%H%M%SZ``
     shape as a run id, so entries sort chronologically). ``generated`` is
     the executor node keys this pass actually ran — the ``color`` / ``font``
-    / ``text`` / ``icon`` roots and per-slot image/lottie ids that weren't
+    / ``text`` / ``icon`` roots and per-slot image ids that weren't
     yet done (expand) or were re-made (regenerate). ``overwrite_specs`` is the
     ``OverwriteSpecs`` applied this pass (its ``specs`` / ``image_to_image``) —
     empty for a plain expand — so the log says exactly what was asked of the

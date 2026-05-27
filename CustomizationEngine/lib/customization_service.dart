@@ -32,7 +32,6 @@ class CustomizationService extends ChangeNotifier {
     required this.expectedFontKeys,
     required this.expectedTextKeys,
     required this.expectedIconKeys,
-    required this.expectedLottieKeys,
     this.livePreview = false,
   });
 
@@ -45,7 +44,6 @@ class CustomizationService extends ChangeNotifier {
   final List<String> expectedFontKeys;
   final List<String> expectedTextKeys;
   final List<String> expectedIconKeys;
-  final List<String> expectedLottieKeys;
 
   /// When true, image resolvers bypass the on-disk image cache and use a
   /// plain RAM-only `NetworkImage` instead, so repeated dev reloads of the
@@ -154,7 +152,6 @@ class CustomizationService extends ChangeNotifier {
     final fonts = _current?.fonts ?? const {};
     final texts = _current?.texts ?? const {};
     final icons = _current?.icons ?? const {};
-    final lotties = _current?.lotties ?? const {};
     final missingColors = expectedColorKeys
         .where((k) => colors[k]?.color == null)
         .toList();
@@ -170,15 +167,11 @@ class CustomizationService extends ChangeNotifier {
     final missingIcons = expectedIconKeys
         .where((k) => (icons[k] ?? '').isEmpty)
         .toList();
-    final missingLotties = expectedLottieKeys
-        .where((k) => (lotties[k]?.url ?? '').isEmpty)
-        .toList();
     if (missingColors.isEmpty &&
         missingImages.isEmpty &&
         missingFonts.isEmpty &&
         missingTexts.isEmpty &&
-        missingIcons.isEmpty &&
-        missingLotties.isEmpty) {
+        missingIcons.isEmpty) {
       return;
     }
 
@@ -197,8 +190,6 @@ class CustomizationService extends ChangeNotifier {
       '${missingTexts.isEmpty ? "-" : missingTexts.join(", ")}\n'
       '  icons missing : '
       '${missingIcons.isEmpty ? "-" : missingIcons.join(", ")}\n'
-      '  lotties missing: '
-      '${missingLotties.isEmpty ? "-" : missingLotties.join(", ")}\n'
       '========================================================\n',
     );
   }

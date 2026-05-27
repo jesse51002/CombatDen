@@ -15,8 +15,6 @@ from schema.output.icon_output import IconOutput
 from schema.output.icon_set import IconSet
 from schema.output.image_output import ImageOutput
 from schema.output.image_set import ImageSet
-from schema.output.lottie_output import LottieOutput
-from schema.output.lottie_set import LottieSet
 from schema.output.node_output import NodeOutput
 from schema.output.output import Output
 from schema.output.overwrite_specs import ImageToImage, OverwriteSpecs
@@ -39,8 +37,6 @@ __all__ = [
     "IconSet",
     "ImageOutput",
     "ImageSet",
-    "LottieOutput",
-    "LottieSet",
     "ImageToImage",
     "NodeOutput",
     "Output",

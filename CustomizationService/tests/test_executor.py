@@ -25,8 +25,6 @@ from schema import (
     IconSet,
     ImageOutput,
     ImageSet,
-    LottieOutput,
-    LottieSet,
     NodeOutput,
     Output,
     OverwriteSpecs,
@@ -48,7 +46,7 @@ _TEXT = DependencyKind.TEXT.value
 _ICON = DependencyKind.ICON.value
 
 # Committed demo fixture: a real (partial) run — colour + one image done,
-# fonts/texts/icons/lotties declared in app.yaml but absent from output.yaml.
+# fonts/texts/icons declared in app.yaml but absent from output.yaml.
 _DEMO_DIR = Path(__file__).resolve().parent / "data" / "apps" / "demo"
 
 
@@ -330,13 +328,11 @@ def test_build_seed_is_slot_level() -> None:
     # Seeded values are the saved per-item models verbatim.
     assert seed["primary"] is output.color_set.colors["primary"]
     assert seed["hero"] is output.image_set.images["hero"]
-    # To-(re)generate is the slot complement: the absent fonts/texts/icons/
-    # lotties.
+    # To-(re)generate is the slot complement: the absent fonts/texts/icons.
     assert all_slot_ids(app) - seed.keys() == {
         "display", "body",
         "booked_screen", "cancel_cta", "home_greeting",
         "home_tab", "search_action", "celebration_badge",
-        "onboarding_pulse", "streak_reveal",
     }
 
 
@@ -378,14 +374,13 @@ def test_expansion_cost_log_round_trips() -> None:
 
 
 def test_per_item_outputs_inherit_node_output() -> None:
-    """All six per-item output models carry the shared overwrite_specs."""
+    """All per-item output models carry the shared overwrite_specs."""
     for model in (
         ColorOutput,
         FontOutput,
         TextOutput,
         IconOutput,
         ImageOutput,
-        LottieOutput,
     ):
         assert issubclass(model, NodeOutput)
 
@@ -464,7 +459,7 @@ def test_build_all_threads_specs_seed_and_declared(tmp_path: Path) -> None:
 
 def _all_nodes(graph: Any) -> list[Any]:
     """Every node object on a built Graph (text/icon may be None)."""
-    nodes = [graph.color, graph.font, *graph.images, *graph.lotties]
+    nodes = [graph.color, graph.font, *graph.images]
     if graph.text is not None:
         nodes.append(graph.text)
     if graph.icon is not None:
@@ -526,16 +521,14 @@ def test_content_version_hashes_bytes(tmp_path: Path) -> None:
 def test_stamp_versions_fingerprints_each_served_asset(
     tmp_path: Path,
 ) -> None:
-    """``_stamp_versions`` fingerprints the served file for every image,
-    icon and lottie slot; a slot whose file is missing stays unversioned."""
+    """``_stamp_versions`` fingerprints the served file for every image
+    and icon slot; a slot whose file is missing stays unversioned."""
     ctx = _ctx(tmp_path, [{"id": "hero", "description": "a hero"}])
 
     png = b"\x89PNG fake hero bytes"
     svg = b"<svg>home</svg>"
-    lottie = b'{"v":"5.7","layers":[]}'
     Path(str(ctx.image_path("hero"))).write_bytes(png)
     Path(str(ctx.icon_path("nav_home"))).write_bytes(svg)
-    Path(str(ctx.lottie_path("cel"))).write_bytes(lottie)
 
     out = Output(
         app="demo",
@@ -561,18 +554,6 @@ def test_stamp_versions_fingerprints_each_served_asset(
                 )
             }
         ),
-        lottie_set=LottieSet(
-            lotties={
-                "cel": LottieOutput(
-                    preset_id="p",
-                    preset_file="p.json",
-                    display_name="Cel",
-                    path=ctx.lottie_path("cel"),
-                    speed=1.0,
-                    region_roles={},
-                )
-            }
-        ),
     )
 
     Writer()._stamp_versions(out, ctx)
@@ -585,8 +566,4 @@ def test_stamp_versions_fingerprints_each_served_asset(
     assert (
         out.icon_set.icons["nav_home"].version
         == hashlib.sha256(svg).hexdigest()[:12]
-    )
-    assert (
-        out.lottie_set.lotties["cel"].version
-        == hashlib.sha256(lottie).hexdigest()[:12]
     )

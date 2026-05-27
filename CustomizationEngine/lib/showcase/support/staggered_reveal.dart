@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
 
 /// Clone of MobileApp's `StaggeredReveal`: one-shot fade + translateY
 /// entrance, fired once on initState after [delay]. Ease-out-quart.

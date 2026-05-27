@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:customization_engine/showcase/showcase_tokens.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
 
 /// Clone of MobileApp's `SparkleBurst`: a decorative one-shot sparkle scatter
 /// that animates in around a hero image. Rewired to [ShowcaseTokens] for the

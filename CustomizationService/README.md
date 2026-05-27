@@ -8,14 +8,14 @@ Takes a brand brief, produces a fully customized app.
 
 Two YAMLs you write (`app.yaml`, `customization.yaml`), one the pipeline
 produces (`output.yaml`). Customized surface: **images, colours, fonts,
-text, icons, and animations (Lottie).**
+text, and icons.**
 
 The pipeline is a **dependency DAG**, not a fixed sequence. The registry
 turns the two YAMLs into a node set — one **colour node**, one **font
 node**, plus a **text node** and an **icon node** (each built only when
-the app declares the matching slots), one **image node per image slot**,
-and one **lottie node per lottie slot**. The executor levels that graph
-topologically and resolves each level **concurrently**.
+the app declares the matching slots), and one **image node per image
+slot**. The executor levels that graph topologically and resolves each
+level **concurrently**.
 
 Colour, font, text and icon are the **level-0 roots** and run side by
 side: the colour node resolves the four base slots in one structured LLM
@@ -25,18 +25,11 @@ picks every font in one call (validated live against the Google Fonts
 catalogue), the text node rewrites every copy slot in one batched,
 length-bounded call, and the icon node matches each slot against a
 curated set (generating any the set can't cover). The font, text and icon
-roots have no dependents. **Every image node and every lottie node
-depends on the colour node** — image nodes paint with the palette, and
-the lottie recolour step maps animation regions to palette roles. An
-image slot may also declare `depends_on` other image slots — a **soft
-reference** for **visual continuity**: the dependency's look is folded into
-this slot's prompt as a style reference (never fed in as an input image). A
-*reveal* lottie slot's `depends_on`, by contrast, is a **full, hard
-dependency** on the image node it reveals — a real DAG edge (`image →
-lottie`), so the reveal lottie is ordered after that image, is handed the
-image's resolved output (its prompt steers preset selection; the preset's
-`insertion_point` is where that exact image composites), and is **skipped if
-the image fails or is skipped** (it can't reveal an image that isn't there).
+roots have no dependents. **Every image node depends on the colour
+node** — image nodes paint with the palette. An image slot may also
+declare `depends_on` other image slots — a **soft reference** for **visual
+continuity**: the dependency's look is folded into this slot's prompt as a
+style reference (never fed in as an input image).
 
 The graph is validated (acyclic, every dependency satisfied) **before
 any paid call**. The run is then **fault-tolerant**: a node that fails
@@ -58,10 +51,7 @@ flowchart TD
     Text["text node (root, if text slots)<br/>copy slots — one batched, length-bounded call"]
     Icon["icon node (root, if icon slots)<br/>set selection + per-slot match, Recraft fallback"]
     Images["image node × N<br/>one per image slot"]
-    Lotties["lottie node × N<br/>one per lottie slot"]
     Color --> Images
-    Color --> Lotties
-    Images -- "reveal slot: full depends_on<br/>(waits for + reveals the image)" --> Lotties
     Images -. "depends_on — visual reference only" .-> Images
   end
 
@@ -212,34 +202,6 @@ icon in it; any slot the set can't honestly cover is generated via
 Recraft. Icons are monochrome (`currentColor`) so the app tints them per
 theme — there is no per-slot colour field.
 
-### Lotties
-
-```mermaid
-flowchart LR
-  S["lottie slot<br/>+ required_type"]
-  Sel["preset selection<br/>(call 1) — pick one from the global library"]
-  R["region → palette-role<br/>recolour (call 2)"]
-  A["assemble<br/>file · display_name · insertion_point<br/>lifted from the preset"]
-  S --> Sel --> R --> A
-```
-
-Selective, not generative: it picks **one** preset from the global
-catalogue and maps that preset's regions to palette role names — it never
-generates Lottie JSON. Trusted fields (`file`, `display_name`,
-`insertion_point`) are lifted off the chosen preset, never from the LLM.
-
-A *standalone* slot plays on its own. A *reveal* slot is **fully dependent on
-the image node it reveals**: its `depends_on` names an image slot, which the
-executor turns into a real dependency edge (image node → lottie node), so the
-reveal lottie does not run until that image has resolved. The image's resolved
-output is then injected as the lottie node's input — its prompt feeds the
-preset **selection** (so the chosen animation's motion and energy suit the
-image being revealed), and the preset's fixed `insertion_point` is where that
-exact image composites at render time. Because the dependency is real, a failed
-or skipped image node skips its dependent reveal lottie too (it can't reveal an
-image that isn't there), and regenerating that image is what a reveal animation
-is built around.
-
 ---
 
 ## Configuration
@@ -300,7 +262,7 @@ Three standalone entrypoints (run from the package root, like `make`):
   snapshot, so to expand against an **updated** inventory pass the live one
   (`--app-yaml apps/<app_id>/app.yaml`); the snapshot is then refreshed to match.
 - **`scripts/regen`** — `--run-dir <dir> --slot <id> [--slot <id> …]
-  [--spec "…"]`. Re-makes one or more colour/font/text/icon/lottie slots,
+  [--spec "…"]`. Re-makes one or more colour/font/text/icon slots,
   preserving everything else. Naming several slots of one atomic node re-rolls
   them together (harmonised). Images are out of scope here.
 - **`scripts/regen_image`** — `--run-dir <dir> --slot <image_id> [--spec "…"]
@@ -358,11 +320,10 @@ App-agnostic by construction: the role list and any per-app overrides live in
 codebase/CustomizationService/
 ├── schema/              # Pydantic contracts for the YAMLs
 │   ├── app_format, customization, primitives, slots,
-│   │     color_role, color_mode, complexity,
-│   │     lottie_type, lottie_library
+│   │     color_role, color_mode, complexity
 │   └── output/          # ColorOutput (+ Derivations), ColorValue,
 │   │                    #   ImageOutput, FontOutput, TextOutput,
-│   │                    #   IconOutput (+ IconAttribution), LottieOutput,
+│   │                    #   IconOutput (+ IconAttribution),
 │   │                    #   *Set wrappers (ColorPalette has mode),
 │   │                    #   Output, RunCost
 ├── src/
@@ -377,10 +338,8 @@ codebase/CustomizationService/
 │   │   ├── fonts/       # FontNode + font selection service
 │   │   │                #   (Google Fonts catalog), prompts/*.md
 │   │   ├── texts/       # TextNode + text generation service, prompts/*.md
-│   │   ├── icons/       # IconNode + set selection / matching /
-│   │   │                #   generation services, prompts/*.md
-│   │   └── lotties/     # LottieNode + selection / recolour services
-│   │                    #   + preset library loader, prompts/*.md
+│   │   └── icons/       # IconNode + set selection / matching /
+│   │                    #   generation services, prompts/*.md
 │   ├── shared/
 │   │   ├── interfaces/  # LLMClient, ImageGenerator, BackgroundRemover,
 │   │   │                #   GoogleFontsCatalog, IconSetCatalog
@@ -389,8 +348,6 @@ codebase/CustomizationService/
 │   │                    #   local icon set catalog, Recraft icon generator,
 │   │                    #   cost, prompts/*.md
 │   └── api/             # read-only FastAPI over output.yaml
-├── assets/
-│   └── lottie_animations/   # global preset catalog (index.yaml + *.json)
 ├── tests/               # core, modules, executor, pipeline, services, api
 ├── scripts/             # expand, regen, regen_image, edit_customization, …
 └── apps/

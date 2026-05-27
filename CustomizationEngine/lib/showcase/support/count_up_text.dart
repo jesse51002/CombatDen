@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
 
 /// Clone of MobileApp's `CountUpText`: an odometer/slot-counter that rolls
 /// 0 → [target] with a steep ease-out-expo curve. One vertical reel per

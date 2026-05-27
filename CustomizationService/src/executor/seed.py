@@ -34,7 +34,7 @@ _ICON = DependencyKind.ICON.value
 
 def all_slot_ids(app: AppFormat) -> set[str]:
     """Every per-slot id across all node types (colours, fonts, texts, icons,
-    images, lotties) — the universe a regen can target and the seed can fill."""
+    images) — the universe a regen can target and the seed can fill."""
     ids: set[str] = set()
     for slots in (
         app.colors,
@@ -42,7 +42,6 @@ def all_slot_ids(app: AppFormat) -> set[str]:
         app.texts,
         app.icons,
         app.images,
-        app.lotties,
     ):
         ids |= {s.id for s in slots}
     return ids
@@ -62,8 +61,6 @@ def node_slots(app: AppFormat) -> dict[str, set[str]]:
     if app.icons:
         slots[_ICON] = {s.id for s in app.icons}
     for s in app.images:
-        slots[s.id] = {s.id}
-    for s in app.lotties:
         slots[s.id] = {s.id}
     return slots
 
@@ -91,5 +88,4 @@ def build_seed(app: AppFormat, output: Output) -> dict[str, BaseModel]:
     _take(app.texts, output.text_set.texts)
     _take(app.icons, output.icon_set.icons)
     _take(app.images, output.image_set.images)
-    _take(app.lotties, output.lottie_set.lotties)
     return seed

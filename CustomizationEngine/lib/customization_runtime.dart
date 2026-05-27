@@ -33,7 +33,6 @@ class CustomizationRuntime {
     required List<String> expectedFonts,
     required List<String> expectedText,
     required List<String> expectedIcons,
-    required List<String> expectedLotties,
     bool livePreview = false,
   }) async {
     if (!getIt.isRegistered<CustomizationService>()) {
@@ -51,7 +50,6 @@ class CustomizationRuntime {
           expectedFontKeys: expectedFonts,
           expectedTextKeys: expectedText,
           expectedIconKeys: expectedIcons,
-          expectedLottieKeys: expectedLotties,
           livePreview: livePreview,
         ),
       );

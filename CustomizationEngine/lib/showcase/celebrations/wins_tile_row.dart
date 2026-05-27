@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:customization_engine/showcase/celebrations/showcase_celebration_stats.dart';
 import 'package:customization_engine/showcase/celebrations/wins_tile.dart';
 import 'package:customization_engine/showcase/showcase_tokens.dart';
-import 'package:customization_engine/theme/lottie/celebration_timings.dart';
+import 'package:customization_engine/theme/animation/celebration_timings.dart';
 
 /// Clone of MobileApp's `WinsTileRow`: three equally-sized [WinsTile]s in a
 /// row, cascading in left-to-right from [baseDelay].

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import 'package:customization_engine/data/models/color_mode.dart';
 import 'package:customization_engine/data/models/customization_color.dart';
-import 'package:customization_engine/data/models/lottie_override.dart';
 
 /// A loaded, resolved customization. App-agnostic: colours,
 /// images, fonts and texts are typed-value maps keyed by slot id
@@ -52,10 +51,6 @@ class Customization extends Equatable {
   /// slots fall back to the call site's `Symbols.*_sharp`.
   final Map<String, String> icons;
 
-  /// Slot -> lottie override (preset URL + region→role recolour map).
-  /// Absent slots fall back to the call site's bundled `.json`.
-  final Map<String, LottieOverride> lotties;
-
   const Customization({
     required this.app,
     required this.displayName,
@@ -67,7 +62,6 @@ class Customization extends Equatable {
     required this.fonts,
     required this.texts,
     required this.icons,
-    required this.lotties,
   });
 
   factory Customization.fromJson(Map<String, dynamic> json) {
@@ -92,7 +86,6 @@ class Customization extends Equatable {
       fonts: _parseStringMap(json['fonts']),
       texts: _parseTexts(textsRaw),
       icons: _parseStringMap(json['icons']),
-      lotties: _parseMap(json['lotties'], LottieOverride.fromJson),
     );
   }
 
@@ -114,9 +107,6 @@ class Customization extends Equatable {
       },
     },
     'icons': Map<String, String>.from(icons),
-    'lotties': {
-      for (final e in lotties.entries) e.key: e.value.toJson(),
-    },
   };
 
   static Map<String, T> _parseMap<T>(
@@ -185,6 +175,5 @@ class Customization extends Equatable {
     fonts,
     texts,
     icons,
-    lotties,
   ];
 }
