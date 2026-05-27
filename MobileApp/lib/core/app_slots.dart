@@ -98,13 +98,12 @@ class CombatDenSlots {
   ];
 
   // ---- Lottie slots ----
-  // The two member-app celebration animations. Consumed via
-  // `ThemeLottie` (slot + bundled `.json` fallback).
+  // The member-app booking celebration animation. Consumed via
+  // `ThemeLottie` (slot + bundled `.json` fallback). The streak celebration
+  // is now a pure-Flutter animation and no longer uses a Lottie slot.
   static const String bookingCelebration = 'booking_celebration';
-  static const String streakCelebration = 'streak_celebration';
 
   static const List<String> expectedLotties = [
     bookingCelebration,
-    streakCelebration,
   ];
 }
