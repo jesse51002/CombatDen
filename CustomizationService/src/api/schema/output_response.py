@@ -3,10 +3,10 @@
 `images`, `fonts` and `icons` each collapse to a `dict[str, str]` — slot
 id maps directly to the value a client actually needs (a fetch URL for an
 image or an SVG icon, a Google Fonts family name for a font). `lotties`
-maps each slot to a `LottieWire` (a fetch URL for the preset `.json` plus
-the recolour metadata the client applies at render time). The colour and
-text groups pass through unchanged: they already carry exactly what the
-client consumes.
+maps each slot to a `LottieWire` (a fetch URL for the baked `.json` plus
+the playback metadata the client renders with — the colour is already
+baked into the served file). The colour and text groups pass through
+unchanged: they already carry exactly what the client consumes.
 """
 
 from __future__ import annotations
@@ -16,20 +16,28 @@ from pydantic import BaseModel, ConfigDict
 from schema import ColorPalette, InsertionPoint, Output, TextSet
 
 
+def _versioned(url: str, version: str) -> str:
+    """Append the asset's content fingerprint as a cache-busting ``?v=``
+    token. Empty version (legacy runs) → the URL is returned unchanged."""
+    return f"{url}?v={version}" if version else url
+
+
 class LottieWire(BaseModel):
-    """One lottie slot projected onto the wire: where to fetch the preset
-    `.json`, plus the recolour map / reveal metadata the client renders
-    with. ``region_roles`` carries palette ROLE keys (not resolved colours)
-    so the client recolours against its own live palette; ``reveals`` /
-    ``insertion_point`` are set only for reveal slots (lifted straight off
-    ``LottieOutput``)."""
+    """One lottie slot projected onto the wire: where to fetch the baked
+    `.json` plus the playback metadata the client renders with. The colour
+    is already baked into the served file, so there is no recolour map —
+    the client plays the animation at ``speed`` and (reveal slots only)
+    holds the revealed image for ``hold_seconds`` at the ``insertion_point``
+    before both end. ``reveals`` / ``insertion_point`` / ``hold_seconds``
+    are set only for reveal slots (lifted straight off ``LottieOutput``)."""
 
     model_config = ConfigDict(extra="forbid")
 
     url: str
-    region_roles: dict[str, str]
+    speed: float
     reveals: str | None = None
     insertion_point: InsertionPoint | None = None
+    hold_seconds: float | None = None
 
 
 class OutputResponse(BaseModel):
@@ -42,6 +50,7 @@ class OutputResponse(BaseModel):
 
     app: str
     display_name: str
+    design_name: str
     images: dict[str, str]
     fonts: dict[str, str]
     icons: dict[str, str]
@@ -59,26 +68,35 @@ class OutputResponse(BaseModel):
         return cls(
             app=output.app,
             display_name=output.display_name,
+            design_name=output.design_name,
             color_set=output.color_set,
             text_set=output.text_set,
             images={
-                slot_id: f"/apps/{app_id}/{run_id}/images/{slot_id}"
-                for slot_id in output.image_set.images
+                slot_id: _versioned(
+                    f"/apps/{app_id}/{run_id}/images/{slot_id}", image.version
+                )
+                for slot_id, image in output.image_set.images.items()
             },
             fonts={
                 slot_id: font.family
                 for slot_id, font in output.font_set.fonts.items()
             },
             icons={
-                slot_id: f"/apps/{app_id}/{run_id}/icons/{slot_id}"
-                for slot_id in output.icon_set.icons
+                slot_id: _versioned(
+                    f"/apps/{app_id}/{run_id}/icons/{slot_id}", icon.version
+                )
+                for slot_id, icon in output.icon_set.icons.items()
             },
             lotties={
                 slot_id: LottieWire(
-                    url=f"/apps/{app_id}/{run_id}/lotties/{slot_id}",
-                    region_roles=lottie.region_roles,
+                    url=_versioned(
+                        f"/apps/{app_id}/{run_id}/lotties/{slot_id}",
+                        lottie.version,
+                    ),
+                    speed=lottie.speed,
                     reveals=lottie.reveals,
                     insertion_point=lottie.insertion_point,
+                    hold_seconds=lottie.hold_seconds,
                 )
                 for slot_id, lottie in output.lottie_set.lotties.items()
             },

@@ -6,10 +6,17 @@ import 'package:customization_engine/service_locator.dart';
 
 /// App-agnostic image resolver. Mirrors `ThemeColor.color` /
 /// `ThemeText.value`: looks up a slot id in the loaded customization
-/// and returns a disk-cached network [ImageProvider] for it, falling
-/// back to the caller's bundled [fallback] when there is no
-/// customization (DI not set up, nothing loaded, slot absent, or
-/// empty URL). Never throws.
+/// and returns a network [ImageProvider] for it, falling back to the
+/// caller's bundled [fallback] when there is no customization (DI not
+/// set up, nothing loaded, slot absent, or empty URL). Never throws.
+///
+/// Normally returns a disk-cached [CachedNetworkImageProvider]. When the
+/// service is in `livePreview` mode (admin live preview) it returns a
+/// plain RAM-only [NetworkImage] instead, so repeated dev reloads don't
+/// pile up disk-cache files. Cache-busting is the server's job either
+/// way: each asset URL carries a content-hash `?v=` token that changes
+/// only when the bytes change, so an edit is picked up on the next config
+/// fetch (a page reload, in the web preview).
 ///
 /// The engine deliberately does NOT own a fallback: white-label
 /// tenants keep their default assets bundled in their own build, so
@@ -31,6 +38,13 @@ class ThemeImage {
     final service = getIt<CustomizationService>();
     final raw = service.current?.images[slot] ?? '';
     if (raw.isEmpty) return fallback;
-    return CachedNetworkImageProvider(service.resolveImageUrl(raw));
+    final url = service.resolveImageUrl(raw);
+    if (service.livePreview) {
+      // Plain RAM-only provider — no disk cache to litter on repeated dev
+      // reloads. The URL already carries the server's content-hash `?v=`
+      // token, so it busts correctly whenever the asset's bytes change.
+      return NetworkImage(url);
+    }
+    return CachedNetworkImageProvider(url);
   }
 }

@@ -33,6 +33,7 @@ class CustomizationService extends ChangeNotifier {
     required this.expectedTextKeys,
     required this.expectedIconKeys,
     required this.expectedLottieKeys,
+    this.livePreview = false,
   });
 
   final CustomizationApiClient _apiClient;
@@ -45,6 +46,15 @@ class CustomizationService extends ChangeNotifier {
   final List<String> expectedTextKeys;
   final List<String> expectedIconKeys;
   final List<String> expectedLottieKeys;
+
+  /// When true, image resolvers bypass the on-disk image cache and use a
+  /// plain RAM-only `NetworkImage` instead, so repeated dev reloads of the
+  /// admin live-preview don't accumulate disk-cache files. Cache-busting
+  /// itself is handled server-side: each asset URL carries a content-hash
+  /// `?v=` token that changes only when the bytes change, so a page reload
+  /// (which re-fetches the config) picks up edits. The member app leaves
+  /// this false and keeps the disk-cached provider. See `ThemeImage`.
+  final bool livePreview;
 
   static const String _prefsKey = 'customization_last_good_json';
   static const String _selectedDesignKey = 'customization_selected_design_id';
@@ -121,18 +131,6 @@ class CustomizationService extends ChangeNotifier {
   /// The app's selectable styles (design name + celebration image).
   Future<List<CustomizationStyle>> fetchStyles() =>
       _apiClient.fetchStyles();
-
-  /// Absolute, deduped, non-empty image URLs for cache warming.
-  List<String> imageUrlsForPrewarm() {
-    final current = _current;
-    if (current == null) return const [];
-    final urls = <String>{};
-    for (final raw in current.images.values) {
-      if (raw.isEmpty) continue;
-      urls.add(_apiClient.resolveImageUrl(raw));
-    }
-    return urls.toList(growable: false);
-  }
 
   /// Resolves a raw slot URL to an absolute one.
   String resolveImageUrl(String raw) =>

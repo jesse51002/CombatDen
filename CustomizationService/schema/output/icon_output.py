@@ -38,6 +38,10 @@ class IconOutput(NodeOutput):
     model_config = ConfigDict(extra="ignore")
 
     path: AbsolutePath
+    # Content fingerprint of the delivered SVG bytes — the API's cache-busting
+    # ``?v=`` token. Stamped by the Writer at serialize time; empty on a legacy
+    # ``output.yaml`` written before this field (URL stays unversioned).
+    version: str = ""
     icon_set: str
     icon_name: str
     icon_key: str

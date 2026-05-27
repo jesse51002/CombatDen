@@ -6,8 +6,11 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Generated pipeline runs (per-app, per-run output dirs)
-apps/*/2*/
+# Generated pipeline runs (every per-app, per-run output dir — timestamped
+# AND named runs). The app-level contract files (apps/<app_id>/app.yaml,
+# customization.yaml, *_customization.yaml) stay tracked; only the run
+# subdirectories one level deeper are ignored.
+apps/*/*/
 
 # Local dev secrets (never commit)
 .env

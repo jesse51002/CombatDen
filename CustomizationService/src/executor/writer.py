@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from schema import (
     ExpansionCostLog,
     ExpansionEntry,
     ExpansionKind,
+    Output,
     OverwriteSpecs,
     RunCost,
 )
@@ -46,6 +48,7 @@ class Writer:
 
         run_cost = self._run_cost(result)
         output = result.output.model_copy(update={"cost": run_cost})
+        self._stamp_versions(output, run_ctx)
 
         self._dump_model(run_ctx.app, app_path)
         self._dump_model(run_ctx.cust, cust_path)
@@ -92,6 +95,7 @@ class Writer:
         are the inputs the caller curated, not artifacts this writer owns.
         """
         output = result.output.model_copy(update={"cost": original_cost})
+        self._stamp_versions(output, run_ctx)
         self._dump_model(output, run_ctx.output_path())
 
         ledger_path = run_ctx.expansion_cost_path()
@@ -174,6 +178,36 @@ class Writer:
             icon_generation=icon_generation,
             by_model=by_model,
         )
+
+    def _stamp_versions(self, output: Output, run_ctx: RunContext) -> None:
+        """Stamp each asset slot with a content fingerprint of the bytes the
+        API will serve, so an edited asset gets a changed ``?v=`` URL.
+
+        Hashes the *served* file by slot id — ``final_images/<slot>.png``,
+        ``icons/<slot>.svg``, ``lotties/<slot>.json`` (the same paths the API
+        streams) — not the recorded ``path``, so a moved run dir still hashes
+        correctly. Identical bytes hash identically, so an unchanged slot keeps
+        a stable URL and only genuinely-changed assets bust their cache.
+        """
+        for slot_id, image in output.image_set.images.items():
+            image.version = self._content_version(
+                Path(str(run_ctx.image_path(slot_id)))
+            )
+        for slot_id, icon in output.icon_set.icons.items():
+            icon.version = self._content_version(
+                Path(str(run_ctx.icon_path(slot_id)))
+            )
+        for slot_id, lottie in output.lottie_set.lotties.items():
+            lottie.version = self._content_version(
+                Path(str(run_ctx.lottie_path(slot_id)))
+            )
+
+    @staticmethod
+    def _content_version(path: Path) -> str:
+        """A short sha256 of the file's bytes, or "" if it's absent."""
+        if not path.is_file():
+            return ""
+        return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
 
     @staticmethod
     def _dump_model(model: BaseModel, path: Path) -> None:

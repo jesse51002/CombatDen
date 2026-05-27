@@ -63,10 +63,10 @@ class ThemeColor {
   /// `primary`, `accent`, which are NOT flattened into the palette).
   /// Returns [fallback] on any miss — never throws.
   ///
-  /// This is the resolver for keys whose store isn't known up front — e.g.
-  /// a lottie `region_roles` value, which the recolour LLM may set to
-  /// either a base role or a derived key. For known base-slot lookups use
-  /// [color]; for known orphan tokens use [paletteEntry].
+  /// This is the resolver for keys whose store isn't known up front — a
+  /// palette role that may be either a base role or a derived/shared key.
+  /// For known base-slot lookups use [color]; for known orphan tokens use
+  /// [paletteEntry].
   static Color token(
     String key, {
     required Color fallback,

@@ -13,7 +13,16 @@ import 'package:customization_engine/data/models/lottie_override.dart';
 /// malformed slot is skipped, never failing the whole payload.
 class Customization extends Equatable {
   final String app;
+
+  /// The app/brand name (e.g. "GlobalMMA"), from `app.yaml`. Stable
+  /// across the app's selectable designs.
   final String displayName;
+
+  /// This run's design/style name (e.g. "Warm Ash Cream"), from the
+  /// input `customization.yaml`'s `design_direction.name` — the label
+  /// a style picker shows to distinguish one preset from another.
+  final String designName;
+
   final ColorMode colorMode;
   final Map<String, CustomizationColor> colors;
 
@@ -50,6 +59,7 @@ class Customization extends Equatable {
   const Customization({
     required this.app,
     required this.displayName,
+    required this.designName,
     required this.colorMode,
     required this.colors,
     required this.palette,
@@ -74,6 +84,7 @@ class Customization extends Equatable {
     return Customization(
       app: (json['app'] as String?) ?? '',
       displayName: (json['display_name'] as String?) ?? '',
+      designName: (json['design_name'] as String?) ?? '',
       colorMode: ColorMode.fromJson(modeRaw),
       colors: _parseMap(colorsRaw, CustomizationColor.fromJson),
       palette: _parsePalette(paletteRaw),
@@ -88,6 +99,7 @@ class Customization extends Equatable {
   Map<String, dynamic> toJson() => {
     'app': app,
     'display_name': displayName,
+    'design_name': designName,
     'color_set': {
       'mode': colorMode.toJson(),
       'colors': {
@@ -165,6 +177,7 @@ class Customization extends Equatable {
   List<Object?> get props => [
     app,
     displayName,
+    designName,
     colorMode,
     colors,
     palette,

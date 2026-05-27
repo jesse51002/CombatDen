@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
@@ -81,6 +83,19 @@ class _ThemeRevealLottieState extends State<ThemeRevealLottie>
   bool _revealed = false;
   bool _completed = false;
 
+  /// The cycle finishes only when BOTH of these are true: the animation has
+  /// played its full natural pass (`_animEnded`) AND the post-reveal hold has
+  /// elapsed (`_held`). Joining the two — rather than racing them — means a
+  /// long animation is never cut short by a short hold, and a short animation
+  /// still dwells for the full hold. With no `hold_seconds` the hold is
+  /// satisfied immediately, so the natural end alone finishes.
+  bool _animEnded = false;
+  bool _held = false;
+
+  /// Pending hold timer (reveal slots with a `hold_seconds`). Cut on dispose so
+  /// it never fires after teardown.
+  Timer? _holdTimer;
+
   /// Point on the timeline (0..1) at which the image pops in. Starts at the
   /// caller's [ThemeRevealLottie.fallbackRevealAt] (the fallback timing) and
   /// is overridden by the preset's insertion_point once the lottie loads.
@@ -98,16 +113,55 @@ class _ThemeRevealLottieState extends State<ThemeRevealLottie>
     if (_revealed || !mounted) return;
     if (_ctrl.value >= _revealAt) {
       setState(() => _revealed = true);
+      _startHold();
     }
   }
 
+  /// Once the image is revealed, start the post-reveal hold from the preset's
+  /// `hold_seconds`. With no hold (the bundled-fallback / no-backend case) the
+  /// hold is satisfied immediately. Either way this only marks the hold leg
+  /// done — [_maybeFinish] waits for the animation's natural end too.
+  void _startHold() {
+    final hold = ThemeLottie.resolve(widget.slot)?.holdSeconds;
+    if (hold == null) {
+      _held = true;
+      _maybeFinish();
+      return;
+    }
+    _holdTimer = Timer(
+      Duration(milliseconds: (hold * 1000).round()),
+      () {
+        if (!mounted) return;
+        _held = true;
+        _maybeFinish();
+      },
+    );
+  }
+
   void _onStatus(AnimationStatus status) {
-    if (_completed || status != AnimationStatus.completed) return;
+    if (status != AnimationStatus.completed) return;
+    // The animation has played its full natural pass; it parks on the last
+    // frame. Finish only once the hold leg is also done (see [_maybeFinish]).
+    _animEnded = true;
+    _maybeFinish();
+  }
+
+  /// Finish when both legs are done: full natural pass AND post-reveal hold.
+  void _maybeFinish() {
+    if (_animEnded && _held) _finish();
+  }
+
+  /// Fire [ThemeRevealLottie.onComplete] exactly once, when both the natural
+  /// end and the hold have elapsed.
+  void _finish() {
+    if (_completed) return;
     _completed = true;
     widget.onComplete?.call();
   }
 
   void _onLoaded(LottieComposition composition) {
+    // Duration (speed-scaled) is set by ThemeLottie before this runs; here we
+    // only compute the reveal point and start playback.
     final insertion = ThemeLottie.resolve(widget.slot)?.insertionPoint;
     if (insertion != null && composition.durationFrames > 0) {
       final raw =
@@ -115,13 +169,12 @@ class _ThemeRevealLottieState extends State<ThemeRevealLottie>
           composition.durationFrames;
       _revealAt = raw.clamp(0.0, 1.0);
     }
-    _ctrl
-      ..duration = composition.duration
-      ..forward();
+    _ctrl.forward();
   }
 
   @override
   void dispose() {
+    _holdTimer?.cancel();
     _ctrl
       ..removeListener(_onTick)
       ..removeStatusListener(_onStatus)

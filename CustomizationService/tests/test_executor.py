@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +22,11 @@ from schema import (
     FontOutput,
     FontSet,
     IconOutput,
+    IconSet,
     ImageOutput,
+    ImageSet,
     LottieOutput,
+    LottieSet,
     NodeOutput,
     Output,
     OverwriteSpecs,
@@ -33,6 +37,7 @@ from src.core.errors import GraphError
 from src.core.run_context import RunContext
 from src.executor.orchestrator import Pipeline
 from src.executor.registry import ModuleRegistry
+from src.executor.writer import Writer
 from src.executor.seed import all_slot_ids, build_seed, node_slots
 from src.modules.base import DependencyKind
 from src.modules.colors.color_node import ColorNode
@@ -493,3 +498,95 @@ def test_assemble_pulls_text_set_when_text_node_resolved(
 
     assert set(out.text_set.texts) == {"booked"}
     assert out.text_set.texts["booked"].value == "Locked in."
+
+
+# --- Writer content-version stamping ------------------------------------
+
+
+def test_content_version_hashes_bytes(tmp_path: Path) -> None:
+    """``_content_version`` is sha256[:12] of the bytes: deterministic,
+    change-sensitive, and "" for an absent file."""
+    f = tmp_path / "a.png"
+    f.write_bytes(b"one")
+    assert (
+        Writer._content_version(f)
+        == hashlib.sha256(b"one").hexdigest()[:12]
+    )
+    # Identical bytes hash identically (stable URL for an unchanged asset).
+    g = tmp_path / "b.png"
+    g.write_bytes(b"one")
+    assert Writer._content_version(g) == Writer._content_version(f)
+    # Changed bytes change the hash (the cache busts).
+    f.write_bytes(b"two")
+    assert Writer._content_version(f) != Writer._content_version(g)
+    # Absent file → empty (URL stays unversioned).
+    assert Writer._content_version(tmp_path / "missing.png") == ""
+
+
+def test_stamp_versions_fingerprints_each_served_asset(
+    tmp_path: Path,
+) -> None:
+    """``_stamp_versions`` fingerprints the served file for every image,
+    icon and lottie slot; a slot whose file is missing stays unversioned."""
+    ctx = _ctx(tmp_path, [{"id": "hero", "description": "a hero"}])
+
+    png = b"\x89PNG fake hero bytes"
+    svg = b"<svg>home</svg>"
+    lottie = b'{"v":"5.7","layers":[]}'
+    Path(str(ctx.image_path("hero"))).write_bytes(png)
+    Path(str(ctx.icon_path("nav_home"))).write_bytes(svg)
+    Path(str(ctx.lottie_path("cel"))).write_bytes(lottie)
+
+    out = Output(
+        app="demo",
+        display_name="Demo",
+        design_name="Demo",
+        color_set=_palette(ctx),
+        image_set=ImageSet(
+            images={
+                "hero": ImageOutput(path=ctx.image_path("hero"), prompt="p"),
+                # No file on disk → stays unversioned.
+                "ghost": ImageOutput(
+                    path=ctx.image_path("ghost"), prompt="p"
+                ),
+            }
+        ),
+        icon_set=IconSet(
+            icons={
+                "nav_home": IconOutput(
+                    path=ctx.icon_path("nav_home"),
+                    icon_set="lucide",
+                    icon_name="home",
+                    icon_key="nav_home",
+                )
+            }
+        ),
+        lottie_set=LottieSet(
+            lotties={
+                "cel": LottieOutput(
+                    preset_id="p",
+                    preset_file="p.json",
+                    display_name="Cel",
+                    path=ctx.lottie_path("cel"),
+                    speed=1.0,
+                    region_roles={},
+                )
+            }
+        ),
+    )
+
+    Writer()._stamp_versions(out, ctx)
+
+    assert (
+        out.image_set.images["hero"].version
+        == hashlib.sha256(png).hexdigest()[:12]
+    )
+    assert out.image_set.images["ghost"].version == ""
+    assert (
+        out.icon_set.icons["nav_home"].version
+        == hashlib.sha256(svg).hexdigest()[:12]
+    )
+    assert (
+        out.lottie_set.lotties["cel"].version
+        == hashlib.sha256(lottie).hexdigest()[:12]
+    )

@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
-import 'package:customization_engine/theme/engine_tokens.dart';
-import 'package:customization_engine/theme/theme_color.dart';
 import 'package:customization_engine/customization_service.dart';
 import 'package:customization_engine/data/models/lottie_override.dart';
 import 'package:customization_engine/service_locator.dart';
 
 /// The base CustomizationService-overridable Lottie widget for [slot].
 ///
-/// If the loaded tenant customization supplies a preset for [slot] it
-/// plays that (fetched over the network), recolouring each named region to
-/// its mapped palette role, and falls back to [fallbackAsset] on load
-/// failure. With no customization at all it plays [fallbackAsset] directly,
-/// tinted with the brand primary (the existing bundled-asset behaviour).
-/// The engine never owns the fallback, so the app still animates with zero
-/// backend (the white-label resilience property).
+/// If the loaded tenant customization supplies a preset for [slot] it plays
+/// that (fetched over the network) and falls back to [fallbackAsset] on load
+/// failure. With no customization at all it plays [fallbackAsset] directly.
+/// The colour is **baked into the served file** by the pipeline, so this
+/// widget never recolours — it just plays the animation. The engine never
+/// owns the fallback, so the app still animates with zero backend (the
+/// white-label resilience property).
 ///
-/// [controller] / [onLoaded] are forwarded to both paths so a call site
-/// can drive the animation (set duration on load, play, listen for
-/// completion) regardless of whether an override is active.
+/// [controller] / [onLoaded] are forwarded to both paths so a call site can
+/// drive the animation (play, listen for completion) regardless of whether
+/// an override is active. When an override carries a `speed`, this widget
+/// sets `controller.duration` to the composition duration scaled by it on
+/// load (before invoking the caller's [onLoaded]); the caller only needs to
+/// `forward()`.
 ///
 /// `ThemeRevealLottie` builds on this widget, adding the composite-at-frame
 /// behaviour it doesn't do.
@@ -46,9 +47,10 @@ class ThemeLottie extends StatelessWidget {
     if (override == null || override.url.isEmpty) return null;
     return LottieOverride(
       url: service.resolveImageUrl(override.url),
-      regionRoles: override.regionRoles,
+      speed: override.speed,
       reveals: override.reveals,
       insertionPoint: override.insertionPoint,
+      holdSeconds: override.holdSeconds,
     );
   }
 
@@ -75,8 +77,7 @@ class ThemeLottie extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
-      onLoaded: onLoaded,
-      delegates: _regionDelegates(override.regionRoles),
+      onLoaded: (composition) => _onLoaded(composition, override.speed),
       errorBuilder: (_, _, _) => _asset(),
     );
   }
@@ -88,44 +89,21 @@ class ThemeLottie extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
-      onLoaded: onLoaded,
-      delegates: _wildcardTint(),
+      // Bundled fallback has no preset metadata: play it at its authored
+      // speed and colours.
+      onLoaded: (composition) => _onLoaded(composition, 1.0),
     );
   }
 
-  /// Tint everything with the brand primary — the legacy `['**']`
-  /// behaviour, used for the bundled fallback and when an override carries
-  /// no recolour data.
-  LottieDelegates _wildcardTint() {
-    final brand = ThemeColor.token(
-      'primary',
-      fallback: EngineTokens.fallbackBrand,
-    );
-    return LottieDelegates(
-      values: [
-        ValueDelegate.color(const ['**'], value: brand),
-        ValueDelegate.strokeColor(const ['**'], value: brand),
-      ],
-    );
-  }
-
-  /// Per-region recolour: each layer name is tinted to its mapped palette
-  /// role, resolved against the live palette via `ThemeColor.token` (which
-  /// covers both derived tokens and base roles). An empty map degrades to
-  /// the wildcard tint.
-  LottieDelegates _regionDelegates(Map<String, String> regionRoles) {
-    if (regionRoles.isEmpty) return _wildcardTint();
-    final brand = ThemeColor.token(
-      'primary',
-      fallback: EngineTokens.fallbackBrand,
-    );
-    final values = <ValueDelegate>[];
-    regionRoles.forEach((region, roleKey) {
-      final color = ThemeColor.token(roleKey, fallback: brand);
-      values
-        ..add(ValueDelegate.color([region, '**'], value: color))
-        ..add(ValueDelegate.strokeColor([region, '**'], value: color));
-    });
-    return LottieDelegates(values: values);
+  /// Scale [controller]'s duration by [speed] (2.0 => half the time), then
+  /// hand the loaded composition to the caller's [onLoaded] (which only has
+  /// to `forward()` / read frames). With no controller this is just the
+  /// passthrough.
+  void _onLoaded(LottieComposition composition, double speed) {
+    final c = controller;
+    if (c != null) {
+      c.duration = composition.duration * (1.0 / speed);
+    }
+    onLoaded?.call(composition);
   }
 }

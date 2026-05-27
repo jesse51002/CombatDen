@@ -173,7 +173,7 @@
 <body>
 <header>
   <h1>Lottie Preset Preview</h1>
-  <p>Load a Lottie + a reveal image, loop it, drag the insertion point until the reveal looks right, then copy the <code>index.yaml</code> block. Mirrors the app's ThemeRevealLottie (top-left origin, 0..1 rect, reveal at a frame).</p>
+  <p>Load a Lottie + a reveal image, loop it, drag the insertion point until the reveal looks right, then copy the <code>config.yaml</code>. Mirrors the app's ThemeRevealLottie (top-left origin, 0..1 rect, reveal at a frame).</p>
 </header>
 
 <div class="wrap">
@@ -223,6 +223,12 @@
         <input id="speed" type="range" min="0.1" max="2" step="0.05" value="1" />
         <output id="speedOut">1</output>
       </div>
+      <p class="controls-note"><em>pause</em> holds the final frame this long before looping — a <strong>preview aid only</strong> (not in the YAML), so you can read the end state instead of it snapping back instantly.</p>
+      <div class="row">
+        <label for="pause">pause</label>
+        <input id="pause" type="range" min="0" max="3" step="0.1" value="1" />
+        <output id="pauseOut">1s</output>
+      </div>
     </div>
 
     <div class="panel" style="margin-top:20px;">
@@ -230,7 +236,7 @@
       <div class="toggles">
         <label><input type="checkbox" id="outlineChk" /> Outline reveal box</label>
       </div>
-      <p class="controls-note">The image pops in at <em>frame</em> (scale 0.5→1 + fade, 260ms ease-out — the app's ScaleReveal) and stays until the loop restarts. <em>x</em>/<em>y</em> are the image <strong>centre</strong>; the YAML below converts to the app's top-left corner.</p>
+      <p class="controls-note">The image pops in at <em>frame</em> (scale 0.5→1 + fade, 260ms ease-out — the app's ScaleReveal), holds for <em>hold</em> seconds, then the image and the animation end together (the animation is cut short if the hold expires before it finishes). <em>x</em>/<em>y</em> are the image <strong>centre</strong>; the YAML below converts to the app's top-left corner.</p>
       <div class="row">
         <label for="frame">frame</label>
         <input id="frame" type="range" min="0" max="100" step="1" value="0" />
@@ -256,6 +262,11 @@
         <input id="h" type="range" min="0" max="1" step="0.005" value="0.75" />
         <output id="hOut">0.75</output>
       </div>
+      <div class="row">
+        <label for="hold">hold</label>
+        <input id="hold" type="range" min="0.2" max="6" step="0.1" value="2" />
+        <output id="holdOut">2s</output>
+      </div>
     </div>
 
     <div class="panel" style="margin-top:20px;">
@@ -270,14 +281,14 @@
     </div>
 
     <div class="panel" style="margin-top:20px;">
-      <h2>Preset → index.yaml</h2>
+      <h2>Preset → config.yaml</h2>
       <div class="meta-grid">
         <label for="pId">id</label>
-        <input id="pId" type="text" placeholder="lightning_strike" />
+        <input id="pId" type="text" placeholder="lightning" />
         <label for="pName">display_name</label>
         <input id="pName" type="text" placeholder="Lightning Strike" />
         <label for="pFile">file</label>
-        <input id="pFile" type="text" placeholder="animations/lightning_neon.json" />
+        <input id="pFile" type="text" placeholder="lightning_neon.json" />
         <label for="pDesc">description</label>
         <textarea id="pDesc" placeholder="What the animation does and when it plays."></textarea>
         <label>types</label>
@@ -288,8 +299,9 @@
       </div>
       <textarea id="yaml" readonly spellcheck="false"></textarea>
       <div class="btnbar">
-        <button class="primary" id="copyYaml">Copy YAML</button>
-        <span class="hint">Paste under <code>presets:</code> in <code>assets/lottie_animations/index.yaml</code>. <code>insertion_point</code> is emitted only when <em>reveal</em> is checked.</span>
+        <button class="primary" id="savePreset">Save to repo</button>
+        <button id="copyYaml">Copy YAML</button>
+        <span class="hint"><strong>Save to repo</strong> writes <code>config.yaml</code> + the animation <code>.json</code> to <code>assets/lottie_animations/&lt;id&gt;/</code> (dev server only). <code>insertion_point</code> is emitted only when <em>reveal</em> is checked.</span>
       </div>
     </div>
   </div>

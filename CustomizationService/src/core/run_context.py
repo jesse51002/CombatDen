@@ -14,12 +14,18 @@ from src.core.util import load_yaml
 logger = logging.getLogger(__name__)
 
 RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
+# The output root every run dir lives under (``<root>/<app_id>/<run_id>``).
+# A safety rail for the destructive full-run overwrite: the pipeline refuses
+# to clear a run dir that does not sit under a directory of this name.
+OUTPUT_ROOT_DIRNAME = "apps"
 # Dev/intermediate artifacts (raw generations, cutouts) live here…
 IMAGES_DIRNAME = "images"
 # …and only the final, delivered per-slot image lands here.
 FINAL_IMAGES_DIRNAME = "final_images"
 # Per-slot delivered SVG icons (matched from a set or generated) land here.
 ICONS_DIRNAME = "icons"
+# Per-slot baked, fully-recoloured Lottie JSONs land here (one per slot).
+LOTTIES_DIRNAME = "lotties"
 OUTPUT_FILENAME = "output.yaml"
 # The two input artifacts copied into a run dir as provenance; the in-place
 # scripts (expand, regen) read them back as the run's contract.
@@ -41,6 +47,7 @@ class RunContext:
     image_dir: Path
     final_image_dir: Path
     icon_dir: Path
+    lottie_dir: Path
 
     def __init__(
         self,
@@ -70,10 +77,12 @@ class RunContext:
         self.image_dir = self.run_dir / IMAGES_DIRNAME
         self.final_image_dir = self.run_dir / FINAL_IMAGES_DIRNAME
         self.icon_dir = self.run_dir / ICONS_DIRNAME
+        self.lottie_dir = self.run_dir / LOTTIES_DIRNAME
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.image_dir.mkdir(parents=True, exist_ok=True)
         self.final_image_dir.mkdir(parents=True, exist_ok=True)
         self.icon_dir.mkdir(parents=True, exist_ok=True)
+        self.lottie_dir.mkdir(parents=True, exist_ok=True)
         logger.debug("run dir: %s", self.run_dir)
 
     def image_path(self, slot_id: str) -> AbsolutePath:
@@ -95,6 +104,19 @@ class RunContext:
         """
         return AbsolutePath(
             str((self.icon_dir / f"{slot_id}.svg").resolve())
+        )
+
+    def lottie_path(self, slot_id: str) -> AbsolutePath:
+        """Absolute path of one slot's baked, recoloured Lottie JSON.
+
+        Lives in ``lotties/``; one file per slot. The lottie module bakes
+        the chosen preset's animation with this run's palette colours and
+        writes it here (the way the icon module writes a slot's SVG into
+        ``icons/``), so the delivered file already carries the brand
+        colours and the app plays it with no recolour step.
+        """
+        return AbsolutePath(
+            str((self.lottie_dir / f"{slot_id}.json").resolve())
         )
 
     def output_path(self) -> Path:

@@ -5,6 +5,7 @@ import 'package:customization_engine/showcase/showcase_assets.dart';
 import 'package:customization_engine/showcase/showcase_slots.dart';
 import 'package:customization_engine/showcase/showcase_tokens.dart';
 import 'package:customization_engine/theme/theme_image.dart';
+import 'package:customization_engine/theme/theme_text.dart';
 
 /// Clone of MobileApp's `AppTopbar` (+ header + gym header + info bar),
 /// flattened into one file. Preview-only: taps are no-ops.
@@ -95,7 +96,10 @@ class _GymHeader extends StatelessWidget {
       spacing: ShowcaseTokens.spacingBig,
       children: [
         Image(
-          image: logoImage ?? ShowcaseAsset.image(logoAsset),
+          image: ThemeImage.image(
+            ShowcaseSlots.logoPrimary,
+            fallback: logoImage ?? ShowcaseAsset.image(logoAsset),
+          ),
           width: 100,
           height: 100,
           fit: BoxFit.cover,
@@ -119,7 +123,10 @@ class _GymNameLabel extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       spacing: ShowcaseTokens.spacingSmall,
       children: [
-        Text(gymName, style: big ? ShowcaseTokens.h1 : ShowcaseTokens.h2),
+        Text(
+          ThemeText.designName(fallback: gymName),
+          style: big ? ShowcaseTokens.h1 : ShowcaseTokens.h2,
+        ),
         Icon(
           Symbols.expand_more_sharp,
           weight: ShowcaseTokens.iconWeight,

@@ -12,8 +12,18 @@ let totalFrames = 0;
 let colorGroups = [];     // [{key, avgHex, count, members:Set<hex>, suggested}]
 let currentFrame = 0;     // current playback frame (0-based)
 let originalData = null;  // pristine parsed Lottie JSON — recolor source of truth
+let originalText = null;  // raw uploaded JSON text — saved verbatim (lossless) on Save
 let loadedName = null;    // filename, for the status line
 let freshLoad = false;    // true only on a new file load
+// ---- playback-cycle state (manual loop: reveal hold + pre-loop pause) ------
+// We drive looping ourselves (dotLottie loop is off) so we can hold the
+// revealed image for `hold` seconds — ending the animation early when the hold
+// expires — and then sit on the final frame for `pause` seconds before
+// restarting, so the end state is readable instead of snapping back instantly.
+let holdTimer = null;     // fires endCycle() when the reveal hold elapses
+let loopTimer = null;     // fires restartCycle() after the pre-loop pause
+let revealStarted = false;// hold already started this cycle (one-shot per loop)
+let cycleEnded = false;   // image dismissed + animation halted, awaiting restart
 const groupOverrides = {};// group key -> new hex (live recolour)
 const groupNames = {};    // group key -> user-typed region name
 const groupDescs = {};    // group key -> user-typed region description
@@ -25,10 +35,12 @@ const revealBox = $("revealBox");
 
 // ---- value helpers -------------------------------------------------------
 const sliders = {
-  frame: $("frame"), x: $("x"), y: $("y"), w: $("w"), h: $("h"), speed: $("speed"),
+  frame: $("frame"), x: $("x"), y: $("y"), w: $("w"), h: $("h"),
+  speed: $("speed"), hold: $("hold"), pause: $("pause"),
 };
 const outs = {
-  frame: $("frameOut"), x: $("xOut"), y: $("yOut"), w: $("wOut"), h: $("hOut"), speed: $("speedOut"),
+  frame: $("frameOut"), x: $("xOut"), y: $("yOut"), w: $("wOut"), h: $("hOut"),
+  speed: $("speedOut"), hold: $("holdOut"), pause: $("pauseOut"),
 };
 const val = (k) => parseFloat(sliders[k].value);
 const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, "").replace(/\.$/, ""));
@@ -41,6 +53,8 @@ function syncOuts() {
   outs.w.textContent = fmt(val("w"));
   outs.h.textContent = fmt(val("h"));
   outs.speed.textContent = fmt(val("speed"));
+  outs.hold.textContent = fmt(val("hold")) + "s";
+  outs.pause.textContent = fmt(val("pause")) + "s";
 }
 
 // ---- reveal positioning (mirrors _PlacedReveal: left=x*w, top=y*h, etc.) --
@@ -61,14 +75,51 @@ function positionOverlay() {
   }
 }
 
+// reveal frame is stored absolute (matches YAML); compare against relative current.
+const insertionRel = () => Math.round(val("frame")) - firstFrame;
+const hasReveal = () => !!overlay.getAttribute("src"); // an image is loaded to reveal
+
 function updateRevealVisibility() {
-  const hasImg = !!overlay.getAttribute("src");
+  const hasImg = hasReveal();
   overlay.style.display = hasImg ? "block" : "none";
   if (!hasImg) { overlay.classList.remove("revealed"); return; }
-  // reveal frame is stored absolute (matches YAML); compare against relative current.
+  // Once the hold has elapsed (cycleEnded) the image stays dismissed through the
+  // pre-loop pause regardless of frame, so tuning sliders can't re-pop it.
+  if (cycleEnded) { overlay.classList.remove("revealed"); return; }
   // Adding/removing .revealed plays / snaps-back the ScaleReveal pop.
-  const insertionRel = Math.round(val("frame")) - firstFrame;
-  overlay.classList.toggle("revealed", currentFrame >= insertionRel);
+  overlay.classList.toggle("revealed", currentFrame >= insertionRel());
+}
+
+// ---- manual loop controller ----------------------------------------------
+const holdMs = () => Math.max(0, val("hold")) * 1000;   // reveal image dwell time
+const pauseMs = () => Math.max(0, val("pause")) * 1000; // pre-loop freeze (preview only)
+function clearCycleTimers() {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
+}
+
+// The reveal hold has elapsed (or, with no image, the animation finished):
+// dismiss the image and halt playback wherever it is — this is the "ends early"
+// cut — then schedule the next cycle behind the pre-loop pause.
+function endCycle() {
+  clearCycleTimers();
+  cycleEnded = true;
+  overlay.classList.remove("revealed");
+  if (anim) anim.pause(); // freeze on the current frame so the end state is visible
+  scheduleLoop();
+}
+
+function scheduleLoop() {
+  if (!$("loopChk").checked) return; // loop off: stay frozen on the end state
+  loopTimer = setTimeout(restartCycle, pauseMs());
+}
+
+function restartCycle() {
+  loopTimer = null;
+  revealStarted = false;
+  cycleEnded = false;
+  overlay.classList.remove("revealed");
+  if (anim) { anim.setFrame(firstFrame); anim.play(); }
 }
 
 function refresh() {
@@ -82,7 +133,13 @@ function refresh() {
 Object.values(sliders).forEach((s) => s.addEventListener("input", refresh));
 $("outlineChk").addEventListener("change", (e) =>
   revealBox.style.display = e.target.checked ? "block" : "none");
-$("loopChk").addEventListener("change", (e) => { if (anim) anim.setLoop(e.target.checked); });
+// Looping is driven manually (see the cycle controller), so the checkbox only
+// gates whether we restart after a cycle. Turning it on while frozen kicks off
+// the next cycle immediately.
+$("loopChk").addEventListener("change", (e) => {
+  if (e.target.checked) { if (cycleEnded) restartCycle(); }
+  else clearCycleTimers();
+});
 $("thresh").addEventListener("input", () => { $("threshOut").textContent = String(threshVal()); regroup(); });
 window.addEventListener("resize", () => { positionOverlay(); });
 
@@ -325,10 +382,17 @@ function foldBlock(text, contentIndent) {
   return ">-\n" + lines.map((l) => contentIndent + l).join("\n");
 }
 
+// Emit the standalone per-animation `config.yaml` (one preset per file,
+// validated directly into `schema.lottie_library.LottiePreset`). It goes in
+// the preset's own folder beside the `.json`:
+//   assets/lottie_animations/<id>/config.yaml
+//   assets/lottie_animations/<id>/<file>.json
+// so `file` is the bare json filename (relative to the folder), and the
+// top-level keys are NOT indented under a `presets:` list.
 function renderYaml() {
   const id = $("pId").value.trim() || "preset_id";
   const name = $("pName").value.trim() || "Display Name";
-  const file = $("pFile").value.trim() || "animations/file.json";
+  const file = $("pFile").value.trim() || "file.json";
   const desc = $("pDesc").value.trim() || "TODO: what this animation does.";
   const types = [];
   if ($("tStandalone").checked) types.push("standalone");
@@ -336,34 +400,39 @@ function renderYaml() {
   const typeStr = types.length ? `[${types.join(", ")}]` : "[standalone]";
 
   let out = "";
-  out += `  - id: ${id}\n`;
-  out += `    display_name: ${name}\n`;
-  out += `    description: ${foldBlock(desc, "      ")}\n`;
-  out += `    file: ${file}\n`;
-  out += `    types: ${typeStr}\n`;
-  // speed is a NEW field (not yet in schema.lottie_library — wire it in later).
-  out += `    speed: ${fmt(val("speed"))}\n`;
-  out += `    recolor_regions:\n`;
+  out += `id: ${id}\n`;
+  out += `display_name: ${name}\n`;
+  out += `description: ${foldBlock(desc, "  ")}\n`;
+  out += `file: ${file}\n`;
+  out += `types: ${typeStr}\n`;
+  out += `speed: ${fmt(val("speed"))}\n`;
+  out += `recolor_regions:\n`;
   if (colorGroups.length) {
     for (const g of colorGroups) {
       const rname = groupNames[g.key] || g.suggested;
       const rdesc = groupDescs[g.key] || `TODO: the ${g.avgHex} group (${g.count} uses) — what this colour does in the animation.`;
-      out += `      - name: ${rname}\n`;
-      out += `        description: ${foldBlock(rdesc, "          ")}\n`;
-      // group → the actual Lottie layer names this colour lives on (the keys the
-      // app tints by). Emitted as a comment so it stays schema-valid.
-      out += `        # layers: ${g.layers && g.layers.length ? g.layers.join(", ") : "(none named)"}\n`;
+      out += `  - name: ${rname}\n`;
+      out += `    description: ${foldBlock(rdesc, "      ")}\n`;
+      // The actual Lottie layer names this colour group lives on — a real,
+      // required field: the pipeline bakes the colour onto exactly these
+      // layers. Empty until you load a file / name the layers (the schema
+      // rejects an empty list, on purpose).
+      const layers = g.layers && g.layers.length ? `[${g.layers.join(", ")}]` : "[]  # TODO: name the layer(s)";
+      out += `    layers: ${layers}\n`;
     }
   } else {
-    out += `      # load a Lottie to populate colour groups\n`;
+    out += `  # load a Lottie to populate colour groups\n`;
   }
   if ($("tReveal").checked) {
-    out += `    insertion_point:\n`;
-    out += `      frame: ${Math.round(val("frame"))}\n`;
-    out += `      x: ${fmt(cornerLeft())}\n`;
-    out += `      y: ${fmt(cornerTop())}\n`;
-    out += `      width: ${fmt(val("w"))}\n`;
-    out += `      height: ${fmt(val("h"))}\n`;
+    out += `insertion_point:\n`;
+    out += `  frame: ${Math.round(val("frame"))}\n`;
+    out += `  x: ${fmt(cornerLeft())}\n`;
+    out += `  y: ${fmt(cornerTop())}\n`;
+    out += `  width: ${fmt(val("w"))}\n`;
+    out += `  height: ${fmt(val("h"))}\n`;
+    // hold_seconds: how long the revealed image stays before it (and the
+    // animation) end.
+    out += `  hold_seconds: ${fmt(val("hold"))}\n`;
   }
   $("yaml").value = out;
 }
@@ -378,6 +447,36 @@ $("copyYaml").addEventListener("click", () => {
   setTimeout(() => (b.textContent = t), 1000);
 });
 
+// Save the designed preset straight into the repo's preset library via the
+// dev-server endpoint (see vite.config.js). Writes the verbatim loaded
+// animation JSON (NOT the recoloured preview — the pipeline bakes the palette
+// at runtime) plus the generated config.yaml. Only works under `npm run dev`.
+$("savePreset").addEventListener("click", async () => {
+  const btn = $("savePreset");
+  if (!originalText) { $("status").textContent = "Load a Lottie before saving."; return; }
+  renderYaml(); // ensure $("yaml") reflects the current form
+  const id = $("pId").value.trim();
+  const file = $("pFile").value.trim();
+  if (!id || id === "preset_id") { $("status").textContent = "Set a preset id before saving."; return; }
+  if (!file || file === "file.json" || !file.endsWith(".json")) {
+    $("status").textContent = "Set a .json file name before saving."; return;
+  }
+  try {
+    const res = await fetch("/api/save-preset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, file, yaml: $("yaml").value, animation: originalText }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { $("status").textContent = "Save failed: " + (data.error || res.statusText); return; }
+    const t = btn.textContent; btn.textContent = "Saved ✓";
+    setTimeout(() => (btn.textContent = t), 1000);
+    $("status").textContent = (data.overwritten ? "Overwrote " : "Saved to ") + data.path + data.file;
+  } catch (err) {
+    $("status").textContent = "Save failed: " + err.message;
+  }
+});
+
 
 // ---- loaders -------------------------------------------------------------
 $("lottieFile").addEventListener("change", (e) => {
@@ -388,6 +487,7 @@ $("lottieFile").addEventListener("change", (e) => {
     let data;
     try { data = JSON.parse(reader.result); }
     catch (err) { $("status").textContent = "Not valid JSON: " + err.message; return; }
+    originalText = reader.result; // keep the exact bytes for a lossless Save
     loadFile(data, f.name);
   };
   reader.readAsText(f);
@@ -411,8 +511,10 @@ $("clearImg").addEventListener("click", () => {
 
 $("clearLottie").addEventListener("click", () => {
   if (anim) { anim.destroy(); anim = null; }
+  clearCycleTimers();
+  revealStarted = false; cycleEnded = false;
   $("lottieFile").value = "";
-  originalData = null; loadedName = null;
+  originalData = null; originalText = null; loadedName = null;
   firstFrame = 0; totalFrames = 0; currentFrame = 0;
   regroup(); // originalData is null → clears groups + renders empty
   $("status").textContent = "No animation loaded.";
@@ -424,12 +526,16 @@ $("clearLottie").addEventListener("click", () => {
 // this keeps originalData pristine for the next recolour pass.
 function createAnim(data) {
   if (anim) { anim.destroy(); anim = null; }
+  clearCycleTimers();
+  revealStarted = false;
+  cycleEnded = false;
 
+  // loop is OFF — we manage looping ourselves (reveal hold + pre-loop pause).
   anim = new DotLottie({
     canvas: $("lottie"),
     data: JSON.parse(JSON.stringify(data)),
     autoplay: true,
-    loop: $("loopChk").checked,
+    loop: false,
     speed: val("speed"),
     renderConfig: { autoResize: true, devicePixelRatio: window.devicePixelRatio || 1 },
   });
@@ -455,6 +561,27 @@ function createAnim(data) {
   anim.addEventListener("frame", (e) => {
     currentFrame = e.currentFrame;
     updateRevealVisibility();
+    // Start the reveal hold the first time we cross the insertion frame. When it
+    // elapses the image and the animation end together (possibly cutting the
+    // animation short — "ends early if it needs to").
+    if (hasReveal() && !revealStarted && !cycleEnded && currentFrame >= insertionRel()) {
+      revealStarted = true;
+      holdTimer = setTimeout(endCycle, holdMs());
+    }
+  });
+
+  // Animation reached its last frame (loop is off).
+  anim.addEventListener("complete", () => {
+    if (cycleEnded) return;
+    if (hasReveal()) {
+      // A reveal hold owns the cycle end. If the hold hasn't started yet (the
+      // insertion frame is the very last frame), start it now; otherwise just
+      // freeze on the final frame with the image up until the hold expires.
+      if (!revealStarted) { revealStarted = true; holdTimer = setTimeout(endCycle, holdMs()); }
+    } else {
+      // Standalone: no image to hold — pause on the end state, then loop.
+      endCycle();
+    }
   });
 }
 
