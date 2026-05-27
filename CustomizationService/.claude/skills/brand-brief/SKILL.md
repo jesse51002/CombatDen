@@ -157,8 +157,9 @@ description — rather than smuggling it in as a normal pick.
 
 Before interviewing, locate and read the target app's `app.yaml`. The brief
 feeds *every* slot's prompt, so tailor questions to the slots that actually
-exist. Name real slots back to the user in your option descriptions. Never
-invent a slot; never write `app.yaml`.
+exist. Name real slots back to the user in your option descriptions to
+*ground the question* — but the brief prose you ultimately write never names
+them (principle 8). Never invent a slot; never write `app.yaml`.
 
 ### 6. Go broad first, then narrow — and adapt every question to the answers
 
@@ -198,6 +199,39 @@ mascot-style 3D, flat illustration, bold silhouette. If the user free-writes
 that they want photorealism, flag plainly that the pipeline produces stylised
 assets and redirect them to the closest stylised treatment; never write
 "photorealistic" (or a synonym) into `long_desc`.
+
+### 8. The brief describes the brand, not the app — keep app.yaml out of the prose
+
+Ground your *questions* in the app's real slots (principle 5) — but what you
+**write into the brief** is pure brand and visual direction, never a map of the
+app. `long_desc` and `colors_direction.description` must read as stylistic
+intent that would hold for *any* surface, plus the brand's own iconography.
+They must **not** name or enumerate anything that lives in `app.yaml`:
+
+- **no slot ids or slot names** (`single_point`, `rank_belt`,
+  `celebration_image`, `streak_icon`, …);
+- **no screen / UI-chrome names** — no "ClassBookedScreen", "the GymHeader top
+  info bar", "the post-class cards", "active nav, pills and tabs", "cards and
+  sheets";
+- **no enumerated hero/token checklists that just re-list the slots** —
+  "celebratory heroes (booking success, the rank belt, trophy, gift, points
+  burst)", "the persistent tokens — the single point-star, the streak mark, the
+  QR check-in icon" — nor a slot's own copy lifted verbatim ("you're in, your
+  spot is locked").
+
+Express the same intent **generically** instead — the dual register the slots
+need, said once: *"celebratory moments hit big, kinetic and arena-lit; small,
+persistent UI elements stay clean, sharp and razor-legible at small size."*
+That guidance reaches every slot through the pipeline anyway; each slot's own
+`app.yaml` description already owns its placement, size and screen, so naming
+them in the brief is redundant at best and fights the slot copy at worst.
+
+**Brand-intrinsic objects are the exception and are welcome** — when an object
+*is* the brand's identity, name it: a BJJ belt-knot, an octagon, a brass
+ring-bell and laced glove, a mascot, no-gi gear. The test is *"is this the
+brand's own iconography, or is it an app feature?"* The belt a jiu-jitsu
+academy lives by stays; "the `rank_belt` indicator at ~39x24 in the info bar"
+goes.
 
 ## Step 0 — Locate the app and read its app.yaml
 
@@ -284,8 +318,10 @@ full context.
 - **Visual system** *(multi-select → `long_desc`)*. The deepest brand lever —
   but **one** multi-select question, not five. Offer a menu drawn from the
   archetype covering *feel*, *medium & materials*, *finish & light*, and
-  *energy by role* (name the app's real persistent vs celebratory slots in the
-  option text). The user ticks the traits that fit. Keep every trait stylised —
+  *energy by role* (in the option text you may frame the two registers —
+  persistent tiny utility vs celebratory hero — but the prose you ultimately
+  write stays slot-agnostic, principle 8). The user ticks the traits that fit.
+  Keep every trait stylised —
   never offer a "realistic / photoreal" option (principle 7). If a
   mascot/hero-symbol decision is live for this app's slots, fold it in as one
   option here rather than spending a separate question.
@@ -396,6 +432,11 @@ Then:
   to read.
 - Never confirm composed prose (essence, colour) mid-interview — hold all
   confirmations to the end and run them back-to-back.
+- Never name or enumerate `app.yaml` slots, screens, or UI chrome in the brief
+  prose — no slot ids, no screen names, no "active nav / pills / tabs", no
+  "celebratory heroes (booking success, rank belt, …)" checklists. Express the
+  visual system generically; brand-intrinsic objects (a BJJ belt, an octagon, a
+  mascot) are the only named objects allowed (principle 8).
 - Never invent a mascot/character/specific object the user named — ask follow-up
   questions to pin down exactly what they mean before writing it into prose.
 - Never blow past ~10 information-gathering questions unless the user is the one
@@ -430,6 +471,9 @@ Then:
 7. Weighted those questions toward brand; kept colour at
    mood / hue-family / saturation / mode only, and offered only colour options
    that can satisfy the contrast / lightness contract.
+7a. Kept the written brief slot-agnostic — no `app.yaml` slot/screen/UI names
+    in `long_desc` or `colors_direction.description`, only brand-intrinsic
+    objects (principle 8).
 8. Held all composed-prose confirmations (essence, colour) to the end and ran
    them back-to-back; got explicit colour approval.
 9. Showed the full assembled YAML back for approval.

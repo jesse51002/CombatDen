@@ -16,6 +16,12 @@ from pydantic import BaseModel, ConfigDict
 from schema import ColorPalette, InsertionPoint, Output, TextSet
 
 
+def _versioned(url: str, version: str) -> str:
+    """Append the asset's content fingerprint as a cache-busting ``?v=``
+    token. Empty version (legacy runs) → the URL is returned unchanged."""
+    return f"{url}?v={version}" if version else url
+
+
 class LottieWire(BaseModel):
     """One lottie slot projected onto the wire: where to fetch the baked
     `.json` plus the playback metadata the client renders with. The colour
@@ -44,6 +50,7 @@ class OutputResponse(BaseModel):
 
     app: str
     display_name: str
+    design_name: str
     images: dict[str, str]
     fonts: dict[str, str]
     icons: dict[str, str]
@@ -61,23 +68,31 @@ class OutputResponse(BaseModel):
         return cls(
             app=output.app,
             display_name=output.display_name,
+            design_name=output.design_name,
             color_set=output.color_set,
             text_set=output.text_set,
             images={
-                slot_id: f"/apps/{app_id}/{run_id}/images/{slot_id}"
-                for slot_id in output.image_set.images
+                slot_id: _versioned(
+                    f"/apps/{app_id}/{run_id}/images/{slot_id}", image.version
+                )
+                for slot_id, image in output.image_set.images.items()
             },
             fonts={
                 slot_id: font.family
                 for slot_id, font in output.font_set.fonts.items()
             },
             icons={
-                slot_id: f"/apps/{app_id}/{run_id}/icons/{slot_id}"
-                for slot_id in output.icon_set.icons
+                slot_id: _versioned(
+                    f"/apps/{app_id}/{run_id}/icons/{slot_id}", icon.version
+                )
+                for slot_id, icon in output.icon_set.icons.items()
             },
             lotties={
                 slot_id: LottieWire(
-                    url=f"/apps/{app_id}/{run_id}/lotties/{slot_id}",
+                    url=_versioned(
+                        f"/apps/{app_id}/{run_id}/lotties/{slot_id}",
+                        lottie.version,
+                    ),
                     speed=lottie.speed,
                     reveals=lottie.reveals,
                     insertion_point=lottie.insertion_point,

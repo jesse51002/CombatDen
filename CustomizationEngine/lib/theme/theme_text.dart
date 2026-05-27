@@ -19,4 +19,16 @@ class ThemeText {
     if (resolved == null || resolved.isEmpty) return fallback;
     return resolved;
   }
+
+  /// The loaded theme's [designName] — this run's design/style name
+  /// (e.g. "Warm Ash Cream"), a top-level field rather than a text slot
+  /// (mirrors `ThemeColor.colorMode`). Falls back to [fallback] when no
+  /// customization is loaded, the name is empty, or DI is not set up
+  /// (tests). Never throws.
+  static String designName({required String fallback}) {
+    if (!getIt.isRegistered<CustomizationService>()) return fallback;
+    final name = getIt<CustomizationService>().current?.designName;
+    if (name == null || name.isEmpty) return fallback;
+    return name;
+  }
 }

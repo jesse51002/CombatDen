@@ -19,6 +19,16 @@ logger = logging.getLogger(__name__)
 
 output_router = APIRouter(prefix="/apps", tags=["output"])
 
+# Asset URLs are stable across regenerations (a preset's run id doesn't
+# change, and re-runs overwrite the same files), so without this clients
+# would sit on the cache manager's ~7-day default freshness window and
+# miss owner updates for a week. One day lets a swap (e.g. a Christmas
+# logo) propagate within ~24h: clients serve the cached file instantly,
+# and once the day lapses the next view revalidates (ETag/Last-Modified
+# are set by FileResponse) and picks up the new bytes — still serving the
+# cached file when offline.
+_ASSET_CACHE_CONTROL = {"Cache-Control": "max-age=86400"}
+
 
 # Declared before `/{app_id}/{run_id}` so the literal `styles` segment
 # isn't captured as a run id (Starlette matches in declaration order).
@@ -102,7 +112,9 @@ async def get_image(
     """Stream the generated PNG for one declared image slot."""
     try:
         path = await output_service().image_file(app_id, run_id, slot_id)
-        return FileResponse(path, media_type="image/png")
+        return FileResponse(
+            path, media_type="image/png", headers=_ASSET_CACHE_CONTROL
+        )
     except NotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -145,7 +157,9 @@ async def get_icon(
     """Stream the resolved monochrome SVG for one declared icon slot."""
     try:
         path = await output_service().icon_file(app_id, run_id, slot_id)
-        return FileResponse(path, media_type="image/svg+xml")
+        return FileResponse(
+            path, media_type="image/svg+xml", headers=_ASSET_CACHE_CONTROL
+        )
     except NotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -192,7 +206,11 @@ async def get_lottie(
     ``GET /apps/{app}/{run}`` payload (``lotties[slot]``)."""
     try:
         path = await output_service().lottie_file(app_id, run_id, slot_id)
-        return FileResponse(path, media_type="application/json")
+        return FileResponse(
+            path,
+            media_type="application/json",
+            headers=_ASSET_CACHE_CONTROL,
+        )
     except NotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)

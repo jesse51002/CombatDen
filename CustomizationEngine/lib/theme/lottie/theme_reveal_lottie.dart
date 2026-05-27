@@ -83,8 +83,17 @@ class _ThemeRevealLottieState extends State<ThemeRevealLottie>
   bool _revealed = false;
   bool _completed = false;
 
-  /// Pending hold-then-end timer (reveal slots with a `hold_seconds`). Cut on
-  /// dispose so it never fires after teardown.
+  /// The cycle finishes only when BOTH of these are true: the animation has
+  /// played its full natural pass (`_animEnded`) AND the post-reveal hold has
+  /// elapsed (`_held`). Joining the two — rather than racing them — means a
+  /// long animation is never cut short by a short hold, and a short animation
+  /// still dwells for the full hold. With no `hold_seconds` the hold is
+  /// satisfied immediately, so the natural end alone finishes.
+  bool _animEnded = false;
+  bool _held = false;
+
+  /// Pending hold timer (reveal slots with a `hold_seconds`). Cut on dispose so
+  /// it never fires after teardown.
   Timer? _holdTimer;
 
   /// Point on the timeline (0..1) at which the image pops in. Starts at the
@@ -108,30 +117,42 @@ class _ThemeRevealLottieState extends State<ThemeRevealLottie>
     }
   }
 
-  /// Once the image is revealed, honour the preset's `hold_seconds`: hold for
-  /// that long, then stop the animation (cutting it short if it has not
-  /// finished) and finish. With no hold (the bundled-fallback / no-backend
-  /// case) the animation plays its natural single pass and `_onStatus`
-  /// finishes it.
+  /// Once the image is revealed, start the post-reveal hold from the preset's
+  /// `hold_seconds`. With no hold (the bundled-fallback / no-backend case) the
+  /// hold is satisfied immediately. Either way this only marks the hold leg
+  /// done — [_maybeFinish] waits for the animation's natural end too.
   void _startHold() {
     final hold = ThemeLottie.resolve(widget.slot)?.holdSeconds;
-    if (hold == null) return;
+    if (hold == null) {
+      _held = true;
+      _maybeFinish();
+      return;
+    }
     _holdTimer = Timer(
       Duration(milliseconds: (hold * 1000).round()),
       () {
         if (!mounted) return;
-        _ctrl.stop();
-        _finish();
+        _held = true;
+        _maybeFinish();
       },
     );
   }
 
   void _onStatus(AnimationStatus status) {
-    if (status == AnimationStatus.completed) _finish();
+    if (status != AnimationStatus.completed) return;
+    // The animation has played its full natural pass; it parks on the last
+    // frame. Finish only once the hold leg is also done (see [_maybeFinish]).
+    _animEnded = true;
+    _maybeFinish();
   }
 
-  /// Fire [ThemeRevealLottie.onComplete] exactly once (whichever of the
-  /// natural end or the hold timer comes first).
+  /// Finish when both legs are done: full natural pass AND post-reveal hold.
+  void _maybeFinish() {
+    if (_animEnded && _held) _finish();
+  }
+
+  /// Fire [ThemeRevealLottie.onComplete] exactly once, when both the natural
+  /// end and the hold have elapsed.
   void _finish() {
     if (_completed) return;
     _completed = true;

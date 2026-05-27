@@ -3,20 +3,24 @@ import 'package:flutter/foundation.dart';
 import 'package:customization_engine/customization_service.dart';
 import 'package:customization_engine/data/customization_api_client.dart';
 import 'package:customization_engine/data/models/customization_style.dart';
-import 'package:customization_engine/image_prewarmer.dart';
 import 'package:customization_engine/service_locator.dart';
 
 /// The one entry point the app needs. Call [initialize] once in
 /// `main()` with the target app/design and the app's slot
-/// manifest — DI wiring, the network fetch, disk last-good, and
-/// image cache pre-warming are all handled internally. The app
-/// never sees `get_it`, the client, or the service.
+/// manifest — DI wiring, the network fetch, and disk last-good
+/// are all handled internally. The app never sees `get_it`, the
+/// client, or the service.
 ///
 /// App-agnostic: the only app-specific inputs are [appId] /
 /// [designId] (from the app's `AppConfig`) and the expected slot
 /// keys. The service URL and request path are package-internal.
 /// (A URL-validation API key will be added here later; not
 /// needed yet.)
+///
+/// Pass `livePreview: true` (the admin live-preview does) to bypass
+/// the on-disk image cache and bust image URLs on every config
+/// re-fetch, so an in-place asset edit shows up immediately. The
+/// member app leaves it false.
 class CustomizationRuntime {
   // Private constructor to prevent instantiation
   CustomizationRuntime._();
@@ -30,6 +34,7 @@ class CustomizationRuntime {
     required List<String> expectedText,
     required List<String> expectedIcons,
     required List<String> expectedLotties,
+    bool livePreview = false,
   }) async {
     if (!getIt.isRegistered<CustomizationService>()) {
       getIt.registerLazySingleton<CustomizationApiClient>(
@@ -47,13 +52,13 @@ class CustomizationRuntime {
           expectedTextKeys: expectedText,
           expectedIconKeys: expectedIcons,
           expectedLottieKeys: expectedLotties,
+          livePreview: livePreview,
         ),
       );
     }
 
     final service = getIt<CustomizationService>();
     await service.initialize();
-    CustomizationImagePrewarmer.prewarm(service);
   }
 
   /// Listenable that fires whenever the active customization changes
@@ -70,14 +75,10 @@ class CustomizationRuntime {
   static String? get activeDesignId =>
       getIt<CustomizationService>().activeDesignId;
 
-  /// Switches the live style and re-warms its image cache. Returns
-  /// whether the switch took effect. Never throws.
+  /// Switches the live style. Returns whether the switch took
+  /// effect. Never throws.
   static Future<bool> selectDesign(String designId) async {
     final service = getIt<CustomizationService>();
-    final ok = await service.selectDesign(designId);
-    if (ok) {
-      CustomizationImagePrewarmer.prewarm(service);
-    }
-    return ok;
+    return service.selectDesign(designId);
   }
 }

@@ -46,6 +46,10 @@ class LottieOutput(NodeOutput):
     # The baked, recoloured animation json in the run dir
     # (``lotties/<slot>.json``) — what the app actually plays.
     path: AbsolutePath
+    # Content fingerprint of the delivered JSON bytes — the API's cache-busting
+    # ``?v=`` token. Stamped by the Writer at serialize time; empty on a legacy
+    # ``output.yaml`` written before this field (URL stays unversioned).
+    version: str = ""
     # Playback multiplier (lifted from the preset; 2.0 => half duration).
     speed: float
     # Provenance only: region name -> palette role key it resolved to. The

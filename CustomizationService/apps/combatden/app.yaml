@@ -112,7 +112,7 @@ images:
       - single_point
   - id: single_point
     description: >-
-      The app's signature single points / earned-value token — the atomic
+      The app's signature points / earned-value token — the atomic
       unit of the points / rewards visual language. Three uses: (1) a ~22px
       points icon in the persistent top info bar next to the points balance;
       (2) fourteen instances forming the orbiting 3D sphere on the Points
@@ -122,9 +122,8 @@ images:
       "points" unit, be simple, perfectly legible at ~22px, symmetrical, and
       look right when repeated, rotated, depth-sorted and scaled in motion —
       a single clean token, never a scene or a cluster, and kept
-      semi-professional (no wild or gimmicky shapes). A clean 4-point star is
-      one excellent option; the object is otherwise the brand's to choose
-      (e.g. a 4-point star, a coin/chip, a gem, a pip/token) as long as it
+      semi-professional (no wild or gimmicky shapes). The object is otherwise the brand's to choose
+      (e.g. a star, a coin/chip, a gem, a pip/token) as long as it
       stays an instantly-readable, restrained points unit.
   - id: icon_qrcode
     description: >-
@@ -140,20 +139,16 @@ images:
       scannable code.
   - id: streak_icon
     description: >-
-      The streak indicator — it communicates that the user has an active
-      attendance streak going: momentum, consistency, "on a roll". Read that
-      feeling and pick imagery that fits this brand's world — do NOT default
-      to a lightning bolt (e.g. a flame, a rising bar/step stack, stacked
-      forward chevrons, an upward arc, a bolt — brand's choice). Three
-      contexts: (1) ~22x30 in the persistent top info bar beside the streak
+      Communicates that the user has an attendance streak going. Read that feeling
+      and pick imagery that fits this brand's world
+      (e.g. a flame, stacked forward chevrons, a lightning bolt, or pick wtv you think would fit is encouraged).
+      This should be stylized to fit their brand and feel exciting while being clear and scannable.
+      Must not be inside a token, wtv you pick should be on its own.
+      Used in three places: (1) ~22x30 in the persistent top info bar beside the streak
       day count; (2) ~12x15 in the Home screen's upcoming-sessions card
       footer next to "You're on an X week streak!"; (3) the ~240px icon hero
       of the post-class Streak screen (the 1st post-class card), revealed by
-      the streak celebration animation as it grows in. So it is mostly a
-      small, ever-present utility that must stay sharp when tiny, but is
-      occasionally a celebratory hero. A single bold momentum mark that reads
-      at a glance and survives heavy downscaling.
-
+      the streak celebration animation as it grows in.
 colors:
   - id: primary
     description: Dominant brand color. Used for primary CTAs and key accents.

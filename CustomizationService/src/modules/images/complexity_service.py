@@ -25,7 +25,7 @@ COMPLEXITY_PROMPT_PATH = (
 # the model is a property of this call. Override `classify(model=...)` in
 # dev to compare models; production uses this default. Gemma/Gemini route
 # on the existing gemini provider key.
-COMPLEXITY_MODEL = "gemini/gemini-3.1-flash-lite-preview"
+COMPLEXITY_MODEL = "gemini/gemini-2.5-flash-lite"
 
 
 class ComplexityClassifier:

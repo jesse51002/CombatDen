@@ -66,7 +66,10 @@ def test_get_output_matches_the_runs_yaml() -> None:
 
     # Images collapse to a flat slot -> fetch-URL map; the unreliable
     # server ``path`` and the generation ``prompt`` never reach the client.
-    assert body["images"] == {"hero": f"/apps/{APP}/run1/images/hero"}
+    # The slot's content fingerprint rides along as a cache-busting ?v= token.
+    assert body["images"] == {
+        "hero": f"/apps/{APP}/run1/images/hero?v=testhash1234"
+    }
 
     # Fonts collapse to a flat slot -> Google Fonts family map.
     assert body["fonts"] == {
@@ -79,10 +82,19 @@ def test_get_output_matches_the_runs_yaml() -> None:
     assert body["text_set"] == {"texts": {}}
 
 
+def test_versionless_slot_yields_unversioned_url() -> None:
+    """A legacy ``output.yaml`` slot with no ``version`` projects to a bare
+    URL — no trailing ``?v=`` — so old runs stay valid and unchanged."""
+    body = client.get(f"/apps/{APP}/default").json()
+    assert body["images"]["hero"] == f"/apps/{APP}/default/images/hero"
+
+
 def test_image_served_from_final_images() -> None:
     resp = client.get(f"/apps/{APP}/run1/images/hero")
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "image/png"
+    # One-day freshness so owner asset swaps propagate within ~24h.
+    assert resp.headers["cache-control"] == "max-age=86400"
     expected = (FIXTURE_APPS / APP / "run1" / "final_images" / "hero.png").read_bytes()
     assert resp.content == expected
 

@@ -8,6 +8,7 @@ image_set:
         specs: ''
         image_to_image: null
       path: /fixture/demo/run1/final_images/hero.png
+      version: testhash1234
       prompt: A bold demo hero illustration on a flat solid background.
       complexity: medium
 color_set:
