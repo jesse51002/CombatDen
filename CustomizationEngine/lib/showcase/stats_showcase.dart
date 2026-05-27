@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -10,15 +11,27 @@ import 'package:customization_engine/showcase/support/showcase_scaffold.dart';
 import 'package:customization_engine/showcase/support/staggered_reveal.dart';
 import 'package:customization_engine/showcase/support/streak_week_strip.dart';
 import 'package:customization_engine/theme/animation/celebration_timings.dart';
-import 'package:customization_engine/theme/animation/scale_reveal.dart';
 import 'package:customization_engine/theme/theme_image.dart';
 
 // Per-screen layout/timing math (clone of MobileApp's streak_body _k consts).
-const double _kIconSize = 320;
-// How long the streak icon dwells after its reveal before the stats cascade.
-const Duration _kRevealHold = Duration(milliseconds: 900);
+const Duration _kDelay = Duration(milliseconds: 500);
+// The mini-icon ring expands then immediately collapses — a quick out-and-back
+// intro pulse before the big icon pop.
+const Duration _kRingGrow = Duration(milliseconds: 600);
+const Duration _kRingCollapse = Duration(milliseconds: 500);
+// After the ring collapses, the big streak icon pops up, holds ~1s, then
+// fades out into the stats cascade.
+const Duration _kIconPop = Duration(milliseconds: 400);
+const Duration _kIconHold = Duration(milliseconds: 800);
+const Duration _kIconExit = Duration(milliseconds: 250);
+const int _kOrbitCount = 8;
+const double _kSpinTurns = 1.6;
+const double _kOrbitSize = 30;
+const double _kIconSize = 120;
+const double _kReferenceExtent = 280;
+const double _kEdgePad = 28;
 
-// How long the stats statement holds before the strike replays.
+// How long the stats statement holds before the orbit replays.
 const Duration _kStatsHold = Duration(milliseconds: 2600);
 
 // Dummy data — clone of MobileApp's `mockStreakStats`.
@@ -35,8 +48,9 @@ const List<ShowcaseStreakDay> _kWeekDays = [
 ];
 
 /// Exact visual clone of the member app's post-class **streak celebration**
-/// (`StreakScreen` / `StreakBody`): the streak icon scale-reveals in, then the
-/// week count + "week streak" + subtitle + week strip cascade in. Loops.
+/// (`StreakScreen` / `StreakBody`): the streak icon pops in while a ring of
+/// smaller streak icons expands + spins around it, then collapses; afterwards
+/// the week count + "week streak" + subtitle + week strip cascade in. Loops.
 class StatsShowcase extends StatefulWidget {
   const StatsShowcase({super.key, this.loop = true, this.onCycleComplete});
 
@@ -49,22 +63,8 @@ class StatsShowcase extends StatefulWidget {
 
 class _StatsShowcaseState extends State<StatsShowcase> {
   bool _showStats = false;
-  int _cycle = 0; // re-keying the reveal rebuilds + restarts it
+  int _cycle = 0; // re-keying the orbit rebuilds + restarts it
   Timer? _hold;
-  Timer? _revealTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _startReveal();
-  }
-
-  void _startReveal() {
-    _revealTimer = Timer(
-      CelebrationTimings.revealDuration + _kRevealHold,
-      _toStats,
-    );
-  }
 
   void _toStats() {
     if (!mounted || _showStats) return;
@@ -80,13 +80,11 @@ class _StatsShowcaseState extends State<StatsShowcase> {
       _showStats = false;
       _cycle++;
     });
-    _startReveal();
   }
 
   @override
   void dispose() {
     _hold?.cancel();
-    _revealTimer?.cancel();
     super.dispose();
   }
 
@@ -97,25 +95,151 @@ class _StatsShowcaseState extends State<StatsShowcase> {
         padding: const EdgeInsets.symmetric(
           vertical: ShowcaseTokens.spacingBig,
         ),
-        child: Center(child: _showStats ? const _StatsContent() : _reveal()),
+        child: _showStats
+            ? const Center(child: _StatsContent())
+            : _StreakOrbit(key: ValueKey(_cycle), onComplete: _toStats),
       ),
     );
   }
+}
 
-  Widget _reveal() {
-    return SizedBox(
-      width: _kIconSize,
-      height: _kIconSize,
-      child: ScaleReveal(
-        key: ValueKey(_cycle),
-        child: Image(
-          image: ThemeImage.image(
-            ShowcaseSlots.streakIcon,
-            fallback: ShowcaseAsset.image('streak_icon.png'),
-          ),
-          fit: BoxFit.contain,
-        ),
+/// The intro animation: a single controller drives the sequence —
+/// 1. **Delay**: a short beat of empty space before anything appears.
+/// 2. **Ring**: a ring of small streak icons expands outward then collapses
+///    back to center — spinning throughout. No big icon yet.
+/// 3. **Icon**: once the ring is gone, the big streak icon pops up (overshoot
+///    scale), holds ~1s, then fades out as the stats cascade takes over.
+class _StreakOrbit extends StatefulWidget {
+  const _StreakOrbit({super.key, required this.onComplete});
+
+  final VoidCallback onComplete;
+
+  @override
+  State<_StreakOrbit> createState() => _StreakOrbitState();
+}
+
+class _StreakOrbitState extends State<_StreakOrbit>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: _kDelay +
+          _kRingGrow +
+          _kRingCollapse +
+          _kIconPop +
+          _kIconHold +
+          _kIconExit,
+    );
+    _ctrl.forward().whenComplete(widget.onComplete);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final smallerExtent =
+            math.min(constraints.maxWidth, constraints.maxHeight);
+        final renderScale = smallerExtent / _kReferenceExtent;
+        final orbitSize = _kOrbitSize * renderScale;
+        final iconSize = _kIconSize * renderScale;
+        final maxRadius = smallerExtent / 2 - _kEdgePad - orbitSize / 2;
+
+        return AnimatedBuilder(
+          animation: _ctrl,
+          builder: (context, _) {
+            final t = _ctrl.value;
+            final total = _ctrl.duration!.inMilliseconds.toDouble();
+            // Phase boundaries as fractions of the controller timeline.
+            final d = _kDelay.inMilliseconds;
+            final g = _kRingGrow.inMilliseconds;
+            final c = _kRingCollapse.inMilliseconds;
+            final p = _kIconPop.inMilliseconds;
+            final ih = _kIconHold.inMilliseconds;
+            final delayEnd = d / total;
+            final ringGrowEnd = (d + g) / total;
+            final ringEnd = (d + g + c) / total;
+            final iconPopEnd = (d + g + c + p) / total;
+            final iconHoldEnd = (d + g + c + p + ih) / total;
+
+            // Mini-icon ring: expand → collapse to center (no hold).
+            final growT =
+                ((t - delayEnd) / (ringGrowEnd - delayEnd)).clamp(0.0, 1.0);
+            final ringCollapseT =
+                ((t - ringGrowEnd) / (ringEnd - ringGrowEnd)).clamp(0.0, 1.0);
+            final expandE = Curves.easeOutQuart.transform(growT);
+            final ringCollapseE = Curves.easeInQuart.transform(ringCollapseT);
+
+            // 0 → 1 (grow), 1 (hold), 1 → 0 (collapse).
+            final radiusFactor = expandE * (1 - ringCollapseE);
+            final radius = maxRadius * radiusFactor;
+            final spin = t * 2 * math.pi * _kSpinTurns;
+
+            // Big center icon: pops up only after the ring has collapsed,
+            // holds ~1s, then fades out into the stats cascade.
+            final iconPopT =
+                ((t - ringEnd) / (iconPopEnd - ringEnd)).clamp(0.0, 1.0);
+            final iconExitT =
+                ((t - iconHoldEnd) / (1 - iconHoldEnd)).clamp(0.0, 1.0);
+            final iconExitE = Curves.easeInQuart.transform(iconExitT);
+            final iconScale =
+                Curves.easeOutBack.transform(iconPopT) * (1 - 0.3 * iconExitE);
+            final iconOpacity =
+                Curves.easeOut.transform(iconPopT) * (1 - iconExitE);
+
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                for (var i = 0; i < _kOrbitCount; i++)
+                  _orbitIcon(i, spin, radius, radiusFactor, orbitSize),
+                _icon(iconScale, iconOpacity, iconSize),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _orbitIcon(
+    int i,
+    double spin,
+    double radius,
+    double opacity,
+    double size,
+  ) {
+    final theta = spin + i * 2 * math.pi / _kOrbitCount;
+    return Transform.translate(
+      offset: Offset(math.cos(theta) * radius, math.sin(theta) * radius),
+      child: Opacity(opacity: opacity.clamp(0.0, 1.0), child: _image(size)),
+    );
+  }
+
+  Widget _icon(double scale, double opacity, double size) {
+    return Opacity(
+      opacity: opacity.clamp(0.0, 1.0),
+      child: Transform.scale(scale: scale, child: _image(size)),
+    );
+  }
+
+  Widget _image(double size) {
+    return Image(
+      image: ThemeImage.image(
+        ShowcaseSlots.streakIcon,
+        fallback: ShowcaseAsset.image('streak_icon.png'),
       ),
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
     );
   }
 }

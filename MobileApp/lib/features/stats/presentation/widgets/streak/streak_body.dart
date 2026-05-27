@@ -14,13 +14,18 @@ import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart'
 
 // Per-screen layout/timing math, file-scoped per CLAUDE.md's _k carve-out.
 const Duration _kDelay = Duration(milliseconds: 500);
-// The icon pop-in and the ring expansion play together across this window.
-const Duration _kGrow = Duration(milliseconds: 700);
-const Duration _kHold = Duration(milliseconds: 1500);
-const Duration _kCollapse = Duration(milliseconds: 600);
-const int _kStarCount = 10;
+// The mini-icon ring expands then immediately collapses — a quick out-and-back
+// intro pulse before the big icon pop.
+const Duration _kRingGrow = Duration(milliseconds: 600);
+const Duration _kRingCollapse = Duration(milliseconds: 500);
+// After the ring collapses, the big streak icon pops up, holds ~1s, then
+// fades out into the stats cascade.
+const Duration _kIconPop = Duration(milliseconds: 400);
+const Duration _kIconHold = Duration(milliseconds: 800);
+const Duration _kIconExit = Duration(milliseconds: 250);
+const int _kOrbitCount = 8;
 const double _kSpinTurns = 1.6;
-const double _kStarSize = 30;
+const double _kOrbitSize = 30;
 const double _kIconSize = 120;
 // Reference extent the seed sizes were tuned against; render scale is
 // `extent / _kReferenceExtent` so larger screens scale proportionally.
@@ -76,12 +81,12 @@ class _StreakBodyState extends State<StreakBody> {
   }
 }
 
-/// The intro animation: a single controller drives four beats —
+/// The intro animation: a single controller drives the sequence —
 /// 1. **Delay**: a short beat of empty space before anything appears.
-/// 2. **Grow**: the streak icon pops in (scale + fade) *while* a ring of star
-///    particles expands outward around it — both play together, spinning.
-/// 3. **Hold**: the ring rests at full radius, still spinning.
-/// 4. **Collapse**: ring radius + icon both shrink and fade to nothing.
+/// 2. **Ring**: a ring of small streak icons expands outward then collapses
+///    back to center — spinning throughout. No big icon yet.
+/// 3. **Icon**: once the ring is gone, the big streak icon pops up (overshoot
+///    scale), holds ~1s, then fades out as the stats cascade takes over.
 ///
 /// Fills its parent's bounds via `LayoutBuilder` so radius/sizes scale to the
 /// available area, mirroring the points screen's `_PointSphere`.
@@ -103,7 +108,13 @@ class _StreakOrbitState extends State<_StreakOrbit>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: _kDelay + _kGrow + _kHold + _kCollapse,
+      duration:
+          _kDelay +
+          _kRingGrow +
+          _kRingCollapse +
+          _kIconPop +
+          _kIconHold +
+          _kIconExit,
     );
     _ctrl.forward().whenComplete(widget.onComplete);
   }
@@ -118,52 +129,68 @@ class _StreakOrbitState extends State<_StreakOrbit>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final smallerExtent =
-            math.min(constraints.maxWidth, constraints.maxHeight);
+        final smallerExtent = math.min(
+          constraints.maxWidth,
+          constraints.maxHeight,
+        );
         final renderScale = smallerExtent / _kReferenceExtent;
-        final starSize = _kStarSize * renderScale;
+        final orbitSize = _kOrbitSize * renderScale;
         final iconSize = _kIconSize * renderScale;
-        final maxRadius = smallerExtent / 2 - _kEdgePad - starSize / 2;
+        final maxRadius = smallerExtent / 2 - _kEdgePad - orbitSize / 2;
 
         return AnimatedBuilder(
           animation: _ctrl,
           builder: (context, _) {
             final t = _ctrl.value;
-            final totalMs = (_kDelay + _kGrow + _kHold + _kCollapse)
-                .inMilliseconds
-                .toDouble();
-            final delayEnd = _kDelay.inMilliseconds / totalMs;
-            final growEnd = (_kDelay + _kGrow).inMilliseconds / totalMs;
-            final collapseStart =
-                (_kDelay + _kGrow + _kHold).inMilliseconds / totalMs;
+            final total = _ctrl.duration!.inMilliseconds.toDouble();
+            // Phase boundaries as fractions of the controller timeline.
+            final d = _kDelay.inMilliseconds;
+            final g = _kRingGrow.inMilliseconds;
+            final c = _kRingCollapse.inMilliseconds;
+            final p = _kIconPop.inMilliseconds;
+            final ih = _kIconHold.inMilliseconds;
+            final delayEnd = d / total;
+            final ringGrowEnd = (d + g) / total;
+            final ringEnd = (d + g + c) / total;
+            final iconPopEnd = (d + g + c + p) / total;
+            final iconHoldEnd = (d + g + c + p + ih) / total;
 
-            // The icon pop and the ring expansion share one progress value, so
-            // they play simultaneously across the grow window.
-            final growT =
-                ((t - delayEnd) / (growEnd - delayEnd)).clamp(0.0, 1.0);
-            final collapseT =
-                ((t - collapseStart) / (1 - collapseStart)).clamp(0.0, 1.0);
-
+            // Mini-icon ring: expand → collapse to center (no hold).
+            final growT = ((t - delayEnd) / (ringGrowEnd - delayEnd)).clamp(
+              0.0,
+              1.0,
+            );
+            final ringCollapseT = ((t - ringGrowEnd) / (ringEnd - ringGrowEnd))
+                .clamp(0.0, 1.0);
             final expandE = Curves.easeOutQuart.transform(growT);
-            final collapseE = Curves.easeInQuart.transform(collapseT);
+            final ringCollapseE = Curves.easeInQuart.transform(ringCollapseT);
 
             // 0 → 1 (grow), 1 (hold), 1 → 0 (collapse).
-            final radiusFactor = expandE * (1 - collapseE);
+            final radiusFactor = expandE * (1 - ringCollapseE);
             final radius = maxRadius * radiusFactor;
             final spin = t * 2 * math.pi * _kSpinTurns;
 
-            // Icon scales in from nothing with a slight overshoot pop, then
-            // shrinks back as it fades out during the collapse.
-            final popScale = Curves.easeOutBack.transform(growT);
-            final iconScale = popScale * (1 - 0.4 * collapseE);
+            // Big center icon: pops up only after the ring has collapsed,
+            // holds ~1s, then fades out into the stats cascade.
+            final iconPopT = ((t - ringEnd) / (iconPopEnd - ringEnd)).clamp(
+              0.0,
+              1.0,
+            );
+            final iconExitT = ((t - iconHoldEnd) / (1 - iconHoldEnd)).clamp(
+              0.0,
+              1.0,
+            );
+            final iconExitE = Curves.easeInQuart.transform(iconExitT);
+            final iconScale =
+                Curves.easeOutBack.transform(iconPopT) * (1 - 0.3 * iconExitE);
             final iconOpacity =
-                Curves.easeOut.transform(growT) * (1 - collapseE);
+                Curves.easeOut.transform(iconPopT) * (1 - iconExitE);
 
             return Stack(
               alignment: Alignment.center,
               children: [
-                for (var i = 0; i < _kStarCount; i++)
-                  _star(i, spin, radius, radiusFactor, starSize),
+                for (var i = 0; i < _kOrbitCount; i++)
+                  _orbitIcon(i, spin, radius, radiusFactor, orbitSize),
                 _icon(iconScale, iconOpacity, iconSize),
               ],
             );
@@ -173,22 +200,22 @@ class _StreakOrbitState extends State<_StreakOrbit>
     );
   }
 
-  Widget _star(
+  Widget _orbitIcon(
     int i,
     double spin,
     double radius,
     double opacity,
     double size,
   ) {
-    final theta = spin + i * 2 * math.pi / _kStarCount;
+    final theta = spin + i * 2 * math.pi / _kOrbitCount;
     return Transform.translate(
       offset: Offset(math.cos(theta) * radius, math.sin(theta) * radius),
       child: Opacity(
         opacity: opacity.clamp(0.0, 1.0),
         child: Image(
           image: ThemeImage.image(
-            CombatDenSlots.singlePoint,
-            fallback: ApiImage.asset('single_point.png'),
+            CombatDenSlots.streakIcon,
+            fallback: ApiImage.asset('streak_icon.png'),
           ),
           width: size,
           height: size,
