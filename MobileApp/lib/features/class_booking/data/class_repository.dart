@@ -1,48 +1,45 @@
 import 'package:mobile_app/core/app_config.dart';
-import 'package:mobile_app/core/app_styles.dart';
-import 'package:customization_engine/customization_runtime.dart';
+import 'package:mobile_app/core/video_service_config.dart';
+import 'package:theme_flutter/customization_runtime.dart';
 import 'package:mobile_app/features/class_booking/data/class_api_client.dart';
 import 'package:mobile_app/features/class_booking/data/class_info.dart';
 
-/// Single source of truth for the active style's four class cards. Paired with
-/// the customization theme via [AppStyle] (same `videoAppId`/base URL as the
-/// video feed); selecting a new style switches the classes too.
+/// Single source of truth for the active theme's four class cards. Fetched by
+/// design id — the VideoService resolves the theme to its gym and serves that
+/// gym's class cards — so selecting a new theme switches the classes too.
 ///
-/// Fetches at most once per `videoAppId` and caches, so the home schedule and
-/// the class detail screen share one load. Lazy app-wide singleton via
-/// [instance]. Mirrors `VideoFeedRepository`.
+/// Fetches at most once per `designId` and caches, so the home schedule and the
+/// class detail screen share one load. Lazy app-wide singleton via [instance].
+/// Mirrors `VideoFeedRepository`.
 class ClassRepository {
   ClassRepository._();
 
   static final ClassRepository instance = ClassRepository._();
 
-  final Map<String, Future<List<ClassInfo>>> _cacheByVideoApp = {};
+  final Map<String, Future<List<ClassInfo>>> _cacheByDesign = {};
 
-  AppStyle? get _activeStyle => appStyleForDesign(
-    CustomizationRuntime.activeDesignId ?? AppConfig.designId,
-  );
+  /// The live theme's design id (falls back to the build's default design
+  /// before any switch in the picker).
+  String get _activeDesignId =>
+      ThemeRuntime.activeDesignId ?? AppConfig.designId;
 
-  /// Whether the active style has class cards. False → schedule shows empty.
-  bool get hasClasses => _activeStyle != null;
-
-  /// The active style's four class cards, fetched at most once per
-  /// `videoAppId`. On failure the cache entry is cleared and the error
-  /// propagates so a rebuild can retry.
+  /// The active theme's four class cards, fetched at most once per `designId`.
+  /// On failure the cache entry is cleared and the error propagates so a
+  /// rebuild can retry.
   Future<List<ClassInfo>> classes() {
-    final style = _activeStyle;
-    if (style == null) return Future.value(const <ClassInfo>[]);
-    return _cacheByVideoApp[style.videoAppId] ??= _fetch(style);
+    final designId = _activeDesignId;
+    return _cacheByDesign[designId] ??= _fetch(designId);
   }
 
-  Future<List<ClassInfo>> _fetch(AppStyle style) async {
+  Future<List<ClassInfo>> _fetch(String designId) async {
     final client = ClassApiClient(
-      baseUrl: style.videoBaseUrl,
-      videoAppId: style.videoAppId,
+      baseUrl: kVideoBaseUrl,
+      designId: designId,
     );
     try {
       return await client.fetchClasses();
     } on ClassFetchException {
-      _cacheByVideoApp.remove(style.videoAppId);
+      _cacheByDesign.remove(designId);
       rethrow;
     }
   }

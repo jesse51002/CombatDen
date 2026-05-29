@@ -1,0 +1,17 @@
+gym_id: prenatal_pilates
+gym_type:
+- prenatal_pilates
+theme: ZZUndonePrePostnatalPilates
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational prenatal pilates content for
+      gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable prenatal pilates sources.
+    avoid_desc: Anything not about prenatal pilates; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

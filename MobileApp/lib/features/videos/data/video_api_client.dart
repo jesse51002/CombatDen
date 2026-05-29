@@ -14,9 +14,13 @@ class VideoFetchException implements Exception {
 
 /// Dedicated read-only client for the public VideoService. Unauthenticated,
 /// short timeouts so a screen never hangs on it. Mirrors
-/// `CustomizationApiClient`.
+/// `ThemeApiClient`. Fetches the feed for a **theme** (design id);
+/// the server resolves the theme to its gym and serves that gym's approved feed.
 class VideoApiClient {
-  VideoApiClient({required this.baseUrl, required this.videoAppId}) {
+  VideoApiClient({
+    required this.baseUrl,
+    required this.designId,
+  }) {
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
@@ -28,14 +32,18 @@ class VideoApiClient {
   }
 
   final String baseUrl;
-  final String videoAppId;
+
+  /// The active customization design id whose gym feed to fetch.
+  final String designId;
 
   late final Dio _dio;
 
-  /// `GET /apps/{videoAppId}/videos` — the tenant's full video feed.
+  /// `GET /themes/{designId}/videos` — the theme's gym feed (single-tenant).
   Future<List<Video>> fetchFeed() async {
     try {
-      final response = await _dio.get<dynamic>('/apps/$videoAppId/videos');
+      final response = await _dio.get<dynamic>(
+        '/themes/$designId/videos',
+      );
       final data = response.data;
       if (data is Map && data['videos'] is List) {
         return (data['videos'] as List)

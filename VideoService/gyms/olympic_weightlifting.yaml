@@ -1,0 +1,17 @@
+gym_id: olympic_weightlifting
+gym_type:
+- olympic_weightlifting
+theme: ZZUndoneOlyLifting
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational olympic weightlifting content
+      for gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable olympic weightlifting sources.
+    avoid_desc: Anything not about olympic weightlifting; off-topic, low-quality,
+      or clickbait videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

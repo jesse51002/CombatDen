@@ -1,0 +1,17 @@
+gym_id: vinyasa
+gym_type:
+- vinyasa
+theme: ZZUndoneVinyasaFlow
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational vinyasa content for gym members
+      — technique breakdowns, full classes, drills, and credible coaching from reputable
+      vinyasa sources.
+    avoid_desc: Anything not about vinyasa; off-topic, low-quality, or clickbait videos;
+      and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

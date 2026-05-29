@@ -1,0 +1,17 @@
+gym_id: bft
+gym_type:
+- bft
+theme: ZZUndoneBFTIndie
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational bft content for gym members
+      — technique breakdowns, full classes, drills, and credible coaching from reputable
+      bft sources.
+    avoid_desc: Anything not about bft; off-topic, low-quality, or clickbait videos;
+      and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

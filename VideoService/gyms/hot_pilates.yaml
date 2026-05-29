@@ -1,0 +1,17 @@
+gym_id: hot_pilates
+gym_type:
+- hot_pilates
+theme: ZZUndoneHotPilates
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational hot pilates content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable hot pilates sources.
+    avoid_desc: Anything not about hot pilates; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

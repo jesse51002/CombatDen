@@ -1,0 +1,17 @@
+gym_id: mobility_recovery
+gym_type:
+- mobility_recovery
+theme: ZZUndoneMobilityRecovery
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational mobility recovery content
+      for gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable mobility recovery sources.
+    avoid_desc: Anything not about mobility recovery; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

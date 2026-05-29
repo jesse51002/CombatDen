@@ -4,8 +4,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/phone_frame.dart';
-import 'package:customization_engine/customization_runtime.dart';
-import 'package:customization_engine/showcase/showcase_screen.dart';
+import 'package:theme_flutter/customization_runtime.dart';
+import 'package:theme_flutter/showcase/showcase_screen.dart';
 
 /// The left pane: a large phone mockup that fills the available space,
 /// showing the active showcase screen (re-themed live, animation looping),
@@ -101,12 +101,12 @@ class _PreviewContent extends StatelessWidget {
           );
         }
         return ListenableBuilder(
-          listenable: CustomizationRuntime.changes,
+          listenable: ThemeRuntime.changes,
           builder: (context, _) {
             // Re-key on theme + slide so the showcase restarts its
             // animation fresh whenever either changes.
             return KeyedSubtree(
-              key: ValueKey('${CustomizationRuntime.activeDesignId}-$screen'),
+              key: ValueKey('${ThemeRuntime.activeDesignId}-$screen'),
               child: screen.build(gymName: gymName, gymLogo: gymLogo),
             );
           },

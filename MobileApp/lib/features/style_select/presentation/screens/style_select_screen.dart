@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import 'package:mobile_app/core/app_styles.dart';
+import 'package:theme_flutter/customization_runtime.dart';
+import 'package:theme_flutter/data/models/customization_style.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:customization_engine/customization_runtime.dart';
-import 'package:customization_engine/data/models/customization_style.dart';
-import 'package:mobile_app/features/style_select/presentation/widgets/style_list/style_list.dart';
+import 'package:mobile_app/features/style_select/data/gyms_pager.dart';
+import 'package:mobile_app/features/style_select/presentation/widgets/style_card/style_card.dart';
+import 'package:mobile_app/features/style_select/presentation/widgets/style_list/style_search_bar.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
-/// Reached by double-tapping the home logo. Lists the app's styles
-/// (design name + celebration image) fetched from the
-/// CustomizationService; tapping one switches the live theme and pops
-/// back to the now-re-themed app.
+// Phones load 10 per page — small enough to feel instant on slow links,
+// big enough to fill the visible viewport on a single roundtrip.
+const int _kMobilePageSize = 10;
+// Distance from the list bottom that triggers the next-page fetch. Big
+// enough that the loader is already in flight before the user reaches
+// the end, so the scroll feels seamless.
+const double _kLoadMoreThreshold = 600;
+
+/// Reached by double-tapping the home logo. A search bar over a
+/// vertically-paged list of styles (design name + celebration image)
+/// fetched from the ThemeService; tapping one switches the live
+/// theme and pops back to the now-re-themed app.
 class StyleSelectScreen extends StatefulWidget {
   const StyleSelectScreen({super.key});
 
@@ -20,56 +29,60 @@ class StyleSelectScreen extends StatefulWidget {
 }
 
 class _StyleSelectScreenState extends State<StyleSelectScreen> {
-  late final Future<List<CustomizationStyle>> _stylesFuture =
-      CustomizationRuntime.fetchStyles();
+  final GymsPager _pager = GymsPager(pageSize: _kMobilePageSize);
+  final ScrollController _scroll = ScrollController();
   bool _busy = false;
 
-  Future<void> _select(CustomizationStyle style) async {
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final pos = _scroll.position;
+    if (pos.pixels >= pos.maxScrollExtent - _kLoadMoreThreshold) {
+      _pager.loadMore();
+    }
+  }
+
+  Future<void> _select(ThemeStyle style) async {
     if (_busy) return;
     setState(() => _busy = true);
-    await CustomizationRuntime.selectDesign(style.id);
+    await ThemeRuntime.selectDesign(style.id);
     if (!mounted) return;
     Navigator.of(context).maybePop();
   }
 
   @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    _pager.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AppScreenScaffold(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingBig,
-          children: [
-            const _StyleSelectHeader(),
-            FutureBuilder<List<CustomizationStyle>>(
-              future: _stylesFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const _StyleStatus(message: 'Loading styles…');
-                }
-                // The curated AppStyle list — not the service's full catalog
-                // — decides what's offered; the service only supplies the art.
-                final curatedIds = {
-                  for (final style in kAppStyles) style.designId,
-                };
-                final styles = (snapshot.data ?? const <CustomizationStyle>[])
-                    .where((s) => curatedIds.contains(s.id))
-                    .toList(growable: false);
-                if (snapshot.hasError || styles.isEmpty) {
-                  return const _StyleStatus(
-                    message: 'No styles available right now.',
-                  );
-                }
-                return StyleList(
-                  styles: styles,
-                  activeId: CustomizationRuntime.activeDesignId,
-                  onSelect: _select,
-                );
-              },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingBig,
+        children: [
+          const _StyleSelectHeader(),
+          StyleSearchBar(onChanged: _pager.setQuery),
+          Expanded(
+            child: ListenableBuilder(
+              listenable: _pager,
+              builder: (context, _) => _StyleListView(
+                pager: _pager,
+                scroll: _scroll,
+                onSelect: _select,
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -100,6 +113,96 @@ class _StyleSelectHeader extends StatelessWidget {
           child: Text('Choose a style', style: DesignConstants.h1),
         ),
       ],
+    );
+  }
+}
+
+/// Lazily-paged scroll list. Rebuilds on every pager state transition;
+/// re-themes via ThemeRuntime.changes so the "active" card
+/// border flips when the live theme switches under it.
+class _StyleListView extends StatelessWidget {
+  const _StyleListView({
+    required this.pager,
+    required this.scroll,
+    required this.onSelect,
+  });
+
+  final GymsPager pager;
+  final ScrollController scroll;
+  final ValueChanged<ThemeStyle> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!pager.hasLoadedFirstPage && pager.isLoading) {
+      return const _StyleStatus(message: 'Loading styles…');
+    }
+    if (pager.items.isEmpty) {
+      if (pager.errored) {
+        return const _StyleStatus(
+          message: 'Could not load styles. Pull to retry.',
+        );
+      }
+      return _StyleStatus(
+        message: pager.query.isEmpty
+            ? 'No styles available right now.'
+            : 'No styles match "${pager.query}".',
+      );
+    }
+    return ListenableBuilder(
+      listenable: ThemeRuntime.changes,
+      builder: (context, _) {
+        final activeId = ThemeRuntime.activeDesignId;
+        final showFooter = pager.hasMore || pager.isLoading || pager.errored;
+        final itemCount = pager.items.length + (showFooter ? 1 : 0);
+        return ListView.separated(
+          controller: scroll,
+          itemCount: itemCount,
+          separatorBuilder: (_, _) => SizedBox(
+            height: DesignConstants.spacingLarge,
+          ),
+          itemBuilder: (context, i) {
+            if (i >= pager.items.length) return _ListFooter(pager: pager);
+            final style = pager.items[i];
+            return StyleCard(
+              style: style,
+              isActive: style.id == activeId,
+              onTap: () => onSelect(style),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Trailing row under the last card: a loader while a page is in
+/// flight, or a one-line error nudge if the last fetch failed.
+class _ListFooter extends StatelessWidget {
+  const _ListFooter({required this.pager});
+
+  final GymsPager pager;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingLarge),
+      child: Center(
+        child: pager.errored
+            ? Text(
+                'Could not load more styles.',
+                style: DesignConstants.pSmall.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              )
+            : SizedBox(
+                width: DesignConstants.iconSizeLg,
+                height: DesignConstants.iconSizeLg,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: DesignConstants.primaryColor,
+                ),
+              ),
+      ),
     );
   }
 }

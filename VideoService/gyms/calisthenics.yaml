@@ -1,0 +1,17 @@
+gym_id: calisthenics
+gym_type:
+- calisthenics
+theme: ZZUndoneCalisthenics
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational calisthenics content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable calisthenics sources.
+    avoid_desc: Anything not about calisthenics; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

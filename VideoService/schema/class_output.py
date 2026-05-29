@@ -1,12 +1,8 @@
-"""The `class_output.yaml` contract: a company's four branded class cards.
+"""``ClassImage`` — one branded class card.
 
-Lives next to `videos_config.yaml` under `apps/<app_id>/`, keyed by the same
-`app_id`. Replaces the mobile app's hardcoded class images with on-brand ones.
-Authored by the `class-images` skill, so — like `videos_config.yaml` and unlike
-the machine-written `videos_output.yaml` — both models are `extra="forbid"`:
-a stray key is a typo and should fail loudly.
-
-Always exactly four classes, each just a display name and a horizontal image URL.
+A gym's class cards live ON the gym (``Gym.classes`` in ``schema/gym.py``); this
+is the per-card model they're a list of. ``extra="forbid"`` — a stray key is a
+typo and should fail loudly.
 """
 
 from __future__ import annotations
@@ -26,14 +22,3 @@ class ClassImage(BaseModel):
     instructor_name: str = Field(min_length=1)
     instructor_bio: str = Field(min_length=1)  # the instructor "details" blurb
     instructor_image_url: str = Field(min_length=1)  # instructor headshot URL
-
-
-class ClassOutput(BaseModel):
-    """A company's four class cards. The whole writable surface."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    company_name: str = Field(min_length=2)
-    app_id: str = Field(min_length=1)
-    # Always exactly four — the mobile app shows four class cards.
-    classes: list[ClassImage] = Field(min_length=4, max_length=4)

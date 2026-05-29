@@ -1,0 +1,17 @@
+gym_id: aerial_yoga
+gym_type:
+- aerial_yoga
+theme: ZZUndoneAerialYoga
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational aerial yoga content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable aerial yoga sources.
+    avoid_desc: Anything not about aerial yoga; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

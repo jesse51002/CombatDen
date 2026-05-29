@@ -1,0 +1,17 @@
+gym_id: hatha
+gym_type:
+- hatha
+theme: ZZUndoneHathaStudio
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational hatha content for gym members
+      — technique breakdowns, full classes, drills, and credible coaching from reputable
+      hatha sources.
+    avoid_desc: Anything not about hatha; off-topic, low-quality, or clickbait videos;
+      and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

@@ -1,0 +1,17 @@
+gym_id: treadmill
+gym_type:
+- treadmill
+theme: ZZUndoneTreadmillRun
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational treadmill content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable treadmill sources.
+    avoid_desc: Anything not about treadmill; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

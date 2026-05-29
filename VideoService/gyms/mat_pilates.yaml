@@ -1,0 +1,17 @@
+gym_id: mat_pilates
+gym_type:
+- mat_pilates
+theme: ZZUndoneMatPilates
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational mat pilates content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable mat pilates sources.
+    avoid_desc: Anything not about mat pilates; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

@@ -1,0 +1,17 @@
+gym_id: cardio_boxing
+gym_type:
+- cardio_boxing
+theme: ZZUndoneCardioBoxing
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational cardio boxing content for
+      gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable cardio boxing sources.
+    avoid_desc: Anything not about cardio boxing; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

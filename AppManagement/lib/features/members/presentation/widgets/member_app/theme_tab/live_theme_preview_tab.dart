@@ -5,21 +5,21 @@ import 'package:app_management/features/members/data/mock_member_app_preview.dar
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/edit_branding_dialog.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_grid.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_preview_pane.dart';
-import 'package:customization_engine/customization_runtime.dart';
-import 'package:customization_engine/data/models/customization_style.dart';
-import 'package:customization_engine/showcase/showcase_screen.dart';
-import 'package:customization_engine/showcase/showcase_slots.dart';
+import 'package:app_management/features/members/presentation/widgets/themes_library/library_view.dart';
+import 'package:theme_flutter/customization_runtime.dart';
+import 'package:theme_flutter/showcase/showcase_screen.dart';
+import 'package:theme_flutter/showcase/showcase_slots.dart';
 
 // The tenant + preset the preview wears on first paint.
 const String _kAppId = 'combatden';
 const String _kSeedDesignId = 'ApexMMA';
 
-/// Theme tab: a large live phone preview on the left and a compact,
-/// independently-scrolling theme picker on the right. Picking a theme
-/// re-themes the phone instantly; the arrows / view chips under the phone
-/// page through the showcase screens. The gym name + logo are the host's
-/// own identity (from [kMockMemberAppPreview]) and are passed into the
-/// preview as arguments — they are NOT a customization slot.
+enum _Mode { library, phone }
+
+/// Theme tab — defaults to the **themes library** (filter + search +
+/// grid). Tapping a theme card switches to the phone-frame preview;
+/// the side pane's "Back to library" link returns. Engine init runs
+/// once per mount and is shared across both modes.
 class LiveThemePreviewTab extends StatefulWidget {
   const LiveThemePreviewTab({super.key});
 
@@ -28,7 +28,7 @@ class LiveThemePreviewTab extends StatefulWidget {
 }
 
 class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
-  late final Future<void> _engineReady = CustomizationRuntime.initialize(
+  late final Future<void> _engineReady = ThemeRuntime.initialize(
     appId: _kAppId,
     designId: _kSeedDesignId,
     expectedColors: ShowcaseSlots.expectedColors,
@@ -42,9 +42,7 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
     livePreview: true,
   );
 
-  late final Future<List<CustomizationStyle>> _catalog = _engineReady.then(
-    (_) => CustomizationRuntime.fetchStyles(),
-  );
+  _Mode _mode = _Mode.library;
 
   // Gym identity, owned by the host (seeded from the shared mock). The Edit
   // button under the phone updates the name; the logo is the in-memory asset.
@@ -68,31 +66,97 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
     }
   }
 
+  void _openLibrary() => setState(() => _mode = _Mode.library);
+  void _openPhone() => setState(() => _mode = _Mode.phone);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _engineReady,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _CenteredSpinner();
+        }
+        return switch (_mode) {
+          _Mode.library => LibraryView(onPicked: _openPhone),
+          _Mode.phone => _PhonePreview(
+              slide: _slide,
+              gymName: _gymName,
+              gymLogo: _gymLogo,
+              onPrev: _prevSlide,
+              onNext: _nextSlide,
+              onSelectSlide: _selectSlide,
+              onEditBranding: _editBranding,
+              onBackToLibrary: _openLibrary,
+            ),
+        };
+      },
+    );
+  }
+}
+
+class _PhonePreview extends StatelessWidget {
+  const _PhonePreview({
+    required this.slide,
+    required this.gymName,
+    required this.gymLogo,
+    required this.onPrev,
+    required this.onNext,
+    required this.onSelectSlide,
+    required this.onEditBranding,
+    required this.onBackToLibrary,
+  });
+
+  final int slide;
+  final String gymName;
+  final ImageProvider gymLogo;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final ValueChanged<int> onSelectSlide;
+  final VoidCallback onEditBranding;
+  final VoidCallback onBackToLibrary;
+
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
       children: [
-        // Phone takes all the room it can; the theme picker is a fixed,
-        // narrow column so its compact cards don't stretch into dead space.
         Expanded(
           child: ThemePreviewPane(
-            engineReady: _engineReady,
-            slide: _slide,
-            gymName: _gymName,
-            gymLogo: _gymLogo,
-            onPrev: _prevSlide,
-            onNext: _nextSlide,
-            onSelect: _selectSlide,
-            onEditBranding: _editBranding,
+            engineReady: Future.value(),
+            slide: slide,
+            gymName: gymName,
+            gymLogo: gymLogo,
+            onPrev: onPrev,
+            onNext: onNext,
+            onSelect: onSelectSlide,
+            onEditBranding: onEditBranding,
           ),
         ),
         SizedBox(
           width: 300,
-          child: ThemeGrid(catalog: _catalog),
+          child: ThemeGrid(onBackToLibrary: onBackToLibrary),
         ),
       ],
+    );
+  }
+}
+
+class _CenteredSpinner extends StatelessWidget {
+  const _CenteredSpinner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SizedBox(
+        height: 32,
+        width: 32,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: DesignConstants.primaryColor,
+        ),
+      ),
     );
   }
 }

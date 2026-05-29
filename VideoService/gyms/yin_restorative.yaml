@@ -1,0 +1,17 @@
+gym_id: yin_restorative
+gym_type:
+- yin_restorative
+theme: ZZUndoneYinRestorative
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational yin restorative content for
+      gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable yin restorative sources.
+    avoid_desc: Anything not about yin restorative; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

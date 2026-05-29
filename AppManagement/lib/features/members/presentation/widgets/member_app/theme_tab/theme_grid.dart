@@ -2,19 +2,83 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_card.dart';
+import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_search_bar.dart';
+import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/section_card.dart';
-import 'package:customization_engine/customization_runtime.dart';
-import 'package:customization_engine/data/models/customization_style.dart';
+import 'package:theme_flutter/customization_runtime.dart';
+import 'package:app_management/features/members/data/gyms_pager.dart';
 
-/// "App Theme" picker: a compact, independently-scrolling list of the
-/// generated themes, the active one highlighted. It fills its column and
-/// scrolls on its own, so scrolling the themes never moves the phone.
-/// Tapping a card switches the live preview. Degrades quietly when the
-/// service is down.
-class ThemeGrid extends StatelessWidget {
-  final Future<List<CustomizationStyle>> catalog;
+// Web admin: bigger viewport than the phone picker, so 50 per page keeps
+// the side scroll snug and gives the scroll-to-active code a single
+// pre-loaded list to seek through.
+const int _kWebPageSize = 50;
+// Each compact theme card + separator. Used to map item index → scroll
+// offset for the scroll-to-active animation. Keep in sync with
+// `theme_card.dart` if its padding/thumb-height changes.
+const double _kRowStride = 72;
+const Duration _kScrollDuration = Duration(milliseconds: 350);
 
-  const ThemeGrid({super.key, required this.catalog});
+/// Side-pane theme picker shown next to the phone-frame preview.
+///
+/// Eager-loads every page so the search + scroll-to-active never miss
+/// an item, then listens to [ThemeRuntime.changes] and scrolls
+/// the list so the active card is on-screen after the library pick.
+class ThemeGrid extends StatefulWidget {
+  const ThemeGrid({super.key, required this.onBackToLibrary});
+
+  final VoidCallback onBackToLibrary;
+
+  @override
+  State<ThemeGrid> createState() => _ThemeGridState();
+}
+
+class _ThemeGridState extends State<ThemeGrid> {
+  final GymsPager _pager = GymsPager(pageSize: _kWebPageSize);
+  final ScrollController _scroll = ScrollController();
+  String? _lastScrolledTo;
+
+  @override
+  void initState() {
+    super.initState();
+    _pager.addListener(_pullUntilDone);
+    ThemeRuntime.changes.addListener(_onActiveChanged);
+    // First paint: scroll to whatever's already active.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onActiveChanged());
+  }
+
+  void _pullUntilDone() {
+    if (!mounted) return;
+    if (!_pager.isLoading && _pager.hasMore) {
+      _pager.loadMore();
+    } else if (!_pager.hasMore) {
+      // List is fully loaded — make sure the active card is visible.
+      _onActiveChanged();
+    }
+  }
+
+  void _onActiveChanged() {
+    if (!mounted || !_scroll.hasClients) return;
+    final active = ThemeRuntime.activeDesignId;
+    if (active == null || active == _lastScrolledTo) return;
+    final i = _pager.items.indexWhere((s) => s.id == active);
+    if (i < 0) return; // not loaded yet — will retry on next page tick.
+    _lastScrolledTo = active;
+    final target = (i * _kRowStride).clamp(0.0, _scroll.position.maxScrollExtent);
+    _scroll.animateTo(
+      target,
+      duration: _kScrollDuration,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  void dispose() {
+    ThemeRuntime.changes.removeListener(_onActiveChanged);
+    _pager.removeListener(_pullUntilDone);
+    _scroll.dispose();
+    _pager.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,46 +87,70 @@ class ThemeGrid extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         Text('App Theme', style: DesignConstants.h2),
+        ThemeSearchBar(onChanged: _pager.setQuery),
+        AppOutlineButton(
+          text: '← Back to library',
+          fullWidth: true,
+          onPressed: widget.onBackToLibrary,
+        ),
         Expanded(
-          child: FutureBuilder<List<CustomizationStyle>>(
-            future: catalog,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const _CatalogMessage.loading();
-              }
-              if (snapshot.hasError) {
-                return const _CatalogMessage(
-                  'Could not reach the customization service. Start it and '
-                  'reopen this tab to load the themes.',
-                );
-              }
-              final styles = snapshot.data ?? const <CustomizationStyle>[];
-              if (styles.isEmpty) {
-                return const _CatalogMessage('No themes generated yet.');
-              }
-              return ListenableBuilder(
-                listenable: CustomizationRuntime.changes,
-                builder: (context, _) {
-                  final active = CustomizationRuntime.activeDesignId;
-                  return ListView.separated(
-                    itemCount: styles.length,
-                    // ListView.separated has no `spacing:`; the separator
-                    // builder is the only way to gap its items, so SizedBox
-                    // here is intentional, not a spacing-rule violation.
-                    separatorBuilder: (_, _) => const SizedBox(
-                      height: DesignConstants.spacingMedium,
-                    ),
-                    itemBuilder: (context, i) => ThemeCard(
-                      style: styles[i],
-                      isActive: styles[i].id == active,
-                    ),
-                  );
-                },
-              );
-            },
+          child: ListenableBuilder(
+            listenable: _pager,
+            builder: (context, _) =>
+                _ThemeListView(pager: _pager, scroll: _scroll),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The scrollable theme list itself, plus its loading / empty / error
+/// states. Wraps in `ListenableBuilder(ThemeRuntime.changes)`
+/// so the active-card border flips when the live theme switches.
+class _ThemeListView extends StatelessWidget {
+  const _ThemeListView({required this.pager, required this.scroll});
+
+  final GymsPager pager;
+  final ScrollController scroll;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!pager.hasLoadedFirstPage && pager.isLoading) {
+      return const _CatalogMessage.loading();
+    }
+    if (pager.items.isEmpty) {
+      if (pager.errored) {
+        return const _CatalogMessage(
+          'Could not reach the customization service. Start it and '
+          'reopen this tab to load the themes.',
+        );
+      }
+      return _CatalogMessage(
+        pager.query.isEmpty
+            ? 'No themes generated yet.'
+            : 'No themes match "${pager.query}".',
+      );
+    }
+    return ListenableBuilder(
+      listenable: ThemeRuntime.changes,
+      builder: (context, _) {
+        final active = ThemeRuntime.activeDesignId;
+        return ListView.separated(
+          controller: scroll,
+          itemCount: pager.items.length,
+          // ListView.separated has no `spacing:`; the separator builder
+          // is the only way to gap its items, so SizedBox here is
+          // intentional, not a spacing-rule violation.
+          separatorBuilder: (_, _) => const SizedBox(
+            height: DesignConstants.spacingMedium,
+          ),
+          itemBuilder: (context, i) {
+            final style = pager.items[i];
+            return ThemeCard(style: style, isActive: style.id == active);
+          },
+        );
+      },
     );
   }
 }

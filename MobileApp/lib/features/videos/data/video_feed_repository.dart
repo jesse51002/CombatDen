@@ -1,16 +1,17 @@
 import 'package:mobile_app/core/app_config.dart';
-import 'package:mobile_app/core/app_styles.dart';
-import 'package:customization_engine/customization_runtime.dart';
+import 'package:mobile_app/core/video_service_config.dart';
+import 'package:theme_flutter/customization_runtime.dart';
 import 'package:mobile_app/features/videos/data/video.dart';
 import 'package:mobile_app/features/videos/data/video_api_client.dart';
 
-/// Single source of truth for the video feed of the **active style**. The
-/// feed is paired with the customization theme (see [AppStyle]); selecting a
-/// new style in the picker switches both the theme and the feed.
+/// Single source of truth for the video feed of the **active theme**. The feed
+/// is fetched by design id — the VideoService resolves the theme to its gym and
+/// serves that gym's approved feed — so selecting a new theme in the picker
+/// switches the feed with it. There is no app-side theme→feed table anymore.
 ///
-/// Fetches each feed at most once and caches it per `videoAppId`, so the home
-/// feed and the post-class/post-booking recommendation surfaces share one
-/// load, and switching back to a previously-seen style is instant.
+/// Fetches each feed at most once and caches it per `designId`, so the home feed
+/// and the post-class/post-booking recommendation surfaces share one load, and
+/// switching back to a previously-seen theme is instant.
 ///
 /// Lazy app-wide singleton via [instance] — there is no app-level service
 /// locator, and the customization `getIt` is package-internal.
@@ -19,36 +20,29 @@ class VideoFeedRepository {
 
   static final VideoFeedRepository instance = VideoFeedRepository._();
 
-  final Map<String, Future<List<Video>>> _cacheByVideoApp = {};
+  final Map<String, Future<List<Video>>> _cacheByDesign = {};
 
-  /// The curated style for the live theme (falls back to the build's default
-  /// design before any switch). Null when the active design isn't one of ours.
-  AppStyle? get _activeStyle => appStyleForDesign(
-    CustomizationRuntime.activeDesignId ?? AppConfig.designId,
-  );
+  /// The live theme's design id (falls back to the build's default design
+  /// before any switch in the picker).
+  String get _activeDesignId =>
+      ThemeRuntime.activeDesignId ?? AppConfig.designId;
 
-  /// Whether the active style has a paired feed. False → the Videos tab shows
-  /// an empty state instead of attempting a fetch.
-  bool get hasVideos => _activeStyle != null;
-
-  /// The active style's feed, fetched at most once per `videoAppId`. On
-  /// failure the cache entry is cleared and the error propagates so a rebuild
-  /// can retry.
+  /// The active theme's feed, fetched at most once per `designId`. On failure
+  /// the cache entry is cleared and the error propagates so a rebuild can retry.
   Future<List<Video>> feed() {
-    final style = _activeStyle;
-    if (style == null) return Future.value(const <Video>[]);
-    return _cacheByVideoApp[style.videoAppId] ??= _fetch(style);
+    final designId = _activeDesignId;
+    return _cacheByDesign[designId] ??= _fetch(designId);
   }
 
-  Future<List<Video>> _fetch(AppStyle style) async {
+  Future<List<Video>> _fetch(String designId) async {
     final client = VideoApiClient(
-      baseUrl: style.videoBaseUrl,
-      videoAppId: style.videoAppId,
+      baseUrl: kVideoBaseUrl,
+      designId: designId,
     );
     try {
       return await client.fetchFeed();
     } on VideoFetchException {
-      _cacheByVideoApp.remove(style.videoAppId);
+      _cacheByDesign.remove(designId);
       rethrow;
     }
   }

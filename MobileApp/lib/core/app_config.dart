@@ -1,7 +1,7 @@
 /// App-level configuration. This is the APP's identity — NOT
 /// part of the customization package. It declares which tenant
 /// app and which design (preset/run) this build targets; those
-/// values are passed into `CustomizationRuntime.initialize`.
+/// values are passed into `ThemeRuntime.initialize`.
 ///
 /// The customization service URL and request path are internal
 /// to the customization package and intentionally NOT here.

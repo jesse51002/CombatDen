@@ -1,0 +1,17 @@
+gym_id: reformer_classical
+gym_type:
+- reformer_classical
+theme: ZZUndoneReformerClassical
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational reformer classical content
+      for gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable reformer classical sources.
+    avoid_desc: Anything not about reformer classical; off-topic, low-quality, or
+      clickbait videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

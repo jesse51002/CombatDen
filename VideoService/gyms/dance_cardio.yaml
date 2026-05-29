@@ -1,0 +1,17 @@
+gym_id: dance_cardio
+gym_type:
+- dance_cardio
+theme: ZZUndoneDanceCardio
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational dance cardio content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable dance cardio sources.
+    avoid_desc: Anything not about dance cardio; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

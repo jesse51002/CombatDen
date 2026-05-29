@@ -18,7 +18,7 @@ import 'package:mobile_app/features/style_select/presentation/screens/style_sele
 import 'package:mobile_app/features/videos/presentation/screens/tag_videos_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/video_recc_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/videos_screen.dart';
-import 'package:customization_engine/customization_runtime.dart';
+import 'package:theme_flutter/customization_runtime.dart';
 import 'package:mobile_app/shared/themes/app_theme.dart';
 
 Future<void> main() async {
@@ -27,7 +27,7 @@ Future<void> main() async {
   // One call: wiring, fetch, disk cache and image pre-warm are
   // all internal. Blocks on the small JSON (5s cap) before the
   // first frame so the UI paints branded.
-  await CustomizationRuntime.initialize(
+  await ThemeRuntime.initialize(
     appId: AppConfig.appId,
     designId: AppConfig.designId,
     expectedColors: CombatDenSlots.expectedColors,
@@ -46,18 +46,18 @@ class MobileAppRoot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Rebuild the whole app when the active customization changes, so a
-    // live style switch (CustomizationRuntime.selectDesign) re-themes
+    // live style switch (ThemeRuntime.selectDesign) re-themes
     // everything: AppTheme + DesignConstants re-resolve, ThemeImage slots
     // re-fetch. The builder runs on first load too (harmless no-op).
     return ListenableBuilder(
-      listenable: CustomizationRuntime.changes,
+      listenable: ThemeRuntime.changes,
       builder: (context, _) {
         return MaterialApp(
           // Re-key on the active design so a live style switch rebuilds
           // the whole tree from a fresh Home. Needed because widgets read
           // DesignConstants static getters (not Theme.of), so the
           // Navigator's already-pushed routes won't otherwise re-theme.
-          key: ValueKey(CustomizationRuntime.activeDesignId),
+          key: ValueKey(ThemeRuntime.activeDesignId),
           title: 'CombatDen',
           theme: AppTheme.forCanvas(),
           debugShowCheckedModeBanner: false,

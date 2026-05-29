@@ -1,0 +1,17 @@
+gym_id: power_cycling
+gym_type:
+- power_cycling
+theme: ZZUndonePowerCycling
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational power cycling content for
+      gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable power cycling sources.
+    avoid_desc: Anything not about power cycling; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

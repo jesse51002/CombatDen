@@ -1,0 +1,17 @@
+gym_id: trampoline
+gym_type:
+- trampoline
+theme: ZZUndoneTrampolineCardio
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational trampoline content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable trampoline sources.
+    avoid_desc: Anything not about trampoline; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

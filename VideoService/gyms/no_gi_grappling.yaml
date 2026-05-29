@@ -1,0 +1,17 @@
+gym_id: no_gi_grappling
+gym_type:
+- no_gi_grappling
+theme: FrictionGrappling
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational no gi grappling content for
+      gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable no gi grappling sources.
+    avoid_desc: Anything not about no gi grappling; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

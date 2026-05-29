@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase.
 
-- **Mostly no backend.** No Supabase, no auth. **Two features are live exceptions** that do real read-only HTTP via `dio` + disk-cached `cached_network_image`: the **customization engine** (the shared `customization_engine` package, `../CustomizationEngine`, fetches the tenant's branding) and the **videos feature** (`lib/features/videos/`, fetches the tenant's feed from the VideoService — see *Videos feature is live* below). Don't add HTTP anywhere else without asking.
+- **Mostly no backend.** No Supabase, no auth. **Two features are live exceptions** that do real read-only HTTP via `dio` + disk-cached `cached_network_image`: the **customization engine** (the shared `theme_flutter` package, `../ThemeService/ThemeFlutter`, fetches the tenant's branding) and the **videos feature** (`lib/features/videos/`, fetches the tenant's feed from the VideoService — see *Videos feature is live* below). Don't add HTTP anywhere else without asking.
 - **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller). The live features fetch via `FutureBuilder` + a cached repository, not a state framework.
 - **No real data, except the live features above.** Every other list, card, and detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
@@ -21,25 +21,26 @@ The videos feature (`lib/features/videos/`) is **real**, not mock. It reads the
 active tenant's feed from the **VideoService** (`../VideoService/`, a read-only
 HTTP API). Architecture, mirroring the customization engine:
 
-- **`core/app_styles.dart`** — `kAppStyles`, the curated `List<AppStyle>`
-  pairing each customization **theme** (`designId`) with the VideoService
-  **feed** (`videoAppId` + base URL) that goes with it. This list — NOT the
-  CustomizationService's full catalog — is the source of truth for both the
-  style picker (double-tap the home logo, which fetches each design's art but
-  only renders these `designId`s) and which feed the app pulls for the active
-  theme. A design absent from the list has no videos (empty state). Base URL
-  defaults to `localhost:8002`, overridable with `--dart-define=VIDEO_BASE_URL`.
+- **`core/video_service_config.dart`** — `kVideoBaseUrl`, the VideoService base
+  URL (defaults to `localhost:8002`, overridable with
+  `--dart-define=VIDEO_BASE_URL`), shared by the video + class-card features.
+  There is **no app-side theme→feed table** anymore: the app fetches the active
+  theme's content **by design id** (`GET /apps/{appId}/themes/{designId}/...`),
+  and the VideoService resolves the theme → its gym → that gym's approved feed.
+  `appId` is `AppConfig.appId` (the tenant pool, `combatden`); the active design
+  is `ThemeRuntime.activeDesignId ?? AppConfig.designId`.
 - **`data/video.dart`** — the `Video` model (matches the API's `VideoCard`). The
   fine-grained `tags` and the server-derived coarse `bigGroups` both come down on
   each video as plain `List<String>`, taken verbatim from the API. The app owns
   **no** tag/group enum or vocabulary — the server owns it, the client just
   renders whatever strings arrive (auto-formatted via `displayLabel`). This is
   deliberate: there is no closed enum to keep in sync with VideoService.
-- **`data/video_api_client.dart`** — `dio` client, `GET /apps/{videoAppId}/videos`.
+- **`data/video_api_client.dart`** — `dio` client,
+  `GET /apps/{appId}/themes/{designId}/videos`.
 - **`data/video_feed_repository.dart`** — `VideoFeedRepository.instance`, a lazy
-  app-wide singleton that resolves the feed from the **active theme** (via
-  `kAppStyles`) and caches it per `videoAppId`, shared by every video surface.
-  Switching style in the picker switches both theme and feed. (No `get_it`; the
+  app-wide singleton that fetches the feed for the **active theme** (by
+  `designId`) and caches it per `designId`, shared by every video surface.
+  Switching theme in the picker switches the feed with it. (No `get_it`; the
   customization locator is package-internal.)
 - **`data/video_selectors.dart`** — pure derivations: top-filter scoping via
   `bigGroups`, one carousel per `tag`, featured = most-viewed, and the picks for
@@ -108,7 +109,7 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 - **`_kFoo` private file-scoped constants are also allowed for scroll-position math, sliver / pinned-header heights, and pure layout arithmetic that has no `DesignConstants` equivalent.** Examples: `_kTopbarHeight = 268`, `_kDateRowHeight = 50`, `_kCardWidth = 258`. The carve-out is for *layout math that is intrinsically per-screen and not a fungible design token*. If the same number appears across multiple screens or controls, it's not a `_k` candidate — escalate to add a `DesignConstants` token instead.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/padding/radius/border/divider/icon-size, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
 - **`design_constants.dart` is runtime-driven, not immutable.** The brand colours (`primaryColor`, `backgroundColor`, `text`, `accent`) are static getters that resolve live from the loaded tenant customization via `BrandColor.color(slot, fallback: <const CombatDen default>)`. Derived shades (`primaryColor50/25/10`, `darkPrimary`, `text2nd/3rd`, `card`, `popup`, `divider`) are getters off those bases. Status/semantic colours (`goodGreen`, `okYellow`, `badRed`, `hyperlink`, the `*Dark` variants) stay hardcoded and are NOT brandable. The const fallback is the CombatDen palette, used verbatim when no customization is loaded. Do not hand-edit token values or the `BrandColor` wiring, and do not add/rename tokens without explicit permission.
-- The customization **engine** (the shared `customization_engine` package, imported as `package:customization_engine/...`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/app_slots.dart` (`CombatDenSlots`) is missing. The engine was extracted from this app's old `lib/customization/` so AppManagement can share it for the live theme preview; this app injects its `CombatDenSlots` manifest + `AppConfig` into `CustomizationRuntime.initialize`. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is no longer byte-identical with FlutterCRM, which was reverted; this app is the customization host.)
+- The customization **engine** (the shared `theme_flutter` package, imported as `package:theme_flutter/...`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/app_slots.dart` (`CombatDenSlots`) is missing. The engine was extracted from this app's old `lib/customization/` so AppManagement can share it for the live theme preview; this app injects its `CombatDenSlots` manifest + `AppConfig` into `ThemeRuntime.initialize`. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is no longer byte-identical with FlutterCRM, which was reverted; this app is the customization host.)
 - Images: the `BrandImage` widget is URL-first — a bundled-asset filename that maps to a customization slot renders the fetched image (disk-cached via `cached_network_image`) and falls back to the bundled asset otherwise. Call sites are unchanged.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
@@ -126,13 +127,13 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 - Global `ThemeData` lives in `lib/shared/themes/app_theme.dart` and is wired in `main.dart`. It maps DesignConstants into Material 3's `ColorScheme` and `TextTheme` so stock Material widgets (`ElevatedButton`, `Text`, `Scaffold`, etc.) auto-theme.
 - For widget-specific styling beyond what the global theme provides, reach into `DesignConstants` directly. Don't add one-off overrides at the call site.
 
-## Current Customization Preset (where the live look comes from)
+## Current ThemeConfig Preset (where the live look comes from)
 
 The colours, images, and design direction the app shows at runtime are **not**
 the CombatDen dark defaults in `design_constants.dart` — those are only the
 fallback used when no customization is loaded. This is a **white-label /
 templated app**: the live look comes from a customization preset produced by
-the CustomizationService. There is no single canonical palette; never assume
+the ThemeService. There is no single canonical palette; never assume
 or hardcode one. The customization surface is **open-ended and growing** —
 colours and images are just the start; over time more of the app (copy,
 layout, enabled features) becomes tenant-customizable. Build accordingly:
@@ -143,7 +144,7 @@ do not bake in assumptions that only colour and text vary.
   preset/run, e.g. `20260518T131056Z`). This is the app's identity, not part
   of the customization package. **Read this file first** to learn what is
   actually loaded.
-- **The preset lives in `../CustomizationService/apps/<appId>/<designId>/`.**
+- **The preset lives in `../ThemeService/apps/<appId>/<designId>/`.**
   Before diagnosing or changing anything about how the app looks, read:
   - `customization.yaml` — the design brief: `design_direction` (name +
     intent, e.g. "Duck Groove") and `colors_direction`, whose
@@ -329,7 +330,7 @@ lib/
 │   ├── app_config.dart             # active tenant + designId (preset)
 │   ├── app_routes.dart             # named-route constants + builder map
 │   ├── app_slots.dart              # CombatDenSlots: expected colour/image slots
-│   └── design_constants.dart       # runtime-driven via the customization_engine package
+│   └── design_constants.dart       # runtime-driven via the theme_flutter package
 ├── features/
 │   └── <feature>/
 │       ├── data/
@@ -368,7 +369,7 @@ lib/
 Current dependencies (intentionally minimal):
 - `google_fonts` — for Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
-- `customization_engine` (path dep, `../CustomizationEngine`) — the shared white-label runtime extracted from this app's old `lib/customization/`. It carries the live-feature deps (`dio`, `flutter_svg`, `cached_network_image`, `get_it`, `shared_preferences`) that back the customization engine; those are the documented live exceptions, not the start of the real-data stack. (`lottie` is a direct MobileApp dep — it backs only the bundled booking "done" checkmark animation, which the app plays and tints to the brand primary itself; the engine no longer renders Lottie.)
+- `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — the shared white-label runtime extracted from this app's old `lib/customization/`. It carries the live-feature deps (`dio`, `flutter_svg`, `cached_network_image`, `get_it`, `shared_preferences`) that back the customization engine; those are the documented live exceptions, not the start of the real-data stack. (`lottie` is a direct MobileApp dep — it backs only the bundled booking "done" checkmark animation, which the app plays and tints to the brand primary itself; the engine no longer renders Lottie.)
 
 If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in.
 

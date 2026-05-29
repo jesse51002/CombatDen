@@ -1,0 +1,17 @@
+gym_id: mma
+gym_type:
+- mma
+theme: ApexMMA
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational mma content for gym members
+      — technique breakdowns, full classes, drills, and credible coaching from reputable
+      mma sources.
+    avoid_desc: Anything not about mma; off-topic, low-quality, or clickbait videos;
+      and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

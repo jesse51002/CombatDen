@@ -1,0 +1,17 @@
+gym_id: functional_fitness
+gym_type:
+- functional_fitness
+theme: ZZUndoneFunctionalFitness
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational functional fitness content
+      for gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable functional fitness sources.
+    avoid_desc: Anything not about functional fitness; off-topic, low-quality, or
+      clickbait videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

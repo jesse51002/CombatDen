@@ -1,0 +1,17 @@
+gym_id: hip_hop
+gym_type:
+- hip_hop
+theme: ZZUndoneHipHopDance
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational hip hop content for gym members
+      — technique breakdowns, full classes, drills, and credible coaching from reputable
+      hip hop sources.
+    avoid_desc: Anything not about hip hop; off-topic, low-quality, or clickbait videos;
+      and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

@@ -1,17 +1,17 @@
-"""VideosService — the filesystem store behind the API and the batch scripts.
+"""VideosService — the single-tenant filesystem store behind the API + scripts.
 
-Reads companies and their briefs, and owns the **split-file feed layout**: each
-app's fetched feed is a metadata-only manifest (``videos_output.yaml``, a
-``VideosManifest``) plus one file per video under ``videos/`` (a ``VideoOutput``,
-with its full transcript as the last key). ``load_output`` reassembles a single
-``VideosOutput`` from the two so consumers keep seeing one aggregate; the write
-helpers (``save_output``/``save_video``/``delete_video``) keep the layout in one
-place. Centralising it here eases the eventual fold into ``FastApiBackend``.
+Flat layout (no tenant nesting):
 
-Company-agnostic: ``app_id`` is an opaque, pattern-checked string. The
-``apps_root`` is injected so tests can point the service at a fixture tree
-without monkeypatching module-level globals. The API process holds one
-process-scoped instance (see ``videos_service`` below) reused across requests.
+    <root>/gyms/<gym_id>.yaml      — the gyms (each owns its videos config,
+                                     classes, rewards, and scan-cost history)
+    <root>/videos/<video_id>.yaml — the shared video pool (a `list[VideoOutput]`,
+                                     one file per video; no manifest wrapper)
+    <root>/cost_log.yaml          — the append-only spend ledger
+
+``root`` is injected so tests can point at a tmp tree. The API process holds one
+process-scoped instance (see ``videos_service`` below). The theme→gym link is the
+set of gym files (each gym carries its ``theme``); VideoService never reads
+ThemeService.
 """
 
 from __future__ import annotations
@@ -22,27 +22,42 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from schema import ClassOutput, VideoOutput, VideosConfig, VideosManifest, VideosOutput
+from schema import (
+    ClassImage,
+    CostEntry,
+    Gym,
+    GymCard,
+    GymsPage,
+    RewardCard,
+    VideoOutput,
+)
+from schema.parent_gym_type import parent_of
 from src.api.config import settings
 from src.api.errors import InvalidConfigError, NotFoundError
 from src.shared.util.video_id import video_id_from_url
 
-CONFIG_FILENAME = "videos_config.yaml"
-# The per-app run manifest (metadata only); the videos themselves live one per
-# file under VIDEOS_DIRNAME/.
-OUTPUT_FILENAME = "videos_output.yaml"
+GYMS_DIRNAME = "gyms"
 VIDEOS_DIRNAME = "videos"
-CLASS_FILENAME = "class_output.yaml"
-# snake_case company ids; also a path-traversal guard (no dots or slashes).
+COST_LOG_FILENAME = "cost_log.yaml"
+# A gym's card art is its theme's celebration image, served by ThemeService's
+# styles convention (`/apps/<theme_app>/<run_id>/images/celebration_image`) and
+# resolved by the client against the ThemeService base URL. DERIVED from the
+# gym's theme. The themes this single tenant serves live under ThemeService's
+# `combatden` app.
+THEME_SERVICE_APP_ID = "combatden"
+CELEBRATION_IMAGE_URL_TEMPLATE = (
+    "/apps/" + THEME_SERVICE_APP_ID + "/{theme}/images/celebration_image"
+)
+# snake_case gym ids; also a path-traversal guard (no dots or slashes).
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-# YouTube video ids — the per-video filename stem; also a path-traversal guard
-# (no dots or slashes, so it can't escape the videos/ directory).
+# ThemeService design ids (e.g. `ZZUndoneVinyasaFlow`, `ApexMMA`).
+_DESIGN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+# YouTube video ids — the per-video filename stem + a path-traversal guard.
 _VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _dump_yaml(data: object, path: Path) -> None:
-    """Write ``data`` as YAML the way every writer in this service does
-    (insertion order preserved, unicode kept, block style)."""
+    """Write ``data`` as YAML (insertion order preserved, unicode kept)."""
     path.write_text(
         yaml.safe_dump(
             data, sort_keys=False, allow_unicode=True, default_flow_style=False
@@ -52,207 +67,224 @@ def _dump_yaml(data: object, path: Path) -> None:
 
 
 class VideosService:
-    """Lists company briefs and loads one company's ``videos_config.yaml``.
+    """The single-tenant store: gyms, the shared video pool, and the cost log."""
 
-    Constructor takes the apps root so tests can point at a fixture tree
-    without monkeypatching ``settings.apps_root``.
-    """
+    def __init__(self, root: Path) -> None:
+        self._root = root
 
-    def __init__(self, apps_root: Path) -> None:
-        self._apps_root = apps_root
+    @property
+    def _gyms_dir(self) -> Path:
+        return self._root / GYMS_DIRNAME
 
-    async def list_apps(self) -> list[str]:
-        """Every company id under ``apps_root`` that has a
-        ``videos_config.yaml``. Sorted; never raises for an empty tree."""
-        root = self._apps_root.resolve()
-        if not root.is_dir():
+    @property
+    def _videos_dir(self) -> Path:
+        return self._root / VIDEOS_DIRNAME
+
+    # --- gyms ----------------------------------------------------------------
+
+    async def list_gyms(self) -> list[str]:
+        """The gym ids that have a ``gyms/<id>.yaml`` file, sorted. Empty when
+        there is no ``gyms/`` directory yet."""
+        if not self._gyms_dir.is_dir():
             return []
-        ids = [
-            child.name
-            for child in root.iterdir()
-            if child.is_dir()
-            and _ID_PATTERN.match(child.name)
-            and (child / CONFIG_FILENAME).is_file()
-        ]
-        return sorted(ids)
+        return sorted(f.stem for f in self._gyms_dir.glob("*.yaml"))
 
-    async def load(self, app_id: str) -> VideosConfig:
-        """The company's validated ``videos_config.yaml``.
-
-        Missing company/file -> ``NotFoundError`` (404). A file that is
-        present but unparseable or stale against the current schema ->
-        ``InvalidConfigError`` (422): the brief is real, the artifact just no
-        longer conforms — that is not a server fault.
-        """
-        config_file = self._safe_app_dir(app_id) / CONFIG_FILENAME
-        if not config_file.is_file():
-            raise NotFoundError(f"no {CONFIG_FILENAME} for {app_id!r}")
+    async def load_gym(self, gym_id: str) -> Gym:
+        """One gym by id. Missing -> ``NotFoundError``; stale ->
+        ``InvalidConfigError``. ``gym_id`` is pattern-checked (no traversal)."""
+        if not _ID_PATTERN.match(gym_id):
+            raise NotFoundError(f"no gym {gym_id!r}")
+        gym_file = self._gyms_dir / f"{gym_id}.yaml"
+        if not gym_file.is_file():
+            raise NotFoundError(f"no gym {gym_id!r}")
         try:
-            return VideosConfig.model_validate(
-                yaml.safe_load(config_file.read_text())
-            )
+            return Gym.model_validate(yaml.safe_load(gym_file.read_text()))
         except (yaml.YAMLError, ValidationError) as exc:
             raise InvalidConfigError(
-                f"company {app_id!r} exists but its {CONFIG_FILENAME} does "
-                "not match the current schema; regenerate it"
+                f"gym {gym_id!r} does not match the current schema; regenerate it"
             ) from exc
 
-    async def load_output(self, app_id: str) -> VideosOutput:
-        """The company's fetched feed, reassembled from the manifest plus every
-        per-video file under ``videos/`` into one ``VideosOutput``.
+    async def save_gym(self, gym: Gym) -> None:
+        """Write (or overwrite) one gym's ``gyms/<gym_id>.yaml``."""
+        if not _ID_PATTERN.match(gym.gym_id):
+            raise InvalidConfigError(f"invalid gym_id {gym.gym_id!r}")
+        self._gyms_dir.mkdir(parents=True, exist_ok=True)
+        _dump_yaml(gym.model_dump(mode="json"), self._gyms_dir / f"{gym.gym_id}.yaml")
 
-        Missing company, or a brief that hasn't been run through the batch
-        script yet (no manifest) -> ``NotFoundError`` (404). A manifest or a
-        per-video file that is present but unparseable or stale ->
-        ``InvalidConfigError`` (422). Videos are returned in a deterministic
-        ``(relevance_index, video_id)`` order so pagination is stable.
-        """
-        app_dir = self._safe_app_dir(app_id)
-        manifest_file = app_dir / OUTPUT_FILENAME
-        if not manifest_file.is_file():
-            raise NotFoundError(
-                f"no {OUTPUT_FILENAME} for {app_id!r}; run the batch script first"
+    async def gym_for_theme(self, design_id: str) -> Gym:
+        """The gym whose ``theme`` is ``design_id`` (the gym files ARE the
+        theme→gym mapping). Unknown design -> ``NotFoundError``."""
+        if not _DESIGN_ID_PATTERN.match(design_id):
+            raise NotFoundError(f"no theme {design_id!r}")
+        for gym_id in await self.list_gyms():
+            gym = await self.load_gym(gym_id)
+            if gym.theme == design_id:
+                return gym
+        raise NotFoundError(f"theme {design_id!r} is not mapped to a gym")
+
+    async def classes_for_theme(self, design_id: str) -> list[ClassImage]:
+        """A theme's gym's class cards. Unknown design / none authored ->
+        ``NotFoundError``."""
+        gym = await self.gym_for_theme(design_id)
+        if gym.classes is None:
+            raise NotFoundError(f"gym {gym.gym_id!r} has no class cards yet")
+        return gym.classes
+
+    async def rewards_for_theme(self, design_id: str) -> list[RewardCard]:
+        """A theme's gym's reward cards. Unknown design / none authored ->
+        ``NotFoundError``."""
+        gym = await self.gym_for_theme(design_id)
+        if gym.rewards is None:
+            raise NotFoundError(f"gym {gym.gym_id!r} has no reward cards yet")
+        return gym.rewards
+
+    async def list_gyms_page(
+        self, *, limit: int, offset: int, query: str | None = None
+    ) -> GymsPage:
+        """One page of slim gym cards for the gym browser, sorted by gym id.
+        ``query`` is an optional case-insensitive substring filter on gym id /
+        theme / discipline. Empty page (not 404) when there are no gyms (or none
+        match); a stale gym file -> ``InvalidConfigError``."""
+        gyms = [await self.load_gym(gid) for gid in await self.list_gyms()]
+        if query:
+            needle = query.strip().lower()
+            gyms = [
+                g
+                for g in gyms
+                if needle in g.gym_id.lower()
+                or needle in g.theme.lower()
+                or any(needle in t.value for t in g.gym_type)
+            ]
+        total = len(gyms)
+        cards = [
+            GymCard(
+                gym_id=gym.gym_id,
+                gym_type=gym.gym_type,
+                # Coarse parent bucket from the primary discipline — the filter
+                # category the gym browser groups by.
+                parent_gym_type=parent_of(gym.gym_type[0]),
+                theme=gym.theme,
+                # Derived from the theme; the client resolves it against the
+                # ThemeService base URL, same as the theme picker.
+                celebration_image_url=CELEBRATION_IMAGE_URL_TEMPLATE.format(
+                    theme=gym.theme
+                ),
+                video_count=len(gym.videos.good_video_ids),
+                has_classes=gym.classes is not None,
+                has_rewards=gym.rewards is not None,
             )
+            for gym in gyms[offset : offset + limit]
+        ]
+        return GymsPage(total=total, limit=limit, offset=offset, gyms=cards)
+
+    # --- the shared video pool ----------------------------------------------
+
+    async def load_pool(self) -> list[VideoOutput]:
+        """The whole shared pool — every ``videos/<id>.yaml`` — in a stable
+        ``(relevance_index, video_id)`` order. Empty when there is no pool yet;
+        a stale per-video file -> ``InvalidConfigError``."""
+        if not self._videos_dir.is_dir():
+            return []
         try:
-            manifest = VideosManifest.model_validate(
-                yaml.safe_load(manifest_file.read_text())
-            )
             videos = [
                 VideoOutput.model_validate(yaml.safe_load(f.read_text()))
-                for f in sorted((app_dir / VIDEOS_DIRNAME).glob("*.yaml"))
+                for f in sorted(self._videos_dir.glob("*.yaml"))
             ]
         except (yaml.YAMLError, ValidationError) as exc:
             raise InvalidConfigError(
-                f"company {app_id!r} has a {OUTPUT_FILENAME} (or a per-video "
-                "file) that does not match the current schema; regenerate it"
+                "a pooled video file does not match the current schema; "
+                "regenerate it"
             ) from exc
         videos.sort(key=lambda v: (v.relevance_index, video_id_from_url(v.url)))
-        return VideosOutput(**manifest.model_dump(), videos=videos)
+        return videos
 
-    async def save_output(self, app_id: str, output: VideosOutput) -> None:
-        """Persist a whole fetched feed: write the manifest and one file per
-        video, replacing any previous feed for this app. Used by the YouTube
-        batch — a fresh fetch is a full replacement, so stale per-video files
-        from a prior run are cleared first (the ``videos_output.removed.yaml``
-        audit log is untouched)."""
-        app_dir = self._safe_app_dir(app_id)
-        videos_dir = app_dir / VIDEOS_DIRNAME
-        videos_dir.mkdir(parents=True, exist_ok=True)
-        for stale in videos_dir.glob("*.yaml"):
+    async def save_pool(self, videos: list[VideoOutput]) -> None:
+        """Replace the whole pool: clear ``videos/`` and write one file per
+        video. A fresh fetch is a full replacement."""
+        self._videos_dir.mkdir(parents=True, exist_ok=True)
+        for stale in self._videos_dir.glob("*.yaml"):
             stale.unlink()
-        self._write_manifest(app_dir, output)
-        for video in output.videos:
-            self._write_video(app_dir, video)
+        for video in videos:
+            self._write_video(video)
 
-    async def save_manifest(self, app_id: str, output: VideosOutput) -> None:
-        """Rewrite just the run manifest (metadata: counts, costs) from
-        ``output``'s fields, leaving every per-video file untouched. Used by the
-        classify pass to record its cost without rewriting the feed."""
-        self._write_manifest(self._safe_app_dir(app_id), output)
+    async def save_video(self, video: VideoOutput) -> None:
+        """Write (or overwrite) one pooled video — the cheap partial update the
+        tagging pass uses so it never rewrites the whole pool."""
+        self._write_video(video)
 
-    async def save_video(self, app_id: str, video: VideoOutput) -> None:
-        """Write (or overwrite) one video's file, leaving the manifest and every
-        other video untouched. The cheap partial update the transcripts and
-        classify passes use so they never rewrite the whole feed."""
-        self._write_video(self._safe_app_dir(app_id), video)
-
-    async def list_video_ids(self, app_id: str) -> list[str]:
-        """The video ids that have a per-video file, sorted. Empty when the app
-        has no ``videos/`` directory yet."""
-        videos_dir = self._safe_app_dir(app_id) / VIDEOS_DIRNAME
-        if not videos_dir.is_dir():
+    async def list_video_ids(self) -> list[str]:
+        """The pooled video ids, sorted. Empty when there is no pool yet."""
+        if not self._videos_dir.is_dir():
             return []
-        return sorted(f.stem for f in videos_dir.glob("*.yaml"))
+        return sorted(f.stem for f in self._videos_dir.glob("*.yaml"))
 
-    async def load_video(self, app_id: str, video_id: str) -> VideoOutput:
-        """One video by id. Missing -> ``NotFoundError``; stale ->
-        ``InvalidConfigError``."""
-        video_file = self._video_path(app_id, video_id)
+    async def load_video(self, video_id: str) -> VideoOutput:
+        """One pooled video by id. Missing -> ``NotFoundError``."""
+        video_file = self._video_path(video_id)
         if not video_file.is_file():
-            raise NotFoundError(f"no video {video_id!r} for {app_id!r}")
+            raise NotFoundError(f"no video {video_id!r}")
         try:
             return VideoOutput.model_validate(yaml.safe_load(video_file.read_text()))
         except (yaml.YAMLError, ValidationError) as exc:
             raise InvalidConfigError(
-                f"video {video_id!r} for {app_id!r} does not match the current "
-                "schema; regenerate it"
+                f"video {video_id!r} does not match the current schema"
             ) from exc
 
-    async def delete_video(self, app_id: str, video_id: str) -> bool:
-        """Remove one video's file. Returns whether a file was actually
-        removed (False when nothing matched the id)."""
-        video_file = self._video_path(app_id, video_id)
+    async def delete_video(self, video_id: str) -> bool:
+        """Remove one pooled video's file. Returns whether a file was removed."""
+        video_file = self._video_path(video_id)
         if not video_file.is_file():
             return False
         video_file.unlink()
         return True
 
-    def _write_manifest(self, app_dir: Path, output: VideosOutput) -> None:
-        """Write the metadata-only manifest from ``output``'s non-video fields."""
-        manifest = VideosManifest.model_validate(output.model_dump(exclude={"videos"}))
-        _dump_yaml(manifest.model_dump(mode="json"), app_dir / OUTPUT_FILENAME)
-
-    def _write_video(self, app_dir: Path, video: VideoOutput) -> None:
-        """Write one ``VideoOutput`` to ``videos/<video_id>.yaml``."""
+    def _write_video(self, video: VideoOutput) -> None:
         video_id = video_id_from_url(video.url)
         if not video_id:
             raise InvalidConfigError(f"video has no id in its url: {video.url!r}")
-        videos_dir = app_dir / VIDEOS_DIRNAME
-        videos_dir.mkdir(parents=True, exist_ok=True)
-        _dump_yaml(video.model_dump(mode="json"), videos_dir / f"{video_id}.yaml")
+        self._videos_dir.mkdir(parents=True, exist_ok=True)
+        _dump_yaml(video.model_dump(mode="json"), self._videos_dir / f"{video_id}.yaml")
 
-    def _video_path(self, app_id: str, video_id: str) -> Path:
-        """``apps_root/app_id/videos/<video_id>.yaml`` — id pattern-checked so it
-        can't escape the videos directory."""
+    def _video_path(self, video_id: str) -> Path:
         if not _VIDEO_ID_PATTERN.match(video_id):
             raise NotFoundError(f"no video {video_id!r}")
-        return self._safe_app_dir(app_id) / VIDEOS_DIRNAME / f"{video_id}.yaml"
+        return self._videos_dir / f"{video_id}.yaml"
 
-    async def load_classes(self, app_id: str) -> ClassOutput:
-        """The company's validated ``class_output.yaml`` (4 branded class cards).
+    # --- cost ledger ---------------------------------------------------------
 
-        Missing company / file (the class-images skill hasn't run) ->
-        ``NotFoundError`` (404). Present but unparseable or stale ->
-        ``InvalidConfigError`` (422).
-        """
-        class_file = self._safe_app_dir(app_id) / CLASS_FILENAME
-        if not class_file.is_file():
-            raise NotFoundError(
-                f"no {CLASS_FILENAME} for {app_id!r}; run the class-images step first"
-            )
-        try:
-            return ClassOutput.model_validate(yaml.safe_load(class_file.read_text()))
-        except (yaml.YAMLError, ValidationError) as exc:
-            raise InvalidConfigError(
-                f"company {app_id!r} has a {CLASS_FILENAME} but it does not "
-                "match the current schema; regenerate it"
-            ) from exc
+    async def append_cost(self, entry: CostEntry) -> None:
+        """Append one entry to the append-only ``cost_log.yaml`` ledger (created
+        on first append). Never overwrites prior entries."""
+        log_file = self._root / COST_LOG_FILENAME
+        existing: list[dict] = []
+        if log_file.is_file():
+            loaded = yaml.safe_load(log_file.read_text())
+            if isinstance(loaded, list):
+                existing = loaded
+        existing.append(entry.model_dump(mode="json"))
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        _dump_yaml(existing, log_file)
 
-    def _safe_app_dir(self, app_id: str) -> Path:
-        """``apps_root/app_id``, but only if the id is well-formed and the
-        resolved path stays directly inside ``apps_root`` (path-traversal
-        guard)."""
-        if not _ID_PATTERN.match(app_id):
-            raise NotFoundError(f"no company {app_id!r}")
-        apps_root = self._apps_root.resolve()
-        app_dir = (apps_root / app_id).resolve()
-        if app_dir.parent != apps_root:
-            raise NotFoundError(f"no company {app_id!r}")
-        return app_dir
+    async def load_cost_log(self) -> list[CostEntry]:
+        """The cost ledger as validated entries (empty if none yet)."""
+        log_file = self._root / COST_LOG_FILENAME
+        if not log_file.is_file():
+            return []
+        loaded = yaml.safe_load(log_file.read_text()) or []
+        return [CostEntry.model_validate(e) for e in loaded]
 
 
 # Process-scoped singleton the router depends on. Built lazily on first call so
-# tests that override ``settings.apps_root`` (or assign a stub to ``_DEFAULT``)
+# tests that override ``settings.data_root`` (or assign a stub to ``_DEFAULT``)
 # before first use pick the override up automatically.
 _DEFAULT: VideosService | None = None
 
 
 def videos_service() -> VideosService:
-    """The one process-scoped VideosService, lazily built on first call.
-    Reads ``apps_root`` from Settings at construction; reset ``_DEFAULT = None``
-    (or assign a stub) in tests if you change ``settings.apps_root`` after the
-    first hit."""
+    """The one process-scoped VideosService, lazily built on first call. Reads
+    ``data_root`` from Settings; reset ``_DEFAULT = None`` (or assign a stub) in
+    tests if you change ``settings.data_root`` after the first hit."""
     global _DEFAULT
     if _DEFAULT is None:
-        _DEFAULT = VideosService(apps_root=settings.apps_root)
+        _DEFAULT = VideosService(root=settings.data_root)
     return _DEFAULT

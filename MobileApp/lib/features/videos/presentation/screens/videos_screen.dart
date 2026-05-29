@@ -59,7 +59,6 @@ class _VideosScreenState extends State<VideosScreen> {
           children: [
             const _Topbar(),
             _Body(
-              repository: _repository,
               feed: _feed,
               selectedScope: _selectedScope,
               onScopeSelected: _onScopeSelected,
@@ -77,14 +76,12 @@ class _VideosScreenState extends State<VideosScreen> {
 /// under the topbar in the parent) because they derive from feed data.
 class _Body extends StatelessWidget {
   const _Body({
-    required this.repository,
     required this.feed,
     required this.selectedScope,
     required this.onScopeSelected,
     required this.onVideoTap,
   });
 
-  final VideoFeedRepository repository;
   final Future<List<Video>> feed;
   final String? selectedScope;
   final ValueChanged<String?> onScopeSelected;
@@ -92,9 +89,6 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!repository.hasVideos) {
-      return const _FeedMessage(text: 'Videos aren\'t available yet.');
-    }
     return FutureBuilder<List<Video>>(
       future: feed,
       builder: (context, snapshot) {

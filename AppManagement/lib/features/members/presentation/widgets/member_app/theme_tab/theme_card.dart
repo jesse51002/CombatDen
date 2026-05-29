@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:customization_engine/customization_runtime.dart';
-import 'package:customization_engine/data/models/customization_style.dart';
+import 'package:theme_flutter/customization_runtime.dart';
+import 'package:theme_flutter/data/models/customization_style.dart';
 
 // Small thumbnail — the theme list is secondary to the phone, so cards are
 // compact rows rather than big hero tiles.
@@ -14,7 +14,7 @@ const double _kThumbHeight = 48;
 /// name, and a check when active. Tapping switches the LIVE preview theme
 /// via the customization engine, so the phone re-themes instantly.
 class ThemeCard extends StatelessWidget {
-  final CustomizationStyle style;
+  final ThemeStyle style;
   final bool isActive;
 
   const ThemeCard({super.key, required this.style, required this.isActive});
@@ -23,7 +23,7 @@ class ThemeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => CustomizationRuntime.selectDesign(style.id),
+      onTap: () => ThemeRuntime.selectDesign(style.id),
       child: Container(
         padding: const EdgeInsets.all(DesignConstants.spacingMedium),
         decoration: BoxDecoration(
@@ -78,7 +78,7 @@ class _Thumb extends StatelessWidget {
             ? const _ThumbPlaceholder()
             : Image.network(
                 imageUrl,
-                fit: BoxFit.cover,
+                fit: BoxFit.contain,
                 errorBuilder: (_, _, _) => const _ThumbPlaceholder(),
                 loadingBuilder: (context, child, progress) =>
                     progress == null ? child : const _ThumbPlaceholder(),

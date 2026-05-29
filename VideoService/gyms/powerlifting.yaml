@@ -1,0 +1,17 @@
+gym_id: powerlifting
+gym_type:
+- powerlifting
+theme: ZZUndonePowerlifting
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational powerlifting content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable powerlifting sources.
+    avoid_desc: Anything not about powerlifting; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

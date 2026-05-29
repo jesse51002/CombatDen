@@ -1,0 +1,17 @@
+gym_id: f45
+gym_type:
+- f45
+theme: ZZUndoneF45Indie
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational f45 content for gym members
+      — technique breakdowns, full classes, drills, and credible coaching from reputable
+      f45 sources.
+    avoid_desc: Anything not about f45; off-topic, low-quality, or clickbait videos;
+      and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

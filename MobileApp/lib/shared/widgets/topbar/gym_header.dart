@@ -3,7 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:customization_engine/theme/theme_image.dart';
+import 'package:theme_flutter/theme/theme_image.dart';
 
 class GymHeader extends StatelessWidget {
   const GymHeader({
@@ -29,7 +29,7 @@ class GymHeader extends StatelessWidget {
           ),
           width: 100,
           height: 100,
-          fit: BoxFit.cover,
+          fit: BoxFit.contain,
         ),
         Row(
           mainAxisSize: MainAxisSize.min,

@@ -1,0 +1,17 @@
+gym_id: group_pt
+gym_type:
+- group_pt
+theme: ZZUndoneGroupPT
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational group pt content for gym members
+      — technique breakdowns, full classes, drills, and credible coaching from reputable
+      group pt sources.
+    avoid_desc: Anything not about group pt; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

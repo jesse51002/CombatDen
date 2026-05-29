@@ -1,0 +1,17 @@
+gym_id: spin_strength
+gym_type:
+- spin_strength
+theme: ZZUndoneSpinStrength
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational spin strength content for
+      gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable spin strength sources.
+    avoid_desc: Anything not about spin strength; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

@@ -12,10 +12,14 @@ class ClassFetchException implements Exception {
   String toString() => message;
 }
 
-/// Read-only client for the VideoService class cards. Mirrors
-/// `VideoApiClient` (same host, short timeouts).
+/// Read-only client for the VideoService class cards. Mirrors `VideoApiClient`
+/// (same host, short timeouts). Fetches the cards for a **theme** (design id);
+/// the server resolves the theme to its gym and serves that gym's class cards.
 class ClassApiClient {
-  ClassApiClient({required this.baseUrl, required this.videoAppId}) {
+  ClassApiClient({
+    required this.baseUrl,
+    required this.designId,
+  }) {
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
@@ -27,14 +31,18 @@ class ClassApiClient {
   }
 
   final String baseUrl;
-  final String videoAppId;
+
+  /// The active customization design id whose gym class cards to fetch.
+  final String designId;
 
   late final Dio _dio;
 
-  /// `GET /apps/{videoAppId}/classes` — the tenant's four branded class cards.
+  /// `GET /themes/{designId}/classes` — the theme's gym class cards (single-tenant).
   Future<List<ClassInfo>> fetchClasses() async {
     try {
-      final response = await _dio.get<dynamic>('/apps/$videoAppId/classes');
+      final response = await _dio.get<dynamic>(
+        '/themes/$designId/classes',
+      );
       final data = response.data;
       if (data is Map && data['classes'] is List) {
         return (data['classes'] as List)

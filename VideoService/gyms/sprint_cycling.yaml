@@ -1,0 +1,17 @@
+gym_id: sprint_cycling
+gym_type:
+- sprint_cycling
+theme: ZZUndoneSprintCycling
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational sprint cycling content for
+      gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable sprint cycling sources.
+    avoid_desc: Anything not about sprint cycling; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

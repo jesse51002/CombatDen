@@ -1,0 +1,17 @@
+gym_id: krav_maga
+gym_type:
+- krav_maga
+theme: ZZUndoneKravMagaSchool
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational krav maga content for gym
+      members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable krav maga sources.
+    avoid_desc: Anything not about krav maga; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null

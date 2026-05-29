@@ -1,7 +1,7 @@
 import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/video_format_helpers.dart';
 
 /// One video as served by the VideoService
-/// (`GET /apps/{appId}/videos` -> `VideoCard`). Field names mirror the
+/// (`GET /themes/{designId}/videos` -> `VideoCard`). Field names mirror the
 /// API so the JSON parse stays mechanical. See
 /// `../../../../VideoService/schema/video_feed.py`.
 class Video {

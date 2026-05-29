@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:theme_flutter/customization_runtime.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/features/members/data/video_api_client.dart';
@@ -11,11 +12,15 @@ import 'package:app_management/shared/widgets/filter_pills.dart';
 import 'package:app_management/shared/widgets/section_card.dart';
 import 'package:app_management/shared/widgets/subtitle_section.dart';
 
+/// The design the live preview initializes with (see `LiveThemePreviewTab`);
+/// the feed falls back to it before the admin picks a theme.
+const String _kInitialPreviewDesignId = 'ApexMMA';
+
 /// The live member feed, pulled from the VideoService. Mirrors the member
 /// app: a filter bar of fine-grained tags, "All" previewing each tag as a
 /// single row (with a View all jump to that tag), and a selected tag
 /// showing every video for it as a grid. The one screen that hits a real
-/// backend, so the admin previews real thumbnails.
+/// backend, so the admin previews real thumbnails for the previewed theme.
 class MemberFeedSection extends StatefulWidget {
   const MemberFeedSection({super.key});
 
@@ -24,15 +29,24 @@ class MemberFeedSection extends StatefulWidget {
 }
 
 class _MemberFeedSectionState extends State<MemberFeedSection> {
-  late final Future<List<Video>> _future = VideoApiClient().fetchFeed();
+  // The feed follows the previewed theme: keyed by the active design so picking
+  // a new theme swaps the feed, and revisiting a theme is instant. Falls back
+  // to the preview's initial design before any pick.
+  final Map<String, Future<List<Video>>> _cacheByDesign = {};
   int _selectedIndex = 0;
+
+  Future<List<Video>> _feedFor(String designId) =>
+      _cacheByDesign[designId] ??=
+          VideoApiClient(designId: designId).fetchFeed();
 
   @override
   Widget build(BuildContext context) {
+    final designId =
+        ThemeRuntime.activeDesignId ?? _kInitialPreviewDesignId;
     return SubtitleSection(
       title: 'Automatically Curated Member Feed',
       child: FutureBuilder<List<Video>>(
-        future: _future,
+        future: _feedFor(designId),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const _FeedMessage.loading();

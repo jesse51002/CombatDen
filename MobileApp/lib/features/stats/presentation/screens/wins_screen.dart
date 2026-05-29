@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/app_slots.dart';
-import 'package:customization_engine/theme/theme_text.dart';
+import 'package:theme_flutter/theme/theme_text.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/wins/wins_body.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_scaffold.dart';

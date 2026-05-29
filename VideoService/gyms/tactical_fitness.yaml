@@ -1,0 +1,17 @@
+gym_id: tactical_fitness
+gym_type:
+- tactical_fitness
+theme: ZZUndoneTacticalPrep
+videos:
+  specification:
+    videos_desc: Instructional, class, and motivational tactical fitness content for
+      gym members — technique breakdowns, full classes, drills, and credible coaching
+      from reputable tactical fitness sources.
+    avoid_desc: Anything not about tactical fitness; off-topic, low-quality, or clickbait
+      videos; and content that argues against the discipline.
+  queries: []
+  good_video_ids: []
+  rejected_video_ids: []
+  scan_costs: []
+classes: null
+rewards: null
