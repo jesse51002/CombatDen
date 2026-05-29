@@ -1,17 +1,528 @@
 gym_id: pole
 gym_type:
 - pole
-theme: ZZUndonePoleDance
+theme: PoleDance
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational pole content for gym members
-      — technique breakdowns, full classes, drills, and credible coaching from reputable
-      pole sources.
-    avoid_desc: Anything not about pole; off-topic, low-quality, or clickbait videos;
-      and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Pole fitness and dance instruction — spins, climbs, inversions,
+      transitions, and the strength and conditioning behind them — plus the performance
+      side: showcase and competition routines, skill and combo clips, studio vlogs
+      and behind-the-scenes, funny training moments, and poler interviews. Beginner
+      to advanced, framed as a legitimate athletic art.'
+    short_avoid_desc: No male-gaze / objectifying or sexually explicit framing, off-topic
+      or clickbait videos, or "pole vs aerial / is pole a real sport" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Pole fitness and dance content for athletes from total beginners to
+      seasoned polers — technique and class content plus the fun, human side,
+      so it's a feed members enjoy, not just a drill library.
+
+      ## Technique & training
+      - Spins, climbs, sits, inversions, and transitions — breakdowns and
+        progressions at every level
+      - Follow-along beginner-to-advanced classes from credible instructors
+        and studios
+      - Strength, grip, and flexibility conditioning that makes the tricks
+        possible
+      - Athletic practice details: drills, prep exercises, safe inversion
+        and dismount technique
+      - Artistry and performance: flow, choreography, floorwork, musicality
+
+      ## The fun & human side
+      - Showcase and competition routines
+      - Skill and combo clips
+      - Studio vlogs and "day in the life of a pole instructor"
+      - Training behind-the-scenes and funny / relatable training moments
+      - Poler interviews and progress / "first trick" reels
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about pole fitness / pole dance as an athletic discipline;
+      off-topic, genuinely low-quality, or clickbait videos.
+
+      ## Reject
+      - Male-gaze / objectifying or sexually explicit framing, and
+        "stripper-tutorial" novelty content that treats the dancer's body
+        rather than the craft as the subject
+      - Gear / heel hauls and product shilling
+      - Clickbait ("invert in a week", "first climb in one day")
+      - "Pole vs aerial silks / which is harder" cross-discipline framings,
+        and "is pole a real sport / pole dancing isn't fitness" debate and
+        reaction videos
+
+      ## Keep in mind
+      A video is NOT rejected just for being short, a showcase, a clip, a
+      vlog, or entertaining — fun and creator content that celebrates the
+      craft is wanted.
+  queries:
+  - pole dance for beginners first lesson
+  - basic pole spins tutorial for beginners
+  - how to climb the pole technique tutorial
+  - pole inversion tutorial step by step
+  - beginner pole combo follow along
+  - strength training for pole dancers at home
+  - grip strength exercises for pole
+  - pole dance transitions and flow tutorial
+  - safe pole dismount and spotting technique
+  - pole conditioning and flexibility routine
+  - full pole fitness class follow along
+  - pole dance competition routine performance
+  - pole sport championship showcase highlights
+  - pole skill combo clip athletic
+  - day in the life of a pole instructor
+  - pole studio vlog behind the scenes
+  - funny pole training moments and fails
+  - poler first invert celebration
+  - pole dancer interview on the sport
+  - pole student progress one year transformation
+  good_video_ids:
+  - AluJoE3S-_s
+  - DtOmETPHP8w
+  - Kq5ezirSSfM
+  - LWpsNd1Gv7w
+  - g8pN7yweZA8
+  - pVd8L8tb9zk
+  - wXW5k6331OU
+  - Al_U6mTqZXc
+  - GnWRwUR7GAY
+  - QMtqq4BqZOo
+  - Tap-qXHJIpQ
+  - b3AQlir39Rk
+  - dGTxoqj137I
+  - jbsduDZRDAg
+  - 2wEONT5fE3s
+  - 9VcJ3Gm91yw
+  - C9NN41Z9x1Y
+  - FVQ3U1KC5G8
+  - PhuuKCVd7tk
+  - X-5RslWsDV0
+  - c5TTJsxJAGk
+  - vIS1V8GGilc
+  - y9RNxcSVc9U
+  - yM9X7SLoR04
+  - -tHBOcgQCss
+  - 3Mj2edU22p0
+  - 6vlFaYgrRfA
+  - 74R4BdCO8rw
+  - BlVOKqRRnjE
+  - DUc3M8u_Or8
+  - LJ31RS-sP2k
+  - VcddZL5MEwE
+  - bJjtX7ATy3Y
+  - fCYGw-js8hI
+  - no5LW1penE0
+  - rlZgtQbRlD0
+  - 1trY-U9REas
+  - 2vI6V3K9IJw
+  - FTl9xAw9yFQ
+  - QpcAJajOmQI
+  - SmfvohAlafQ
+  - cF7snEtLqto
+  - cxmgZzPDWo8
+  - dIqJTlKhAJU
+  - dn51Emr50ZE
+  - jvj6Ke_O6ec
+  - kjKSMOQbrbA
+  - l2Gh06t0EFk
+  - ycsovr1ILlQ
+  - 6kfvNJam0CA
+  - 9ld96XZ3NvE
+  - Lxe98ILCjb4
+  - MFVhLJiz1EA
+  - TpZxYst7b48
+  - Tp_cMctREZU
+  - Uei_9njVzNc
+  - d3VtCXnZHkE
+  - r3-pzHNkVBs
+  - ux5T4PwNqHA
+  - vCnVMNApvSY
+  - -1tRorI5oKc
+  - CnYSf9w5_Y4
+  - JUUFwYZ_03g
+  - QP2m1bwax7A
+  - gcmsAtqU_4U
+  - hpQsJoN3fqE
+  - oFFtocdGCLo
+  - oawEi97c65w
+  - sEZAALlcf2A
+  - 6GdC66EmFgE
+  - BSp7WnBaCFM
+  - Jq6-whUC2JY
+  - Pdf4cCPJ3qs
+  - YBHRD7CBCtI
+  - bIwUEub7BDY
+  - c5Ar9SpZWRw
+  - n8ST37cWXtU
+  - rbRRcrrFNfI
+  - tUWL6wzreuo
+  - w-54maG4ZFE
+  - x5C3rqIr7Uk
+  - 02-SShXPKpg
+  - 2RpPNeKzwpQ
+  - 34kiBxeg5b8
+  - FWeuycEGA2s
+  - HmZ-57fKJJA
+  - IUK5FTFcjGw
+  - LHsO-5R_geY
+  - OivnV2JMUu0
+  - b88DfFMbh-o
+  - cSh85LhMld0
+  - gmYvYNh67xk
+  - jBz27QzoV6s
+  - xEuAmPn9Tds
+  - 4-rETS7n1Q0
+  - 7npKF9yz8Nw
+  - A_K8m_bw6Cg
+  - CGMpxF07hl8
+  - FH2YrkawsNc
+  - JPz_1PzrVkU
+  - KjRWWsS-dKc
+  - LqYx6A4WAHM
+  - O5OGWtmkblM
+  - OgebtLI8eW4
+  - Ud3cX-98Q8A
+  - p63mfrTqTOE
+  - qDJPzjD7NSY
+  - z2D6WXT_3TU
+  - D1_9LDE-pq4
+  - FUXxA9JHTXM
+  - GL3P3yTCSSc
+  - HyNdltfM2L0
+  - KsuOEL402bc
+  - ZyMlDNgalWI
+  - eqsoXBthwGs
+  - hQTCEVnWuas
+  - i_n_2148M_E
+  - mqgS9QRKJXg
+  - yV9zAlk72PY
+  - ztnYDamOHGw
+  - -8JgBEZW460
+  - 6xWOr0GY1RQ
+  - 8bxUk1rq2H8
+  - LV-DfWrPqKk
+  - Y47B5wmookw
+  - YghOeTjdEf4
+  - c0C7IptlfNU
+  - liXokIGKBA4
+  - o2po2TxQ3TE
+  - x2opkgmp1Uc
+  - 2TMWWBJMbso
+  - 4ptV98eBwG8
+  - F43vlYvf5ck
+  - FLjZlEE4vFU
+  - JhrRgWlkDYQ
+  - fEsKIgwIi64
+  - j-E-A5kYw6U
+  - lxBXmBi7MBM
+  - p9n1qACW0jI
+  - zOLsEa4KRyw
+  - 8FNuTNlqBcA
+  - POWkt22obR4
+  - UtH8yA7IzjQ
+  - f97QbVVuJlw
+  - jveFnx7To5Q
+  - q-CKxBNzscw
+  - qUAdad2ywK0
+  - tJeI51crrvs
+  - -aaYdP_cFdk
+  - Est5Jdate7Y
+  - KeCSn8nH1bk
+  - LRzewDQeRvs
+  - OIPUmz-5W5A
+  - PcMihvlaFPc
+  - SW6h2LngP3E
+  - TXjVsP_wsKI
+  - WySl_IEfc0c
+  - bqpn-20IU6k
+  - ofxG9EbpUZg
+  - xhqWQT9KScw
+  - 22K05UXVICE
+  - Q43-eESJvhg
+  - SfFg4LLSnqE
+  - VjOxxunKOrI
+  - ek5n8bFXD84
+  - tLTxgd1uatQ
+  - yDWCqev8JnM
+  - 48LEw_i3y5c
+  - 64-9OJubsno
+  - Ju_vvJR5TUc
+  - RRi0pxJZLEg
+  - TyiF7bHBkOE
+  - VuJn_E6BeaQ
+  - abrExOjsZ4I
+  - eTDVhOm0wmA
+  - ezmqKkNcfmc
+  - fzorN9AlFSE
+  - y2PS3t_Pjcg
+  - C9809D8hCMg
+  - EofnchMztOo
+  - I4RPBzj4vjA
+  - TYyoQvFl9Sg
+  - foYDg1NjmDo
+  - i8p0Mm5e9Vg
+  - jiRBS8PtNno
+  - sJWoWC6h244
+  - 1PGa1kahB8I
+  - 5BZevTgt1KE
+  - 6axNjZrCXOo
+  - 9M5JRDk9B1I
+  - ATTQUMBWRD8
+  - GM2u951iAv4
+  - JmnpUT52XjI
+  - OBPQKoBYEak
+  - Ss2j3j7Dcz8
+  - ZIlfRQABWI4
+  - bsZFZH358-k
+  - vs0vElROT18
+  - w_wtU5YU34A
+  - xsDujWOogwQ
+  - KEFg01mK92g
+  - PCc-oU2v00k
+  - hclo76KAb2c
+  - j14EYhy7950
+  - zcnpdF1yk8o
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 1hC3_-c5XYk
+  - 8KaN6vScapM
+  - INXD5osrkDo
+  - URYaOI4kwnk
+  - bEhhGXfIWM8
+  - bkJ6ujLyFBo
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - 4imTQhTlj3M
+  - 4sMFRzs8fDU
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - Q-7KCRNLLzc
+  - dBSAURSwuiI
+  - kThGMgiprF4
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - FXcYeeTZ894
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - xHlhEnN60-s
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - BfI9mgCEQwM
+  - CDDHlGRL3AI
+  - Dv1Gs3mp1Ps
+  - HSH8Zif-Mno
+  - ItE7xQpkfMA
+  - Y-AYC3_DbpY
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - yPX6u_O_2fM
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - XaA3qD1EAqg
+  - l3Zy_26HtVU
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - EzzHv56zDVc
+  - Fqptx5fNXR4
+  - SYJu_y6WvEc
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - hZoeX99CiPE
+  - krelLOZdJnU
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - DtyvU5VzRFk
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - TN9i9Ni0Xr4
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - c-D7xX-IJbY
+  - g5wYrCAH_5w
+  - mLTqcadk8Bw
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - YsW9GKlUvmI
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - ooEgWahEvEM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - cQ4K399DTgI
+  - 5t35HiD8zHM
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - 6oZfhhEHXU8
+  - E1j9o5VYDG0
+  - FKcr2h7RR-g
+  - M4nSM7TBsJg
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - V0n0zrdRTxE
+  - bOwJrqhjk2k
+  - c3HVnxtoqd0
+  - cujcxjSm69g
+  - gPry3-OomII
+  - lGIFTWsBXdw
+  - pA6ls-oHhX0
+  - IQwcCaAAuRc
+  - SGJuJApC6IE
+  - ZV3fXS2XHeQ
+  - e2N-yzH29fo
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - znAZGoxJja8
+  - 4pLO3g2qHyU
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - SMAB27z3x0c
+  - Zz8SZ-XkDUk
+  - 716e30A053U
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - u6mGPxWo6pI
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - MK8sBaAHzqA
+  - moVynuxM4fc
+  - rtOmEVZx1jY
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - NjlxJeT_ATg
+  - cl-xoycxEX8
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - sB0w4MhSHBs
+  - sCGAJRm5bmw
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - Q5xxPjrtEUI
+  - VWdAR4M3El4
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - wuy3l12p7bk
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - MSCOpNU2-74
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - aiEh6GpqDxU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - kChjPWlj7S8
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 36BFKo9P3EU
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - bzGSxdGF8z0
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - -fpjl8q0RhU
+  - F1ebv9IH7Tc
+  - IqXOWtwEeeM
+  - MilYefF9DjI
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:29:18.597496Z'
+    usd: 0.11184330000001275
+classes:
+- name: Foundations
+  image_url: https://images.pexels.com/photos/12312/pexels-photo-12312.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the essential grips, spins, and climbing techniques that form
+    the foundation of pole. Perfect for beginners starting their pole journey.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Flow & Tricks
+  image_url: https://images.pexels.com/photos/3775566/pexels-photo-3775566.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build strength and style as you level up to inversions, transitions,
+    and smooth combos. Learn how to string moves together with confidence and grace.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Pole Performance
+  image_url: https://images.pexels.com/photos/8957645/pexels-photo-8957645.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Explore choreography, musicality, and artistry. Learn to express yourself
+    through pole as a legitimate athletic art form with style and presence.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Strength Lab
+  image_url: https://images.pexels.com/photos/12086690/pexels-photo-12086690.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Dedicated conditioning for grip, core, and shoulder strength. Build
+    the athletic foundation you need for advanced tricks and injury-free poling.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Grip socks
+  image_url: https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

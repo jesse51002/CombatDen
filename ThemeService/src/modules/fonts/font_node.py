@@ -13,7 +13,7 @@ the selection service.
 
 from __future__ import annotations
 
-from schema import FontOutput, FontSet, OverwriteSpecs
+from schema import FontOutput, FontSet
 from src.core.run_context import RunContext
 from src.modules.base import DependencyKind, Node
 from src.modules.fonts.font_selection_service import (
@@ -34,7 +34,6 @@ class FontNode(Node):
         llm: LLMClient,
         catalog: GoogleFontsCatalog,
         seed: dict[str, FontOutput] | None = None,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> None:
         super().__init__(
             run_ctx,
@@ -42,7 +41,6 @@ class FontNode(Node):
             deps=frozenset(),
             declared_slots={slot.id for slot in run_ctx.app.fonts},
             seed=seed,
-            overwrite_specs=overwrite_specs,
         )
         self._selection = FontSelectionService(llm, catalog)
 
@@ -64,6 +62,5 @@ class FontNode(Node):
             model=model,
             only=dirty,
             fixed=self.seed,  # type: ignore[arg-type]
-            overwrite_specs=self.overwrite_specs,
         )
         return FontSet(fonts={**self.seed, **regenerated.fonts})

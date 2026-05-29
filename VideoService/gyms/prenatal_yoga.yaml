@@ -1,17 +1,763 @@
 gym_id: prenatal_yoga
 gym_type:
 - prenatal_yoga
-theme: ZZUndonePrenatalYoga
+theme: PrenatalYoga
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational prenatal yoga content for
-      gym members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable prenatal yoga sources.
-    avoid_desc: Anything not about prenatal yoga; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Pregnancy-safe prenatal and postpartum yoga — classes by trimester,
+      safe pose modifications, gentle mobility, breath and labour prep, plus postpartum
+      and mom-and-baby practice — and the gentle, human side: mom-to-be and teacher
+      vlogs, studio behind-the-scenes, relatable pregnancy class moments, and teacher/midwife
+      interviews. Nurturing, gentle, body-adapting.'
+    short_avoid_desc: No generic intense vinyasa/power/hot flows or deep twists, strong
+      inversions and other positions unsafe in pregnancy; no "bounce back / lose the
+      baby weight" clickbait, gear/leggings hauls, or "yoga vs pilates" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Pregnancy-safe and postpartum yoga for members moving through pregnancy
+      and the early months after — plus the gentle, human side, so it's a
+      feed members enjoy scrolling, not just a how-to library.
+
+      ## Prenatal & postpartum classes
+      - Full classes adapted by trimester (first, second, and third)
+      - Safe pose modifications and props for the changing body
+      - Gentle mobility for hips, back, and pelvis
+      - Breathwork and relaxation for labour preparation
+      - Pelvic-floor and core-safe work
+      - Postpartum recovery and diastasis-recti-aware classes
+      - Baby-friendly mom-and-baby flows
+      - Prenatal restorative and birth-prep sequences
+
+      ## The gentle & human side
+      - Mom-to-be and teacher vlogs and "what a prenatal class is really like"
+      - Studio behind-the-scenes and day-in-the-life content
+      - Relatable pregnancy and new-mom class moments
+      - Pregnancy yoga journey stories
+      - Aesthetic gentle-flow edits
+      - Warm interviews with prenatal-certified teachers, midwives,
+        or pelvic-health professionals
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about prenatal / postpartum yoga; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Generic intense vinyasa, power, or hot flows not adapted for pregnancy
+      - Classes teaching deep closed twists, strong inversions, prone
+        (belly-down) poses, deep backbends, or other positions contraindicated
+        in pregnancy
+      - "Bounce back / lose the baby weight in X weeks" and "easiest natural
+        birth ever" clickbait
+      - Gear/leggings hauls and product shilling
+      - "Yoga vs pilates / which is better" or "is prenatal yoga safe /
+        pointless" debate and reaction videos
+
+      ## Keep in mind
+      Don't drop a safe, pregnancy-appropriate video just for being short, a
+      vlog, a highlight, or entertaining — gentle fun and creator content is
+      wanted.
+  queries:
+  - prenatal yoga full class first trimester
+  - prenatal yoga second trimester class
+  - prenatal yoga third trimester gentle class
+  - safe yoga poses during pregnancy tutorial
+  - prenatal yoga for back and hip pain
+  - prenatal yoga breathing for labour prep
+  - pregnancy yoga modifications with props
+  - prenatal yoga pelvic floor exercises
+  - postpartum yoga recovery full class
+  - diastasis recti safe postpartum yoga
+  - yoga poses to avoid during pregnancy explained
+  - what a prenatal yoga class is really like
+  - pregnancy yoga journey vlog by trimester
+  - relatable pregnancy yoga class moments
+  - mom and baby yoga class behind the scenes
+  - prenatal yoga studio day in the life teacher
+  - gentle prenatal flow with calming music aesthetic
+  - prenatal yoga teacher interview on safe practice
+  - my postpartum yoga recovery journey story
+  - what is prenatal yoga explained for beginners
+  good_video_ids:
+  - -qmEKTDnrw8
+  - 0zSWaP1VDk4
+  - 4CQR-We-BXY
+  - 4NwQKXpWN_A
+  - 4hKLf-6nqCY
+  - 5PNFKQvR550
+  - AqAZpLoGa3Y
+  - Cc_vRDbp7JE
+  - EhYAEAWeHDc
+  - Ilg-gQY2Rxc
+  - QZTH5ePMV4c
+  - SWqKv-8JWls
+  - YM8_F1Wp25U
+  - Zt2pueccNFk
+  - _qN1sua5Bl8
+  - c_yYwKDzVVI
+  - g9ixc_cvKk0
+  - lJpWD-QMPtw
+  - ly9R_6TEtdY
+  - pYyddjN0JSg
+  - rfWI2m9EQqU
+  - sd1tLoD-EKw
+  - y4Y-O_Nh0Yk
+  - zmUJWKM98hM
+  - 0ZgHkOWk-_8
+  - 0mCvtuG_4Og
+  - 3RsTPpEp88o
+  - 3VHnnpBJVsk
+  - 40z3vMD89uw
+  - 4xH3DCHFyOo
+  - BFiQpemClEc
+  - F9kOllK9PxM
+  - OL7qjktVxdw
+  - Pp1IsXvqvC4
+  - Qm0RB9L0vMM
+  - SpAxvNXiqmQ
+  - T6Ef-Jt-o_0
+  - Vrdt-Tzp8rY
+  - Z4VjfSWZJQs
+  - ZelAnmiLS0M
+  - cqdX0vKw4yw
+  - j5vp6kw4wzI
+  - k1dNL03Ic_8
+  - uQt0XPKqo3Y
+  - urdS_bk5VBU
+  - wBjgsfKv9a0
+  - wjygmw2LY6c
+  - 47vxxkhIJ9s
+  - 7BQKggpZRxI
+  - BcVOmKUhxnQ
+  - CVwMDg6TLiE
+  - DNpB7C0RGOk
+  - Fn0O_XrwybE
+  - HB9MERVLpmk
+  - ILYBjg8kdDg
+  - Ni7JapPGaYY
+  - PO9GqEBRDE4
+  - RnSy8ZLwHnw
+  - XB2yWWuBdxU
+  - XhqntqSGKsc
+  - c_EqLDXRPwM
+  - iN6z471tS8o
+  - kTgvTMjPdYY
+  - kmtqOepYDdU
+  - mDwXO72uVkY
+  - pdI8CCxStP0
+  - qjN2pZg8zo0
+  - r49dRuLl9Gs
+  - r55Y72xVTuM
+  - rI75dIKW6uU
+  - sB9pW_44Dy8
+  - sRLfFcfkaxk
+  - uyFqgK5U03c
+  - vW5ygnSYozY
+  - yWvRIpqyszM
+  - zIk2CjWoU88
+  - zmPAAEAbTiE
+  - -Z58Go7TS9w
+  - 46Vaw3zfu5U
+  - 51HeAcslKLs
+  - 8-If0Y2SZns
+  - AERzKViXfMM
+  - DqpjfUMY--w
+  - J0_z8UnGyww
+  - N4OwU0O7uDI
+  - NdO4CWYnp14
+  - NieKZURyFEo
+  - OgYxNz2TZ2Q
+  - PAh8ZF8R3LA
+  - QA1FU_gJ7Pk
+  - VSSuUhEf3Bs
+  - XkyRE2L_Owk
+  - _NP6u3TWlBE
+  - _Z-Psmp8p7Y
+  - b8_6bApD1ec
+  - dRWFZh-Rplw
+  - hbm87eIAF8Q
+  - iOH9Av7YYnY
+  - q3VpbfTcBGo
+  - qkhLev3bKd0
+  - rlHwhBj7pv4
+  - u3cd85x7mVU
+  - uEWc4zzEr1k
+  - -jtcA7ZjTAU
+  - 0-xHoP9OZY4
+  - 1E2WEsXqVTE
+  - 6pcJGolfEio
+  - C-7TU-YypsA
+  - Eadzp6T-em4
+  - Ia6dNwVs1M8
+  - LH3CSHiOVJM
+  - NsoG4PPWcMA
+  - SDNnCSlD_E0
+  - TPBweVj_tK8
+  - Uyu4klxYNIM
+  - VBxblb9RaeQ
+  - a9_vuzUHVxw
+  - did4yD8Ofoc
+  - eK9BrVX8RhM
+  - fEE8lZyeDJo
+  - jp3wqNSel1o
+  - nCsswhgX_4A
+  - qD7yN5mqoWo
+  - yxIASueS9Ng
+  - -3bvlFKeLRE
+  - 2VED5fGdqj4
+  - 44fYnoSLL3c
+  - 7zGVGDZPxxA
+  - 8o7RaLzr7Jc
+  - D75ClMK09TA
+  - LwL9RnsU3i4
+  - NZNwQ7t9l7g
+  - OGTT-tJwHMI
+  - SYJu_y6WvEc
+  - Sas9eBPTYBI
+  - TpECt8HzQC8
+  - YHdtXf4M0iU
+  - ZcNkBh3Pvjc
+  - _8I0IQeKJHo
+  - _dVuHFdUN0c
+  - bMW9jBFTkVY
+  - c-Rj8eGbx4s
+  - fA15SFm50eg
+  - iE5lWIEoasI
+  - nt406A8B9wg
+  - nw5J6uA9QxQ
+  - oelLSrThoyw
+  - sOL0MwmIpYk
+  - 33LLeqyVbG0
+  - 38QKU7P_yxs
+  - 4CsjDPyFM0o
+  - 7t975H2QP0U
+  - DRRTzp73yHU
+  - FKVqxcI39i8
+  - FQPeFr4bvco
+  - GLE914spe7s
+  - IwSy105hNIg
+  - Kdo5X6n-YF0
+  - YE0RoETf0DM
+  - YkAxrnE9xb8
+  - ZgMBd8J5czU
+  - _GFkKV9MCyk
+  - jg3VHLa-kVA
+  - l2AEkqnASRc
+  - rtWDB0p2vos
+  - sVrPU5nKaFw
+  - tgpFpLjEHhQ
+  - 5iX6ecbz8XE
+  - 7mumwqwPRFQ
+  - A1mn9brmP4I
+  - Atmhf2XHZGs
+  - D1nl5PpXiAc
+  - ERAvgQyYlc4
+  - F94H3MF_7QI
+  - MW7GmvRqDIs
+  - PPcWD8Lz7Ck
+  - RydxPfrOLig
+  - SXUGOjs1g40
+  - Xl1-dllmzS8
+  - aJhIsYrNCVc
+  - h6t88-NmIDQ
+  - joyTsogpk2Q
+  - ldIu1wMDkYY
+  - s8rcKNkeYMg
+  - xdgKoQzGFzI
+  - xhZhKSOQI4c
+  - zCwU4Hgas14
+  - 5ByUy7CQR0o
+  - B87FpWtkIKA
+  - E72i6nHVO4k
+  - JHRHG0UpMsU
+  - K5KuZtc8X_Q
+  - N0AB4YrgQ-8
+  - OSxv7k4l-Cw
+  - Tj3Whz5dWAY
+  - VNBrlpArbdI
+  - VY0GMqZwVD8
+  - bOGDilOXMj8
+  - ijl9qspF1fg
+  - jEDCvgAjR5o
+  - oXYhM26ACAU
+  - rdtqKP-qRlw
+  - ry2cydyNnn4
+  - vTxIFX_xn0U
+  - 1n2p0Ha9Yng
+  - ADC-X96NqIo
+  - APm6g65q0x0
+  - EoG-SFBAObk
+  - HV92CZXgza4
+  - HpKqNwaKmuQ
+  - LWD8a11zlTw
+  - NFktLGrz_jw
+  - R_wED63SL00
+  - TOkoyBRXbyo
+  - UuZ6kukTJOc
+  - Wlu6HsO-pEM
+  - YCXBuiVGAzY
+  - a3NFhEAi1mY
+  - dXoQvLUShQA
+  - hia1PKtNdhI
+  - lLMeZ2zBg7g
+  - npVDkVrLbrE
+  - sBLc2jKmlF8
+  - 3IuajbApfWo
+  - 4AWzeCNDJUI
+  - 4eYqG9gZbks
+  - 9FVKW8wwBdE
+  - HxArewt5yko
+  - L9kxAaQs-b4
+  - LNV22KDu20g
+  - XHdhL5PUVlw
+  - _FUbuVmpxAY
+  - _SXBTFuhDvE
+  - b-TMZ9ItirE
+  - gPry3-OomII
+  - rPLw0kk9los
+  - rbmzl6SThbI
+  - tUR8PKalDBg
+  - zY9LPl8Q8vw
+  - zm8zPSTUoXk
+  - 8HFPuxt2lKc
+  - AiZRIeR5jQc
+  - AwgdmJxoWL8
+  - B8bTXHnyGGM
+  - HN7pvWcZhHM
+  - JuILtH5ASpg
+  - OFxwEgel14c
+  - OVEZnciFgPA
+  - Q2va_tp0BA0
+  - SxNAFFM5aKQ
+  - YghOeTjdEf4
+  - bwjZt6xQnlo
+  - kR4i6uK1BQ0
+  - mHltOyptkm0
+  - mfOFoFxOw58
+  - ue4wcRcRGik
+  - w04SYVEuVq8
+  - wUd6auAEDJc
+  - xZJfWykxYI8
+  - 06L0S9DNEKQ
+  - 0f-ygihj7Vc
+  - 5HfGShJOWFc
+  - BIjd73Ynk3M
+  - DjyCGGdDEwU
+  - EH18ikq09BQ
+  - G9SzuioIflA
+  - RPSApPXcdV8
+  - WZmCGb2chbY
+  - XUEZzeTwwpY
+  - ZXeDKE5ADcU
+  - aO0BOnTpLIA
+  - auS7n7xBjVg
+  - cPe7ZjWUID8
+  - cbYpAdXXvYI
+  - eTQEsUwR85U
+  - ncx17NAKkog
+  - oLcm2pCDCHo
+  - qlq-prZ4KfA
+  - rxSGzFQ-Qc4
+  - sk1PL8j7tL4
+  - 79cB1xZGSXk
+  - 8M7X73qN-b0
+  - HDuJXvfuQCI
+  - PgW4QNUWqgw
+  - QhzzGfrcRGI
+  - UYDsl9gXguE
+  - VKIGqEEtW4o
+  - YeilqmXV1H4
+  - _w834hWWjdM
+  - ezOsco9legc
+  - mILb12cD0JA
+  - rvKP2P7kvpU
+  - utINxvh-h9Q
+  - 0omymecKi3E
+  - 6Xf6DtvOwpo
+  - FRQbPjsyzZ8
+  - HHsa8nFxd_s
+  - JWqoZrraZt8
+  - KT79sPpOxJU
+  - KVDBwH4eMSk
+  - N5EO-1LHAyI
+  - OY2dZwwr6Bg
+  - Q82YnmL0Kr8
+  - WBTrG0ZCyqk
+  - ilinL1pIDfw
+  - pn0HA-AKzDc
+  - s5ly73hyRhg
+  - vsvyaaDL-SE
+  - wLGwXgNm7TA
+  - 1HH4Rz6WKd8
+  - FDS2qKwHOmw
+  - G2C2qEf3y9A
+  - Ip7wrGxqQhM
+  - JI3IB5jbZxo
+  - Tlt7OzM4Srk
+  - bDsLXioazNc
+  - fTsAWWxTxow
+  - gRFTpwQ433U
+  - ghaM_XJbMRI
+  - iAIq6V6ALxI
+  - pxACsE_bH-Y
+  - q5iSsdzWhwE
+  - rokKrnjHQVw
+  - zk5eFlXUbCs
+  - 2Ap8ayp3Dck
+  - 3IzmT5MG9NA
+  - 66ORWFL9iME
+  - 97VP4mTCH-g
+  - 9v7a7Z_hWJw
+  - BnvhJKnGuCE
+  - KF3D-Q0C6-c
+  - Uih27FGRiV0
+  - ZZIl3ZwcyRg
+  - ffFdevYOD9w
+  - k58kGQ7_s_U
+  - lKx0sOz31C4
+  - mkrSYQnA5cQ
+  - nxrT_DgEroQ
+  - rYWvW-bgHSY
+  - xaRWYMW7OAg
+  - 2dXq4KaGLOI
+  - 61fn83zkpoc
+  - 7_RslRTHOkU
+  - 9peMD2kp4SU
+  - G9NVRZN_gp4
+  - JRESbISX0q0
+  - JujwOOjSJfo
+  - _wX30DcjhMQ
+  - cMx8PzJgjxA
+  - gMzZ8d7exiU
+  - nGkHoLSkzcI
+  - 1MGqEItEJqw
+  - 7viU4PvQMIE
+  - AK9-EpGHNuU
+  - EHheYtD34dU
+  - Ex5xE_ApPvA
+  - L-ZP0dss5g0
+  - RlrmSu5u9bE
+  - UMGkQ9FmbGg
+  - VcK3KNRQ8j0
+  - XzK2PkpSJ9M
+  - goXYJAMHmis
+  - mAE8yZJRNYY
+  - ph8Dr-WtNnc
+  - qLNTB3T1Wuk
+  - zYVSI_BYF1s
+  - zZ3IrgR9q_Y
+  - -ErUOq78R7A
+  - 3MnCdb9oHhc
+  - CfANK5JX6AI
+  - DFaz1GimByY
+  - FmsRJeyAuM8
+  - Zl91rOC1sas
+  - bQaO1vO07Wc
+  - dBTQi5kdfW0
+  - e1Qq3mH-sXg
+  - hpeAchmNV48
+  - iKniDZF50-w
+  - kseIDPerJiE
+  - p8fFAJ4pqbc
+  - quMHccQuH6A
+  - wpB0d56K9tc
+  - zs5oYWkWoKw
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - HW4ADAzkxDo
+  - INXD5osrkDo
+  - URYaOI4kwnk
+  - a4ZpSs195I4
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - suV7BjHE0wc
+  - 3yMZfEO60UY
+  - 53YGckKJZng
+  - 70ydbjksIns
+  - 7JYF44bb5_k
+  - 96WjC49dagg
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - NPnTN1Pn1hU
+  - Q-7KCRNLLzc
+  - _NuvqZG2bDI
+  - byXfcfeiQeA
+  - kThGMgiprF4
+  - khflFFpKpsI
+  - nDTxyW0QES8
+  - u2M128GfJko
+  - yAK1WWcCniU
+  - 064uUn5syz0
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 5RDQQ9_DkAk
+  - 6ADogpDq0t4
+  - DIWnZDGZsVg
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - Wwbuv7v9B0E
+  - dVX8SaU37O8
+  - fZNblui4CGc
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - tqXnQ-zHLBg
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 62-nBy3OpgY
+  - ItE7xQpkfMA
+  - TbYkJXqdUP0
+  - YGm7FDrGODw
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - mh-dp3pwPpA
+  - q9CKxBMxTlU
+  - vtMvB4ErfZU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 06KsU8rYhC0
+  - 6TjXPRkXx9c
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - LoutTGa0ML4
+  - M5g7jKeHu8w
+  - mS_yuOfyNIM
+  - ncORPosDrjI
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - QJnr0_CVfXE
+  - U7nT5qC48XI
+  - YXzzuLcmE_o
+  - Z2AOmI3aQpQ
+  - cqDH7vHRcEw
+  - hZoeX99CiPE
+  - jEjhDcUIwrA
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - -KJBu7ZhkF0
+  - BdWvP-lbb68
+  - D2d7zi6ya58
+  - KMliGnl7uVo
+  - Knpr3ZZu1TQ
+  - TN9i9Ni0Xr4
+  - YNHMNVLwy9c
+  - acKgy9JxhMw
+  - kXitig9Ro60
+  - mLTqcadk8Bw
+  - vizFoFnJPis
+  - -l2Ngy_x554
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - JuAacs4omrs
+  - Pfse9GxqdAE
+  - YhIPJwEu6PE
+  - aEaQwy4hYLo
+  - eE-VtAKgQEE
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - mY6DZF6nDtc
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - 0BIbKxuOFIE
+  - 6-AXfni2zd0
+  - 99kVvs5a59U
+  - GxEhphkKGi0
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - V5LMXgBF0PA
+  - VGzzdrTuwj0
+  - YDbpNA4MqPs
+  - cQ4K399DTgI
+  - hsL_SsDaO0U
+  - jNBBCrOCcdE
+  - rIiDmvI_jmY
+  - xwoi_Jsx2zc
+  - 1bFVoTGDUws
+  - 8ZYJ64opv6I
+  - BSfOzy0Dpqk
+  - BfB4lVnL4CM
+  - GZqgvEWyOUI
+  - HSj7EPqPoLA
+  - HwHKN28z218
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - Ok2w5YnrosQ
+  - P26sJBTOaEo
+  - UCHnsgFpxsk
+  - VyV0oDX80dU
+  - Z7Ra8Wa-WMI
+  - blad0omDwIA
+  - cMwOX7cJJk8
+  - cdPejPpoMFo
+  - kDPJaT-YZus
+  - nv_GOK_dtEU
+  - qeDWB9AVxzI
+  - wt9-6VWbfHI
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - M4nSM7TBsJg
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - YSNLuOlUcD4
+  - cujcxjSm69g
+  - pA6ls-oHhX0
+  - 1hoGJhFWORo
+  - CZtOVFsTSuY
+  - Hc78YBArDAk
+  - LCFZkeCHfag
+  - Pui3UaKI2Pk
+  - YYZI3pczGqQ
+  - ZV3fXS2XHeQ
+  - cfaRviHdLfk
+  - iu_7JEConqY
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - viQG0SC73hs
+  - zBe-QCSXvTk
+  - zvqJNmYmyk0
+  - As1UlhYVK9I
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - MdokfHJK4mQ
+  - WEKB9EGH20I
+  - ZDqkZibM8iA
+  - _X6rsR5yCNo
+  - _w7BirEE9Ao
+  - idbNasHM5kw
+  - r1UMA4TvHr0
+  - vnpraKh91DM
+  - xI87hsZRJUA
+  - 716e30A053U
+  - CBnLOlVT4yQ
+  - Hu-rVZVSzxs
+  - UcXDxaNDzSM
+  - WprPdJKfaGk
+  - t-Sd0G1kZ1g
+  - uDA5hUg_L6Q
+  - w9YWEbihNr0
+  - -QS5t92wECw
+  - EAxgVFPJD3s
+  - EiTJBa8RpWI
+  - JYtbmL7-Mr0
+  - KxV8I_YyiaY
+  - NQHF7qdH0rM
+  - QsdXRoBiPBI
+  - moVynuxM4fc
+  - ucWD2CuSKSo
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - FBLcOucDCzU
+  - eO8W1pWRJ1E
+  - gEDXDaisk3M
+  - hY9KeU42L9M
+  - 5OVlqlcjiZw
+  - B9AT0WneXPI
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - Ji01F-ZfXYA
+  - Y0GDgQqt-bA
+  - fE5RTd5N5lM
+  - jdo843M-oCo
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - IRfZkJQnH1g
+  - OTrTqs9FLq0
+  - RoFCMBOUixI
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - _I-qMG3OlFM
+  - eX-fmOOIIiA
+  - fhY0pUKtsyQ
+  - foGlgwWk76I
+  - kgPkf89nHy4
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - tTGY0G8OZQM
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 3SBBDKJ1ETM
+  - BZu_pk7cXVw
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - QAj0VHx43fM
+  - oThDZBWEXMk
+  - qjlpZOmOry4
+  - sLYw8VdVGbw
+  - xdLy8PCcmwA
+  - -GCA92b119Y
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - Pg4WPKuDxmQ
+  - jiJ1c9eWA60
+  - pPlFSqXnbls
+  - tC05QrP0ZtU
+  scan_costs:
+  - at: '2026-05-29T16:34:20.857485Z'
+    usd: 0.19586187999999893
+classes:
+- name: Prenatal Essentials
+  image_url: https://images.pexels.com/photos/8436589/pexels-photo-8436589.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Foundation-focused class with safe modifications for every trimester.
+    Perfect for pregnancy newcomers to learn alignment and build strength safely.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Breath & Birth Prep
+  image_url: https://images.pexels.com/photos/8436587/pexels-photo-8436587.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Explore breathing techniques, relaxation and movement patterns to prepare
+    mind and body for labour. Build confidence through mindful practice.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Postpartum Reset
+  image_url: https://images.pexels.com/photos/8436426/pexels-photo-8436426.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Gentle, diastasis-recti-aware recovery practice for postpartum bodies.
+    Rebuild core strength and regain balance with safe progressions.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Gentle Mobility Flow
+  image_url: https://images.pexels.com/photos/8436605/pexels-photo-8436605.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Soft, nurturing practice for hips, back and pelvis relief. A daily
+    sanctuary to ease pregnancy discomfort and connect with your changing body.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Yoga mat
+  image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Fitness_mats_%2851543374690%29.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

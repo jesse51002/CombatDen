@@ -1,8 +1,9 @@
 # Video Service
 
 A lightweight, **single-tenant, gym-centric** service. The **gym** is the unit of
-everything: a member browses gyms, picks one, loads the **theme it carries**, and
-gets that gym's videos / classes / rewards.
+everything: a member browses gyms, picks one (by `gym_id`), and gets that gym's
+videos / classes / rewards. The **theme it carries** is used only for branding
+(loading the design), never to fetch content.
 
 Everything lives flat under `VideoService/`:
 
@@ -23,11 +24,13 @@ One `gyms/<gym_id>.yaml` carries everything about a gym:
 ```yaml
 gym_id: vinyasa                       # stable id == filename stem
 gym_type: [vinyasa]                   # 1+ disciplines (the GymType enum, 76 values)
-theme: ZZUndoneVinyasaFlow            # the ThemeService design id this gym runs
+theme: VinyasaFlow            # the ThemeService design id this gym runs
 videos:
   specification:
-    videos_desc: Led full vinyasa classes, breath-paced, clear instruction.
-    avoid_desc:  Talking-head philosophy, 30s social clips, gymwear hauls.
+    short_videos_desc: Led, full vinyasa classes, clear instruction.   # ≤2-sentence
+    short_avoid_desc:  No talking-head philosophy or 30s social clips.  # skim summary
+    videos_desc: Led full vinyasa classes, breath-paced, clear instruction.  # LONG —
+    avoid_desc:  Talking-head philosophy, 30s social clips, gymwear hauls.    # scanned
   queries:                            # the searches that feed this gym's pool slice
     - vinyasa flow full class breath led
     - beginner vinyasa yoga 30 minutes
@@ -44,6 +47,10 @@ rewards: null                         # optional points-store reward cards (Rewa
   Pilates / Barre / HIIT / Cardio / Dance / Wellness) from it for the picker
   filter. It's also the **candidate filter**: a gym scans only the pool slice
   tagged with one of its disciplines.
+- **`specification`** comes in two tiers: the long `videos_desc` / `avoid_desc`
+  (required, the full context-rich criteria the **scan** judges against) and a
+  short `short_videos_desc` / `short_avoid_desc` ~2-sentence summary for easy
+  viewing (display-only, not scanned; optional until all gyms are backfilled).
 - **`good_video_ids` / `rejected_video_ids` / `scan_costs`** are machine state —
   the scan owns them. Author them empty; never hand-edit.
 - **Card art** (the gym's celebration image) is **derived by the API** from the
@@ -131,9 +138,13 @@ Read-only endpoints:
 |---|---|
 | `GET /health` | liveness probe |
 | `GET /gyms` | a **page** of the gym browser (`GymsPage`) — slim cards (id, disciplines, derived `parent_gym_type`, `theme`, derived `celebration_image_url`, counts). Paginate with `?limit=` (default 20, max 100) / `?offset=`; filter with `?query=` (substring over id / theme / discipline) |
-| `GET /themes/{design_id}/videos` | a **page** of the theme's gym feed (`VideosFeed`) — **only that gym's `good_video_ids`**, hydrated from the pool in feed order. Paginate; filter with **either** `?video_type=<genre>` **or** `?big_group=<educational\|entertainment>` (both → `400`). `404` if the theme isn't mapped to a gym |
-| `GET /themes/{design_id}/classes` | the theme's gym's branded class cards (`ThemeClasses`). `404` if unmapped or none authored |
-| `GET /themes/{design_id}/rewards` | the theme's gym's points-store reward cards (`ThemeRewards`). `404` if unmapped or none authored |
+| `GET /gyms/{gym_id}` | one gym's whole content detail (`GymDetail`) — its feed `specification` (short + full descriptions), branded `classes`, and points-store `rewards`, served verbatim. The client reads this into memory once on selection. `404` if there's no such gym |
+| `GET /gyms/{gym_id}/videos` | a **page** of the gym's feed (`VideosFeed`) — **only that gym's `good_video_ids`**, hydrated from the pool in feed order. Paginate; filter with **either** `?video_type=<genre>` **or** `?big_group=<educational\|entertainment>` (both → `400`). `404` if there's no such gym |
+
+Everything is keyed by `gym_id` — the gym is the unit. Browse `/gyms`, pick one,
+read its detail (`/gyms/{gym_id}`) into memory, and page its feed
+(`/gyms/{gym_id}/videos`). The `theme` a gym carries is used only for branding
+(loading the design), never to fetch content.
 
 The gym browser's `celebration_image_url` is **derived** from the gym's theme
 (`/apps/combatden/{theme}/images/celebration_image`) — a ThemeService-relative

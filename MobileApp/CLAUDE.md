@@ -35,13 +35,17 @@ HTTP API). Architecture, mirroring the customization engine:
   **no** tag/group enum or vocabulary — the server owns it, the client just
   renders whatever strings arrive (auto-formatted via `displayLabel`). This is
   deliberate: there is no closed enum to keep in sync with VideoService.
-- **`data/video_api_client.dart`** — `dio` client,
-  `GET /apps/{appId}/themes/{designId}/videos`.
+- **`data/video_api_client.dart`** — `dio` client, gym-id-keyed
+  (`selectedGym.gymId`). Two reads: `fetchPreview()` →
+  `GET /gyms/{gymId}/videos/preview` (the home feed in ONE request — each genre
+  sampled individually, top 10, server-side, so no carousel is starved by
+  pagination), and `fetchTag(tag)` → `GET /gyms/{gymId}/videos?video_type=…`
+  (one genre's full list for a carousel's "view all"). 30s timeouts.
 - **`data/video_feed_repository.dart`** — `VideoFeedRepository.instance`, a lazy
-  app-wide singleton that fetches the feed for the **active theme** (by
-  `designId`) and caches it per `designId`, shared by every video surface.
-  Switching theme in the picker switches the feed with it. (No `get_it`; the
-  customization locator is package-internal.)
+  app-wide singleton. `feed()` is the per-genre **home preview** cached per gym;
+  `tagFeed(tag)` is one genre's full list cached per (gym, tag). Switching gym
+  switches the feed with it. (No `get_it`; the customization locator is
+  package-internal.)
 - **`data/video_selectors.dart`** — pure derivations: top-filter scoping via
   `bigGroups`, one carousel per `tag`, featured = most-viewed, and the picks for
   the recommendation surfaces. There is no client-side tag→big-group map: the

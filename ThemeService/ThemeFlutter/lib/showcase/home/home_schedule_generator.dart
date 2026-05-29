@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:theme_flutter/showcase/home/home_class.dart';
+import 'package:theme_flutter/showcase/showcase_content.dart';
 
 /// Clone of MobileApp's `schedule_generator.dart`. Builds one day's schedule
 /// by looping the const showcase classes into fixed time slots, with
@@ -61,20 +62,41 @@ bool _isClassBooked(int dayOffset, int classIndex) {
       (dayOffset * 3 + classIndex * 2) % 11 == 0;
 }
 
-/// Builds one day's schedule from the const [showcaseClasses] — class i at
-/// slot i. Every day shows the same four classes at the same times (per-day
-/// variation is just the demo attending/booked flags).
-ShowcaseDay dayAt(int dayOffset) {
+/// The base classes for the schedule: the host's injected gym [classes] when
+/// provided (their time slots borrowed from the const samples by index, since
+/// the gym file carries no schedule), else the const [showcaseClasses].
+List<ShowcaseClass> _baseClasses(List<ShowcaseClassInfo>? classes) {
+  if (classes == null || classes.isEmpty) return showcaseClasses;
+  return [
+    for (var i = 0; i < classes.length; i++)
+      ShowcaseClass(
+        name: classes[i].name,
+        // Borrow a plausible time slot from the samples (gym files have no time).
+        timeRange: showcaseClasses[i % showcaseClasses.length].timeRange,
+        durationMinutes:
+            showcaseClasses[i % showcaseClasses.length].durationMinutes,
+        mentor: classes[i].instructorName,
+        imageUrl: classes[i].imageUrl,
+      ),
+  ];
+}
+
+/// Builds one day's schedule — class i at slot i. Every day shows the same
+/// classes at the same times (per-day variation is just the demo
+/// attending/booked flags). Pass [classes] to preview a real gym's classes.
+ShowcaseDay dayAt(int dayOffset, {List<ShowcaseClassInfo>? classes}) {
+  final base = _baseClasses(classes);
   return ShowcaseDay(
     label: formatFullDayLabel(dayOffset),
     classes: [
-      for (var i = 0; i < showcaseClasses.length; i++)
+      for (var i = 0; i < base.length; i++)
         ShowcaseClass(
-          name: showcaseClasses[i].name,
-          timeRange: showcaseClasses[i].timeRange,
-          durationMinutes: showcaseClasses[i].durationMinutes,
-          mentor: showcaseClasses[i].mentor,
-          imageAsset: showcaseClasses[i].imageAsset,
+          name: base[i].name,
+          timeRange: base[i].timeRange,
+          durationMinutes: base[i].durationMinutes,
+          mentor: base[i].mentor,
+          imageAsset: base[i].imageAsset,
+          imageUrl: base[i].imageUrl,
           attending: _seededAttending(dayOffset, i),
           isBooked: _isClassBooked(dayOffset, i),
         ),

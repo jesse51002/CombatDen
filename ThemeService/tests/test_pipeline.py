@@ -677,8 +677,8 @@ def test_font_partial_regen_preserves_siblings_and_steers(tmp_path, monkeypatch)
 
     seed = build_seed(ctx.app, full.output)
     seed.pop("display")  # drop the target so it re-rolls
-    specs = OverwriteSpecs(specs="make it more elegant")
-    res = asyncio.run(Pipeline().run(ctx, seed=seed, overwrite_specs=specs))
+    ctx.overwrite_specs = OverwriteSpecs(specs="make it more elegant")
+    res = asyncio.run(Pipeline().run(ctx, seed=seed))
 
     # Only the 'display' slot re-ran (slot-level).
     assert res.generated == frozenset({"display"})
@@ -713,8 +713,8 @@ def test_color_partial_regen_preserves_siblings_and_steers(
 
     seed = build_seed(ctx.app, full.output)
     seed.pop("primary")  # drop the target so it re-rolls
-    specs = OverwriteSpecs(specs="warmer")
-    res = asyncio.run(Pipeline().run(ctx, seed=seed, overwrite_specs=specs))
+    ctx.overwrite_specs = OverwriteSpecs(specs="warmer")
+    res = asyncio.run(Pipeline().run(ctx, seed=seed))
 
     assert res.generated == frozenset({"primary"})
     for sid in ("background", "text", "accent"):
@@ -944,6 +944,7 @@ def test_write_expansion_preserves_cost_and_appends_ledger(
     assert original.cost is not None
 
     # Regenerate only the image (seed everything else).
+    ctx.overwrite_specs = OverwriteSpecs(specs="darker background")
     seed = {
         k: v for k, v in build_seed(ctx.app, full.output).items() if k != "hero"
     }
@@ -953,7 +954,6 @@ def test_write_expansion_preserves_cost_and_appends_ledger(
         ctx,
         original_cost=original.cost,
         kind=ExpansionKind.REGENERATE,
-        overwrite_specs=OverwriteSpecs(specs="darker background"),
     )
 
     # output.yaml: cost block is the ORIGINAL, byte-for-byte.
@@ -1022,6 +1022,7 @@ def test_output_back_compat_ignores_removed_fields():
     dropped, not rejected. ``complexity`` and ``cost`` stay optional."""
     base_image = {
         "path": "/fixture/demo/default/final_images/hero.png",
+        "version": "0123456789ab",  # required: every image carries its token
         "prompt": "A bold demo hero illustration on a flat solid background.",
     }
     # The colour shape changed: a ColorOutput now nests its value as a

@@ -4,14 +4,870 @@ gym_type:
 theme: KillerMuayThai
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational muay thai content for gym
-      members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable muay thai sources.
-    avoid_desc: Anything not about muay thai; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Serious Muay Thai technique and follow-along training — the
+      eight limbs, clinch, and fight drills from credible coaches and Thai camps —
+      plus the fun side: stadium knockout and highlight reels, pro bout breakdowns,
+      Thailand camp vlogs, funny sparring moments, and fighter and coach interviews.'
+    short_avoid_desc: Off-topic, clickbait, street-fight "one elbow ends any fight"
+      fantasy, "get fight-ready fast" promises, supplement scams, backyard-brawl footage,
+      and "muay thai vs kickboxing / is it useless" anti-Muay-Thai debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and film-study content for serious Muay Thai members —
+      plus the fun, human side, so it's a feed members enjoy, not just a drill
+      library.
+
+      ## Technique & training
+      - The art of eight limbs: punches, elbows, knees, kicks, and teeps
+      - The clinch and clinch-knee game, checking and countering
+      - Timing and ring craft of the sport
+      - Follow-along bag and pad rounds, sparring drills, and fighter-grade
+        conditioning from established coaches and Thai camps
+
+      ## The fun & human side of Muay Thai
+      - Breakdowns of classic and current pro bouts
+      - Lumpinee/Rajadamnern and ONE-style stadium highlight and knockout reels
+      - Thailand training-camp vlogs and "a day at the gym"
+      - Behind-the-scenes from fight camp
+      - Funny sparring moments and amateur first-fight stories
+      - Fighter and coach interviews, and motivation montages
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about Muay Thai; off-topic, genuinely low-quality, or clickbait
+      videos.
+
+      ## Reject
+      - Cardio-kickboxing or "bag-fitness" classes dressed up as Muay Thai
+      - Street-fight / self-defense fantasy ("one elbow to end any fight",
+        "deadliest technique")
+      - McDojo-style "get fight-ready fast / go pro in months" promises
+      - Sketchy supplement promos and unsanctioned backyard-brawl footage
+      - "Muay thai vs kickboxing", "is muay thai useless in a street fight", and
+        similar cross-discipline or anti-Muay-Thai debate and reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a highlight, a vlog, or entertaining —
+      fun content is wanted.
+  queries:
+  - muay thai fundamentals technique tutorial
+  - muay thai teep and push kick breakdown
+  - muay thai roundhouse kick technique
+  - muay thai elbow strikes tutorial
+  - muay thai knee strikes and clinch entries
+  - muay thai clinch control and sweeps tutorial
+  - how to check a kick muay thai
+  - muay thai punch and kick combinations
+  - heavy bag muay thai workout follow along
+  - muay thai counters and timing breakdown
+  - classic lumpinee stadium fight breakdown
+  - best muay thai knockouts and highlights
+  - greatest muay thai elbow knockouts reel
+  - training muay thai in thailand camp vlog
+  - a day at the muay thai gym vlog
+  - funny muay thai sparring moments
+  - amateur muay thai first fight experience
+  - thai fighter training camp behind the scenes
+  - muay thai coach interview on the art of eight limbs
+  - muay thai training motivation montage
+  good_video_ids:
+  - A-LjOfQLQLc
+  - CX6z25t9HeE
+  - C_KO98xIx_0
+  - EPC8Xj_sVJM
+  - G2Z5YFJ02y4
+  - Gw_Gf9jRvTM
+  - S0gbkjyV_MY
+  - SedKFKgpgbk
+  - WVB2ATaLJ6U
+  - WgnwzAArMKc
+  - b3hd-E7ge04
+  - f2eBuNcflU0
+  - qeTsQxz1-ME
+  - yHCtA3g7huQ
+  - -9GdYh_YoJo
+  - A_IM_52psPw
+  - EiZzaoK68iw
+  - GPug-MuCKKY
+  - HTts3Kk91ew
+  - K4whNc7B_X4
+  - S6uhuSimf-A
+  - W1uZhq8O_R4
+  - bmVXD9_WprY
+  - fqB_szSOQBk
+  - jEieq-i5Gko
+  - kfmO67CN7fY
+  - mp771sLeuQs
+  - qdSQSA0-0R4
+  - uscwNFSP5kU
+  - vhNzk4XCSs8
+  - 4zCjfuXlD9E
+  - AbU29p8p5k4
+  - CPROBJ_fTJU
+  - DflnvUqZn2w
+  - E3MsxKDuSHg
+  - EO_-pZL-1Wo
+  - Fl7WlI1opxc
+  - KNz0wqbzlR8
+  - M3330xDmcN0
+  - N45Uh3wDaKc
+  - S2I5O92wXpI
+  - TtEXXR4hndI
+  - XzXUM6i9Qdw
+  - fKFI6-YPVsY
+  - ftxUiF-H6PE
+  - hOi-mLYpBlQ
+  - hSl-1ht-7Uo
+  - iyrJSBS5byI
+  - pZta8R-PA_s
+  - rPg_ZDJCp0E
+  - uwooUgob5jc
+  - 2rJcFoYsef8
+  - 3p0XnRmnSuI
+  - 8s5Xgn_Pd-U
+  - 8xBsTynPpg0
+  - 9R7wWh6GF24
+  - BCtbuLRm750
+  - BtnwY-j091A
+  - EIl7R_Ma54Q
+  - FDUfxZG35zI
+  - J3ITG_3vLzM
+  - MH6YU7emGsk
+  - QTgajjJFoqo
+  - RPW9GT11oTA
+  - U9vUzqwbl64
+  - W9cOOWPEA9E
+  - WX3vS8Pj6vQ
+  - ZnHYO-6165k
+  - g6nn0iZwenA
+  - gBwOCHGMxO4
+  - gEcNwq9v0bg
+  - gXOtQP3A6fM
+  - guhUTMawAXY
+  - hZG6Cg8MtEI
+  - mTeCh3XSiEA
+  - rT9NOnCUUVE
+  - v-Jfv9NKzbc
+  - wwc4cnvkwnk
+  - zFf1grygwhE
+  - 29kipLhNL_A
+  - 6LZjO3Uk1Dw
+  - 7X_DUzxk5os
+  - 7kyANpBToQ8
+  - B1OOTNaPN7I
+  - Bp_QVO7kYtg
+  - EQio6nzPLPw
+  - EgGmKVqf2zg
+  - NkOIUV6Qu9E
+  - QCYJfFOSClo
+  - VKA3lC25l14
+  - Xi7ROz0Xb3U
+  - YcJsOe-vYAI
+  - g7cBp9TnMwI
+  - gaInvk4-cNM
+  - tEVBENk7XdY
+  - y59uqLjD7Zs
+  - zptHZjTHK7Y
+  - 4TbIpJ28zZc
+  - 4hO-MXUo56I
+  - 5DcTrFOXUgs
+  - 7t9Y8pX5NEk
+  - DYBExzyv4-M
+  - IBXWXEvoQZg
+  - IoFJMh7jDrE
+  - JPQAbK09iFI
+  - Jk0IGC8GOcI
+  - KaGj0mNKZ_4
+  - LQQln842_UM
+  - SD2PvP-jVds
+  - Sv85JrwYfTk
+  - XbAAiXJuinQ
+  - acCvfwXPEBU
+  - cFXQbE_EHwc
+  - epJCYeLRVmg
+  - f0zBN71xctU
+  - j484m1U6f_4
+  - lUDtvJfAr00
+  - lYooVYKJJzM
+  - mfVHNjaAmvM
+  - tBVuXV-uYvo
+  - wDLSsMxULW4
+  - zCr_jou5BIs
+  - 12QNDtPrbPY
+  - 63FDy1O-3P0
+  - 8qAJyg9DVak
+  - 8qbZ3H1LceQ
+  - AuXrVv2wBOM
+  - C-HIpOy_kwI
+  - Ev6xYiLjlBs
+  - JzvLsNQvtp0
+  - MTlEFD2GlmE
+  - TM7cU9y84VY
+  - YeRS99DkgmQ
+  - eDwqdjgIMgM
+  - gDjhfuaX0cM
+  - gzHEwJjaaMQ
+  - hCHUuk1b8PY
+  - kzzZcyUFyfk
+  - m9JjW0s_O0k
+  - oj3YL4aMnW4
+  - pxHkG8-_720
+  - vXv6uvrUjKo
+  - vr2URWxmPt4
+  - ySV-PTpkFV8
+  - --dba2clfx4
+  - 0VGI-IQ8Z54
+  - 9_rygGQo7mc
+  - BY5_ExAmB64
+  - CNWTLoLxndk
+  - CliT1_uS_MI
+  - IPORkNzhwbY
+  - J9dK0uIEXIM
+  - LXfSOsu4T9s
+  - MkHrv_B2oOQ
+  - NUF9BIUaSjs
+  - Rnsp01f-I4s
+  - Sc4A9RTj6kc
+  - UCOuQJ3rVB4
+  - W4OduPgefAc
+  - _gWEEfSuRmE
+  - _vC4oDmykTk
+  - e_h0gVtIWDo
+  - fI5iMJvcNRM
+  - fVeGKwcp700
+  - lcFIMNQhtjM
+  - pTqzKKiuZXI
+  - qele89Xmyc0
+  - teYCn5IZqQU
+  - xt_Db9p2sUc
+  - 26DSA5DRz0s
+  - 2Ep1bR1Fds0
+  - DIyvOv6RsmA
+  - I6A2e3IU-nw
+  - KBCcscGSY7Q
+  - Mob3xOiyAbI
+  - V4bFdfbpyIc
+  - YfVAnjIpBJk
+  - _IiYzR8pLeY
+  - ilowJy7r2JA
+  - mTGxj6zOzEU
+  - pqjn1AgmuEQ
+  - pvS7R1HfArk
+  - qToht6O--ho
+  - t6dki-fVmGg
+  - tPuvwPYjULw
+  - uaM90gmt5DI
+  - ux_37AZky4w
+  - whOG41g798s
+  - zwKi6PVOrSE
+  - -PiJQRvYdzg
+  - 4nWEnuPdgEg
+  - 7xzn_qwywHE
+  - 8O4LbKyhWO4
+  - 93XKgRftirw
+  - Bvpo0rI0lGw
+  - FFF2-9ygtxE
+  - MpzVb1aDQ5Y
+  - O3zb9eBJ5_M
+  - RVC5ZyPaXeA
+  - TjHXjEAxA3Y
+  - _ccuRYoMN6g
+  - a4OG796FsOc
+  - cK61vw7OKAM
+  - gjInlnUJM2g
+  - ndIa69fEgJY
+  - ywVnCQ_U-eo
+  - zMksE9OKvTM
+  - -eTsdAag0i8
+  - 0xvl-Y0Vo6Q
+  - 1T7nYSypRC8
+  - 4P9AG1BTgEc
+  - 7Churg3xUWg
+  - Ejz9HJHQZag
+  - JXs3Hvs3bN0
+  - JbfqeHqmewU
+  - S_qWPACqJaA
+  - ZWh2W3QuOUQ
+  - dcXCv00Z9wg
+  - fRSQbrsDB0o
+  - jgtB40coNv0
+  - lQI8khlwsao
+  - lSRCNSTcxiM
+  - tZGQm16eLCE
+  - uMkxXP3ZMGI
+  - vFqMm_wG3gA
+  - zmQRzTT0-Ko
+  - 3Jy7H3kv84A
+  - 8v4Cw9xcGbo
+  - HVTTZI_7Lvw
+  - JxNGCrMuiTc
+  - MIv_1IT5HsI
+  - RE5Q4lU1Sho
+  - RevstGRcR4g
+  - RxIgKPV6R9k
+  - aAhGplFt1fs
+  - fdsiCeQjHUo
+  - nAdgqrAzrfs
+  - oQVuIQbfL6Q
+  - rY3fJXSYLcI
+  - uuBdODesdMI
+  - vIa4WWIjT-s
+  - xoxnkg_poU8
+  - 2aSpBHz9QJ0
+  - 7dm4TgMj_Gg
+  - AghC5EcC6dE
+  - J05UZ-neSGw
+  - JnWQoeuqzM4
+  - O0CpyezjfH0
+  - P5Vxeort9YY
+  - PPYsg2QGPuo
+  - W5qd8FQnTlk
+  - Z3xMglkVfvw
+  - g4E8jeO-I4M
+  - gQ7TpuptisA
+  - gljK90LZqA4
+  - oQhqoXG2zfY
+  - qlJ9ozU6iGc
+  - sklsNPxGSs0
+  - wgihxpbXNYo
+  - xjMiuwoN4Vc
+  - yMXLAl3gTYs
+  - 2DLM6s9AWRE
+  - DRlHv84xymM
+  - Fm4X1WEUtEc
+  - IyZTZOf1YjU
+  - JP1rmDDLyP0
+  - Jn4VAas6PIo
+  - Lc9joHI-A9M
+  - RpFIQWkceJA
+  - TNDQ1pvAH8M
+  - ULUUg0OHlpg
+  - XavDyo61cBo
+  - cg_s45cclkc
+  - onf6qfSOxB8
+  - sy_sHbEEMj8
+  - vICrwtnmM6w
+  - x9YiOKELqdA
+  - xTocI1RhKb8
+  - yxwfaDpdCMo
+  - 4CQUxL7Ij-Y
+  - 4D6qbU_UteA
+  - 4XpUbUNM4x0
+  - J9P96JpcCQY
+  - Tz84KuoeRWc
+  - awgP60rGSlw
+  - b2EaxgTDWZc
+  - bUUE3xpZ550
+  - eH8VqWN0IeI
+  - fX3B_DstFvM
+  - hZrVBXH0vxA
+  - hbD-2PByq1I
+  - jXbmPLHdQVM
+  - jiVgEWAdIIA
+  - nqFoFKu6UHI
+  - ppcFlq-3DA0
+  - s48lPJGjGJ0
+  - sRmuxVw5HCo
+  - wy_Kp-CtT78
+  - z5cVK9DlioA
+  - zU_frFSykGw
+  - 066YdprB9sk
+  - 4pEZbGuwr-Y
+  - 9tuop_PqX0c
+  - CJ2PbU4K9Ho
+  - CxxeA5pd_so
+  - IzyRoB_9UmU
+  - R0WcFxtKFj8
+  - TBsjtNyChaA
+  - WMxzNhnIv88
+  - XxwrVK1z1go
+  - d21167Fofeo
+  - digCpcXpJjk
+  - j8NY7oMnnRU
+  - jS9dsaH51T4
+  - k7J96qxRQKg
+  - lWwUl9FekY4
+  - lsjR_It-HTk
+  - rnnz2X4A5A0
+  - tJ__5dLCCtQ
+  - xllY8J5G8d4
+  - 1j88pN4jMM0
+  - 6FEovkQ4z4E
+  - GxQHUg6MMkE
+  - HYG6kcRYIZg
+  - OzvwoQ3sXSg
+  - R5toltK0JO4
+  - Rxh6bab5y3U
+  - Vc9AEyaLvuk
+  - hweZvnAnXqc
+  - iJlNj3O1StA
+  - n6t8HbsZ9ss
+  - oc1WmxBjMYY
+  - omNZaQ1WipE
+  - q_bCMQ0wVNE
+  - s3XTFR1ihBY
+  - uMGF2tVaMEg
+  - yNxx-9L1jjI
+  - zbQXVb9R5GQ
+  - 0ZlSlVtm-7Y
+  - 9_kuYgmLlis
+  - CBczlTISbYw
+  - EJqxmIrllZI
+  - ErOHZHz50Sw
+  - KfUQzaFt_ys
+  - RmAgg07cBh4
+  - Rr2CagV6re8
+  - UO0PP0oo-fA
+  - _Ye8xaveOic
+  - ruuW_shWsqA
+  - vGGLcJCqzJI
+  - xPenkC_U6b8
+  - zLes5gkTslw
+  - -aqD5fHrsY4
+  - 0zq-ldME1ck
+  - 8FqmLxpz9LU
+  - 9qfNr9AbdkU
+  - A7LOitI_aa0
+  - C79XDXuU6uw
+  - FBNHCVjpPnc
+  - KrcLQCtdkNA
+  - Ktu41DkaFzA
+  - O3EkqQmBGbc
+  - VMdOoRm7xL4
+  - eJoWTlqMuZc
+  - gQ0gNtiDSxc
+  - l1Za5yBML7M
+  - p1XLtmcYOwc
+  - yhB9oVEHbkQ
+  - 0DU7x4iKNUE
+  - 7X13KDgCl5A
+  - GBxxdVM406E
+  - HlEWI6L_Cdg
+  - JmWT9wGesQo
+  - R6eNf8jXOHQ
+  - S1qTvJtmJiQ
+  - eZCdFbRE5vU
+  - g-hNpdaCd-w
+  - gKCcOv70CAw
+  - hNgLpoNCKno
+  - iNIF8e4tBxw
+  - nwdf1NIMbNo
+  - w5B-32_Ql8c
+  - xyqyFEXsLe4
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 34MHPHygSGE
+  - EERMNeTfHaY
+  - INXD5osrkDo
+  - QwLX1P6ogC0
+  - SotLyRb8XjE
+  - T8O5CMhppdo
+  - X3im5bF4KI0
+  - XyMxRbgGySk
+  - dBJry3tcX0Q
+  - e6UNuMxBIdE
+  - eDW5pZc3bMU
+  - gT6OkjTDcYc
+  - h33XAsyVcIw
+  - iWT658TQfVU
+  - k0QVcaw4A2w
+  - nE4mvAWZKXw
+  - rgvPJsygNyo
+  - A0o4JsHUSHw
+  - BbRTXtD_IlI
+  - GQoSnlh3Nbk
+  - HKX-HBAM8NQ
+  - KJBlo6X4Mm4
+  - MHrGENGDlX0
+  - MxCFVDYN8Ao
+  - Q-7KCRNLLzc
+  - WV_OH8cuJFw
+  - X15kOTm_5lw
+  - XxBYWljhplA
+  - Z8BkIZgJ5C0
+  - bUfIDnislec
+  - gfUg6qWohTk
+  - kThGMgiprF4
+  - x1fguR6Lduw
+  - xbABGepKT2o
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4D6wSrXC__0
+  - 6ADogpDq0t4
+  - 9aqpDxfhhyU
+  - CMgghWxHMIc
+  - CkwsP85USK8
+  - DIb4ORefBaE
+  - DacqZQC3Hfc
+  - EydeXyoDgAk
+  - G7-tJmJwJU8
+  - JH2Vk7UNaOY
+  - KIjHz3ZTrnk
+  - KNmxPI86cZs
+  - MrzGlecbLxU
+  - O2JyplMHA4A
+  - Q3mqj0S-ECY
+  - Q8udY0uDYL8
+  - SfGyVRAvhgs
+  - TbGqp7mdO04
+  - WT2qWAcet3s
+  - Yko3GMseY40
+  - k6Qp78Hh5DI
+  - udo0RzY-9Cg
+  - v4pezeJWpVM
+  - ximZfmqh2hI
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - 8nMGOZuVjOU
+  - ADeS2LCVDu4
+  - ILSbK8RnGdI
+  - ItE7xQpkfMA
+  - MSuu3eFXTTo
+  - UyyJy9m82po
+  - XJy7txO14nw
+  - b-Hbyii-HGA
+  - deSsG444nU0
+  - dm8JR9Wkz5Q
+  - h1vlqBRmH_g
+  - hqYxFoJ-DDM
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - l7GVxAqcads
+  - pVwL4ZDYKCg
+  - q9CKxBMxTlU
+  - sbNhd0JLQXA
+  - viHjGf9WbCA
+  - wd6dkj6p3lM
+  - 3uPhWSq_1dk
+  - BK2HdRp4Oo0
+  - C-q6NYWPAVk
+  - Cq_Nuo8ilak
+  - DbEwDrTlz_g
+  - GFqwzC_q2A4
+  - JKiuEi5jYyM
+  - LdhIhIEtsRo
+  - MNte5pRNsa4
+  - RFoEx4BK88w
+  - XaA3qD1EAqg
+  - mS_yuOfyNIM
+  - p27vx8Zf3wY
+  - v6B9zgvkos0
+  - -99HKFiZOWQ
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 4-lrb-YjXYM
+  - 5SM5O-tlC5s
+  - BLYnBNOsxoI
+  - KmhDx91x8sg
+  - MICPyrnGYwg
+  - O9Sop7_Mxeg
+  - OJ6VBf1Vn-U
+  - OT-1mQSE3lw
+  - Okmz3oq8M_8
+  - QhqwZD-a4T0
+  - SYJu_y6WvEc
+  - U3zQHweg1eI
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - b3K7RR5KGaU
+  - bMkEhPX0Vj0
+  - cslPzDzeyEA
+  - eCCAsiaajLY
+  - hZoeX99CiPE
+  - l3o543fl2gE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - q_7LMlxolTg
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - vZhWdFZ1xW8
+  - vucFkmTMO2o
+  - vuuqoMs162A
+  - yyN2PXSds5I
+  - zhWfajP4EVU
+  - 4VbmiMEs22c
+  - BdWvP-lbb68
+  - Bn252MRdazs
+  - C1gLitjrn2A
+  - HIuN3NzdSPs
+  - KYuSjvR6W9U
+  - QYep9TgZsa4
+  - TN9i9Ni0Xr4
+  - UDf_Ey7FfkY
+  - YNHMNVLwy9c
+  - f3Q3Lwl-dwI
+  - l8E5GpRuiqg
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - qxFLyK_UM44
+  - -ywRvvPIkXw
+  - 0qVlPcJp7c4
+  - 3oqxkQmYZcU
+  - 4zO7i9P8mGE
+  - 4zQL4ALDOVQ
+  - 5iX6ecbz8XE
+  - 7Cwb-lzzv1A
+  - B6jwYGC4AoE
+  - CXP7Q5n5JP8
+  - HZDVa0LDvJE
+  - Pfse9GxqdAE
+  - U8STIEcxj14
+  - VikuYpj5rmo
+  - VunalWJ2vq0
+  - f0MAIwb7hvg
+  - f6yAY1oZUOA
+  - fWHLuFrVW68
+  - g9Er55uc7UM
+  - hQaF64yk-N4
+  - kwDQk2siRJs
+  - ooEgWahEvEM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 5BWvCETiDy4
+  - 8hzxM7a83gI
+  - ApRBjb93FJ4
+  - FJnO9Zjqzl8
+  - HWAOifKGLiE
+  - JqC83NFhAYM
+  - M72GOLyer-o
+  - Mlgs4_54q8Y
+  - UR0g95Rb0W4
+  - cQ4K399DTgI
+  - crxA8bm60u4
+  - epv2RbE5DUo
+  - f4O0gKEK0d8
+  - iTOsX-aMtrw
+  - na2QowvbwsU
+  - qL7Nlexje-M
+  - uPDpvaAhhd4
+  - zl6AlpI5QsA
+  - 5fzTBTfWJ20
+  - BRvvpVLQpIY
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - JyV7mUFSpXs
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - UzONl7k_ZXk
+  - Y88oZtk5K9U
+  - Z7Ra8Wa-WMI
+  - r_VHltdyvv4
+  - yRmx06wpGsU
+  - zunDUmdfRSY
+  - 1MnIdw5n0j8
+  - 30qxieXQ9_k
+  - 6oZfhhEHXU8
+  - F5MODFj28oU
+  - FKcr2h7RR-g
+  - M4nSM7TBsJg
+  - UNf2qsX8uFc
+  - YyA0JAnK5l8
+  - aIeuMhYQ2vw
+  - cWNVP4Ui22g
+  - cujcxjSm69g
+  - pA6ls-oHhX0
+  - -yp3g7EeDqo
+  - 7bC-orwQ2zo
+  - A-PDoo2BXLQ
+  - A6fTUQLTO24
+  - A9vN9CdpXLc
+  - IQwcCaAAuRc
+  - Je-FFZNzo24
+  - JpzS2KcpRh4
+  - Pui3UaKI2Pk
+  - WEDrp2R3kts
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - _FoW3uJ8uw0
+  - _PhRgPYz5Ps
+  - a78ZS7-RySU
+  - bOj0WwFx3nE
+  - eE2BQ7rE7OU
+  - gHL3jZAn6AU
+  - iZjvLtAYkGM
+  - nRQSfBhd7FE
+  - r19LbSZqi84
+  - t-ezOLT2Kv0
+  - t2ROQSBOgiY
+  - 1-EVNlNZiks
+  - 2uMr2C-u-9w
+  - 5ZK50rIFyL4
+  - 7Xt-K5FdZrM
+  - 9enAikPH_k8
+  - AsyyZgtHMPw
+  - CPFjrs4jRLU
+  - ClIoWZlQD70
+  - KLxh4PRoZWg
+  - Tzpb3iqoWYk
+  - WHR8Ms4OJvE
+  - WP-lFKMj7n8
+  - Z_4djaNyKEE
+  - tdYM_Tp5C6c
+  - v_ejnuAy6Ck
+  - zDPrunnFSsg
+  - -36Hv3Jn7I4
+  - 6snSEm_aMo0
+  - 8OzKOAEpXP0
+  - B833Ddf8feI
+  - Hu-rVZVSzxs
+  - WprPdJKfaGk
+  - Z-krc8k8PpU
+  - bPgpG1Vp3R4
+  - cnyTQDSE884
+  - dVkOoAVQt9g
+  - jrEG8gHaqrQ
+  - o0qP8bxQPyA
+  - tJeI51crrvs
+  - -luXgXhuGrs
+  - 9oFJL_9uKGA
+  - E3Kt5qUYWfY
+  - GN4PMRJmlBY
+  - ImBQ80X9CX0
+  - KxV8I_YyiaY
+  - LkhVKgUlNhI
+  - ZJBprx7oWAM
+  - aYAmtU72d9g
+  - h54us18qc20
+  - im7xZ7jgyRw
+  - moVynuxM4fc
+  - z4UVq_pQ1Yc
+  - -gYhgW5xAr0
+  - 0JnCRsQhA6s
+  - 1kbMcU9XE0g
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - DkbDhPNWkao
+  - LaeoJFdncp0
+  - dtmJOusvWis
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - wcmNBNqdDDg
+  - 7-GDuhjOAU8
+  - 8WUp0GEbcQg
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - LguCWBwS8Dg
+  - SpIQrvqnw0o
+  - Yh_4S7DgRmA
+  - c4F3ZMN-lbw
+  - iAlA4gFHdO8
+  - j0ZCQFoNx0I
+  - jdo843M-oCo
+  - oe1gG2xAE9A
+  - p-jIAjWbJbc
+  - qhNWbrGqdL4
+  - ssH35JwmwTM
+  - w5aLmLz9peI
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 2DX_U89ocX8
+  - 5PgGohPpvww
+  - 5nLkLgtbkGM
+  - 6r27t7loW5I
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - KosAPIzhNE8
+  - LT_aBQatj5s
+  - OTrTqs9FLq0
+  - R2gk3398iNk
+  - Slzk17RnOrc
+  - WUgiZ_IgAmQ
+  - Yt7XVvDSeyU
+  - Z7Uyv7GAGxg
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - iO63azcGdxE
+  - l0GCECJxCZY
+  - oS51Geg7XJ4
+  - oZ1c8IBz7a0
+  - olmoBkc_Bv8
+  - rfGi8W9j9gQ
+  - s8u4PCyTGMo
+  - vAp84Bvhunw
+  - 0O9bmFhtrHY
+  - 7PGEGcTHHmg
+  - 7VNWK5MJmSk
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - NEogTE8uP7o
+  - RlrmSu5u9bE
+  - epv1zgwHAhc
+  - pDFRv18wOt8
+  - sLYw8VdVGbw
+  - tMlpDXwYi6U
+  - -GCA92b119Y
+  - B1eG9DyYK9E
+  - CYXxBGKrlLw
+  - H_6pS1Ku0WU
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - QjuQlw5FYuk
+  - SP7I3Srd7uI
+  - dBTQi5kdfW0
+  - hSCZAJsw34E
+  - mKIm3JQguUM
+  - n-MG0gzXwis
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:23:07.931668Z'
+    usd: 0.20698301000002672
+classes:
+- name: Fundamentals
+  image_url: https://images.pexels.com/photos/7991668/pexels-photo-7991668.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the eight limbs of Muay Thai with proper stance, footwork, and
+    striking mechanics. Build the foundational skill set required for all striking
+    disciplines.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Pad Work
+  image_url: https://images.pexels.com/photos/6296002/pexels-photo-6296002.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Learn practical kick, knee, and punch combinations with partner pad
+    work. Develop power, precision, and fluidity under the guidance of experienced
+    coaches.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Clinch Mastery
+  image_url: https://images.pexels.com/photos/4761788/pexels-photo-4761788.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Control the clinch with sweeps, knee strikes, and positioning. Master
+    the most dynamic and close-range aspect of modern Muay Thai.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Sparring Bootcamp
+  image_url: https://images.pexels.com/photos/7991616/pexels-photo-7991616.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: High-intensity sparring drills and tactical training for fighters of
+    all levels. Build ring awareness, distance management, and strategic thinking
+    in the ring.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Boxing gloves
+  image_url: https://upload.wikimedia.org/wikipedia/commons/c/c8/Boxing_gloves_Bail_10-OZ_%281%29.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

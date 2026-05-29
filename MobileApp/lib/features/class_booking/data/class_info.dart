@@ -1,5 +1,5 @@
 /// One branded class card as served by the VideoService
-/// (`GET /themes/{designId}/classes` → `ClassImage`). Field names mirror the API
+/// (`GET /gyms/{gymId}` → `GymDetail.classes`). Field names mirror the API
 /// so the JSON parse stays mechanical.
 ///
 /// See `../VideoService/schema/class_output.py` for the source contract.

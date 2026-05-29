@@ -348,7 +348,6 @@ def test_color_prompt_is_data_driven(tmp_path: Path) -> None:
         ctx,
         target_ids=[slot.id for slot in ctx.app.colors],
         fixed={},
-        overwrite_specs=OverwriteSpecs(),
     )
     template = COLOR_PROMPT_PATH.read_text(encoding="utf-8")
 
@@ -648,6 +647,35 @@ def test_image_prompt_is_app_agnostic_and_theme_fixed(
     assert THEME_BG_LIGHT in light and THEME_BG_DARK not in light
 
 
+def test_image_prompt_injects_reopen_spec_as_override(tmp_path: Path) -> None:
+    """A reopen-time ``--spec`` is folded into the create-new prompt as a
+    high-priority override block. Regression: the spec used to be recorded but
+    never reached ``_build_prompt``, so "make it a flame" was silently ignored
+    and the model free-picked from the subject's example imagery."""
+    ctx = _run_ctx(tmp_path)
+    palette = _full_palette(ctx)
+    slot = ctx.app.images[0]
+
+    def _sent() -> str:
+        llm = StubLLM(text="stub")
+        asyncio.run(_image_node(ctx, llm, slot)._build_prompt(palette, {}))
+        return llm.structured_calls[0]["messages"][0]["content"]
+
+    # No spec (the default empty steering) → no override block, placeholder
+    # substituted away to nothing.
+    plain = _sent()
+    assert "$override" not in plain
+    assert "USER OVERRIDE" not in plain
+
+    # With a spec → the override frame AND the verbatim spec reach the model.
+    spec = "A stylized flame — not a yoga mat, not chevrons."
+    ctx.overwrite_specs = OverwriteSpecs(specs=spec)
+    sent = _sent()
+    assert "$override" not in sent  # placeholder fully substituted
+    assert "USER OVERRIDE" in sent
+    assert spec in sent
+
+
 def test_image_generation_retry_preserves_prior_attempt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -792,7 +820,11 @@ def test_image_dependency_folds_into_prompt_as_reference(
     ctx = _dep_ctx(tmp_path)
     palette = _full_palette(ctx)
     derived = ctx.app.images[1]
-    hero = ImageOutput(path=ctx.image_path("hero"), prompt="hero prompt")
+    hero = ImageOutput(
+        path=ctx.image_path("hero"),
+        version="0123456789ab",
+        prompt="hero prompt",
+    )
 
     llm = StubLLM()
     gen = StubImageGen()
@@ -958,7 +990,6 @@ def test_font_prompt_is_data_driven(tmp_path: Path) -> None:
         ctx,
         target_ids=[slot.id for slot in ctx.app.fonts],
         fixed={},
-        overwrite_specs=OverwriteSpecs(),
     )
     template = FONT_PROMPT_PATH.read_text(encoding="utf-8")
 

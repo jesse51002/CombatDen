@@ -85,6 +85,21 @@ reasonable answer, ask and wait for the user's explicit response. Never assume,
 recommend-and-proceed, or defer the choice unilaterally."* If the run dir, the
 slots, or which brief field is meant is ambiguous, ask (`AskUserQuestion`).
 
+### Resolving which run a gym name means
+The combatden run dirs are *branded* names (`ZenBJJ`, `SweetScienceBoxing`,
+`FrictionGrappling`), **not** the casual gym name a user says ("bjj gi",
+"boxing", "no-gi"). The canonical map lives in **`../VideoService/gyms/<gym>.yaml`**:
+the filename is the plain gym id (`bjj_gi`, `boxing`, `no_gi_grappling`) and the
+file's **`theme:` field is the exact ThemeService run-dir name**. So to resolve
+a casually-named gym: open the matching `../VideoService/gyms/<gym>.yaml`, read
+`theme:`, and the run dir is `apps/combatden/<theme>/`. Examples:
+`bjj_gi.yaml → theme: ZenBJJ`, `boxing.yaml → theme: SweetScienceBoxing`,
+`no_gi_grappling.yaml → theme: FrictionGrappling`. This `theme:` field is the
+disambiguator when two gyms are close (gi vs no-gi BJJ; the several "boxing"
+brands — `CardioBoxing`, `PilatesBoxing`, `SweetScienceBoxing`). Only fall back
+to scanning `apps/combatden/*/customization.yaml` `name:`/`short_desc` if no gym
+file matches; still confirm (`AskUserQuestion`) if genuinely unsure.
+
 ### Know the scope
 - `regen` re-makes only the slots you pass and keeps the rest. Slots of the
   **same atomic node** (e.g. two colours) re-roll **together** in one
@@ -97,17 +112,27 @@ slots, or which brief field is meant is ambiguous, ask (`AskUserQuestion`).
   re-generating the image, that's `remove_bg` (Lever E): it re-runs the
   background pass on the existing raw — no image-gen call, no `--spec`.
 
-### Run generations sequentially — never in parallel (rate limits)
-The pipeline hits rate-limited LLM / image providers. **Never fan out
-generations concurrently.** When a request covers more than one run (e.g.
-"regenerate every app", a batch of `regen` / `expand` / full re-runs), run them
-**strictly one at a time** — each script invocation finishes before the next
-starts (a sequential `for` loop, not background jobs launched in parallel, not a
-single command with `&`, not multiple concurrent tool calls). It is fine to run
-*one* long generation in the background to monitor it, but only ever one
-in flight. This applies to **every** lever that spends (A `regen`, C `expand`,
-D full re-run) and to any future batching — sequential is the hard default;
-parallelism across runs is never an optimisation to reach for here.
+### Batching across runs — image regens may parallelise (≤5); everything else sequential
+The pipeline hits rate-limited LLM / image providers, so heavy work stays
+serial — but a **single-slot image regen** is light: one `regen_image` slot is
+just one image-gen call plus a background pass (and `remove_bg` is a single
+provider call). When a request spans **several runs each needing one image
+slot** (e.g. "redo the streak flame for these 5 gyms"), you **MAY fan those out
+in parallel, up to 5 at once** — separate `regen_image` invocations launched
+concurrently, then further waves of ≤5 if there are more. This parallel
+allowance is **only** for per-slot image regens (`regen_image` / `remove_bg`);
+the ≤5 cap is a ceiling, not a target — when unsure, run fewer.
+
+Everything heavier stays **strictly sequential — one in flight at a time**:
+
+- **Full in-place re-runs (Lever D)** — each *already* fans out the whole DAG
+  (colour, fonts, every image) internally; running two concurrently would blow
+  the rate limit. Never parallelise a full re-run, and never batch several full
+  re-runs at once — strictly one after another.
+- **`regen` of colour / font / text / icon slots, and `expand`** — keep these
+  one at a time (not cleared for the ≤5 image allowance).
+
+Running *one* long generation in the background to monitor it is always fine.
 
 ## Lever A — re-make slots (`regen`)
 1. Locate the run dir `apps/<app_id>/<run_id>/` (holds `app.yaml`,
@@ -141,6 +166,17 @@ authors the whole brief interactively); use `edit_customization` for targeted
 field edits. After editing a run's brief, **`regen` the affected slots** so it
 takes effect (a `colors_direction` change is a colour re-roll; a
 `design_direction` change affects prompt-driven slots).
+
+**`long_desc` is the imagery lever.** It carries the "visual system / shared
+look every generated asset must wear" — medium, materials, recurring objects,
+the anchor motif, and the hard-nos. The `app.yaml` image-slot descriptions are
+deliberately **brand-agnostic** ("brand's choice"), so it's `long_desc` that
+decides *what every image depicts and feels like* across the whole run. When the
+complaint is "the images don't read as <X>" (off-theme, wrong objects, wrong
+vibe) — not colours/fonts/copy — the fix is: edit `long_desc` here (name the new
+anchor motif + recurring objects + explicit nos for the wrong reads), then
+`regen_image` the image slots (**Lever F**) to apply it. Re-steering the brief
+beats per-image `--spec` alone because it persists for any future re-run.
 
 ## Lever C — fill missing slots (`expand`)
 Generate only the slots that are **declared in `app.yaml` but absent from
@@ -209,6 +245,48 @@ poetry run python scripts/remove_bg/run.py \
   (the final still has a background) and the script flags it as `FALLBACK`
   and exits non-zero — re-run or escalate.
 
+## Lever F — re-make images (`regen_image`)
+Images have their own entrypoint — the per-slot `regen` of Lever A never
+touches them. Use this to re-roll one or more **image** slots in place, i.e. to
+change *what an image is / how it looks* (a bad cutout *only* is Lever E; this
+re-generates the image):
+```
+poetry run python scripts/regen_image/run.py \
+    --run-dir apps/<app_id>/<run_id> \
+    --slot <image_id> [--slot <image_id> ...] \
+    [--spec "..."] [--mode create_new|edit_current_image] \
+    [--app-yaml apps/<app_id>/app.yaml]
+```
+- **`--mode create_new`** (default) — a *fresh* image, generated from the brief
+  the way a full run does, optionally steered by `--spec`. Use this to
+  re-imagine a slot (e.g. after a `long_desc` edit, or with new direction).
+- **`--mode edit_current_image`** — image-to-image: edits the slot's *current*
+  image, changing only what `--spec` asks and keeping the rest. Needs an
+  existing final image for every named slot (errors otherwise); here `--spec`
+  is *the change to make*.
+- **`--slot` is repeatable — pass ALL the image slots you want in ONE
+  invocation.** Every named slot regenerates in a single pass; all others are
+  preserved verbatim. The pass is **internally capped at 5 modules in-flight**
+  (the pipeline's one run-wide semaphore, `MAX_CONCURRENT_MODULES` in
+  `src/executor/orchestrator.py`) and it **topologically orders dependency
+  chains** itself (e.g. `single_point` before `points_stars_image` / `giftbox`;
+  `rank_belt` before `next_rank_belt_image`). So you do **not** hand-split many
+  slots into waves of 5 — the cap and the ordering are automatic. (The ≤5 rule
+  under "Batching across runs" is a *different* thing: it's about parallelising
+  *separate* `regen_image` invocations across *different* runs.)
+- **The prompt for each `create_new` slot is rebuilt from the run's brief
+  (`customization.yaml`) + the slot's `app.yaml` description + `--spec`.** So a
+  `long_desc` brief edit (Lever B) *does* flow into the new images — the path to
+  restyle a run's whole look is: edit `long_desc`, then `regen_image` the image
+  slots.
+- **No prior image is lost:** the current final is archived as
+  `images/<slot>.vN.png` (`v1`, `v2`, …) before being overwritten. Preserves the
+  original `cost`; appends a `regenerate` entry to `expansion_cost.yaml`.
+- A wrong/non-image slot id fails **before** spending, listing the valid image
+  ids. Spends one image-gen call (plus a background pass) per slot — confirm
+  spend first. `--app-yaml` behaves as in Lever C (re-roll against an updated
+  manifest; the dir snapshot is refreshed to match).
+
 ## Report
 Say which slots regenerated + the pass cost, or which brief fields changed.
 Offer to open affected outputs. A re-roll is just running again (LLM output
@@ -223,15 +301,19 @@ varies); a fundamentally-off look means steering (`--spec`) or a brief edit.
   Lever D (full in-place re-run) is the deliberate exception: it has **no
   interactive gate** — the pipeline's `WARNING` is the gate — but you still tell
   the user which folder gets overwritten and that it spends, before launching.
-- Per-slot levers never regenerate images — that's `regen_image`. Only Lever D
-  (a full pipeline run) re-makes images, by design.
+- Per-slot `regen` (Lever A) never regenerates images, by design — use
+  `regen_image` (Lever F) to re-make specific images, or Lever D to re-make
+  everything (images included). For many image slots in one run, pass them all
+  to a single `regen_image` call (it caps in-flight at 5 and DAG-orders deps) —
+  don't hand-split into waves.
 - `remove_bg` (Lever E) re-strips a cutout, it does **not** re-generate the
   image — don't reach for it to change *what* the image is (that's
   `regen_image`). It still spends (~$0.01/slot, Recraft) and hard-overwrites
   `final_images/<slot>.png` with no backup, so confirm before running and keep
   slots sequential.
 - Never claim a brief edit took effect on its own — it needs a `regen`/full run.
-- Never run generations in parallel — no concurrent runs, no `&`, no parallel
-  background jobs, no batched fan-out. Sequential, one run in flight at a time,
-  because the providers are rate-limited (see "Run generations sequentially").
+- Don't parallelise heavy work: full re-runs (Lever D) and `regen` / `expand`
+  run one at a time, because the providers are rate-limited. The ONLY sanctioned
+  parallelism is per-slot image regens (`regen_image` / `remove_bg`), which may
+  fan out up to 5 concurrently (see "Batching across runs").
 - Never use bare `python3` / `.venv/bin/*` — `poetry run` only.

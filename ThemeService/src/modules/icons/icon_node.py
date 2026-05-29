@@ -55,7 +55,6 @@ class IconNode(Node):
         catalog: IconSetCatalog,
         generator: ImageGenerator,
         seed: dict[str, IconOutput] | None = None,
-        overwrite_specs: str = "",
     ) -> None:
         super().__init__(
             run_ctx,
@@ -63,7 +62,6 @@ class IconNode(Node):
             deps=frozenset(),
             declared_slots={slot.id for slot in run_ctx.app.icons},
             seed=seed,
-            overwrite_specs=overwrite_specs,
         )
         self._catalog = catalog
         self._selection = IconSetSelectionService(llm, catalog)
@@ -96,13 +94,11 @@ class IconNode(Node):
             chosen,
             only=dirty,
             fixed=self.seed,  # type: ignore[arg-type]
-            overwrite_specs=self.overwrite_specs,
         )
         generated = await self._generation.resolve(
             self._run_ctx,
             chosen,
             unmatched,
-            overwrite_specs=self.overwrite_specs,
         )
         merged = {**self.seed, **self._stamp({**matched, **generated})}
         return IconSet(

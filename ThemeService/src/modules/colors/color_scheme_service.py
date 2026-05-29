@@ -19,7 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 from string import Template
 
-from schema import ColorMode, ColorRole, OverwriteSpecs
+from schema import ColorMode, ColorRole
 from schema.output.color_output import ColorOutput
 from src.core.run_context import RunContext
 from src.modules.colors.color_models import (
@@ -51,7 +51,6 @@ class ColorSchemeService:
         model: str = COLOR_MODEL,
         only: set[str] | None = None,
         fixed: dict[str, ColorOutput] | None = None,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> LLMPalette:
         """Run the colour LLM call; return the contract-clean FULL schema.
 
@@ -67,8 +66,9 @@ class ColorSchemeService:
         fixed background/text context the AA contract checks against and to
         reconstruct the non-regenerated slots so the returned ``LLMPalette``
         is always the *full* base map (the downstream correction/surfaces
-        steps need every slot). ``overwrite_specs`` is the per-slot steering
-        for the prompt. With all unset, every slot is resolved (full run).
+        steps need every slot). The run's steering
+        (``run_ctx.overwrite_specs``) is folded into the prompt. With ``only``/
+        ``fixed`` unset, every slot is resolved (full run).
         """
         declared = [slot.id for slot in run_ctx.app.colors]
         # roles + mode come from app.yaml / customization.yaml (never the
@@ -78,7 +78,6 @@ class ColorSchemeService:
         mode = run_ctx.cust.colors_direction.mode
         target_ids = sorted(only) if only is not None else declared
         fixed = fixed or {}
-        specs = overwrite_specs or OverwriteSpecs()
 
         bg_id = next(
             (sid for sid, r in roles.items() if r is ColorRole.BACKGROUND),
@@ -112,7 +111,6 @@ class ColorSchemeService:
                     run_ctx,
                     target_ids=target_ids,
                     fixed=fixed,
-                    overwrite_specs=specs,
                 ),
             }
         ]
@@ -141,11 +139,10 @@ class ColorSchemeService:
         *,
         target_ids: list[str],
         fixed: dict[str, ColorOutput],
-        overwrite_specs: OverwriteSpecs,
     ) -> str:
         """Rule + brand brief + fixed-context + the slots to (re)pick,
         substituted into the one ``.md`` template (``safe_substitute``
-        tolerates a stray ``$``). The call's steering note (instruction +
+        tolerates a stray ``$``). The run's steering note (instruction +
         rejected attempts) is appended over the slots being picked; fixed
         slots are listed as harmony context."""
         template = COLOR_PROMPT_PATH.read_text(encoding="utf-8")
@@ -153,7 +150,7 @@ class ColorSchemeService:
         colors = run_ctx.cust.colors_direction
         desc = {slot.id: slot.description for slot in run_ctx.app.colors}
         lines = [f"- {sid}: {desc.get(sid, '')}" for sid in target_ids]
-        note = overwrite_specs.prompt_note()
+        note = run_ctx.overwrite_specs.prompt_note()
         if note:
             lines.append(f"\n{note}")
         inventory = "\n".join(lines)

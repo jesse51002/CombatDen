@@ -16,7 +16,7 @@ contract (key, deps); constants (``TEXT_MODEL``, prompt path,
 
 from __future__ import annotations
 
-from schema import OverwriteSpecs, TextOutput, TextSet
+from schema import TextOutput, TextSet
 from src.core.run_context import RunContext
 from src.modules.base import DependencyKind, Node
 from src.modules.texts.text_generation_service import (
@@ -35,7 +35,6 @@ class TextNode(Node):
         *,
         llm: LLMClient,
         seed: dict[str, TextOutput] | None = None,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> None:
         super().__init__(
             run_ctx,
@@ -43,7 +42,6 @@ class TextNode(Node):
             deps=frozenset(),
             declared_slots={slot.id for slot in run_ctx.app.texts},
             seed=seed,
-            overwrite_specs=overwrite_specs,
         )
         self._generation = TextGenerationService(llm)
 
@@ -67,6 +65,5 @@ class TextNode(Node):
             model=model,
             only=dirty,
             fixed=self.seed,  # type: ignore[arg-type]
-            overwrite_specs=self.overwrite_specs,
         )
         return TextSet(texts={**self.seed, **regenerated.texts})

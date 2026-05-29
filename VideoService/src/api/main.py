@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.config import settings
 from src.api.videos_router import videos_router
+from src.api.viewer_router import viewer_router
 
 
 def create_app() -> FastAPI:
@@ -23,6 +24,8 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(videos_router)
+    # Internal feed viewer (HTML page at /viewer) — serves rejected too, dev-only.
+    application.include_router(viewer_router)
 
     @application.get("/health", tags=["meta"])
     async def health_check() -> dict[str, str]:

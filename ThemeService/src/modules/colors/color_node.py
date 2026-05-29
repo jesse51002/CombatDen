@@ -17,7 +17,7 @@ indivisible piece. Constants (``COLOR_MODEL``, prompt path) live in
 
 from __future__ import annotations
 
-from schema import ColorMode, ColorPalette, ColorRole, OverwriteSpecs
+from schema import ColorMode, ColorPalette, ColorRole
 from schema.output.color_output import ColorOutput
 from schema.output.color_value import ColorValue
 from schema.output.derivations import Derivations
@@ -46,7 +46,6 @@ class ColorNode(Node):
         *,
         llm: LLMClient,
         seed: dict[str, ColorOutput] | None = None,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> None:
         super().__init__(
             run_ctx,
@@ -54,7 +53,6 @@ class ColorNode(Node):
             deps=frozenset(),
             declared_slots={slot.id for slot in run_ctx.app.colors},
             seed=seed,
-            overwrite_specs=overwrite_specs,
         )
         self._scheme = ColorSchemeService(llm)
         self._correction = ColorCorrectionService()
@@ -88,7 +86,6 @@ class ColorNode(Node):
             model=model,
             only=dirty,
             fixed=self.seed,  # type: ignore[arg-type]
-            overwrite_specs=self.overwrite_specs,
         )
         schema = self._correction.apply(scheme)
         surfaces = self._surfaces.compute(

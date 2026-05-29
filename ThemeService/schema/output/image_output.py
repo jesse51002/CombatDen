@@ -25,9 +25,11 @@ class ImageOutput(NodeOutput):
 
     path: AbsolutePath
     # Content fingerprint of the delivered bytes — the API's cache-busting
-    # ``?v=`` token. Stamped by the Writer at serialize time; empty on a
-    # legacy ``output.yaml`` written before this field (URL stays unversioned).
-    version: str = ""
+    # ``?v=`` token. REQUIRED: set at creation (the image module hashes the
+    # file it just wrote) and re-affirmed by the Writer at serialize time, so
+    # every produced/served image carries one. A run whose ``output.yaml``
+    # predates this field no longer validates — regenerate it.
+    version: str
     prompt: str
     complexity: Complexity | None = None
 

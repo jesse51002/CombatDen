@@ -39,6 +39,13 @@ SCHEMA_CORRECTION_PROMPT_PATH = (
 # Its length is the retry budget — len + 1 total attempts (here: 3).
 RETRY_BACKOFF_SECONDS = (5, 15)
 
+# Transport-level retries (litellm's own exponential backoff) for transient
+# provider failures — chiefly Gemini RateLimitError under the classify fan-out,
+# which otherwise drops the tag outright. Distinct from the schema-correction
+# re-asks above (those handle a bad *response*, not a failed *call*). Genuine
+# 400s (BadRequest) are not retried by litellm.
+LLM_NUM_RETRIES = 5
+
 # Logged prompts elide base64 data URLs so a vision call's image payload
 # isn't dumped into the logs.
 DATA_URL_MARKER = ";base64,"

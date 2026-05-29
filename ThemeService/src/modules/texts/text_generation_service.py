@@ -30,7 +30,7 @@ import logging
 from pathlib import Path
 from string import Template
 
-from schema import OverwriteSpecs, TextOutput, TextSet, TextSlot
+from schema import TextOutput, TextSet, TextSlot
 from src.core.run_context import RunContext
 from src.modules.texts.text_models import (
     LLMTextResponse,
@@ -71,7 +71,6 @@ class TextGenerationService:
         model: str = TEXT_MODEL,
         only: set[str] | None = None,
         fixed: dict[str, TextOutput] | None = None,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> TextSet:
         """Resolve the requested text slots.
 
@@ -83,10 +82,10 @@ class TextGenerationService:
 
         ``only`` scopes the call to a subset of slot ids (a partial regen);
         ``fixed`` supplies the already-written copy shown as fixed context so
-        the rewrites stay consistent in voice; ``overwrite_specs`` is the
-        call's single steering string, stamped onto each returned
-        ``TextOutput``. With all three unset every declared slot is resolved —
-        the full-run behavior.
+        the rewrites stay consistent in voice. The run's steering
+        (``run_ctx.overwrite_specs``) is folded into the prompt and stamped onto
+        each returned ``TextOutput``. With ``only``/``fixed`` unset every
+        declared slot is resolved — the full-run behavior.
 
         Returns a ``TextSet`` that may be partial: a slot is present
         only if a satisfying value was found within the retry budget.
@@ -101,7 +100,6 @@ class TextGenerationService:
             # the primary skip path; this is defense-in-depth.)
             return TextSet(texts={})
         target_ids = {s.id for s in target}
-        specs = overwrite_specs or OverwriteSpecs()
         # Fixed context is the prior copy for slots NOT being rewritten.
         fixed_context = {
             sid: out.value
@@ -122,7 +120,6 @@ class TextGenerationService:
                 prior_violations=prior_violations,
                 model=model,
                 fixed_context=fixed_context,
-                overwrite_specs=specs,
             )
             still_violating: list[TextSlot] = []
             prior_attempts = {}
@@ -155,7 +152,9 @@ class TextGenerationService:
 
         return TextSet(
             texts={
-                sid: TextOutput(value=v, overwrite_specs=specs)
+                sid: TextOutput(
+                    value=v, overwrite_specs=run_ctx.overwrite_specs
+                )
                 for sid, v in results.items()
             }
         )
@@ -169,7 +168,6 @@ class TextGenerationService:
         prior_violations: dict[str, list[str]],
         model: str,
         fixed_context: dict[str, str],
-        overwrite_specs: OverwriteSpecs,
     ) -> LLMTextResponse:
         """One structured call: closed schema keyed by the ``slots`` ids,
         prompt built from the brand brief + fixed context + slot inventory
@@ -182,7 +180,6 @@ class TextGenerationService:
             prior_attempts=prior_attempts,
             prior_violations=prior_violations,
             fixed_context=fixed_context,
-            overwrite_specs=overwrite_specs,
         )
         return await self._llm.complete_structured(
             [{"role": "user", "content": prompt}],
@@ -229,11 +226,10 @@ class TextGenerationService:
         prior_attempts: dict[str, str],
         prior_violations: dict[str, list[str]],
         fixed_context: dict[str, str],
-        overwrite_specs: OverwriteSpecs,
     ) -> str:
         """Rule + brand brief + fixed context + slot inventory (+ retry block
         on retry), substituted into the one ``.md`` template
-        (``safe_substitute`` tolerates a stray ``$``). The call's steering note
+        (``safe_substitute`` tolerates a stray ``$``). The run's steering note
         (instruction + rejected attempts) is appended over the slots; fixed
         slots are listed as voice-consistency context only."""
         template = TEXT_PROMPT_PATH.read_text(encoding="utf-8")
@@ -244,7 +240,7 @@ class TextGenerationService:
             f"{slot.min_chars}-{slot.max_chars} chars"
             for slot in slots
         ]
-        note = overwrite_specs.prompt_note()
+        note = run_ctx.overwrite_specs.prompt_note()
         if note:
             lines.append(f"\n{note}")
         inventory = "\n".join(lines)

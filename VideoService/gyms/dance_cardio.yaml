@@ -1,17 +1,710 @@
 gym_id: dance_cardio
 gym_type:
 - dance_cardio
-theme: ZZUndoneDanceCardio
+theme: DanceCardio
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational dance cardio content for gym
-      members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable dance cardio sources.
-    avoid_desc: Anything not about dance cardio; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'High-energy dance cardio classes staged like a night out —
+      full follow-along choreographed sweat sessions, move and combo breakdowns, plus
+      the fun side: "what a dance cardio class is really like", studio vlogs and behind-the-scenes,
+      instructor vibes and playlists, funny class moments, and transformation stories.'
+    short_avoid_desc: Off-topic, clickbait "burn 1000 calories dancing" gimmicks,
+      and "dance cardio vs Zumba / dance vs running which is better" or "is dance
+      cardio a real workout" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Dance cardio content for people who want a real workout dressed as a
+      night out — and the fun, human side of the studio, so it's a feed
+      members enjoy, not just a how-to library.
+
+      ## Classes & choreography
+      - Full follow-along choreographed cardio classes you can sweat through:
+        cardio dance, hip-hop and pop routines, dance HIIT and toning combos
+      - Step-by-step move and combination breakdowns so beginners can pick up
+        the choreography
+
+      ## The fun & human side
+      - "What a dance cardio class is really like"
+      - Studio vlogs and behind-the-scenes
+      - Club-staged playlist and themed/artist routines
+      - Instructor vibes and high-energy 305-style sets
+      - Relatable class humour, transformation stories, and instructor
+        interviews
+
+      For people who hate the treadmill but will move for an hour if the music
+      is right.
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about dance cardio as a workout; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Competitive or technical dance training that isn't a cardio workout
+        (ballet, recital choreography, dance-team routines)
+      - Calorie-bait "burn 1000 calories dancing / melt fat fast" gimmick
+        titles
+      - "Dance cardio vs Zumba / dance vs running which is better"
+        cross-discipline framings
+      - "Is dance cardio a real workout / dancing won't get you fit" debate or
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a clip, a highlight, or
+      entertaining — fun content is wanted.
+  queries:
+  - dance cardio full workout follow along
+  - hip hop dance cardio class beginners
+  - 30 minute dance cardio workout at home
+  - pop song dance cardio routine follow along
+  - dance cardio moves and combos breakdown tutorial
+  - beginner dance cardio class easy choreography
+  - dance HIIT cardio workout
+  - learn dance cardio choreography step by step
+  - latin dance cardio workout follow along
+  - low impact dance cardio class beginners
+  - what a dance cardio class is really like
+  - club themed dance cardio playlist workout
+  - 305 style dance cardio class
+  - dance cardio studio behind the scenes
+  - funny dance cardio class moments
+  - dance cardio transformation story
+  - star dance cardio instructor full class
+  - dance cardio instructor interview on coaching
+  - day in the life dance cardio instructor
+  - my first dance cardio class vlog
+  good_video_ids:
+  - 4FrTY-uesNU
+  - E6lsGDntAEM
+  - EjJIVSGyNDo
+  - HoqoQs0kYok
+  - ImI63BUUPwU
+  - LVVNx3yWTYg
+  - Me7KUr-NOVk
+  - VHLZvzNK_DI
+  - VmaN6i3BEyE
+  - fpiATCjerzg
+  - gmAzwbi4gMI
+  - iiI_mP5pi00
+  - l5KFDWw8rgc
+  - proINILL4X4
+  - rIONESd0DBo
+  - v3SGmJPDNVw
+  - 0EiQOGX4_XQ
+  - 4imTQhTlj3M
+  - 51iHTzEiIr4
+  - DVD_gIdPr-o
+  - H0c-4nZjIWQ
+  - JPGTAGUPVQw
+  - TRPgrayoPV8
+  - U8sh8Y5jSCU
+  - Up4PyObmK24
+  - XLvCjcmSTTk
+  - ZCSGRrzHS7g
+  - pHWxXjnm_w0
+  - pr6J_x3Ccko
+  - tbqMcHaxsiA
+  - uDXX3nlqHL4
+  - v-zhXOWABtI
+  - xqA_T8qQB4g
+  - -FTHPMy8RhE
+  - 4MY6By61OoM
+  - 7jvI-j86KD0
+  - AVyRmOdNO0U
+  - AjWoaUBe80c
+  - FAXIiVPuBgY
+  - IfXtn24_fiM
+  - QkV65oFH2jM
+  - RwCjv-Frd0c
+  - WgGa-ido9kQ
+  - XE5dw45glgI
+  - XnPw82kImXI
+  - qzZQ4Yt0kG4
+  - r55Y72xVTuM
+  - rjUDSKNP8xU
+  - sd9lOTxBLBs
+  - t617akw9hvE
+  - vNyGbguyTO8
+  - 7-nu6leioPE
+  - 91_y2ytKnJU
+  - 9OsVgCgHchU
+  - L-A2YPGbr3w
+  - LIMQWvI37t8
+  - SFP2eSKikKw
+  - WCuI3Ulyc9M
+  - dsANewaxcM8
+  - ft8-AZugo4k
+  - kqrs4S0AAVE
+  - oFON1wxbdjw
+  - rlZgtQbRlD0
+  - rvu7iNIrNa8
+  - sVt9cqNheOE
+  - vvf9IXOVjTw
+  - y1DsB_TLmzM
+  - 6-qfgM5jyR4
+  - 6GqxRoLrATk
+  - 7QjeHwFnyI4
+  - 8zHpxk6-EOs
+  - Ju0tRG3h6Hg
+  - OGT5QrIw3wM
+  - Pb6519XBZnk
+  - QegSjK9Itbs
+  - RFfbZV3bwys
+  - UI48Zd5CQI0
+  - YNxXyVy1ypE
+  - khvSXG0UYzM
+  - lCRBVAV0yio
+  - p9GPq3g5IDQ
+  - pFvDf1dHoXo
+  - rfKaRZJo5EE
+  - vI5MzT-wIjs
+  - z9jaTqX75qU
+  - 1gAiGNKain4
+  - 8DZktowZo_k
+  - IU913YMDXCk
+  - MB6S_XGi-j0
+  - QunNg_SIopw
+  - WVmp_bKPZX4
+  - XTH5saFBDqA
+  - mLWZIxofRCU
+  - mvZQVytMBXU
+  - nSAtPmmm0Xg
+  - 2TmrI31IJmU
+  - 3oitzTfujXs
+  - 3sDjYg-67Dc
+  - 4I5KNYlfJXU
+  - 5RZ9QA-hPWM
+  - 9wmqmz63x-A
+  - Ah5dRSkHllg
+  - B8EbRWlIFuY
+  - DMAxIrCAAZ0
+  - DO6OwbjgzfM
+  - NaAakg4ASJg
+  - OJm7Xf5JjtU
+  - PKWjc5q1LkQ
+  - PvEnWsPrL4w
+  - VyfnZZ7gN8w
+  - d0xVxgRi20g
+  - oSgwaSuM5Po
+  - zJHWlfKebps
+  - zmxPXaeEXBU
+  - 1hupx0eMwEE
+  - 2-uiPPNdVdA
+  - 6oLg5fFe5ww
+  - HP_P-A3crw4
+  - NnsAoxrohQY
+  - ORESezyc6U0
+  - XR9RsGxHU7w
+  - bY5Fq9BxBAs
+  - ddOCabwpk_k
+  - hjW2YqViE0M
+  - jVRlQFSsODg
+  - vJ_vfZKfayg
+  - 0X6qRWrnIEE
+  - 2EE9dYhEII0
+  - 2fB0AmRD3HI
+  - 7Y3KOGfmSV0
+  - StmyxV5Z5lA
+  - ULELkb-kr-o
+  - VKWnIrEUyu8
+  - ZY0jD7_sRtg
+  - eZSQ9NQNdrs
+  - pdsGv5B9OSQ
+  - rmSCU43jf4g
+  - u1iyZpQ2ftw
+  - uQC_eYxBsKw
+  - xJrs_QX7Vr4
+  - -LG7_oZ8V5Y
+  - 63BLmLL_pN4
+  - FnkA4KrmP0c
+  - L_o7CVgup50
+  - NnLSp0cRMqg
+  - PpBYRx3izdQ
+  - TQ1O08q9m5E
+  - UvHckj110Pk
+  - WVupQ0nSXmA
+  - WWVsD4DmN20
+  - WqGCy3Ro9yc
+  - aRcroj5SmhQ
+  - cCI8QhPMJ90
+  - cIcLtMwu6Ac
+  - cRky9GhVKnI
+  - iNW4lCU693Q
+  - kGxeVOmKmA8
+  - kwkXyHjgoDM
+  - m1DBJhxKmiU
+  - v8CDptlpeys
+  - z-sJSi9CGUg
+  - zjJzAXjvbwA
+  - 5mvW8UfJGt0
+  - AQC6Ht0Y9u8
+  - IdBESRDwo_8
+  - L3KswA8KM-8
+  - ZMO_XC9w7Lw
+  - ZWk19OVon2k
+  - _EIZxRf6pEw
+  - gDg4i7opwkc
+  - nPSCaRY3jGk
+  - o1yE8cK5qBc
+  - y3KwVF-aBNQ
+  - 3LpJSXiI3iA
+  - ChiksnCuSpo
+  - D-LubT53KKU
+  - FyDo5IatGZc
+  - Ll9ARK8yejg
+  - OrwRthxwoYg
+  - QF_89LSM8AU
+  - nF75L-s7PM4
+  - sXY3wn56nEI
+  - voJem17yIvc
+  - wHECm3-dAn8
+  - 4aKTZLHAI0I
+  - 6TW0pwAeTdg
+  - 7_WRg-YZQhE
+  - 8TOIWNAVADw
+  - 8ln8T3yQ9bU
+  - M0o5bYUQG70
+  - RJRfh-6yBx0
+  - ZG1ZVwnb8pg
+  - gfO48ejjQhc
+  - s53wbTMWyI8
+  - 1bjKpgrbm6o
+  - 2C4rvTUTHRg
+  - 6Z2-s_T-xcQ
+  - JHDHrjFhqkc
+  - OVys9s4Q4TY
+  - RggKI--t43E
+  - UZQUXSDP30w
+  - WzsMmXOCmUQ
+  - Yn0dV4s81H0
+  - _nZ07OVtSmQ
+  - pHTBWOpRHMY
+  - t1tJGAh_Zs0
+  - tA383GHGvlo
+  - 0ff1a0u51_w
+  - 1sD51hC0yRg
+  - 8366JzwR0sk
+  - Ar7GhT_63HQ
+  - PCbtJB2gs2U
+  - RJn7cxX9SSM
+  - sx_y0Fs3jmk
+  - FK1tcu7DrDE
+  - TItIq0L0e58
+  - bVR8_Ri-Me8
+  - idfdVYiGVNc
+  - oBxYddiCq3Y
+  - CCo3Oe9ioEs
+  - DAoafI90egA
+  - GYRG0gUGOvc
+  - JARim_SDKo4
+  - QKV-KhMjOWA
+  - QsiImYTLvTk
+  - SORsNRujqj8
+  - VFm242jwENI
+  - fDS6hY_jTZ8
+  - fV6CQWxGirE
+  - uyP-gIrXVrM
+  - zIy8XqToXYA
+  - 6WlmIGwfvmQ
+  - CoiiwajR-eY
+  - G9NVRZN_gp4
+  - MCQHhwTKChY
+  - N0jmQNNYgHY
+  - atSbkW1W6Nc
+  - ka4tN6RJvgQ
+  - psFfWdzlExg
+  - s174nGvb08I
+  - u2rNCpCSqO0
+  - zjJ_izG1Cxs
+  - 58wJRQejD4E
+  - 7Jxl7BBAo3c
+  - G7Qjx57HMzM
+  - H0YBDXB8dv4
+  - J7FQW-AH9u4
+  - Jg6m5q54nvQ
+  - NrtK5GZR3rk
+  - Whqg8tIy97k
+  - btivGZ_l8tA
+  - rWksOi52-fk
+  - tYyNM9pmOlA
+  - 0W6tpYrpzEI
+  - 1gdmoLm4a7I
+  - 26WHnPtjm00
+  - B_7BbcT1048
+  - O90qEKNTHiY
+  - QPKXw8XEQiA
+  - UVcz1cgaNIs
+  - W1eaJXUJf3E
+  - XqqtfJNSSSI
+  - ZZf6Gb96F0U
+  - hpeAchmNV48
+  - lhgto3xo2c8
+  - qO19Pv36o3U
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 1hC3_-c5XYk
+  - INXD5osrkDo
+  - Vve4BVTZ0QU
+  - WycElKjDNAM
+  - gT6OkjTDcYc
+  - heP2u6TYfeE
+  - hhIAe5h2FPM
+  - iCMD2ZJEF54
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - sy11C-XJdDI
+  - zw1GzJvoJbY
+  - 1lxJvRWCVrM
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - D_AvOKr8ncE
+  - KJBlo6X4Mm4
+  - L5J6sgQLvuE
+  - MyUJcPLbZ78
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - aKfYBfRL8Dc
+  - dBSAURSwuiI
+  - fD-qF0cHAP4
+  - fDOet7CQd48
+  - kThGMgiprF4
+  - mE0XrGLW_ZI
+  - ti1t9Qaorrw
+  - 0mJGecBLEi4
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - 7SUQzX4djtc
+  - BcVOmKUhxnQ
+  - DacqZQC3Hfc
+  - Fdkcn1_exVc
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - IfhMDU3PQcM
+  - JmBeDYb8tNk
+  - KIjHz3ZTrnk
+  - KNmxPI86cZs
+  - MqQHpKGbXzU
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - VNgfAzTO3xU
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - xHlhEnN60-s
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - CDDHlGRL3AI
+  - EgCGVCy3TZs
+  - ItE7xQpkfMA
+  - Y-AYC3_DbpY
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - imLdIKEmZ6U
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - r6HHJJXMmdU
+  - uD2kjf_IUkI
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - EQio6nzPLPw
+  - MR4pIQhpu9Q
+  - Ug_faPHj0zg
+  - V5M-gADbaqk
+  - Wh8R0a7sLPc
+  - XaA3qD1EAqg
+  - c2N665i31C8
+  - hs3AtAEqyoo
+  - knZqfUOs7dM
+  - m1UF4RgGoY0
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - w47WFz04klo
+  - -J-loNFrwrE
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - EzzHv56zDVc
+  - LKSC_KujZ4g
+  - SYJu_y6WvEc
+  - T4N2DtBTfoA
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - X-FJm8-LKh8
+  - YXzzuLcmE_o
+  - ZGzE9svTAR0
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - BdWvP-lbb68
+  - GCRXgDB-4ak
+  - H2AlT3dyQrk
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - RV2rqYuSFGQ
+  - TN9i9Ni0Xr4
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - ZhoXBtvWyic
+  - g5wYrCAH_5w
+  - lZgYqGDvDcU
+  - mEK7rGTpcZg
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - yIXoeIrg75g
+  - 0qVlPcJp7c4
+  - 3glWW8_VVno
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - 6Ea38Ns1an8
+  - 7VPtCzzFya4
+  - B6jwYGC4AoE
+  - IVEAfdHlnO4
+  - KgF2YaXICfk
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - ZmPFDnsKg0Q
+  - f6yAY1oZUOA
+  - fwQ1PrED9IE
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - ooEgWahEvEM
+  - qAbNwhioKv4
+  - sV3V02gCYOA
+  - uEasfCTXAl0
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 3BleGLfyXRE
+  - HWAOifKGLiE
+  - Klk2Y40_Ulg
+  - Mlgs4_54q8Y
+  - cQ4K399DTgI
+  - d8OL6m0ZblA
+  - wAoFvHRvkCA
+  - 0Qy51jKYdPQ
+  - 1EeTvG34xGo
+  - 5fzTBTfWJ20
+  - 6snqIh6lgsE
+  - APm6g65q0x0
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - gdJYRWx9g6w
+  - r_VHltdyvv4
+  - vSSkDos2hzo
+  - xAgKR-OBDIU
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - Nb28h96vtKY
+  - SV-KfCQPJJ4
+  - U3AUFXbiVdw
+  - UNf2qsX8uFc
+  - WmBC1icHwcw
+  - XZJp_ysweTY
+  - cujcxjSm69g
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - x6UyziJYpao
+  - y-MMdLR9rUc
+  - -yp3g7EeDqo
+  - 5QhrFSxYhCA
+  - BXeOYJIq-1I
+  - EzfFjAym1gI
+  - IQwcCaAAuRc
+  - JYCBzGrUYzQ
+  - LVIYUOyroD4
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - u1UNSANB-po
+  - 5ZK50rIFyL4
+  - 87OSqDBBarM
+  - AL5HDsXTUyI
+  - AqIMz14J-Lw
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - IGGuzpu87f4
+  - JQaeGoQox0k
+  - N6t8hwKp71g
+  - OQWOMNRRCPg
+  - Ohr1ZbPVz7M
+  - SMAB27z3x0c
+  - SpS9Wt9F7pI
+  - Z6VLe8SAiI0
+  - kg_uOGsrhPs
+  - sXKQED2YaLM
+  - wgXtt0QKSTA
+  - xgv49WM_PuY
+  - 716e30A053U
+  - F_JOoeHXcmc
+  - Fxs9BIJ_MbE
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - WprPdJKfaGk
+  - Y_rwY8LCFMc
+  - ezOsco9legc
+  - f5JF5w5qbZo
+  - jLvQTW1llIE
+  - kyOWh6nhgcg
+  - tJeI51crrvs
+  - CUzNuf_1ot8
+  - EbI0gqAm4qE
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - an7tAQTRqLU
+  - b02C7AD05lc
+  - iWzxM0fBddw
+  - moVynuxM4fc
+  - sMIatEvTACI
+  - vhhI6k4SSek
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 8DsoVhEVDeE
+  - 92044EDbXdE
+  - 9TzHTKBiy68
+  - Dh77sKTYZIk
+  - EwclzA3FplQ
+  - J_PkzPsXEPU
+  - NjlxJeT_ATg
+  - eO8W1pWRJ1E
+  - iblztzV8qGo
+  - lHWlTYe1_Rk
+  - vIG9SbQbqhM
+  - zjsC3t9VzAs
+  - 8ajO440Ss0g
+  - Bd4gxNpbJGE
+  - Hc_1hbqnM-s
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - NnWVlVfrBeY
+  - R0mMyV5OtcM
+  - XjUpzjwMOfY
+  - __jgqitB2EQ
+  - ctV8NyRWZIo
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DI79Lm9JX8
+  - 2DX_U89ocX8
+  - 2MlxAXBzjXM
+  - 8D6nnYgQdfw
+  - 9O2fnIbrdzw
+  - 9k9nhbqA6Ao
+  - HKF9mb6FQDg
+  - K6j7K0u1JRE
+  - OPMHtBOvba8
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - e-6Dv2VSdes
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - f5aUx1KvSF0
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - mK-MWu3VCyY
+  - r6MBg8-FlD4
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - xxewH3n9Mb0
+  - 0O9bmFhtrHY
+  - 4edVPOR0uDo
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - HrWjf8WOsfI
+  - MBaoJffyT5I
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - V6lDJ6IeVok
+  - ZCRoea6rt2M
+  - bzGSxdGF8z0
+  - g3ZdqBdyoU8
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - 19aunTn3SfI
+  - F4BJst5d9Ac
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - MilYefF9DjI
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  - sqlJcJfKZJw
+  scan_costs:
+  - at: '2026-05-29T15:38:20.065546Z'
+    usd: 0.18404668999998375
+classes:
+- name: Barre Cardio Burn
+  image_url: https://images.pexels.com/photos/12312/pexels-photo-12312.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Technique-focused barre cardio class emphasizing proper form and alignment
+    while building cardiovascular endurance. Perfect for dancers of all levels seeking
+    strength and grace.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Pop Pulse
+  image_url: https://images.pexels.com/photos/3775566/pexels-photo-3775566.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: High-energy, music-driven fusion class blending contemporary choreography
+    with sustained cardio intervals. Feel the beat, build the burn, and find your
+    groove.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Rhythm & Strength Flow
+  image_url: https://images.pexels.com/photos/8957645/pexels-photo-8957645.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Mindful, endurance-building class that meets you where you are and
+    encourages you to rise. Sustained barre cardio moves synced to empowering music.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Choreography Intensity
+  image_url: https://images.pexels.com/photos/12086690/pexels-photo-12086690.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Theatrical, full-body choreography class delivered with infectious
+    energy and precise technique. For movers who want polish, power, and a stage-worthy
+    performance.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://upload.wikimedia.org/wikipedia/commons/6/69/BlueIEditShirt-plainBackground.jpeg
+  price_label: Free
+  points_cost: 1500
+- title: Water bottle
+  image_url: https://upload.wikimedia.org/wikipedia/commons/4/45/Metal_Water_Bottles.jpeg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

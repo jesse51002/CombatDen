@@ -1,6 +1,6 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
 // Reserve two lines of h2 (16px font, ~1.3 line height) so all cards have
@@ -14,7 +14,7 @@ const double _kCardTitleHeight = 42;
 class RewardCard extends StatelessWidget {
   const RewardCard({
     super.key,
-    required this.imageAsset,
+    required this.imageUrl,
     required this.title,
     required this.priceLabel,
     required this.pointsCost,
@@ -22,7 +22,7 @@ class RewardCard extends StatelessWidget {
     required this.onPressed,
   });
 
-  final String imageAsset;
+  final String imageUrl;
   final String title;
   final String priceLabel;
   final int pointsCost;
@@ -42,7 +42,7 @@ class RewardCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           RewardImageHero(
-            imageAsset: imageAsset,
+            imageUrl: imageUrl,
             priceLabel: priceLabel,
           ),
           Padding(
@@ -86,12 +86,12 @@ class RewardCard extends StatelessWidget {
 class RewardImageHero extends StatelessWidget {
   const RewardImageHero({
     super.key,
-    required this.imageAsset,
+    required this.imageUrl,
     required this.priceLabel,
     this.borderRadius,
   });
 
-  final String imageAsset;
+  final String imageUrl;
   final String priceLabel;
 
   /// Optional rounded corners. Pass when used outside the card's own clip
@@ -106,8 +106,10 @@ class RewardImageHero extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Image(
-            image: ApiImage.rewardAsset(imageAsset),
+            image: CachedNetworkImageProvider(imageUrl),
             fit: BoxFit.cover,
+            errorBuilder: (_, _, _) =>
+                ColoredBox(color: DesignConstants.card),
           ),
           Positioned(
             top: DesignConstants.spacingMedium,

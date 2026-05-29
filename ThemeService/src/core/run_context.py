@@ -6,7 +6,13 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from schema import AbsolutePath, AppFormat, Customization, Output
+from schema import (
+    AbsolutePath,
+    AppFormat,
+    Customization,
+    Output,
+    OverwriteSpecs,
+)
 
 from src.core.errors import PipelineError
 from src.core.util import load_yaml
@@ -45,6 +51,7 @@ class RunContext:
     image_dir: Path
     final_image_dir: Path
     icon_dir: Path
+    overwrite_specs: OverwriteSpecs
 
     def __init__(
         self,
@@ -52,6 +59,7 @@ class RunContext:
         cust: Customization,
         out_root: Path,
         run_id: str | None = None,
+        overwrite_specs: OverwriteSpecs | None = None,
     ) -> None:
         """Store the models and create this run's directory + image folder.
 
@@ -61,9 +69,17 @@ class RunContext:
         that directory in place (the ``mkdir(exist_ok=True)`` calls below
         are then harmless no-ops) — this is how ``expand`` reopens a saved
         run to seed its done nodes and generate only what's missing.
+
+        ``overwrite_specs`` is the run's single steering object (the
+        reopen-time ``--spec`` plus any per-module knobs). It lives here so
+        nothing has to hand-thread it through the executor → registry → node
+        → service chain: every layer already carries the ``RunContext`` and
+        reads ``run_ctx.overwrite_specs`` where it needs the steering. A fresh
+        full run (no reopen) leaves it as an empty ``OverwriteSpecs()``.
         """
         self.app = app
         self.cust = cust
+        self.overwrite_specs = overwrite_specs or OverwriteSpecs()
         self.app_id = app.id
         self.run_id = (
             run_id

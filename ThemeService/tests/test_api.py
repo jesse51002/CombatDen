@@ -82,11 +82,14 @@ def test_get_output_matches_the_runs_yaml() -> None:
     assert body["text_set"] == {"texts": {}}
 
 
-def test_versionless_slot_yields_unversioned_url() -> None:
-    """A legacy ``output.yaml`` slot with no ``version`` projects to a bare
-    URL — no trailing ``?v=`` — so old runs stay valid and unchanged."""
+def test_image_url_carries_version_token() -> None:
+    """Every image slot is versioned (the field is required), so its served URL
+    carries the content-hash ``?v=`` cache-bust token."""
     body = client.get(f"/apps/{APP}/default").json()
-    assert body["images"]["hero"] == f"/apps/{APP}/default/images/hero"
+    assert (
+        body["images"]["hero"]
+        == f"/apps/{APP}/default/images/hero?v=0123456789ab"
+    )
 
 
 def test_image_served_from_final_images() -> None:
@@ -178,9 +181,11 @@ def test_list_styles_excludes_date_runs_and_imageless(tmp_path: Path) -> None:
     assert page.limit == 20
     assert [s.id for s in page.items] == ["ZenStyle"]
     assert page.items[0].display_name == "Demo App"
-    assert (
-        page.items[0].celebration_image
-        == "/apps/demo/ZenStyle/images/celebration_image"
+    # The celebration URL carries the image's content-hash `?v=` token (hashed
+    # on the spot here, since this fixture's output.yaml declares no version),
+    # so a regenerated card busts its cache instead of sitting on the old copy.
+    assert page.items[0].celebration_image.startswith(
+        "/apps/demo/ZenStyle/images/celebration_image?v="
     )
 
 

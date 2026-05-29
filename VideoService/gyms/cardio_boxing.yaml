@@ -1,17 +1,1032 @@
 gym_id: cardio_boxing
 gym_type:
 - cardio_boxing
-theme: ZZUndoneCardioBoxing
+theme: CardioBoxing
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational cardio boxing content for
-      gym members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable cardio boxing sources.
-    avoid_desc: Anything not about cardio boxing; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'No-contact rhythm boxing for fitness — follow-along combo
+      workouts timed to the music on free-standing bags or shadow, with form cues
+      for clean punches, plus the fun side: "what a cardio boxing class is really
+      like", studio vlogs and behind-the-scenes, instructor vibes and playlists, funny
+      class moments, and transformation stories. Fitness boxing only: never sparring,
+      never partner contact.'
+    short_avoid_desc: No real sparring, self-defense, fight technique or competition
+      footage — this is no-contact fitness boxing. Also off-topic, "knockout in one
+      punch" fantasy, calorie-bait gimmicks, and "boxing vs X / is cardio boxing useless"
+      debate clips.
+    videos_desc: |-
+      # What we surface
+
+      No-contact rhythm boxing content for people who want the workout of
+      boxing without ever sparring a partner — plus the fun, human side of the
+      studio, so it's a feed members enjoy, not just a how-to library.
+
+      ## Workouts & form
+      - Follow-along combo workouts timed to the music: jab-cross-hook
+        combinations, shadow boxing rounds, free-standing-bag and heavy-bag
+        cardio drills
+      - Form cues for clean punches, stance, guard, and footwork done for
+        fitness
+      - For total beginners through seasoned fitness-boxing regulars
+
+      ## The fun & human side
+      - "What a cardio boxing class is really like"
+      - Studio vlogs and behind-the-scenes
+      - Beat-coded playlist and themed workouts
+      - Instructor vibes and high-energy sets
+      - Relatable class humour, transformation stories, and instructor
+        interviews
+
+      The point is rhythm boxing — combo plus beat — purely as a workout, never
+      sparring, never harm.
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about no-contact fitness boxing; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Real-combat content: sparring, partner drills, self-defense, and
+        competitive / amateur / pro fight footage and fight-technique
+        breakdowns
+      - Street-fight / "one punch knockout" / "deadliest" fantasy clips
+      - Calorie-bait "burn 1000 calories boxing / melt fat fast" gimmick titles
+      - "Boxing vs MMA / cardio boxing vs real boxing which is better"
+        cross-discipline framings
+      - "Is cardio boxing useless / fitness boxing is fake" debate or reaction
+        videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a clip, a highlight, or
+      entertaining — fun content is wanted, as long as it stays no-contact
+      fitness boxing.
+  queries:
+  - cardio boxing workout follow along no equipment
+  - rhythm boxing class combos to the beat
+  - shadow boxing cardio workout for beginners
+  - boxing combinations workout for fitness
+  - heavy bag cardio boxing workout follow along
+  - free standing bag boxing fitness workout
+  - how to throw a jab cross hook for fitness
+  - boxing stance and guard basics for beginners
+  - 30 minute cardio boxing class
+  - fitness boxing form and technique cues
+  - what a cardio boxing class is really like
+  - upbeat playlist boxing cardio workout
+  - beat based boxing fitness class
+  - cardio boxing studio behind the scenes
+  - funny cardio boxing class moments
+  - cardio boxing transformation story
+  - star cardio boxing instructor full class
+  - cardio boxing instructor interview on coaching
+  - day in the life fitness boxing instructor
+  - my first cardio boxing class vlog
+  good_video_ids:
+  - 6PmmXBYGbIg
+  - AC7YEpRgxQc
+  - EFgl7fyhb9g
+  - EjJIVSGyNDo
+  - JAekXBZdEFA
+  - K8865slASi8
+  - KPN_3LIbvZQ
+  - KWuXI6ZYgJI
+  - SedKFKgpgbk
+  - Vve4BVTZ0QU
+  - WVB2ATaLJ6U
+  - _U4Qx4wI1og
+  - e6UNuMxBIdE
+  - etZXAJmVa1E
+  - sSRYt0397zI
+  - v1vZYQ2hRrk
+  - xo0Sv_pI8UE
+  - ytnIS1uOHJs
+  - 1lqmhEHUAxY
+  - 3INWVK83fxg
+  - 4imTQhTlj3M
+  - Av9-bJAucWc
+  - BDuTGIx5qy8
+  - HLPU9Qk7ZVw
+  - Ik2coTPVOVI
+  - OeedpzLRe2E
+  - S5fNyMLqbiU
+  - TEzjGTVnxMM
+  - TU52X9C9TnQ
+  - YsFK1MMDQgk
+  - bz3Bv1y-mYo
+  - fVWCFssd6bA
+  - knV57Ecxv5I
+  - qTuCO1WOlFc
+  - qxCdT08OOpA
+  - rwAGGeOk4_Q
+  - s6Z0mZrQMlg
+  - sgwtp9mF8tI
+  - vbISBPWAVxs
+  - xbABGepKT2o
+  - -cfSa-gBxtc
+  - 4MY6By61OoM
+  - 7jvI-j86KD0
+  - A2S8P80JKc4
+  - AGW9_tFO6YY
+  - AoGbene7BdE
+  - CMgghWxHMIc
+  - DD9w2ZDdGN4
+  - E3g87V2KaOM
+  - FSu6IHJTRGk
+  - Hri2rYgOLKI
+  - IfhMDU3PQcM
+  - KidSVNv0WcY
+  - NB3BF1YSvmk
+  - QMBi2apMRjY
+  - QqPhZ61PhyA
+  - Qrw_XkdSbA4
+  - Rb0mWOq4qYA
+  - VqtCGBOkHPs
+  - XwfTTbEbwng
+  - hSl-1ht-7Uo
+  - jLcXi7S8BLg
+  - jzLkUHpzf0s
+  - l0pwc9OHehE
+  - pZta8R-PA_s
+  - yrJE2unJ_m0
+  - 0U4wRPZaC_4
+  - 0_Soh1STxR4
+  - 7eZQpslOERU
+  - 8g2eGbrPycA
+  - ADeS2LCVDu4
+  - DFTa81YQRmw
+  - FDUfxZG35zI
+  - GKmaZa3hiNo
+  - HoWdEb7XUVg
+  - Ocii2spoGIQ
+  - UyyJy9m82po
+  - W0oxbv3820I
+  - W30xbyO2shM
+  - XIHvfwYVy4A
+  - Z1LeHynYZLk
+  - fCZUWCalVpo
+  - ftNsri_7CbQ
+  - hqYxFoJ-DDM
+  - jiFenKV3gds
+  - nOGIOjGm6Qs
+  - sEmcJEyW5FU
+  - wB8GhqtKLdk
+  - yBvnf3af4yU
+  - -IYso0jeehU
+  - 3uPhWSq_1dk
+  - 9a_uJsueK00
+  - AzAbALA68XE
+  - GJmO-xyx6_8
+  - L5gGu_A2b-U
+  - LdhIhIEtsRo
+  - QorRKgmXm7A
+  - msk8oWv8k4w
+  - nHYWqJivPrs
+  - nky4BpWiwew
+  - ookm2yaPR00
+  - xfuM5YSES3I
+  - 1pnuSi4Ee8I
+  - 3E4Q7dzqaL8
+  - 4hO-MXUo56I
+  - 5SM5O-tlC5s
+  - 6r7DpF14n-U
+  - 8wwZEFkGB-Q
+  - CyPo9gq2qbw
+  - G9b1hkakLKQ
+  - Gfee3ZiJreA
+  - LQQln842_UM
+  - TautiJV2j9Q
+  - WRBdhcoqa_w
+  - ZClDryP8tUQ
+  - _ZaNhLTVhgs
+  - c-8kFxC6uVw
+  - gNNZUt0xrwM
+  - i2ymgs8t9IE
+  - kbgkeTTSau8
+  - ppkrgHZpoQk
+  - quwx8XrEf7g
+  - rfw0IChKpT4
+  - so_bEQS91hE
+  - yyN2PXSds5I
+  - zhWfajP4EVU
+  - 3tTfUCuUFd0
+  - 7EHSN5T-ZQE
+  - 8qbZ3H1LceQ
+  - C4i__4LGtI0
+  - FPSIw8r1Uzs
+  - Fapbuxi76sw
+  - KYuSjvR6W9U
+  - MJmHnyBjC6s
+  - MWS04-mHe4U
+  - SUV2A0h8zvY
+  - b_ZFmTnkTxU
+  - hU046Z5wpFk
+  - qR3joPGG1jk
+  - uGoS-AWW7jY
+  - xEhSeioFlyQ
+  - xSUXMwqZ3z0
+  - zKDquM5qw3s
+  - 0oJXes85YAk
+  - 3oqxkQmYZcU
+  - 6oLg5fFe5ww
+  - 71nmi6nGcrY
+  - HZDVa0LDvJE
+  - LipmnrzdHJ4
+  - MkHrv_B2oOQ
+  - _Zem0_qsDg0
+  - f0MAIwb7hvg
+  - lYCV3C4dAf4
+  - qQNDK6R3Q2Y
+  - t0o8igB5qf8
+  - v0y86288Wt0
+  - yhlReQeymEA
+  - 26DSA5DRz0s
+  - FJnO9Zjqzl8
+  - H7X6f09mpAg
+  - HgoQDCv0Aog
+  - JqC83NFhAYM
+  - O7-yMjiX0uQ
+  - UR0g95Rb0W4
+  - cQW-h8yGbRc
+  - f4O0gKEK0d8
+  - hrFajktsi1w
+  - jCTEVKRTuS8
+  - nuf6Hs1-tgk
+  - qknWUslG2Nw
+  - rnwEUIylf8A
+  - sgwfcpEzTxM
+  - tPuvwPYjULw
+  - tVarQ36RaLA
+  - zM7upFXgnx8
+  - 4LSflu3ORCE
+  - BwCwTuqd6Ts
+  - Wfezpx2ZhDg
+  - XNQhTJ4xg5Q
+  - aRcroj5SmhQ
+  - lk5G1WEcntA
+  - lujcE3FGL_U
+  - t0VDNDMulAY
+  - u7PB8NgUUXM
+  - yQ0dopb69ns
+  - 01fKG6aEDRg
+  - Ltk6T1qsqNE
+  - M1E2GqzvOkg
+  - YkCjR_RAZPk
+  - YkSPCG8JN6M
+  - aIeuMhYQ2vw
+  - adWg9R21-S4
+  - bYK_IlxI0kM
+  - cQw7qxXLfnE
+  - dSK8Mj13qs0
+  - dhnqTMGiId4
+  - kzOuIDYXCHg
+  - l3n8cqPb0RY
+  - o94PzKLgP88
+  - vyTaKpylOcU
+  - w_96O0hnxu4
+  - 0l7LC_GFrv0
+  - 93duoKOq5lg
+  - BF4MQ9mhQOk
+  - HVTTZI_7Lvw
+  - JnNsi9K_Mqs
+  - PfKeCuAgm1Y
+  - RevstGRcR4g
+  - Uvr-oAmwfVo
+  - dXSYMg6GZ1I
+  - krXm3tAkiyg
+  - mcdnnET9BCU
+  - mudTfmninfo
+  - nAdgqrAzrfs
+  - pxCihMks6zU
+  - wIKrLzBAf84
+  - AESDi49ubRU
+  - CPFjrs4jRLU
+  - FSVcmMd9bR4
+  - IsMCmKa86Hc
+  - SbYCLWaWGqE
+  - Z-iofaQmFNg
+  - ZmHyBHTMA4I
+  - bkLp7WxXj8g
+  - pAAty8hKKs4
+  - xcMacsd4K4U
+  - xxn4pgsy1Sc
+  - yc7JIUf8zdw
+  - zDPrunnFSsg
+  - -j6Q9QFh9eY
+  - 0kiKsQKsXcs
+  - 1bjKpgrbm6o
+  - 2C4rvTUTHRg
+  - 3z8lZhQhhZQ
+  - AqIhdcLCimA
+  - J4j3AOVWuHE
+  - NTj30m1u-bs
+  - RpFIQWkceJA
+  - a8VR_97r9bA
+  - bPgpG1Vp3R4
+  - jLvQTW1llIE
+  - mg5jFJwmEeQ
+  - xCzzhnnGst8
+  - -luXgXhuGrs
+  - 1XSYHFwS33o
+  - 23CTBq8f6JI
+  - 4o3iAH_ddBQ
+  - GpB2f5nulWs
+  - PCbtJB2gs2U
+  - SovpzLt9Jmw
+  - UkMzxSfz04I
+  - XLVK_ml6KGU
+  - YJ3QuchrUNA
+  - gqHc3OtDF-Y
+  - lwCwCRBJbPA
+  - mxm9tuRsh3g
+  - 2iJOxa36iL8
+  - FYngyNu1StA
+  - Oy-LygqBCGo
+  - QLaAjc-ARz4
+  - fw5cLFmMIK0
+  - jlmDNjV1v84
+  - lSqs3s2Znxk
+  - oBxYddiCq3Y
+  - rs_Y8prcAeE
+  - 8WUp0GEbcQg
+  - RgYo0OL7wTw
+  - YPnYX3CHB7g
+  - c4F3ZMN-lbw
+  - 2c1-ne5b0QU
+  - Biu8g_O__4c
+  - Pe1dxJUaoyo
+  - iNfXCenFZGY
+  - psFfWdzlExg
+  - xPenkC_U6b8
+  - yWPuu2KCZbs
+  - -HV_dT74bsU
+  - 07hLhUQ0rAs
+  - 0iOq0M0B06g
+  - A7LOitI_aa0
+  - JKUgsJJW_7g
+  - SvcTyMtkrM0
+  - ezJb7fG1cmY
+  - gQ0gNtiDSxc
+  - kuYFBj40oLk
+  - z0SrRarzolQ
+  - -9xaSrZJkbw
+  - 26WHnPtjm00
+  - DqkUoAsCa88
+  - QjuQlw5FYuk
+  - _oAuk-KUrUQ
+  - w3JSl-RjsQE
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - EERMNeTfHaY
+  - F1WkAvrfiZ0
+  - Fz_Z8Tc8abs
+  - Gw_Gf9jRvTM
+  - INXD5osrkDo
+  - ImI63BUUPwU
+  - QwLX1P6ogC0
+  - RFsNmv-Z5UU
+  - RKbzoVj2-bk
+  - S0gbkjyV_MY
+  - T8O5CMhppdo
+  - W31eWDidL0g
+  - WycElKjDNAM
+  - XyMxRbgGySk
+  - b3hd-E7ge04
+  - f2eBuNcflU0
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - iWT658TQfVU
+  - irE87bHhAe0
+  - k0QVcaw4A2w
+  - proINILL4X4
+  - qBRWbOvTysU
+  - s9SSx0EYguk
+  - sy11C-XJdDI
+  - ucncduxX0eE
+  - yVUcHEOr450
+  - zw1GzJvoJbY
+  - 7JYF44bb5_k
+  - 8H0REG_UmAc
+  - 9Wa9xY88WF8
+  - EiZzaoK68iw
+  - GQoSnlh3Nbk
+  - HTts3Kk91ew
+  - JOomXP-r1wY
+  - KJBlo6X4Mm4
+  - OMqyyd_3IBg
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - TNm8Y0Y5RJw
+  - W1uZhq8O_R4
+  - WV_OH8cuJFw
+  - XxBYWljhplA
+  - a9os1z0zxWs
+  - bmVXD9_WprY
+  - cc0tz2LuXvs
+  - dBSAURSwuiI
+  - fD-qF0cHAP4
+  - fqB_szSOQBk
+  - hbsHcIjvsno
+  - kThGMgiprF4
+  - mp771sLeuQs
+  - uscwNFSP5kU
+  - vhNzk4XCSs8
+  - wPN2t8wr9dw
+  - x1fguR6Lduw
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4D6wSrXC__0
+  - 6ADogpDq0t4
+  - 7SUQzX4djtc
+  - 9aqpDxfhhyU
+  - AbU29p8p5k4
+  - BcVOmKUhxnQ
+  - CPROBJ_fTJU
+  - Ccf414IZo1g
+  - DIb4ORefBaE
+  - DacqZQC3Hfc
+  - DflnvUqZn2w
+  - E3MsxKDuSHg
+  - EH31c-rIbBU
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - H3oS8anPqX4
+  - IfdLGnbStWw
+  - KIjHz3ZTrnk
+  - KNmxPI86cZs
+  - LxZJUBsUL3s
+  - MrzGlecbLxU
+  - Om5bHgCBY3k
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - R9JmgC1a9y0
+  - TbGqp7mdO04
+  - VNgfAzTO3xU
+  - WT2qWAcet3s
+  - XzXUM6i9Qdw
+  - Yko3GMseY40
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - cXKZ0YjRnCQ
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - pCQOus2YwDQ
+  - r2OFrZXHQnM
+  - sOPFUfXpxVI
+  - udo0RzY-9Cg
+  - vBZUQIZml08
+  - xHlhEnN60-s
+  - xhgZBJG-97g
+  - ximZfmqh2hI
+  - z6k8wXfwS94
+  - -S3oyVW0N8w
+  - 4X9ybpSAQVo
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - 8NFhHP0DcNQ
+  - 8s5Xgn_Pd-U
+  - 9R7wWh6GF24
+  - BtnwY-j091A
+  - CDDHlGRL3AI
+  - ItE7xQpkfMA
+  - J3ITG_3vLzM
+  - JpvW1T7hXjo
+  - L4oa4nIIYGQ
+  - LJ17RCPFeRo
+  - MSuu3eFXTTo
+  - QTgajjJFoqo
+  - RPW9GT11oTA
+  - UGp6VzbkReA
+  - WHZWIsmLZAI
+  - XJy7txO14nw
+  - Y-AYC3_DbpY
+  - _qpSqEjV55Q
+  - b-Hbyii-HGA
+  - dm8JR9Wkz5Q
+  - g6nn0iZwenA
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - imLdIKEmZ6U
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - oFON1wxbdjw
+  - oVE-9yvtX_g
+  - q9CKxBMxTlU
+  - sRuzFXj4LTA
+  - uD2kjf_IUkI
+  - viHjGf9WbCA
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 29kipLhNL_A
+  - 5xfBiYplogg
+  - 7X_DUzxk5os
+  - BK2HdRp4Oo0
+  - Bp_QVO7kYtg
+  - CH3zemurQ88
+  - CP5JauSVu6M
+  - Cq_Nuo8ilak
+  - EQio6nzPLPw
+  - MNte5pRNsa4
+  - RrqXAkfjBdo
+  - V5M-gADbaqk
+  - VZNxIl1aMMc
+  - XaA3qD1EAqg
+  - dfF2eKKvK3A
+  - g7cBp9TnMwI
+  - gaInvk4-cNM
+  - jSH5OeIUzU4
+  - khvSXG0UYzM
+  - mS_yuOfyNIM
+  - nxsETdPOvCU
+  - rmwot8oOyM4
+  - v6B9zgvkos0
+  - vrA0pTgN1xg
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 2SVkH1aKo1M
+  - 4-lrb-YjXYM
+  - BLYnBNOsxoI
+  - EzzHv56zDVc
+  - G6Ldhhox680
+  - KO_OVfzKSHc
+  - LKSC_KujZ4g
+  - MICPyrnGYwg
+  - N464yaKx_I4
+  - O9Sop7_Mxeg
+  - OT-1mQSE3lw
+  - SYJu_y6WvEc
+  - Sv85JrwYfTk
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - X-FJm8-LKh8
+  - YXzzuLcmE_o
+  - aRk2NvIfd9E
+  - acCvfwXPEBU
+  - hZoeX99CiPE
+  - i_pmR8oN9bM
+  - l3o543fl2gE
+  - lYooVYKJJzM
+  - mfVHNjaAmvM
+  - n5FULuO4YQI
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - s_jNQkalgmU
+  - t2Ly6-QPMi8
+  - vZhWdFZ1xW8
+  - vucFkmTMO2o
+  - vuuqoMs162A
+  - wDLSsMxULW4
+  - yyu6iH1Bdug
+  - 0RKmNXkLW1c
+  - 12QNDtPrbPY
+  - 3YYXlC1-2WE
+  - 5tTKSFsgfeI
+  - 5x3V6JaEHX0
+  - 63FDy1O-3P0
+  - BdWvP-lbb68
+  - Bn252MRdazs
+  - C-HIpOy_kwI
+  - HIuN3NzdSPs
+  - JzvLsNQvtp0
+  - KMliGnl7uVo
+  - L0DMumN4Pqg
+  - M8rk9M66SKE
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - RV2rqYuSFGQ
+  - RyQC_VLi2cg
+  - SqWOI74V3Wc
+  - TM7cU9y84VY
+  - TN9i9Ni0Xr4
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - YeRS99DkgmQ
+  - cI28XPwBPBg
+  - g5wYrCAH_5w
+  - gzHEwJjaaMQ
+  - h940zBQCuk4
+  - kzzZcyUFyfk
+  - l8E5GpRuiqg
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - vXv6uvrUjKo
+  - -ywRvvPIkXw
+  - 0qVlPcJp7c4
+  - 1dR0pgto7ms
+  - 2-uiPPNdVdA
+  - 4sZNfDs2ueA
+  - 4zO7i9P8mGE
+  - 4zQL4ALDOVQ
+  - 5iX6ecbz8XE
+  - A6K3ACgzrLI
+  - B6jwYGC4AoE
+  - CliT1_uS_MI
+  - IPORkNzhwbY
+  - IVEAfdHlnO4
+  - J9dK0uIEXIM
+  - JEpHliDLr7s
+  - LUA66RbrRSA
+  - LXfSOsu4T9s
+  - Pfse9GxqdAE
+  - Sc4A9RTj6kc
+  - UQjYtlMrypA
+  - VP2cGOAxiyI
+  - VikuYpj5rmo
+  - VunalWJ2vq0
+  - W4OduPgefAc
+  - YXvpoh_JZHI
+  - _gWEEfSuRmE
+  - _vC4oDmykTk
+  - f6yAY1oZUOA
+  - fI5iMJvcNRM
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - mj6x3rnx5L8
+  - ooEgWahEvEM
+  - qele89Xmyc0
+  - r1zD8STM6nc
+  - rjBuTF2ABbM
+  - sV3V02gCYOA
+  - teYCn5IZqQU
+  - tt_3s2gW8co
+  - vsn-NJIMdjY
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - xt_Db9p2sUc
+  - -VJ6jNxq7RU
+  - 1cyiDLDaWUI
+  - 22M5iYuOgf8
+  - 28UKYA7C8m0
+  - 4pfSHh8Llys
+  - Diuvy0i804Q
+  - HWAOifKGLiE
+  - I6A2e3IU-nw
+  - L3Fux_50Cyk
+  - Mlgs4_54q8Y
+  - SiH7ny3dHCo
+  - YLJayNNNLKM
+  - ZkwBzPmhtr0
+  - cQ4K399DTgI
+  - hmbj63AzK2Q
+  - na2QowvbwsU
+  - oY6kPxgzjmU
+  - pqjn1AgmuEQ
+  - qL7Nlexje-M
+  - qToht6O--ho
+  - sf6WaGrRGNc
+  - wAoFvHRvkCA
+  - xaVX1Z-HVU8
+  - zl6AlpI5QsA
+  - -90jOnMCfD0
+  - -PiJQRvYdzg
+  - 0Qy51jKYdPQ
+  - 1EeTvG34xGo
+  - 5fzTBTfWJ20
+  - 6snqIh6lgsE
+  - ALRvrCzWKzA
+  - ARYTEV6GSJY
+  - BazD3LgECV0
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - Bvpo0rI0lGw
+  - C6LMqBUuqAs
+  - HSj7EPqPoLA
+  - JyV7mUFSpXs
+  - K2bomS-KLQA
+  - Lp7OSX0r9P4
+  - M4K0s792wAU
+  - MpzVb1aDQ5Y
+  - OeTK66_glm0
+  - SaikC5bKEhM
+  - TjHXjEAxA3Y
+  - Y88oZtk5K9U
+  - Z7Ra8Wa-WMI
+  - _ccuRYoMN6g
+  - cdPejPpoMFo
+  - gdJYRWx9g6w
+  - hbH9WvckjUk
+  - iNW4lCU693Q
+  - kUuaz_ab5YY
+  - ndIa69fEgJY
+  - ngAGkccj_3M
+  - r_VHltdyvv4
+  - vSSkDos2hzo
+  - yVj_XR6SGUo
+  - ywVnCQ_U-eo
+  - zGJiDyHqAxo
+  - zMksE9OKvTM
+  - 1T7nYSypRC8
+  - 4P9AG1BTgEc
+  - 4zlQ07gllAw
+  - 6oZfhhEHXU8
+  - ELJcfoxCbD8
+  - FKcr2h7RR-g
+  - GruTA2Eexz8
+  - I5q_-qNM28U
+  - JXs3Hvs3bN0
+  - JbfqeHqmewU
+  - Jz7eLmA2y5A
+  - M4nSM7TBsJg
+  - Os2s_Kya3_o
+  - SV-KfCQPJJ4
+  - UNf2qsX8uFc
+  - XQ6_GdODuww
+  - YzpCtSJA748
+  - cujcxjSm69g
+  - fRSQbrsDB0o
+  - gPry3-OomII
+  - ksiD-NcxwFs
+  - pA6ls-oHhX0
+  - tZGQm16eLCE
+  - uMkxXP3ZMGI
+  - wtgggEGnMOo
+  - x6DyLXdi_Jk
+  - x6UyziJYpao
+  - -yp3g7EeDqo
+  - 5QhrFSxYhCA
+  - 5bqt7dxsiKw
+  - 7bC-orwQ2zo
+  - A-PDoo2BXLQ
+  - EzfFjAym1gI
+  - IQwcCaAAuRc
+  - JpzS2KcpRh4
+  - MIv_1IT5HsI
+  - Pui3UaKI2Pk
+  - RxIgKPV6R9k
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - _PhRgPYz5Ps
+  - eE2BQ7rE7OU
+  - nRQSfBhd7FE
+  - oQVuIQbfL6Q
+  - pr5-pzwukRc
+  - t-ezOLT2Kv0
+  - t2ROQSBOgiY
+  - u1UNSANB-po
+  - xoxnkg_poU8
+  - 0_gtaZ6_aTE
+  - 1-EVNlNZiks
+  - 1Daic2lJank
+  - 5ZK50rIFyL4
+  - 7dm4TgMj_Gg
+  - AL5HDsXTUyI
+  - AO-DYLUDssQ
+  - AghC5EcC6dE
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - IGGuzpu87f4
+  - JQaeGoQox0k
+  - KLxh4PRoZWg
+  - LViFS7EMdi4
+  - OQWOMNRRCPg
+  - Ozd2aK0nZkE
+  - PPYsg2QGPuo
+  - PaRIi8K_Xtc
+  - S6dJCpotWCA
+  - SMAB27z3x0c
+  - Z3xMglkVfvw
+  - Z6VLe8SAiI0
+  - Z_4djaNyKEE
+  - aoWKeodh92U
+  - fIs7Cv1JQdM
+  - g4E8jeO-I4M
+  - hYka3IEYQgM
+  - kKKEr7tAfS0
+  - kV6FPfFkSqI
+  - mV-CxYE90V0
+  - qlJ9ozU6iGc
+  - tdYM_Tp5C6c
+  - xgv49WM_PuY
+  - ys7JHNC2qqg
+  - -36Hv3Jn7I4
+  - 6snSEm_aMo0
+  - 716e30A053U
+  - 8OzKOAEpXP0
+  - 9uy9vUPU5Yw
+  - BDORUMu__is
+  - Bfux-E-jRK0
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - QCUVrkms8EY
+  - RggKI--t43E
+  - Tw2dsJR8ZZc
+  - WprPdJKfaGk
+  - WxSNQwdEHQ0
+  - Xd1wsWDbQKw
+  - YskzOVTuwqc
+  - cUemRzQHblU
+  - cg_s45cclkc
+  - cnyTQDSE884
+  - dKNiEU-xr_0
+  - dVkOoAVQt9g
+  - ezOsco9legc
+  - jrEG8gHaqrQ
+  - kyOWh6nhgcg
+  - onf6qfSOxB8
+  - rUNGjwyZy28
+  - tJeI51crrvs
+  - u6Ki3Jpt53w
+  - vICrwtnmM6w
+  - x9YiOKELqdA
+  - 4XpUbUNM4x0
+  - 8gsXKblWgHo
+  - 9oFJL_9uKGA
+  - BJAjNaAgRG0
+  - E3Kt5qUYWfY
+  - EiTJBa8RpWI
+  - ImBQ80X9CX0
+  - KxV8I_YyiaY
+  - LkhVKgUlNhI
+  - Pte7Jcp3IcQ
+  - RFOdxztM01Y
+  - U3ykqvW1OSk
+  - ZTTNTDqk72I
+  - ah6rnjWEFB4
+  - an7tAQTRqLU
+  - awgP60rGSlw
+  - gUujm4O0-m0
+  - im7xZ7jgyRw
+  - moVynuxM4fc
+  - pJk0p-98Xzc
+  - pQRnSYfliEc
+  - qN5QMETjwx4
+  - qyF60uSs7yA
+  - sRmuxVw5HCo
+  - vDrw_kBiba4
+  - zU_frFSykGw
+  - -hyXqNH0tqQ
+  - 066YdprB9sk
+  - 1kbMcU9XE0g
+  - 3qyWpJ34dWw
+  - 4pEZbGuwr-Y
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - D-p1umoDAYo
+  - DkbDhPNWkao
+  - Dlql3NIAwBI
+  - EwclzA3FplQ
+  - IzyRoB_9UmU
+  - NjlxJeT_ATg
+  - R0WcFxtKFj8
+  - WMxzNhnIv88
+  - XxwrVK1z1go
+  - Yh_loza_dLU
+  - eO8W1pWRJ1E
+  - i3X-IG9sBJQ
+  - j8NY7oMnnRU
+  - k7J96qxRQKg
+  - lHWlTYe1_Rk
+  - v2d7CLq85ps
+  - vIG9SbQbqhM
+  - vRw91VAjJzI
+  - xllY8J5G8d4
+  - zjsC3t9VzAs
+  - 4MQGjcdGwgo
+  - 6FEovkQ4z4E
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - N_VnAGgFqDc
+  - QsiImYTLvTk
+  - R0mMyV5OtcM
+  - SpIQrvqnw0o
+  - U7ppWOd52YU
+  - crXYs7EfnDc
+  - ctV8NyRWZIo
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - q_bCMQ0wVNE
+  - qhNWbrGqdL4
+  - rX5zEYzAsCs
+  - s3XTFR1ihBY
+  - ytNfD5DAicE
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 2MlxAXBzjXM
+  - 5nLkLgtbkGM
+  - 6ZX-PDPXWXE
+  - 8D6nnYgQdfw
+  - 9O2fnIbrdzw
+  - ErOHZHz50Sw
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - PjYQsgRwQEU
+  - QfSBj_IAtfQ
+  - Slzk17RnOrc
+  - UD-1rRaK06w
+  - Yt7XVvDSeyU
+  - Z5VBA8KeLqk
+  - Z7Uyv7GAGxg
+  - ZASEeRktvIY
+  - _NHGncVUMjM
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - fu15mR5qv3w
+  - l0GCECJxCZY
+  - oZ1c8IBz7a0
+  - r6MBg8-FlD4
+  - rfGi8W9j9gQ
+  - ruuW_shWsqA
+  - s8u4PCyTGMo
+  - tkFgwveBkdQ
+  - vx6RkgoxzgQ
+  - zLes5gkTslw
+  - -aqD5fHrsY4
+  - 0O9bmFhtrHY
+  - 9qfNr9AbdkU
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - FBNHCVjpPnc
+  - HrWjf8WOsfI
+  - JuaCj1ceum8
+  - KrcLQCtdkNA
+  - LT-NaeBHmHM
+  - MBaoJffyT5I
+  - MCGa9qP_Bo8
+  - NEogTE8uP7o
+  - O3EkqQmBGbc
+  - RlrmSu5u9bE
+  - RsUuU6cBXqU
+  - VMdOoRm7xL4
+  - bzGSxdGF8z0
+  - c2DyMsW1t68
+  - eqTF-rDHm2I
+  - g3ZdqBdyoU8
+  - l1Za5yBML7M
+  - pbk6XqNpAsc
+  - sLYw8VdVGbw
+  - yhB9oVEHbkQ
+  - -GCA92b119Y
+  - 0DU7x4iKNUE
+  - 15lDzHSIO-k
+  - 19aunTn3SfI
+  - 2OV2cwgKxJk
+  - 4O8d1oZ1q4Y
+  - CYXxBGKrlLw
+  - GBxxdVM406E
+  - H_6pS1Ku0WU
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - K7V93KQMYFQ
+  - MilYefF9DjI
+  - SP7I3Srd7uI
+  - UVcz1cgaNIs
+  - Vswrm9dCGEE
+  - dBTQi5kdfW0
+  - eZCdFbRE5vU
+  - fGaj47G5hy0
+  - hNgLpoNCKno
+  - n-MG0gzXwis
+  - pPlFSqXnbls
+  - qO19Pv36o3U
+  - sqlJcJfKZJw
+  - vhJxr6yQLfE
+  scan_costs:
+  - at: '2026-05-29T15:31:49.269132Z'
+    usd: 0.2721622899999945
+classes:
+  - name: "Combo Burner"
+    image_url: "https://images.pexels.com/photos/7991668/pexels-photo-7991668.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "High-energy jab-cross-hook combos timed to upbeat music. Build rhythm and explosiveness through fast-paced sequences."
+    instructor_name: "James Carter"
+    instructor_bio: "Head coach with over a decade of experience helping members of every level train smarter, move better, and stay consistent."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg"
+  - name: "Shadow & Speed"
+    image_url: "https://images.pexels.com/photos/6296002/pexels-photo-6296002.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Shadowboxing drills focused on footwork velocity and punch speed without equipment. Perfect for footwork refinement and cardio intervals."
+    instructor_name: "Sarah Mitchell"
+    instructor_bio: "Performance coach focused on building strength, mobility, and confidence through approachable, well-structured sessions."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg"
+  - name: "Bag & Beat"
+    image_url: "https://images.pexels.com/photos/4761788/pexels-photo-4761788.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Heavy bag and free-standing bag cardio drills locked to the beat. Combine power development with rhythm-based conditioning."
+    instructor_name: "Daniel Brooks"
+    instructor_bio: "Certified instructor who breaks every movement down step by step so newcomers and regulars alike feel supported."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg"
+  - name: "Cardio Circuits"
+    image_url: "https://images.pexels.com/photos/7991616/pexels-photo-7991616.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Mixed-format conditioning flow combining shadowboxing rounds, bag work, stance drills, and form cues. Full-body fitness boxing workout."
+    instructor_name: "Maya Bennett"
+    instructor_bio: "Coach passionate about creating an inclusive, high-energy room where members from all backgrounds can thrive."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg"
+rewards:
+  - title: "Bring a friend"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+    price_label: "Free"
+    points_cost: 1000
+  - title: "Club t-shirt"
+    image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    price_label: "Free"
+    points_cost: 1500
+  - title: "Boxing gloves"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/c/c8/Boxing_gloves_Bail_10-OZ_%281%29.jpg"
+    price_label: "25% off"
+    points_cost: 2000
+  - title: "1-on-1 PT session"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+    price_label: "50% off"
+    points_cost: 2500

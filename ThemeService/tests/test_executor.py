@@ -91,6 +91,7 @@ def _ctx(
     *,
     texts: list[dict[str, Any]] | None = None,
     icons: list[dict[str, Any]] | None = None,
+    overwrite_specs: OverwriteSpecs | None = None,
 ) -> RunContext:
     payload: dict[str, Any] = {
         "id": "demo",
@@ -105,7 +106,7 @@ def _ctx(
         payload["icons"] = icons
     app = AppFormat.model_validate(payload)
     cust = Customization.model_validate(_CUST)
-    return RunContext(app, cust, tmp_path)
+    return RunContext(app, cust, tmp_path, overwrite_specs=overwrite_specs)
 
 
 def _graph(ctx: RunContext) -> Any:
@@ -256,7 +257,10 @@ def _palette(ctx: RunContext) -> ColorPalette:
 
 def _img_out(ctx: RunContext, slot_id: str) -> ImageOutput:
     return ImageOutput(
-        path=ctx.image_path(slot_id), prompt="p", complexity=None
+        path=ctx.image_path(slot_id),
+        version="0123456789ab",
+        prompt="p",
+        complexity=None,
     )
 
 
@@ -388,8 +392,11 @@ def test_per_item_outputs_inherit_node_output() -> None:
 def test_node_output_back_compat_and_validators() -> None:
     """An old per-item dict (no overwrite_specs) validates to ""; the field
     round-trips; and a subclass's own validator still fires."""
-    # Back-compat: pre-feature output.yaml entries lack the field → empty.
-    old = ImageOutput.model_validate({"path": "/x/y.png", "prompt": "p"})
+    # Back-compat: pre-feature output.yaml entries lack overwrite_specs →
+    # empty. (version is required and carried.)
+    old = ImageOutput.model_validate(
+        {"path": "/x/y.png", "version": "0123456789ab", "prompt": "p"}
+    )
     assert old.overwrite_specs == OverwriteSpecs()
     # A bare string coerces to OverwriteSpecs(specs=...); the field round-trips.
     stamped = TextOutput(value="hi", overwrite_specs="make it punchier")
@@ -400,7 +407,7 @@ def test_node_output_back_compat_and_validators() -> None:
     )
     # Inheriting NodeOutput did not suppress the subclass validator.
     with pytest.raises(ValueError, match="prompt"):
-        ImageOutput(path="/x/y.png", prompt="   ")
+        ImageOutput(path="/x/y.png", version="0123456789ab", prompt="   ")
 
 
 def test_expansion_kind_resilience() -> None:
@@ -426,12 +433,16 @@ def test_expansion_kind_resilience() -> None:
 
 
 def test_build_all_threads_specs_seed_and_declared(tmp_path: Path) -> None:
-    """build_all hands every node the one steering object and the seed slice
-    for the slots it owns; each node derives its dirty set from declared minus
-    its seed slice."""
-    ctx = _ctx(tmp_path, [{"id": "hero", "description": "a hero"}])
-    palette = _palette(ctx)
+    """build_all hands every node the seed slice for the slots it owns; each
+    node derives its dirty set from declared minus its seed slice and reads the
+    one steering object off the run context."""
     specs = OverwriteSpecs(specs="warmer")
+    ctx = _ctx(
+        tmp_path,
+        [{"id": "hero", "description": "a hero"}],
+        overwrite_specs=specs,
+    )
+    palette = _palette(ctx)
     graph = ModuleRegistry(ctx).build_all(
         llm=_Dummy(),
         image_gen=_Dummy(),
@@ -439,7 +450,6 @@ def test_build_all_threads_specs_seed_and_declared(tmp_path: Path) -> None:
         google_fonts=_Dummy(),
         icon_catalog=_Dummy(),
         icon_generator=_Dummy(),
-        overwrite_specs=specs,
         seed={  # 'primary' dropped → it's the only dirty colour slot
             "background": palette.colors["background"],
             "text": palette.colors["text"],
@@ -449,7 +459,8 @@ def test_build_all_threads_specs_seed_and_declared(tmp_path: Path) -> None:
     assert graph.color.declared_slots == {
         "primary", "background", "text", "accent"
     }
-    assert graph.color.overwrite_specs is specs  # one object, every node
+    # The one steering object reaches every node — off the run context now.
+    assert graph.color.overwrite_specs is specs
     assert graph.color.dirty() == {"primary"}
     assert graph.font.overwrite_specs is specs
     assert graph.font.seed == {}  # no font slot in the seed
@@ -537,10 +548,15 @@ def test_stamp_versions_fingerprints_each_served_asset(
         color_set=_palette(ctx),
         image_set=ImageSet(
             images={
-                "hero": ImageOutput(path=ctx.image_path("hero"), prompt="p"),
+                # Constructed with a placeholder version; _stamp_versions
+                # overwrites it from the file (hero present → hash; ghost
+                # absent → "").
+                "hero": ImageOutput(
+                    path=ctx.image_path("hero"), version="", prompt="p"
+                ),
                 # No file on disk → stays unversioned.
                 "ghost": ImageOutput(
-                    path=ctx.image_path("ghost"), prompt="p"
+                    path=ctx.image_path("ghost"), version="", prompt="p"
                 ),
             }
         ),

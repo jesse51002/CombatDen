@@ -13,6 +13,8 @@ flow, a moment. That context is for your understanding only: NEVER copy
 placement, screen names, app flow, or usage wording into the `prompt`. The
 prompt is the art piece, not the app around it.
 
+$override
+
 When the subject names example objects (an "e.g. …" list), treat them as
 illustrative starting points, NOT a closed set or a mandate. Read the asset's
 underlying meaning and pick the object that best fits this brand — choosing a

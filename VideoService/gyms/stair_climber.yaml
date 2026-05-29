@@ -1,17 +1,517 @@
 gym_id: stair_climber
 gym_type:
 - stair_climber
-theme: ZZUndoneStairClimber
+theme: StairClimber
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational stair climber content for
-      gym members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable stair climber sources.
-    avoid_desc: Anything not about stair climber; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Stair-climber cardio sessions for people who treat stairs
+      like a sport — follow-along StairMaster interval and endurance workouts, proper
+      climbing form and pacing, plus the fun side: "what a StairMaster session is
+      really like", climb-challenge highlights, relatable stairmaster humour, funny
+      moments, transformation stories, and coach interviews.'
+    short_avoid_desc: Off-topic, clickbait "burn 1000 calories on the stairs" gimmicks,
+      and "stairmaster vs running / vs treadmill which is better" or "is the stairmaster
+      useless" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Stair-climber cardio content for people who treat stairs like a sport —
+      follow-along workouts plus the fun, human side, so it's a feed members
+      enjoy, not just a how-to library.
+
+      ## Workouts & technique
+      - Follow-along StairMaster / stepmill sessions: long endurance climbs,
+        blocky intervals, speed and resistance sections
+      - The heart-rate spike no other machine quite hits
+      - Proper climbing posture, foot placement, and not leaning on the rails
+      - Cadence control: how to set speed and pace a climb
+      - Beginner first-session walkthroughs and lower-body / glute conditioning
+
+      ## The fun & human side of stair climbing
+      - "What a StairMaster session is really like" honest takes
+      - Stair-climb challenge highlights
+      - Relatable stairmaster humour and funny moments
+      - Transformation stories
+      - Coach interviews — urban, stadium-concourse grit for people who hate
+        running but love climbing
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about stair-climber / StairMaster cardio; off-topic,
+      genuinely low-quality, or clickbait videos.
+
+      ## Reject
+      - VersaClimber / vertical-rail climbing and outdoor stadium / stair-running
+        content (different machines and disciplines)
+      - Calorie-bait "burn 1000 calories on the stairs / melt fat fast" gimmick
+        titles
+      - "Stairmaster vs running / vs treadmill which is better" cross-discipline
+        framings
+      - "Is the stairmaster useless / stair climbing wrecks your knees" debate
+        or reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, or entertaining
+      — fun content is wanted.
+  queries:
+  - stair climber workout follow along
+  - stairmaster interval workout session
+  - proper form on the stair climber tutorial
+  - beginner stairmaster workout what to expect
+  - 20 minute stairmaster HIIT workout
+  - how to use the stair climber correctly
+  - stair climber workout without holding the rails
+  - endurance climb stairmaster workout
+  - stairmaster workout for glutes and legs
+  - stair climber cadence and posture explained
+  - what a stairmaster session is really like
+  - stairmaster climb challenge highlights
+  - relatable stairmaster class moments
+  - funny stairmaster gym moments
+  - stairmaster transformation story
+  - stadium stair climb style cardio workout
+  - stair climber conditioning for athletes
+  - stair climb coach interview on training
+  - day in the life stair climber studio coach
+  - my first stairmaster workout vlog
+  good_video_ids:
+  - BOI0LvBQKOY
+  - HWu9EDRYwkc
+  - DwSkclPxT2A
+  - JFQM75Rm_MY
+  - Rt6onZufsi8
+  - Zn1O9LcKW9E
+  - q2FBHk4UECo
+  - szjqZyL6uOM
+  - ww3YV_N6U_U
+  - xSB39wbMz4w
+  - 2Xb3MJyy3Gs
+  - 36uCiAo75pg
+  - W33kjqJpa2Q
+  - boUgu7ACduY
+  - k9ORtJGfAD8
+  - lkZ91iTGkEU
+  - y0zGTCPk3mA
+  - GljbDQVIEmk
+  - SZU9Rm0sNOo
+  - UNw2Y6JyU3k
+  - WCX7W2axvHA
+  - aab-_0amjQ0
+  - qPOQTUq951A
+  - rlZgtQbRlD0
+  - IavaxaqwB0Q
+  - SwGzLtOwax4
+  - _DoOZllVx7M
+  - sih3SM8phvQ
+  - sudbdjw6-Vc
+  - uzwIKOYSsCI
+  - wToIB5OqGG4
+  - xsj-pCQveuI
+  - 9lRWsalXSAw
+  - VPc-7UqqpQE
+  - XP7Pq8WD9zU
+  - __MVLA4ZI38
+  - fd6ZmG6L-TE
+  - qnGWaT2xI4c
+  - tb0HPThGft4
+  - v7HqS2nWoBs
+  - 7VFNV3cmL4E
+  - Si5FpZHgnLc
+  - dlQ1Kg9r3X8
+  - eSp5NbXuUf4
+  - jZNHqj0tgUw
+  - pDNbmh_XLm0
+  - GMc8fUksKpY
+  - KpGeZyQOGzs
+  - TpiVbltFmuQ
+  - ki0EVnBW5oc
+  - rcMjbqfvgms
+  - vUqHqBQ-wK0
+  - 6eJA7I3zHmg
+  - 6eMPlQ95gXI
+  - n-0_Nkgb_Qg
+  - u3vhxTZYeTc
+  - uGQH8EvtKFg
+  - 7tRrAByaJ3U
+  - Suzmbq9pbQ4
+  - sCywX5btJjc
+  - yq9czzJsOaI
+  - 3F1--uygTwk
+  - 5Gc_TXkeUUA
+  - JJlHMddJrvg
+  - ZyyHST8VK7M
+  - x3r-Zqa8ENU
+  - LW52UdyOt8c
+  - PpbtucIYFzs
+  - agiTAiGp7ec
+  - iw5xm9CCyNg
+  - j04wOp5R3ZY
+  - oGOTjSt1F0o
+  - Z_4djaNyKEE
+  - mCB27gKVhWg
+  - 0cRfeIL4zq0
+  - BmYNpHeDAB0
+  - W5QSoay73s8
+  - e1a0ajeBShI
+  - wVECfN7gyBM
+  - AMy7L60nZ7M
+  - V2EQYdMw4Do
+  - apYKD5SjVUQ
+  - xXN14KHjduI
+  - B-ePkIehooM
+  - BgMvht44uqE
+  - DBuW7K6wHd0
+  - JE0_GUdEsQQ
+  - QqGayqFac2U
+  - dpN5dpUFEyQ
+  - i2FVJYY4sMw
+  - pZIONyw031M
+  - 2-C9QvUala4
+  - ST-5lD69XqU
+  - i98t33E8Eps
+  - x_D622ftypQ
+  - yzZusajbUCg
+  - tZrD7FhoftY
+  - tl90dPJ9Od8
+  - A4SuTOHXc3c
+  - XNHRZKA7Hgc
+  - sp-SAEy2m4M
+  - zYoTQKfUTjk
+  - 1OcYng29OP8
+  - 8XEg57ZQX2M
+  - JnA3s0ZDhUc
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 2yDWWJ0TeD0
+  - FH4-F1V-3uc
+  - FcEqCbfRZZw
+  - INXD5osrkDo
+  - YM8_F1Wp25U
+  - Yeb0llpEnTM
+  - _H8IcawJSsw
+  - dxCB5mkIv7c
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - sT56CulnMvU
+  - sy11C-XJdDI
+  - tfRfK0FnLBk
+  - vWrfhvEP9h4
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - dBSAURSwuiI
+  - fD-qF0cHAP4
+  - kThGMgiprF4
+  - vBy8jXvnyO0
+  - wpWV4MwYaSk
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4D6wSrXC__0
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - EllmewqfO1Q
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - X-5RslWsDV0
+  - aWadQMEngCA
+  - bK0wrNKbHjI
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - lNZSsuZ80Ow
+  - n_yuiYV-_Zo
+  - z6k8wXfwS94
+  - 04VS7ji4EpE
+  - 5kkBgb426Aw
+  - 7B62Uf-C5To
+  - 7yX1QN5a6L4
+  - CDDHlGRL3AI
+  - GjCixyDkJ18
+  - ItE7xQpkfMA
+  - Y-AYC3_DbpY
+  - YRdAWnoXKag
+  - c5H9RSp594E
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - q9CKxBMxTlU
+  - r6HHJJXMmdU
+  - rKJUH7rWD4Q
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 2OwzD_UPL30
+  - 4_WPNDsiXxA
+  - Ay8kG35jH5M
+  - BK2HdRp4Oo0
+  - CFLjP1EjBoY
+  - Cq_Nuo8ilak
+  - LxB0jSh0_H0
+  - MR4pIQhpu9Q
+  - RrqXAkfjBdo
+  - XaA3qD1EAqg
+  - YhF2TskHBHM
+  - bGauZyt2Fo0
+  - crPb62o-z_E
+  - mS_yuOfyNIM
+  - t33e3iVAxAw
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 1RqY5EYOM0k
+  - 2MvZ_7401aI
+  - 2kui0fFKMyE
+  - EzzHv56zDVc
+  - LKSC_KujZ4g
+  - SYJu_y6WvEc
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - hZoeX99CiPE
+  - n2_UX7KmCYs
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - yT_7yYZDFSA
+  - 2SoELYEcFDc
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - QpLKcfpdxYQ
+  - TN9i9Ni0Xr4
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - EKUNGQ4LmH8
+  - IVEAfdHlnO4
+  - Pfse9GxqdAE
+  - USMriGrAdjo
+  - YXvpoh_JZHI
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - h7QTEYSKkGI
+  - kwDQk2siRJs
+  - qqLfhSuEYqQ
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - 0-oHNJ8KedQ
+  - 0BIbKxuOFIE
+  - ErpHj-i6ooQ
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - cQ4K399DTgI
+  - gqRDl-q_-NY
+  - ohQ17qQvtZw
+  - zGZz0xJW_1I
+  - 0Qy51jKYdPQ
+  - 1EeTvG34xGo
+  - 2LD0Tp3oIDU
+  - 4GeFbKU76yw
+  - 5fzTBTfWJ20
+  - 9xzlwCYaCbQ
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - KhZQtQvwAt4
+  - Ly4eJuehcpk
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - SF1BZ4p78tw
+  - Ttg_Gs3Zfe0
+  - Z7Ra8Wa-WMI
+  - _WteLGbW3ps
+  - cdPejPpoMFo
+  - gdJYRWx9g6w
+  - vSSkDos2hzo
+  - 6oZfhhEHXU8
+  - 6t_SMyZ3Pgo
+  - AyMUWBUt3WY
+  - FKcr2h7RR-g
+  - HcBy0AtEKfg
+  - I5q_-qNM28U
+  - SV-KfCQPJJ4
+  - UNf2qsX8uFc
+  - bIE0byxi6rk
+  - b_yTKFKXcGo
+  - cujcxjSm69g
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - zrB7a6fk8RA
+  - -yp3g7EeDqo
+  - 9HaF1sTHMVM
+  - D2QD2yMCO3A
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - eM__HkyHx7I
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - u1UNSANB-po
+  - xsrA0piEUOU
+  - -ENLFPdXIbA
+  - 5ZK50rIFyL4
+  - AIn36HmfOVU
+  - AL5HDsXTUyI
+  - AsyyZgtHMPw
+  - Eo97pP334pc
+  - IGGuzpu87f4
+  - JQaeGoQox0k
+  - K34SJBZ1i8E
+  - P-GFrJPkjyc
+  - RF8_N2Tj2Yk
+  - SMAB27z3x0c
+  - WEKB9EGH20I
+  - Z6VLe8SAiI0
+  - cOgleHNpBo4
+  - -OJXaJD-yaA
+  - 716e30A053U
+  - EeSYPxQF0To
+  - F6oshxpJ3zk
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - Tmd8yR0DUck
+  - V-ASjboj5Y0
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - tJeI51crrvs
+  - EiTJBa8RpWI
+  - HqQHUgl-rsk
+  - JWqoZrraZt8
+  - KxV8I_YyiaY
+  - NHtv-zy9mE8
+  - OIABpor_4Qw
+  - drk9WfhBeMk
+  - moVynuxM4fc
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - EwclzA3FplQ
+  - NjlxJeT_ATg
+  - bgpLfpzz_Yk
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - wcmNBNqdDDg
+  - 42qKDlnt59Q
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - Pjbxp2kwpiU
+  - R0mMyV5OtcM
+  - ctV8NyRWZIo
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - tnpWaYNHDaE
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 2MlxAXBzjXM
+  - 4VzNLpkwYxs
+  - 8D6nnYgQdfw
+  - 9O2fnIbrdzw
+  - HKF9mb6FQDg
+  - JKxusNGZ-Jo
+  - OTrTqs9FLq0
+  - P3DUcxwO0pw
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 6ckAWn8JMhE
+  - Ae1eeEuBS78
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - JeS69edUl5U
+  - LT-NaeBHmHM
+  - MBaoJffyT5I
+  - MCGa9qP_Bo8
+  - QAj0VHx43fM
+  - RlrmSu5u9bE
+  - YSJubcbzJmo
+  - bzGSxdGF8z0
+  - sLYw8VdVGbw
+  - yj-UdTz9omw
+  - -GCA92b119Y
+  - 19aunTn3SfI
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - MilYefF9DjI
+  - P5a7I-4GaYI
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  - sqlJcJfKZJw
+  - yIRf1BdGiV0
+  scan_costs:
+  - at: '2026-05-29T16:41:15.544523Z'
+    usd: 0.10637920000002765
+classes:
+- name: Climb Strong
+  image_url: https://images.pexels.com/photos/1954524/pexels-photo-1954524.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: High-intensity resistance intervals designed to build lower body power
+    and endurance. Perfect for athletes ready to push their limits.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Pace Master
+  image_url: https://images.pexels.com/photos/31012865/pexels-photo-31012865.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Technique-focused session emphasizing proper form, cadence control,
+    and efficient climbing without leaning. Great for beginners and form refinement.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Endurance Ascent
+  image_url: https://images.pexels.com/photos/7690207/pexels-photo-7690207.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Long, sustained climbs that build cardiovascular capacity and mental
+    toughness. Expect steady progression and deep work.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Peak Intervals
+  image_url: https://images.pexels.com/photos/3757954/pexels-photo-3757954.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Explosive sprint and recovery cycles that spike your heart rate and
+    torch calories. Short, punchy, and highly rewarding.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Running shoes
+  image_url: https://upload.wikimedia.org/wikipedia/commons/9/98/On_Cloud_Running_Shoes.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

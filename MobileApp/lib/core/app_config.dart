@@ -12,6 +12,10 @@ class AppConfig {
   /// Tenant app identifier (snake_case).
   static const String appId = 'combatden';
 
-  /// The design (preset/run) of [appId] to load.
+  /// The design the customization runtime initializes on, only so it has
+  /// something to fetch for the first paint (the gym-select screen). It is NOT
+  /// a selected gym — content (videos / classes / rewards) follows the gym the
+  /// user picks on the gym-select screen ([SelectedGym]); there is no hardcoded
+  /// gym anymore.
   static const String designId = 'StrikeKickboxing';
 }

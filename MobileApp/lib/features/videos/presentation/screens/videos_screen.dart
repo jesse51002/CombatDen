@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/selected_gym.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/videos/data/video.dart';
 import 'package:mobile_app/features/videos/data/video_feed_repository.dart';
@@ -170,7 +171,7 @@ class _Topbar extends StatelessWidget {
     return AppTopbar(
       mode: AppTopbarMode.nameOnly,
       showBackButton: false,
-      gymName: mockGymGlobalMma.name,
+      gymName: selectedGym.displayName,
       logoAsset: mockGymGlobalMma.logoAsset,
       streakDays: mockGymGlobalMma.streakDays,
       pointsLabel: mockGymGlobalMma.pointsLabel,

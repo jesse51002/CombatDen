@@ -4,14 +4,1004 @@ gym_type:
 theme: FrictionGrappling
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational no gi grappling content for
-      gym members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable no gi grappling sources.
-    avoid_desc: Anything not about no gi grappling; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'No-gi submission grappling technique and drilling — wrestling,
+      scrambles, guard, leg locks, and back attacks from credible coaches — plus the
+      fun side: ADCC-style competition highlights, leg-lock finish reels, gym vlogs,
+      funny scramble moments, and grappler interviews.'
+    short_avoid_desc: Off-topic, clickbait, gi-only content, "submission grappling
+      in a street fight" fantasy, "comp-ready fast" promises, ego smash-room footage,
+      and "no-gi vs gi / which is better" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and study content for no-gi submission grappling
+      members — plus the fun, human side, so it's a feed members enjoy,
+      not just a how-to library.
+
+      ## Technique & training
+      - Wrestling and takedowns, scrambles and transitions
+      - No-gi guard: single leg X, butterfly, half guard
+      - Guard passing, back control, and positional drilling
+      - The modern leg-lock game: heel hooks, ashi garami,
+        entries and finishes
+      - Follow-along drilling, positional rounds, and grappling
+        conditioning from credible coaches
+
+      ## The fun & human side
+      - ADCC-style and EBI/submission-only competition match
+        breakdowns and highlights
+      - Leg-lock and submission finish reels
+      - Gym vlogs and "a day on the mats", comp-prep behind-the-scenes
+      - Funny scramble and rolling moments, first-tournament stories
+      - Pro-grappler and coach interviews
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about no-gi grappling; off-topic, genuinely low-quality,
+      or clickbait videos.
+
+      ## Reject
+      - Gi-only and traditional-dojo content (this is the no-gi club)
+      - Street-fight / self-defense fantasy ("one submission to end any
+        fight", "deadliest choke")
+      - McDojo-style "get comp-ready fast / go pro quick" promises
+      - Ego-driven smash-everybody or backyard-roll footage
+      - "No-gi vs gi / which is better", "is grappling useless in a real
+        fight", and similar cross-discipline or anti-grappling debate
+        and reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, or
+      entertaining — fun content is wanted.
+  queries:
+  - no gi grappling fundamentals for beginners
+  - wrestling takedowns for no gi grappling
+  - no gi guard passing technique
+  - leg lock entries for beginners no gi
+  - heel hook finishing mechanics tutorial
+  - ashi garami and saddle position breakdown
+  - no gi back take and rear naked choke
+  - single leg x guard sweeps no gi
+  - no gi guillotine and front headlock series
+  - body lock passing no gi tutorial
+  - adcc match breakdown analysis
+  - submission only grappling highlights
+  - best no gi leg lock finishes reel
+  - a day at the grappling gym vlog
+  - funny no gi rolling and scramble moments
+  - grappler first submission only tournament story
+  - pro grappler comp prep behind the scenes
+  - pro grappler day in the life no gi
+  - submission grappler interview on the game
+  - no gi grappling coach interview on the modern meta
+  good_video_ids:
+  - -cCkyag3Mss
+  - 0_q_MytCEJk
+  - 18Wle1vr5PI
+  - 3r5ofkUYwyE
+  - 4WVhVyNeCn8
+  - 7PJW-0v1cus
+  - 9NgMrA8TTuA
+  - EZyfCLtg7yw
+  - FWVeQnJ7RF4
+  - J6RdX606DrY
+  - KWQAMLYvZnw
+  - Ov_N0dt5SIk
+  - S2l8Ug9qU8Q
+  - TWQQ_pucjt4
+  - V9uuOqpbfj4
+  - Z5Ai1Nj8tfs
+  - _RW39gSJd3Y
+  - i9rA2rDb05k
+  - jv4YtosznsQ
+  - krdXhFQHqZA
+  - nKIMxCzXvl0
+  - pMmyD-sD7oM
+  - ucncduxX0eE
+  - we3wrU-Ctbw
+  - z5W_PK7ymf0
+  - 3pFCw87TFOc
+  - 8tdVE2zgjXw
+  - D9if92w1pGQ
+  - EUuZio59fvk
+  - F0IwBKk5l9U
+  - GS8tR-WZEqE
+  - GwXJw8FY4eQ
+  - IyQPgTW5wUI
+  - Jm2k-R25B5A
+  - KFo8FI6fK7M
+  - MkVsLlxhF1o
+  - MxCFVDYN8Ao
+  - PARsvWFmssI
+  - RKTq5CgsF9I
+  - RSWgSqdZaeM
+  - SIe3OnvXGz4
+  - SZmnh7yZlOw
+  - SpWfuVhqQsk
+  - _4jDUxFg7uU
+  - cbdFNwZY7yU
+  - h5kspyLJlbY
+  - hihKauEb2sg
+  - j7ziSuzxjbk
+  - jhvUH1fXZQk
+  - slJYFJV6ROw
+  - uPMSJIrouC0
+  - w-W0ug7Edag
+  - xjRxfIeBioY
+  - yPUVFNS28Fk
+  - zaKm4NODl2k
+  - 0MRi94zwJq8
+  - 0ebVXri6VmM
+  - 12rNXPlqVXo
+  - 1pe3PZ8RbU4
+  - 3frX9zWJjbM
+  - 4_cH9A-XWtg
+  - 6lXwED3LW-w
+  - 7v_M_ea_7Ik
+  - JpRJLg9Lq5g
+  - L_2x8KVMzjI
+  - Q_nW-1DchUw
+  - QtN_TQNFXlI
+  - R4-4wiHam98
+  - Rv_J8DsaDYc
+  - SMRbZEbxepA
+  - ScjxpirJ5GY
+  - VHyrQ308uuY
+  - VLQGyGIsN_0
+  - Wn57Jj2o708
+  - X3j7OWFyAB4
+  - aoeGPLJnqV0
+  - atKRy2MuxIU
+  - caNLNunVP4c
+  - iuaUaIV7cWg
+  - ld6BXbVFHOo
+  - mYI-mXvmQnI
+  - pQ43Oy5k9yQ
+  - s3RWF9M126s
+  - tM10c6W_gLg
+  - tcS7oBdpRW0
+  - xHlhEnN60-s
+  - z4GlwBXm_Yk
+  - zGngLeJz-UY
+  - -bOU2yj_34E
+  - 0ezGy9HKkjY
+  - 3i6iNrIWKD4
+  - 9i2nf6N0O-k
+  - AVbGwHZtqn8
+  - DVEMxS9rnZY
+  - DZ-fmNcJFg4
+  - EcxCadpBePk
+  - HrlFFPOe-Dg
+  - IEDptWxvy8k
+  - J8QJ3tOEBsY
+  - LJ17RCPFeRo
+  - MMNPGGnkOcU
+  - PrvTS6hE4do
+  - RYeyFSqnYkk
+  - U9Mk1zoLfJE
+  - UGp6VzbkReA
+  - _BV67g1m-n0
+  - _Wa0ZdtSvec
+  - c5jtBZ5RR9U
+  - i-9xFFS5FyU
+  - jbxv4EIcRlE
+  - kc8j-YrtRVM
+  - khd9tFAyIyQ
+  - mbRARHwpmaE
+  - n6EUwvCkWJ8
+  - o-mnlzHphns
+  - o4jrNmJvYB8
+  - pRNghspbWLU
+  - qpmc6uClx4o
+  - spB8qALp5rA
+  - vjuQFBOgTkk
+  - wlhV-cUQeNQ
+  - -0BnL1xQRT8
+  - -FGKmWnpjIA
+  - -Lqo5vKw7WM
+  - -vW86TAa3uk
+  - 0Au3aPImBFg
+  - 44xq78i6fcU
+  - 5kvT1q1-4sU
+  - 8_65z555Me0
+  - GGsqHLwicbw
+  - J0kcsLXX1Ms
+  - Jc4pKeGLVXk
+  - L3gkpR4w8cM
+  - OI3j6mxdo1g
+  - QwhR65oSsdg
+  - SYel-mVSMAI
+  - UAIoIpefvxw
+  - ary963VdmqY
+  - eiI_4VBA-qA
+  - gHtKfp7cE0s
+  - h438PsMRRCY
+  - kitboNiSLq0
+  - lWCjIz1TlCE
+  - ocLOphmR8Vw
+  - oe-xUmRLcUg
+  - p27vx8Zf3wY
+  - pe4jLWTzpSE
+  - qMy7lKUo8aU
+  - q_cp1THQ52I
+  - qp5AXBHxQec
+  - rXrzlhITgjw
+  - wCOSLAxQoe8
+  - x_EFpu23jXw
+  - yMvbf35tgE0
+  - zQ-FNH5a01k
+  - 04axE4WidO8
+  - 3H7f-tV_OEM
+  - 3xKpyhFT8rU
+  - 4yFtZxw1jSc
+  - 6GE-fPyaph0
+  - 70jECxFfCSA
+  - 7xzIfsXYduY
+  - 833Nr36EBeo
+  - 8hzRbpUfawY
+  - Ay4aFtfdHJ8
+  - CE-249MNn5A
+  - FmMTdFxZowQ
+  - JiqEETm20Wo
+  - LGunZYI_p1c
+  - PElDsR8wv0E
+  - PrfDtuAn-3k
+  - S1zrViGgFm4
+  - U3zQHweg1eI
+  - X3xKwQcDKM0
+  - ZC8EbfLmO9o
+  - bqdnbCcx0QE
+  - d1MqX3GwrO0
+  - g-rZm9PtyPQ
+  - l8mlsOsMVYs
+  - mVkKOPNGvjA
+  - o2-_eUw4HG0
+  - ukVeZZLd1eA
+  - v68TUDCHSe8
+  - vucFkmTMO2o
+  - wOqrQZ1_4AI
+  - xcq2Gqn-cVw
+  - xqm7dC78xhs
+  - -wftJg6jm3E
+  - 0HHcIiQcDJc
+  - 0oQB0glVkv0
+  - 1Z4KAoIeq9c
+  - 3GprqnqZKA4
+  - 4-nL_hgTaUM
+  - 7MmG7xnFP20
+  - 8JgqaQCHDrE
+  - DRld0NJKUKw
+  - EkhvG6nFDUU
+  - H5p_2JTa1Os
+  - HlN8Gs9ddiQ
+  - Huv5wYwC3_o
+  - Ivnvn056Fbk
+  - Kf8CdiKvBuQ
+  - MkB2A4nmS3U
+  - PEhfJnm-gd4
+  - PmPohfZ3cl8
+  - QhvavBJ2-y4
+  - RdPyfLfq4iw
+  - RyQC_VLi2cg
+  - RyTkcgYojZM
+  - SbGR8C63szA
+  - XD0cyrBtBKA
+  - XbcuUJw4v8E
+  - dVbD9SpAjAw
+  - hz4wqAgr4Lc
+  - kTW9tXjh-NY
+  - qrItcRRlBg0
+  - svkYt81yBcE
+  - v1Pxhbl9I-Q
+  - zrdo3vZxZ-Y
+  - 0F91dwD9Gvg
+  - 1iMxrcBiYwc
+  - CB5BsNWSGQM
+  - CoLX69Llroc
+  - EIMXGa--6xo
+  - ESmPMPAUOJQ
+  - IEJTtbstxIY
+  - OdscGUlottI
+  - REFdmhRCsSQ
+  - Rj5K00W3P2g
+  - TeL--WeKQyY
+  - VDeVdNwe4Fo
+  - VYS1XAB2nLg
+  - VdvzKLjdd8c
+  - X0ubgNNHbX4
+  - XsHxv8i4npc
+  - ZXW0PVWzcEk
+  - _IxtobCktAQ
+  - dAnqZuCKhbI
+  - f6o0MecKxOU
+  - gxdOMn9veUk
+  - iLtzc8Rd3CU
+  - kmJRUTAU9gk
+  - phIZJo1n-4s
+  - qmgqpsnQZOI
+  - rDYc1I246_M
+  - rZxkT0dkfmg
+  - tbc50Cjlglg
+  - uSrYAzVADsw
+  - vT2axFFVD-E
+  - vrNnNTOHnz8
+  - zmoyANCY4To
+  - 0oVMcESmBns
+  - 24rPGjlpiM0
+  - 2j5QHVgwEf8
+  - 5ciTwCNs8uM
+  - 5tQmr_iYzBo
+  - AS9lz5LQdX8
+  - ATluhsIxtNg
+  - Glagv41bJoQ
+  - L2ep5v0zOZE
+  - M5E9KJHD2qA
+  - OWVMvV4gmIo
+  - Okd-T7qWDbU
+  - SGteSakwQPE
+  - WsoMrW7iGXE
+  - XnmYNO1eHtM
+  - _JPZaIcr90c
+  - aYXLMxjgH3s
+  - c-oGZXzpNR0
+  - dN1VnbEcGVE
+  - fRP6irpNVjM
+  - fnqOpoSfGMg
+  - ibfVoSWQpvo
+  - jqL3-LD-EJI
+  - kaW71ZyUX80
+  - nN8qe4wxo2Q
+  - oOa6H0OJRQM
+  - x_IrC_-zzYU
+  - y0C8vIeCrc0
+  - yquAL8CBldY
+  - zKk1uFHfIH8
+  - zzppQLDoswY
+  - -S230cttiTk
+  - 1PeFhfmlfy4
+  - 1xAFbNGMoa8
+  - 3PDaCQ_ZYVI
+  - 45Yh32XJHK0
+  - 56mS3ve6-7k
+  - DhAona29x2M
+  - FVfwQGa0pDw
+  - I1gTwhX2Abw
+  - MbdpOmzThpQ
+  - NEo3sN3mSCg
+  - QBqwipFt0Ww
+  - R-eJgOxN2L0
+  - TVS4VG_x_Tc
+  - T_SZrBmx2ys
+  - Twkyo0A09Q8
+  - We_LTbJQc7E
+  - YL2Eh58UVt8
+  - YSh6yDxtaPM
+  - aghnJOwld9g
+  - cUiyPOrOpvE
+  - eMbkVDRreIQ
+  - iQA5fr0QFBE
+  - j35oc5eDX_c
+  - m-ueyJXiShY
+  - oCRooQnMoSs
+  - otskR_OjuBU
+  - r6OXHhvKaSA
+  - sumXHpYvEJY
+  - uJsigNUGJ-A
+  - uijTIuD1-8Q
+  - xT_Z97Foaxs
+  - xajzAuQ1BfY
+  - 4RNjb6jeRcQ
+  - 4pIMEAKrqcY
+  - 50i9ooTMibU
+  - 5bw7poxVJ1E
+  - 87-dSjqiISI
+  - 8uQePHJeU_U
+  - Bsnz1TWAiXI
+  - C8cmVIIwIFc
+  - Cg3E0Y-CIuw
+  - F5MODFj28oU
+  - Gxe9mZnFlnk
+  - JW05O82Y7JY
+  - KfzGKoV2u9U
+  - OCECwvRdx58
+  - UO3sYlTF8AU
+  - X4BU2RSB1mM
+  - YK4gVWTZVBE
+  - bEu5SP5Y3nM
+  - gA3cF4U-0A4
+  - gwEmeb9RSk4
+  - hAXgUrec48k
+  - pYnp2_gJIoM
+  - quM3u9Jxthg
+  - rwVqygCjm4U
+  - w0Vg2PRGqG4
+  - w6PqH4B02nY
+  - w86znfBRKXU
+  - wtgggEGnMOo
+  - ygxmdkmtQeQ
+  - zoHNAwnKq7M
+  - zoabs7H2ZN8
+  - 20j7LcZ5xRY
+  - 3x2x8p6OzcE
+  - 4FIPSW38vCA
+  - 8CgSYj00Fxc
+  - 8RwNtCa6QMY
+  - 9fQvpFhr8eg
+  - Ct5yCkAxuis
+  - CyXYyRQl19o
+  - EVVdF8YPy1Y
+  - GgPtGMgzymQ
+  - IuUYRO7PRtw
+  - JjsUDvPkG5U
+  - KW2RvtWgBxU
+  - LEIG4xge52Y
+  - LkWSWopG-3M
+  - OwVg9IdNjvE
+  - RtOqV2nhYA4
+  - S0hg98ijQE4
+  - TSybO7VM9LI
+  - VvkYx4zEWNo
+  - Z7ZAjBof16g
+  - jEwrlRhRppI
+  - k5GuJ_UCELQ
+  - lL2pqw43RGU
+  - ltN_CXzo69o
+  - lyfNzr9Rza4
+  - nGzLMmKp3x4
+  - oCiaKS1psd8
+  - pr5-pzwukRc
+  - qSZzVDYIQDw
+  - rZKJf9T7jyI
+  - u-dtKs7S0H8
+  - vfmfM357Sdw
+  - wff--JzcHnQ
+  - yTyjCYMlfXg
+  - -LhSBH3BBFE
+  - 1EkKwnhpODI
+  - 5YYbZoIwpSM
+  - 86SrcnnJ6BY
+  - ALhb8nFaFgA
+  - CJrKkymdkGI
+  - FTPim_Wf_-E
+  - GmmH-SwAsAI
+  - HM7nw4a4ius
+  - L1HoQPBGV10
+  - OCT1l6JwXUM
+  - Q4rc_P31Oqo
+  - Qk73ilRRgmQ
+  - RWxkNhcZ2k8
+  - Va9VJFcaskg
+  - Vg-SrkZdhGU
+  - azzYS65sqks
+  - isv_6Hd1Iac
+  - jwZOoM4K1sM
+  - k3HbojWciwk
+  - kKKEr7tAfS0
+  - kmFsdM97xtY
+  - l_sxi2CRlJw
+  - mzAgY0QUtnc
+  - nbiRCgrrLnY
+  - qG-8xEz2MHo
+  - qNJNfA27HlI
+  - sMM47Gxz6hw
+  - uZt4c2yEETc
+  - wDxqmSA5Jf8
+  - zAuqAZzD0F4
+  - zKcW0O98XLQ
+  - -IdUUmp2OF0
+  - 05L105UVHHQ
+  - 15kus9CLg2s
+  - 2VkaK0_OkhM
+  - 2gKtsAA-gvo
+  - DGiDB6vI670
+  - FBDG7u5lOjk
+  - GYA4Y-j3-uQ
+  - Iv8tjaZ78sU
+  - J33KsBpt0aM
+  - L2KBFih0sZ0
+  - O80iR_TuC6E
+  - PnY0dzTE2CU
+  - RRok0Nr1t4k
+  - RgFwY9poHgg
+  - Sgb1Attfm-0
+  - TGXF66FB6bg
+  - cuXq-k__9lQ
+  - gRK-0UGny7A
+  - i0ocFwdAw8Q
+  - iiIvawtdQ4g
+  - k74zyEn_Z_0
+  - kPZh0ZZyZj0
+  - oTX505GdUvc
+  - pOpc2E2Zcjc
+  - rbvhf7Y0D1w
+  - wMM9VwcsO_Y
+  - xa0c5HHTuhM
+  - z7EHnm6_jAI
+  - 032wIsVv0hY
+  - 0pzF4_ltfJQ
+  - 547x4bIW1XU
+  - 5p1k7kqz3jw
+  - 6gEZ1iZEayI
+  - ALEeReC3u5Y
+  - FknfX8bvZMQ
+  - HEMVLhZJf60
+  - QH1d8RO7gME
+  - QIjiz7UI0qg
+  - SsyCNg4m3Mc
+  - VtpvdnEbXuc
+  - WBNLfHeml-o
+  - Z_FBT8ZDSmo
+  - Zg4r3uVDAC0
+  - _QTNEn4xasI
+  - _Ws3ydM8Gl4
+  - dp76e_qFMJ0
+  - ghJuzGvvUVo
+  - gyNtm1_ztTQ
+  - kJyV3zZPvCg
+  - mqrp8_a_Wy4
+  - mzZ1aw5QAEI
+  - sL6VFERzpXM
+  - t6bWomkB3u4
+  - tGoeqwH_nKc
+  - tWUkxvM8ppA
+  - wcoG_HprU4s
+  - ypTfNWlR5ls
+  - zNmrvurVcVE
+  - 05u3gmDm9iU
+  - 0aunMzuwpQc
+  - 0qqfSS97MN4
+  - 2Zq_QJK9Y_A
+  - 6nO2NHvAXe8
+  - C87ZOvvDjW4
+  - Ej0UIcAO1w4
+  - GtQhr-X3ers
+  - LS-7aBC_TwE
+  - Lr0mg6kqn_Q
+  - OSa7-XmCoAE
+  - PEE8G2ow3Uk
+  - VA6zjDN690s
+  - eAwidAAZAmw
+  - lFRKrBcs6kc
+  - mPEYAuKIcc0
+  - n3_gnxq-xw0
+  - pW2YL_n8Q_U
+  - rDrB048vduE
+  - vNUMzoWbhu4
+  - wJQw63QM2VE
+  - x6ndBMXapsU
+  - xCO6h_t_24Y
+  - xWrEk9MbvUc
+  - 5C23f7Gf8sA
+  - 7ntsJOLxcCA
+  - BVkGvkFsmjI
+  - DCqvHDb7vMQ
+  - EKTnSwrDfKI
+  - F4STyqtLekQ
+  - GVoo3nVVhkQ
+  - Gr2FoVttm7U
+  - Gwkcpf2hQYQ
+  - HW8NYczCCT8
+  - I3H31pG3_ss
+  - KnICbiC9744
+  - O2TSW44wwX4
+  - PEBfx67_jK4
+  - YWwRC0V6O9Y
+  - ZdlX4YGOwi8
+  - _cXnwpxUAHI
+  - aahJznxxEsE
+  - f_vagBe2NnM
+  - hNTsYUShvLU
+  - mjaIyRDmpTQ
+  - mk-kJx2yLYY
+  - nIPbC14HEIc
+  - tBezGmpYWyQ
+  - tIrzgxvByzI
+  - vbkD3fT93Nk
+  - zzovZGhewQY
+  - 0NAaES9J3BU
+  - 27Ssk_AeT2c
+  - 3A8Sl16vaMk
+  - 4USvXZ2rXV0
+  - 4WqkHFi7ac0
+  - 71dSQjjwEAE
+  - 7i0kvw2SoBA
+  - 8kcddHCwFPo
+  - DgmOTCpM-xo
+  - DrjbaXt-nTo
+  - F1Nd4MmLuDk
+  - FQWY2RndTPY
+  - Fim6_G4WK9c
+  - GTFCMi4zw2k
+  - IlSghUDu658
+  - JLcUHuHE05w
+  - K5XhO7o5QN0
+  - KR1rLZR7TKE
+  - Km8CXFWN-Qw
+  - LQul2ZvHyms
+  - Mt10mEk4pms
+  - ODuQCA88oY4
+  - P53x1OGdtcQ
+  - RVmijRAH-LE
+  - Sm7j35LRftI
+  - Z6DZTC22WwY
+  - ZvhT-y88kk8
+  - h3SAXeqVqo0
+  - hicSGNye4tY
+  - hwYzrSF9unk
+  - iJlsydO0zi0
+  - jZbaahoIbmo
+  - nkVrugu4yLY
+  - sWG32V4Mg0o
+  - vqHQZkH3erk
+  - wjmRLz3GDQY
+  - -MD6i-5aPhU
+  - 0FO10dH_3RU
+  - 3QeNPc3Z7Wg
+  - 3xEmPci_szw
+  - 5I-8i7twrwM
+  - Gdkv9sR-LTk
+  - IVwHZGAL7gM
+  - IcxaMf9ZVT8
+  - Jekd1ruohpw
+  - NOVuZAMVx6s
+  - UAJUXq-vX7c
+  - UEp6r5DzmVk
+  - Ud2SvQWkYm4
+  - WWNI0EdprOI
+  - WmHQNFtuxRk
+  - _J_isfR1y9E
+  - aMsjNgnx_Mc
+  - cJYDk8tClz0
+  - cTKqTifc0zk
+  - dlw6AQH4oI0
+  - epv1zgwHAhc
+  - l3iBO4oth04
+  - lXSsD_AK7tI
+  - m9OsimZI5vo
+  - ns_YcYn6wRc
+  - pn59xw1z9nE
+  - pqRe-u5utjo
+  - qWCEX5DDunQ
+  - r-FNcolHsg4
+  - r2GvPjrr2p0
+  - sby5qQuzD0M
+  - vhyv7HlC-X8
+  - xWVVo1OKG8g
+  - yzuyVgKSo-c
+  - -oqlmL6IOGI
+  - 5lLXzt9Hg-s
+  - 6GMAwcmWcpE
+  - 6MMB12vteKU
+  - A4HkWMOcYaQ
+  - CPgwMG87-xY
+  - CtcZlbLkedg
+  - Dkaf0fjfmXY
+  - EoQiLc1UbW4
+  - F5jWn5v2zmk
+  - HWpzOku7qC4
+  - Lm-oeLuJy00
+  - LyLwl4K7jag
+  - MOgFU3bc9s8
+  - N1sWj_tM7-8
+  - SI2FmsKfqXQ
+  - S_vtppaNxoc
+  - UB7US0zETmM
+  - URKZyGZ8NAo
+  - V5mB3IiL6nE
+  - Vswrm9dCGEE
+  - WQylr1iKII4
+  - YTn22lkCNjw
+  - dBTQi5kdfW0
+  - gHso-ZrQT50
+  - hCLLVqxpNCE
+  - iiExTTeuB2s
+  - j7lV6A5q-E8
+  - laZdg1mwRQY
+  - nh80a_lKljU
+  - pAIdwSnLXW4
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - B-pbpGhv3So
+  - INXD5osrkDo
+  - K1zFr7Lr1t0
+  - SotLyRb8XjE
+  - X3im5bF4KI0
+  - dBJry3tcX0Q
+  - k0QVcaw4A2w
+  - nE4mvAWZKXw
+  - -0Kcrcd2jRs
+  - CYUFLnzDsds
+  - KJBlo6X4Mm4
+  - MHrGENGDlX0
+  - Obr96z7UMQA
+  - Q-7KCRNLLzc
+  - X15kOTm_5lw
+  - bUfIDnislec
+  - gfUg6qWohTk
+  - kThGMgiprF4
+  - kzR3-s7-AGc
+  - qAcrDrEUnrY
+  - xIPc_XOEruE
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - CkwsP85USK8
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - KNmxPI86cZs
+  - Q8udY0uDYL8
+  - QCwGIpGf_dA
+  - SgzoTnar2ZA
+  - TbGqp7mdO04
+  - X8eBAjL2K3A
+  - ZyN6s-Avktg
+  - k6Qp78Hh5DI
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - ETYAa1v04e4
+  - ILSbK8RnGdI
+  - ItE7xQpkfMA
+  - Xx9zS1JzopM
+  - Y16z9PWl4ec
+  - b-Hbyii-HGA
+  - b1-c_ncmWXk
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - q7u41twiwZQ
+  - q9CKxBMxTlU
+  - wd6dkj6p3lM
+  - 3UCafeK-fac
+  - BK2HdRp4Oo0
+  - Eg9qeIh3vug
+  - K2ii1VBCOrs
+  - RFoEx4BK88w
+  - Ryn4JrEGLPQ
+  - XaA3qD1EAqg
+  - hMe5BgNxq1A
+  - iYOxPIq7IRg
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 3lx5ZQQPzTM
+  - BLYnBNOsxoI
+  - DrACRjoe4-c
+  - O9Sop7_Mxeg
+  - Okmz3oq8M_8
+  - PmSWYF67S28
+  - SYJu_y6WvEc
+  - WtunB3RhqBk
+  - Y2XDKeuSOA0
+  - YXzzuLcmE_o
+  - _t_1oXJgUzE
+  - a8sJQRxoXSU
+  - b9b_OFh6T7A
+  - hZoeX99CiPE
+  - mzyiuTEMSKU
+  - nYpcm5B64n4
+  - oozoFBkJRqI
+  - pkT2yYrvv-Q
+  - qSi4tbWQKZ0
+  - q_7LMlxolTg
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - vuuqoMs162A
+  - 4Q0INBkdMMQ
+  - 4VbmiMEs22c
+  - BdWvP-lbb68
+  - CHNnSFZ8m3Q
+  - HIuN3NzdSPs
+  - L4iPW1qvgqk
+  - MR4nJQ6qhuU
+  - TN9i9Ni0Xr4
+  - V2fp9aZXXS0
+  - YNHMNVLwy9c
+  - hpFDk29rtbw
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - qxFLyK_UM44
+  - 0qVlPcJp7c4
+  - 2W00ltW6lYc
+  - 2aOtn8E1gxg
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - A3XL1T5QL9s
+  - Pfse9GxqdAE
+  - Qdy4mFAPVgQ
+  - RU6G4Gz_Wwo
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - gZztPMkV9pQ
+  - hQaF64yk-N4
+  - ooEgWahEvEM
+  - r4ZW4389EeM
+  - sFAKG9SCyLs
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - zl89u5I7dXc
+  - -VJ6jNxq7RU
+  - 9SQdDVypn3M
+  - EkUiYeqF0do
+  - FnfrlT7Q1pc
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - Ts8Yh2DZA1Y
+  - XvEaa4f5N7w
+  - cQ4K399DTgI
+  - iTOsX-aMtrw
+  - uPDpvaAhhd4
+  - xBa5-FMWeWg
+  - 9VLvWvTEcPU
+  - BRvvpVLQpIY
+  - BfB4lVnL4CM
+  - GCUuXnj9OXs
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - U30qDyI84ks
+  - UnqnUvTt1zU
+  - Z7Ra8Wa-WMI
+  - yRmx06wpGsU
+  - 3H-WOkUhLjY
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - H1q02Fy0Zkc
+  - L9XvY0lU7A4
+  - RUeN5mitoAw
+  - UNf2qsX8uFc
+  - cWNVP4Ui22g
+  - cujcxjSm69g
+  - pA6ls-oHhX0
+  - qBMJr91Sn9U
+  - -yp3g7EeDqo
+  - 9cZ93q7rqcc
+  - A-PDoo2BXLQ
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - _FoW3uJ8uw0
+  - nRQSfBhd7FE
+  - r19LbSZqi84
+  - t-ezOLT2Kv0
+  - uorBPf4LO6M
+  - 4epJ5d9ktG0
+  - 5ZK50rIFyL4
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - SmmoMjLXHyo
+  - Vfgh5XzmN9s
+  - WHR8Ms4OJvE
+  - ePiZNQgLTMw
+  - tdYM_Tp5C6c
+  - tlvT5GTulFM
+  - xg_CijWVRrI
+  - D3kQb4cWuU4
+  - Hu-rVZVSzxs
+  - I54Ef4EjF9A
+  - M8YRrW39_7Q
+  - NlS-oHFah-Q
+  - WprPdJKfaGk
+  - giw0IDYaH-Y
+  - i8DTrFLWHIQ
+  - o0qP8bxQPyA
+  - tJeI51crrvs
+  - ym7W3in6MEQ
+  - 04pdpzHqdWM
+  - GS6s6skiNe8
+  - KxV8I_YyiaY
+  - Y3qanM53ul4
+  - aYAmtU72d9g
+  - moVynuxM4fc
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - EAJ2vt8wUbY
+  - G_gm5bOgIQM
+  - HALf3esHQJ0
+  - Mny7CVbnQVs
+  - SqBF2EA7EYc
+  - _4b9Vs_v1P4
+  - bJ45bcexK6o
+  - eO8W1pWRJ1E
+  - fRWed_3zyaI
+  - j8NY7oMnnRU
+  - lHWlTYe1_Rk
+  - wuFRt2HD2So
+  - xWXBfON8YBY
+  - 0w10MODyoz0
+  - 6OfPQBBCi8Y
+  - IYni6AfrkAY
+  - LguCWBwS8Dg
+  - bYq0Cp4tyx4
+  - iAlA4gFHdO8
+  - jdo843M-oCo
+  - oe1gG2xAE9A
+  - p-jIAjWbJbc
+  - pTRvQL0Wdlg
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 2DX_U89ocX8
+  - 67RpDNWRPDU
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - KosAPIzhNE8
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - TpgSaDU1PcA
+  - YedsbnVmjjM
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - jAfeRH7aOUk
+  - k5mmudlTLcw
+  - l0GCECJxCZY
+  - oS51Geg7XJ4
+  - rfGi8W9j9gQ
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - ZrJ2QpZZxlI
+  - oatsxK5Q_cw
+  - sLYw8VdVGbw
+  - tMlpDXwYi6U
+  - zaVgGO7OVsI
+  - 0CAYlI89MfY
+  - 6N0sCftmmT4
+  - IqXOWtwEeeM
+  - Tf6_04bRw-Y
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:24:30.607127Z'
+    usd: 0.251716519999988
+classes:
+- name: Leg Lock Mastery
+  image_url: https://images.pexels.com/photos/8612009/pexels-photo-8612009.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Deep dive into heel hooks, ashi garami, and modern leg-lock progressions.
+    Learn entries, positioning, and finishing mechanics from fundamental to competition-ready.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Scramble & Transitions
+  image_url: https://images.pexels.com/photos/29956727/pexels-photo-29956727.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master explosive movement and weight distribution in scrambles and
+    guard recovery. Build athleticism and timing for transitions between positions.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Guard Passing Drills
+  image_url: https://images.pexels.com/photos/8612465/pexels-photo-8612465.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Systematic progressions for breaking guards and advancing position.
+    Drill pressure mechanics, hand placement, and hip movement for safe, technical
+    passing.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Back Control & Finishes
+  image_url: https://images.pexels.com/photos/6765021/pexels-photo-6765021.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Achieve and maintain back control; explore hooks, seatbelt control,
+    and rear naked choke finishes. Build the foundation for one of grappling's most
+    dominant positions.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Water bottle
+  image_url: https://upload.wikimedia.org/wikipedia/commons/4/45/Metal_Water_Bottles.jpeg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

@@ -46,12 +46,11 @@ class ImageEditService:
         *,
         slot: ImageSlot,
         palette: ColorPalette,
-        change: str,
         model: str = IMAGE_EDIT_MODEL,
     ) -> str:
-        """Author the edit instruction for ``slot`` from the requested
-        ``change``, grounded in the brand brief + palette. Returns the bare
-        instruction string (the change only)."""
+        """Author the edit instruction for ``slot`` from the run's requested
+        change (``run_ctx.overwrite_specs.specs``), grounded in the brand brief
+        + palette. Returns the bare instruction string (the change only)."""
         template = IMAGE_EDIT_PROMPT_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
         palette_summary = "\n".join(
@@ -63,7 +62,7 @@ class ImageEditService:
             short=design.short_desc,
             palette=palette_summary,
             subject=slot.description,
-            change=change,
+            change=run_ctx.overwrite_specs.specs,
         )
         result = await self._llm.complete_structured(
             [{"role": "user", "content": prompt}],

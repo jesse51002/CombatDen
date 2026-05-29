@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/remove_video_dialog.dart';
+import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/video_curation_dialog.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 
 /// Compact video card for the horizontal carousels: thumbnail, creator
@@ -11,6 +11,10 @@ import 'package:app_management/shared/widgets/app_outline_button.dart';
 ///
 /// [showEdit] adds an Edit action next to Remove for the gym's own
 /// videos; the live feed leaves it off (a pulled video can't be edited).
+///
+/// [rejected] flips the action to a green "Keep this video" (the tile is one
+/// the scan rejected, shown in the rejected section so the admin can keep it
+/// back) instead of the red Remove.
 class VideoTile extends StatelessWidget {
   final ImageProvider thumbnail;
   final ImageProvider avatar;
@@ -18,6 +22,7 @@ class VideoTile extends StatelessWidget {
   final String meta;
   final String? pillLabel;
   final bool showEdit;
+  final bool rejected;
 
   const VideoTile({
     super.key,
@@ -27,6 +32,7 @@ class VideoTile extends StatelessWidget {
     required this.meta,
     this.pillLabel,
     this.showEdit = false,
+    this.rejected = false,
   });
 
   static const double _kWidth = 280;
@@ -47,7 +53,11 @@ class VideoTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingLarge,
           children: [
-            _Thumbnail(image: thumbnail, pillLabel: pillLabel),
+            _Thumbnail(
+              image: thumbnail,
+              pillLabel: pillLabel,
+              rejected: rejected,
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 DesignConstants.spacingMedium,
@@ -62,10 +72,14 @@ class VideoTile extends StatelessWidget {
                   _Info(avatar: avatar, title: title, meta: meta),
                   _Actions(
                     showEdit: showEdit,
-                    onRemove: () => RemoveVideoDialog.show(
+                    rejected: rejected,
+                    onPrimary: () => VideoCurationDialog.show(
                       context,
                       videoTitle: title,
-                      teachAgent: !showEdit,
+                      teachAgent: rejected || !showEdit,
+                      mode: rejected
+                          ? VideoCurationMode.keep
+                          : VideoCurationMode.remove,
                     ),
                   ),
                 ],
@@ -81,8 +95,13 @@ class VideoTile extends StatelessWidget {
 class _Thumbnail extends StatelessWidget {
   final ImageProvider image;
   final String? pillLabel;
+  final bool rejected;
 
-  const _Thumbnail({required this.image, required this.pillLabel});
+  const _Thumbnail({
+    required this.image,
+    required this.pillLabel,
+    required this.rejected,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +115,18 @@ class _Thumbnail extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => ColoredBox(color: DesignConstants.card),
           ),
-          if (pillLabel != null)
+          // A rejected tile takes the corner marker (solid red) so it's clear
+          // at a glance; otherwise show the optional content pill.
+          if (rejected)
+            const Positioned(
+              top: DesignConstants.spacingMedium,
+              left: DesignConstants.spacingMedium,
+              child: _Pill(
+                label: 'Rejected',
+                color: DesignConstants.badRed,
+              ),
+            )
+          else if (pillLabel != null)
             Positioned(
               top: DesignConstants.spacingMedium,
               left: DesignConstants.spacingMedium,
@@ -110,8 +140,9 @@ class _Thumbnail extends StatelessWidget {
 
 class _Pill extends StatelessWidget {
   final String label;
+  final Color color;
 
-  const _Pill({required this.label});
+  const _Pill({required this.label, this.color = DesignConstants.primaryColor});
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +152,7 @@ class _Pill extends StatelessWidget {
         vertical: DesignConstants.spacingTiny,
       ),
       decoration: BoxDecoration(
-        color: DesignConstants.primaryColor,
+        color: color,
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       ),
       child: Text(
@@ -189,13 +220,31 @@ class _Info extends StatelessWidget {
 
 class _Actions extends StatelessWidget {
   final bool showEdit;
-  final VoidCallback onRemove;
+  final bool rejected;
+  final VoidCallback onPrimary;
 
-  const _Actions({required this.showEdit, required this.onRemove});
+  const _Actions({
+    required this.showEdit,
+    required this.rejected,
+    required this.onPrimary,
+  });
 
   @override
   Widget build(BuildContext context) {
-    if (!showEdit) return _RemoveButton(onPressed: onRemove);
+    if (rejected) {
+      return _ActionButton(
+        label: 'Keep this video',
+        color: DesignConstants.goodGreen,
+        onPressed: onPrimary,
+      );
+    }
+    if (!showEdit) {
+      return _ActionButton(
+        label: 'Remove',
+        color: DesignConstants.redDark,
+        onPressed: onPrimary,
+      );
+    }
     return Row(
       spacing: DesignConstants.spacingMedium,
       children: [
@@ -206,23 +255,35 @@ class _Actions extends StatelessWidget {
             onPressed: () => debugPrint('TODO: edit video'),
           ),
         ),
-        Expanded(child: _RemoveButton(onPressed: onRemove)),
+        Expanded(
+          child: _ActionButton(
+            label: 'Remove',
+            color: DesignConstants.redDark,
+            onPressed: onPrimary,
+          ),
+        ),
       ],
     );
   }
 }
 
-class _RemoveButton extends StatelessWidget {
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final Color color;
   final VoidCallback onPressed;
 
-  const _RemoveButton({required this.onPressed});
+  const _ActionButton({
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: DesignConstants.redDark,
+        backgroundColor: color,
         foregroundColor: DesignConstants.text,
         elevation: 0,
         padding: const EdgeInsets.symmetric(
@@ -233,7 +294,7 @@ class _RemoveButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
         ),
       ),
-      child: Text('Remove', style: DesignConstants.h3),
+      child: Text(label, style: DesignConstants.h3),
     );
   }
 }

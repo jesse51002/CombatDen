@@ -1,17 +1,403 @@
 gym_id: pilates_boxing
 gym_type:
 - pilates_boxing
-theme: ZZUndonePilatesBoxing
+theme: PilatesBoxing
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational pilates boxing content for
-      gym members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable pilates boxing sources.
-    avoid_desc: Anything not about pilates boxing; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Pilates boxing — reformer/mat pilates spliced with non-contact
+      boxing rounds: controlled pilates sets alternating with footwork, combinations
+      and bag/shadow work — plus the enjoyable side: instructor vlogs and "day in
+      the life", studio behind-the-scenes, what a class is really like, aesthetic
+      class edits, transformations, and interviews.'
+    short_avoid_desc: No plain pilates with no boxing, no contact sparring or pro/amateur
+      fight footage (this is non-contact), and no "fighter abs in X days" clickbait.
+      Skip "pilates vs boxing" framings and "pilates is useless / boxing cardio is
+      fake" debate clips. (Fun vlogs, studio tours, class edits, and interviews are
+      welcome.)
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and crossover content for members who want pilates
+      with a sharper edge — plus the fun, human side, so it's a feed members
+      enjoy, not just a how-to library.
+
+      ## Pilates boxing technique & classes
+      - Reformer and mat pilates work: core, glute and leg series, controlled
+        tempo, breath and posture
+      - Non-contact boxing rounds: stance and footwork, jab-cross-hook-uppercut
+        combinations, slips and rolls, shadow boxing and heavy-bag work
+      - How the two halves connect — hips, breath, and posture as shared
+        foundations
+      - Follow-along boxing-pilates conditioning rounds and pilates technique
+        that supports the boxing
+      - How to structure a session that alternates the carriage and the gloves
+      - Full-length follow-along crossover classes and technique breakdowns
+        from credible coaches
+
+      ## The fun & human side
+      - Instructor vlogs and "day in the life" of a pilates boxing coach
+      - Studio behind-the-scenes and "what a pilates boxing class is really like"
+      - Relatable class humour and moments
+      - Aesthetic bag-and-carriage class edits
+      - Before/after and "30 days of pilates boxing" transformation stories
+      - Instructor interviews on the crossover between pilates and boxing
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about pilates boxing; off-topic, genuinely low-quality,
+      or clickbait videos.
+
+      ## Reject
+      - Plain pilates classes with no boxing element
+      - Contact sparring, amateur/pro fight footage, and street-fight /
+        self-defense "one punch knockout" fantasy
+      - Generic "boxing HIIT / metcon" workouts with no pilates principles
+        mislabeled as pilates boxing
+      - Clickbait ("fighter abs in 7 days", "snatched in 2 weeks"), scams,
+        and misinformation
+      - "Pilates vs boxing / which is better" cross-discipline framings
+      - "Pilates is useless / boxing cardio is fake" debate or reaction rage-bait
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, class edit, or
+      entertaining — fun and creator content is wanted.
+  queries:
+  - pilates boxing full class follow along
+  - pilates and boxing fusion workout
+  - boxing pilates full body class
+  - non contact boxing pilates rounds
+  - shadow boxing and pilates core class
+  - boxing fundamentals stance and footwork for fitness
+  - jab cross hook uppercut combinations tutorial
+  - heavy bag boxing rounds follow along
+  - beginner pilates boxing class
+  - how to structure pilates and boxing session
+  - pilates boxing form cues and common mistakes
+  - day in the life of a pilates boxing instructor
+  - what a pilates boxing class is really like
+  - pilates boxing studio behind the scenes
+  - 30 days of pilates boxing transformation results
+  - relatable pilates boxing class moments funny
+  - aesthetic pilates boxing class edit
+  - first pilates boxing class honest review vlog
+  - pilates boxing before and after results story
+  - pilates boxing instructor interview on the crossover
+  good_video_ids:
+  - Sk_wTsIeJX8
+  - WVB2ATaLJ6U
+  - OeedpzLRe2E
+  - DD9w2ZDdGN4
+  - s5FSQWddVxI
+  - lokn0miZSV8
+  - 4hO-MXUo56I
+  - wgYcAjoTLMI
+  - r1zD8STM6nc
+  - tTuLJbQNk00
+  - WnWaqeisF-c
+  - 1Daic2lJank
+  - RpFIQWkceJA
+  - makaA7RPC-U
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 1hC3_-c5XYk
+  - 9a8nsUPtOlI
+  - INXD5osrkDo
+  - RFsNmv-Z5UU
+  - URYaOI4kwnk
+  - bgB91vVONcU
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - nTzjzMoJpGk
+  - -Ra5YzvW9rc
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - D_AvOKr8ncE
+  - JYPzPIA9F6o
+  - KJBlo6X4Mm4
+  - Ne8yvlyiO-s
+  - Q-7KCRNLLzc
+  - YJHW_ZI8aIc
+  - byXfcfeiQeA
+  - gD_g7pSZg90
+  - kThGMgiprF4
+  - p61nsi42twU
+  - qT9XWi5z9Zo
+  - 2mjc6AdpPpw
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - NB3BF1YSvmk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - tYbDHLYrlbc
+  - udo0RzY-9Cg
+  - xI82OUlb-T0
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - 9R7wWh6GF24
+  - ItE7xQpkfMA
+  - L2JdM3wzdxQ
+  - Ocii2spoGIQ
+  - ftNsri_7CbQ
+  - iK_h-2kot6s
+  - kiPkodTP1Z4
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - qlzP9QyUckY
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - xJ_ZuU5127I
+  - 0NXJVAILuRY
+  - 1E2WEsXqVTE
+  - 1QxRih653nY
+  - 6IcYWpJ1xes
+  - 6TjXPRkXx9c
+  - 81v0ih2LxyE
+  - BK2HdRp4Oo0
+  - Bp_QVO7kYtg
+  - C25MKm9jN1Y
+  - Cq_Nuo8ilak
+  - FQEBVY-pjOw
+  - LdhIhIEtsRo
+  - Sbiqni-nJsk
+  - XaA3qD1EAqg
+  - YjleTnfeEAs
+  - di8QaNIXR1E
+  - dnRJxbdUa_M
+  - jSH5OeIUzU4
+  - mS_yuOfyNIM
+  - nky4BpWiwew
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - OT-1mQSE3lw
+  - SYJu_y6WvEc
+  - Sas9eBPTYBI
+  - YXzzuLcmE_o
+  - a0cVuDMgqXM
+  - aTOAdXjmdd4
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - yyu6iH1Bdug
+  - BdWvP-lbb68
+  - KMliGnl7uVo
+  - KYuSjvR6W9U
+  - TN9i9Ni0Xr4
+  - TgyBVsdbqKM
+  - YNHMNVLwy9c
+  - _J1vKIXj6JA
+  - mLTqcadk8Bw
+  - rxNtthY7e4s
+  - uKqB5cruu4U
+  - wTUTkhVg3DU
+  - 3ONb6S8JRz4
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - 71nmi6nGcrY
+  - HZDVa0LDvJE
+  - LUA66RbrRSA
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - Xwdc2bfL6YI
+  - _kDF7vZWMoQ
+  - f4Hyy1W1F8Q
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - q2gvY0KFwmA
+  - w4mdKa97ptM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - 4H-qbzvL6Hs
+  - HWAOifKGLiE
+  - KO2sWBAhZjg
+  - Mlgs4_54q8Y
+  - O8hHcvDfDOY
+  - cQ4K399DTgI
+  - clD9Yd_Mi4c
+  - qL7Nlexje-M
+  - tYJJyYUrK4c
+  - vLA7IMCpjZI
+  - vm6ZoKRLGh8
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - MM0Q35Pcqa0
+  - XW34jjW3F1o
+  - Z7Ra8Wa-WMI
+  - _ccuRYoMN6g
+  - bKtdCS-7Scg
+  - bLr0h7cEIKc
+  - cdPejPpoMFo
+  - r_VHltdyvv4
+  - 6oZfhhEHXU8
+  - 9ulMbvUrYZg
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - cujcxjSm69g
+  - gPry3-OomII
+  - p8cfpHBoUus
+  - pA6ls-oHhX0
+  - yduD5IDUF-c
+  - BIisTf1oHdE
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - bN1Ec5zBkaM
+  - nRQSfBhd7FE
+  - oaUrYcoPnlc
+  - t-ezOLT2Kv0
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - DS0TpU1m4Es
+  - FSVcmMd9bR4
+  - I6Cy-2RvkuM
+  - JQaeGoQox0k
+  - QkcTzGvH-i0
+  - YKoXfvPIVTQ
+  - 716e30A053U
+  - CBnLOlVT4yQ
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - WprPdJKfaGk
+  - aidlHNTTk3c
+  - ezOsco9legc
+  - tJeI51crrvs
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - QsdXRoBiPBI
+  - bLnjytMXv_A
+  - moVynuxM4fc
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - FYngyNu1StA
+  - GWV1Mk9JlsY
+  - LBOFE-DWrD8
+  - NAsRGSoj0tg
+  - Oy-LygqBCGo
+  - eO8W1pWRJ1E
+  - haX25zafqKo
+  - xllY8J5G8d4
+  - Bd4gxNpbJGE
+  - CEYvLDKvXQ8
+  - Fk-kT2hb31U
+  - IYni6AfrkAY
+  - If9W3kQa254
+  - J-LMiZHWdbU
+  - KF3D-Q0C6-c
+  - TGejJOLjqZ8
+  - jdo843M-oCo
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - kEiPal3RrKw
+  - l0GCECJxCZY
+  - qrXgcdOow10
+  - rfGi8W9j9gQ
+  - s8u4PCyTGMo
+  - vx6RkgoxzgQ
+  - 0Io61Cal5iI
+  - 0O9bmFhtrHY
+  - 7x7T0RuG5CM
+  - A7LOitI_aa0
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - MCGa9qP_Bo8
+  - l1Za5yBML7M
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - 8R53vXBP_v0
+  - CAYNs6eWcg0
+  - F1ebv9IH7Tc
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - KZlcGcWJx4Q
+  - P91ECY3eLvQ
+  - Y19LuuVj-VE
+  - cnjVc1ctzYs
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  - qX4ejoqu5_4
+  - wS7NIu01KrM
+  scan_costs:
+  - at: '2026-05-29T16:27:27.077629Z'
+    usd: 0.07394260000000763
+classes:
+- name: Core & Combinations
+  image_url: https://images.pexels.com/photos/25599825/pexels-photo-25599825.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: A foundational class blending pilates core series with basic boxing
+    footwork and jab-cross combinations.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Flow & Impact
+  image_url: https://images.pexels.com/photos/18136885/pexels-photo-18136885.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Reformer pilates flowing into dynamic boxing rounds that emphasize
+    balance, breath and body awareness.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Strength Rounds
+  image_url: https://images.pexels.com/photos/18136886/pexels-photo-18136886.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Pilates conditioning circuits paired with heavy-bag work to build functional
+    strength and explosive power.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Mat to Mitts
+  image_url: https://images.pexels.com/photos/18136888/pexels-photo-18136888.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Classical pilates mat sequences transitioning into shadow boxing and
+    slips/rolls for rhythm and control.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Grip socks
+  image_url: https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

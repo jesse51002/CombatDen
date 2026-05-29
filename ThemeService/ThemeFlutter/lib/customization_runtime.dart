@@ -81,6 +81,13 @@ class ThemeRuntime {
   static String? get activeDesignId =>
       getIt<ThemeService>().activeDesignId;
 
+  /// The active design's human name (e.g. "Apex MMA") from the loaded
+  /// customization — what to title a gym/brand surface with. Null until a
+  /// design is loaded. Distinct from the app/brand name
+  /// ([ThemeConfig.displayName]), which is stable across an app's designs.
+  static String? get activeDesignName =>
+      getIt<ThemeService>().current?.designName;
+
   /// Switches the live style. Returns whether the switch took
   /// effect. Never throws.
   static Future<bool> selectDesign(String designId) async {

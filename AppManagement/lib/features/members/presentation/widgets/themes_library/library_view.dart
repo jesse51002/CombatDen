@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
+import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_search_bar.dart';
 import 'package:app_management/features/members/presentation/widgets/themes_library/library_card.dart';
 import 'package:app_management/shared/widgets/fill_grid.dart';
@@ -40,6 +41,9 @@ class _LibraryViewState extends State<LibraryView> {
 
   void _pullUntilDone() {
     if (!mounted) return;
+    // The library is the gym-select screen — it deliberately does NOT
+    // auto-select a gym; picking a card does (via `_pick`). (The phone-mode
+    // side pane reconciles a deep-linked theme to its gym; the library doesn't.)
     if (!_pager.isLoading && _pager.hasMore) {
       _pager.loadMore();
     }
@@ -66,8 +70,9 @@ class _LibraryViewState extends State<LibraryView> {
     return items.where((s) => s.gymType == _selected).toList();
   }
 
-  void _pick(String designId) {
-    ThemeRuntime.selectDesign(designId);
+  void _pick(ThemeStyle style) {
+    // Records the gym globally (rewards/classes/spec) AND brands with its theme.
+    selectedGym.selectStyle(style);
     widget.onPicked();
   }
 
@@ -131,7 +136,7 @@ class _Grid extends StatelessWidget {
   final List<ThemeStyle> visible;
   final bool isLoading;
   final bool errored;
-  final ValueChanged<String> onPick;
+  final ValueChanged<ThemeStyle> onPick;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +145,8 @@ class _Grid extends StatelessWidget {
         text: isLoading
             ? 'Loading themes…'
             : errored
-                ? 'Could not reach the customization service.'
+                ? 'Could not reach the video service (the gym browser, '
+                      'port 8002).'
                 : 'No themes match this filter.',
       );
     }
@@ -156,7 +162,7 @@ class _Grid extends StatelessWidget {
                 LibraryCard(
                   style: s,
                   isActive: s.id == active,
-                  onTap: () => onPick(s.id),
+                  onTap: () => onPick(s),
                 ),
             ],
           ),

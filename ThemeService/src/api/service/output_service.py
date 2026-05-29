@@ -18,6 +18,7 @@ process holds one process-scoped instance (see
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -45,6 +46,14 @@ IMAGE_SUFFIX = ".png"
 ICON_SUFFIX = ".svg"
 # The image slot a style picker shows as each style's card art.
 CELEBRATION_SLOT = "celebration_image"
+
+
+def _content_version(path: Path) -> str:
+    """Short sha256 of a file's bytes — the cache-bust ``?v=`` token (matches
+    the writer's stamp). ``""`` if the file is absent (nothing to fingerprint)."""
+    if not path.is_file():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
 
 # snake_case ids (mirrors schema.output.Output's app/slot rule).
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -256,13 +265,27 @@ class OutputService:
                 output = await self.load(app_id, run_id)
             except (NotFoundError, InvalidRunError):
                 continue
+            # Carry the celebration image's content fingerprint as a `?v=`
+            # cache-buster (same token the run's config uses), so a picker's
+            # card art refreshes when the image is regenerated instead of
+            # sitting on the cached copy. Use the stamped/backfilled slot
+            # version when declared; otherwise hash the on-disk PNG on the spot
+            # (the file is guaranteed present — it's how this style qualified),
+            # so the token is ALWAYS there.
+            declared = output.image_set.images.get(CELEBRATION_SLOT)
+            version = (
+                declared.version
+                if declared and declared.version
+                else _content_version(celebration)
+            )
+            celebration_image = f"/apps/{app_id}/{run_id}/images/{CELEBRATION_SLOT}"
+            if version:
+                celebration_image = f"{celebration_image}?v={version}"
             styles.append(
                 StyleSummary(
                     id=run_id,
                     display_name=output.design_name,
-                    celebration_image=(
-                        f"/apps/{app_id}/{run_id}/images/{CELEBRATION_SLOT}"
-                    ),
+                    celebration_image=celebration_image,
                 )
             )
         styles.sort(key=lambda s: s.display_name)

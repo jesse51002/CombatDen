@@ -4,6 +4,7 @@ import 'package:theme_flutter/showcase/rewards/mock_points_store.dart';
 import 'package:theme_flutter/showcase/rewards/points_headline.dart';
 import 'package:theme_flutter/showcase/rewards/rewards_tabs.dart';
 import 'package:theme_flutter/showcase/rewards/store_grid.dart';
+import 'package:theme_flutter/showcase/showcase_content.dart';
 import 'package:theme_flutter/showcase/showcase_tokens.dart';
 import 'package:theme_flutter/showcase/support/showcase_bottom_nav.dart';
 import 'package:theme_flutter/showcase/support/showcase_scaffold.dart';
@@ -14,6 +15,9 @@ import 'package:theme_flutter/showcase/support/showcase_topbar.dart';
 /// (your points balance), and the two-column store of redeemable items.
 /// Static, non-scrolling surface; [loop] / [onCycleComplete] accepted for the
 /// uniform API but unused. [gymName] / [gymLogo] are the host's gym identity.
+/// When [rewards] is non-null, the store renders the selected gym's real
+/// rewards instead of the bundled sample items (the points/streak chrome stays
+/// sample — that's per-member, not gym data).
 class RewardsShowcase extends StatelessWidget {
   const RewardsShowcase({
     super.key,
@@ -21,16 +25,29 @@ class RewardsShowcase extends StatelessWidget {
     this.onCycleComplete,
     this.gymName = 'Your Gym',
     this.gymLogo,
+    this.rewards,
   });
 
   final bool loop;
   final VoidCallback? onCycleComplete;
   final String gymName;
   final ImageProvider? gymLogo;
+  final List<ShowcaseReward>? rewards;
 
   @override
   Widget build(BuildContext context) {
     const data = showcasePointsStoreData;
+    final items = (rewards != null && rewards!.isNotEmpty)
+        ? [
+            for (final r in rewards!)
+              ShowcasePointsStoreItem(
+                title: r.title,
+                priceLabel: r.priceLabel,
+                pointsCost: r.pointsCost,
+                imageUrl: r.imageUrl,
+              ),
+          ]
+        : data.items;
     return ShowcaseScaffold(
       horizontalPadding: ShowcasePadding.none,
       bottomNav: const ShowcaseBottomNav(selected: ShowcaseNavTab.reward),
@@ -57,7 +74,7 @@ class RewardsShowcase extends StatelessWidget {
               ),
               const RewardsTabs(active: RewardsTab.pointsStore),
               PointsHeadline(points: data.totalPoints),
-              StoreGrid(items: data.items),
+              StoreGrid(items: items),
             ],
           ),
         ),

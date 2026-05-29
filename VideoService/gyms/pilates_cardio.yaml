@@ -1,17 +1,646 @@
 gym_id: pilates_cardio
 gym_type:
 - pilates_cardio
-theme: ZZUndonePilatesCardio
+theme: PilatesCardio
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational pilates cardio content for
-      gym members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable pilates cardio sources.
-    avoid_desc: Anything not about pilates cardio; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Cardio pilates — reformer work spliced with jumpboard plyometric
+      intervals, so controlled pilates sets and low-impact cardio bursts share one
+      booking — plus the enjoyable side: instructor vlogs and "day in the life", studio
+      behind-the-scenes, what a jumpboard class is really like, aesthetic class edits,
+      transformations, and interviews.'
+    short_avoid_desc: No plain pilates with no cardio or high-impact bootcamp/HIIT
+      mislabeled as pilates cardio, no reckless jump landings with no form coaching,
+      and no "burn 500 calories in X minutes" clickbait. Skip "pilates vs cardio"
+      framings and "pilates is not real cardio / is useless" debate clips. (Fun vlogs,
+      studio tours, class edits, and interviews are welcome.)
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and follow-along content for cardio pilates members who
+      want both the method and a real cardio engine — plus the fun, human side,
+      so it's a feed members enjoy, not just a how-to library.
+
+      ## Reformer & jumpboard technique
+      - Reformer pilates work: footwork, core, leg and glute series, controlled tempo
+      - Jumpboard plyometric intervals: setup, spring settings, safe landing mechanics
+      - Interval structure: pilates set then cardio burst, and full cardio-pilates flows
+      - Low-impact cardio-pilates mat alternatives for studios without a jumpboard
+      - Full-length follow-along reformer-cardio classes and technique breakdowns from
+        credible instructors
+
+      ## The fun & human side
+      - Instructor vlogs and "day in the life" of a cardio pilates teacher
+      - Studio behind-the-scenes and "what a jumpboard pilates class is really like"
+      - Relatable cardio-pilates humour and class moments, aesthetic class edits
+      - Before/after and "30 days of cardio pilates" transformation stories
+      - Teacher interviews; the tone is energetic but controlled
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about cardio / jumpboard pilates; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Plain pilates classes with no cardio element
+      - High-impact "bootcamp / HIIT / metcon" or running/spin workouts with no
+        pilates principles mislabeled as pilates cardio
+      - Jump sequences with reckless landings and no form coaching
+      - Clickbait ("burn 500 calories in 20 minutes", "torch fat fast") and scams
+        or misinformation
+      - "Pilates vs cardio / vs HIIT which is better" cross-discipline framings
+      - "Pilates is not real cardio / is useless" debate or reaction rage-bait
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, class edit, or entertaining —
+      fun and creator content is wanted.
+  queries:
+  - cardio pilates full class follow along
+  - reformer jumpboard pilates class
+  - jumpboard pilates technique tutorial
+  - pilates cardio full body workout
+  - jumpboard landing mechanics and safety
+  - beginner cardio pilates class
+  - jumpboard pilates spring settings explained
+  - cardio pilates interval structure explained
+  - low impact cardio pilates mat alternative
+  - cardio pilates form cues and common mistakes
+  - jumpboard pilates for runners cross training
+  - day in the life of a cardio pilates instructor
+  - what a jumpboard pilates class is really like
+  - cardio pilates studio behind the scenes
+  - 30 days of cardio pilates transformation results
+  - relatable jumpboard pilates class moments funny
+  - aesthetic cardio pilates class edit
+  - first jumpboard pilates class honest review vlog
+  - cardio pilates before and after results story
+  - cardio pilates instructor interview jumpboard
+  good_video_ids:
+  - C2HX2pNbUCM
+  - MB4D_0xJoa8
+  - ObCDRGuXGUA
+  - Wtg9PjcJ_Mc
+  - bkiatp2muRs
+  - pWwbK1wq0wc
+  - paRmHPWwb50
+  - EilzExU1y2g
+  - HYsNF4LZhE4
+  - MDDuE_vdVFo
+  - ODJJuGAXhg8
+  - P921J1Fjoug
+  - gD_g7pSZg90
+  - qVw3Okuknm8
+  - 2mjc6AdpPpw
+  - 9WPe2-HjS7w
+  - AjWoaUBe80c
+  - Jc6aS-_1jLw
+  - LXFfLDPgvOs
+  - L_7ErRD6lr8
+  - VBEj7RosCUE
+  - XF2u7pGDnxo
+  - rBppVGejlGk
+  - uEjpE8eroHE
+  - uoX7rCEaN0U
+  - -tW7Z5-wQFo
+  - 3K4ydbybufM
+  - 5SIRjXFm5Jc
+  - amCAXuyxqgU
+  - lokn0miZSV8
+  - qoxHy7N4Vog
+  - -jtcA7ZjTAU
+  - 0NXJVAILuRY
+  - 2gQ5DeT2Wlo
+  - 9v6mYwGxnuE
+  - LrB4CjpC-F8
+  - dnRJxbdUa_M
+  - g7mRrWDMYHU
+  - n7HXRGOB-9U
+  - rmX5fAQxEuk
+  - 2PudJur_12E
+  - Fkos6uxeZKM
+  - c7e2tNr3nlc
+  - nGYXHtLBpDI
+  - wgYcAjoTLMI
+  - 0O0SUY70NRE
+  - 2HmFyBNFut8
+  - EQpY2H7rvoM
+  - SiwKVo_sL28
+  - Ww-14vcwCQw
+  - aWqboZnnD3w
+  - -Qx_FRqNAv4
+  - 6G4VfPHWUqY
+  - DXIUGawadj8
+  - UwGFvbZ93Hk
+  - omHCmdCNK4c
+  - 1WMrnZ60U58
+  - 2fB0AmRD3HI
+  - F7QUSczcDYk
+  - NGDgKlbeUw4
+  - O8hHcvDfDOY
+  - evNHa4rhHEc
+  - qaR-ympZ22g
+  - vH1iWHBcj7M
+  - 4SKG8J0x8dw
+  - 6A98Glp5DuY
+  - 73_y6Bp-ARY
+  - 9GfOc6HDiac
+  - XNQhTJ4xg5Q
+  - XW34jjW3F1o
+  - d3zbaFB9WM8
+  - j6CEO02qHoE
+  - kH3Btjuvpww
+  - vpviEF2piEE
+  - 9ulMbvUrYZg
+  - JaAc7vXTq8c
+  - Sw0UcdRra10
+  - WFYEMv9KoBU
+  - bv7S4egNa1k
+  - p8cfpHBoUus
+  - sMHgdGv7Lz0
+  - 0aBy-FYUjw0
+  - PbXqua7g9_4
+  - Q2va_tp0BA0
+  - QG8HXYs8cOU
+  - bN1Ec5zBkaM
+  - eMeYACN6jPc
+  - oaUrYcoPnlc
+  - BWXNkVPZHt8
+  - Blo8ou2ktpM
+  - doGkcbAqNho
+  - j25BPLoYtHQ
+  - p5c9Dy84hHE
+  - Q-n2SOnyr1Y
+  - _nZ07OVtSmQ
+  - dF2dXejdKHM
+  - dYq1KpVqsak
+  - mILb12cD0JA
+  - ycXPFNKQpdQ
+  - 7uzmlxnq2y8
+  - 8366JzwR0sk
+  - BDX4UFr9BWM
+  - ClbYjESkqIM
+  - tKKrIrMnIJg
+  - 3F8aN0-weV8
+  - MvNRN-GlsJg
+  - NAsRGSoj0tg
+  - VDuUVyuIz4g
+  - dzU1pqZ0qI4
+  - khVMDLKHwQI
+  - p5wzXdhnIX4
+  - 0yEiadIwGxM
+  - HxNWQZjkLMk
+  - QsiImYTLvTk
+  - g2vBrgPBmFQ
+  - yGLOrFDEtmY
+  - JujwOOjSJfo
+  - Qz81e2bScZM
+  - bbyJKTBIBAQ
+  - v-AZ7r41iOE
+  - 0H38ycwhs5Y
+  - 3EXTdYjyty0
+  - TmUPQxrgJA8
+  - UsyPDZptw8E
+  - tCeN2JiaPeg
+  - woFZklxw06s
+  - --Bv-mYEpWI
+  - Eexaqzq5Yz0
+  - P91ECY3eLvQ
+  - QJ9qTDvpGUw
+  - VxxpRI3IXTM
+  - qX4ejoqu5_4
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 1hC3_-c5XYk
+  - 1ltZQ9rJiFw
+  - 9a8nsUPtOlI
+  - ASAWSZ3Zrns
+  - C75M3Y1J5QM
+  - DXsYbCuouo4
+  - GR-iIB0Pbk8
+  - HN34nV9Z0wE
+  - INXD5osrkDo
+  - URYaOI4kwnk
+  - XUqNRbeKErI
+  - ZFYIsSB8VOA
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - hBw7ZzA2iwg
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - nTzjzMoJpGk
+  - q8x8fjyhcO8
+  - s8j951FBSvE
+  - suEKQqM3inM
+  - 6CwzyELSPDU
+  - 6mT9MG2Tq2Q
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - D_AvOKr8ncE
+  - JLM3MKut7nE
+  - JYPzPIA9F6o
+  - KJBlo6X4Mm4
+  - MpZmojxF8Ps
+  - MyUJcPLbZ78
+  - Ne8yvlyiO-s
+  - Q-7KCRNLLzc
+  - U8sh8Y5jSCU
+  - YJHW_ZI8aIc
+  - YTN65n-a5t4
+  - a9os1z0zxWs
+  - byXfcfeiQeA
+  - kThGMgiprF4
+  - p61nsi42twU
+  - qT9XWi5z9Zo
+  - ti1t9Qaorrw
+  - 1w58635hIsA
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - BcVOmKUhxnQ
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - IwSdbcvEIbA
+  - KIjHz3ZTrnk
+  - PMcNTERHpHo
+  - PPEz1_UPGjg
+  - Q4pBYLcn_7c
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - YzJATfAC9c8
+  - aTaViyAIraA
+  - aWadQMEngCA
+  - g-SpS3hIWAs
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - r55Y72xVTuM
+  - sBObC61uWLs
+  - tYbDHLYrlbc
+  - xI82OUlb-T0
+  - z6k8wXfwS94
+  - 29n-nh2h18I
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - ItE7xQpkfMA
+  - OJKTVnxnCbE
+  - OgDaJl1l6AM
+  - _S3_c9QiPYs
+  - _jb35PSAzv0
+  - iK_h-2kot6s
+  - kiPkodTP1Z4
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - qlzP9QyUckY
+  - r6HHJJXMmdU
+  - uUFHEL39ETA
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - wjGE5BGf58E
+  - xJ_ZuU5127I
+  - -Wbmsp5pNqo
+  - 1E2WEsXqVTE
+  - 1QxRih653nY
+  - 2KP6RYAHBIA
+  - 6IcYWpJ1xes
+  - 6TjXPRkXx9c
+  - 81v0ih2LxyE
+  - BK2HdRp4Oo0
+  - BiCxV_RJNnU
+  - C25MKm9jN1Y
+  - Cq_Nuo8ilak
+  - FQEBVY-pjOw
+  - MvjMk6BaMtc
+  - RWqJtXJuqTE
+  - Sbiqni-nJsk
+  - XaA3qD1EAqg
+  - YjleTnfeEAs
+  - _y7AJMZ07nE
+  - dBd6Yjt5_t0
+  - fa-I7iUErK0
+  - kjZ_b7ul-dQ
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - w09TzNUO-38
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 2Y9ngBj2HgU
+  - 7J9odmnlgAM
+  - CrZLr93JnMg
+  - Eik9mXj5vbA
+  - G6Ldhhox680
+  - HzKkx2VcsgQ
+  - SYJu_y6WvEc
+  - Sas9eBPTYBI
+  - XTH5saFBDqA
+  - YXzzuLcmE_o
+  - _n0NN1gT934
+  - a0cVuDMgqXM
+  - aTOAdXjmdd4
+  - fuXPe5-Fm_Y
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - shB5Wb2L1yA
+  - sx6J_ci6KC4
+  - t2Ly6-QPMi8
+  - tTY5QlwqtQc
+  - vuuqoMs162A
+  - yU5uWAMed7k
+  - 5x3V6JaEHX0
+  - B8EbRWlIFuY
+  - BdWvP-lbb68
+  - GsCgtu0s3yA
+  - KMliGnl7uVo
+  - P6oaA8fuFzY
+  - TN9i9Ni0Xr4
+  - YNHMNVLwy9c
+  - _J1vKIXj6JA
+  - cEVAjm_ETtY
+  - mLTqcadk8Bw
+  - rxNtthY7e4s
+  - uKqB5cruu4U
+  - yHyURNTrot4
+  - 3ONb6S8JRz4
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - 7R4uTJR8iKg
+  - EkVFgs_qe3g
+  - Hb2-7HWoT9c
+  - LQHLAUugetQ
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - Xwdc2bfL6YI
+  - YhIPJwEu6PE
+  - _Mx24iENIEY
+  - _kDF7vZWMoQ
+  - abS8TIcJb2I
+  - f4Hyy1W1F8Q
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - nq07Wb8nCEA
+  - pzYTq2prOg4
+  - q2gvY0KFwmA
+  - tTuLJbQNk00
+  - w4mdKa97ptM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 0BIbKxuOFIE
+  - 4H-qbzvL6Hs
+  - 8K_cpuaNhCc
+  - HWAOifKGLiE
+  - JGly9i0AVVs
+  - KO2sWBAhZjg
+  - Mlgs4_54q8Y
+  - cQ4K399DTgI
+  - cTKtjxWhrEk
+  - ciACs4HAQfg
+  - lQR-L7jLfuk
+  - qL7Nlexje-M
+  - rXq--HAVsCc
+  - tYJJyYUrK4c
+  - vLA7IMCpjZI
+  - vm6ZoKRLGh8
+  - 1-SfQdEZUKM
+  - 5fzTBTfWJ20
+  - 6amk1U-lIKI
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - Hcm0NzPQjTo
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - MM0Q35Pcqa0
+  - QQ50rpLal8Q
+  - QZ9dI_0XCSY
+  - Rp5V_n4Q7aY
+  - TCV7v3XbJfE
+  - Z7Ra8Wa-WMI
+  - bKtdCS-7Scg
+  - bLr0h7cEIKc
+  - cdPejPpoMFo
+  - iKNZxVWYeK0
+  - lae1ENagN9o
+  - rT45E7ITdE8
+  - r_VHltdyvv4
+  - zbK-HgqWClA
+  - 0fJwHktpuGA
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - FQ580EQdYQ8
+  - FUXxA9JHTXM
+  - HhjqG_teDFo
+  - I5q_-qNM28U
+  - M4nSM7TBsJg
+  - OYsq8zweRm8
+  - RlyOSpcVT_Q
+  - RqQqEA-x4_M
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - VzeeIpLM8hM
+  - beoa3-Al870
+  - cujcxjSm69g
+  - gPry3-OomII
+  - lULmIyc88hE
+  - pA6ls-oHhX0
+  - uPa0dBrQN04
+  - yduD5IDUF-c
+  - zJNd9eQNA9U
+  - -yp3g7EeDqo
+  - 7M94emKl5Ss
+  - BIisTf1oHdE
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - nRQSfBhd7FE
+  - nhEzNDNemDU
+  - t-ezOLT2Kv0
+  - 5AXUBLOUL4E
+  - 87OSqDBBarM
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - HLs8quTLZks
+  - HojOfYAJZrQ
+  - I6Cy-2RvkuM
+  - JQaeGoQox0k
+  - KXTKsMh6pm0
+  - O1cubPjoB-E
+  - YKoXfvPIVTQ
+  - Z65rh9C6np4
+  - gtummPmFCfw
+  - lh9E8RwM1Gw
+  - wgXtt0QKSTA
+  - 716e30A053U
+  - 9uy9vUPU5Yw
+  - CBnLOlVT4yQ
+  - DUKcSUksOXA
+  - F_JOoeHXcmc
+  - GJIuTAzs9-Y
+  - Hu-rVZVSzxs
+  - JHDHrjFhqkc
+  - Md2hht2RhJI
+  - WprPdJKfaGk
+  - Y_rwY8LCFMc
+  - aidlHNTTk3c
+  - ezOsco9legc
+  - hRoLUTJ4bxs
+  - tJeI51crrvs
+  - vNQZ6g_Lz1c
+  - zDQmvvQkrBo
+  - Ar7GhT_63HQ
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - QsdXRoBiPBI
+  - bLnjytMXv_A
+  - bvtuQUJ_EAI
+  - ePzyn2mKqDE
+  - moVynuxM4fc
+  - 0JnCRsQhA6s
+  - 3qyWpJ34dWw
+  - 49EHnr1ZMWA
+  - 5tg9dpQMYHk
+  - 9--KfQnOUYo
+  - 9TzHTKBiy68
+  - GWV1Mk9JlsY
+  - LBOFE-DWrD8
+  - R1QTj9J-SoU
+  - UyoqRHklKjc
+  - VXLTlUjd1qk
+  - eO8W1pWRJ1E
+  - haX25zafqKo
+  - 1iSAlyjEDds
+  - 4MQGjcdGwgo
+  - 8ajO440Ss0g
+  - Bd4gxNpbJGE
+  - CEYvLDKvXQ8
+  - Er1E1YCDwFc
+  - Fk-kT2hb31U
+  - Gb9EFs2l9gc
+  - Hc_1hbqnM-s
+  - IYni6AfrkAY
+  - If9W3kQa254
+  - J-LMiZHWdbU
+  - K2k3vSJb3Mg
+  - KF3D-Q0C6-c
+  - TGejJOLjqZ8
+  - TqSPp_khzRM
+  - Vmu1grE0EAI
+  - abrExOjsZ4I
+  - f0OaQz3cog4
+  - jdo843M-oCo
+  - rX5zEYzAsCs
+  - sD5VWN5Jt5U
+  - t-AVCP3U8l4
+  - w8TFdU85OEc
+  - xaRWYMW7OAg
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 6pDKKyT--YM
+  - 8D6nnYgQdfw
+  - F64MjQbdjXc
+  - HKF9mb6FQDg
+  - LMbElXpaBw8
+  - OTcsB8rrWJ4
+  - OTrTqs9FLq0
+  - S4SEEBKL22A
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - fNWpchnqaYY
+  - fTky0-ETtjA
+  - foGlgwWk76I
+  - kEiPal3RrKw
+  - l0GCECJxCZY
+  - pvIjsG5Svck
+  - qaz3IBaXtAU
+  - qrXgcdOow10
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0Io61Cal5iI
+  - 0O9bmFhtrHY
+  - 0zq-ldME1ck
+  - 3SUtOSaOn1M
+  - 7x7T0RuG5CM
+  - BZu_pk7cXVw
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - S0qepjAIxIY
+  - ZCRoea6rt2M
+  - fXpNnWMATFQ
+  - gyFRstjdf2A
+  - lhHwWGTaAwo
+  - nG9JfDHJJlY
+  - sLYw8VdVGbw
+  - tYQf71h4zj0
+  - xX3v4dbV4l8
+  - -GCA92b119Y
+  - 0CtJjSEoeLk
+  - 0W6tpYrpzEI
+  - 8R53vXBP_v0
+  - CAYNs6eWcg0
+  - G9Tf5zpdjFQ
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - NVmX_Tcm3a4
+  - cnjVc1ctzYs
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  - wS7NIu01KrM
+  scan_costs:
+  - at: '2026-05-29T16:28:06.161919Z'
+    usd: 0.16812509999999392
+classes:
+- name: Reformer Plyometrics
+  image_url: https://images.pexels.com/photos/25599825/pexels-photo-25599825.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master jumpboard fundamentals with instructor Marcus. This class blends
+    controlled pilates sets with explosive plyometric intervals to build cardio power.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Core Cardio Flow
+  image_url: https://images.pexels.com/photos/18136885/pexels-photo-18136885.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Flow through integrated core and cardio circuits with Sophie. This
+    advanced reformer class challenges strength and endurance in seamless sequences.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Beginner Jumpboard Basics
+  image_url: https://images.pexels.com/photos/18136886/pexels-photo-18136886.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: New to jumpboard? James walks you through foundation techniques and
+    safe landing mechanics in this approachable intro class.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Cardio Pilates Power
+  image_url: https://images.pexels.com/photos/18136888/pexels-photo-18136888.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Push your limits with Olivia in this high-energy full-body class. Expect
+    controlled pilates precision merged with serious cardio intensity.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Grip socks
+  image_url: https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

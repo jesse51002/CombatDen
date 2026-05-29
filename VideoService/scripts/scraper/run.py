@@ -25,10 +25,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
 import itertools
 import logging
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -57,8 +59,18 @@ DEFAULT_LANG = "en"
 # streamers/youtube-scraper pricing, ~$2.40 / 1,000 videos (live as of 2026-05;
 # re-verify on the actor page). Used to estimate the scrape's Apify spend.
 APIFY_USD_PER_VIDEO = 0.0024
-# Max videos tagged at once. Flash-Lite's rate limits comfortably allow this.
-CONCURRENCY = 16
+# Max videos tagged at once. 16 tripped Gemini Flash-Lite's rate limit on a big
+# fan-out (~800 RateLimitErrors over ~5.6k calls); 8 keeps the request rate under
+# the limit (with LLM_NUM_RETRIES riding out any stragglers).
+CONCURRENCY = 8
+# Apify actor runs fired at once during fetch — one run per query. The cap is MEMORY:
+# each youtube-scraper run needs 1024MB, so the ceiling is (actor-memory pool)/1024MB.
+# On the 32GB plan (32 max workers) that's 32768/1024 = 32. (Was 8 on the old 8GB plan;
+# exceeding the pool fails the surplus runs with "exceed the memory limit" — but the
+# per-query try/except drops just those, never the whole batch.) Runs are independent
+# and transform.build_outputs is order-independent, so concurrency only changes speed,
+# never the resulting pool.
+FETCH_CONCURRENCY = 32
 
 
 # --- queries -----------------------------------------------------------------
@@ -197,7 +209,13 @@ def _merge_into_pool(
 
 
 async def scrape_pool(
-    service: VideosService, *, gym_id: str | None, lang: str, max_results: int
+    service: VideosService,
+    *,
+    gym_id: str | None,
+    lang: str,
+    max_results: int,
+    fetch_concurrency: int = FETCH_CONCURRENCY,
+    queries: list[str] | None = None,
 ) -> None:
     """Stage 1: fetch the gyms' queries from Apify and MERGE the results into the
     pool (never wipes — so scraping one gym can't destroy others' videos, and
@@ -211,19 +229,54 @@ async def scrape_pool(
 
     Apify still runs every query (it can't fetch "only what's new"), so the Apify
     cost is the full fetch; the saving is that tagging only touches new videos."""
-    queries = await _queries(service, gym_id)
+    if queries is None:
+        queries = await _queries(service, gym_id)
+    else:
+        # An explicit list (e.g. retrying queries an Apify limit dropped) — dedup,
+        # drop blanks, preserve order. Bypasses the per-gym union entirely.
+        queries = list(dict.fromkeys(q.strip() for q in queries if q.strip()))
     if not queries:
         logger.warning(
-            "no gym queries%s — add videos.queries to gyms first; nothing to scrape",
+            "no queries%s — add videos.queries to gyms (or pass --queries-file); "
+            "nothing to scrape",
             f" for gym {gym_id!r}" if gym_id else "",
         )
         return
     client = ApifyYouTubeSearchClient(apify_search_settings().apify_token)
-    hits: list[ApifyHit] = []
-    for i, query in enumerate(queries, start=1):
+    workers = max(1, min(fetch_concurrency, len(queries)))
+    loop = asyncio.get_running_loop()
+    done = itertools.count(1)
+
+    async def _search(i: int, query: str, pool: ThreadPoolExecutor) -> list[ApifyHit]:
+        """One query's Apify run, off the event loop so the runs overlap. The
+        blocking client.call() goes to the thread pool; parsing stays here. One
+        query's failure must NOT abort the whole batch (and waste the Apify spend on
+        the queries that already succeeded), so we log it and drop just that query."""
         logger.info("[%d/%d] searching: %s", i, len(queries), query)
-        items = client.search(query, max_results=max_results, language=lang)
-        hits.extend(parse_search_items(items, query))
+        try:
+            items = await loop.run_in_executor(
+                pool,
+                functools.partial(client.search, query, max_results=max_results, language=lang),
+            )
+        except Exception as exc:  # noqa: BLE001 — one bad query must not kill the run
+            logger.warning(
+                "[%d/%d] search FAILED (dropped): %s\n    %s",
+                i, len(queries), query, exc,
+            )
+            next(done)
+            return []
+        logger.info(
+            "[%d/%d] done (%d/%d complete): %s",
+            i, len(queries), next(done), len(queries), query,
+        )
+        return parse_search_items(items, query)
+
+    logger.info("fetching %d queries, up to %d at a time", len(queries), workers)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        per_query = await asyncio.gather(
+            *(_search(i, q, pool) for i, q in enumerate(queries, start=1))
+        )
+    hits: list[ApifyHit] = [hit for q_hits in per_query for hit in q_hits]
 
     fresh = build_outputs(hits)  # deduped within this scrape
     existing = await service.load_pool()
@@ -316,14 +369,29 @@ async def classify_pool(service: VideosService, *, model: str) -> None:
 
 
 async def run(
-    *, root: Path, gym_id: str | None, lang: str, max_results: int, model: str
+    *,
+    root: Path,
+    gym_id: str | None,
+    lang: str,
+    max_results: int,
+    model: str,
+    fetch_concurrency: int = FETCH_CONCURRENCY,
+    queries: list[str] | None = None,
 ) -> None:
     """Scrape the gyms' queries into the pool, then classify the pool's untagged
     videos. The two stages are independent — scrape only writes the pool, and
     classify re-reads the pool from disk to find what still needs tagging; nothing
-    is passed between them."""
+    is passed between them. ``queries`` (if given) overrides the gyms' queries —
+    used to retry an explicit list (e.g. queries an Apify limit dropped)."""
     service = VideosService(root=root)
-    await scrape_pool(service, gym_id=gym_id, lang=lang, max_results=max_results)
+    await scrape_pool(
+        service,
+        gym_id=gym_id,
+        lang=lang,
+        max_results=max_results,
+        fetch_concurrency=fetch_concurrency,
+        queries=queries,
+    )
     await classify_pool(service, model=model)
 
 
@@ -335,8 +403,30 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--lang", default=DEFAULT_LANG)
     parser.add_argument("--max-results", type=int, default=DEFAULT_MAX_RESULTS)
+    parser.add_argument(
+        "--fetch-concurrency",
+        type=int,
+        default=FETCH_CONCURRENCY,
+        help=f"Apify runs fired at once during fetch (default {FETCH_CONCURRENCY}; "
+        "the cap is memory: actor-pool-MB / 1024)",
+    )
+    parser.add_argument(
+        "--queries-file",
+        type=Path,
+        default=None,
+        help="scrape exactly these queries (one per line) instead of the gyms' "
+        "queries — e.g. to retry queries an Apify limit dropped",
+    )
     parser.add_argument("--model", default=VIDEO_CLASSIFY_MODEL)
     args = parser.parse_args(argv)
+
+    explicit_queries: list[str] | None = None
+    if args.queries_file is not None:
+        explicit_queries = [
+            line.strip()
+            for line in args.queries_file.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
@@ -347,6 +437,8 @@ def main(argv: list[str] | None = None) -> int:
                 lang=args.lang,
                 max_results=args.max_results,
                 model=args.model,
+                fetch_concurrency=args.fetch_concurrency,
+                queries=explicit_queries,
             )
         )
     except (ProviderError, SchemaValidationError) as exc:

@@ -6,7 +6,6 @@ library;
 
 class MockProfile {
   const MockProfile({
-    required this.gymName,
     required this.streakDays,
     required this.pointsLabel,
     required this.rankBadgeAsset,
@@ -20,7 +19,6 @@ class MockProfile {
     required this.nextRankBadgeAsset,
   });
 
-  final String gymName;
   final int streakDays;
   final String pointsLabel;
   final String rankBadgeAsset;
@@ -38,7 +36,6 @@ class MockProfile {
 }
 
 const mockProfileGlobalMma = MockProfile(
-  gymName: 'Global MMA',
   streakDays: 3,
   pointsLabel: '3.4k',
   rankBadgeAsset: 'icon_rank_belt.png',

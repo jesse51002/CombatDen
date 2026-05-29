@@ -55,14 +55,16 @@ class Node(ABC):
       shows the model and copies untouched slots from verbatim. **The seed is
       the sole control of what's regenerated**: any declared slot absent from
       it is re-made; to re-roll a slot, a caller simply leaves it out.
-    - ``overwrite_specs`` — the call's single ``OverwriteSpecs`` (the free-text
-      ``specs`` plus optional per-module extras), stamped onto every slot this
-      node re-makes. A node passes ``specs`` to its service and reads any
-      extras it cares about (the image node, ``image_to_image``). One per call;
-      an empty default on a plain fill/full run.
+    The call's single ``OverwriteSpecs`` (the free-text ``specs`` plus optional
+    per-module extras) is **not** a construction field — it rides on the
+    ``RunContext`` (``run_ctx.overwrite_specs``) and is surfaced here as
+    ``self.overwrite_specs`` for convenience, so a node still stamps it onto
+    every slot it re-makes and reads any extras it cares about (the image node,
+    ``image_to_image``) without threading a parameter. One per run; an empty
+    default on a plain fill/full run.
 
-    ``dirty()`` is just ``declared_slots - seed`` — what to (re)generate. All
-    three default empty, so a fresh full run has an empty seed ⇒ every slot
+    ``dirty()`` is just ``declared_slots - seed`` — what to (re)generate. Both
+    default empty, so a fresh full run has an empty seed ⇒ every slot
     dirty ⇒ a normal full generation. ``regenerated`` is the set a node's
     ``run()`` records as the slots it actually re-made (the executor unions
     these for the ledger).
@@ -76,7 +78,6 @@ class Node(ABC):
         deps: frozenset[str],
         declared_slots: set[str] | None = None,
         seed: dict[str, BaseModel] | None = None,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> None:
         self._run_ctx = run_ctx
         self.key = key
@@ -84,8 +85,10 @@ class Node(ABC):
         self.inputs: dict[str, BaseModel] = {}
         self.declared_slots: set[str] = declared_slots or set()
         self.seed: dict[str, BaseModel] = seed or {}
+        # Sourced from the run context (one steering object per run); a node
+        # constructed without a context falls back to empty steering.
         self.overwrite_specs: OverwriteSpecs = (
-            overwrite_specs or OverwriteSpecs()
+            run_ctx.overwrite_specs if run_ctx is not None else OverwriteSpecs()
         )
         self.regenerated: set[str] = set()
 

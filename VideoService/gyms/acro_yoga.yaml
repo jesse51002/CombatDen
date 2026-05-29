@@ -1,17 +1,538 @@
 gym_id: acro_yoga
 gym_type:
 - acro_yoga
-theme: ZZUndoneAcroYoga
+theme: AcroYoga
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational acro yoga content for gym
-      members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable acro yoga sources.
-    avoid_desc: Anything not about acro yoga; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Acro and partner-yoga tutorials and flows — base and flyer
+      foundations, spotting and safety, L-basing, standing acro, washing-machines
+      and transitions — plus the fun, human side acro is famous for: partner vlogs,
+      festival and jam behind-the-scenes, funny acro bloopers, partner-flow reels
+      with music, and teacher interviews. Playful, communal, two-person practice.'
+    short_avoid_desc: Off-topic, genuinely low-quality, or clickbait "acro yoga for
+      weight loss / flat abs" videos, gear/leggings hauls and product shilling, dangerous
+      untrained no-spotter stunts, and "yoga vs pilates" or "is acro yoga dangerous/pointless"
+      debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Acro and partner-yoga instruction for members from curious couples and
+      friends drawn by the trust and silliness of partner work to seasoned
+      practitioners chasing advanced flows — plus the playful, human side acro
+      is famous for, so it's a feed members enjoy, not just a how-to library.
+
+      ## Acro & partner-yoga instruction
+      - Base-and-flyer foundations, spotting and safety
+      - L-basing poses, standing acro, washing-machines and sequences
+      - The communication and counterbalance two-body practice depends on
+      - Step-by-step pose tutorials (bird, throne, whale, front/back bird)
+      - Transition and washing-machine breakdowns
+      - Partner warm-ups and Thai-massage cool-downs
+      - Conditioning and balance drills for basing and flying
+
+      ## The fun & human side
+      - Partner and couple vlogs and "what an acro class is really like"
+      - Festival and jam behind-the-scenes
+      - Funny acro bloopers and "couples try acro" moments
+      - Partner-flow reels set to music
+      - Teacher interviews on partner trust
+      - Couples-learning transformation stories
+
+      Playful, communal, warm tone throughout — yoga shared between two people,
+      lifting each other off the ground.
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about acro / partner yoga; off-topic, genuinely low-quality,
+      or clickbait videos.
+
+      ## Reject
+      - Calorie-burn "acro yoga for weight loss / flat abs in X days" promises
+      - Dangerous untrained no-spotter stunts
+      - Gear/leggings hauls and product shilling
+      - "Yoga vs pilates / which is better" or "is acro yoga dangerous /
+        pointless" debate and reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a highlight, a blooper,
+      or entertaining — the playful, fun side of acro is exactly what's wanted.
+  queries:
+  - acro yoga for beginners step by step
+  - acro yoga base and flyer foundations
+  - acro yoga spotting and safety tutorial
+  - acro yoga bird pose tutorial
+  - acro yoga throne pose tutorial
+  - acro yoga washing machine sequence
+  - standing acro yoga beginner tutorial
+  - acro yoga L-basing poses for beginners
+  - acro yoga transitions breakdown
+  - acro yoga partner warm up routine
+  - acro yoga whale and back bird tutorial
+  - couples try acro yoga for the first time funny
+  - what an acro yoga class is really like
+  - funny acro yoga fails and bloopers
+  - acro yoga festival and jam behind the scenes
+  - acro yoga partner flow with music aesthetic
+  - acro yoga date night vlog couples
+  - acro yoga teacher interview on partner trust
+  - learning acro yoga together our journey
+  - what is acro yoga explained for beginners
+  good_video_ids:
+  - RR9iyrrMddM
+  - Sy-tEHxVe90
+  - a4ZpSs195I4
+  - bDtBE5Xacbc
+  - eFmjckKXEoA
+  - 6OJExaGJWjk
+  - 7X4yVWfxQb4
+  - 8KZsfosPLZo
+  - 96WjC49dagg
+  - EtTDy1nuz3w
+  - KowDFJolg3E
+  - rHCL4nouzfI
+  - 064uUn5syz0
+  - EBGO6vipavM
+  - HWfOs3r-knE
+  - OCR60bz-7HM
+  - TmrKhyeuCHQ
+  - Wwbuv7v9B0E
+  - YXTjgsJLz_M
+  - dvxBGUXdg2M
+  - hBrGxXFZQ98
+  - j-sUuy5sFss
+  - EGqsou8Vrr4
+  - GQpLseJmv00
+  - c-eHZmKy3ro
+  - l49lpey41e8
+  - pv8Eh1eYurE
+  - HJEBnmJr1r4
+  - HgZb-s_9wag
+  - IUZeQcMRupk
+  - IiCfyK9bwJw
+  - KxMrnrqrM24
+  - R55n8nv736g
+  - cCFcsNbjBzQ
+  - kvQivOvXyyk
+  - t8rghj3hhLA
+  - 9V9wTsCTFDw
+  - LZfjbrwNFQk
+  - NnPg3d8PAIg
+  - WUtVJ46LT-M
+  - _bXRG7sd98U
+  - evpdtUezwgQ
+  - fPKukNk8R3g
+  - ks-4IzTcNSk
+  - uOIHj3BzARA
+  - wXevuCGhfYY
+  - 7MyHReg0U7g
+  - 7kTCP6xJsGI
+  - AcjzKnzktrw
+  - AqXlA7Hy_wc
+  - FjWLKXsno8E
+  - Qs7lWjwdogw
+  - SP2LXn3vmd8
+  - STU6xO4lKSY
+  - VTTdzj_cXXM
+  - WBx9-n8aFsc
+  - _QLmfftcw-Y
+  - icxfNsKol_4
+  - tF3zc2JfGwA
+  - vizFoFnJPis
+  - 2BIIOEULO3c
+  - 6cuD9azJ3DI
+  - By5paodCyfc
+  - E8Sibvi7gVk
+  - Ea3Nz1W6tts
+  - M1cclTLsSNs
+  - QWsDdgPJ2SI
+  - dYsKaZSKnjw
+  - qhuRX-pjK8M
+  - s88HWDMQk8Y
+  - DehBBCPZ66I
+  - eWu3BxMF1Bg
+  - hk_JIqknSo4
+  - ilvD4DezUyE
+  - y5-l1FHG-TI
+  - yfSfiwmoUtA
+  - 7IaQQ8JcntM
+  - 7NnuIktv7LU
+  - OF36ML_8OB4
+  - RyId-W6BoBQ
+  - S2XCtQrdeFQ
+  - VyV0oDX80dU
+  - ciorsc1yrlk
+  - ezJnlAqT2K0
+  - odJua5kfYkw
+  - s-mW5TRdub0
+  - uSg5yNz8V00
+  - wy7E8x2D8-8
+  - 4WMAZ67brUc
+  - Mz_P0UzoBbk
+  - QkWcmL07SHI
+  - YDJOKpz0t-4
+  - Z0QEO8Iy5cc
+  - bmktYLuksek
+  - c3HVnxtoqd0
+  - lGIFTWsBXdw
+  - vDgJAMBbSDA
+  - OEWRpcyU6Tk
+  - PcQ_QdooDcg
+  - a8fCNt2Qi2E
+  - eXm4tvP8EEw
+  - fY3FWRdd-sw
+  - ffFsn-4ThuQ
+  - g5cGNpdaUgs
+  - iOJMcYHefHY
+  - iu_7JEConqY
+  - jsiSzCMJPP4
+  - pKRcgQ-bDD8
+  - viQG0SC73hs
+  - 2PwaOcf-uZ8
+  - 6citKGs_yck
+  - Bi-h6a3eln4
+  - Ecz6dG9LZgQ
+  - JWFwnqurLXE
+  - SF2BQTK9zVg
+  - WYkuKe4S5hE
+  - WqzOUSXuVbE
+  - drzrkKgd6hI
+  - hQ8g6ISO_vc
+  - khKFrEZIgl8
+  - K-5PUMbhSbY
+  - L8t-_hSdEj0
+  - Qb8BbKjelv4
+  - fUqqu_Bmya8
+  - gujewym6CTE
+  - juDxeJXoNVQ
+  - wmOfXMPQ2yU
+  - 2XxU_cfNjJo
+  - 8T6ZGjZ8lj4
+  - ScL9iDke9fo
+  - _epk0irDSnM
+  - hyvggsDIhak
+  - if5Or4384jQ
+  - pTRYo_2ynyg
+  - rnWEdJYFVRA
+  - syzkgnX9jIc
+  - ucWD2CuSKSo
+  - F7EtkCioJlo
+  - FW0ppNoek2A
+  - GDGjXvvrmlg
+  - IuY1ZBwa88A
+  - JrXcBpw8DZI
+  - SQi9y9KxHqk
+  - YZ3i65i_GnI
+  - dollsSxNWzg
+  - mQTY5roFlo8
+  - 0qaXoFLq-9k
+  - FKocikVTzHM
+  - a4aoZ-ORp80
+  - 0cMQEYdvJ7A
+  - FO0s4akprWs
+  - FvIhPcsKj6o
+  - H6gyl4or1Ho
+  - P1IYhVfV9sc
+  - PV5cSV40VI8
+  - TiZ7YqRMdfQ
+  - dg5Z5ujC-TA
+  - tZHOrMMKirQ
+  - 0kYFojJ5gqI
+  - AjQAJTmSzkM
+  - ax1qA5v0RDA
+  - tsuXCxCuSTI
+  - y5vFDCuARjg
+  - 0ar0EexR4LQ
+  - 1S7uQzwEl6c
+  - 6XcKnnfiVN0
+  - TCjlkZtkads
+  - Yx6JwyGr9jI
+  - cvdudz_laKw
+  - dSZnf1AAUjg
+  - qa5iG6k3W0s
+  - r3qPX9qPEgg
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - HW4ADAzkxDo
+  - INXD5osrkDo
+  - URYaOI4kwnk
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - suV7BjHE0wc
+  - 3yMZfEO60UY
+  - 53YGckKJZng
+  - 70ydbjksIns
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - Q-7KCRNLLzc
+  - byXfcfeiQeA
+  - kThGMgiprF4
+  - khflFFpKpsI
+  - nDTxyW0QES8
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DIWnZDGZsVg
+  - DWG39Up6Qs8
+  - DacqZQC3Hfc
+  - FXcYeeTZ894
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - dVX8SaU37O8
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - tqXnQ-zHLBg
+  - yWvRIpqyszM
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - ItE7xQpkfMA
+  - YGm7FDrGODw
+  - gZI7w0IT8fo
+  - iK_h-2kot6s
+  - iu83tBdfr6s
+  - kqyr3kaw5qE
+  - q9CKxBMxTlU
+  - u3cd85x7mVU
+  - vtMvB4ErfZU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - y3izFDOtNao
+  - 06KsU8rYhC0
+  - 6TjXPRkXx9c
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - HdY1mVIEJcc
+  - M5g7jKeHu8w
+  - XaA3qD1EAqg
+  - _4cCdUuMOPA
+  - mS_yuOfyNIM
+  - ncORPosDrjI
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 9VA1X-Cpfcw
+  - Fqptx5fNXR4
+  - SYJu_y6WvEc
+  - U7nT5qC48XI
+  - YXzzuLcmE_o
+  - Z2AOmI3aQpQ
+  - c-Rj8eGbx4s
+  - cqDH7vHRcEw
+  - hZoeX99CiPE
+  - jEjhDcUIwrA
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - -KJBu7ZhkF0
+  - BdWvP-lbb68
+  - KMliGnl7uVo
+  - Knpr3ZZu1TQ
+  - TN9i9Ni0Xr4
+  - YNHMNVLwy9c
+  - acKgy9JxhMw
+  - kXitig9Ro60
+  - mLTqcadk8Bw
+  - 1vTATJmEIW8
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - 7mumwqwPRFQ
+  - D1nl5PpXiAc
+  - Pfse9GxqdAE
+  - YhIPJwEu6PE
+  - YsW9GKlUvmI
+  - eE-VtAKgQEE
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - mY6DZF6nDtc
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - 6-AXfni2zd0
+  - 99kVvs5a59U
+  - HWAOifKGLiE
+  - HmZ-57fKJJA
+  - Mlgs4_54q8Y
+  - VGzzdrTuwj0
+  - YDbpNA4MqPs
+  - b7WsSsH-3Lo
+  - cQ4K399DTgI
+  - hsL_SsDaO0U
+  - jNBBCrOCcdE
+  - qL7Nlexje-M
+  - 1bFVoTGDUws
+  - 8ZYJ64opv6I
+  - BSfOzy0Dpqk
+  - BfB4lVnL4CM
+  - GZqgvEWyOUI
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - Ok2w5YnrosQ
+  - P26sJBTOaEo
+  - UCHnsgFpxsk
+  - Z7Ra8Wa-WMI
+  - blad0omDwIA
+  - cdPejPpoMFo
+  - kDPJaT-YZus
+  - qeDWB9AVxzI
+  - 4AWzeCNDJUI
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - IICS9-EhGF0
+  - M4nSM7TBsJg
+  - RAu9RUXwlR4
+  - SCxcO3Os_OE
+  - TznCfvMaUps
+  - UNf2qsX8uFc
+  - cujcxjSm69g
+  - pA6ls-oHhX0
+  - 1hoGJhFWORo
+  - CZtOVFsTSuY
+  - LCFZkeCHfag
+  - Pui3UaKI2Pk
+  - YYZI3pczGqQ
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - MdokfHJK4mQ
+  - RPSApPXcdV8
+  - WEKB9EGH20I
+  - ZDqkZibM8iA
+  - _X6rsR5yCNo
+  - _w7BirEE9Ao
+  - idbNasHM5kw
+  - qlq-prZ4KfA
+  - r1UMA4TvHr0
+  - vnpraKh91DM
+  - 3iinKzXsgT4
+  - 716e30A053U
+  - CBnLOlVT4yQ
+  - Hu-rVZVSzxs
+  - LvnlEEjyvQU
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - lZ1vQHYUp70
+  - w9YWEbihNr0
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - NQHF7qdH0rM
+  - QsdXRoBiPBI
+  - moVynuxM4fc
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - FBLcOucDCzU
+  - W9HGGgJkRzY
+  - eO8W1pWRJ1E
+  - gEDXDaisk3M
+  - hY9KeU42L9M
+  - zeBHjHKtpYM
+  - 3IzmT5MG9NA
+  - 5OVlqlcjiZw
+  - B9AT0WneXPI
+  - Bd4gxNpbJGE
+  - BnvhJKnGuCE
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - KF3D-Q0C6-c
+  - VWdAR4M3El4
+  - _phK5kkJIKA
+  - jdo843M-oCo
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - RoFCMBOUixI
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - aiEh6GpqDxU
+  - eX-fmOOIIiA
+  - fhY0pUKtsyQ
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - tTGY0G8OZQM
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 3SBBDKJ1ETM
+  - BZu_pk7cXVw
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - QAj0VHx43fM
+  - RlrmSu5u9bE
+  - VcK3KNRQ8j0
+  - oThDZBWEXMk
+  - sLYw8VdVGbw
+  - teONOIV_gHc
+  - xdLy8PCcmwA
+  - -ErUOq78R7A
+  - -GCA92b119Y
+  - 6mcaAEGINUE
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - Pg4WPKuDxmQ
+  - T4HAo2B6FyA
+  - dBTQi5kdfW0
+  - jiJ1c9eWA60
+  - pPlFSqXnbls
+  - qcyY0tsGm6A
+  - tC05QrP0ZtU
+  scan_costs:
+  - at: '2026-05-29T15:03:26.181867Z'
+    usd: 0.10093619000000002
+classes:
+  - name: "Silks & Suspension"
+    image_url: "https://images.pexels.com/photos/30131194/pexels-photo-30131194.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Learn aerial silks from the ground up with proper rigging and safety protocols. Build the shoulder strength and grip techniques needed to flow elegantly through the air."
+    instructor_name: "James Carter"
+    instructor_bio: "Head coach with over a decade of experience helping members of every level train smarter, move better, and stay consistent."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg"
+  - name: "Partner Foundations"
+    image_url: "https://images.pexels.com/photos/9306115/pexels-photo-9306115.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Master the essential base and flyer skills, trust-building exercises, and communication patterns that make acro yoga possible. Perfect for couples or friends just starting their partner journey."
+    instructor_name: "Sarah Mitchell"
+    instructor_bio: "Performance coach focused on building strength, mobility, and confidence through approachable, well-structured sessions."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg"
+  - name: "Conditioning for Acro"
+    image_url: "https://images.pexels.com/photos/4323299/pexels-photo-4323299.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Build the foundational strength, balance, and body awareness that acro demands. Solo conditioning work designed to prepare you safely for partner balances and aerial skills."
+    instructor_name: "Daniel Brooks"
+    instructor_bio: "Certified instructor who breaks every movement down step by step so newcomers and regulars alike feel supported."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg"
+  - name: "Restorative Inversions"
+    image_url: "https://images.pexels.com/photos/8713850/pexels-photo-8713850.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Float upside down in the gentle support of aerial hammocks while building flexibility and decompression through your spine. A peaceful, meditative approach to inversion practice."
+    instructor_name: "Maya Bennett"
+    instructor_bio: "Coach passionate about creating an inclusive, high-energy room where members from all backgrounds can thrive."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg"
+rewards:
+  - title: "Bring a friend"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+    price_label: "Free"
+    points_cost: 1000
+  - title: "Club t-shirt"
+    image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    price_label: "Free"
+    points_cost: 1500
+  - title: "Yoga mat"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Fitness_mats_%2851543374690%29.jpg"
+    price_label: "25% off"
+    points_cost: 2000
+  - title: "1-on-1 PT session"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+    price_label: "50% off"
+    points_cost: 2500

@@ -1,30 +1,11 @@
 /// Hardcoded data for the Member App "Loyalty Program" tab.
 ///
-/// The loyalty program is points-based: members earn a single point
-/// balance and spend it on rewards. Reward names mirror the member
-/// app's points store (`MobileApp/.../mock_points_store.dart`) so the
-/// admin store and the member store stay in sync. Field names match the
-/// shape the real API will eventually return.
+/// The points-based **rewards store** is now live — driven by the selected
+/// gym's rewards from the VideoService (see `RewardsGridSection` /
+/// `gym_detail.dart`). What stays mock here is the per-member flow the gym
+/// file can't carry: the redemption queue awaiting desk confirmation and the
+/// "add your own" starter templates.
 library;
-
-/// A reward the gym offers in its points store.
-class LoyaltyReward {
-  final String title;
-
-  /// What the member pays on top of points, e.g. "Free", "30% off".
-  /// Stored the way the API hands it over; capitalized at display time.
-  final String priceLabel;
-
-  final int pointsCost;
-  final String imageAsset;
-
-  const LoyaltyReward({
-    required this.title,
-    required this.priceLabel,
-    required this.pointsCost,
-    required this.imageAsset,
-  });
-}
 
 /// A starter the admin can add to their store from the "Add your own"
 /// grid. The subtitle hints at what the admin will configure.
@@ -46,7 +27,13 @@ class PendingRedemption {
   final String rewardTitle;
   final String priceLabel;
   final int pointsCost;
-  final String imageAsset;
+
+  /// Bundled image (member-history mocks). Ignored when [imageUrl] is set.
+  final String? imageAsset;
+
+  /// Network image url — set when the redemption is built from a live gym
+  /// reward (the loyalty-tab pending queue), so the card matches the store.
+  final String? imageUrl;
 
   /// The code the member reads off their phone; the admin matches it.
   final String code;
@@ -63,51 +50,13 @@ class PendingRedemption {
     required this.rewardTitle,
     required this.priceLabel,
     required this.pointsCost,
-    required this.imageAsset,
+    this.imageAsset,
+    this.imageUrl,
     required this.code,
     required this.requestedAt,
     this.approved = false,
   });
 }
-
-const List<LoyaltyReward> kMockLoyaltyRewards = [
-  LoyaltyReward(
-    title: 'Bring a friend',
-    priceLabel: 'Free',
-    pointsCost: 800,
-    imageAsset: 'assets/images/reward_bring_friend.png',
-  ),
-  LoyaltyReward(
-    title: 'Hand wraps',
-    priceLabel: '30% off',
-    pointsCost: 1500,
-    imageAsset: 'assets/images/reward_hand_wraps.png',
-  ),
-  LoyaltyReward(
-    title: 'Private Training (15 min)',
-    priceLabel: 'Free',
-    pointsCost: 1800,
-    imageAsset: 'assets/images/reward_private_training.png',
-  ),
-  LoyaltyReward(
-    title: 'Gym t-shirt',
-    priceLabel: 'Free',
-    pointsCost: 2200,
-    imageAsset: 'assets/images/reward_gym_tshirt.png',
-  ),
-  LoyaltyReward(
-    title: 'Boxing gloves',
-    priceLabel: '10% off',
-    pointsCost: 2500,
-    imageAsset: 'assets/images/reward_boxing_gloves.png',
-  ),
-  LoyaltyReward(
-    title: 'Private Training',
-    priceLabel: '50% off',
-    pointsCost: 3500,
-    imageAsset: 'assets/images/reward_private_training.png',
-  ),
-];
 
 const List<RewardTemplate> kMockRewardTemplates = [
   RewardTemplate(
@@ -129,45 +78,6 @@ const List<RewardTemplate> kMockRewardTemplates = [
     title: 'Custom',
     subtitle: 'Anything you want',
     imageAsset: 'assets/images/reward_custom.png',
-  ),
-];
-
-const List<PendingRedemption> kMockPendingRedemptions = [
-  PendingRedemption(
-    memberName: 'Amy Traver',
-    rewardTitle: 'Hand wraps',
-    priceLabel: '30% off',
-    pointsCost: 1500,
-    imageAsset: 'assets/images/reward_hand_wraps.png',
-    code: 'TXR-3K9P',
-    requestedAt: 'Today, 6:12 PM',
-  ),
-  PendingRedemption(
-    memberName: 'Justin Stemmons',
-    rewardTitle: 'Private Training (15 min)',
-    priceLabel: 'Free',
-    pointsCost: 1800,
-    imageAsset: 'assets/images/reward_private_training.png',
-    code: 'QP7-M2L4',
-    requestedAt: 'Today, 5:48 PM',
-  ),
-  PendingRedemption(
-    memberName: 'Lily Altega',
-    rewardTitle: 'Bring a friend',
-    priceLabel: 'Free',
-    pointsCost: 800,
-    imageAsset: 'assets/images/reward_bring_friend.png',
-    code: 'BF9-X1C8',
-    requestedAt: 'Yesterday, 8:03 PM',
-  ),
-  PendingRedemption(
-    memberName: 'Timothy Tom',
-    rewardTitle: 'Boxing gloves',
-    priceLabel: '10% off',
-    pointsCost: 2500,
-    imageAsset: 'assets/images/reward_boxing_gloves.png',
-    code: 'GL2-7VK3',
-    requestedAt: 'Yesterday, 7:21 PM',
   ),
 ];
 

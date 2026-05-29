@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:theme_flutter/customization_runtime.dart';
+import 'package:app_management/core/state/selected_gym.dart';
 import 'package:theme_flutter/data/models/customization_style.dart';
 
 // Small thumbnail — the theme list is secondary to the phone, so cards are
@@ -23,7 +23,9 @@ class ThemeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => ThemeRuntime.selectDesign(style.id),
+      // Records the gym globally (rewards/classes/spec) AND brands with its
+      // theme — one call keeps the global and the live preview in lockstep.
+      onTap: () => selectedGym.selectStyle(style),
       child: Container(
         padding: const EdgeInsets.all(DesignConstants.spacingMedium),
         decoration: BoxDecoration(

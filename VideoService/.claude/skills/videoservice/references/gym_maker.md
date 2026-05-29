@@ -17,18 +17,52 @@ You author the fields below. The pipeline owns the rest (see "Do not touch").
 ```yaml
 gym_id: vinyasa                       # stable id == the filename stem
 gym_type: [vinyasa]                   # 1+ disciplines (the GymType enum)
-theme: ZZUndoneVinyasaFlow            # the ThemeService design id this gym runs
+theme: VinyasaFlow            # the ThemeService design id this gym runs
 videos:
   specification:
-    videos_desc: >-                   # what the scan should KEEP (prose, ≥2 chars)
-      Led full-length vinyasa classes, breath-paced, clear instruction,
-      beginner-to-intermediate, filmed in a calm studio.
-    avoid_desc: >-                    # what the scan should REJECT (prose, ≥2 chars)
-      Talking-head philosophy, gymwear hauls, 30-second social clips,
-      anything not an actual followable class.
-  queries:                            # the searches the scraper runs for this gym
-    - vinyasa flow full class breath led
-    - beginner vinyasa yoga 30 minutes
+    # SHORT pair — a ≤2-sentence skim summary, for easy viewing. NOT scanned.
+    # Plain prose; the folded `>-` scalar is fine here.
+    short_videos_desc: >-
+      Led, breath-paced vinyasa classes with clear instruction, PLUS the fun
+      side — teacher vlogs, studio behind-the-scenes, and flow-with-music.
+    short_avoid_desc: >-
+      Off-topic, clickbait "yoga for weight loss" promises, gear hauls, and
+      "yoga vs pilates" / "yoga is useless" debate videos.
+    # LONG pair — the full, context-rich criteria the SCAN judges against (≥2
+    # chars). A markdown DOCUMENT: use the LITERAL block scalar `|-` so the
+    # newlines/headings/bullets survive (the folded `>-` collapses them into
+    # one paragraph and destroys the markdown). The app renders this verbatim.
+    videos_desc: |-                   # what the scan should KEEP (markdown)
+      # What we surface
+
+      Led full-length vinyasa classes, breath-paced and clear — and the
+      enjoyable, human side of the practice.
+
+      ## Classes & foundations
+      - Led full-length vinyasa classes, breath-paced and clearly cued
+      - Foundations: sun salutations, alignment, breath-to-movement tutorials
+
+      ## The fun & human side
+      - Teacher vlogs and "day in the life", studio/retreat behind-the-scenes
+      - Relatable class humour, flow-with-music edits, and interviews
+    avoid_desc: |-                    # what the scan should REJECT (markdown)
+      # What we avoid
+
+      Off-topic, genuinely low-quality, or clickbait videos.
+
+      ## Reject
+      - "Yoga for weight loss / flat abs" promises and gear-haul shilling
+      - "Yoga vs pilates" / "yoga is useless" debate or reaction videos
+
+      Don't reject a video just for being short, a vlog, a highlight, or fun —
+      that content is wanted.
+  queries:                            # the searches the scraper runs (mix genres!)
+    - beginner vinyasa yoga foundations    # teach
+    - sun salutation breakdown tutorial    # teach
+    - day in the life of a yoga teacher    # human / vlog
+    - what a vinyasa class is really like  # enjoy
+    - yoga teacher reacts to yoga fails    # enjoy / entertainment
+    - yoga retreat vlog                    # human / vlog
   good_video_ids: []                  # ← scan fills this. Leave empty.
   rejected_video_ids: []              # ← scan fills this. Leave empty.
   scan_costs: []                      # ← scan appends here. Leave empty.
@@ -48,17 +82,48 @@ rewards: null                         # optional points-store reward cards (belo
   These disciplines are also the **candidate filter**: scan only considers pooled
   videos tagged with one of the gym's `gym_type`s.
 - **`theme`** — one ThemeService design id (a folder name under
-  `ThemeService/apps/combatden/`, e.g. `ApexMMA`, `ZZUndoneVinyasaFlow`). The
+  `ThemeService/apps/combatden/`, e.g. `ApexMMA`, `VinyasaFlow`). The
   theme→gym link IS this field; the gym browser serves it and the app loads it.
   The theme also supplies the gym's card art (its celebration image), derived by
   the API — you do **not** store an image url on the gym.
-- **`videos.specification`** — the scan's criteria, as prose. `videos_desc` =
-  what to surface; `avoid_desc` = what to reject. Both ≥2 chars, both required.
-  Write them concretely — vague specs make the scan noisy.
+- **`videos.specification`** — the scan's criteria, in **two tiers**:
+  - **LONG** (`videos_desc` / `avoid_desc`) — the full, context-rich criteria,
+    written as a **markdown document**. `videos_desc` = what to surface;
+    `avoid_desc` = what to reject. Both ≥2 chars, both **required**, and the
+    **only** pair the scan judges against. Write them concretely and richly —
+    vague specs make the scan noisy, and there's no length limit (add as much
+    context as the gym needs). **Markdown structure — titles are required:**
+    every long description is a real document with hashtag headings. Start with
+    a `#` document title (`# What we surface` / `# What we avoid`), a one-line
+    framing sentence, then `##` section headings each with a `-` bullet list (a
+    short closing line is fine). Use `#`/`##` for titles and sections — **not**
+    bold (`**…**`) as a stand-in for headings; the renderer needs the heading
+    hierarchy to format the document. **YAML:** these MUST use the **literal
+    block scalar `|-`**,
+    never the folded `>-` — `>-` collapses the newlines into one paragraph and
+    destroys the markdown. The app renders this markdown verbatim in the agent
+    view's prompt panel, so keep it clean and readable.
+    **The feed is for enjoyment, not just instruction.** `videos_desc` must
+    welcome the *fun and human* side of the gym's world too — entertainment,
+    highlight/clip reels, creator vlogs and "day in the life", behind-the-scenes,
+    funny moments, interviews, transformations — not only how-to/technique
+    content. Correspondingly, `avoid_desc` must **never** reject a video just for
+    being short, a vlog, a highlight, a clip, or entertaining; it drops only
+    genuine low-value/off-topic content (clickbait, scams, misinformation,
+    not-the-discipline, cross-discipline "X vs Y", anti-discipline rage-bait,
+    unsafe stunts). See principle 6.
+  - **SHORT** (`short_videos_desc` / `short_avoid_desc`) — a ~2-sentence summary
+    of each, for **easy viewing** (skimming the file, the approval gate). The
+    scan never reads these. **Plain prose, NOT markdown** (the folded `>-`
+    scalar is fine). **Optional for now** (a gym may omit them); they become
+    required once every gym has been backfilled. When present, ≥2 chars.
 - **`videos.queries`** — the YouTube searches that populate this gym's slice of
-  the shared pool. Author them to cover the gym's disciplines well; the scraper
-  reads them. Empty list is allowed (a gym that rides on others' queries), but
-  then nothing new is fetched for it.
+  the shared pool. Author them to cover the gym's disciplines well **and across
+  the content spectrum** — a healthy share must target the *enjoy* and *human*
+  clusters (entertainment, clips, vlogs, interviews), not just *teach*
+  (educational/how-to). An all-educational query set is wrong (principle 6). The
+  scraper reads them. Empty list is allowed (a gym that rides on others'
+  queries), but then nothing new is fetched for it.
 - **`classes` / `rewards`** — `null` until authored. Shapes below.
 
 ### `classes` — branded class cards (`ClassImage`)
@@ -121,17 +186,18 @@ A workable order (adapt, don't recite):
 ## Write, then validate
 
 1. Write `gyms/<gym_id>.yaml` with the surface above (empty pipeline fields).
-2. **Validate** it round-trips against the `Gym` model before you're done:
+2. **Validate** it round-trips against the `Gym` model before you're done — load
+   the file through the Pydantic model:
 
    ```bash
-   make gym-check GYM_ID=<gym_id>
+   poetry run python -c "import yaml; from schema import Gym; \
+     Gym(**yaml.safe_load(open('gyms/<gym_id>.yaml'))); print('ok')"
    ```
 
-   (Equivalently `poetry run python -m scripts.gym_maker.run check --gym-id <id>`.)
-   This loads the file through the `Gym` Pydantic model via the service — a green
-   check means the schema, the `gym_id`/filename match, and the enum values are
-   all valid. Fix and re-run until clean. **Always `poetry run`**, never bare
-   `python3` or `.venv/bin/*`.
+   A clean load means the schema, the `gym_id`/filename match, and the enum
+   values are all valid (the model is `extra="forbid"`, so typos fail loudly).
+   `make test` also round-trips every gym. Fix and re-run until clean. **Always
+   `poetry run`**, never bare `python3` or `.venv/bin/*`.
 
 After a gym exists with `queries` and a `specification`, the next jobs are the
 **scraper** (fills the pool) and the **scan** (fills this gym's feed) — but those
@@ -230,15 +296,33 @@ user's pick tells you something. Five flavours of one idea teaches nothing (they
 tick all of them) — offer real branches ("hardcore fight team" vs "welcoming and
 social" vs "technical and studious" vs "competition-driven"), not synonyms.
 
-### 6. Spread the queries broadly across the content spectrum
+### 6. A feed is for enjoyment — spread queries across the whole spectrum
 
-Word `videos.queries` to surface content spread **as broadly as possible across
-the nine `VideoType` genres** (`schema/video_type.py`): `educational`,
-`analysis`, `entertainment`, `news`, `interview`, `vlog`, `professional`,
-`clips`, `memes`. Breadth lives in the *queries themselves* — reach across the
-clusters: teach (educational/analysis), enjoy (entertainment/clips/memes), inform
-(news), human (vlog/interview), and peak (professional). Don't let the gym's
-"main thing" (e.g. technique for a how-to gym) crowd out the rest.
+The in-app feed is something members **enjoy scrolling**, not a how-to course
+catalogue. So `videos.queries` must surface content spread **as broadly as
+possible across the nine `VideoType` genres** (`schema/video_type.py`):
+`educational`, `analysis`, `entertainment`, `news`, `interview`, `vlog`,
+`professional`, `clips`, `memes`. Breadth lives in the *queries themselves* —
+reach across the clusters: teach (educational/analysis), **enjoy
+(entertainment/clips/memes)**, inform (news), **human (vlog/interview)**, and
+peak (professional).
+
+**The most common failure is an all-educational query set — do not do this.**
+Fun, entertaining, vlog, clip, highlight, interview and "day in the life" content
+is *explicitly wanted* in every gym's feed. As a rule of thumb a healthy set is
+**only about half teach/how-to**; the rest should be enjoy + human + peak.
+Calibrate the *flavour* of fun to the gym's culture (a calm wellness studio's fun
+is teacher vlogs, studio behind-the-scenes and aesthetic edits; a competitive or
+playful gym's fun is highlight reels, funny moments, challenges and montages) —
+but **never drop the fun to zero**, and never let the gym's "main thing"
+(e.g. technique for a how-to gym) crowd out the rest.
+
+This cuts both ways: `videos_desc` should *welcome* that fun/human content, and
+`avoid_desc` must **never reject a video merely for being short, a vlog, a clip,
+a highlight, or entertaining** — only for being genuinely low-value (clickbait,
+scams, misinformation, off-topic, cross-discipline "X vs Y", anti-discipline
+rage-bait, unsafe stunts).
+
 **`professional` means pros/elite competitors performing the craft at the top
 level** (pro fight footage, championship play) — NOT corporate / high-production
 video.
@@ -277,14 +361,32 @@ question and its options from the answers so far; keep the **bold** ones.
   is ask them about **videos or titles**; turning their meaning into concrete,
   title-verifiable avoids is **your** job at the derive step.
 
-## Derive the specification — `videos_desc` and `avoid_desc`
+## Derive the specification — the LONG pair (scan) + SHORT pair (viewing)
 
 Once you understand the gym, build the spec with **no further video questions**.
+You compose **two tiers**: the long `videos_desc` / `avoid_desc` the scan judges
+against, then a short `short_videos_desc` / `short_avoid_desc` summary for easy
+viewing. Derive the long pair first (steps 1–2), then condense it (step 3). The
+**long pair is a markdown document** (one-line framing, then `**Bold**`
+sub-labels with `-` bullets), written into YAML with a **literal `|-` block
+scalar** so the formatting survives; the **short pair stays plain prose**.
 
-1. **Derive `videos_desc`** from the discipline, persona, culture, and philosophy
-   — tight, concrete prose describing the kinds of videos worth surfacing for
-   *this* gym.
-2. **Derive `avoid_desc`** — **your reasoning work, not the user's**. They handed
+1. **Derive `videos_desc`** (LONG) from the discipline, persona, culture, and
+   philosophy — a concrete **markdown document** describing the kinds of videos
+   worth surfacing for *this* gym: a `# What we surface` title, a framing line,
+   then `##` section headings (e.g. `## Technique & classes`, `## The fun &
+   human side`) each with `-` bullets. Be **rich and
+   specific**, not terse — this is the scan's full context, and there's no
+   length limit. Cover **both halves of the feed**: the
+   instructional/how-to/technique/class content *and* the fun, human content
+   members enjoy — entertainment, highlight/clip reels, creator vlogs and "day in
+   the life", behind-the-scenes, funny moments, interviews, transformations.
+   Calibrate the flavour to the gym's culture, but never describe a how-to-only
+   feed (principle 6).
+2. **Derive `avoid_desc`** (LONG) — **your reasoning work, not the user's**, and
+   likewise a **markdown document** (a `# What we avoid` title, a framing line,
+   a `## Reject` bullet list, and a closing reminder that fun/short/vlog content
+   is NOT a reason to reject). They handed
    you a natural-language want ("no McDojo stuff", "nothing that says BJJ is
    useless"); silently translate each into the concrete, title/description-
    verifiable form the scan can act on (it sees title + description + transcript).
@@ -305,13 +407,29 @@ Once you understand the gym, build the spec with **no further video questions**.
    obviously-unrelated topics (a Muay Thai gym excluding "cooking videos" is
    pointless). Test each: *could I tell this matches from a title + description?*
    If not, rewrite it.
-3. **Descriptions gate.** Show the composed `videos_desc` + `avoid_desc` back via
+
+   **Never reject content by format.** An avoid drops *low-value* content, not
+   *fun* content. Do NOT write avoids like "short clips", "social clips", "vlogs",
+   "highlights", "non-instructional", or "anything that isn't a followable class"
+   — that content is wanted (principle 6). Reject only the genuinely bad: off-topic,
+   clickbait, scams/misinformation, cross-discipline "X vs Y", anti-discipline
+   rage-bait, and unsafe stunts. If an avoid would catch a perfectly good gym vlog
+   or highlight reel, it's wrong — delete it.
+3. **Condense to the SHORT pair.** Distill each long description into a
+   ~2-sentence `short_videos_desc` / `short_avoid_desc` — the same intent, fast
+   to skim. These are display-only (the scan never reads them); their job is to
+   make the gym readable at a glance. Don't drop the key specifics, just trim.
+4. **Descriptions gate.** Show **both tiers** — the long `videos_desc` /
+   `avoid_desc` and the short `short_videos_desc` / `short_avoid_desc` — back via
    one `AskUserQuestion` (approve / revise). This is the content approval; loop
    until approved.
-4. **Draft the queries.** Concrete `query` strings — real phrases someone would
+5. **Draft the queries.** Concrete `query` strings — real phrases someone would
    type into YouTube, specific to this gym's world — **spread broadly across the
-   content spectrum** (principle 6). Show them so the user can cut/add; don't make
-   them write the set.
+   content spectrum** (principle 6). About half teach/how-to; the rest must hit
+   the *enjoy* and *human* clusters (entertainment, clips, highlights, vlogs,
+   "day in the life", interviews, transformations), flavoured to the gym's
+   culture. A query set that's all educational is wrong. Show them so the user can
+   cut/add; don't make them write the set.
 
 ## Classes & rewards — derive + approve, then verify every image
 
@@ -331,28 +449,43 @@ otherwise leave them `null`.
 - **Find + VISUALLY verify EVERY image — no exceptions.** Applies to all class
   images, all instructor headshots, and all reward images. Never write an
   `image_url` you haven't downloaded and looked at. For each:
-  1. **Source from Wikimedia Commons** (stable, hotlinkable, licensed — never
-     random-placeholder services like picsum, which return unrelated photos):
+  1. **Source activity / people / class imagery from Pexels** — clean, modern,
+     commercial-grade stock that hotlinks and reads as a real studio/gym.
+     **Do NOT use Wikimedia Commons for activity or people shots:** it is
+     public-domain-dominated, so "boxing class", "yoga", "spin", etc. come back
+     mostly US-military and competition/Olympic photos — off-brand and
+     trust-destroying on a member screen. (Commons is fine only for a plain
+     product/object shot — a dumbbell, a gi, a water bottle — where military
+     bleed isn't a risk. Never use random-placeholder services like picsum.)
+     Find candidates with WebSearch restricted to Pexels, then build the direct
+     CDN url from the photo id in the result URL (no API key needed):
      ```
-     curl -s -A "CombatDen/1.0" "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=<query>&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url|size&iiurlwidth=1280&format=json"
+     WebSearch({ query: "<discipline> class", allowed_domains: ["pexels.com"] })
+     # result page https://www.pexels.com/photo/<slug>-<ID>/  → take trailing <ID>
+     # direct hotlinkable CDN url (this exact pattern works):
+     https://images.pexels.com/photos/<ID>/pexels-photo-<ID>.jpeg?auto=compress&cs=tinysrgb&w=1200
      ```
-     Use the `iiurlwidth` thumb for landscape class/reward images; prefer
-     portrait results for headshots.
-  2. **Download** to a temp file: `curl -s -A "CombatDen/1.0" "<url>" -o /tmp/cand.jpg`
-     (a `<!DOCTYPE html>` body means a bad thumb size — use a size the API
-     returned).
+     Skip `/video/` and `/search/` results.
+  2. **Download** with a browser User-Agent to a temp file:
+     `curl -s -A "Mozilla/5.0 … Chrome/120" "<cdn-url>" -o /tmp/cand.jpg`
+     (a `<!DOCTYPE html>` body means a bad id/url — pick another).
   3. **VIEW it** — `Read` `/tmp/cand.jpg` and actually look. Confirm: (i) class /
      reward images are **horizontal** (wider than tall); (ii) it truly **is the
      thing** — the activity for a class, a real coach portrait for a headshot;
-     (iii) it's clean — no watermark, logo, heavy text, collage, AI-slop, or
-     wrong subject.
+     (iii) it's clean — no watermark, logo, heavy text, collage, AI-slop,
+     **military uniforms/fatigues, competition bibs/medals**, or wrong subject.
   4. Failed any check → pick another candidate and repeat. Only a URL that passed
      (3) goes in the gym file.
+  - **At scale (many gyms): group by discipline.** Verify one small image set per
+    discipline cluster and reuse it across that cluster's gyms (e.g. a Sonnet
+    workflow fanned out one agent per cluster), rather than sourcing per-gym. Do
+    the visual vetting with **Sonnet or stronger — Haiku is too weak for it** (it
+    has waved through 18th-century paintings and recognizable celebrities as
+    "instructor headshots").
 
-> **Known limitation:** hotlinked internet images rot, can be hotlink-blocked,
-> and carry licensing risk on a customer-facing screen. The durable answer is
-> owned / hosted images (generated via ThemeService, or gym-uploaded). This is the
-> interim brand-match step.
+> **Known limitation:** hotlinked internet images rot and can be hotlink-blocked.
+> The durable answer is owned / hosted images (generated via ThemeService, or
+> gym-uploaded). Pexels-via-CDN is the interim brand-match step.
 
 ## Anti-patterns
 
@@ -369,11 +502,30 @@ otherwise leave them `null`.
   technique") — every avoid must be **specific AND verifiable from a title /
   description**. Test each one.
 - Never fill `avoid_desc` with obviously-unrelated topics.
+- Never write an **all-educational / how-to-only** feed. The feed is for
+  enjoyment too — `videos_desc` and the queries must include fun + human content
+  (entertainment, clips, highlights, vlogs, "day in the life", interviews),
+  flavoured to the gym's culture (principle 6).
+- Never reject content **by format**: no avoids for "short clips", "vlogs",
+  "highlights", "social clips", "non-instructional", or "anything that isn't a
+  followable class" — that content is wanted. Avoids drop only genuinely
+  low-value content (clickbait, scams, off-topic, "X vs Y", anti-discipline
+  rage-bait, unsafe stunts).
+- Never write the **LONG** descriptions with a folded `>-` scalar — they're
+  markdown documents and `>-` flattens the newlines/headings/bullets. Use the
+  literal `|-` block scalar. (The **SHORT** pair stays plain prose; `>-` is fine
+  there.)
+- Never write a long description without **hashtag headings** — every long doc
+  needs a `#` title and `##` section headings (not bold `**…**` as fake
+  headings). A markdown document without titles doesn't format properly.
 - Never write any `image_url` (class, headshot, or reward) you haven't downloaded
-  and **viewed**; never use random-placeholder image services.
+  and **viewed**; never use random-placeholder image services; never source
+  activity / people imagery from Wikimedia Commons (military & competition bleed)
+  — use Pexels for those (see the image step above).
 - Never fabricate a real, named gym's instructor bios; only demo / archetype
   profiles may use placeholders.
 - Never hand-edit the pipeline fields (`good_video_ids` / `rejected_video_ids` /
   `scan_costs`) — they're machine state.
 - Never invent a `Gym` field — the model is `extra="forbid"`.
-- Never skip `make gym-check`, and never use bare `python3` / `.venv/bin/*`.
+- Never skip the round-trip validation (load through the `Gym` model / `make
+  test`), and never use bare `python3` / `.venv/bin/*`.

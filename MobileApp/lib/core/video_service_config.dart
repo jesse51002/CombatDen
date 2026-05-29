@@ -1,8 +1,9 @@
-/// VideoService deployment config, shared by the video feed and class-card
-/// features. Both fetch the active theme's content from the VideoService by
-/// **design id** (`GET /themes/{designId}/...`, single-tenant) — the
-/// theme→gym→feed mapping lives server-side, so the app no longer carries any
-/// theme→feed table.
+/// VideoService deployment config, shared by the gym detail (classes +
+/// rewards) and the video feed. Both fetch this single-tenant build's content
+/// from the VideoService by **gym id** (`GET /gyms/{gymId}` for the whole
+/// detail, read into memory once; `GET /gyms/{gymId}/videos` for the paginated
+/// feed). The gym id is the user-selected gym (`SelectedGym`); the theme it
+/// carries is branding-only.
 ///
 /// Base URL defaults to localhost (use `adb reverse tcp:8002 tcp:8002` so a
 /// device reaches the host over USB), overridable at launch with

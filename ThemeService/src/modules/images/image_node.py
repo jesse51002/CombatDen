@@ -11,6 +11,7 @@ prompt text for visual continuity — never fed in as an input image).
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 from string import Template
@@ -29,12 +30,26 @@ from src.shared.interfaces.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
+
+def _content_version(path: Path) -> str:
+    """Short sha256 of the just-written image bytes — the API's cache-busting
+    ``?v=`` token, set on the ``ImageOutput`` at creation (matches the Writer's
+    later re-stamp). The file is always present here (it was just written)."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+
 IMAGE_PROMPT_PATH = Path(__file__).parent / "prompts" / "image_prompt_rule.md"
 # Injected into the main prompt ONLY when the slot has image
 # dependencies: the visual-continuity guidance plus the per-dependency
 # listing. Kept separate so the common no-dependency prompt carries no
 # dependency wording at all. Dependencies are always reference.
 RELATED_ASSETS_PATH = Path(__file__).parent / "prompts" / "related_assets.md"
+# Injected into the main prompt ONLY when a reopen-time ``--spec`` is present:
+# the user's change request wrapped in a high-priority "obey this exactly"
+# frame so it outranks the subject's example imagery (the create-new path used
+# to drop the spec entirely, so a "make it a flame" steer was ignored). Empty —
+# no injection — on a fresh run or a re-roll carrying no spec. Kept as its own
+# ``.md`` per the no-inline-prompt rule; code holds only the path.
+USER_OVERRIDE_PATH = Path(__file__).parent / "prompts" / "user_override.md"
 RAW_SUFFIX = ".raw.png"
 # A retried generation reuses the canonical ``{slot}.raw.png`` dest; before
 # the next attempt overwrites a file a prior attempt already wrote, that
@@ -86,7 +101,6 @@ class ImageNode(Node):
         classifier: ComplexityClassifier,
         background: BackgroundService,
         seed: dict[str, ImageOutput] | None = None,
-        overwrite_specs: str = "",
     ) -> None:
         super().__init__(
             run_ctx,
@@ -94,7 +108,6 @@ class ImageNode(Node):
             deps=deps,
             declared_slots={slot.id},
             seed=seed,
-            overwrite_specs=overwrite_specs,
         )
         self._slot = slot
         self._llm = llm
@@ -141,6 +154,7 @@ class ImageNode(Node):
         await self._background.run(raw, final)
         return ImageOutput(
             path=self._run_ctx.image_path(self._slot.id),
+            version=_content_version(final),
             prompt=prompt,
             complexity=complexity,
             overwrite_specs=self.overwrite_specs,
@@ -155,7 +169,6 @@ class ImageNode(Node):
             self._run_ctx,
             slot=self._slot,
             palette=palette,
-            change=self.overwrite_specs.specs,
         )
         raw = self._run_ctx.image_dir / f"{self._slot.id}.edit{RAW_SUFFIX}"
         await self._image_gen.edit(instruction, source, raw, model=IMAGE_GEN_MODEL)
@@ -163,6 +176,7 @@ class ImageNode(Node):
         await self._background.run(raw, final)
         return ImageOutput(
             path=self._run_ctx.image_path(self._slot.id),
+            version=_content_version(final),
             prompt=instruction,
             complexity=None,
             overwrite_specs=self.overwrite_specs,
@@ -202,6 +216,16 @@ class ImageNode(Node):
             related_assets = Template(fragment).safe_substitute(dependencies=listing)
         else:
             related_assets = ""
+        # The reopen-time change request: dropped here historically, now folded
+        # in as a high-priority override so create-new actually obeys --spec.
+        spec = self._run_ctx.overwrite_specs.specs
+        override = (
+            Template(USER_OVERRIDE_PATH.read_text(encoding="utf-8")).safe_substitute(
+                spec=spec
+            )
+            if spec
+            else ""
+        )
         prompt = Template(template).safe_substitute(
             name=design.name,
             short=design.short_desc,
@@ -210,6 +234,7 @@ class ImageNode(Node):
             theme_background=(THEME_BG_DARK if dark_mode else THEME_BG_LIGHT),
             subject=self._slot.description,
             related_assets=related_assets,
+            override=override,
         )
         result = await self._llm.complete_structured(
             [{"role": "user", "content": prompt}],

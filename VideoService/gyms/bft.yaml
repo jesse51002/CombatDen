@@ -1,17 +1,545 @@
 gym_id: bft
 gym_type:
 - bft
-theme: ZZUndoneBFTIndie
+theme: BFTIndie
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational bft content for gym members
-      — technique breakdowns, full classes, drills, and credible coaching from reputable
-      bft sources.
-    avoid_desc: Anything not about bft; off-topic, low-quality, or clickbait videos;
-      and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'BFT-style group strength-and-conditioning content — progressive
+      strength and HIIT follow-alongs, barbell and dumbbell technique, and how programmed
+      training blocks build week over week, from credible coaches — plus the fun side:
+      "what a BFT-style class is really like" vlogs, member progress and transformation
+      stories, behind-the-scenes, and community and coach interviews.'
+    short_avoid_desc: No "get shredded in 30 days" clickbait, ego-lifting / fake-PR
+      clips, sketchy supplement promos, or "BFT is a scam / BFT vs F45" debate videos.
+      Nothing off-topic.
+    videos_desc: |-
+      # What we surface
+
+      Format, technique, and follow-along content for a group strength-and-
+      conditioning studio in the BFT-style mould — plus the fun, human side, so
+      it's a feed members enjoy, not just a how-to library.
+
+      ## Strength & conditioning
+      - Progressive strength sessions and HIIT conditioning circuits you can do
+        at home
+      - Barbell, dumbbell and kettlebell technique for the movements that recur
+        on the floor: squat, deadlift, press, hinge, carries
+      - Explainers on how progressive twelve-week training blocks and
+        progressive overload stack week over week
+      - Warm-up, mobility and recovery, from credible coaches
+      - Measurable, programmed, block-by-block tone throughout
+
+      ## The fun & human side
+      - "What a BFT-style class is really like" walkthroughs
+      - Member progress and transformation stories
+      - Studio behind-the-scenes and community moments
+      - PR-celebration and funny workout moments
+      - Coach interviews — leaning on independent creator content rather than
+        copyrighted branded class footage
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about group strength-and-conditioning / HIIT training;
+      off-topic, genuinely low-quality, or clickbait videos.
+
+      ## Reject
+      - "Get shredded / abs in 30 days" clickbait
+      - Dangerous ego-lifting and fake-PR fail compilations
+      - Sketchy supplement or steroid/SARMs promos
+      - "BFT vs F45 / CrossFit" and "is BFT worth it / BFT is a scam /
+        overpriced" cross-discipline or anti-discipline debate and reaction
+        videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a clip, a highlight, or
+      entertaining — fun content is wanted.
+  queries:
+  - progressive strength training program explained
+  - group strength and conditioning workout follow along
+  - barbell squat deadlift press technique breakdown
+  - dumbbell strength workout follow along
+  - how progressive overload works over weeks
+  - 12 week strength training block explained
+  - hiit conditioning circuit follow along
+  - full body strength workout for beginners
+  - group hiit workout 45 minutes follow along
+  - strength training movement mistakes and fixes
+  - what a bft style class is really like
+  - my first group strength class experience vlog
+  - group strength training transformation story
+  - strength studio behind the scenes
+  - pr celebration group workout clips
+  - funny group strength workout moments
+  - day in the life group fitness coach
+  - strength coach interview on block programming
+  - group strength workout day in the life vlog
+  - progressive strength training motivation
+  good_video_ids:
+  - EbfdMaV7qqM
+  - W31eWDidL0g
+  - XVKgRC2w2lA
+  - gT6OkjTDcYc
+  - pH5bl36t-ik
+  - qLccfZ4HEAQ
+  - vc7v73nIAqE
+  - vxdQbLZfkJc
+  - 0MfKBouPSME
+  - 4imTQhTlj3M
+  - ATQ2xB7SzCs
+  - E91hwT81nTQ
+  - YJzle_w53Vs
+  - fD-qF0cHAP4
+  - gfUg6qWohTk
+  - joI6MmdzMYo
+  - laO7iSLSIZE
+  - w4ntwYkRlcY
+  - 4C6uxkH6V6A
+  - HiJ1uLuTNxo
+  - TbGqp7mdO04
+  - US-EMesKq4Q
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - p40iUjf02j0
+  - pbkrx340TBM
+  - sBObC61uWLs
+  - ximZfmqh2hI
+  - 3NeeB6I7AFc
+  - 7yX1QN5a6L4
+  - 9zt6Hc84rjg
+  - CDDHlGRL3AI
+  - E5-WVI-1mUE
+  - NBRv7ShUTm4
+  - _qpSqEjV55Q
+  - dm8JR9Wkz5Q
+  - fMz5CLtKXC4
+  - nMo--6qR61w
+  - ogSfK4fPCwk
+  - q9CKxBMxTlU
+  - qLBImHhCXSw
+  - rlZgtQbRlD0
+  - rma9n_xL1i0
+  - wd6dkj6p3lM
+  - 5xfBiYplogg
+  - 8rEfztgwBoc
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - EQio6nzPLPw
+  - GY1JhB9BEkk
+  - MR4pIQhpu9Q
+  - NJ8NP-UKwHE
+  - PK3Xz3VemYw
+  - V5M-gADbaqk
+  - XaA3qD1EAqg
+  - bGauZyt2Fo0
+  - h4nLNNbR9o8
+  - mS_yuOfyNIM
+  - t-X8ITcKS-c
+  - woYIxttRHrw
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 2kui0fFKMyE
+  - 8wwZEFkGB-Q
+  - EzzHv56zDVc
+  - GFaDWjjWlvs
+  - JTUxuQlS2RU
+  - SYJu_y6WvEc
+  - W6ydiO7SUIM
+  - lZjtasHvlN4
+  - s_jNQkalgmU
+  - t2Ly6-QPMi8
+  - vK_DQYimccw
+  - 0zKWxM9rwfE
+  - 5tTKSFsgfeI
+  - 7SIjcX5B1Vs
+  - AxlTMs58tHw
+  - BdWvP-lbb68
+  - KeNObkhENKQ
+  - P_ouE8obuoU
+  - TN9i9Ni0Xr4
+  - gu11txbEKSk
+  - oFFtocdGCLo
+  - wejo2SqFZoY
+  - zSfy8KOcgG0
+  - 06P5b_u0ut4
+  - 1DN1SijxDUY
+  - 5iHQDUvR_vc
+  - 5iX6ecbz8XE
+  - B12MXF0bSFo
+  - EKUNGQ4LmH8
+  - W6wwO_gbn-o
+  - Yxx-j3J7N6c
+  - bDCeXbMJVNs
+  - bGKNaw82JNc
+  - gUZ5VfjBagc
+  - kwDQk2siRJs
+  - -mpPLGD2iCs
+  - KTUNnCNs9UY
+  - PvDPhqeRZ7A
+  - adV2t4QrHWg
+  - cQ4K399DTgI
+  - mVlQ3eVMa6Q
+  - qL7Nlexje-M
+  - 22AFyTaVs5g
+  - 2LD0Tp3oIDU
+  - 8lqiBygUFsM
+  - JKQcQO7fKV4
+  - JyV7mUFSpXs
+  - M4K0s792wAU
+  - T7Mk9KBuhAU
+  - Tg0Zz1ckDkA
+  - bZC1ym4Ti24
+  - 342ALAEwapQ
+  - 6oZfhhEHXU8
+  - EctwcTwyIsk
+  - N1ZRYx46ye4
+  - SV-KfCQPJJ4
+  - UNf2qsX8uFc
+  - UhLNFz20oQU
+  - YDactrbACK4
+  - bIE0byxi6rk
+  - gx0RWT7WbmA
+  - 85Xv_bDDUOM
+  - Dpyutwgczw0
+  - SoTjgjO_kTk
+  - WDhl_906uuI
+  - YghOeTjdEf4
+  - dXSYMg6GZ1I
+  - j04wOp5R3ZY
+  - o0geL60T8jI
+  - tFOP4-BlW-c
+  - u6ZelKyUM6g
+  - -ENLFPdXIbA
+  - 5RUWK_51lkU
+  - AL5HDsXTUyI
+  - AqIMz14J-Lw
+  - AsyyZgtHMPw
+  - PVF2jrr82vo
+  - T912qM6x080
+  - WEKB9EGH20I
+  - gcX4qN--Zdo
+  - ixZVPFJWnRY
+  - x5PAjQrG_UM
+  - 3irVy7zN47w
+  - DAKGiwO9Gj0
+  - F4vmk_MhhsM
+  - NCiL9vAkKvM
+  - gvM-WuRfbkY
+  - pD8bBBSa6Hw
+  - tJeI51crrvs
+  - uQWlzocm6ec
+  - 2-gQlIJukC4
+  - CiMn91rtWkk
+  - Wa4f7f5y7uQ
+  - 0cnjahRSA8A
+  - 3qyWpJ34dWw
+  - B-ePkIehooM
+  - HWSlRhGzdXU
+  - RTELzIAssa0
+  - bKvlpaDR-Eo
+  - bej53DFL4WQ
+  - m8mQ_92_Ylg
+  - qx1LeNpCYd0
+  - 09ijnl90ulE
+  - 5CGlXgmauIY
+  - Pjbxp2kwpiU
+  - WGshtWEzxeA
+  - ctV8NyRWZIo
+  - dc-PGQhCwSc
+  - hiLF_pF3EJM
+  - 2DX_U89ocX8
+  - KpzoVMw_rMg
+  - LT_aBQatj5s
+  - OTrTqs9FLq0
+  - rfGi8W9j9gQ
+  - s8u4PCyTGMo
+  - 0L0cOOpyPpA
+  - 42fVGpylH2Y
+  - AcVj1bB8Jnk
+  - DE9T22Q20Bw
+  - J8YaoUpH-qg
+  - MCGa9qP_Bo8
+  - _JEO0KWcP3M
+  - ozpcrgmwyto
+  - -GCA92b119Y
+  - ClgAYjvqP_s
+  - ZdTzmfPffl4
+  - mq40ebFwhT8
+  - pPlFSqXnbls
+  - xqvCmoLULNY
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 0CfdNf9S7S8
+  - FcEqCbfRZZw
+  - INXD5osrkDo
+  - IqKAk7N2GmM
+  - T8O5CMhppdo
+  - aglGMqG-Nzg
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - kUTSNVYUG60
+  - proINILL4X4
+  - qOec0er9XdA
+  - yVUcHEOr450
+  - -Et6xw8bv7U
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - CEvIs9y1uog
+  - DYHOf_R3XRw
+  - KJBlo6X4Mm4
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - dBSAURSwuiI
+  - f_Yi3YrWSsk
+  - iKMr1BLeMpc
+  - kThGMgiprF4
+  - mL40wGiWbCo
+  - pdUptRE5Dpc
+  - sW_NLt47vPU
+  - uS2XpgGOPuA
+  - wpWV4MwYaSk
+  - 0mJGecBLEi4
+  - 1u6d1CX7o9c
+  - 3dgIOZk7g2s
+  - 4D6wSrXC__0
+  - 6ADogpDq0t4
+  - Cmsr0n0Gd3I
+  - DacqZQC3Hfc
+  - Gqqt0h19vxc
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - VNgfAzTO3xU
+  - n_yuiYV-_Zo
+  - xHlhEnN60-s
+  - z6k8wXfwS94
+  - 4L_xcWCOQOA
+  - 5kkBgb426Aw
+  - 6BTBUhAWhSg
+  - ItE7xQpkfMA
+  - P1j1j0ttVPU
+  - Y-AYC3_DbpY
+  - dfSmTclf3wk
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - lokn0miZSV8
+  - r6HHJJXMmdU
+  - DS6nJkgfAko
+  - NthtMRjIT2I
+  - UXI6j0MJFWw
+  - ZDVjEOAU0TM
+  - jy-R9pPBDDM
+  - mtVs-IefHrM
+  - t1zP9ojJ_WE
+  - v6B9zgvkos0
+  - 1ZccDxDC5UY
+  - 7zjLVDQMY0w
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - bd2EAn9tJDM
+  - cA1t3TTnTes
+  - dSRLhDyA0-E
+  - fd6ZmG6L-TE
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - sL69s4E63pU
+  - uVMuw2oRyt0
+  - vuuqoMs162A
+  - wgYcAjoTLMI
+  - 2oQp_ibJWME
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - UbEQSel4BhQ
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - gImOTwdjAog
+  - mLTqcadk8Bw
+  - y7_Tc8vS5NU
+  - 0qVlPcJp7c4
+  - 1s_0rUUo0A0
+  - 4zO7i9P8mGE
+  - D89yRfGIpmg
+  - IVEAfdHlnO4
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - eU2cqgesA3w
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - ooEgWahEvEM
+  - scIOIOrhYus
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - HWAOifKGLiE
+  - KijAPJXjg8c
+  - Mlgs4_54q8Y
+  - jAGt4H5oC5g
+  - qd3vrkQePVQ
+  - vm6ZoKRLGh8
+  - 1EeTvG34xGo
+  - 6snqIh6lgsE
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - MM0Q35Pcqa0
+  - OeTK66_glm0
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - e4xwZuIAZJM
+  - gdJYRWx9g6w
+  - r_VHltdyvv4
+  - 2uPyV7Goj9M
+  - AyMUWBUt3WY
+  - FKcr2h7RR-g
+  - M4nSM7TBsJg
+  - cujcxjSm69g
+  - gPry3-OomII
+  - gaiQNxnpZa4
+  - iBb7TfmdzCk
+  - p17GwFtNGws
+  - pA6ls-oHhX0
+  - sDvar0GLPJA
+  - ucygiLlByFw
+  - x6UyziJYpao
+  - -yp3g7EeDqo
+  - 2-5zmszOu3o
+  - 3ap81sm30P8
+  - 7bC-orwQ2zo
+  - A-PDoo2BXLQ
+  - BXeOYJIq-1I
+  - EsglINkJKPs
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - ZV3fXS2XHeQ
+  - dFiBVley3o0
+  - e2a-n2Cl8H8
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - u1UNSANB-po
+  - 5ZK50rIFyL4
+  - 87OSqDBBarM
+  - ClIoWZlQD70
+  - HzfHKN6rmpk
+  - IGGuzpu87f4
+  - QVl-xXen7KU
+  - SMAB27z3x0c
+  - YQpuGCTXszw
+  - _-qJwnqlJMw
+  - i5Li6GaTU1I
+  - xgv49WM_PuY
+  - 1P088Ervhss
+  - 6snSEm_aMo0
+  - 716e30A053U
+  - Hu-rVZVSzxs
+  - OwPGsdNYQGM
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - jLvQTW1llIE
+  - lZTWOdcuI-8
+  - mq1ePlTGBuY
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - im7xZ7jgyRw
+  - moVynuxM4fc
+  - vcxBPswPszY
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - A46HOfXlFa8
+  - NjlxJeT_ATg
+  - Np6ZwNLknSI
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - 2-C9QvUala4
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - SpIQrvqnw0o
+  - U7ppWOd52YU
+  - i98t33E8Eps
+  - j0ZCQFoNx0I
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 8D6nnYgQdfw
+  - Evz8STuQhYw
+  - HKF9mb6FQDg
+  - KosAPIzhNE8
+  - Slzk17RnOrc
+  - Vib_BSDPTNI
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - oZ1c8IBz7a0
+  - vx6RkgoxzgQ
+  - -jc4EeIGgRU
+  - 0O9bmFhtrHY
+  - CRUnIbCbH3c
+  - HrWjf8WOsfI
+  - LT-NaeBHmHM
+  - MBaoJffyT5I
+  - RlrmSu5u9bE
+  - YSJubcbzJmo
+  - bzGSxdGF8z0
+  - sLYw8VdVGbw
+  - 82Pd_Kbzim4
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - MilYefF9DjI
+  - Vswrm9dCGEE
+  - pdtyvwgpBI0
+  scan_costs:
+  - at: '2026-05-29T15:14:48.341242Z'
+    usd: 0.12134440000000213
+classes:
+  - name: "Iron Foundation"
+    image_url: "https://images.pexels.com/photos/4662333/pexels-photo-4662333.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Master the fundamentals of compound lifts with progressive resistance. Learn proper squat, deadlift, and press mechanics before moving into advanced programming."
+    instructor_name: "James Carter"
+    instructor_bio: "Head coach with over a decade of experience helping members of every level train smarter, move better, and stay consistent."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg"
+  - name: "Power Blocks"
+    image_url: "https://images.pexels.com/photos/9958667/pexels-photo-9958667.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Build raw strength through structured 12-week blocks focusing on progressive overload. Experience how systematic programming drives measurable gains week to week."
+    instructor_name: "Sarah Mitchell"
+    instructor_bio: "Performance coach focused on building strength, mobility, and confidence through approachable, well-structured sessions."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg"
+  - name: "Metabolic Assault"
+    image_url: "https://images.pexels.com/photos/4720230/pexels-photo-4720230.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Crush your conditioning with high-intensity circuits that build cardiovascular fitness and muscular endurance. Dynamic partner and group formats keep energy high."
+    instructor_name: "Daniel Brooks"
+    instructor_bio: "Certified instructor who breaks every movement down step by step so newcomers and regulars alike feel supported."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg"
+  - name: "Recovery & Mobility"
+    image_url: "https://images.pexels.com/photos/8381747/pexels-photo-8381747.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Balance hard training with smart recovery through mobility work and injury prevention. Learn sustainable training practices to stay strong and healthy long-term."
+    instructor_name: "Maya Bennett"
+    instructor_bio: "Coach passionate about creating an inclusive, high-energy room where members from all backgrounds can thrive."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg"
+rewards:
+  - title: "Bring a friend"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+    price_label: "Free"
+    points_cost: 1000
+  - title: "Club t-shirt"
+    image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    price_label: "Free"
+    points_cost: 1500
+  - title: "Jump rope"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/f/fd/BeadedRope.jpg"
+    price_label: "25% off"
+    points_cost: 2000
+  - title: "1-on-1 PT session"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+    price_label: "50% off"
+    points_cost: 2500

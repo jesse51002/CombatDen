@@ -50,6 +50,7 @@ class _StoreColumn extends StatelessWidget {
         for (final item in items)
           RewardCard(
             imageAsset: item.imageAsset,
+            imageUrl: item.imageUrl,
             title: item.title,
             priceLabel: item.priceLabel,
             pointsCost: item.pointsCost,

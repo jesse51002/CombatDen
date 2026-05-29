@@ -1,9 +1,11 @@
 """OverwriteSpecs — the agent-authored steering for (re)generating a slot.
 
-This is the single object a reopen-time regeneration is steered by, threaded
-through ``Pipeline.run`` → the registry → every node → its service, and
-recorded on each per-item output (``NodeOutput.overwrite_specs``) so a saved
-slot says exactly what produced it.
+This is the single object a reopen-time regeneration is steered by. It rides on
+the ``RunContext`` (``run_ctx.overwrite_specs``) — every layer (executor →
+registry → node → service) already carries the context and reads the steering
+off it, so nothing hand-threads it as a parameter. It is also recorded on each
+per-item output (``NodeOutput.overwrite_specs``) so a saved slot says exactly
+what produced it.
 
 **It is the agent's job to populate this with whatever helps the
 regeneration.** Carrying everything on one extensible object (rather than

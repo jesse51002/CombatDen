@@ -107,12 +107,12 @@ def test_list_gyms_empty_tree(tmp_path: Path) -> None:
 
 def test_save_gym_then_load_round_trip(tmp_path: Path) -> None:
     service = VideosService(root=tmp_path)
-    _save_gym(service, _gym("vinyasa", "ZZUndoneVinyasaFlow", good=["abc", "xyz"]))
+    _save_gym(service, _gym("vinyasa", "VinyasaFlow", good=["abc", "xyz"]))
 
     gym = asyncio.run(service.load_gym("vinyasa"))
     assert gym.gym_id == "vinyasa"
     assert [g.value for g in gym.gym_type] == ["vinyasa"]
-    assert gym.theme == "ZZUndoneVinyasaFlow"
+    assert gym.theme == "VinyasaFlow"
     assert gym.videos.good_video_ids == ["abc", "xyz"]
     assert asyncio.run(service.list_gyms()) == ["vinyasa"]
 
@@ -138,45 +138,6 @@ def test_malformed_gym_id_raises_not_found(tmp_path: Path, bad_id: str) -> None:
         asyncio.run(service.load_gym(bad_id))
 
 
-def test_gym_for_theme_resolves_and_unmapped_raises(tmp_path: Path) -> None:
-    service = VideosService(root=tmp_path)
-    _save_gym(service, _gym("vinyasa", "ZZUndoneVinyasaFlow"))
-
-    gym = asyncio.run(service.gym_for_theme("ZZUndoneVinyasaFlow"))
-    assert gym.gym_id == "vinyasa"
-    with pytest.raises(NotFoundError):
-        asyncio.run(service.gym_for_theme("ZZUndoneNope"))
-
-
-def test_classes_for_theme_resolves_and_missing_raises(tmp_path: Path) -> None:
-    service = VideosService(root=tmp_path)
-    _save_gym(
-        service,
-        _gym("vinyasa", "ZZUndoneVinyasaFlow", classes=[_class_card(i) for i in range(4)]),
-    )
-    out = asyncio.run(service.classes_for_theme("ZZUndoneVinyasaFlow"))
-    assert len(out) == 4
-
-    _save_gym(service, _gym("bare", "ApexMMA"))  # no classes
-    with pytest.raises(NotFoundError):
-        asyncio.run(service.classes_for_theme("ApexMMA"))
-
-
-def test_rewards_for_theme_resolves_and_missing_raises(tmp_path: Path) -> None:
-    service = VideosService(root=tmp_path)
-    _save_gym(
-        service,
-        _gym("vinyasa", "ZZUndoneVinyasaFlow", rewards=[_reward_card(i) for i in range(3)]),
-    )
-    out = asyncio.run(service.rewards_for_theme("ZZUndoneVinyasaFlow"))
-    assert len(out) == 3
-    assert out[0].price_label == "Free"
-
-    _save_gym(service, _gym("bare", "ApexMMA"))  # no rewards
-    with pytest.raises(NotFoundError):
-        asyncio.run(service.rewards_for_theme("ApexMMA"))
-
-
 # --- gym browser page --------------------------------------------------------
 
 
@@ -186,24 +147,25 @@ def test_list_gyms_page_builds_cards(tmp_path: Path) -> None:
         service,
         _gym(
             "vinyasa",
-            "ZZUndoneVinyasaFlow",
+            "VinyasaFlow",
             good=["abc", "xyz"],
             classes=[_class_card(0)],
+            rewards=[_reward_card(0)],
         ),
     )
     page = asyncio.run(service.list_gyms_page(limit=20, offset=0))
     assert page.total == 1
     card = page.gyms[0]
     assert card.gym_id == "vinyasa"
-    assert card.theme == "ZZUndoneVinyasaFlow"
+    assert card.theme == "VinyasaFlow"
     assert card.parent_gym_type.value == "Yoga"  # coarse bucket from vinyasa
     assert (
         card.celebration_image_url
-        == "/apps/combatden/ZZUndoneVinyasaFlow/images/celebration_image"
+        == "/apps/combatden/VinyasaFlow/images/celebration_image"
     )
     assert card.video_count == 2  # len(good_video_ids)
     assert card.has_classes is True
-    assert card.has_rewards is False
+    assert card.has_rewards is True
 
 
 def test_list_gyms_page_paginates_sorted_by_id(tmp_path: Path) -> None:
@@ -220,7 +182,7 @@ def test_list_gyms_page_paginates_sorted_by_id(tmp_path: Path) -> None:
 
 def test_list_gyms_page_query_filters(tmp_path: Path) -> None:
     service = VideosService(root=tmp_path)
-    _save_gym(service, _gym("vinyasa", "ZZUndoneVinyasaFlow"))
+    _save_gym(service, _gym("vinyasa", "VinyasaFlow"))
     _save_gym(service, _gym("mma", "ApexMMA", gym_type=[GymType.MMA]))
     page = asyncio.run(service.list_gyms_page(limit=20, offset=0, query="mma"))
     assert page.total == 1

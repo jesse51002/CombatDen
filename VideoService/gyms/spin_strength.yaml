@@ -1,17 +1,670 @@
 gym_id: spin_strength
 gym_type:
 - spin_strength
-theme: ZZUndoneSpinStrength
+theme: SpinStrength
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational spin strength content for
-      gym members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable spin strength sources.
-    avoid_desc: Anything not about spin strength; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Hybrid spin-and-strength classes that cross from the saddle
+      to the dumbbell rack — follow-along rides paired with floor strength blocks,
+      plus the fun side: "what a spin-and-strength class is really like", studio vlogs
+      and behind-the-scenes, instructor vibes and playlists, funny class moments,
+      and transformation stories.'
+    short_avoid_desc: Off-topic, clickbait "get toned in 7 days" gimmicks, and "spin
+      vs lifting / cardio vs weights which is better" or "cardio kills your gains"
+      debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Hybrid cycle-plus-strength content for members who want both engines
+      trained in one class — plus the fun, human side, so it's a feed members
+      enjoy, not just a how-to library.
+
+      ## Spin & strength technique
+      - Follow-along sessions that alternate spin intervals on the bike with
+        floor strength blocks
+      - Dumbbell, kettlebell, and bodyweight work for legs, push, pull, and core
+      - Instruction on bike setup, cadence, and resistance
+      - Clean lifting form for the off-bike moves
+      - How to structure a bike-and-bench session, transition efficiently
+        between the two, and pair conditioning with strength
+
+      ## The fun & human side
+      - "What a spin-and-strength class is really like" videos
+      - Studio vlogs and behind-the-scenes
+      - Instructor vibes and playlists
+      - Relatable class humour and funny moments
+      - Transformation stories and instructor interviews
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about cycle-plus-strength training; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Calorie-bait "burn 1000 calories / shred fat fast" gimmick titles
+      - "Spin vs lifting / cardio vs weights which is better" cross-discipline
+        framings
+      - "Cardio kills your gains / spinning makes you skinny-fat" debate or
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, or
+      entertaining — fun content is wanted.
+  queries:
+  - spin and strength hybrid class full workout
+  - bike and dumbbell hybrid workout follow along
+  - cycle and weights interval class 45 minutes
+  - how to structure a spin and strength session
+  - dumbbell strength block after cycling workout
+  - upper body strength routine for spin class
+  - lower body dumbbell workout for cyclists
+  - bike setup and posture for spin class beginners
+  - proper dumbbell squat and lunge form
+  - transitioning from bike to floor in hybrid class
+  - low impact cycle and strength class beginners
+  - what a spin and strength class is really like
+  - best spin and strength class playlist
+  - hybrid studio behind the scenes
+  - funny spin and strength class moments
+  - star hybrid spin instructor full class
+  - hybrid fitness coach interview cardio and strength
+  - day in the life hybrid studio coach
+  - my first spin and strength class vlog
+  - one year of spin and strength transformation
+  good_video_ids:
+  - 4Hl1WAGKjMc
+  - 6lFv6vveUOw
+  - 8qLp4nA7NPc
+  - CsF-bpdNJvA
+  - CuxgRQYFb0E
+  - NnFGvxDoutY
+  - YipJAsAj5Kc
+  - hhIAe5h2FPM
+  - s9SSx0EYguk
+  - uXLBex9khRM
+  - xmCGfE5eUrM
+  - 1McAzf6fQeM
+  - JAsQGn2rzmY
+  - TO1h5fbOLAA
+  - W_4LEuPmSOA
+  - mzUMBW5De8c
+  - qGEKTZJYMdA
+  - v1TEezdfir8
+  - wpWV4MwYaSk
+  - 4bOlq3Wtqj4
+  - ET2Q4J0MT70
+  - KHBMxH5ocJI
+  - NDY8-lcEIHI
+  - UoRydALN1PM
+  - csNeUKYBW0E
+  - evYlPb2e308
+  - f34uVw1MI7A
+  - gryPYiipR5M
+  - iwrPEXKjrZw
+  - lwuFoUHxHJ0
+  - qmf9JKZRtzA
+  - rNGNgLA-PeA
+  - u8faopu5BHM
+  - vXMQqd3Jdvc
+  - yMfmaQAXQns
+  - 19hkXvwgoQU
+  - 4Ek31_3PMW4
+  - 8Jgjrpb_D2c
+  - 8xE33ltjZHw
+  - J9fAk04oTtA
+  - JV2nqyGCaPE
+  - SmUrDhmBe78
+  - UNqAsbupP6o
+  - UuOCJlwkeXA
+  - _DfOulVPpdM
+  - gHgnRZyFC1g
+  - wBurKQX7h4Q
+  - 06LGyRYiAsU
+  - 2dDuSLsImcs
+  - 7arZTrywTjY
+  - 8gS8dozEbPA
+  - EQCWKKvgoDs
+  - PmV-kDYP_KE
+  - Q3Zom7cLkQU
+  - VBDG5Xfnu3U
+  - eRH0eDSy0FA
+  - ffWWZFuK4vU
+  - id-F3Tyqo08
+  - jLYSX9AcXQM
+  - mS_yuOfyNIM
+  - mn1tzulyoUQ
+  - rahPPkqTUpk
+  - udhRFATkN44
+  - vyWJ6PCsjGI
+  - wEwR023XvQ8
+  - ytmxyIKOptI
+  - D6zyBYatv2s
+  - EKEyfzoM5l0
+  - I8P6ngXhGRY
+  - R2LUBV3NgLg
+  - RpQPwIoMOL8
+  - ScSiJYJXiy0
+  - TeVJSxQ_ATI
+  - ebyXscXCWx0
+  - lEg2RJ8YkQw
+  - pH4ISSkJ4bw
+  - rpjp0PGLalU
+  - zzygkcr4DUI
+  - -nrEEXkod-s
+  - 0_BpHUitJ78
+  - 5mDrawzYxmM
+  - AVQnBolo5zU
+  - Eb5Ab1gPS1w
+  - FjrVp22mmS8
+  - I_kbZS2LxQM
+  - KGK1GAWeUl8
+  - NQG6g5mc-mc
+  - QMaf5BTaefA
+  - mv0H9iCz8Ms
+  - ndh2LxWvwTc
+  - uc-JY42QMoI
+  - xMK2TUB_JeY
+  - 8DbpBXGAB8Q
+  - Ab2HQVOyNcU
+  - DyArLXlb22w
+  - KcPeiyQihlQ
+  - LUA66RbrRSA
+  - LaDgnEOaMzk
+  - On6hWy-wDT0
+  - SgXij9Aez3o
+  - dXfF2pzrJDg
+  - i9hlBk-tNLY
+  - oifWCeMoONM
+  - tkdIDaPr-EM
+  - yEoYqDzj7oA
+  - 1cyiDLDaWUI
+  - 3nddTCe0l0Y
+  - 4ZY3Qu0Ld90
+  - AiDD_aqdnK0
+  - I3Ppgr9qHRw
+  - KOBa3W7EaLU
+  - MNWJYPTiyjI
+  - T05-R4PbJsI
+  - YeHSHwBXbAU
+  - ZiGE3-L4vyg
+  - lFbjsRvjF-A
+  - o2c_mB0sUnk
+  - uLOgVMv81PM
+  - ufptzBr7r4I
+  - vluJECwQOMk
+  - wAoFvHRvkCA
+  - 2TnhzZDqL8w
+  - 6snqIh6lgsE
+  - SF1BZ4p78tw
+  - SaikC5bKEhM
+  - WFFLXRt2_qw
+  - hAK7-3zdAxc
+  - jAYaLDjmVt8
+  - jed4Bg1dyEI
+  - qzyHyFawOT8
+  - ui3-yG58SLo
+  - uqx00_y8NhE
+  - wMPNtszIV_A
+  - wPOcEj5x59w
+  - 6-56SSqPVPY
+  - DdRZyRoONuE
+  - Fe0PEMiDToY
+  - FrK51QARffM
+  - G3JcLWttKwU
+  - O5vIICKsA8g
+  - QuKEyPhRrMM
+  - VQy3xI3g2po
+  - a1vLzLHzbgc
+  - e9H_40wePqU
+  - gIrJ9HI6YuI
+  - 1hyQxzL_CoI
+  - 1lM3tOwPYfA
+  - 3ap81sm30P8
+  - FhawWeIT-YQ
+  - KOevOXrOIfg
+  - aQezTkqOWc0
+  - aZ0QiiGsC4k
+  - aynh1iKRKKI
+  - b7YbMJWL86Y
+  - kmxhVO5H-f8
+  - nXiGrgTQ8mE
+  - wTvYRWSFAfc
+  - zywMI603gTE
+  - 0R0ARYXsM3c
+  - F6vhKjSQ3SY
+  - GUKlCQEddQ4
+  - IKhK5RQ2RXI
+  - VDN-64jvJ3Q
+  - WWmYrjOworw
+  - j3CV94F56uw
+  - opJJpkwTBC0
+  - BjT2Zvt_RtI
+  - LkHH7f0AODs
+  - MQ2OEj8BL3M
+  - U6dxEY-c7yQ
+  - VmIzcR-2GAg
+  - iotN5_6qNqQ
+  - kyOWh6nhgcg
+  - wPNSKT3hJwM
+  - 6cL_dsFUzQ0
+  - 8fT3n20fefs
+  - F1vcecTEBiw
+  - GtqVK-u4QlM
+  - Hbh_bMsSJzA
+  - PKl09o_0Z3Y
+  - Pte7Jcp3IcQ
+  - a-Lyp9Eo09c
+  - aGaQCma_XkI
+  - aVPaagIbugo
+  - d4Htrm8hzjg
+  - mrKzvcfKKT4
+  - -XgLm0TSY-M
+  - 4P0pb4pdXMw
+  - 969hWazk4i4
+  - D-p1umoDAYo
+  - GZwGfjO7saI
+  - GzEpFWfFWiQ
+  - Rvs2y6NHcIg
+  - eNyVyngn0l8
+  - ew1oXzVC-7M
+  - lJI-PvNozzw
+  - lwURIKLyccc
+  - w_EKaO6NiFI
+  - zjsC3t9VzAs
+  - 0AGWwN20pG4
+  - 8juOXfj7-S4
+  - D7y2gYNHD3A
+  - EUAB7bS-dxo
+  - OGajhKIKZV0
+  - gdfun9tociQ
+  - 5_Lhbw9lMp4
+  - 5fZZD9epea0
+  - 9FMQYee0SiI
+  - DE5DYJGWDpU
+  - NIq0lc1MEzs
+  - Q2mB4CihPKk
+  - Za8N-K-nntY
+  - hszvQi5ODuQ
+  - qNjX1CPgdQc
+  - vDKnTjpccf4
+  - 4EkyTaEvZiE
+  - 84XYHtU3qVo
+  - Aze4zkaQRlo
+  - I3LR0nR_gkw
+  - Nm2birGdJqk
+  - SoRw4HDfxEQ
+  - hzK35U_GGm4
+  - lXIEeT9AqjE
+  - r1ae7fHpvgw
+  - --mOWKDgy8A
+  - 4NK_fGBrbV4
+  - 4burMVak1Yo
+  - ClgAYjvqP_s
+  - F6NXPYRr-EE
+  - I6bOkHN6OF0
+  - szEnd4ca3QM
+  - u5COdcb6M7w
+  - ytzTumKutZo
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 0EghxxrCwdM
+  - 0MLnC3bzXgQ
+  - 1caaQcA4qF8
+  - INXD5osrkDo
+  - ImI63BUUPwU
+  - WycElKjDNAM
+  - _nLBmurO2-0
+  - gT6OkjTDcYc
+  - gWosN1CY4bg
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - sy11C-XJdDI
+  - v0zY5O-1XLo
+  - zw1GzJvoJbY
+  - -6DhfMJH84E
+  - 2eN3FAmIXSQ
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - DVPstA0j1Ls
+  - D_AvOKr8ncE
+  - KJBlo6X4Mm4
+  - MM4YwZvmdhs
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - RS6d5JY9_Ss
+  - VIaY3QHyq1E
+  - VmfK-_9o7b0
+  - _tNBAuB17j0
+  - io6cK1dweIs
+  - kThGMgiprF4
+  - mBY3cjQYBm0
+  - tMumV35BZ78
+  - zsigGSz6WZk
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4D6wSrXC__0
+  - 6ADogpDq0t4
+  - 71NFCzhdNWk
+  - 9roRGEqFzbA
+  - BEYpXopPxKE
+  - CncV3vpLCRY
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - OkB3MXQXhGc
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - Vktqln9rm1U
+  - aI_nSzypjO4
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - qS30SfB9PRw
+  - sKD_0HLtIM0
+  - z6k8wXfwS94
+  - zG-UCwdyN2w
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - 9VkEa34PsNg
+  - GwYEJ76b7cQ
+  - HiSZ0D5GlGU
+  - ItE7xQpkfMA
+  - KEcJul552Xs
+  - P1j1j0ttVPU
+  - QeR2KhKz_Aw
+  - Y-AYC3_DbpY
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - ksJFLPDG22o
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - uz4Wmo7y4HA
+  - wWHgMzpvH7c
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - yg5cUbsm7qY
+  - 2lQbERRLWuU
+  - 7GvMyG_L-tI
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - EGprU9GtElc
+  - MR4pIQhpu9Q
+  - MjJ3x3ZRaZ4
+  - XaA3qD1EAqg
+  - o5HWRdoQoGs
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 4VrwO-RdMds
+  - Fms3NNVJl-g
+  - I7b2bANiCL0
+  - Oskx1r3_xlA
+  - SYJu_y6WvEc
+  - T4N2DtBTfoA
+  - V-HmspieYjE
+  - VPYKFLwRqtU
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - ZTDA0i7rWns
+  - _wXa_vfzvsY
+  - cM-giAjfW9w
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - nfV1oi-cBAw
+  - pkT2yYrvv-Q
+  - ptuFsWSvvw0
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - KEWPQwf5MeY
+  - KMliGnl7uVo
+  - LFMQqX2c_eg
+  - P8KjhlQbCdQ
+  - QmL8ueGp63M
+  - TBvUjD5iYto
+  - TN9i9Ni0Xr4
+  - VeHusvcdTM0
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - bpaw42DKvCI
+  - mLTqcadk8Bw
+  - v7-h_w7bJrU
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - BFhA56W8y1A
+  - IVEAfdHlnO4
+  - NHe8HgMRIfg
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - bGKNaw82JNc
+  - clr_xzWBoMw
+  - f6yAY1oZUOA
+  - fQqndzvURAU
+  - g9Er55uc7UM
+  - pjkyTmj4xqo
+  - tt_3s2gW8co
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - DcoBAXCx9sg
+  - EGWIWnXEdrs
+  - ELeLmLTWzaU
+  - HWAOifKGLiE
+  - LpH1Qq0WaHA
+  - MSQp044GUI8
+  - Mlgs4_54q8Y
+  - cH-P8BzWw80
+  - cQ4K399DTgI
+  - 5fzTBTfWJ20
+  - 7ISwspy0FMQ
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - HgAvHce7UWs
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - ThHMNAjFwj4
+  - Z7Ra8Wa-WMI
+  - ZAXXJdTkWkY
+  - cNCRIu_QxxQ
+  - cdPejPpoMFo
+  - gdJYRWx9g6w
+  - vSSkDos2hzo
+  - z_aiys9bT8s
+  - 6oZfhhEHXU8
+  - CKqwy9bNjRk
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - IglpZPEVkH4
+  - LsqcRGalNlo
+  - SE34kwfQ6QE
+  - SV-KfCQPJJ4
+  - UNf2qsX8uFc
+  - XrWK48hlQyY
+  - a3jQc9ns54k
+  - cujcxjSm69g
+  - gPry3-OomII
+  - hOHFvM813vM
+  - pA6ls-oHhX0
+  - -yp3g7EeDqo
+  - CcF7uY9HOok
+  - EoZUCvKK3mk
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - _np9jwYmUcE
+  - fEKKHAEg_B8
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - 5ZK50rIFyL4
+  - AL5HDsXTUyI
+  - AsyyZgtHMPw
+  - Fy2FVE14pO0
+  - JQaeGoQox0k
+  - QvS1d1JVPvY
+  - SMAB27z3x0c
+  - WEKB9EGH20I
+  - Z6VLe8SAiI0
+  - aoWKeodh92U
+  - 5MyCNUVqlMk
+  - 67MiyTJaGZI
+  - 716e30A053U
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - Jq0lfTOUM0Y
+  - UxBfiFf-Pf0
+  - WprPdJKfaGk
+  - eHUwX1dYU8I
+  - ezOsco9legc
+  - lW0_00jQ52A
+  - r8Qv9to8-bA
+  - tJeI51crrvs
+  - yBC5WYxeQ6Y
+  - 9z7nuCzCvxg
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - PfeoV_Npi5E
+  - RFOdxztM01Y
+  - Tk96QIHGDX8
+  - an7tAQTRqLU
+  - g5Y0hfn2CrM
+  - hPcR6MQ5dJo
+  - moVynuxM4fc
+  - 3qyWpJ34dWw
+  - 5mjoai8TB7o
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - CYKM5wiL54c
+  - GKoLdOTdtac
+  - GcU8w5t8VfE
+  - NjlxJeT_ATg
+  - QQkMyBwOae8
+  - YogZubKl4sw
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - vIG9SbQbqhM
+  - zONNPaluURw
+  - 2ov2Man4Zdc
+  - 9GXeraWADvw
+  - Bd4gxNpbJGE
+  - CjP8QfNPRfc
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - Q0CwNpMmUfY
+  - Sy5ySkuf4kA
+  - VE-aMdBv4SM
+  - ZUjXFIuYLKw
+  - dIO3vvW3l4A
+  - iJPTVfGA0Bc
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - u0w6g_yU53Q
+  - -sbMsutmgBU
+  - 1Q-9w048TS0
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - InA9rpK5b1E
+  - JIO9cVSugpA
+  - N8dDTyho2vM
+  - OTrTqs9FLq0
+  - Q_IVqDwG1fU
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - bxKK6bj_Qmo
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - grFUV0RVcmU
+  - l0GCECJxCZY
+  - qLAv-ekvbNk
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - xp8b4NVmlgc
+  - 0O9bmFhtrHY
+  - 8HztR4AVJHQ
+  - AikvKEt6b3E
+  - B_VHgiFZZaw
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - KTvW8Frskak
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - U_YeWhYuJ1U
+  - bzGSxdGF8z0
+  - sLYw8VdVGbw
+  - wTu7Zq1wnng
+  - -GCA92b119Y
+  - 5tgKxxOUOgU
+  - GzXkaTUcR24
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - MilYefF9DjI
+  - OSi6VO8lTo8
+  - ZGS11psCU5k
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:40:20.435990Z'
+    usd: 0.18991959999999608
+classes:
+- name: Peak Power
+  image_url: https://images.pexels.com/photos/264084/pexels-photo-264084.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: High-intensity intervals on the bike combined with explosive strength
+    movements. Build power and cardiovascular endurance in one dynamic session.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Strength Cycles
+  image_url: https://images.pexels.com/photos/4162595/pexels-photo-4162595.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Balanced cycling intervals paired with controlled, heavy dumbbell work.
+    Perfect for building lean muscle while maintaining cardio fitness.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Endurance Fusion
+  image_url: https://images.pexels.com/photos/5851030/pexels-photo-5851030.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Longer steady-state ride followed by full-body strength conditioning.
+    Develop stamina and functional strength for real-world performance.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Climb & Conquer
+  image_url: https://images.pexels.com/photos/26655637/pexels-photo-26655637.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Resistance-heavy climbing intervals with lower-body and core strengthening.
+    Challenge yourself on the bike and the floor in one powerful class.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Cycling shoes
+  image_url: https://upload.wikimedia.org/wikipedia/commons/4/4d/Paar_wielerschoenen%2C_S-Phyre%2C_Annemiek_Van_Vleuten%2C_2020_-_overzicht-1_%28WU3762_-_collectie_KOERS._Museum_van_de_Wielersport%29.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

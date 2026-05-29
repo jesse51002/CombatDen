@@ -15,7 +15,8 @@ const double _kRewardCardTitleHeight = 42;
 class RewardCard extends StatelessWidget {
   const RewardCard({
     super.key,
-    required this.imageAsset,
+    this.imageAsset,
+    this.imageUrl,
     required this.title,
     required this.priceLabel,
     required this.pointsCost,
@@ -23,7 +24,11 @@ class RewardCard extends StatelessWidget {
     required this.onPressed,
   });
 
-  final String imageAsset;
+  /// Bundled fallback image (sample data); ignored when [imageUrl] is set.
+  final String? imageAsset;
+
+  /// Injected gym reward image (network URL); wins over [imageAsset].
+  final String? imageUrl;
   final String title;
   final String priceLabel;
   final int pointsCost;
@@ -44,6 +49,7 @@ class RewardCard extends StatelessWidget {
         children: [
           RewardImageHero(
             imageAsset: imageAsset,
+            imageUrl: imageUrl,
             priceLabel: priceLabel,
           ),
           Padding(
@@ -85,12 +91,17 @@ class RewardCard extends StatelessWidget {
 class RewardImageHero extends StatelessWidget {
   const RewardImageHero({
     super.key,
-    required this.imageAsset,
+    this.imageAsset,
+    this.imageUrl,
     required this.priceLabel,
     this.borderRadius,
   });
 
-  final String imageAsset;
+  /// Bundled fallback image (sample data); ignored when [imageUrl] is set.
+  final String? imageAsset;
+
+  /// Injected gym reward image (network URL); wins over [imageAsset].
+  final String? imageUrl;
   final String priceLabel;
 
   /// Optional rounded corners. Pass when used outside the card's own clip.
@@ -104,8 +115,9 @@ class RewardImageHero extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Image(
-            image: ShowcaseAsset.image(imageAsset),
+            image: ShowcaseAsset.imageOrNetwork(imageUrl, imageAsset ?? ''),
             fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => ColoredBox(color: ShowcaseTokens.card),
           ),
           Positioned(
             top: ShowcaseTokens.spacingMedium,

@@ -17,7 +17,6 @@ import logging
 
 from pydantic import BaseModel, ConfigDict
 
-from schema import OverwriteSpecs
 from src.core.run_context import RunContext
 from src.modules.base import DependencyKind
 from src.modules.colors.color_node import ColorNode
@@ -71,7 +70,6 @@ class ModuleRegistry:
         google_fonts: GoogleFontsCatalog,
         icon_catalog: IconSetCatalog,
         icon_generator: ImageGenerator,
-        overwrite_specs: OverwriteSpecs | None = None,
         seed: dict[str, BaseModel] | None = None,
     ) -> Graph:
         """Construct the colour node, the font node, and one image node
@@ -86,13 +84,13 @@ class ModuleRegistry:
         today, but the executor still levels it alongside colour and
         runs them concurrently.
 
-        ``overwrite_specs`` is the call's single free-text steering string
-        (stamped onto whatever each node re-makes); ``seed`` maps slot id →
+        The run's steering rides on ``run_ctx`` (``run_ctx.overwrite_specs`` —
+        stamped onto whatever each node re-makes); ``seed`` maps slot id →
         that slot's saved per-item output (a reopen-time regeneration; see the
-        ``regen`` / ``expand`` scripts). Each node receives that one steering
-        string plus the seeded outputs for the slots it owns, and re-makes any
-        of its declared slots absent from that seed. Both default empty, so a
-        fresh full run builds every node exactly as before.
+        ``regen`` / ``expand`` scripts). Each node reads the steering off the
+        context and receives the seeded outputs for the slots it owns, and
+        re-makes any of its declared slots absent from that seed. An empty seed
+        ⇒ a fresh full run that builds every node exactly as before.
         """
         sd = seed or {}
 
@@ -105,7 +103,6 @@ class ModuleRegistry:
             self._run_ctx,
             llm=llm,
             seed=_seed(color_ids),  # type: ignore[arg-type]
-            overwrite_specs=overwrite_specs,
         )
         font_ids = {s.id for s in self._run_ctx.app.fonts}
         font = FontNode(
@@ -113,7 +110,6 @@ class ModuleRegistry:
             llm=llm,
             catalog=google_fonts,
             seed=_seed(font_ids),  # type: ignore[arg-type]
-            overwrite_specs=overwrite_specs,
         )
         # No text slots → no text node → no LLM call (and an empty
         # ``text_set`` in the assembled Output, which is also the honest
@@ -124,7 +120,6 @@ class ModuleRegistry:
                 self._run_ctx,
                 llm=llm,
                 seed=_seed(text_ids),  # type: ignore[arg-type]
-                overwrite_specs=overwrite_specs,
             )
             if self._run_ctx.app.texts
             else None
@@ -141,7 +136,6 @@ class ModuleRegistry:
                 catalog=icon_catalog,
                 generator=icon_generator,
                 seed=_seed(icon_ids),  # type: ignore[arg-type]
-                overwrite_specs=overwrite_specs,
             )
             if self._run_ctx.app.icons
             else None
@@ -160,7 +154,6 @@ class ModuleRegistry:
                 classifier=classifier,
                 background=background,
                 seed=_seed({slot.id}),  # type: ignore[arg-type]
-                overwrite_specs=overwrite_specs,
             )
             for slot in self._run_ctx.app.images
         ]

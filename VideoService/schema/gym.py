@@ -43,10 +43,22 @@ class ScanCost(BaseModel):
 
 
 class GymSpecifications(BaseModel):
-    """What this gym wants surfaced and what it rejects — the scan's criteria."""
+    """What this gym wants surfaced and what it rejects — the scan's criteria.
+
+    Two tiers: a long, context-rich pair the scan judges against
+    (``videos_desc`` / ``avoid_desc``, required) and a short ~2-sentence summary
+    for easy viewing (``short_videos_desc`` / ``short_avoid_desc``, display-only,
+    not read by the scan). The short pair is optional for now and becomes
+    required once every gym is backfilled.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    # SHORT — ~2-sentence summary for easy viewing (approval gate, README). NOT
+    # used by the scan. Optional for now; required after the Phase-2 backfill.
+    short_videos_desc: str | None = Field(default=None, min_length=2)
+    short_avoid_desc: str | None = Field(default=None, min_length=2)
+    # LONG — the full, context-rich criteria the SCAN judges against (required).
     videos_desc: str = Field(min_length=2)  # prose: the kinds of videos worth surfacing
     avoid_desc: str = Field(min_length=2)  # prose: content this gym rejects
 

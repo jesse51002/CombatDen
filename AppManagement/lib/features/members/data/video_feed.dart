@@ -1,7 +1,7 @@
 import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/video_format_helpers.dart';
 
 /// One video as served by the VideoService
-/// (`GET /themes/{designId}/videos` -> `VideoCard`). Field names mirror the
+/// (`GET /gyms/{gymId}/videos` -> `VideoCard`). Field names mirror the
 /// API so the JSON parse stays mechanical. See
 /// `../../../../VideoService/schema/video_feed.py`.
 class Video {
@@ -54,13 +54,43 @@ class Video {
       channelAvatarUrl: (json['channel_avatar_url'] as String?) ?? '',
       viewCount: json['view_count'] as int?,
       relevanceIndex: (json['relevance_index'] as int?) ?? 1 << 30,
-      tags: _parseStrings(json['tags']),
-      bigGroups: _parseStrings(json['big_groups']),
+      // The API sends a single `tag` / `big_group` string; wrap each into a
+      // one-element list so the list-based grouping keeps working (mirrors
+      // MobileApp's `Video.fromJson`).
+      tags: _wrap(json['tag']),
+      bigGroups: _wrap(json['big_group']),
     );
   }
 
-  static List<String> _parseStrings(dynamic raw) {
-    if (raw is! List) return const [];
-    return raw.whereType<String>().toList(growable: false);
-  }
+  static List<String> _wrap(dynamic raw) =>
+      (raw is String && raw.isNotEmpty) ? [raw] : const [];
+}
+
+/// One page of a gym's video feed: the videos plus the pre-pagination [total]
+/// for that filter, so a "View all" grid knows whether more pages remain.
+class VideoPage {
+  final List<Video> videos;
+  final int total;
+
+  const VideoPage({required this.videos, required this.total});
+}
+
+/// One genre's preview row from `GET /gyms/{gymId}/videos/preview` — a [tag]
+/// and its first few videos, sampled server-side (each genre individually) so
+/// the whole "All" preview arrives in one request and no genre is starved.
+class FeedSection {
+  final String tag;
+  final List<Video> videos;
+
+  const FeedSection({required this.tag, required this.videos});
+
+  factory FeedSection.fromJson(Map<String, dynamic> json) => FeedSection(
+    tag: (json['tag'] as String?) ?? '',
+    videos:
+        (json['videos'] as List?)
+            ?.whereType<Map>()
+            .map((e) => Video.fromJson(Map<String, dynamic>.from(e)))
+            .toList(growable: false) ??
+        const [],
+  );
 }

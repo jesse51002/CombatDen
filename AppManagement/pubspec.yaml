@@ -39,6 +39,8 @@ dependencies:
   http: ^1.6.0
   theme_flutter:
     path: ../ThemeService/ThemeFlutter
+  scrollable_positioned_list: ^0.3.8
+  flutter_markdown_plus: ^1.0.7
 
 dev_dependencies:
   flutter_test:

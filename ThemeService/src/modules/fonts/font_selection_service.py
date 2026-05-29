@@ -21,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 from string import Template
 
-from schema import FontOutput, FontSet, OverwriteSpecs
+from schema import FontOutput, FontSet
 from src.core.errors import ProviderError
 from src.core.run_context import RunContext
 from src.modules.fonts.font_models import (
@@ -59,7 +59,6 @@ class FontSelectionService:
         model: str = FONT_MODEL,
         only: set[str] | None = None,
         fixed: dict[str, FontOutput] | None = None,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> FontSet:
         """Run the font LLM call; return the resolved slots as a ``FontSet``.
 
@@ -74,14 +73,13 @@ class FontSelectionService:
 
         ``only`` scopes the call to a subset of slot ids (a partial regen);
         ``fixed`` supplies the already-chosen fonts shown as fixed context so
-        the new picks harmonize with them; ``overwrite_specs`` is the call's
-        single steering string, stamped onto each returned ``FontOutput``.
-        With all three unset the call resolves every slot — the full-run
-        behavior."""
+        the new picks harmonize with them. The run's steering
+        (``run_ctx.overwrite_specs``) is folded into the prompt and stamped onto
+        each returned ``FontOutput``. With ``only``/``fixed`` unset the call
+        resolves every slot — the full-run behavior."""
         all_ids = [slot.id for slot in run_ctx.app.fonts]
         target_ids = sorted(only) if only is not None else all_ids
         fixed = fixed or {}
-        specs = overwrite_specs or OverwriteSpecs()
         known_families = await self._catalog.families()
         response_model = build_font_response_model(
             target_ids, known_families=known_families
@@ -93,7 +91,6 @@ class FontSelectionService:
                     run_ctx,
                     target_ids=target_ids,
                     fixed=fixed,
-                    overwrite_specs=specs,
                 ),
             }
         ]
@@ -117,7 +114,7 @@ class FontSelectionService:
                 category=entry.category,
                 display_name=pick.display_name,
                 description=pick.description,
-                overwrite_specs=specs,
+                overwrite_specs=run_ctx.overwrite_specs,
             )
         return FontSet(fonts=fonts)
 
@@ -127,18 +124,17 @@ class FontSelectionService:
         *,
         target_ids: list[str],
         fixed: dict[str, FontOutput],
-        overwrite_specs: OverwriteSpecs,
     ) -> str:
         """Rule + brand brief + fixed-context + the slots to fill, substituted
         into the one ``.md`` template (``safe_substitute`` tolerates a stray
-        ``$``). The call's steering note (instruction + rejected attempts) is
+        ``$``). The run's steering note (instruction + rejected attempts) is
         appended over the slots being picked; fixed slots (already chosen, not
         re-picked) are listed as harmony context only."""
         template = FONT_PROMPT_PATH.read_text(encoding="utf-8")
         design = run_ctx.cust.design_direction
         desc = {slot.id: slot.description for slot in run_ctx.app.fonts}
         lines = [f"- {sid}: {desc.get(sid, '')}" for sid in target_ids]
-        note = overwrite_specs.prompt_note()
+        note = run_ctx.overwrite_specs.prompt_note()
         if note:
             lines.append(f"\n{note}")
         inventory = "\n".join(lines)

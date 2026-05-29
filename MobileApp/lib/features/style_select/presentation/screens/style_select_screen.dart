@@ -3,7 +3,9 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:theme_flutter/data/models/customization_style.dart';
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/selected_gym.dart';
 import 'package:mobile_app/features/style_select/data/gyms_pager.dart';
 import 'package:mobile_app/features/style_select/presentation/widgets/style_card/style_card.dart';
 import 'package:mobile_app/features/style_select/presentation/widgets/style_list/style_search_bar.dart';
@@ -47,12 +49,21 @@ class _StyleSelectScreenState extends State<StyleSelectScreen> {
     }
   }
 
-  Future<void> _select(ThemeStyle style) async {
+  void _select(ThemeStyle style) {
     if (_busy) return;
     setState(() => _busy = true);
-    await ThemeRuntime.selectDesign(style.id);
-    if (!mounted) return;
-    Navigator.of(context).maybePop();
+    // Record the gym (drives videos / classes / rewards) and re-brand to its
+    // theme. Then land on a fresh Home for this gym — the theme re-key rebuilds
+    // the tree too, but this also covers picking the gym whose theme is already
+    // active (no re-key fires then).
+    selectedGym.select(
+      gymId: style.gymId,
+      theme: style.id,
+      name: style.displayName,
+    );
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
   }
 
   @override
@@ -110,7 +121,7 @@ class _StyleSelectHeader extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Text('Choose a style', style: DesignConstants.h1),
+          child: Text('Choose a gym', style: DesignConstants.h1),
         ),
       ],
     );
@@ -134,18 +145,18 @@ class _StyleListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!pager.hasLoadedFirstPage && pager.isLoading) {
-      return const _StyleStatus(message: 'Loading styles…');
+      return const _StyleStatus(message: 'Loading gyms…');
     }
     if (pager.items.isEmpty) {
       if (pager.errored) {
         return const _StyleStatus(
-          message: 'Could not load styles. Pull to retry.',
+          message: 'Could not load gyms. Pull to retry.',
         );
       }
       return _StyleStatus(
         message: pager.query.isEmpty
-            ? 'No styles available right now.'
-            : 'No styles match "${pager.query}".',
+            ? 'No gyms available right now.'
+            : 'No gyms match "${pager.query}".',
       );
     }
     return ListenableBuilder(
@@ -189,7 +200,7 @@ class _ListFooter extends StatelessWidget {
       child: Center(
         child: pager.errored
             ? Text(
-                'Could not load more styles.',
+                'Could not load more gyms.',
                 style: DesignConstants.pSmall.copyWith(
                   color: DesignConstants.text2nd,
                 ),

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/widgets.dart';
 
 /// Centralises the `packages/<pkg>/...` prefix every consumer must use to
@@ -16,4 +17,13 @@ class ShowcaseAsset {
 
   /// An [ImageProvider] for a packaged image, e.g. `streak_icon.png`.
   static ImageProvider image(String file) => AssetImage('$_images$file');
+
+  /// An [ImageProvider] for injected gym content served as a network URL
+  /// (reward / class photos). Disk-cached like the engine's brand images.
+  static ImageProvider network(String url) => CachedNetworkImageProvider(url);
+
+  /// Pick the right provider for showcase content: the injected gym [url] when
+  /// present, otherwise the bundled [fallbackAsset]. Empty/null [url] falls back.
+  static ImageProvider imageOrNetwork(String? url, String fallbackAsset) =>
+      (url != null && url.isNotEmpty) ? network(url) : image(fallbackAsset);
 }

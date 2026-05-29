@@ -15,11 +15,18 @@ class ThemeStyle extends Equatable {
   final String celebrationImageUrl;
   final String? gymType;
 
+  /// The VideoService gym id this style belongs to, when the catalog is the
+  /// gym browser (AppManagement). The content key — the host stores it on
+  /// selection and fetches the gym's detail/feed by it. Null for plain
+  /// ThemeService styles, which have no gym.
+  final String? gymId;
+
   const ThemeStyle({
     required this.id,
     required this.displayName,
     required this.celebrationImageUrl,
     this.gymType,
+    this.gymId,
   });
 
   /// Builds from one wire item. [resolveUrl] absolutises the
@@ -35,9 +42,16 @@ class ThemeStyle extends Equatable {
       displayName: (json['display_name'] as String?) ?? '',
       celebrationImageUrl: raw.isEmpty ? '' : resolveUrl(raw),
       gymType: json['gym_type'] as String?,
+      gymId: json['gym_id'] as String?,
     );
   }
 
   @override
-  List<Object?> get props => [id, displayName, celebrationImageUrl, gymType];
+  List<Object?> get props => [
+        id,
+        displayName,
+        celebrationImageUrl,
+        gymType,
+        gymId,
+      ];
 }

@@ -1,17 +1,454 @@
 gym_id: hot_pilates
 gym_type:
 - hot_pilates
-theme: ZZUndoneHotPilates
+theme: HotPilates
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational hot pilates content for gym
-      members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable hot pilates sources.
-    avoid_desc: Anything not about hot pilates; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Hot pilates — mat pilates run in a heated room, with sweaty,
+      low-impact, high-rep core and full-body work held precise in the heat — plus
+      the enjoyable side: instructor vlogs and "day in the life", studio behind-the-scenes,
+      what a hot pilates class is really like, aesthetic sweaty class edits, transformations,
+      and interviews.'
+    short_avoid_desc: No cool-room mat or reformer classes mislabeled as hot pilates,
+      hot-yoga sequences passed off as pilates, or "sweat off 10 lbs in X days" clickbait.
+      Skip "hot pilates vs hot yoga" framings and "hot pilates is dangerous / pointless"
+      debate clips. (Fun vlogs, studio tours, class edits, and interviews are welcome.)
+    videos_desc: |-
+      # What we surface
+
+      Hot pilates instruction for members who chase the heated burn — mat
+      pilates run in a warm, mirrored room — plus the fun, human side, so it's a
+      feed members enjoy, not just a how-to library. The tone is warm, intense
+      and grown-up.
+
+      ## Heated classes & technique
+      - Sweaty, low-impact, high-rep core and full-body sequences: the hundred
+        and ab series, planks and side planks, leg and glute work, controlled
+        pulses — held precise as the heat opens the body and the mirror keeps
+        form honest
+      - Full-length follow-along heated classes
+      - Single-exercise technique and modification breakdowns from credible
+        instructors
+      - Practical guidance on hydration, pacing and recovery for training in
+        the heat
+
+      ## The fun & human side
+      - Instructor vlogs and "day in the life", studio behind-the-scenes
+      - "What a hot pilates class is really like"
+      - Relatable sweaty class humour and moments, aesthetic class edits
+      - Before/after and "30 days of hot pilates" transformation stories
+      - Teacher interviews
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about hot pilates; off-topic, genuinely low-quality, or
+      clickbait videos.
+
+      ## Reject
+      - Cool-room mat or reformer classes mislabeled as hot pilates
+      - Hot-yoga or Bikram sequences passed off as pilates
+      - Generic "sweaty HIIT / ab burner" workouts with no pilates principles
+      - Clickbait ("sweat off 10 lbs in a week", "flat tummy in 7 days"), scams
+        and misinformation
+      - "Hot pilates vs hot yoga / which is better" cross-discipline framings
+      - "Hot pilates is dangerous / pointless" debate or reaction rage-bait
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a clip, a class edit, or
+      entertaining — fun and creator content is wanted.
+  queries:
+  - hot pilates full class follow along
+  - 30 minute hot pilates workout heated
+  - beginner hot pilates class guide
+  - hot pilates core and abs sequence
+  - hot pilates full body sweat session
+  - hot pilates plank and side plank tutorial
+  - hot pilates leg and glute series
+  - hot pilates breathing and pacing in heat
+  - hydration tips for hot pilates
+  - hot pilates form cues and common mistakes
+  - what to expect first hot pilates class
+  - day in the life of a hot pilates instructor
+  - what a hot pilates class is really like
+  - hot pilates studio behind the scenes
+  - 30 days of hot pilates transformation results
+  - relatable hot pilates sweaty class moments funny
+  - aesthetic hot pilates class edit
+  - first hot pilates class honest review vlog
+  - hot pilates before and after results story
+  - hot pilates instructor interview heated room
+  good_video_ids:
+  - Ic9M_rdWLyg
+  - XUqNRbeKErI
+  - hBw7ZzA2iwg
+  - mrjObpvJVSI
+  - paRmHPWwb50
+  - YJHW_ZI8aIc
+  - gD_g7pSZg90
+  - ti1t9Qaorrw
+  - 2mjc6AdpPpw
+  - FY0SiIyVn-M
+  - LXFfLDPgvOs
+  - TzBBZMATWWM
+  - YzJATfAC9c8
+  - g-SpS3hIWAs
+  - tYbDHLYrlbc
+  - xI82OUlb-T0
+  - L2JdM3wzdxQ
+  - WrUXaBtCasY
+  - _S3_c9QiPYs
+  - lokn0miZSV8
+  - qlzP9QyUckY
+  - x-Aw6TuzO2Q
+  - C25MKm9jN1Y
+  - YjleTnfeEAs
+  - kjZ_b7ul-dQ
+  - CrZLr93JnMg
+  - Sas9eBPTYBI
+  - aTOAdXjmdd4
+  - MYG8ofM3B8o
+  - aWqboZnnD3w
+  - _kDF7vZWMoQ
+  - hgWkEUk6ifk
+  - 4H-qbzvL6Hs
+  - DrNrIqkZzhk
+  - KO2sWBAhZjg
+  - cQ4K399DTgI
+  - clD9Yd_Mi4c
+  - lr2kH1Uji7Q
+  - qL7Nlexje-M
+  - tYJJyYUrK4c
+  - vLA7IMCpjZI
+  - wAM7hRowIiE
+  - 6A98Glp5DuY
+  - 73_y6Bp-ARY
+  - QQ50rpLal8Q
+  - bKtdCS-7Scg
+  - c9k52HlMcXk
+  - iKNZxVWYeK0
+  - lae1ENagN9o
+  - 9ulMbvUrYZg
+  - p8cfpHBoUus
+  - plbZk8BgBb8
+  - rkDhm34xIr4
+  - 9HaF1sTHMVM
+  - BIisTf1oHdE
+  - ImQFoaPkO7A
+  - YghOeTjdEf4
+  - bN1Ec5zBkaM
+  - oaUrYcoPnlc
+  - HI7-yvAezwk
+  - KXTKsMh6pm0
+  - L9igPEwvUgU
+  - aidlHNTTk3c
+  - iPEMqiNz3Hg
+  - lZ1vQHYUp70
+  - 0ZHSIuOcQHU
+  - DO_Yh9d4vZA
+  - ePzyn2mKqDE
+  - lLBGlXCg0oY
+  - PmdKCsO6TmM
+  - R1QTj9J-SoU
+  - CEYvLDKvXQ8
+  - K2k3vSJb3Mg
+  - TGejJOLjqZ8
+  - Vmu1grE0EAI
+  - dgud_zWK4Co
+  - sQUnnqDqxyc
+  - OTcsB8rrWJ4
+  - Qa_fGGT-GYQ
+  - qrXgcdOow10
+  - 0Io61Cal5iI
+  - BZu_pk7cXVw
+  - xX3v4dbV4l8
+  - 8R53vXBP_v0
+  - G9Tf5zpdjFQ
+  - P91ECY3eLvQ
+  - _o1M_tl6GSI
+  - cnjVc1ctzYs
+  - qX4ejoqu5_4
+  - wcS1HcRi39o
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 0a1TTJeazwg
+  - 1hC3_-c5XYk
+  - 8B9UqB3hq7U
+  - 9a8nsUPtOlI
+  - HN34nV9Z0wE
+  - INXD5osrkDo
+  - URYaOI4kwnk
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - nTzjzMoJpGk
+  - 2Sq9wuBOH1U
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - D_AvOKr8ncE
+  - JYPzPIA9F6o
+  - KJBlo6X4Mm4
+  - Ne8yvlyiO-s
+  - Q-7KCRNLLzc
+  - byXfcfeiQeA
+  - iMhjHE37jZs
+  - kThGMgiprF4
+  - p61nsi42twU
+  - qT9XWi5z9Zo
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - HBfP-EazJqI
+  - KIjHz3ZTrnk
+  - PMcNTERHpHo
+  - PPEz1_UPGjg
+  - Q4pBYLcn_7c
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - vXDJIJEySoM
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7B_vQvhDsIA
+  - 7yX1QN5a6L4
+  - ItE7xQpkfMA
+  - L-_7YbDMLko
+  - iK_h-2kot6s
+  - kiPkodTP1Z4
+  - kqyr3kaw5qE
+  - mK5IsS3buCU
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - xJ_ZuU5127I
+  - 1E2WEsXqVTE
+  - 6IcYWpJ1xes
+  - 6TjXPRkXx9c
+  - 81v0ih2LxyE
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - FQEBVY-pjOw
+  - MvjMk6BaMtc
+  - Sbiqni-nJsk
+  - XaA3qD1EAqg
+  - di8QaNIXR1E
+  - dnRJxbdUa_M
+  - fV_sWSQVEUg
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - Kl8V8hyxogY
+  - SYJu_y6WvEc
+  - YXzzuLcmE_o
+  - a0cVuDMgqXM
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - qQjDYs4vnYI
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - BdWvP-lbb68
+  - KMliGnl7uVo
+  - TN9i9Ni0Xr4
+  - TgyBVsdbqKM
+  - Tq9TVNNnSgU
+  - YNHMNVLwy9c
+  - _J1vKIXj6JA
+  - mLTqcadk8Bw
+  - rxNtthY7e4s
+  - uKqB5cruu4U
+  - -Qx_FRqNAv4
+  - -l2Ngy_x554
+  - 3ONb6S8JRz4
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - GywHrwP6JV8
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - Xwdc2bfL6YI
+  - YhIPJwEu6PE
+  - __-cM33hUoo
+  - f4Hyy1W1F8Q
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - pzYTq2prOg4
+  - w4mdKa97ptM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 0BIbKxuOFIE
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - O8hHcvDfDOY
+  - vm6ZoKRLGh8
+  - 5fzTBTfWJ20
+  - 6amk1U-lIKI
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - MM0Q35Pcqa0
+  - XIVs_6d83TE
+  - Z7Ra8Wa-WMI
+  - bLr0h7cEIKc
+  - cdPejPpoMFo
+  - r_VHltdyvv4
+  - 0Pa1QpQGNzU
+  - 0fJwHktpuGA
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - M4nSM7TBsJg
+  - MrTEd41g02Q
+  - RqQqEA-x4_M
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - cq8kvBxthHk
+  - cujcxjSm69g
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - yduD5IDUF-c
+  - BK8XPaPcPb8
+  - Pui3UaKI2Pk
+  - RRVPR9L2i1o
+  - ZV3fXS2XHeQ
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - JQaeGoQox0k
+  - RDuywKzm7qM
+  - hur54unakf8
+  - 716e30A053U
+  - CBnLOlVT4yQ
+  - F_JOoeHXcmc
+  - GJIuTAzs9-Y
+  - Hu-rVZVSzxs
+  - KzKAnT_hiLE
+  - WprPdJKfaGk
+  - YHaEF3q2jWU
+  - ezOsco9legc
+  - 3Nvx4ghktLA
+  - 74ikV_dDIiQ
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - QsdXRoBiPBI
+  - bLnjytMXv_A
+  - moVynuxM4fc
+  - oVAco43Jstc
+  - 3qyWpJ34dWw
+  - 4wqvWr0sq8A
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - GWV1Mk9JlsY
+  - Hk8AIWhIRqw
+  - LBOFE-DWrD8
+  - eO8W1pWRJ1E
+  - haX25zafqKo
+  - xpRCSKIPwv8
+  - 8ajO440Ss0g
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - If9W3kQa254
+  - J-LMiZHWdbU
+  - KF3D-Q0C6-c
+  - f0OaQz3cog4
+  - jdo843M-oCo
+  - rX5zEYzAsCs
+  - t-AVCP3U8l4
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - fTky0-ETtjA
+  - foGlgwWk76I
+  - iudEJR7ebuw
+  - kEiPal3RrKw
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - CRUnIbCbH3c
+  - JeS69edUl5U
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - _NyYdgZ8zpI
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - CAYNs6eWcg0
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - XPaaDumEw3s
+  - dBTQi5kdfW0
+  - jf5-Xpco98M
+  - pPlFSqXnbls
+  - wS7NIu01KrM
+  scan_costs:
+  - at: '2026-05-29T15:52:33.404869Z'
+    usd: 0.09121399999999369
+classes:
+- name: Core Ignition
+  image_url: https://images.pexels.com/photos/25599825/pexels-photo-25599825.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: High-rep ab series and core burners in the heat. Expect the hundred,
+    pulses, scissors, and controlled breathing as the warmth deepens your engagement
+    and precision.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Flow & Flexibility
+  image_url: https://images.pexels.com/photos/18136885/pexels-photo-18136885.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Dynamic mat work combining flowing sequences with deep stretches in
+    a heated environment. Build functional strength and mobility while the heat opens
+    your body.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Lower Body Burn
+  image_url: https://images.pexels.com/photos/18136886/pexels-photo-18136886.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Intense leg, glute, and hip work designed to torch and sculpt. Control
+    every pulse and squeeze as the heat amplifies the burn and builds lasting strength.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Full Body Heat
+  image_url: https://images.pexels.com/photos/18136888/pexels-photo-18136888.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Total-body conditioning from arms to glutes. Flowing planks, side planks,
+    and integrated strength work sustained in heat for maximum mind-muscle connection.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Grip socks
+  image_url: https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

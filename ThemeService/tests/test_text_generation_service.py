@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from schema import AppFormat, Customization, OverwriteSpecs, TextSet, TextSlot
+from schema import AppFormat, Customization, TextSet, TextSlot
 from src.core.run_context import RunContext
 from src.core.util import load_yaml
 from src.modules.base import DependencyKind
@@ -258,7 +258,6 @@ def test_text_prompt_is_app_agnostic(tmp_path: Path) -> None:
         prior_attempts={},
         prior_violations={},
         fixed_context={},
-        overwrite_specs=OverwriteSpecs(),
     )
     # Brand brief substituted; every slot's id+description+limits listed.
     assert ctx.cust.design_direction.name in prompt
@@ -283,7 +282,6 @@ def test_text_prompt_includes_retry_block_on_retry(tmp_path: Path) -> None:
         prior_attempts={"cancel_cta": "A wildly long cancel string"},
         prior_violations={"cancel_cta": ["too many characters (27; max 18)"]},
         fixed_context={},
-        overwrite_specs=OverwriteSpecs(),
     )
     assert "Your previous attempt failed length validation" in prompt
     assert "A wildly long cancel string" in prompt

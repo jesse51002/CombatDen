@@ -6,37 +6,72 @@ import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/app_primary_button.dart';
 import 'package:app_management/shared/widgets/custom_text_field.dart';
 
-/// Confirms removing a video. For agent-curated feed videos it asks an
-/// optional "why" so the agent learns to keep videos like it out of the
-/// feed automatically next time, instead of resurfacing the same mistake.
-class RemoveVideoDialog extends StatefulWidget {
+/// Whether the dialog removes a video from the feed or keeps a rejected one
+/// back in it. Drives the copy, the reason hint, and the confirm button.
+enum VideoCurationMode { remove, keep }
+
+/// Confirms removing a video from the feed, or keeping a rejected one back.
+/// For agent-curated videos it asks an optional "why" so the agent learns to
+/// surface / suppress videos like it automatically next time, instead of
+/// resurfacing the same mistake.
+class VideoCurationDialog extends StatefulWidget {
   final String videoTitle;
   final bool teachAgent;
+  final VideoCurationMode mode;
 
-  const RemoveVideoDialog({
+  const VideoCurationDialog({
     super.key,
     required this.videoTitle,
     required this.teachAgent,
+    required this.mode,
   });
 
   static Future<void> show(
     BuildContext context, {
     required String videoTitle,
     required bool teachAgent,
+    VideoCurationMode mode = VideoCurationMode.remove,
   }) {
     return showDialog<void>(
       context: context,
-      builder: (_) =>
-          RemoveVideoDialog(videoTitle: videoTitle, teachAgent: teachAgent),
+      builder: (_) => VideoCurationDialog(
+        videoTitle: videoTitle,
+        teachAgent: teachAgent,
+        mode: mode,
+      ),
     );
   }
 
   @override
-  State<RemoveVideoDialog> createState() => _RemoveVideoDialogState();
+  State<VideoCurationDialog> createState() => _VideoCurationDialogState();
 }
 
-class _RemoveVideoDialogState extends State<RemoveVideoDialog> {
+class _VideoCurationDialogState extends State<VideoCurationDialog> {
   final TextEditingController _reasonController = TextEditingController();
+
+  bool get _isKeep => widget.mode == VideoCurationMode.keep;
+
+  String get _title => _isKeep ? 'Keep this video?' : 'Remove this video?';
+
+  String get _confirmLabel => _isKeep ? 'Keep' : 'Remove';
+
+  Color get _confirmColor =>
+      _isKeep ? DesignConstants.goodGreen : DesignConstants.redDark;
+
+  String get _teachText => _isKeep
+      ? "Tell the agent why you want it back. It'll learn to surface "
+            'videos like this automatically next time, so it stays in the '
+            'feed.'
+      : "Tell the agent why. It'll learn to keep videos like this out of "
+            'the feed automatically next time, so you never have to remove '
+            'it again.';
+
+  String get _reasonLabel =>
+      _isKeep ? 'Why keep it? (optional)' : 'Why remove it? (optional)';
+
+  String get _reasonHint => _isKeep
+      ? 'e.g. great breakdown, on-topic, members asked for it'
+      : 'e.g. wrong discipline, off-topic, too graphic';
 
   @override
   void dispose() {
@@ -47,7 +82,7 @@ class _RemoveVideoDialogState extends State<RemoveVideoDialog> {
   @override
   Widget build(BuildContext context) {
     return AppDialog(
-      title: 'Remove this video?',
+      title: _title,
       showCloseButton: false,
       body: Column(
         mainAxisSize: MainAxisSize.min,
@@ -62,17 +97,15 @@ class _RemoveVideoDialogState extends State<RemoveVideoDialog> {
           ),
           if (widget.teachAgent) ...[
             Text(
-              "Tell the agent why. It'll learn to keep videos like this "
-              'out of the feed automatically next time, so you never have '
-              'to remove it again.',
+              _teachText,
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),
             ),
             CustomTextField(
               controller: _reasonController,
-              label: 'Why remove it? (optional)',
-              hintText: 'e.g. wrong discipline, off-topic, too graphic',
+              label: _reasonLabel,
+              hintText: _reasonHint,
             ),
           ],
         ],
@@ -89,9 +122,9 @@ class _RemoveVideoDialogState extends State<RemoveVideoDialog> {
           ),
           Expanded(
             child: AppPrimaryButton(
-              text: 'Remove',
+              text: _confirmLabel,
               fullWidth: true,
-              backgroundColor: DesignConstants.redDark,
+              backgroundColor: _confirmColor,
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),

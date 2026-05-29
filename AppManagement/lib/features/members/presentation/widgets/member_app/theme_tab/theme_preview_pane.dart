@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
+import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/phone_frame.dart';
 import 'package:theme_flutter/customization_runtime.dart';
+import 'package:theme_flutter/showcase/showcase_content.dart';
 import 'package:theme_flutter/showcase/showcase_screen.dart';
+
+// Phone-like page push between showcase screens. Same spirit (and curve) as
+// theme_grid.dart's scroll animation — a local const, not a design token.
+const Duration _kSlideDuration = Duration(milliseconds: 300);
 
 /// The left pane: a large phone mockup that fills the available space,
 /// showing the active showcase screen (re-themed live, animation looping),
@@ -16,6 +22,7 @@ class ThemePreviewPane extends StatelessWidget {
     super.key,
     required this.engineReady,
     required this.slide,
+    required this.forward,
     required this.gymName,
     required this.gymLogo,
     required this.onPrev,
@@ -26,6 +33,7 @@ class ThemePreviewPane extends StatelessWidget {
 
   final Future<void> engineReady;
   final int slide;
+  final bool forward;
   final String gymName;
   final ImageProvider gymLogo;
   final VoidCallback onPrev;
@@ -46,6 +54,7 @@ class ThemePreviewPane extends StatelessWidget {
               child: _PreviewContent(
                 engineReady: engineReady,
                 screen: screen,
+                forward: forward,
                 gymName: gymName,
                 gymLogo: gymLogo,
               ),
@@ -71,12 +80,14 @@ class _PreviewContent extends StatelessWidget {
   const _PreviewContent({
     required this.engineReady,
     required this.screen,
+    required this.forward,
     required this.gymName,
     required this.gymLogo,
   });
 
   final Future<void> engineReady;
   final ShowcaseScreen screen;
+  final bool forward;
   final String gymName;
   final ImageProvider gymLogo;
 
@@ -100,14 +111,71 @@ class _PreviewContent extends StatelessWidget {
             ),
           );
         }
+        final reduceMotion = MediaQuery.disableAnimationsOf(context);
         return ListenableBuilder(
-          listenable: ThemeRuntime.changes,
+          // Re-render on a theme switch (branding) AND on a gym switch / its
+          // detail loading (so the Store + Home surfaces get the real content).
+          listenable: Listenable.merge([ThemeRuntime.changes, selectedGym]),
           builder: (context, _) {
-            // Re-key on theme + slide so the showcase restarts its
-            // animation fresh whenever either changes.
-            return KeyedSubtree(
-              key: ValueKey('${ThemeRuntime.activeDesignId}-$screen'),
-              child: screen.build(gymName: gymName, gymLogo: gymLogo),
+            final detail = selectedGym.detail;
+            final rewards = detail?.rewards
+                .map(
+                  (r) => ShowcaseReward(
+                    title: r.title,
+                    imageUrl: r.imageUrl,
+                    priceLabel: r.priceLabel,
+                    pointsCost: r.pointsCost,
+                  ),
+                )
+                .toList();
+            final classes = detail?.classes
+                .map(
+                  (c) => ShowcaseClassInfo(
+                    name: c.name,
+                    imageUrl: c.imageUrl,
+                    instructorName: c.instructorName,
+                  ),
+                )
+                .toList();
+            return AnimatedSwitcher(
+              duration: reduceMotion ? Duration.zero : _kSlideDuration,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeOutCubic,
+              transitionBuilder: (child, animation) => DualTransitionBuilder(
+                animation: animation,
+                // Entering screen.
+                forwardBuilder: (context, anim, child) => SlideTransition(
+                  position: Tween<Offset>(
+                    begin: Offset(forward ? 1.0 : -1.0, 0),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: child,
+                ),
+                // Exiting screen (slides the opposite way).
+                reverseBuilder: (context, anim, child) => SlideTransition(
+                  position: Tween<Offset>(
+                    begin: Offset.zero,
+                    end: Offset(forward ? -1.0 : 1.0, 0),
+                  ).animate(anim),
+                  child: child,
+                ),
+                child: child,
+              ),
+              child: KeyedSubtree(
+                // Slide change drives the switch; a theme change keeps this
+                // key, so it re-themes in place (no slide).
+                key: ValueKey(screen),
+                child: KeyedSubtree(
+                  // Restart the showcase's own animation on theme change.
+                  key: ValueKey('${ThemeRuntime.activeDesignId}-$screen'),
+                  child: screen.build(
+                    gymName: gymName,
+                    gymLogo: gymLogo,
+                    rewards: rewards,
+                    classes: classes,
+                  ),
+                ),
+              ),
             );
           },
         );

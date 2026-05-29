@@ -44,7 +44,10 @@ logger = logging.getLogger(__name__)
 
 # scripts/scan/run.py -> <root> (the single-tenant data root, holds gyms/ etc.)
 _DEFAULT_ROOT = Path(__file__).resolve().parent.parent.parent
-CONCURRENCY = 16
+# 8, matching the tagger: 16 trips Gemini Flash-Lite's rate limit on a big
+# fan-out, and here a failed call is treated as REJECTED (a false drop), so
+# staying under the limit matters more (LLM_NUM_RETRIES rides out the rest).
+CONCURRENCY = 8
 
 
 def _candidates(gym: Gym, videos: list[VideoOutput]) -> list[VideoOutput]:

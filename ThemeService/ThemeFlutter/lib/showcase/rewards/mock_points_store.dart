@@ -7,13 +7,19 @@ class ShowcasePointsStoreItem {
     required this.title,
     required this.priceLabel,
     required this.pointsCost,
-    required this.imageAsset,
+    this.imageAsset,
+    this.imageUrl,
   });
 
   final String title;
   final String priceLabel;
   final int pointsCost;
-  final String imageAsset;
+
+  /// Bundled fallback image (the const sample data uses this).
+  final String? imageAsset;
+
+  /// Injected gym reward image (a network URL); wins over [imageAsset].
+  final String? imageUrl;
 }
 
 class ShowcasePointsStoreData {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:theme_flutter/showcase/home/home_not_booked_body.dart';
+import 'package:theme_flutter/showcase/showcase_content.dart';
 import 'package:theme_flutter/showcase/support/showcase_bottom_nav.dart';
 import 'package:theme_flutter/showcase/support/showcase_scaffold.dart';
 import 'package:theme_flutter/showcase/support/showcase_topbar.dart';
@@ -25,12 +26,14 @@ class HomeShowcase extends StatelessWidget {
     this.onCycleComplete,
     this.gymName = 'Your Gym',
     this.gymLogo,
+    this.classes,
   });
 
   final bool loop;
   final VoidCallback? onCycleComplete;
   final String gymName;
   final ImageProvider? gymLogo;
+  final List<ShowcaseClassInfo>? classes;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +41,7 @@ class HomeShowcase extends StatelessWidget {
       horizontalPadding: ShowcasePadding.none,
       bottomNav: const ShowcaseBottomNav(selected: ShowcaseNavTab.home),
       child: HomeNotBookedBody(
+        classes: classes,
         topbar: ShowcaseTopbar(
           mode: ShowcaseTopbarMode.bigLogo,
           gymName: gymName,

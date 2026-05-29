@@ -1,17 +1,557 @@
 gym_id: sauna_cold_plunge
 gym_type:
 - sauna_cold_plunge
-theme: ZZUndoneSaunaPlunge
+theme: SaunaPlunge
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational sauna cold plunge content
-      for gym members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable sauna cold plunge sources.
-    avoid_desc: Anything not about sauna cold plunge; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Sauna and cold-plunge protocols, contrast-therapy routines,
+      and breathing for the cold — how-to guidance plus evidence-based explainers
+      on recovery and health benefits — plus the human side: "what a cold plunge is
+      really like", first-time reactions, "I cold plunged every day for 30 days" stories,
+      sauna and spa behind-the-scenes, and calm ritual vlogs. Measured and credible.'
+    short_avoid_desc: No extreme biohacker stunts, unsafe "stay in the ice until you
+      pass out" challenges, or "cold plunge cures disease / melts fat" miracle claims.
+      Nothing off-topic, supplement promos, or "cold plunge is a scam" debate.
+    videos_desc: |-
+      # What we surface
+
+      Sauna, cold-plunge, and contrast-therapy content for members from
+      longevity-curious first-timers to athletes using heat and cold for
+      recovery — plus the fun, human side, so it's a feed members enjoy,
+      not just a how-to library.
+
+      ## Protocols, technique & science
+      - Practical how-to on protocols and timing: heat duration, plunge
+        temperature and time, how many rounds, when to use it around training
+      - The contrast cycle itself, and breathing techniques to stay calm in
+        the cold
+      - Credible, evidence-based explainers on recovery, circulation, and
+        well-being benefits
+      - Safety and contraindications, and beginner cold-exposure guidance
+
+      ## The fun & human side
+      - "What a cold plunge is really like" — relatable beginner experiences
+        and first-time reactions
+      - "I cold plunged every day for 30 days" experience stories
+      - Sauna and spa behind-the-scenes
+      - Calm morning-ritual vlogs and "day in the life"
+      - Calming aesthetic and ambiance edits
+      - Practitioner, coach, or researcher interviews
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about sauna, cold plunge, or contrast therapy; off-topic,
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Extreme biohacker stunts and unsafe challenges ("longest ice bath
+        ever", "stay in the cold until you pass out", hyperventilate-then-submerge
+        dares)
+      - Miracle-cure and pseudoscience claims ("cold plunge cures depression
+        / disease / melts fat", "boost testosterone 1000%")
+      - Ice-bath tub / sauna-gadget gear hauls and supplement promos
+      - "Sauna vs cold plunge / which is better" framing pitched as a winner
+      - "Cold plunge is useless / dangerous / a scam" debate or reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, short, a clip, a highlight,
+      or entertaining — fun and human content is wanted.
+  queries:
+  - cold plunge for beginners how to start
+  - cold plunge protocol time and temperature
+  - sauna protocol how long and how hot
+  - contrast therapy sauna and cold plunge routine
+  - breathing techniques for cold plunge
+  - how to stay calm in an ice bath
+  - sauna and cold plunge for recovery after training
+  - cold exposure benefits explained by science
+  - sauna health benefits evidence based
+  - cold plunge safety and contraindications
+  - how many rounds of sauna and cold plunge
+  - when to cold plunge around your workout
+  - cold plunge first time experience honest reaction
+  - i cold plunged every day for 30 days
+  - what a cold plunge is really like
+  - calm morning sauna and cold plunge ritual vlog
+  - day in the life cold plunge routine
+  - sauna and spa behind the scenes
+  - sauna and cold plunge researcher interview
+  - relaxing sauna ambiance aesthetic edit
+  good_video_ids:
+  - 2aIjSl91T1o
+  - 9wGFh2EsrTw
+  - D5LzvgD8tzc
+  - EwB_xrwnOvE
+  - JXvPWhde-Is
+  - PnFKlO-LVW0
+  - R0-_ZizWzGs
+  - TwrCi5GVhq0
+  - WkXM6gaBFKU
+  - _LPlutr7vSQ
+  - eDTw82eh9PA
+  - iKIV8lPT838
+  - kCyb2hP2laA
+  - qym5GcXDctU
+  - serJmA0YFD0
+  - x3MgDtZovks
+  - ytIL--_REyw
+  - 3Lofl_Mm3a8
+  - 845b4xdl_QQ
+  - EQ3GjpGq5Y8
+  - ExG2hH9GdXo
+  - K75nRHHcJpM
+  - MkT6HcJDpAM
+  - QCl04Nt36VE
+  - TlRcjjQdyXw
+  - dimxzWQrWmA
+  - gS9JTJUIXmo
+  - giZtPe3uvBA
+  - kZBYW4CKScs
+  - mOZ-6NOcegQ
+  - o7DpT1aCPKY
+  - qQN3EERwUk0
+  - veZlasPrtTY
+  - wtrft9k-gXM
+  - 1uerS5JjjRI
+  - 7c-OXc6H7us
+  - B4Y6An0R0uI
+  - DdTfurGTJ8Q
+  - ExZ9JF69px0
+  - KIjHz3ZTrnk
+  - MS4jsI_TVCc
+  - j5WCgs2dyaE
+  - mwINuSXnrhY
+  - pvPu6G3j5tA
+  - qwyevDqrcFM
+  - wnaOCNnE8ts
+  - z6k8wXfwS94
+  - zgtSL3HyKxc
+  - -TXdgFbABQY
+  - 0F_bBmnM78k
+  - 0G9uEZDm1p0
+  - 2yZNoTI-0wo
+  - 5kkBgb426Aw
+  - 7aYArAYghUA
+  - LQ8BVCG97QQ
+  - OB1bsYDHpvQ
+  - SKZ6T3MTcO8
+  - UmqtLFqT8qE
+  - X7GX5itGJc4
+  - _L04EYo2v94
+  - ew2zvL4CigE
+  - pq6WHJzOkno
+  - uz8Pl85YGVQ
+  - 4pBaPnRTnqY
+  - 9RB3sgq3V7c
+  - DAhVtr71k24
+  - DQjflJci_sk
+  - Yvt6_QUUEXw
+  - eUexrJ-AwLs
+  - iuPQmw4Ax00
+  - toGaY9y4F7Q
+  - w92HasOQPH8
+  - 1YnXQz-xBd4
+  - 1wvZ9a6j1Pk
+  - 5UkwK9sBTGo
+  - XaLd5w6zF7A
+  - ZDhdbt-l5eI
+  - ZSsnmLKnV7c
+  - ah2dJiB2oAo
+  - majAIb_RQos
+  - urvTq4eEpYE
+  - 6GsUyLtiiz4
+  - 7FlmpnsbciQ
+  - Ar4rNsBxyOk
+  - eiWqgjVAhMs
+  - nOuzSOnfyv0
+  - sZSY4ild8yU
+  - tPPXhCEYyNs
+  - u51gDmaVfUc
+  - vK6xj5-0fu4
+  - yiQOlTsFcwU
+  - 2P9HuyzrdVI
+  - 2W00ltW6lYc
+  - 2XecbuI-9QE
+  - HWdr9a8YLZo
+  - Qm43X9GYpKI
+  - Sg9gTioMN8g
+  - X6WO6GQfGAg
+  - XTEGtRLPIKk
+  - _VjvqjLSc9Q
+  - g9Er55uc7UM
+  - k1AXtln8qBM
+  - yuyeS_2hwMw
+  - -VJ6jNxq7RU
+  - 252XH4UPTjs
+  - 4gLBG7IkCxs
+  - 7szkWRrQ96Q
+  - 8iqMC9uzc2M
+  - APAhGeN5tVk
+  - HWAOifKGLiE
+  - HZs1a6n0q7c
+  - ZLgif_x-ycE
+  - kiUM92VDI1Y
+  - --XXeEa5Lbs
+  - 8MqbdX6n6yY
+  - 9VllOWCYCMA
+  - FVBZ3PLj1b4
+  - PI8nEdCWvyA
+  - cA-48RuPYWc
+  - nFPd_tjtx18
+  - yRmx06wpGsU
+  - 0cUpZ_mLuS4
+  - 1OZffdbW3Fw
+  - L_Rnq7Rym1A
+  - RWkv9ad7zvc
+  - YBySXhg1mwE
+  - cw9g7T8bjCY
+  - rkruUWNhmfk
+  - rnp8gTv_VyY
+  - IF4ID6_4BGY
+  - Kpt-Tl9l0eM
+  - NunbmVSmx2A
+  - RE6ZyGsmp8A
+  - UbQ4SUjxOG4
+  - VYboi1PEdU4
+  - rSpaqq9_Wg4
+  - 1m0VLBd85Gk
+  - 2-gzvlVL_Ng
+  - 9YAcQLUGUAE
+  - AZ7Z14jzVNU
+  - T0NINJOuaf4
+  - U2SXR4MFiAs
+  - eP7SH6_CIsk
+  - ic5S5jNeBCE
+  - jj9_wV9iMY8
+  - kJWuRmHEjk4
+  - qrVMFHGnAyg
+  - 2GuLaNd1aq8
+  - 4yuUP8MU4sc
+  - DHEU1kgWCzk
+  - TMfQxlHb_EE
+  - VA-OggdIulI
+  - WnSXOZz_6BI
+  - dYxxR2iYlpI
+  - fCgBf3wblbk
+  - jv1ljJky4OU
+  - nCG6qOzDADI
+  - qjkPBXQFUuc
+  - vbUvmhd23hQ
+  - 20YBYFa3T8E
+  - BDB-z-jHjf8
+  - CbIQQcQ6In0
+  - HUfiMkjv9Ls
+  - KsApjjg9tsk
+  - Ll6bm3xU-ic
+  - XkPqboIJ6jo
+  - decvd4aIZ2I
+  - eVJo98Fs-bc
+  - exeNt4zg50c
+  - fSvN5xweRNw
+  - vbmQ6MoMUN0
+  - 5tg9dpQMYHk
+  - 6EVF_cDxsvc
+  - GbyLNpuym7k
+  - NrxiJ1_0-Pc
+  - Rgyc2QFFoLU
+  - k1zca852DZ4
+  - pnWuKutsxtU
+  - wuFRt2HD2So
+  - zA7bTUjE5wI
+  - -ty6VTNPjqw
+  - 2DvQDVyom3w
+  - IYni6AfrkAY
+  - RqULt5PZflY
+  - U0ReQBu-PHc
+  - VrIGzJlBE-w
+  - _LjQyCGAT6c
+  - ElyzzYBIJbk
+  - TKIK7gv7GLQ
+  - W_bHopi5hIA
+  - f4cdu-QiKHo
+  - iydgS0OQxgE
+  - jRvyau1E55Y
+  - oX6dqlb35KE
+  - vZlVucnOxso
+  - wsFB3EcqWGo
+  - BTCukZS9qPE
+  - Ey-zAL0Mk0s
+  - J9gSVkxMEzQ
+  - LbdTBXgiVrM
+  - WwQ-i9SC-g4
+  - YDxyfY4OLVI
+  - Zqc_VAff1gk
+  - oatsxK5Q_cw
+  - rprFJVrF_as
+  - sLYw8VdVGbw
+  - 2Y13Ob6agkI
+  - 8pwx3Wcy2pU
+  - 9O-yAEjg29o
+  - Og22S034y9I
+  - Sj_g3-ZNO7s
+  - Y8Dv7qMnyug
+  - _bmJ6ndVqPA
+  - eprWVjxe_Uw
+  - oBNQ1JKvH04
+  - sdpvPpzh3Vw
+  - x4f53UBZ3JE
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - Fz9ofLEARY0
+  - INXD5osrkDo
+  - Jq5EaC8RpkA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - q8x8fjyhcO8
+  - 4imTQhTlj3M
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - Po6iYzQahzE
+  - Q-7KCRNLLzc
+  - RNXVSla1EGo
+  - dBSAURSwuiI
+  - kThGMgiprF4
+  - r3NjrnANKq0
+  - yE6wxXYkulo
+  - 0DqFwD-pUps
+  - 2tEswSlY6_8
+  - 3dgIOZk7g2s
+  - 3zTR4ayDG38
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - BwCGWSoAgj8
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - Nv7QAAE65Ng
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - oFf7mlaJA8I
+  - xHlhEnN60-s
+  - CDDHlGRL3AI
+  - ItE7xQpkfMA
+  - Y-AYC3_DbpY
+  - deSsG444nU0
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - q9CKxBMxTlU
+  - rlZgtQbRlD0
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - xtPiQV-xRPg
+  - 2Z3APKu1mHo
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - DUNT_SycTJM
+  - NeiXHk_y634
+  - XaA3qD1EAqg
+  - fa-I7iUErK0
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - EzzHv56zDVc
+  - SYJu_y6WvEc
+  - TIxZXp13Lg4
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - hZoeX99CiPE
+  - nQHCZAES39g
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - yT_7yYZDFSA
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - QmL8ueGp63M
+  - TN9i9Ni0Xr4
+  - YNHMNVLwy9c
+  - _Qe1MxlnsAs
+  - bklrNzdtU3Q
+  - mLTqcadk8Bw
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - 6bCQz-P5r30
+  - CXP7Q5n5JP8
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - XGRUSpYPruc
+  - kwDQk2siRJs
+  - ooEgWahEvEM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - xtrZ2tuevdw
+  - 6SpNMNQAVnI
+  - ChVhCKUUD3M
+  - Mlgs4_54q8Y
+  - _V-FWN6KSGA
+  - le-ST0HC6us
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HGFxnwbpLNE
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - LRxTzDKe16I
+  - M4K0s792wAU
+  - Z7Ra8Wa-WMI
+  - cTJLrfopP5M
+  - cdPejPpoMFo
+  - h-PoUMBtpVU
+  - oZNCjMVjrsE
+  - 0fJwHktpuGA
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - HsonXuJs8-s
+  - I5q_-qNM28U
+  - M4nSM7TBsJg
+  - RUeN5mitoAw
+  - UNf2qsX8uFc
+  - ZuNLpuKaQKQ
+  - cujcxjSm69g
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - -4UD1I0gdC4
+  - IQwcCaAAuRc
+  - Ibt-pBe7uxw
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - nRQSfBhd7FE
+  - nygR3g0-lts
+  - pmfXpsW84Yc
+  - t-ezOLT2Kv0
+  - zBe-QCSXvTk
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - SMAB27z3x0c
+  - WEKB9EGH20I
+  - kIWXzXLkau4
+  - wgihxpbXNYo
+  - 716e30A053U
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - tJeI51crrvs
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - Say3pUbllSA
+  - moVynuxM4fc
+  - nL8si_954O8
+  - 3qyWpJ34dWw
+  - 9TzHTKBiy68
+  - G1jUVQBHCNA
+  - NjlxJeT_ATg
+  - Qkq3hiy1CXA
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - mvTfrZ-a554
+  - n1TI2udDBl4
+  - s0YrUCo8YJk
+  - uVOgCCGtH_s
+  - 3E_pM9PCNrA
+  - Bd4gxNpbJGE
+  - KF3D-Q0C6-c
+  - Uc_5m6rL7h0
+  - _9ivIL_Tab8
+  - jdo843M-oCo
+  - l3vZAw7Ey3w
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - JEYBh-6Asts
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - ZT8DmiuvxCI
+  - bIhSAida-bk
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - eloJ6DomIJA
+  - foGlgwWk76I
+  - g1MitjqGMzU
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 9NvRn7FYGiQ
+  - 9YwxfM20njs
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - F-7pt0mPvdM
+  - MCGa9qP_Bo8
+  - bzGSxdGF8z0
+  - -GCA92b119Y
+  - 9ZAcrIvQgW4
+  - I4uLVYD2l-o
+  - IqXOWtwEeeM
+  - MilYefF9DjI
+  - VvgtmpJ_Nf8
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:39:38.985799Z'
+    usd: 0.1379768999999591
+classes:
+- name: Heat & Chill Foundations
+  image_url: https://images.pexels.com/photos/7596956/pexels-photo-7596956.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the basics of sauna and cold plunge. Learn proper technique,
+    breathing foundations, and how to ease into your first cold exposure safely.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Contrast Ritual Mastery
+  image_url: https://images.pexels.com/photos/8436490/pexels-photo-8436490.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Deep dive into the full heat-cold contrast cycle. Understand timing,
+    temperature, and protocols for maximum recovery and adaptation benefits.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Cold Confidence
+  image_url: https://images.pexels.com/photos/8436587/pexels-photo-8436587.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build mental resilience and calm in the cold. Learn advanced breathing
+    techniques and mindset strategies to extend your cold plunge duration.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Recovery Reset
+  image_url: https://images.pexels.com/photos/8436426/pexels-photo-8436426.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Optimize sauna and cold therapy for post-workout recovery. Learn when
+    and how to use heat and cold to accelerate muscle repair and reduce soreness.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Water bottle
+  image_url: https://upload.wikimedia.org/wikipedia/commons/4/45/Metal_Water_Bottles.jpeg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

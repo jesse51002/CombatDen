@@ -8,6 +8,7 @@ image_set:
         specs: ''
         image_to_image: null
       path: /fixture/demo/default/final_images/hero.png
+      version: '0123456789ab'
       prompt: A bold demo hero illustration on a flat solid background.
       complexity: medium
 color_set:

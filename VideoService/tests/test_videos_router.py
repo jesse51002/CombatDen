@@ -87,7 +87,7 @@ def _reward_cards(n: int = 3) -> list[RewardCard]:
 def _write_gym(
     service: VideosService,
     *,
-    design: str = "ZZUndoneVinyasaFlow",
+    design: str = "VinyasaFlow",
     gym_id: str = "vinyasa",
     gym_type: list[GymType] | None = None,
     good: tuple[str, ...] = ("ent1", "edu1"),
@@ -134,63 +134,111 @@ def _ids(feed) -> list[str]:
     return [c.url.split("v=")[1] for c in feed.videos]
 
 
-# --- fetch-by-theme videos ---------------------------------------------------
+# --- fetch-by-gym videos -----------------------------------------------------
 
 
-def _get_theme(**kwargs):
+def _get_gym_videos(**kwargs):
     params = dict(
-        design_id="ZZUndoneVinyasaFlow",
+        gym_id="vinyasa",
         video_type=None,
         big_group=None,
+        rejected=False,
         limit=20,
         offset=0,
     )
     params.update(kwargs)
-    return asyncio.run(videos_router.get_theme_videos(**params))
+    return asyncio.run(videos_router.get_gym_videos(**params))
 
 
-def test_theme_feed_serves_only_gym_good_in_order(service: VideosService) -> None:
+def test_gym_feed_serves_only_gym_good_in_order(service: VideosService) -> None:
     _seed_pool(service)
     _write_gym(service, good=("ent1", "edu1"))
-    feed = _get_theme()
+    feed = _get_gym_videos()
     # Only the gym's good ids, in good_video_ids order (not pool relevance order).
     assert _ids(feed) == ["ent1", "edu1"]
     assert feed.total == 2
 
 
-def test_theme_feed_serves_exactly_the_gym_good_list(service: VideosService) -> None:
+def test_gym_feed_serves_exactly_the_gym_good_list(service: VideosService) -> None:
     _seed_pool(service)
     # Approval is the gym's good list — the pool has no opinion.
     _write_gym(service, good=("bad1",))
-    assert _ids(_get_theme()) == ["bad1"]
+    assert _ids(_get_gym_videos()) == ["bad1"]
 
 
-def test_theme_feed_skips_ids_not_in_pool(service: VideosService) -> None:
+def test_gym_feed_skips_ids_not_in_pool(service: VideosService) -> None:
     _seed_pool(service)
     _write_gym(service, good=("edu1", "ghost999"))
-    assert _ids(_get_theme()) == ["edu1"]  # ghost id not in the pool -> skipped
+    assert _ids(_get_gym_videos()) == ["edu1"]  # ghost id not in pool -> skipped
 
 
-def test_theme_feed_unmapped_design_is_404(service: VideosService) -> None:
+def test_gym_feed_unknown_gym_is_404(service: VideosService) -> None:
     _seed_pool(service)
     _write_gym(service)
     with pytest.raises(HTTPException) as exc:
-        _get_theme(design_id="ZZUndoneUnknown")
+        _get_gym_videos(gym_id="nope")
     assert exc.value.status_code == 404
 
 
-def test_theme_feed_video_type_filter(service: VideosService) -> None:
+def test_gym_feed_rejected_serves_rejected_list(service: VideosService) -> None:
+    _seed_pool(service)
+    _write_gym(service, good=("ent1", "edu1"), rejected=("bad1", "edu2"))
+    # Default (approved) feed is the gym's good list...
+    assert _ids(_get_gym_videos()) == ["ent1", "edu1"]
+    # ...and rejected=True swaps it for the gym's rejected list, in order.
+    feed = _get_gym_videos(rejected=True)
+    assert _ids(feed) == ["bad1", "edu2"]
+    assert feed.total == 2
+
+
+def _get_preview(**kwargs):
+    params = dict(gym_id="vinyasa", rejected=False, per_tag=10)
+    params.update(kwargs)
+    return asyncio.run(videos_router.get_gym_videos_preview(**params))
+
+
+def test_preview_one_section_per_tag_in_feed_order(service: VideosService) -> None:
+    _seed_pool(service)
+    # edu1=educational, edu2=analysis, ent1=memes -> 3 sections, feed order.
+    _write_gym(service, good=("edu1", "edu2", "ent1"))
+    preview = _get_preview()
+    assert [s.tag.value for s in preview.sections] == [
+        "educational",
+        "analysis",
+        "memes",
+    ]
+    assert all(len(s.videos) >= 1 for s in preview.sections)
+
+
+def test_preview_caps_videos_per_tag(service: VideosService) -> None:
+    _seed_pool(service)
+    _write_gym(service, good=("ent1", "bad1"))  # both memes
+    preview = _get_preview(per_tag=1)
+    assert len(preview.sections) == 1
+    assert preview.sections[0].tag.value == "memes"
+    assert len(preview.sections[0].videos) == 1  # capped at per_tag
+
+
+def test_preview_rejected_uses_rejected_list(service: VideosService) -> None:
+    _seed_pool(service)
+    _write_gym(service, good=("edu1",), rejected=("ent1", "bad1"))  # rejected: memes
+    preview = _get_preview(rejected=True)
+    assert [s.tag.value for s in preview.sections] == ["memes"]
+    assert len(preview.sections[0].videos) == 2
+
+
+def test_gym_feed_video_type_filter(service: VideosService) -> None:
     _seed_pool(service)
     _write_gym(service, good=("edu1", "edu2", "ent1"))
-    feed = _get_theme(video_type=VideoType.EDUCATIONAL)
+    feed = _get_gym_videos(video_type=VideoType.EDUCATIONAL)
     assert _ids(feed) == ["edu1"]  # only the educational-tagged good video
 
 
-def test_theme_feed_both_filters_is_400(service: VideosService) -> None:
+def test_gym_feed_both_filters_is_400(service: VideosService) -> None:
     _seed_pool(service)
     _write_gym(service)
     with pytest.raises(HTTPException) as exc:
-        _get_theme(video_type=VideoType.EDUCATIONAL, big_group=BigGroup.EDUCATIONAL)
+        _get_gym_videos(video_type=VideoType.EDUCATIONAL, big_group=BigGroup.EDUCATIONAL)
     assert exc.value.status_code == 400
 
 
@@ -210,11 +258,11 @@ def test_gyms_page_returns_cards(service: VideosService) -> None:
     assert page.total == 1
     card = page.gyms[0]
     assert card.gym_id == "vinyasa"
-    assert card.theme == "ZZUndoneVinyasaFlow"
+    assert card.theme == "VinyasaFlow"
     assert card.parent_gym_type.value == "Yoga"  # coarse bucket from vinyasa
     assert (
         card.celebration_image_url
-        == "/apps/combatden/ZZUndoneVinyasaFlow/images/celebration_image"
+        == "/apps/combatden/VinyasaFlow/images/celebration_image"
     )
     assert card.video_count == 2  # len(good_video_ids)
     assert card.has_classes is True
@@ -240,50 +288,43 @@ def test_gyms_page_empty_when_no_gyms(service: VideosService) -> None:
 
 def test_gyms_page_query_filters(service: VideosService) -> None:
     _seed_pool(service)
-    _write_gym(service, design="ZZUndoneVinyasaFlow", gym_id="vinyasa")
+    _write_gym(service, design="VinyasaFlow", gym_id="vinyasa")
     _write_gym(service, design="ApexMMA", gym_id="mma", gym_type=[GymType.MMA])
     page = _get_gyms(query="mma")
     assert page.total == 1
     assert page.gyms[0].gym_id == "mma"
 
 
-# --- classes / rewards -------------------------------------------------------
+# --- gym detail (classes / rewards / spec, one fetch) ------------------------
 
 
-def test_theme_classes_resolves_from_gym(service: VideosService) -> None:
+def test_gym_detail_resolves_classes_rewards_and_spec(service: VideosService) -> None:
     _seed_pool(service)
-    _write_gym(service, classes=_class_cards())
-    out = asyncio.run(videos_router.get_theme_classes("ZZUndoneVinyasaFlow"))
+    _write_gym(service, classes=_class_cards(), rewards=_reward_cards())
+    out = asyncio.run(videos_router.get_gym("vinyasa"))
+    assert out.gym_id == "vinyasa"
+    assert out.theme == "VinyasaFlow"  # carried for branding
     assert len(out.classes) == 4
-
-
-def test_theme_classes_none_is_404(service: VideosService) -> None:
-    _seed_pool(service)
-    _write_gym(service)  # no classes authored
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(videos_router.get_theme_classes("ZZUndoneVinyasaFlow"))
-    assert exc.value.status_code == 404
-
-
-def test_theme_classes_unmapped_design_is_404(service: VideosService) -> None:
-    _seed_pool(service)
-    _write_gym(service, classes=_class_cards())
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(videos_router.get_theme_classes("ZZUndoneUnknown"))
-    assert exc.value.status_code == 404
-
-
-def test_theme_rewards_resolves_from_gym(service: VideosService) -> None:
-    _seed_pool(service)
-    _write_gym(service, rewards=_reward_cards())
-    out = asyncio.run(videos_router.get_theme_rewards("ZZUndoneVinyasaFlow"))
     assert len(out.rewards) == 3
     assert out.rewards[0].price_label == "Free"
+    # The feed spec rides along — no separate fetch.
+    assert out.specification.videos_desc == "flow classes"
+    assert out.specification.avoid_desc == "no injuries"
 
 
-def test_theme_rewards_none_is_404(service: VideosService) -> None:
+def test_gym_detail_classes_rewards_none_when_unauthored(
+    service: VideosService,
+) -> None:
     _seed_pool(service)
-    _write_gym(service)  # no rewards authored
+    _write_gym(service)  # no classes / rewards authored
+    out = asyncio.run(videos_router.get_gym("vinyasa"))
+    assert out.classes is None
+    assert out.rewards is None
+
+
+def test_gym_detail_unknown_gym_is_404(service: VideosService) -> None:
+    _seed_pool(service)
+    _write_gym(service)
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(videos_router.get_theme_rewards("ZZUndoneVinyasaFlow"))
+        asyncio.run(videos_router.get_gym("nope"))
     assert exc.value.status_code == 404

@@ -1,17 +1,662 @@
 gym_id: karate
 gym_type:
 - karate
-theme: ZZUndoneKarateDojo
+theme: KarateDojo
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational karate content for gym members
-      — technique breakdowns, full classes, drills, and credible coaching from reputable
-      karate sources.
-    avoid_desc: Anything not about karate; off-topic, low-quality, or clickbait videos;
-      and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Traditional karate-do technique and practice — kihon, kata,
+      kumite, stances and etiquette in the lineage styles (Shotokan, Kyokushin, Goju-ryu)
+      from credible senseis — plus the human side: tournament kata and kumite footage,
+      dojo vlogs, belt-test stories, demonstrations, and sensei interviews.'
+    short_avoid_desc: Off-topic, clickbait, McDojo "black belt fast / colour-belt-every-six-weeks"
+      promises, cartoon "hi-YAA" karate-kid parody, street-fight "deadliest move"
+      fantasy, and "karate vs X / is karate useless" anti-karate debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and study content for traditional karate members —
+      taught by credible senseis and dojos — plus the human side of karate-do,
+      so it's a feed members enjoy, not just a how-to library.
+
+      ## Technique & study
+      - Kihon basics: stances, blocks, strikes, kicks
+      - Kata and bunkai application
+      - Kumite and sparring drills
+      - Posture, breathing, and the etiquette of karate-do in the lineage
+        styles (Shotokan, Kyokushin, Goju-ryu)
+      - The culture here is traditional, disciplined and respectful — favour
+        calm, careful instruction on technique, kata detail and grading
+        standards over hype, for white belts through black belts
+
+      ## The fun & human side
+      - Properly executed tournament kata and kumite footage
+      - Black-belt demonstrations
+      - Dojo vlogs and "a day at the dojo"
+      - Belt-test and grading stories, training behind-the-scenes
+      - Sensei interviews on the way of karate
+      - Kept composed and respectful, never gimmicky parody
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about karate; off-topic, genuinely low-quality, or clickbait
+      videos.
+
+      ## Reject
+      - McDojo-style "get your black belt fast", "new coloured belt every six
+        weeks", or "go pro quick" promises
+      - Cartoon "hi-YAA" karate-kid parody and board-breaking gimmick stunts
+      - Street-fight / self-defense fantasy ("one move to end any fight",
+        "deadliest karate technique")
+      - "karate vs muay thai / taekwondo", "is karate useless in a real fight",
+        and similar cross-discipline or anti-karate debate and reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a clip, a highlight, a
+      demonstration, or entertaining — fun and human content is wanted.
+  queries:
+  - karate kihon basics for beginners
+  - shotokan karate stances tutorial
+  - heian kata step by step shotokan
+  - karate front kick and roundhouse technique
+  - karate punch and block fundamentals
+  - bunkai application of kata explained
+  - kyokushin karate technique breakdown
+  - goju ryu sanchin kata tutorial
+  - karate kumite sparring drills
+  - karate timing and distance in kumite
+  - traditional karate etiquette and dojo basics
+  - tournament kata performance highlights
+  - wkf kumite match analysis
+  - kyokushin knockdown tournament highlights
+  - a day at the karate dojo vlog
+  - karate black belt grading test story
+  - karate black belt demonstration
+  - life as a karate sensei vlog
+  - karate sensei interview on karate-do
+  - karate student first competition experience
+  good_video_ids:
+  - 0ISUGbAb0dU
+  - F1WkAvrfiZ0
+  - HK5-X9hdS7s
+  - ZYZY1ij3c1w
+  - dCemse2o1mg
+  - rvr8AC2v-lM
+  - sj8rQiqod3Y
+  - CehXem4jujk
+  - M2z3EwffbyU
+  - Vd1Sl9DJC4o
+  - Ycj8hisRXEE
+  - c-mhlPzdQf4
+  - c_dkr6JZqGY
+  - jq7yqox1D5w
+  - l8hzfxKw3w0
+  - sf5KRe-VUp8
+  - xHY0PT0ZDQI
+  - 6mooMH1Bn5I
+  - AUx84zQ3eeE
+  - CExVa5_aGNQ
+  - EtsEPixdxoA
+  - U-PJki-c1w0
+  - VsiCAi5woak
+  - Z-ZPankx_p0
+  - jcIvgJl87Qc
+  - k72E1u962Qg
+  - l7humWGq1xM
+  - susxXOdWhDE
+  - 9R7wWh6GF24
+  - F8cCAgsfpjs
+  - IIsr-YumQ_Q
+  - NC7lWqFXwnI
+  - Q_hujUP-16s
+  - XrhtJhoK9pg
+  - ly3dYy0iOmU
+  - mCGiBAHkO08
+  - qqXefXfAmxY
+  - CqQX6HIsYsE
+  - DbEwDrTlz_g
+  - K2ii1VBCOrs
+  - O7RwkLNoLEI
+  - iJ4HOCDN_Mc
+  - qWqK5Ra_zpI
+  - qimQgh2umnI
+  - s9vbEsqlVVo
+  - se7c2hIJTRM
+  - tyM7c1ZF_2A
+  - zIBQC9egW0E
+  - zaDvw5lWps4
+  - -xHkngBGKqM
+  - 173Guuuukwk
+  - 3RHeq4LHfkY
+  - 4zrufBoxSuQ
+  - DZJQ4PBHIZc
+  - E1mCYysSbG4
+  - FSv8TOE_L84
+  - H2CacXLorf0
+  - KrR-58vvMnY
+  - XpWW623eQYI
+  - _7zbQNbkWDI
+  - dhawWyJdlok
+  - qJED51I7iTc
+  - vqmopf5uQG4
+  - y60EWCahqvs
+  - 2tz77nBXLLw
+  - 8f25kT94jwk
+  - DyDxha9KZWA
+  - L3dAgxztXNo
+  - Q3bS6QHGMmw
+  - RtSFIdd7C5I
+  - SphyudPW_Io
+  - f3b4YD9e1gU
+  - gn9j2JT9P2k
+  - m9JjW0s_O0k
+  - 0lZzjN_HLUQ
+  - 5iX6ecbz8XE
+  - 9YZ-1ZAmCJE
+  - BTDnYUGqOE8
+  - HMSoY2uj68E
+  - LxpHOI8n22Q
+  - SqQioG7YNxI
+  - TXkqQVcT7Kc
+  - Td3_jSLcr88
+  - UL7Lvbg-mBs
+  - l_m7aO86_as
+  - oyz5R0IpOHc
+  - pOIvGBwzoXg
+  - q9kS4nOXPCI
+  - raxNbDbP1tU
+  - 1MrRmimBJoA
+  - 1hZ4iOHPuGU
+  - BNYcOBUJeeU
+  - E0XEy96waTw
+  - Hk__nFdfvMQ
+  - KOQGfKkcuMw
+  - Kjt8nMQotUI
+  - OSu2fvWwIQ0
+  - PnXlOkqJ3xM
+  - UTo23Ek2tow
+  - ke8L_sU081k
+  - n7whaeolsDQ
+  - s-Hwu16-Vpk
+  - 1E_MJRR0PiA
+  - 1sBm4AATsa8
+  - 72-8jhREtzI
+  - JLSksuDd7Nc
+  - Oh_EeSzGvek
+  - P6ZgF4cbEg0
+  - T8sf6u_bFuE
+  - TgFkEudrVWQ
+  - ZOKZCsxHDY8
+  - cZ1GTNIrOLU
+  - kkbYiYtas5U
+  - tTKlVcz7_-U
+  - 039nv45oth8
+  - 3_qA-xVRTWw
+  - FwPIFOH2CN0
+  - GruTA2Eexz8
+  - HTaYbq_HuuU
+  - J3C9FV6l5EQ
+  - LLEDWu_xK7Y
+  - QFf3zfwjoVY
+  - SJyAWmn1WAQ
+  - vhcqTnOql24
+  - 1GmeWbdBbEY
+  - 1v_huNxRyUQ
+  - 7m0tUM4Lb1w
+  - 8ZDXq0eU8wM
+  - 8v4Cw9xcGbo
+  - CZGcQFQJG84
+  - Jmq5nlVqfvc
+  - NzL59IHAtko
+  - QcRnV8VFYVo
+  - WO0wGYhk5xY
+  - W_SltXL6WV0
+  - Wwe2OnQXoPw
+  - YghOeTjdEf4
+  - d6T_sflodhk
+  - q1Rg8rUpjjw
+  - x1B4c4pWn-E
+  - x2pk_6icGtI
+  - 0RAYao3dLJA
+  - 7uOggh1o0GM
+  - A-D9OCckP1E
+  - BkglXSf8uc0
+  - CSp7noiux_U
+  - IRXdlWZshBY
+  - QtoIcQuNPTo
+  - RBJbFJq6A88
+  - WuHKYPHSe0w
+  - YAQE_u-77qU
+  - iICFmI9WV1g
+  - lyZ2dpZMZhQ
+  - vbIVNdXAuhE
+  - z51sfPu-XFw
+  - 6jcL2JdLCI8
+  - 7u36Eex83A8
+  - EoONbCw0Q6c
+  - F5omTz32t1A
+  - JP1rmDDLyP0
+  - L5yTFE4Vfp4
+  - N_VKspke9Lc
+  - TLcSzTb7AgE
+  - ZvvnqetTg9w
+  - aF_GMUEQYRQ
+  - bmV43wlF8Ok
+  - gQuJ47Oa-DU
+  - gX5GpvGmFD0
+  - j1K4ABI8TOg
+  - oA3XhRg2Af0
+  - z45Vu4h9zlc
+  - 2A8pN3Kic1E
+  - 87g3cn6bDT4
+  - B8jNtZaZbgY
+  - BlTrrP-pV9M
+  - GN4PMRJmlBY
+  - Hcmmro0QXZo
+  - YRoFA0IiZG0
+  - _4z4P937Lnc
+  - _i0s6Yr1cS4
+  - b5LvVMBQOcI
+  - bUUE3xpZ550
+  - fnA-Skin4FA
+  - j3_TFJyFiE0
+  - jkCb2WXH61U
+  - lTG_U-8qlTg
+  - leJpbAw6gZA
+  - qDQGuY2duZo
+  - whzhyZyzqWM
+  - yWSjS4IDJCA
+  - -gYhgW5xAr0
+  - 3XYbC5UbLOc
+  - 6VgXQsjpCvY
+  - Ai29ZDUwDQ4
+  - DkbDhPNWkao
+  - DtuABYQETVE
+  - Mny7CVbnQVs
+  - WgIrbI-_ZE8
+  - fM9DqHsovmA
+  - mLHxh-9kC5Y
+  - p-OpqkPZbEI
+  - xI3QsZLmOgQ
+  - -DDR4fFk6Rc
+  - 8PtYD_6W7BY
+  - 8hpyRH-qHiA
+  - BN28hjDE8aM
+  - Ble7sYwSp74
+  - Ep0K2Hn7ARk
+  - KD1uSGjpCQU
+  - SeeAtIIeBl4
+  - TB5K_V1ZD-8
+  - W3QH35R4j64
+  - XHKerL_56HI
+  - sCnAbvRDW4Y
+  - 4UvcQo1Me08
+  - 7fcJ47-Xi-8
+  - BuiG_BWIfms
+  - OJMmGT2AcuE
+  - RCabMHfCCRA
+  - athKvL1GdOE
+  - ojQ_ia2PBYU
+  - pV0mRzaJbCY
+  - tvutu7Sfmcs
+  - z6jY0Ahuggw
+  - 0rIP32W0CSA
+  - 8rw_LAnTB54
+  - DmWi5n7C3fI
+  - eJoWTlqMuZc
+  - jXxflQCSjlw
+  - rRZAgKhp0zE
+  - rgs1ysn0R-0
+  - slNSdv8f0fc
+  - t2dFTukLIfU
+  - tgdIVEmnwdc
+  - wihHgq6usUU
+  - 0pNHa6M-Zk8
+  - 3bHHUd6Dzqo
+  - 9IGkhxM9hVo
+  - GBxxdVM406E
+  - OHtYSaQsKmk
+  - PKt5YUzjBgw
+  - R6eNf8jXOHQ
+  - WieDEmswugE
+  - dBTQi5kdfW0
+  - hSCZAJsw34E
+  - lOQ3GykgeOY
+  - oNdc3bDnXB8
+  - vxEb9luNV58
+  - ztsXMiO86Gg
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 7lgyV7imcKc
+  - A4f-th_YW2U
+  - INXD5osrkDo
+  - S0gbkjyV_MY
+  - SotLyRb8XjE
+  - T8O5CMhppdo
+  - dBJry3tcX0Q
+  - gT6OkjTDcYc
+  - k0QVcaw4A2w
+  - lytNsPESWXs
+  - nE4mvAWZKXw
+  - rgvPJsygNyo
+  - 2hgyc3Kkc3E
+  - 9Wa9xY88WF8
+  - A_IM_52psPw
+  - BbRTXtD_IlI
+  - GQoSnlh3Nbk
+  - KJBlo6X4Mm4
+  - MHrGENGDlX0
+  - MkVsLlxhF1o
+  - Q-7KCRNLLzc
+  - RSWgSqdZaeM
+  - SQl5Eu2LalA
+  - X15kOTm_5lw
+  - Z8BkIZgJ5C0
+  - gfUg6qWohTk
+  - kThGMgiprF4
+  - mAxvK2aGtQU
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - CkwsP85USK8
+  - DIb4ORefBaE
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - KNmxPI86cZs
+  - O2JyplMHA4A
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - k6Qp78Hh5DI
+  - lCsR-zxwN1Y
+  - oZJnpVdcPjI
+  - qLMyrLKxsUI
+  - v4pezeJWpVM
+  - xHlhEnN60-s
+  - ximZfmqh2hI
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - BtnwY-j091A
+  - ILSbK8RnGdI
+  - ItE7xQpkfMA
+  - h1vlqBRmH_g
+  - iK_h-2kot6s
+  - jAsYJwSw2w8
+  - kYYXtz9uNYc
+  - kqyr3kaw5qE
+  - oIB8kKroCd0
+  - q9CKxBMxTlU
+  - qRDZjEZByZg
+  - rDAIlfTFDqU
+  - wd6dkj6p3lM
+  - yW0aNuhib5A
+  - 29kipLhNL_A
+  - 3UCafeK-fac
+  - Cfro_K1cGXc
+  - Cq_Nuo8ilak
+  - EQio6nzPLPw
+  - XaA3qD1EAqg
+  - v6B9zgvkos0
+  - -99HKFiZOWQ
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - BLYnBNOsxoI
+  - Jk0IGC8GOcI
+  - K_-mBWT47_E
+  - Okmz3oq8M_8
+  - SYJu_y6WvEc
+  - U3zQHweg1eI
+  - WtunB3RhqBk
+  - XbAAiXJuinQ
+  - YXzzuLcmE_o
+  - a8sJQRxoXSU
+  - aq92sWWU4FM
+  - bMkEhPX0Vj0
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - qSi4tbWQKZ0
+  - q_7LMlxolTg
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - vucFkmTMO2o
+  - vuuqoMs162A
+  - 4VbmiMEs22c
+  - BdWvP-lbb68
+  - Db098oKgzpk
+  - HIuN3NzdSPs
+  - I5j8WD-fkNU
+  - LlkV4EOG2_k
+  - OnZCKqTPTdo
+  - QYep9TgZsa4
+  - TN9i9Ni0Xr4
+  - UDf_Ey7FfkY
+  - YNHMNVLwy9c
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - rbzafKjNIp8
+  - xtrETWp_eEA
+  - -ywRvvPIkXw
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 4zQL4ALDOVQ
+  - Pfse9GxqdAE
+  - VDeVdNwe4Fo
+  - Y1rmsLtq96Y
+  - Y1v1LWYFDSQ
+  - f6yAY1oZUOA
+  - fWHLuFrVW68
+  - g9Er55uc7UM
+  - hQaF64yk-N4
+  - kSDwrthpMsQ
+  - ooEgWahEvEM
+  - qsycNUaN75Y
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 5BWvCETiDy4
+  - HWAOifKGLiE
+  - IuQeTww3c3o
+  - K-yHWxGYIZg
+  - Mlgs4_54q8Y
+  - SiH7ny3dHCo
+  - Z0XM7-NZcgY
+  - a59UYxB9CUw
+  - cQ4K399DTgI
+  - e9qfasu0DaA
+  - epv2RbE5DUo
+  - lhDWT3LQdc8
+  - tZvgvURuUDE
+  - 4zcAYWPTRIk
+  - 6a1gSJScsco
+  - BRvvpVLQpIY
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - PrAARwust9M
+  - Z7Ra8Wa-WMI
+  - gRCQ3o3yygY
+  - yRmx06wpGsU
+  - 30qxieXQ9_k
+  - 6oZfhhEHXU8
+  - 7Q44dUYxS9c
+  - F5MODFj28oU
+  - FKcr2h7RR-g
+  - Imo1hJ4a49A
+  - L1kwFZY7bvA
+  - UNf2qsX8uFc
+  - cWNVP4Ui22g
+  - cujcxjSm69g
+  - k7j_4N5gIMY
+  - lGIFTWsBXdw
+  - pA6ls-oHhX0
+  - -yp3g7EeDqo
+  - 7bC-orwQ2zo
+  - A-PDoo2BXLQ
+  - A9vN9CdpXLc
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - WEDrp2R3kts
+  - ZV3fXS2XHeQ
+  - _FoW3uJ8uw0
+  - d1_XpUBo7IM
+  - iZjvLtAYkGM
+  - nRQSfBhd7FE
+  - r19LbSZqi84
+  - sQR6FSxHZhw
+  - t-ezOLT2Kv0
+  - t2ROQSBOgiY
+  - 5ZK50rIFyL4
+  - 6itDZl4RndI
+  - 7Xt-K5FdZrM
+  - 8c6z8XZ5U7Y
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - Dp3ZL-H2zgk
+  - PcEU2LH-TFI
+  - dQg8m976LKw
+  - gljK90LZqA4
+  - tdYM_Tp5C6c
+  - B833Ddf8feI
+  - BDORUMu__is
+  - Hu-rVZVSzxs
+  - R0zEQ4tDDYU
+  - WprPdJKfaGk
+  - c64SMkkUK18
+  - o0qP8bxQPyA
+  - q3qEFaaAWaM
+  - tJeI51crrvs
+  - vkVFIEOwzL4
+  - 9oFJL_9uKGA
+  - 9yrB__GiA0g
+  - KxV8I_YyiaY
+  - LWlTYaqX--4
+  - ZJBprx7oWAM
+  - aYAmtU72d9g
+  - eanN_llY6ms
+  - h54us18qc20
+  - moVynuxM4fc
+  - -0YJUS_CxLo
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - EAJ2vt8wUbY
+  - LaeoJFdncp0
+  - clRLDLbulfI
+  - digCpcXpJjk
+  - dtmJOusvWis
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - 472L0bTvLrU
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - SpIQrvqnw0o
+  - iAlA4gFHdO8
+  - jdo843M-oCo
+  - jmyF9qEJ4dI
+  - kQrTufrQChM
+  - l3-eGFIXRAM
+  - p-jIAjWbJbc
+  - tza6LW8n-js
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 2DX_U89ocX8
+  - 5PgGohPpvww
+  - 5c2wDQUEwt8
+  - 67RpDNWRPDU
+  - 6r27t7loW5I
+  - 8D6nnYgQdfw
+  - 966jvHFKqEA
+  - HKF9mb6FQDg
+  - JCTqD_LKZLs
+  - KosAPIzhNE8
+  - OTrTqs9FLq0
+  - PjYQsgRwQEU
+  - QW2F0s5RHyE
+  - Slzk17RnOrc
+  - WUgiZ_IgAmQ
+  - Yt7XVvDSeyU
+  - bxGlq8qbBQI
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - fRI8r1d-874
+  - foGlgwWk76I
+  - kkbDu0r2zEo
+  - l0GCECJxCZY
+  - oZ1c8IBz7a0
+  - rfGi8W9j9gQ
+  - 7VJJFuOake4
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - dxTRjWyEGtE
+  - epv1zgwHAhc
+  - pDFRv18wOt8
+  - qSAolY3NX-o
+  - sLYw8VdVGbw
+  - tMlpDXwYi6U
+  - 9BZ5ihJpnXc
+  - CYXxBGKrlLw
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - gKCcOv70CAw
+  - iNIF8e4tBxw
+  - n-MG0gzXwis
+  - otnEOTFJRwE
+  - pAIdwSnLXW4
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T15:56:49.353718Z'
+    usd: 0.1350595000000041
+classes:
+- name: Kihon Fundamentals
+  image_url: https://images.pexels.com/photos/8612009/pexels-photo-8612009.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: 'Master the foundation of karate-do: stances, blocks, and strikes.
+    Learn proper technique and form from footwork through punching mechanics.'
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Kata Mastery
+  image_url: https://images.pexels.com/photos/29956727/pexels-photo-29956727.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Deep-dive into kata patterns and bunkai applications. Understand the
+    martial principles behind each movement and how they apply to real combat scenarios.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Kumite Sparring
+  image_url: https://images.pexels.com/photos/8612465/pexels-photo-8612465.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Develop timing, distance, and reaction in controlled sparring drills.
+    Build confidence and strategy in the kumite ring with progressive intensity.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Tournament Preparation
+  image_url: https://images.pexels.com/photos/6765021/pexels-photo-6765021.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Train for competition with tournament-focused kata and kumite preparation.
+    Polish your performance under pressure and compete with confidence.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Karate gi
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/32/Judo_orange_belt_%28Brusselsshrek%29.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

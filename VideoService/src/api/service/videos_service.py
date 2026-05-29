@@ -16,19 +16,24 @@ ThemeService.
 
 from __future__ import annotations
 
+import asyncio
 import re
+from collections.abc import Iterable
 from pathlib import Path
 
 import yaml
 from pydantic import ValidationError
 
+try:  # libyaml — ~35x faster YAML parsing than the pure-Python loader
+    from yaml import CSafeLoader as _FAST_LOADER
+except ImportError:  # pragma: no cover - libyaml is virtually always present
+    from yaml import SafeLoader as _FAST_LOADER
+
 from schema import (
-    ClassImage,
     CostEntry,
     Gym,
     GymCard,
     GymsPage,
-    RewardCard,
     VideoOutput,
 )
 from schema.parent_gym_type import parent_of
@@ -39,6 +44,9 @@ from src.shared.util.video_id import video_id_from_url
 GYMS_DIRNAME = "gyms"
 VIDEOS_DIRNAME = "videos"
 COST_LOG_FILENAME = "cost_log.yaml"
+# Threads for load_videos_by_id: each does a disk read + libyaml parse (both
+# release the GIL), so a small pool overlaps the IO and the parse.
+_LOAD_WORKERS = 16
 # A gym's card art is its theme's celebration image, served by ThemeService's
 # styles convention (`/apps/<theme_app>/<run_id>/images/celebration_image`) and
 # resolved by the client against the ThemeService base URL. DERIVED from the
@@ -50,8 +58,6 @@ CELEBRATION_IMAGE_URL_TEMPLATE = (
 )
 # snake_case gym ids; also a path-traversal guard (no dots or slashes).
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-# ThemeService design ids (e.g. `ZZUndoneVinyasaFlow`, `ApexMMA`).
-_DESIGN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 # YouTube video ids — the per-video filename stem + a path-traversal guard.
 _VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -110,33 +116,6 @@ class VideosService:
             raise InvalidConfigError(f"invalid gym_id {gym.gym_id!r}")
         self._gyms_dir.mkdir(parents=True, exist_ok=True)
         _dump_yaml(gym.model_dump(mode="json"), self._gyms_dir / f"{gym.gym_id}.yaml")
-
-    async def gym_for_theme(self, design_id: str) -> Gym:
-        """The gym whose ``theme`` is ``design_id`` (the gym files ARE the
-        theme→gym mapping). Unknown design -> ``NotFoundError``."""
-        if not _DESIGN_ID_PATTERN.match(design_id):
-            raise NotFoundError(f"no theme {design_id!r}")
-        for gym_id in await self.list_gyms():
-            gym = await self.load_gym(gym_id)
-            if gym.theme == design_id:
-                return gym
-        raise NotFoundError(f"theme {design_id!r} is not mapped to a gym")
-
-    async def classes_for_theme(self, design_id: str) -> list[ClassImage]:
-        """A theme's gym's class cards. Unknown design / none authored ->
-        ``NotFoundError``."""
-        gym = await self.gym_for_theme(design_id)
-        if gym.classes is None:
-            raise NotFoundError(f"gym {gym.gym_id!r} has no class cards yet")
-        return gym.classes
-
-    async def rewards_for_theme(self, design_id: str) -> list[RewardCard]:
-        """A theme's gym's reward cards. Unknown design / none authored ->
-        ``NotFoundError``."""
-        gym = await self.gym_for_theme(design_id)
-        if gym.rewards is None:
-            raise NotFoundError(f"gym {gym.gym_id!r} has no reward cards yet")
-        return gym.rewards
 
     async def list_gyms_page(
         self, *, limit: int, offset: int, query: str | None = None
@@ -198,6 +177,40 @@ class VideosService:
         videos.sort(key=lambda v: (v.relevance_index, video_id_from_url(v.url)))
         return videos
 
+    async def load_videos_by_id(
+        self, ids: Iterable[str]
+    ) -> dict[str, VideoOutput]:
+        """Load ONLY the named pool videos (skipping the rest of the pool), keyed
+        by id. Each read is a disk read + libyaml parse; they run across a small
+        thread pool (``_LOAD_WORKERS``) so the IO and the GIL-releasing parse
+        overlap instead of blocking the event loop one file at a time. A missing
+        or stale file is skipped — the caller simply won't get that id. Use this
+        when you already know which ids you need (e.g. a gym's good/rejected feed)
+        rather than paying to load the whole pool."""
+        wanted = [i for i in dict.fromkeys(ids) if _VIDEO_ID_PATTERN.match(i)]
+        if not wanted:
+            return {}
+
+        def _read_chunk(chunk: list[str]) -> dict[str, VideoOutput]:
+            out: dict[str, VideoOutput] = {}
+            for vid in chunk:
+                path = self._videos_dir / f"{vid}.yaml"
+                try:
+                    data = yaml.load(path.read_text(encoding="utf-8"), Loader=_FAST_LOADER)
+                    out[vid] = VideoOutput.model_validate(data)
+                except (OSError, yaml.YAMLError, ValidationError):
+                    continue  # missing / stale -> omit; the card just won't show
+            return out
+
+        chunks = [wanted[i::_LOAD_WORKERS] for i in range(_LOAD_WORKERS)]
+        maps = await asyncio.gather(
+            *(asyncio.to_thread(_read_chunk, chunk) for chunk in chunks if chunk)
+        )
+        merged: dict[str, VideoOutput] = {}
+        for part in maps:
+            merged.update(part)
+        return merged
+
     async def save_pool(self, videos: list[VideoOutput]) -> None:
         """Replace the whole pool: clear ``videos/`` and write one file per
         video. A fresh fetch is a full replacement."""
@@ -229,6 +242,19 @@ class VideosService:
             raise InvalidConfigError(
                 f"video {video_id!r} does not match the current schema"
             ) from exc
+
+    async def load_videos(self, video_ids: list[str]) -> list[VideoOutput]:
+        """Load the given pooled videos **by id** (the filename stem), preserving
+        the given order and skipping any id with no file. Reads only those files —
+        never the whole pool — so serving a gym's feed costs O(feed size), not
+        O(pool size). A *stale* file still raises ``InvalidConfigError``."""
+        out: list[VideoOutput] = []
+        for vid in video_ids:
+            try:
+                out.append(await self.load_video(vid))
+            except NotFoundError:
+                continue  # id not in the pool (or malformed) — skip, as before
+        return out
 
     async def delete_video(self, video_id: str) -> bool:
         """Remove one pooled video's file. Returns whether a file was removed."""

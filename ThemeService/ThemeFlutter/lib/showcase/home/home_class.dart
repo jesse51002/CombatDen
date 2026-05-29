@@ -9,7 +9,8 @@ class ShowcaseClass {
     required this.timeRange,
     required this.durationMinutes,
     required this.mentor,
-    required this.imageAsset,
+    this.imageAsset,
+    this.imageUrl,
     this.attending,
     this.isBooked = false,
   });
@@ -21,8 +22,12 @@ class ShowcaseClass {
   /// Instructor display name.
   final String mentor;
 
-  /// Bundled class-photo filename (resolved via `ShowcaseAsset.image`).
-  final String imageAsset;
+  /// Bundled class-photo filename (resolved via `ShowcaseAsset.image`); used by
+  /// the sample data. Ignored when [imageUrl] is set.
+  final String? imageAsset;
+
+  /// Injected gym class photo (a network URL); wins over [imageAsset].
+  final String? imageUrl;
 
   final int? attending;
   final bool isBooked;

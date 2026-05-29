@@ -14,13 +14,13 @@ const String _kVerificationCode = 'TXR-3K9P';
 class RewardRedeemDialog extends StatelessWidget {
   const RewardRedeemDialog({
     super.key,
-    required this.imageAsset,
+    required this.imageUrl,
     required this.title,
     required this.priceLabel,
     required this.pointsCost,
   });
 
-  final String imageAsset;
+  final String imageUrl;
   final String title;
   final String priceLabel;
   final int pointsCost;
@@ -28,7 +28,7 @@ class RewardRedeemDialog extends StatelessWidget {
   /// Convenience: open this dialog from any reward card's `onPressed`.
   static Future<void> show(
     BuildContext context, {
-    required String imageAsset,
+    required String imageUrl,
     required String title,
     required String priceLabel,
     required int pointsCost,
@@ -36,7 +36,7 @@ class RewardRedeemDialog extends StatelessWidget {
     return showDialog<void>(
       context: context,
       builder: (_) => RewardRedeemDialog(
-        imageAsset: imageAsset,
+        imageUrl: imageUrl,
         title: title,
         priceLabel: priceLabel,
         pointsCost: pointsCost,
@@ -65,7 +65,7 @@ class RewardRedeemDialog extends StatelessWidget {
           children: [
             _DialogHeader(onClose: () => Navigator.of(context).pop()),
             RewardImageHero(
-              imageAsset: imageAsset,
+              imageUrl: imageUrl,
               priceLabel: priceLabel,
               borderRadius: BorderRadius.circular(
                 DesignConstants.radiusSmall,

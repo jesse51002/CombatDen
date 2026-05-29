@@ -35,6 +35,7 @@ class RewardConfirmDialog extends StatelessWidget {
         children: [
           RewardImageHero(
             imageAsset: r.imageAsset,
+            imageUrl: r.imageUrl,
             priceLabel: r.priceLabel,
             borderRadius: BorderRadius.circular(
               DesignConstants.radiusSmall,

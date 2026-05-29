@@ -13,8 +13,6 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from schema.big_group import BigGroup, big_group_for
-from schema.class_output import ClassImage
-from schema.gym import RewardCard
 from schema.video_type import VideoType
 
 
@@ -63,18 +61,22 @@ class VideosFeed(BaseModel):
     videos: list[VideoCard] = Field(default_factory=list)
 
 
-class ThemeClasses(BaseModel):
-    """The fetch-by-theme classes response: a theme's gym's class cards. The
-    cards are served verbatim from the gym; `classes` keys it for the client."""
+class FeedSection(BaseModel):
+    """One genre's preview row: the tag plus its first few videos, in feed
+    order. ``from_attributes`` lets FastAPI build the cards from ``VideoOutput``."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
 
-    classes: list[ClassImage] = Field(default_factory=list)
+    tag: VideoType
+    videos: list[VideoCard] = Field(default_factory=list)
 
 
-class ThemeRewards(BaseModel):
-    """The fetch-by-theme rewards response: a theme's gym's reward cards."""
+class FeedPreview(BaseModel):
+    """The whole "All" preview in one response: one section per genre present in
+    the gym's feed, each capped to a few videos, in feed order. Each genre is
+    sampled individually server-side, so no genre is starved by global
+    pagination — and the client makes one request instead of one per genre."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
 
-    rewards: list[RewardCard] = Field(default_factory=list)
+    sections: list[FeedSection] = Field(default_factory=list)

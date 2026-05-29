@@ -20,7 +20,7 @@ The whole point is to make screens that **look right** so the design can be eval
 
 This prototype makes exactly **one** real network call, and it is deliberate. The member-app **videos tab** pulls its feed live from the VideoService so the admin previews real thumbnails and titles instead of mock art.
 
-- **Scope:** read-only, one endpoint — `GET /apps/{appId}/themes/{designId}/videos` (fetch-by-theme: the server resolves the theme to its gym and serves that gym's feed). No writes, no auth, no other endpoints. `appId` defaults to `combatden`; the feed follows the previewed theme (`ThemeRuntime.activeDesignId`, falling back to the preview's initial design before any pick).
+- **Scope:** read-only, one endpoint — `GET /gyms/{gymId}/videos` (gym-id-keyed: serves that gym's feed, paginated). The feed follows the selected gym (`SelectedGym` global). No writes, no auth, no other endpoints. The one query knob beyond paging/genre is `?rejected=true`, which serves the scan's **rejected** list instead of the approved feed (it backs the videos tab's rejected-videos section, where the admin can keep a video back) — still read-only, still this same endpoint. This boolean is a deliberate, user-approved widening of the carve-out; do not add further parameters or endpoints without asking.
 - **Where it lives:** `lib/features/members/data/video_api_client.dart` (`VideoApiClient`, wraps `package:http`) feeds `member_feed_section.dart`, which is the **only** place a `StatefulWidget` + `FutureBuilder` driving a network call is allowed. Models live in `lib/features/members/data/video_feed.dart` (`Video.fromJson`).
 - **Dependency:** the VideoService (sibling, see below) must be running. Base URL defaults to `http://localhost:8002`; override at launch with `--dart-define=VIDEO_BASE_URL=http://<host>:<port>`.
 - **Failure behavior:** the call has a 5s timeout and degrades quietly (empty feed) so the rest of the demo never breaks if the service is down.
@@ -294,6 +294,7 @@ Direct equivalents if you don't want the Makefile:
 Current dependencies (intentionally minimal):
 - `google_fonts` — for Hanken Grotesk via `GoogleFonts.hankenGrotesk()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
+- `flutter_markdown_plus` — renders the agent view's read-only prompt panel (the feed's `videos_desc` / `avoid_desc`, which the VideoService stores as markdown). A maintained fork of the discontinued `flutter_markdown`; styling is driven from `DesignConstants`. Used only there.
 - `http` — **for the VideoService carve-out only** (see above). It backs `VideoApiClient` and nothing else. Adding `http` to any other client is not allowed; reach for the user first.
 - `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — **for the live theme preview carve-out only** (see *ThemeService carve-out* above). It is the shared white-label runtime + showcase screens. It transitively pulls in `dio`, `flutter_svg`, `cached_network_image`, and `get_it`. **This is a named, user-approved exception scoped to the theme preview feature** — those transitive packages are NOT a license to wire `dio` into other screens or to start the real-data stack. Do not import them directly elsewhere.
 

@@ -173,17 +173,18 @@ async def main(argv: list[str] | None = None) -> int:
     print(RULE)
 
     run_ctx = RunContext(
-        app, cust, out_root=run_dir.parent.parent, run_id=run_dir.name
+        app,
+        cust,
+        out_root=run_dir.parent.parent,
+        run_id=run_dir.name,
+        overwrite_specs=overwrite_specs,
     )
-    result = await Pipeline().run(
-        run_ctx, seed=seed, overwrite_specs=overwrite_specs
-    )
+    result = await Pipeline().run(run_ctx, seed=seed)
     Writer().write_expansion(
         result,
         run_ctx,
         original_cost=output.cost,
         kind=ExpansionKind.REGENERATE,
-        overwrite_specs=overwrite_specs,
     )
     # Re-rolled against an updated manifest → refresh the dir's snapshot so its
     # app.yaml matches what the slot was regenerated from.

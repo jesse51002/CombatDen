@@ -13,6 +13,22 @@ choice for the user is not.
 
 ---
 
+## Skills are living documents
+
+When you're working through a skill (or any reference doc / `SKILL.md` it loads)
+and realize its guidance is wrong, outdated, or actively holding the work back —
+a recommended source that returns bad results, a step that no longer fits, a
+better tool you've found — do **not** silently work around it:
+
+1. Use the better approach for the task in front of you.
+2. **Recommend the specific skill fix to the user and wait for approval** (per
+   *No assumptions* — present it, don't self-apply).
+3. On approval, **update the skill file** so the lesson is baked in next time.
+
+Skills are ever-evolving: every real-world correction should feed back into them.
+
+---
+
 ## Iron-clad rule: never hand-edit a produced run
 
 A run directory's **produced artifacts** — `output.yaml`, `expansion_cost.yaml`,

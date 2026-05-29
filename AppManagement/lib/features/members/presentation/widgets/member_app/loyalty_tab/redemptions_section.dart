@@ -7,15 +7,15 @@ import 'package:app_management/shared/widgets/subtitle_section.dart';
 
 /// A grid of reward redemptions, shown as visual cards so staff recognize the
 /// reward art. Pending ones offer Review & confirm; approved ones show an
-/// "Approved" marker. Defaults to the member-app's pending queue; pass
-/// [redemptions] + [title] to reuse it elsewhere (e.g. one member's history).
+/// "Approved" marker. Reused by the loyalty tab's live pending queue and by one
+/// member's redemption history — both pass their own [redemptions] + [title].
 class RedemptionsSection extends StatelessWidget {
   final List<PendingRedemption> redemptions;
   final String title;
 
   const RedemptionsSection({
     super.key,
-    this.redemptions = kMockPendingRedemptions,
+    required this.redemptions,
     this.title = 'Pending Redemption Approval',
   });
 

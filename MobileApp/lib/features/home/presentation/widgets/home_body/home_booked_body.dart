@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/selected_gym.dart';
 import 'package:mobile_app/features/class_booking/data/class_info.dart';
 import 'package:mobile_app/features/class_booking/data/class_repository.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
@@ -115,7 +116,7 @@ class _HomeBookedBodyState extends State<HomeBookedBody>
                     return AppTopbar(
                       mode: AppTopbarMode.bigLogo,
                       showBackButton: false,
-                      gymName: gym.name,
+                      gymName: selectedGym.displayName,
                       logoAsset: gym.logoAsset,
                       streakDays: gym.streakDays,
                       pointsLabel: gym.pointsLabel,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:theme_flutter/showcase/home/date_tab.dart';
 import 'package:theme_flutter/showcase/home/day_class_group.dart';
 import 'package:theme_flutter/showcase/home/home_schedule_generator.dart';
+import 'package:theme_flutter/showcase/showcase_content.dart';
 import 'package:theme_flutter/showcase/support/showcase_topbar.dart';
 import 'package:theme_flutter/showcase/showcase_tokens.dart';
 
@@ -16,10 +17,13 @@ const int _kVisibleDateTabs = 3;
 /// horizontally; the showcase removes both — content is laid out once and the
 /// phone frame clips any overflow.
 class HomeNotBookedBody extends StatelessWidget {
-  const HomeNotBookedBody({super.key, required this.topbar});
+  const HomeNotBookedBody({super.key, required this.topbar, this.classes});
 
   /// The branded topbar (gym logo + name + info bar).
   final ShowcaseTopbar topbar;
+
+  /// The selected gym's classes to preview; null falls back to the samples.
+  final List<ShowcaseClassInfo>? classes;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +40,10 @@ class HomeNotBookedBody extends StatelessWidget {
           children: [
             topbar,
             const _StaticDateStrip(),
-            DayClassGroup(day: dayAt(0), showBookings: false),
+            DayClassGroup(
+              day: dayAt(0, classes: classes),
+              showBookings: false,
+            ),
           ],
         ),
       ),

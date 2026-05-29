@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:theme_flutter/showcase/booking_showcase.dart';
 import 'package:theme_flutter/showcase/home_showcase.dart';
+import 'package:theme_flutter/showcase/showcase_content.dart';
 import 'package:theme_flutter/showcase/points_showcase.dart';
 import 'package:theme_flutter/showcase/rewards_card_showcase.dart';
 import 'package:theme_flutter/showcase/rewards_showcase.dart';
@@ -36,12 +37,16 @@ enum ShowcaseScreen {
   /// Builds the showcase widget for this surface. [loop] keeps the animated
   /// surfaces running; [onCycleComplete] fires once per loop. [gymName] /
   /// [gymLogo] are the host app's gym identity, used only by the surfaces
-  /// that render the gym header.
+  /// that render the gym header. [rewards] / [classes] are the selected gym's
+  /// real content, injected into the catalog surfaces (the Store grid and the
+  /// Home schedule); null on the others, which stay on bundled samples.
   Widget build({
     bool loop = true,
     VoidCallback? onCycleComplete,
     String gymName = 'Your Gym',
     ImageProvider? gymLogo,
+    List<ShowcaseReward>? rewards,
+    List<ShowcaseClassInfo>? classes,
   }) {
     switch (this) {
       case ShowcaseScreen.home:
@@ -50,6 +55,7 @@ enum ShowcaseScreen {
           onCycleComplete: onCycleComplete,
           gymName: gymName,
           gymLogo: gymLogo,
+          classes: classes,
         );
       case ShowcaseScreen.booking:
         return BookingShowcase(loop: loop, onCycleComplete: onCycleComplete);
@@ -70,6 +76,7 @@ enum ShowcaseScreen {
           onCycleComplete: onCycleComplete,
           gymName: gymName,
           gymLogo: gymLogo,
+          rewards: rewards,
         );
     }
   }

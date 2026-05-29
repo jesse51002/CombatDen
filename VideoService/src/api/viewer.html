@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VideoService — feed viewer</title>
+<style>
+:root{--bg:#0e0f13;--panel:#16181f;--line:#262a35;--txt:#e7e9ee;--mut:#9aa3b2;--good:#3fb950;--bad:#f85149;--accent:#4c8dff}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+a{color:inherit}
+.app{display:grid;grid-template-columns:268px 1fr;height:100vh}
+.side{border-right:1px solid var(--line);overflow:auto;padding:12px;background:var(--panel)}
+.side h1{font-size:12px;margin:4px 6px 10px;color:var(--mut);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.search{width:100%;padding:8px 10px;margin-bottom:10px;background:#0b0c10;border:1px solid var(--line);border-radius:8px;color:var(--txt)}
+.gym{display:flex;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:8px;cursor:pointer}
+.gym:hover{background:#1d2029}
+.gym.active{background:#23304d}
+.gym .c{color:var(--mut);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.gym.unscanned{opacity:.4}
+.main{overflow:auto;padding:22px 26px}
+.head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.head h2{margin:0;font-size:22px}
+.head .meta{color:var(--mut)}
+.tabs{display:flex;gap:8px;margin:14px 0 14px}
+.tab{padding:7px 15px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer;font-size:13px;font-variant-numeric:tabular-nums}
+.tab.active.good{background:rgba(63,185,80,.14);border-color:var(--good);color:var(--good)}
+.tab.active.bad{background:rgba(248,81,73,.14);border-color:var(--bad);color:var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px}
+.chip{padding:4px 11px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--mut);cursor:pointer;font-size:12px;font-variant-numeric:tabular-nums}
+.chip:hover{color:var(--txt)}
+.chip.active{background:rgba(76,141,255,.16);border-color:var(--accent);color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;text-decoration:none;display:flex;flex-direction:column}
+.card:hover{border-color:var(--accent)}
+.grid.good .card{border-top:3px solid var(--good)}
+.grid.bad .card{border-top:3px solid var(--bad)}
+.grid.good .card:hover{border-color:var(--good)}
+.grid.bad .card:hover{border-color:var(--bad)}
+.thumb{position:relative;aspect-ratio:16/9;background:#000}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.dur{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.82);padding:1px 5px;border-radius:4px;font-size:11px}
+.tag{position:absolute;left:6px;top:6px;background:rgba(0,0,0,.72);padding:1px 8px;border-radius:999px;font-size:11px;color:#cdd3df}
+.cap{padding:9px 11px}
+.cap .t{font-weight:600;font-size:13px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cap .ch{color:var(--mut);font-size:12px;margin-top:4px}
+.empty{color:var(--mut);padding:48px;text-align:center}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <h1>Gyms · good / rejected</h1>
+    <input class="search" id="search" placeholder="filter gyms…" autocomplete="off">
+    <div id="gymlist"></div>
+  </aside>
+  <main class="main" id="main"><div class="empty">Loading… (first load reads the pool, ~30s)</div></main>
+</div>
+<script>
+let GYMS = [];
+let cur = null, tab = 'good', tagFilter = null;
+const esc = s => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function card(v){
+  const id = esc(v.id);
+  const thumb = v.thumb || ('https://i.ytimg.com/vi/'+id+'/mqdefault.jpg');
+  return `<a class="card" href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener">
+    <div class="thumb"><img loading="lazy" src="${esc(thumb)}" onerror="this.src='https://i.ytimg.com/vi/${id}/mqdefault.jpg'">
+      ${v.tag?`<span class="tag">${esc(v.tag)}</span>`:''}${v.dur?`<span class="dur">${esc(v.dur)}</span>`:''}</div>
+    <div class="cap"><div class="t">${esc(v.title)}</div><div class="ch">${esc(v.channel)}</div></div></a>`;
+}
+function renderList(){
+  const f = document.getElementById('search').value.toLowerCase();
+  const list = document.getElementById('gymlist'); list.innerHTML = '';
+  GYMS.filter(g => g.id.includes(f)).forEach(g => {
+    const scanned = (g.good.length + g.rejected.length) > 0;
+    const row = document.createElement('div');
+    row.className = 'gym' + (g.id===cur?' active':'') + (scanned?'':' unscanned');
+    row.innerHTML = `<span>${esc(g.id)}</span><span class="c">${g.good.length} / ${g.rejected.length}</span>`;
+    row.onclick = () => { cur = g.id; tagFilter = null; render(); };
+    list.appendChild(row);
+  });
+}
+function render(){
+  renderList();
+  const g = GYMS.find(x => x.id===cur), m = document.getElementById('main');
+  if(!g){ m.innerHTML = '<div class="empty">Pick a gym from the left.</div>'; return; }
+  let items = tab==='good' ? g.good : g.rejected;
+  const counts = {};
+  items.forEach(v => { const t = v.tag || 'untagged'; counts[t] = (counts[t]||0) + 1; });
+  const tagsSorted = Object.keys(counts).sort((a,b) => counts[b] - counts[a]);
+  const chips = [`<button class="chip ${tagFilter===null?'active':''}" data-tag="">All (${items.length})</button>`]
+    .concat(tagsSorted.map(t => `<button class="chip ${tagFilter===t?'active':''}" data-tag="${esc(t)}">${esc(t)} (${counts[t]})</button>`))
+    .join('');
+  if(tagFilter !== null) items = items.filter(v => (v.tag || 'untagged') === tagFilter);
+  m.innerHTML = `<div class="head"><h2>${esc(g.id)}</h2><span class="meta">${esc(g.disciplines)} · theme ${esc(g.theme)}</span></div>
+    <div class="tabs">
+      <button class="tab good ${tab==='good'?'active':''}" data-t="good">Accepted (${g.good.length})</button>
+      <button class="tab bad ${tab==='rejected'?'active':''}" data-t="rejected">Rejected (${g.rejected.length})</button>
+    </div>
+    <div class="chips">${chips}</div>
+    <div class="grid ${tab==='good'?'good':'bad'}">${items.map(card).join('') || '<div class="empty">— none —</div>'}</div>`;
+  m.querySelectorAll('.tab').forEach(b => b.onclick = () => { tab = b.dataset.t; tagFilter = null; render(); });
+  m.querySelectorAll('.chip').forEach(b => b.onclick = () => { tagFilter = b.dataset.tag === '' ? null : b.dataset.tag; render(); });
+}
+document.getElementById('search').oninput = renderList;
+fetch('/viewer/data')
+  .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+  .then(data => {
+    GYMS = data;
+    cur = (GYMS.find(g => (g.good.length + g.rejected.length) > 0) || GYMS[0] || {}).id || null;
+    render();
+  })
+  .catch(e => { document.getElementById('main').innerHTML = '<div class="empty">Failed to load /viewer/data: '+esc(String(e))+'</div>'; });
+</script>
+</body>
+</html>

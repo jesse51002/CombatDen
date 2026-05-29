@@ -17,7 +17,6 @@ from schema import (
     ExpansionEntry,
     ExpansionKind,
     Output,
-    OverwriteSpecs,
     RunCost,
 )
 
@@ -74,7 +73,6 @@ class Writer:
         *,
         original_cost: RunCost | None,
         kind: ExpansionKind,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> None:
         """Write a reopen-time pass (expand or regenerate) back in place.
 
@@ -108,7 +106,7 @@ class Writer:
                     RUN_ID_FORMAT
                 ),
                 generated=sorted(result.generated),
-                overwrite_specs=overwrite_specs or OverwriteSpecs(),
+                overwrite_specs=run_ctx.overwrite_specs,
                 cost=pass_cost,
             )
         )

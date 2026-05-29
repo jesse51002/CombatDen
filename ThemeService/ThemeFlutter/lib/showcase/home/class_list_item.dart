@@ -48,7 +48,10 @@ class ClassListItem extends StatelessWidget {
                     ShowcaseTokens.radiusSmall,
                   ),
                   child: Image(
-                    image: ShowcaseAsset.image(classData.imageAsset),
+                    image: ShowcaseAsset.imageOrNetwork(
+                      classData.imageUrl,
+                      classData.imageAsset ?? '',
+                    ),
                     width: _kClassImageWidth,
                     height: _kClassImageHeight,
                     fit: BoxFit.cover,

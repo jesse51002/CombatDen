@@ -27,7 +27,6 @@ from schema import (
     IconSet,
     ImageSet,
     Output,
-    OverwriteSpecs,
     TextSet,
 )
 from src.core.config import settings
@@ -198,7 +197,6 @@ class Pipeline:
         run_ctx: RunContext,
         *,
         seed: dict[str, BaseModel] | None = None,
-        overwrite_specs: OverwriteSpecs | None = None,
     ) -> PipelineResult:
         """Resolve every node level-by-level, assemble the ``Output``, and
         return it alongside the paid services so the writer can total
@@ -208,9 +206,9 @@ class Pipeline:
         stays domain-blind. ``seed`` (slot id → that slot's saved per-item
         output) is the sole control of what's re-made — a node regenerates any
         declared slot absent from its seed slice and returns the rest verbatim
-        (no LLM/provider spend). ``overwrite_specs`` is the call's single
-        steering string, stamped onto whatever is re-made. An empty ``seed``
-        ⇒ every node regenerates every slot, a normal full run.
+        (no LLM/provider spend). The run's steering (``run_ctx.overwrite_specs``)
+        is stamped onto whatever is re-made. An empty ``seed`` ⇒ every node
+        regenerates every slot, a normal full run.
         ``PipelineResult.generated`` is the union of the slot ids the nodes
         actually re-made."""
         # A full (unseeded) run pointed at an existing run dir is an in-place
@@ -240,7 +238,6 @@ class Pipeline:
             google_fonts=google_fonts,
             icon_catalog=icon_catalog,
             icon_generator=icon_gen,
-            overwrite_specs=overwrite_specs,
             seed=seed,
         )
         graph = self._build_digraph(node_set)

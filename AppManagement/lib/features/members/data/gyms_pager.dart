@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:theme_flutter/customization_runtime.dart';
 import 'package:theme_flutter/data/models/customization_style.dart';
 
 /// VideoService base (the gym browser lives there); mirrors the video carve-out.
@@ -57,6 +58,42 @@ class GymsPager extends ChangeNotifier {
   int _queryGeneration = 0;
   Timer? _debounce;
 
+  // Design id -> the theme's celebration-image URL carrying its content-hash
+  // `?v=` token (from the ThemeService styles catalog), so a card's art
+  // refreshes when the image is regenerated instead of sitting on the browser's
+  // day-long cache. Fetched once; the VideoService-derived bare URL is the
+  // fallback when the styles catalog is unreachable. ThemeService is reached
+  // through the engine (dio), never `http` (VideoService-only).
+  Map<String, String>? _celebrationByDesign;
+  Future<void>? _celebrationFetch;
+
+  Future<void> _ensureCelebrationUrls() =>
+      _celebrationFetch ??= _fetchCelebrationUrls();
+
+  Future<void> _fetchCelebrationUrls() async {
+    final map = <String, String>{};
+    try {
+      const pageSize = 100;
+      var offset = 0;
+      while (true) {
+        final page = await ThemeRuntime.fetchStylesPage(
+          offset: offset,
+          limit: pageSize,
+        );
+        for (final s in page.items) {
+          if (s.celebrationImageUrl.isNotEmpty) {
+            map[s.id] = s.celebrationImageUrl;
+          }
+        }
+        offset += page.items.length;
+        if (page.items.isEmpty || offset >= page.total) break;
+      }
+    } catch (_) {
+      // Degrade quietly: fall back to the bare VideoService-derived URLs.
+    }
+    _celebrationByDesign = map;
+  }
+
   void setQuery(String next) {
     final trimmed = next.trim();
     if (trimmed == _query) return;
@@ -93,6 +130,11 @@ class GymsPager extends ChangeNotifier {
       if (response.statusCode != 200) {
         throw Exception('gyms fetch failed (${response.statusCode})');
       }
+      // Load the tokened celebration URLs (once) so each card's art carries its
+      // content-hash `?v=` and refreshes when the theme is regenerated.
+      // Best-effort: on failure the bare VideoService URL is used.
+      await _ensureCelebrationUrls();
+      if (generation != _queryGeneration) return;
       final data = jsonDecode(response.body);
       final rawGyms = data is Map ? data['gyms'] : null;
       final styles = rawGyms is List
@@ -120,13 +162,21 @@ class GymsPager extends ChangeNotifier {
   Future<void> _loadFirstPage() => loadMore();
 
   ThemeStyle _toStyle(Map<String, dynamic> gym) {
+    final theme = (gym['theme'] as String?) ?? '';
     final raw = (gym['celebration_image_url'] as String?) ?? '';
     return ThemeStyle(
-      id: (gym['theme'] as String?) ?? '',
+      id: theme,
       displayName: _titleize((gym['gym_id'] as String?) ?? ''),
-      celebrationImageUrl: raw.isEmpty ? '' : _resolve(raw),
+      // Prefer the ThemeService styles catalog's celebration URL — it carries
+      // the content-hash `?v=` token so the card refreshes when the image is
+      // regenerated; fall back to the bare VideoService-derived URL.
+      celebrationImageUrl:
+          _celebrationByDesign?[theme] ?? (raw.isEmpty ? '' : _resolve(raw)),
       // The coarse parent bucket (Fighting/Yoga/…) is what the picker filters by.
       gymType: gym['parent_gym_type'] as String?,
+      // The content key: stored on selection so the loyalty/videos/preview
+      // surfaces fetch this gym's detail + feed by it.
+      gymId: gym['gym_id'] as String?,
     );
   }
 

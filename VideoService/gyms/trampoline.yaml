@@ -1,17 +1,536 @@
 gym_id: trampoline
 gym_type:
 - trampoline
-theme: ZZUndoneTrampolineCardio
+theme: TrampolineCardio
 videos:
   specification:
-    videos_desc: Instructional, class, and motivational trampoline content for gym
-      members — technique breakdowns, full classes, drills, and credible coaching
-      from reputable trampoline sources.
-    avoid_desc: Anything not about trampoline; off-topic, low-quality, or clickbait
-      videos; and content that argues against the discipline.
-  queries: []
-  good_video_ids: []
-  rejected_video_ids: []
-  scan_costs: []
-classes: null
-rewards: null
+    short_videos_desc: 'Mini-trampoline rebounder cardio classes — bouncy, low-impact
+      follow-along workouts on a fitness trampoline, basic bounce moves and form,
+      plus the fun side: "what a rebounder class is really like", studio vlogs and
+      behind-the-scenes, instructor vibes and playlists, funny bounce moments, and
+      transformation stories that make cardio feel like recess.'
+    short_avoid_desc: Off-topic, clickbait "burn 1000 calories bouncing" gimmicks,
+      and "rebounding vs running / trampoline vs treadmill which is better" or "is
+      rebounding a waste" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Rebounder cardio content for people who want a low-impact, high-spirits
+      workout — plus the fun, human side of the studio so it's a feed members
+      enjoy, not just a how-to library.
+
+      ## Classes & technique
+      - Follow-along mini-trampoline / rebounder classes: bounce cardio, health
+        bounce, jogging and dance-style sequences, interval rebounding
+      - Instruction on the basic bounce, foot placement, and posture
+      - How to set up and stay safe on a fitness trampoline
+      - Beginner first-class walkthroughs for people returning from injury or
+        who can't run
+
+      ## The fun & human side
+      - "What a rebounder class is really like" and my-first-class vlogs
+      - Studio vlogs and behind-the-scenes
+      - Upbeat playlist and themed rebounding sessions
+      - Relatable class humour and funny bounce moments
+      - Transformation stories
+      - Instructor interviews and day-in-the-life content
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about rebounder / fitness-trampoline cardio; off-topic,
+      genuinely low-quality, or clickbait videos.
+
+      ## Reject
+      - Gymnastics or big-trampoline flips, tricks, and trampoline-park stunts
+        (this is rebounder cardio, not gymnastics)
+      - Calorie-bait "burn 1000 calories bouncing / melt fat fast" gimmick titles
+      - "Rebounding vs running / trampoline vs treadmill which is better"
+        cross-discipline framings
+      - "Is rebounding a waste / trampoline cardio does nothing" debate or
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, or entertaining
+      — fun content is wanted.
+  queries:
+  - rebounder cardio workout follow along
+  - mini trampoline workout for beginners
+  - how to do the basic bounce on a rebounder
+  - health bounce rebounder tutorial
+  - 20 minute trampoline cardio class
+  - low impact rebounding workout for joints
+  - fun dance rebounder cardio workout
+  - proper form and posture on a mini trampoline
+  - how to set up your fitness trampoline safely
+  - beginner rebounder class what to expect
+  - what a rebounder class is really like
+  - upbeat playlist rebounding cardio workout
+  - trampoline studio behind the scenes
+  - funny rebounder class moments
+  - star rebounder instructor full class
+  - rebounding transformation story
+  - rebounder fitness instructor interview
+  - day in the life trampoline studio coach
+  - my first rebounder class vlog
+  - rebounding for people who cant run
+  good_video_ids:
+  - 4E36J-I7DcU
+  - AyDx3Hrnt8g
+  - KL_xBo5yjRo
+  - RJJBFg13ns4
+  - VmaN6i3BEyE
+  - WqLtfFltdKI
+  - iCMD2ZJEF54
+  - qrYyrZzsbV4
+  - t2y0FaOcb0Y
+  - wfAtaExyh8s
+  - -D2-faIgnWw
+  - KDa2YLycv0k
+  - Up4PyObmK24
+  - XHLdcEgB0co
+  - aKfYBfRL8Dc
+  - ffdOk8rRDxQ
+  - uNit8DAhtxE
+  - 6i2Qu_i71Hw
+  - Bf4qPKh0Hp8
+  - E1mDmgFMJNI
+  - E6OMOl8g37w
+  - JmBeDYb8tNk
+  - Jv_5X6Z5eTY
+  - NMVuZWp8vKM
+  - NjSnuesK_6o
+  - RwCjv-Frd0c
+  - T1J7jOxYTQM
+  - VZgYvW1PS4Q
+  - AoHFjBY4Se4
+  - BrnUeN0u9nM
+  - FxMf1F5mJj4
+  - GoRPp8KN0FA
+  - SFP2eSKikKw
+  - X-LEaCqszI8
+  - jm1PuVQAYsU
+  - lBrTcABD5H0
+  - rTsV34tpuh0
+  - rlZgtQbRlD0
+  - wzJqhKvI17s
+  - xmcBnrX-aYc
+  - y1DsB_TLmzM
+  - -l8LwUdrkmo
+  - 6GqxRoLrATk
+  - Jrtwq60n-Ds
+  - Pb6519XBZnk
+  - SQpD_eR9lEQ
+  - Sf7faOt8TZY
+  - WKnGCSquBjg
+  - Wh8R0a7sLPc
+  - meJPhm2Mn84
+  - w47WFz04klo
+  - w9Ze1h-9N4c
+  - 3COKeQeQuxA
+  - NqF1QzRVNRc
+  - QunNg_SIopw
+  - ZGzE9svTAR0
+  - d9_xuadwB9Y
+  - n_XZ-vTvavk
+  - rR9bBGdz0_M
+  - vdfHlgeL3ck
+  - vzDVrQgw8Z8
+  - y4o2pBax5g8
+  - 5RZ9QA-hPWM
+  - 8GIR2x5ERAg
+  - KJc8a-zL-ho
+  - PKWjc5q1LkQ
+  - dZO_TpogccM
+  - lZgYqGDvDcU
+  - lhXXRZt4bIU
+  - yIXoeIrg75g
+  - GV6VyqW-xpY
+  - JDvt2dUvNpQ
+  - NnsAoxrohQY
+  - O7t610Hpx24
+  - ORESezyc6U0
+  - Q8z4FjnHKcQ
+  - SAnHqMrt024
+  - VNj3wELVgVg
+  - X2qSoJttjwc
+  - iHqqkhuol3E
+  - iZOgRkQCjtU
+  - QqxP8XzpU8E
+  - _dZ5uUcbdIw
+  - f6ME1Ew7YHo
+  - jYWXl3YNcQM
+  - rmSCU43jf4g
+  - tsGPpuFv7XA
+  - 2zQGGNB7gv8
+  - 35nNoo9dzUw
+  - PD18BtMJcA8
+  - TQ1O08q9m5E
+  - hRlEIAq22dI
+  - iGU2QkSo7e8
+  - n2Nj_oFaM6s
+  - qQoHLEQYNiM
+  - ueRhI_IQHVQ
+  - CCyeXlyPFaw
+  - U3AUFXbiVdw
+  - WmBC1icHwcw
+  - eOBXJZNa9zw
+  - gDg4i7opwkc
+  - wyDpvKycc6k
+  - 76IMK403-Lw
+  - ChiksnCuSpo
+  - MpHIu0Pu7rQ
+  - Ref1PiAhGSE
+  - XG2AnMoD-j4
+  - ZlzIFB6hsOk
+  - g59S0LcmrCM
+  - h4Icp04k3c4
+  - hyQ9FQdCGPs
+  - rYnxZkPkHc8
+  - u0NCTZ4Mtu8
+  - 1fGJyKT2ARw
+  - 7_WRg-YZQhE
+  - TFUYOST6BHM
+  - ZxbOrd5175o
+  - d2LbxPu2m8I
+  - gVUx6fpprsM
+  - kg_uOGsrhPs
+  - xQBttW3BLlc
+  - 6Z2-s_T-xcQ
+  - 9yO7nieVY78
+  - RcBOhxOLdKY
+  - UZQUXSDP30w
+  - WrSaN1fvu9o
+  - X1ZSgN7ZrNI
+  - eE_Qbxxx4J4
+  - g45KKgHl7Ds
+  - oKomQ-6WwIc
+  - xwEN-75plnU
+  - CUzNuf_1ot8
+  - Hwu88HhnVp4
+  - z6AQjCjVRE4
+  - 2I1iPQvgL9M
+  - 5XBNEdj0V54
+  - G5eR6Q1o1QU
+  - LFlUIulvVKM
+  - QQKTdBUuQsg
+  - eym3Oj1i54k
+  - f36y--wz1VM
+  - g_KRMP60iBQ
+  - tKEEw6tsvxQ
+  - 2pvUTnQ8Hao
+  - IgNqo3xqRoA
+  - XjUpzjwMOfY
+  - oY3kPDZN_E4
+  - zIy8XqToXYA
+  - 0dctvtCfCx8
+  - 2DI79Lm9JX8
+  - 5LbQYHLnAo4
+  - ELFLbGj8nJU
+  - IVQqyvlqHXc
+  - MCQHhwTKChY
+  - ax__cqaLpOE
+  - e-EO3qXum8Y
+  - zjJ_izG1Cxs
+  - 7Zbpbtgvs5Y
+  - EKGM59NrN2o
+  - YaENJfjPec4
+  - _SE1qExGzlk
+  - z49neguzCZU
+  - 5CW20kqQlxU
+  - CYX9d-4iirk
+  - GvBPy3Vxl50
+  - UMzb3dnEagk
+  - ZZf6Gb96F0U
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 9roML5pNYM0
+  - DgHMfu5iiMw
+  - FH4-F1V-3uc
+  - INXD5osrkDo
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - sy11C-XJdDI
+  - uSfpCLNeCdk
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - dBSAURSwuiI
+  - kThGMgiprF4
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - DobNGtI-w4I
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - YV0EW0ATg3Q
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - wAeD5DOZfGI
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - CDDHlGRL3AI
+  - ItE7xQpkfMA
+  - KEkb7zaOM4E
+  - Y-AYC3_DbpY
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - oVE-9yvtX_g
+  - q9CKxBMxTlU
+  - r6HHJJXMmdU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - xtPiQV-xRPg
+  - 4_WPNDsiXxA
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - HYted2CzQWk
+  - MR4pIQhpu9Q
+  - RrqXAkfjBdo
+  - TXa9Y6-WYMI
+  - WXNmSruTWIA
+  - XaA3qD1EAqg
+  - YRdIU4iJEuc
+  - bGauZyt2Fo0
+  - jwTfv75Q0zU
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 2kui0fFKMyE
+  - EzzHv56zDVc
+  - SYJu_y6WvEc
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - p4Rl7IRoAjo
+  - pD1FndUEMXs
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - rnrVtZ15y0M
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - HNJYNp9U9Hc
+  - KMliGnl7uVo
+  - L47-E98gvsM
+  - LtfgYcUBDQA
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - Sgb7KicfizM
+  - TN9i9Ni0Xr4
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - xa9_-hk0j7I
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - IVEAfdHlnO4
+  - Pfse9GxqdAE
+  - WIYXfnLgSZQ
+  - YXvpoh_JZHI
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - i8Xnixkiqkg
+  - kwDQk2siRJs
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - DcdRBOQeJXA
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - P2KwAZNGwGY
+  - cQ4K399DTgI
+  - o1F46KsQGyU
+  - p3efxXT7y3M
+  - 1EeTvG34xGo
+  - 2W6ZjDGygdE
+  - 4C9lSiCMDs0
+  - 5fzTBTfWJ20
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - gdJYRWx9g6w
+  - vSSkDos2hzo
+  - 6oZfhhEHXU8
+  - AyMUWBUt3WY
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - SNeAsyqfewg
+  - SV-KfCQPJJ4
+  - UNf2qsX8uFc
+  - _jA_aFsai1k
+  - cujcxjSm69g
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - -yp3g7EeDqo
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - X46jtDFLfEA
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - aGzgcKDbKhw
+  - nRQSfBhd7FE
+  - rWAAeVmlP08
+  - t-ezOLT2Kv0
+  - u1UNSANB-po
+  - -ENLFPdXIbA
+  - 4d17y7B-BJM
+  - 5ZK50rIFyL4
+  - AL5HDsXTUyI
+  - AsyyZgtHMPw
+  - IGGuzpu87f4
+  - JQaeGoQox0k
+  - LEwwgCUGraQ
+  - SMAB27z3x0c
+  - VX_h3_YLiaI
+  - WEKB9EGH20I
+  - 716e30A053U
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - WprPdJKfaGk
+  - ZTBfG30195g
+  - ezOsco9legc
+  - pyzuiaDBvxU
+  - tJeI51crrvs
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - SwKLcKW-inA
+  - moVynuxM4fc
+  - oJtFnij53yc
+  - opRJtyLwyPo
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 8DsoVhEVDeE
+  - 9TzHTKBiy68
+  - EwclzA3FplQ
+  - NjlxJeT_ATg
+  - NwWSIpU7B8Q
+  - eO8W1pWRJ1E
+  - ft8GvFDE89I
+  - lHWlTYe1_Rk
+  - v2QMApW9hq8
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - Pjbxp2kwpiU
+  - R0mMyV5OtcM
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - vRcQjgf6E84
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - ciJP2HQybdQ
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - p1EmPJJuWqQ
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 4edVPOR0uDo
+  - 9voEjh4OLy8
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - IBPgb2Whc8o
+  - LT-NaeBHmHM
+  - MBaoJffyT5I
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - bzGSxdGF8z0
+  - fXpNnWMATFQ
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - 9c9lsafJxI4
+  - DLEdojCopI4
+  - FiwG3s8ZnjY
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - MilYefF9DjI
+  - dBTQi5kdfW0
+  - gWv2gfSU2Fg
+  - pPlFSqXnbls
+  - vEBSPgRAqYg
+  scan_costs:
+  - at: '2026-05-29T16:48:15.723306Z'
+    usd: 0.12304880000000296
+classes:
+- name: Bounce Basics
+  image_url: https://images.pexels.com/photos/1954524/pexels-photo-1954524.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Learn the fundamentals of rebounder cardio with proper form, footwork,
+    and bounce technique. Perfect for beginners or anyone returning from time away.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Rise & Flow
+  image_url: https://images.pexels.com/photos/31012865/pexels-photo-31012865.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: A rhythmic, full-body rebounder workout combining upbeat music with
+    flowing bounce sequences and light dance movements for an energizing session.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Interval Fire
+  image_url: https://images.pexels.com/photos/7690207/pexels-photo-7690207.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: High-intensity intervals on the rebounder push your cardio while staying
+    low-impact. Build strength and endurance with short bursts of work and recovery.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Bounce & Groove
+  image_url: https://images.pexels.com/photos/3757954/pexels-photo-3757954.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Dance your way through a fun, playful rebounder class where the beat
+    meets the bounce. Great for members who want cardio that feels like a party.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Water bottle
+  image_url: https://upload.wikimedia.org/wikipedia/commons/4/45/Metal_Water_Bottles.jpeg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500
