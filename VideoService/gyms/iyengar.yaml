@@ -1,0 +1,918 @@
+gym_id: iyengar
+gym_type:
+- iyengar
+theme: IyengarStudio
+videos:
+  specification:
+    short_videos_desc: 'Iyengar-method instruction focused on precise alignment and
+      prop use — blocks, straps, ropes, bolsters and blankets, exact pose setup, and
+      therapeutic sequencing — plus the human side: teacher vlogs, studio and prop-room
+      behind-the-scenes, relatable class humour, and teacher interviews. Detailed,
+      craft-respecting teaching for all levels.'
+    short_avoid_desc: Off-topic, genuinely low-quality, or clickbait "yoga for weight
+      loss / flat abs" videos, gear/leggings hauls and product shilling, and "yoga
+      vs pilates" or "yoga is useless/dangerous" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Iyengar-method instruction for members from beginners drawn by safety and
+      clear teaching to long-time students chasing precision or managing
+      injuries — plus the human side of the practice, so it's something members
+      enjoy scrolling, not just a how-to library.
+
+      ## Method & instruction
+      - Exact alignment of standing, seated, and inverted poses
+      - How to use blocks, straps, the rope wall, bolsters, chairs and blankets
+        to set up a posture correctly
+      - The methodical sequenced approach the method is known for
+      - Prop-supported and restorative variations
+      - Alignment breakdowns of key asanas (Trikonasana, Sirsasana, Sarvangasana)
+      - Therapeutic sequences for back, neck and shoulders
+
+      ## The human side
+      - Teacher and practitioner vlogs and "day in the life of an Iyengar teacher"
+      - Studio and prop-room behind-the-scenes
+      - Relatable yoga humour and class moments
+      - Aesthetic prop-practice edits
+      - Teacher interviews on the method
+      - Practice-journey transformation stories
+
+      Precise, craft-respecting tone throughout — yoga taught with surgical
+      attention to detail.
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about Iyengar-method yoga; off-topic, genuinely low-quality,
+      or clickbait videos.
+
+      ## Reject
+      - Calorie-burn "yoga for weight loss / flat abs in X days" promises
+      - Heavy chanted-Sanskrit devotional sermons sold as the main point
+      - Gear/leggings hauls and product shilling
+      - "Yoga vs pilates / which is better" or "yoga is useless/dangerous"
+        debate and reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a highlight, or
+      entertaining — fun and creator content is wanted.
+  queries:
+  - iyengar yoga for beginners full class
+  - iyengar yoga how to use blocks and straps
+  - iyengar yoga rope wall sequence
+  - trikonasana alignment iyengar method
+  - iyengar yoga supported shoulderstand with props
+  - iyengar yoga headstand setup and alignment
+  - iyengar yoga standing poses alignment tutorial
+  - iyengar yoga restorative props sequence
+  - iyengar yoga for back pain therapeutic
+  - iyengar yoga chair sequence tutorial
+  - how to set up a home iyengar prop practice
+  - day in the life of an iyengar yoga teacher
+  - what an iyengar yoga class is really like
+  - relatable yoga class moments funny
+  - iyengar yoga studio and prop room behind the scenes
+  - iyengar prop practice with music aesthetic
+  - learning iyengar yoga my practice journey vlog
+  - certified iyengar teacher interview on alignment
+  - one year of iyengar yoga transformation
+  - what is iyengar yoga method explained
+  good_video_ids:
+  - 4F4lTh09Z5E
+  - 93Rtc9oqfwE
+  - Flc62qizzOQ
+  - IgfNW88jGDA
+  - NL8G-DzGzY0
+  - Q0K8TKYFSOw
+  - U3DBlbiEkaU
+  - Yu85xFcSt5U
+  - Z0MOL9c_nQw
+  - __tUCzLBzHM
+  - a-atFdQSh-s
+  - oUgpXY7QhpQ
+  - r07BZBSmhhk
+  - rInjQEeYYKU
+  - rfuOrgEOd2k
+  - tp1pl32UPHQ
+  - zxOKpicdIpo
+  - -PcamiCJM7o
+  - 2RWs1W9rzNQ
+  - 30obmSRI7Ag
+  - 3uTpamADhEs
+  - 3yMZfEO60UY
+  - 4d23GL96sNw
+  - 53YGckKJZng
+  - 7CqEkly3Em8
+  - 9cedd7A85mg
+  - A3jlfueHPz8
+  - C79FIVxT8Qo
+  - Cx8qmdwEWwc
+  - DZjKqzbt_AY
+  - DbnR6UQT3sA
+  - EYKqnP0Dlw4
+  - GZtTXmNgB40
+  - K6Q23y0Omm4
+  - L-xnS1pClF0
+  - W_DsJ0f1njg
+  - YK7aA0SQL_Q
+  - ZRS0dXit51Q
+  - ZzSnSgpr2-Y
+  - lZXBy1Ml-58
+  - xfLF5UOqj0s
+  - 0Xz_U7TID1Y
+  - 22S-E3lrwjY
+  - 30ZOQrDENnE
+  - 3CjORKysVAY
+  - 8eepIqlkkWM
+  - 8nSX1ZgC70c
+  - FCX9pY7pWSc
+  - HWrfTRx-WAk
+  - KekMX-2Ij9k
+  - Lb56doVpBrU
+  - MHerO0Lh4iA
+  - Ms7Nybi2qVA
+  - Rt4YslexNts
+  - bK0wrNKbHjI
+  - joJZyqiXQNA
+  - kCqgd85oOwc
+  - kNOyMBFf6IQ
+  - l2-058mpGCA
+  - ogGqdvrRq40
+  - tqXnQ-zHLBg
+  - yWvRIpqyszM
+  - 0MWoqXL7Qzk
+  - 0_F8DbmpFao
+  - 8wX2RdTtf_I
+  - FS8PEvFAmE8
+  - JUlUCXH7xL4
+  - KQwqNznDvaM
+  - L47Xq9MfgmI
+  - O6cRt3QWCGg
+  - SIbzF8C8AsI
+  - TJwhhCnhISQ
+  - TwNaYH5M9VA
+  - YGm7FDrGODw
+  - YphdIXl51Nk
+  - Z4jUAchP5Q0
+  - bd-7SxCDyXY
+  - brCnEpWpz48
+  - ggwkBxNUo4s
+  - oEeVTKI0-pk
+  - oPIkKtC61CQ
+  - pPZxywFiUBg
+  - u3cd85x7mVU
+  - vL2WWHGAwpg
+  - wpN4tLulgBw
+  - -VcyNMdxE_8
+  - 5T10ss8z-2s
+  - AYdgNrMG-NI
+  - Cbq-2L4UNG8
+  - DtjZo2WQnC4
+  - FPjppcOquE4
+  - LtyuIYGmDNc
+  - O6IcireDN_g
+  - Sjq7P6qtvpE
+  - W5ps3vxttkA
+  - W6c6fn9AChc
+  - aS_Bp-d-bI4
+  - h1GU6nwutN8
+  - hcIQY4MY-RI
+  - iw-WXoNH7l0
+  - jSmW82MAzrI
+  - kl3bxnCZhJA
+  - lnbbDQ1sPZk
+  - sbRGki58bcE
+  - wPHYjFcsC98
+  - wUVveQ-l4cw
+  - xtoZUtZkTMw
+  - 0NvqT1j3000
+  - 6xuo7SX256Y
+  - A4t7hBD1RoU
+  - CRg3fMPmFck
+  - GZhkUX1Qkgw
+  - L1PHPGzNX2I
+  - LECamzh1AVs
+  - Or9kTKV8oHs
+  - SYJu_y6WvEc
+  - SvpEAqLEvkQ
+  - _toAvDoGEAE
+  - eoIrLyMorlA
+  - fIVGdP0-Pb0
+  - fQzUFqfyHvA
+  - kYBKknWAmA4
+  - lA6O5iir-Wo
+  - ljpHmXekae0
+  - p2sJAvN0xDE
+  - pWyqdrlXu3Y
+  - rPAO6WFwvu4
+  - u3749hNRVVM
+  - zQisY3p72a8
+  - 5fnVbhjVG8I
+  - 8L2t2vetKKs
+  - FFe2JjoMdKs
+  - FeZQbqqynL8
+  - I0fOMWIlwWk
+  - KGDdwiS3jW0
+  - NMnmn8Z39Cc
+  - NfZlpXNR108
+  - OEjl3vFUO_U
+  - P-Lg51PpXtU
+  - W-BmOPuQn5w
+  - XPMi0l6xu1o
+  - acKgy9JxhMw
+  - bWw576OcCjo
+  - fLIJrkBuoqs
+  - gpfd45GO8cE
+  - szS3BOJJK9g
+  - upFYlxZHif0
+  - wGzRKGcL8cw
+  - yeO_l2BFcE8
+  - 0uq4JEKaY3U
+  - 1PLTHwCyPDY
+  - 1iVxbYhtFFs
+  - 4D4XiPhPi6g
+  - 5KrDlrmsRrU
+  - 5iX6ecbz8XE
+  - 6-kNuYSeue0
+  - 7mumwqwPRFQ
+  - Ah3wXx0GYpQ
+  - CKQbsH4kesY
+  - D1nl5PpXiAc
+  - PBqmeVghAcU
+  - SmPQz1THW1o
+  - _ba0yIAZ9ok
+  - f1-vByCO7Jo
+  - iNyq2Oa8Y4k
+  - lT8TL12jqlI
+  - mmP3m29Bvls
+  - skt0-T2xcVM
+  - xaIqZkRpXJU
+  - 5ByUy7CQR0o
+  - D3DXO4REdQI
+  - DQ3gmTG-NW0
+  - KN8AoPbRrGI
+  - QOBdVK9_UO4
+  - SQF-0s1CckA
+  - U-At7DHIx74
+  - YDbpNA4MqPs
+  - Z4u09Y-GS0M
+  - b3M6zJ1qCP8
+  - cQ4K399DTgI
+  - f7WysCuvYL0
+  - i5VNuH0l-Mg
+  - jNBBCrOCcdE
+  - nHhw2_xSiiU
+  - nxGCrdLJQds
+  - tlu2DaL5hTs
+  - uFOrBx0IaXI
+  - uX77SHsPA78
+  - w2pevx-Mr_Q
+  - 4F0AIQrENAk
+  - 7Mo3F2jVQI0
+  - 8ZYJ64opv6I
+  - 8oDAM5N9o4w
+  - AnvAmLqgsbc
+  - Ckfy_Kx3Xx4
+  - D-bDA4lo2mc
+  - D2w20Qomx-Q
+  - HP15xLFDxxA
+  - PP0wnFUbfoo
+  - PX0sYJMXI4s
+  - T1b4anVSWo4
+  - UCjEyjXO_Xw
+  - dsebIELjfDY
+  - ewrg1l0Z1PA
+  - kDPJaT-YZus
+  - l407IrqpCjU
+  - mDWiZ5QwSC0
+  - sQlKTg4nOgc
+  - woWzLbBWXhk
+  - zUEC0kpvf6c
+  - -PF_DD-mFng
+  - 4AWzeCNDJUI
+  - 6SWpig_4TUY
+  - 6onXFOczABo
+  - 9mZGWkq09gU
+  - At4Sq0RmeCs
+  - BMqjQcMrNkU
+  - KP-fG5100QM
+  - O6kdIkLuFlM
+  - RsNv4To9ziw
+  - W0VDl3PR_ms
+  - YThR1_CkWFQ
+  - _SWd-Dg9epg
+  - cKhjAlQBa0w
+  - gCnE-0swypc
+  - k1DzL2kbjek
+  - qIj7lL_P01E
+  - uEKH-z8mHKo
+  - vDgJAMBbSDA
+  - y4hHsX_FIkU
+  - 0fWz0oW8-1s
+  - CfRM64o2PAs
+  - Ga-G8sjWzqY
+  - HvkzRRG8OC0
+  - IslcCVqOyec
+  - K3DuAK7RY50
+  - LR72KqH24xM
+  - P-GOPuw8ZKw
+  - R_gw-T9oSJw
+  - RkVhWk2gQWk
+  - UNRKFNuLawo
+  - UV_Me-zMa3E
+  - WB4ozdwrgAs
+  - YghOeTjdEf4
+  - YtjpEpyjDaM
+  - _-Ual915HEs
+  - aOCiozPzbQA
+  - arUj-0L9tNw
+  - dIPEkaT9R8E
+  - iu_7JEConqY
+  - q-kL7-5L83M
+  - -OZXvR2M8sU
+  - 4-D3aa3N6Xw
+  - 4-jP6vQzuFw
+  - 5vet5NCY2c0
+  - 7onlmGIl8qY
+  - 81jQSSbxpQM
+  - EriPRTk1ly0
+  - IU1S8vGbDFA
+  - LEvO04Is8qE
+  - LSTMoSkVtvg
+  - M_5V8QjJcKo
+  - MdokfHJK4mQ
+  - RPSApPXcdV8
+  - RTs1zEFJl0I
+  - WJ5YSZfwX0s
+  - cL0XBpYpyFM
+  - eNRNMQ9bAXM
+  - grmMrgQMDso
+  - m4KAN2PFTL0
+  - n9PYCn8ivl4
+  - owHQQlc5zXo
+  - rhIhzcaNd2o
+  - xI87hsZRJUA
+  - 2S4cfmNRkd4
+  - 716e30A053U
+  - A-bxVtp3jno
+  - EwBX2Y8jgsY
+  - IuwpSz-59PE
+  - LGCs9X__lT4
+  - Me8wKFcTlBA
+  - Oq5AlN-6vhU
+  - RTI9DuG_QDM
+  - S9wle_xyRhM
+  - Uo1UjETnGkQ
+  - kfvcXxoDSoc
+  - lCzPfmRC3tQ
+  - oGununRKKHg
+  - pp0oJGNtiIE
+  - qayigF8__is
+  - sX11hp65x14
+  - ui3ToKZtKIs
+  - wj0pBJ4-pkU
+  - yoHg6z2Pxcw
+  - zLvMoNKfagU
+  - 0DlGmDWoqlw
+  - 0rmvgzx5NZ8
+  - 18dKpr1qznM
+  - 1QYhC3h1z5U
+  - 3IcCweY5M2Q
+  - 3sBA_32g9Ns
+  - 4rpqo-xQ5fo
+  - 6S8No7WLaY8
+  - 8IVCwrkZRs0
+  - 8q7GxnIFsQo
+  - BwQwQke2QB8
+  - Glt6VA80l1s
+  - S3DkSkGaDX0
+  - TTSpVpBhI0c
+  - Ym2JaAb-8NA
+  - apzdoDYQE3A
+  - bX_IUbp-_tw
+  - fSql9oJUGUg
+  - ndX_ZDhwmug
+  - qA90s0GbKF4
+  - uJfasbshkVY
+  - zigbPVQMjaU
+  - -4prymCU4xc
+  - -Qq6hp2wb2g
+  - 1c2xZ-blv1I
+  - Ebjm_hQG0EU
+  - FSuUNALs5wc
+  - JTFHhn26G0E
+  - JxPogUI_b80
+  - KFQEDU-cvFQ
+  - OLP5RfXstfM
+  - Twnx2b2mMg0
+  - X84hAaNC9CI
+  - XxIZ1zR8pVs
+  - cOZK_oM2PoY
+  - fPaZtnvkt4k
+  - gihO0-DAnPI
+  - mAPNseAqdSU
+  - q5iSsdzWhwE
+  - s9IY2Jj1r-E
+  - v3PEMON2OpU
+  - xZatllUm1NI
+  - 0CWcNJIWufA
+  - 0KzyEgkq7zw
+  - 33PO30nsg1I
+  - 3IzmT5MG9NA
+  - 8MqWJ58JIu0
+  - 9FENnkzCz8s
+  - BnvhJKnGuCE
+  - GCRzhqKipBw
+  - LVvcvAWDBXI
+  - R4SHSEvytCg
+  - RM9sUmDKqKI
+  - RWlEVW0UXLw
+  - WUXWYxOTCnk
+  - Y0GDgQqt-bA
+  - l_3G1nMSoMc
+  - mJ7nSNikGPM
+  - n7122yUhnFk
+  - q-w-2iOSGAA
+  - x8HyHook1uw
+  - -y8JBjRUqKc
+  - 21FPC9sMVLc
+  - 23GoED5ce1s
+  - 6GfjS4xfcKc
+  - 8zs4kghYtDs
+  - G1gNqhQ6eDs
+  - Qqtwmys2FQU
+  - WGPlUTCPh2E
+  - _KQ4_aS6DBM
+  - cAhfw-d4Oic
+  - cLFQuzuZ26U
+  - dfTKbaq20v0
+  - gmyMqZCEP74
+  - l0Cqk8pvCao
+  - tKHFi1kLFF0
+  - v6q6s-BcAhY
+  - 0_qVQQhmV4o
+  - 9GMqqZ1XQ9k
+  - 9VZ5jfiYlN0
+  - C0ZyLVh8ub4
+  - IvAx7q2LKqk
+  - OC42vm8gnvM
+  - OHSfGgWgnd4
+  - Op72srvfIXM
+  - VcK3KNRQ8j0
+  - XB_hdbm5Dks
+  - eIOIXA8oqPA
+  - ef6q8ykSD3g
+  - iM0GlT64PK8
+  - irNIHwBjBuA
+  - nmTPvsC6n8o
+  - oThDZBWEXMk
+  - ph8Dr-WtNnc
+  - rEkKjU74leA
+  - tIJOf_JESSc
+  - -ErUOq78R7A
+  - -eTYkeWp1Hs
+  - 08ZOhpJ0Cgk
+  - 77BN8VJ-9SE
+  - 7ZWQpDzgNnU
+  - ChE_viFlmIk
+  - D3IJzCi9hoM
+  - EyaDcoFJHTE
+  - HGKGOo_mP48
+  - NlvSvp8tN9E
+  - R7fBJ-PeApM
+  - SedzswEwpPw
+  - TRCC5TIeAt0
+  - aTRgMVtMGJM
+  - ci5LkVoJVYI
+  - dJMxkti9MbY
+  - kJeP9mTNsD8
+  - p7vz3xByvV0
+  - q7A2gXI3Cc8
+  - sQ5FwJ7c3is
+  - tC05QrP0ZtU
+  - yFObN029hnw
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 2E2ROQJM_tY
+  - Cv-GBnsHiyI
+  - HN34nV9Z0wE
+  - HW4ADAzkxDo
+  - INXD5osrkDo
+  - Nq-qifMPAfk
+  - RIXslLqSYTM
+  - URYaOI4kwnk
+  - Xc3FOKlCXZM
+  - a4ZpSs195I4
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - lJpWD-QMPtw
+  - rf2QT43NUs8
+  - suV7BjHE0wc
+  - zEOkI3xkF4U
+  - 70ydbjksIns
+  - 7JYF44bb5_k
+  - 96WjC49dagg
+  - 9Wa9xY88WF8
+  - BRDdRI7TmBs
+  - D_AvOKr8ncE
+  - KJBlo6X4Mm4
+  - Q-7KCRNLLzc
+  - UtXzq-EGM8U
+  - Vy4K9OXSRVs
+  - XoUe3V6Vw1c
+  - _8kV4FHSdNA
+  - byXfcfeiQeA
+  - igaU5Bjhtfw
+  - kThGMgiprF4
+  - khflFFpKpsI
+  - l2FHJ9gFaqo
+  - nDTxyW0QES8
+  - rHCL4nouzfI
+  - 064uUn5syz0
+  - 2mjc6AdpPpw
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DIWnZDGZsVg
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - IL24oJTi9DA
+  - JW6H_MjQXvs
+  - KIjHz3ZTrnk
+  - LJRFzLOFK_g
+  - OpMNNBRx9ZI
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - Wwbuv7v9B0E
+  - _n7hKXILyig
+  - dVX8SaU37O8
+  - k6Qp78Hh5DI
+  - kdByMeToAkk
+  - miNlSQED4MY
+  - n_yuiYV-_Zo
+  - vXDJIJEySoM
+  - z6k8wXfwS94
+  - zBnKgwnn7i4
+  - 4ViO9NUp7qc
+  - 5kkBgb426Aw
+  - 7_QmKjnWQI0
+  - ItE7xQpkfMA
+  - J0_z8UnGyww
+  - hrpdiMc_bEI
+  - iK_h-2kot6s
+  - iZTXTzc8Gj8
+  - kqyr3kaw5qE
+  - moCiVEL8LaQ
+  - p_rSPKWrQqg
+  - q9CKxBMxTlU
+  - vtMvB4ErfZU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - x-Aw6TuzO2Q
+  - xpHKwJNCArs
+  - zcBMbmnO7Jk
+  - 06KsU8rYhC0
+  - 6TjXPRkXx9c
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - HXrZqO12md8
+  - KXFa9yhdBZE
+  - M5g7jKeHu8w
+  - ORzlvF8inyI
+  - S08WbhUAq0Q
+  - kjZ_b7ul-dQ
+  - mREzOsy0kO0
+  - mS_yuOfyNIM
+  - mvj176O9he0
+  - ncORPosDrjI
+  - v6B9zgvkos0
+  - wZ9UpsEzx38
+  - -ox5xW8D_f8
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 3wzzgI_GrXE
+  - 4wEDoKm40Yc
+  - 9VA1X-Cpfcw
+  - 9dHwxwxVcl8
+  - AYmsZCREvZE
+  - F7IHOaO6K2Y
+  - Sas9eBPTYBI
+  - U7nT5qC48XI
+  - YXzzuLcmE_o
+  - Z2AOmI3aQpQ
+  - aE8VlMFralI
+  - cqDH7vHRcEw
+  - hZoeX99CiPE
+  - jEjhDcUIwrA
+  - lQKXdALWwSs
+  - nYpcm5B64n4
+  - p0MOWW1lfpY
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - zt8XsSs5zi4
+  - -KJBu7ZhkF0
+  - BdWvP-lbb68
+  - IN6nQSNGpZE
+  - KMliGnl7uVo
+  - Knpr3ZZu1TQ
+  - P7l5kgIjOTc
+  - SuZN5HENnps
+  - TN9i9Ni0Xr4
+  - YNHMNVLwy9c
+  - cEVAjm_ETtY
+  - ec7HgcttWGk
+  - gDRw6HYdhoc
+  - kXitig9Ro60
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - vizFoFnJPis
+  - 1lxzUeRG8z8
+  - 2ZYZz66XOus
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - BQIPGYEtscs
+  - Bk6UF0uEV2E
+  - Ch-rknz-yrU
+  - Jzxvx79DQzM
+  - NLOr0kt06tk
+  - Pfse9GxqdAE
+  - Xl1-dllmzS8
+  - YhIPJwEu6PE
+  - ZyahUQopy38
+  - _bvOsaNdlRE
+  - _u3NOB8pZf8
+  - dNCyC4gV_34
+  - eE-VtAKgQEE
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - h6t88-NmIDQ
+  - kWQ8GP_jjSE
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - mY6DZF6nDtc
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - 3jwAGWky98c
+  - 6-AXfni2zd0
+  - 99kVvs5a59U
+  - AbsaUHdxGHg
+  - BGl5kyviQA4
+  - HWAOifKGLiE
+  - LwVjMU8qMEc
+  - Mlgs4_54q8Y
+  - aJqxB2uyAgc
+  - bwfDuoakRSs
+  - dfeqKsgTjPo
+  - gZNvMOAw3FE
+  - hsL_SsDaO0U
+  - qL7Nlexje-M
+  - 1bFVoTGDUws
+  - 3oo1-EaIZk8
+  - 50MlmnUSrWo
+  - AE8RJw9Mx6s
+  - BSfOzy0Dpqk
+  - BfB4lVnL4CM
+  - FjO3CpihTjQ
+  - GZqgvEWyOUI
+  - HSj7EPqPoLA
+  - HV92CZXgza4
+  - IMFlZJwE-rc
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - Ok2w5YnrosQ
+  - P26sJBTOaEo
+  - Rp5V_n4Q7aY
+  - UCHnsgFpxsk
+  - V0o6C99z1Xs
+  - Z7Ra8Wa-WMI
+  - blad0omDwIA
+  - cdPejPpoMFo
+  - l-Z4uNHDS9g
+  - lqu9GBG4HLg
+  - qeDWB9AVxzI
+  - 0MigPK7uuak
+  - 1zUWuwvQyRQ
+  - 6oZfhhEHXU8
+  - AyMUWBUt3WY
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - M4nSM7TBsJg
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - X2uV1V1M_3g
+  - bumTp3-SZNo
+  - ciIRmxoQ_A4
+  - cujcxjSm69g
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - pYqnHlTpegk
+  - seHDM_F7nO0
+  - tkH2-_jMCSk
+  - 1hoGJhFWORo
+  - CZtOVFsTSuY
+  - D0p33QKxgbg
+  - ImQFoaPkO7A
+  - LCFZkeCHfag
+  - Pui3UaKI2Pk
+  - YYZI3pczGqQ
+  - ZV3fXS2XHeQ
+  - gzCdJlENxO4
+  - jsBTcnf3NHk
+  - jsiSzCMJPP4
+  - nRQSfBhd7FE
+  - op685VA5yYM
+  - t-ezOLT2Kv0
+  - viQG0SC73hs
+  - zLVAW7jOkp4
+  - -er2gIKj2w8
+  - 9Dvhd0k9J60
+  - 9n8FmIqa3Ro
+  - AsyyZgtHMPw
+  - Dua3zWsebsM
+  - GIS8Azenl8A
+  - HzBZP3sFZ8E
+  - SpS9Wt9F7pI
+  - WEKB9EGH20I
+  - ZDqkZibM8iA
+  - _X6rsR5yCNo
+  - _w7BirEE9Ao
+  - idbNasHM5kw
+  - qLwcrykMzbs
+  - qlq-prZ4KfA
+  - r1UMA4TvHr0
+  - vnpraKh91DM
+  - zpA9F6vPhFU
+  - -bgL0Ik_fvI
+  - 7ZNllP4WQuQ
+  - CBnLOlVT4yQ
+  - Hu-rVZVSzxs
+  - OrsBKKYipwk
+  - WprPdJKfaGk
+  - Wvt5jdys8Fg
+  - d9SzjMp4Qhs
+  - ezOsco9legc
+  - tJeI51crrvs
+  - uKYZIC-67gY
+  - w9YWEbihNr0
+  - 3oj-TFQbuCg
+  - 4QSgW07cyQM
+  - 6Xf6DtvOwpo
+  - B6mth7-L9yQ
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - NQHF7qdH0rM
+  - Q82YnmL0Kr8
+  - QsdXRoBiPBI
+  - eXcHMDSEk0c
+  - hgOOu4fXlCo
+  - lxv-kyRzSNk
+  - moVynuxM4fc
+  - ucWD2CuSKSo
+  - xlylyxpXWzA
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 7Po7uCqPkZY
+  - 9TzHTKBiy68
+  - 9XudNmAf6P0
+  - CDT6FWU5Vm0
+  - FBLcOucDCzU
+  - Hk8AIWhIRqw
+  - LBOFE-DWrD8
+  - PmdKCsO6TmM
+  - QV3UxTPCX5A
+  - T_yUO4xmz5k
+  - WBPtDKCmIB8
+  - bsOIl6weWCc
+  - eO8W1pWRJ1E
+  - gEDXDaisk3M
+  - hY9KeU42L9M
+  - v0leJCYGEwY
+  - xaMbvaLk0KY
+  - 5OVlqlcjiZw
+  - B9AT0WneXPI
+  - Bd4gxNpbJGE
+  - DCYcAKZ2jEw
+  - IICZ11I3_tg
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - KF3D-Q0C6-c
+  - _QjhWVG5hXQ
+  - jdo843M-oCo
+  - og-mcIIy9v4
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 26TgDhfwpjU
+  - 2DX_U89ocX8
+  - 6DOPUqJ738E
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - M2zYtxsBdAQ
+  - OTrTqs9FLq0
+  - RoFCMBOUixI
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - fhY0pUKtsyQ
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - nGkHoLSkzcI
+  - rfGi8W9j9gQ
+  - tTGY0G8OZQM
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 3SBBDKJ1ETM
+  - BZu_pk7cXVw
+  - CRUnIbCbH3c
+  - HrWjf8WOsfI
+  - MCGa9qP_Bo8
+  - QAj0VHx43fM
+  - RlrmSu5u9bE
+  - UGnGytGoqlA
+  - V0q9CFfn_ew
+  - YSJubcbzJmo
+  - bzGSxdGF8z0
+  - goXYJAMHmis
+  - kOBYNPaUe_I
+  - kyqpSycLASY
+  - sLYw8VdVGbw
+  - xdLy8PCcmwA
+  - -GCA92b119Y
+  - 0hynzjke640
+  - DTbn8mZWdqs
+  - EOJTEVZLvjY
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - Pg4WPKuDxmQ
+  - WWisVvsYB8A
+  - d-A0mpc5mes
+  - dBTQi5kdfW0
+  - ek7TCRH67mw
+  - fzkCheAGV_c
+  - jiJ1c9eWA60
+  - pPlFSqXnbls
+  - qcyY0tsGm6A
+  - sECSM8pIWS4
+  - vhb-B3lFfB8
+  - xRcWlA1I9z0
+  scan_costs:
+  - at: '2026-05-29T15:56:11.864352Z'
+    usd: 0.21850429999999044
+classes:
+- name: Alignment Essentials
+  image_url: https://images.pexels.com/photos/8436589/pexels-photo-8436589.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the foundations of Iyengar alignment with precise instruction
+    on standing, seated, and supported poses. Learn how blocks and straps help you
+    access correct alignment at any experience level.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Prop-Supported Flow
+  image_url: https://images.pexels.com/photos/8436587/pexels-photo-8436587.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Explore the therapeutic power of props—bolsters, blankets, and walls—to
+    deepen your practice safely. Dynamic sequences that honor your body's unique needs
+    and capacity.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Therapeutic Sequences
+  image_url: https://images.pexels.com/photos/8436426/pexels-photo-8436426.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Targeted sequences designed to address back pain, neck tension, and
+    shoulder stiffness. Methodical, restorative approaches that bring lasting relief
+    and mobility.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Inversion Mastery
+  image_url: https://images.pexels.com/photos/8436605/pexels-photo-8436605.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build strength and confidence with inversions—from supported shoulderstands
+    to headstand work on the rope wall. Detailed, step-by-step progressions for all
+    levels.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Yoga mat
+  image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Fitness_mats_%2851543374690%29.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

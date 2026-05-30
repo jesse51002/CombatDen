@@ -1,0 +1,475 @@
+gym_id: aerial_silks
+gym_type:
+- aerial_silks
+theme: AerialSilks
+videos:
+  specification:
+    short_videos_desc: 'Aerial silks, lyra and trapeze instruction — climbs, wraps,
+      drops, transitions, plus conditioning and safety — alongside the performance
+      and human side: cabaret and showcase routines, skill clips, studio vlogs and
+      behind-the-scenes, funny training moments, and aerialist interviews. Beginner
+      to advanced, credible studio coaching.'
+    short_avoid_desc: No "aerial fitness" cardio rebrands that hide the apparatus,
+      reckless "learn to drop in a day / no spotter needed" stunts ignoring safety,
+      off-topic or clickbait videos, or "aerial vs pole / is aerial a real art" debate
+      clips.
+    videos_desc: |-
+      # What we surface
+
+      Aerial apparatus content for dancers from first-timers to seasoned
+      aerialists across silks, lyra (hoop) and static trapeze — plus the
+      performance and human side, so it's a feed members enjoy, not just a
+      how-to library.
+
+      ## Apparatus technique & classes
+      - Silks, lyra (hoop) and static trapeze for first-timers through
+        seasoned aerialists
+      - Technique breakdowns of climbs, footlocks, wraps, inversions, beats,
+        transitions and drops
+      - Follow-along beginner-to-advanced classes
+      - Core conditioning, grip and flexibility that make the work safe and
+        possible
+      - Apparatus safety, spotting, rigging awareness and clean dismounts
+        alongside the skills, taught by credible instructors and studios that
+        respect the lineage of the circus and the contemporary aerial stage
+
+      ## The performance & human side
+      - Cabaret and showcase routines
+      - Skill and combo clips
+      - Studio vlogs and "day in the life"
+      - Training and rehearsal behind-the-scenes
+      - Funny and relatable training moments
+      - Aerialist interviews
+      - Progress and "first drop" reels
+
+      The performances inspire the training — kept to skilled work, never
+      reckless no-spotter stunts.
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about aerial silks / lyra / trapeze; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - "Aerial fitness / aerial yoga cardio" rebrands that hide the apparatus
+        arts behind a hammock workout
+      - Reckless "learn to drop in a day / no spotter needed" gimmick tutorials
+        and unsafe stunts that ignore safety and rigging
+      - Gear hauls and product shilling
+      - Clickbait ("master the silks in a week")
+      - "Aerial silks vs pole / which is harder" cross-discipline framings
+      - "Is aerial too dangerous / aerial silks isn't a real art" debate or
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a showcase, a clip, a vlog, or
+      entertaining — fun and creator content is wanted.
+  queries:
+  - aerial silks for beginners first class
+  - how to climb aerial silks tutorial
+  - aerial silks footlock tutorial step by step
+  - basic aerial silks wraps for beginners
+  - aerial silks invert tutorial
+  - aerial silks conditioning and strength workout
+  - aerial silks drop tutorial with safety
+  - beginner lyra aerial hoop tutorial
+  - static trapeze basics tutorial
+  - aerial silks transitions and sequences
+  - grip and pull up strength for aerial
+  - aerial silks performance showcase
+  - aerial cabaret routine performance
+  - aerial lyra competition routine
+  - aerial silks skill combo clip
+  - day in the life of an aerial silks performer
+  - aerial arts studio vlog behind the scenes
+  - funny aerial silks training moments and fails
+  - aerialist interview on the apparatus arts
+  - aerial silks first drop progress reel
+  good_video_ids:
+  - bEhhGXfIWM8
+  - c9Yg83r_DyI
+  - g8pN7yweZA8
+  - hD7ufBNzDoE
+  - EHi8GS-n4gg
+  - HX9AZIw5Le8
+  - X2Dp-1EDqEM
+  - m19iGZQfATc
+  - o7x_OITmypM
+  - z45IGWokrFc
+  - hUu6SfVCipE
+  - zCE7Mv20zog
+  - 3w0iOPk_RGk
+  - Dv1Gs3mp1Ps
+  - Lj-vGtJOJeQ
+  - Nfmpa3SePjI
+  - fRi426BDVsc
+  - kSuXXA3AdY0
+  - rlZgtQbRlD0
+  - xI0RtWVpgw8
+  - yPX6u_O_2fM
+  - DcwO6nOKzF4
+  - JBsNUwwjTA4
+  - QpcAJajOmQI
+  - XOO5h482VV8
+  - cycpIwDFwGA
+  - kSy9tB0pYpw
+  - 8WC4YoYd3L4
+  - MAnmPsdT5wA
+  - Mvz6I0X-RX0
+  - jArB2fslKFI
+  - qMmqH-RtHOI
+  - 4hlUrk8pqkc
+  - 8beRPjktY64
+  - p0LUGIxxGgY
+  - sLziuKpyx2E
+  - wG0Lbxi_zP4
+  - DJ8K4_EClus
+  - JBeyZBLSbm0
+  - Pdf4cCPJ3qs
+  - QsZaXeTGINQ
+  - YZP90lvS7G0
+  - tzrHDzakWNY
+  - w4sZQAky1Zw
+  - Aoc1WlXPAxw
+  - HmZ-57fKJJA
+  - IVSZx0b5GZA
+  - U80Y3188M34
+  - WYgo6Irfw4E
+  - YwpgdZGDkh0
+  - gY1Ilm03gjc
+  - m34d5nFjmhc
+  - -i8lc4YvG00
+  - 4IBtGNSEjbU
+  - FijG8hDfhss
+  - LqYx6A4WAHM
+  - UdXF89HElek
+  - bYRRNZANE9M
+  - hgsxB4JjdPA
+  - nAjKwAfT4i8
+  - tQW8P8icIjA
+  - z7rUS_UYUG4
+  - -hos6sF__ks
+  - 8D-8SEnVAG4
+  - KsuOEL402bc
+  - RvCWKpK9tZE
+  - T6Rl5S0n6XU
+  - c3HVnxtoqd0
+  - fjmccIeReWg
+  - tinYgmPyb_8
+  - vq673WhB51c
+  - 5CsL6IdP6IY
+  - 89yNR1IfIO4
+  - O_9XuhNwSQc
+  - SGJuJApC6IE
+  - UgyslU2IQxs
+  - Wb42P0alDZ0
+  - XX52rqTshA8
+  - tqN7qaipYAU
+  - 4pLO3g2qHyU
+  - Eu1FsJSi3Xk
+  - FLjZlEE4vFU
+  - Gowet_LomtY
+  - PZfsvjJQE7U
+  - QGwUhH2ONHA
+  - Zz8SZ-XkDUk
+  - aUkKkryJEvE
+  - akkCLXOCu0U
+  - o2wM02gyFgk
+  - rVcWJkgkdjA
+  - 6i1BqolgPek
+  - 8-x_cUDCX0c
+  - Dn0l80Sulrk
+  - EMDAbNqh6RA
+  - Nh1D52BsF1Y
+  - PMstRgi1DVs
+  - WSTf5GVKYV4
+  - tJeI51crrvs
+  - u6mGPxWo6pI
+  - zWattVHdU0k
+  - 5cRV8AqvNsM
+  - KOLDUxRrb3g
+  - RppZVQUYa_w
+  - SbDRp5s7znE
+  - Xz-38jZ1zY8
+  - cI0Tl-qqc9Y
+  - dsaYD_iKpgE
+  - nNcu8hINyYU
+  - rtOmEVZx1jY
+  - -jptW39Kd04
+  - fj3ZrhctiR4
+  - mP9U5QwPRxU
+  - nD31Xzgkf_A
+  - sCGAJRm5bmw
+  - 1yHA4_ZfoOc
+  - 64-9OJubsno
+  - 8tXIITCbHgQ
+  - Q5xxPjrtEUI
+  - RAodzab41GI
+  - _ZE8QRa4nPY
+  - eYOD90tpGKs
+  - ADcPDj9Zl1s
+  - MVv4esb2lwI
+  - TYyoQvFl9Sg
+  - aiEh6GpqDxU
+  - lM4iOXW3t_s
+  - ogTHq0JHmCA
+  - rl3M3gmZNxE
+  - 36BFKo9P3EU
+  - 9M5JRDk9B1I
+  - 9S3yytI4_PY
+  - Abb53rMMpOw
+  - HWU8vrvkjjI
+  - KlE3b78utoc
+  - eZZE9ojNfbo
+  - 0VbdIQFjWRI
+  - 2uxFKO-KUCA
+  - BhrMFrViX2A
+  - CEnCyCP3YrA
+  - Ccf5YGjnVHk
+  - DEeQw5RrDaU
+  - bKNuoz22NPw
+  - muxkdCsmuFs
+  - roRl09LO6YE
+  - zcnpdF1yk8o
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - INXD5osrkDo
+  - URYaOI4kwnk
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - 4imTQhTlj3M
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - Q-7KCRNLLzc
+  - dBSAURSwuiI
+  - kThGMgiprF4
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DXmmWBiCVfE
+  - DacqZQC3Hfc
+  - FXcYeeTZ894
+  - G7-tJmJwJU8
+  - HrcQlCBEk6k
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - UOSPAbQqhXo
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - wqYR_qdJnHw
+  - xHlhEnN60-s
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - CDDHlGRL3AI
+  - ItE7xQpkfMA
+  - Y-AYC3_DbpY
+  - d-9Eq6E1SJQ
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - n9LTJkuPHzk
+  - q9CKxBMxTlU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 64BppW4YDP4
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - XaA3qD1EAqg
+  - f0HjzspnZms
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - AYmsZCREvZE
+  - EzzHv56zDVc
+  - Fqptx5fNXR4
+  - MFkNCuG2bm0
+  - SYJu_y6WvEc
+  - Tp_cMctREZU
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - g8CYKFjUUDo
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - LyGKTFW5geU
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - TN9i9Ni0Xr4
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - e1nJeGisd1U
+  - hfi-KBG0Wz8
+  - kXV8Dgy8778
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - GYI3tTexJcQ
+  - KAhv3sXorAQ
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - ooEgWahEvEM
+  - tt_3s2gW8co
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - cQ4K399DTgI
+  - A_K8m_bw6Cg
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - CjibFMO_OHU
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - ogjsPb907Ns
+  - 5xEjH1fw2gU
+  - 6oZfhhEHXU8
+  - BSpoGCg_OkI
+  - FKcr2h7RR-g
+  - M4nSM7TBsJg
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - bOwJrqhjk2k
+  - cujcxjSm69g
+  - gPry3-OomII
+  - jdygLntd-tY
+  - lGIFTWsBXdw
+  - pA6ls-oHhX0
+  - IQwcCaAAuRc
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - nRQSfBhd7FE
+  - pJajNovFYOE
+  - t-ezOLT2Kv0
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - PgXU4btYnSY
+  - SMAB27z3x0c
+  - XItaktao2QU
+  - 716e30A053U
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - MK8sBaAHzqA
+  - moVynuxM4fc
+  - 3EJdUuHB6kY
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - D9yXpd5dyYI
+  - GCGQ8p-KsAc
+  - NjlxJeT_ATg
+  - WSd1boUwGvo
+  - eO8W1pWRJ1E
+  - eez4p7pHltg
+  - hKzL-S2aW_A
+  - lHWlTYe1_Rk
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - VWdAR4M3El4
+  - Y7MO8hGiRKI
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - MSCOpNU2-74
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - kA42BwMdw4c
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - zobOOTj9BvU
+  - 6axNjZrCXOo
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - EgK-wKAdv8E
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - bzGSxdGF8z0
+  - eMgBZ9KvLvE
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - IqXOWtwEeeM
+  - LDnfLsTMGMw
+  - MilYefF9DjI
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  - xnuurCo25lA
+  scan_costs:
+  - at: '2026-05-29T15:04:59.170625Z'
+    usd: 0.08851629000000007
+classes:
+  - name: "Foundations"
+    image_url: "https://images.pexels.com/photos/30131194/pexels-photo-30131194.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Master the fundamentals of aerial silks with safe, progressive climbs and wraps. Perfect for beginners and those building a solid foundation in apparatus technique."
+    instructor_name: "James Carter"
+    instructor_bio: "Head coach with over a decade of experience helping members of every level train smarter, move better, and stay consistent."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg"
+  - name: "Inversion & Flow"
+    image_url: "https://images.pexels.com/photos/9306115/pexels-photo-9306115.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Explore dynamic partner-based inversions and flowing sequences on silks. Build strength through playful movement exploration with trust-building partner work."
+    instructor_name: "Sarah Mitchell"
+    instructor_bio: "Performance coach focused on building strength, mobility, and confidence through approachable, well-structured sessions."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg"
+  - name: "Strength & Conditioning"
+    image_url: "https://images.pexels.com/photos/4323299/pexels-photo-4323299.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Build the grip, core, and upper body strength required for advanced silks skills. Focused conditioning work designed to progress you safely toward complex aerial maneuvers."
+    instructor_name: "Daniel Brooks"
+    instructor_bio: "Certified instructor who breaks every movement down step by step so newcomers and regulars alike feel supported."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg"
+  - name: "Restorative Silks & Mobility"
+    image_url: "https://images.pexels.com/photos/8713850/pexels-photo-8713850.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Gentle inversion and mobility work using aerial silks as a tool for stretching and relaxation. Enhance flexibility, decompress your spine, and recover mindfully."
+    instructor_name: "Maya Bennett"
+    instructor_bio: "Coach passionate about creating an inclusive, high-energy room where members from all backgrounds can thrive."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg"
+rewards:
+  - title: "Bring a friend"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+    price_label: "Free"
+    points_cost: 1000
+  - title: "Club t-shirt"
+    image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    price_label: "Free"
+    points_cost: 1500
+  - title: "Water bottle"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/4/45/Metal_Water_Bottles.jpeg"
+    price_label: "25% off"
+    points_cost: 2000
+  - title: "1-on-1 PT session"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+    price_label: "50% off"
+    points_cost: 2500

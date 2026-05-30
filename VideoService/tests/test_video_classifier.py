@@ -1,23 +1,25 @@
-"""VideoClassifier against a stubbed LLMClient — no network.
+"""VideoClassifier (pool tagging) against a stubbed LLMClient — no network.
 
-Proves the classifier feeds the brief + video into the prompt and returns the
-model's structured verdict, plus the duration formatting helper. The real LLM
-call (and its validate-and-retry) is exercised by the ported client, not here.
+Proves the tagger feeds the video content + discipline vocabulary into the
+prompt and returns the model's structured genre+disciplines verdict, plus the
+transcript/duration helpers. The real LLM call (and its validate-and-retry) is
+exercised by the ported client, not here. This pass is gym-agnostic — no brief.
 """
 
 from __future__ import annotations
 
 import asyncio
 
+from schema.gym_type import GymType
 from schema.video_classification import VideoClassification
 from schema.video_output import VideoOutput
 from schema.video_type import VideoType
-from schema.videos_config import VideosConfig
 from src.classification.video_classifier import (
     NO_TRANSCRIPT_PLACEHOLDER,
     TRANSCRIPT_CHAR_BUDGET,
     VideoClassifier,
     format_duration,
+    gym_type_vocab,
     truncate_transcript,
 )
 from src.shared.interfaces.llm_client import LLMClient, ModelT
@@ -43,14 +45,8 @@ class _StubLLM(LLMClient):
         return self._verdict  # type: ignore[return-value]
 
 
-def _brief() -> VideosConfig:
-    return VideosConfig(
-        company_name="Bangkok Muay Thai Academy",
-        type="Muay Thai gym",
-        videos_desc="Clinch and technique tutorials, elite stadium footage.",
-        avoid_desc="Cardio-kickboxing mislabeled as Muay Thai.",
-        searches=[{"query": "muay thai clinch tutorial"}],
-    )
+def _verdict() -> VideoClassification:
+    return VideoClassification(tag=VideoType.EDUCATIONAL, gym_type=[GymType.MUAY_THAI])
 
 
 def _video(*, transcript: str | None = None) -> VideoOutput:
@@ -70,37 +66,41 @@ def _video(*, transcript: str | None = None) -> VideoOutput:
 
 
 def test_classify_returns_verdict_and_passes_context() -> None:
-    verdict = VideoClassification(is_good=True, tag=VideoType.EDUCATIONAL)
+    verdict = _verdict()
     stub = _StubLLM(verdict)
     classifier = VideoClassifier(llm=stub)
 
-    result = asyncio.run(classifier.classify(_video(), _brief(), model="m"))
+    result = asyncio.run(classifier.classify(_video(), model="m"))
     assert result is verdict
     assert stub.last_model == "m"
-    # Brief + video context made it into the single user message.
     prompt = stub.last_messages[0]["content"]
-    assert "Bangkok Muay Thai Academy" in prompt
-    assert "Dominate the Muay Thai Clinch" in prompt
+    assert "Dominate the Muay Thai Clinch" in prompt  # video context
     assert "5m30s" in prompt  # formatted duration
-    assert "muay thai clinch tutorial" in prompt  # the brief's search query (intent)
+    assert "muay_thai" in prompt  # the discipline vocabulary is injected
 
 
 def test_classify_includes_transcript_when_present() -> None:
-    stub = _StubLLM(VideoClassification(is_good=True, tag=VideoType.EDUCATIONAL))
+    stub = _StubLLM(_verdict())
     classifier = VideoClassifier(llm=stub)
     asyncio.run(
-        classifier.classify(
-            _video(transcript="grab the plum, drive the knee"), _brief(), model="m"
-        )
+        classifier.classify(_video(transcript="grab the plum, drive the knee"), model="m")
     )
     assert "grab the plum, drive the knee" in stub.last_messages[0]["content"]
 
 
 def test_classify_falls_back_to_placeholder_without_transcript() -> None:
-    stub = _StubLLM(VideoClassification(is_good=True, tag=VideoType.EDUCATIONAL))
+    stub = _StubLLM(_verdict())
     classifier = VideoClassifier(llm=stub)
-    asyncio.run(classifier.classify(_video(transcript=None), _brief(), model="m"))
+    asyncio.run(classifier.classify(_video(transcript=None), model="m"))
     assert NO_TRANSCRIPT_PLACEHOLDER in stub.last_messages[0]["content"]
+
+
+def test_gym_type_vocab_lists_every_discipline() -> None:
+    vocab = gym_type_vocab()
+    # Every enum value appears, one per line, so the prompt can't drift.
+    for member in GymType:
+        assert member.value in vocab
+    assert vocab.count("\n") + 1 == len(list(GymType))
 
 
 def test_truncate_transcript() -> None:

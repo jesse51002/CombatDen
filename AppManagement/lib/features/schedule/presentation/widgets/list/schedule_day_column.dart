@@ -46,9 +46,9 @@ class _DayCards extends StatelessWidget {
           ClassCard(
             name: e.name,
             timeLabel: e.timeLabel,
-            instructorName: e.instructor.fullName,
-            instructorPhotoAsset: e.instructor.photoAsset,
-            imageAsset: e.imageAsset,
+            instructorName: e.instructorName,
+            instructorPhotoUrl: e.instructorPhotoUrl,
+            imageUrl: e.imageUrl,
             pointsWorth: e.pointsWorth,
             attendingCount: e.attendingCount,
             onTap: () =>

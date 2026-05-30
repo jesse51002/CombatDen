@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/core/selected_gym.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_details_section.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_image_banner.dart';
@@ -47,7 +48,7 @@ class ClassScreen extends StatelessWidget {
               AppTopbar(
                 mode: AppTopbarMode.nameOnly,
                 showBackButton: true,
-                gymName: gym.name,
+                gymName: selectedGym.displayName,
                 logoAsset: gym.logoAsset,
                 streakDays: gym.streakDays,
                 pointsLabel: gym.pointsLabel,

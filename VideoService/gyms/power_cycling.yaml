@@ -1,0 +1,594 @@
+gym_id: power_cycling
+gym_type:
+- power_cycling
+theme: PowerCycling
+videos:
+  specification:
+    short_videos_desc: 'Power-meter-led indoor cycling that trains by the numbers
+      — FTP testing, structured watt-target intervals, zone work and threshold sessions,
+      plus the fun side: pain-cave ride vlogs, FTP-test reaction clips, coach interviews,
+      community challenge highlights, and structured-training progress stories.'
+    short_avoid_desc: Off-topic, clickbait "gain 50 watts in a week" gimmicks, and
+      "power vs rhythm spin / which is better" or "is FTP testing pointless" debate
+      clips.
+    videos_desc: |-
+      # What we surface
+
+      Technique, training, and metric-driven content for riders who come to
+      train by the numbers — plus the fun, human side, so it's a feed members
+      enjoy, not just a how-to library.
+
+      ## Structured training & technique
+      - Follow-along sessions built around watts and heart-rate zones: FTP /
+        threshold tests, VO2 max and over-unders, sweet-spot and endurance
+        base rides
+      - How to set FTP, calibrate a power meter, read the power curve, and
+        pace an interval to a target
+      - Cadence drills, pedal-stroke efficiency, and using zones to build
+        measurable progress
+
+      ## The fun & human side
+      - Pain-cave ride vlogs and "day in the life" of structured training
+      - FTP-test reaction and attempt videos
+      - Community challenge and event highlights
+      - Coach interviews and the satisfying-progress stories that keep
+        numbers fun
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about power / metrics indoor cycling; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Calorie-bait "burn 1000 calories / melt fat fast" gimmick titles
+      - "Power cycling vs rhythm spin / which is better" cross-discipline
+        framings
+      - "Is FTP testing pointless / power meters are a waste" debate or
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, or
+      entertaining — fun content is wanted.
+  queries:
+  - FTP test indoor cycling 20 minute protocol
+  - how to set your FTP for indoor cycling
+  - power based interval workout follow along
+  - sweet spot training ride structured workout
+  - VO2 max intervals indoor cycling session
+  - threshold intervals cycling workout with targets
+  - endurance base ride zone 2 follow along
+  - how to read a power curve cycling
+  - cycling power zones explained for beginners
+  - pedal stroke technique for power on the bike
+  - 45 minute power intervals indoor cycling class
+  - heart rate vs power training cycling explained
+  - FTP test attempt and reaction vlog
+  - pain cave indoor cycling setup tour
+  - cycling coach interview on power training
+  - day in the life structured cycling training
+  - indoor cycling power challenge highlights
+  - what an FTP test is really like
+  - one year of structured cycling progress
+  - funny moments during an FTP test
+  good_video_ids:
+  - 8qLp4nA7NPc
+  - CXuq9avimC4
+  - NnFGvxDoutY
+  - WPiet-EeeUs
+  - WycElKjDNAM
+  - YipJAsAj5Kc
+  - bhlzJlio3ds
+  - dSQ81Z0n6So
+  - uXLBex9khRM
+  - v0zY5O-1XLo
+  - xmCGfE5eUrM
+  - -6DhfMJH84E
+  - 1McAzf6fQeM
+  - 6ScNxo7fhcg
+  - JAsQGn2rzmY
+  - MM4YwZvmdhs
+  - OsbUYYF3fd4
+  - RS6d5JY9_Ss
+  - SXS6kLqPYAY
+  - TO1h5fbOLAA
+  - VIaY3QHyq1E
+  - W_4LEuPmSOA
+  - io6cK1dweIs
+  - mzUMBW5De8c
+  - qGEKTZJYMdA
+  - tMumV35BZ78
+  - v1TEezdfir8
+  - wpWV4MwYaSk
+  - xfnRz4u4Cgc
+  - 4D6wSrXC__0
+  - 4bOlq3Wtqj4
+  - 71NFCzhdNWk
+  - 9roRGEqFzbA
+  - BEYpXopPxKE
+  - NDY8-lcEIHI
+  - TXsTlk4KisU
+  - UoRydALN1PM
+  - Vktqln9rm1U
+  - aI_nSzypjO4
+  - evYlPb2e308
+  - gryPYiipR5M
+  - jTpajIMZKz8
+  - lwuFoUHxHJ0
+  - mHxuCSa2upg
+  - rNGNgLA-PeA
+  - 4Ek31_3PMW4
+  - 8Jgjrpb_D2c
+  - 8xE33ltjZHw
+  - 9VkEa34PsNg
+  - FfJiKU-a3lo
+  - GwYEJ76b7cQ
+  - J9fAk04oTtA
+  - JV2nqyGCaPE
+  - P025o1s7Jo8
+  - P1j1j0ttVPU
+  - QeR2KhKz_Aw
+  - SmUrDhmBe78
+  - _DfOulVPpdM
+  - imLdIKEmZ6U
+  - q9CKxBMxTlU
+  - wBurKQX7h4Q
+  - wWHgMzpvH7c
+  - wWuI8LQ1_Xs
+  - yg5cUbsm7qY
+  - 06LGyRYiAsU
+  - 7arZTrywTjY
+  - EGprU9GtElc
+  - MR4pIQhpu9Q
+  - VBDG5Xfnu3U
+  - ffWWZFuK4vU
+  - id-F3Tyqo08
+  - o5HWRdoQoGs
+  - rahPPkqTUpk
+  - uLg6xz8WUws
+  - vyWJ6PCsjGI
+  - ytmxyIKOptI
+  - 2MvZ_7401aI
+  - I7b2bANiCL0
+  - I8P6ngXhGRY
+  - JTUxuQlS2RU
+  - RpQPwIoMOL8
+  - ScSiJYJXiy0
+  - TeVJSxQ_ATI
+  - V-HmspieYjE
+  - cM-giAjfW9w
+  - lEg2RJ8YkQw
+  - nfV1oi-cBAw
+  - pH4ISSkJ4bw
+  - rpjp0PGLalU
+  - s_jNQkalgmU
+  - vzI7WGSAA64
+  - 2oQp_ibJWME
+  - 5mDrawzYxmM
+  - Eb5Ab1gPS1w
+  - FjrVp22mmS8
+  - I_kbZS2LxQM
+  - KEWPQwf5MeY
+  - KGK1GAWeUl8
+  - LFMQqX2c_eg
+  - NQG6g5mc-mc
+  - TBvUjD5iYto
+  - aDsjMalY6bE
+  - hDsN73cQpWc
+  - mv0H9iCz8Ms
+  - ndh2LxWvwTc
+  - o8pK_lHa0W8
+  - zus6t02H8oM
+  - 8DbpBXGAB8Q
+  - Ab2HQVOyNcU
+  - Ay-7LIQGNSg
+  - BFhA56W8y1A
+  - IVEAfdHlnO4
+  - KcPeiyQihlQ
+  - On6hWy-wDT0
+  - Pfse9GxqdAE
+  - bGKNaw82JNc
+  - bqwicZO3zTo
+  - dXfF2pzrJDg
+  - i9hlBk-tNLY
+  - oifWCeMoONM
+  - tkdIDaPr-EM
+  - v7Tn3KUjEng
+  - yEoYqDzj7oA
+  - 3nddTCe0l0Y
+  - 4ZY3Qu0Ld90
+  - AiDD_aqdnK0
+  - CSJm2ThlAOc
+  - EGWIWnXEdrs
+  - KOBa3W7EaLU
+  - MNWJYPTiyjI
+  - MSQp044GUI8
+  - Mlgs4_54q8Y
+  - T05-R4PbJsI
+  - YeHSHwBXbAU
+  - cH-P8BzWw80
+  - kmXnOjjuAtM
+  - o2c_mB0sUnk
+  - uLOgVMv81PM
+  - vluJECwQOMk
+  - wAoFvHRvkCA
+  - 2TnhzZDqL8w
+  - 6snqIh6lgsE
+  - 7ISwspy0FMQ
+  - HgAvHce7UWs
+  - Ok38XaO6RII
+  - SF1BZ4p78tw
+  - ThHMNAjFwj4
+  - WFFLXRt2_qw
+  - cNCRIu_QxxQ
+  - ewrf_rCHUdA
+  - hAK7-3zdAxc
+  - iif-w7vDdMs
+  - jed4Bg1dyEI
+  - ui3-yG58SLo
+  - wPOcEj5x59w
+  - z_aiys9bT8s
+  - FrK51QARffM
+  - IglpZPEVkH4
+  - KaeEA1HI1Zg
+  - LsqcRGalNlo
+  - O5vIICKsA8g
+  - QuKEyPhRrMM
+  - SE34kwfQ6QE
+  - SV-KfCQPJJ4
+  - a1vLzLHzbgc
+  - e9H_40wePqU
+  - 1hyQxzL_CoI
+  - 1lM3tOwPYfA
+  - 3ap81sm30P8
+  - EoZUCvKK3mk
+  - Od14d1MyoOc
+  - aZ0QiiGsC4k
+  - b7YbMJWL86Y
+  - fEKKHAEg_B8
+  - kmxhVO5H-f8
+  - nXiGrgTQ8mE
+  - zywMI603gTE
+  - 0R0ARYXsM3c
+  - GUKlCQEddQ4
+  - IKhK5RQ2RXI
+  - QklBrfmChro
+  - QvS1d1JVPvY
+  - RcSOHF2YI7k
+  - WEKB9EGH20I
+  - WWmYrjOworw
+  - 5MyCNUVqlMk
+  - BjT2Zvt_RtI
+  - MQ2OEj8BL3M
+  - U6dxEY-c7yQ
+  - UxBfiFf-Pf0
+  - VmIzcR-2GAg
+  - XT7r4z0qipg
+  - dwhv4h3LKlM
+  - eHUwX1dYU8I
+  - iotN5_6qNqQ
+  - wPNSKT3hJwM
+  - GtqVK-u4QlM
+  - PKl09o_0Z3Y
+  - Pte7Jcp3IcQ
+  - a-Lyp9Eo09c
+  - aGaQCma_XkI
+  - aVPaagIbugo
+  - d4Htrm8hzjg
+  - spICoLKp4bk
+  - -XgLm0TSY-M
+  - 969hWazk4i4
+  - CYKM5wiL54c
+  - GZwGfjO7saI
+  - GcU8w5t8VfE
+  - eNyVyngn0l8
+  - ew1oXzVC-7M
+  - lJI-PvNozzw
+  - oQ22N_mzHIE
+  - zjsC3t9VzAs
+  - 2ov2Man4Zdc
+  - 9GXeraWADvw
+  - D7y2gYNHD3A
+  - EUAB7bS-dxo
+  - OGajhKIKZV0
+  - gdfun9tociQ
+  - iJPTVfGA0Bc
+  - iR9quS91C40
+  - u0w6g_yU53Q
+  - xx8jj6p9WnM
+  - 1Q-9w048TS0
+  - 5_Lhbw9lMp4
+  - DE5DYJGWDpU
+  - InA9rpK5b1E
+  - JIO9cVSugpA
+  - N8dDTyho2vM
+  - Q2mB4CihPKk
+  - bxKK6bj_Qmo
+  - eu_EHi0oXew
+  - grFUV0RVcmU
+  - hszvQi5ODuQ
+  - qLAv-ekvbNk
+  - vDKnTjpccf4
+  - xp8b4NVmlgc
+  - 84XYHtU3qVo
+  - AikvKEt6b3E
+  - Aze4zkaQRlo
+  - B_VHgiFZZaw
+  - I3LR0nR_gkw
+  - Pln_nGVk7Js
+  - SITaF68sIVc
+  - SoRw4HDfxEQ
+  - bzGSxdGF8z0
+  - g3ZdqBdyoU8
+  - hzK35U_GGm4
+  - lXIEeT9AqjE
+  - r1ae7fHpvgw
+  - wTu7Zq1wnng
+  - --mOWKDgy8A
+  - 4NK_fGBrbV4
+  - 5tgKxxOUOgU
+  - ClgAYjvqP_s
+  - F6NXPYRr-EE
+  - GzXkaTUcR24
+  - I6bOkHN6OF0
+  - szEnd4ca3QM
+  - u5COdcb6M7w
+  - ytzTumKutZo
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 0MLnC3bzXgQ
+  - 1caaQcA4qF8
+  - AjGZw1XdjBA
+  - INXD5osrkDo
+  - ImI63BUUPwU
+  - _nLBmurO2-0
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - ogfLJoujY9U
+  - sy11C-XJdDI
+  - 0L9BYzo98FA
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - D_AvOKr8ncE
+  - KJBlo6X4Mm4
+  - Q-7KCRNLLzc
+  - kThGMgiprF4
+  - zsigGSz6WZk
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - ET2Q4J0MT70
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - qmf9JKZRtzA
+  - sKD_0HLtIM0
+  - vXMQqd3Jdvc
+  - z6k8wXfwS94
+  - zG-UCwdyN2w
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - HiSZ0D5GlGU
+  - ItE7xQpkfMA
+  - UNqAsbupP6o
+  - Y-AYC3_DbpY
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - wd6dkj6p3lM
+  - 2dDuSLsImcs
+  - 2lQbERRLWuU
+  - 7GvMyG_L-tI
+  - 8gS8dozEbPA
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - Q3Zom7cLkQU
+  - XaA3qD1EAqg
+  - apUsChxjnkI
+  - mS_yuOfyNIM
+  - udhRFATkN44
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 4VrwO-RdMds
+  - Oskx1r3_xlA
+  - SYJu_y6WvEc
+  - T4N2DtBTfoA
+  - VPYKFLwRqtU
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - ZTDA0i7rWns
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - P1BWUKms9Uc
+  - QmL8ueGp63M
+  - TN9i9Ni0Xr4
+  - VeHusvcdTM0
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - mLTqcadk8Bw
+  - uc-JY42QMoI
+  - v7-h_w7bJrU
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - NHe8HgMRIfg
+  - SgXij9Aez3o
+  - VikuYpj5rmo
+  - clr_xzWBoMw
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - v9JQokYUoMk
+  - w4sZQAky1Zw
+  - -VJ6jNxq7RU
+  - HWAOifKGLiE
+  - cQ4K399DTgI
+  - ufptzBr7r4I
+  - 5fzTBTfWJ20
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - gdJYRWx9g6w
+  - jAYaLDjmVt8
+  - vSSkDos2hzo
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - UNf2qsX8uFc
+  - VQy3xI3g2po
+  - WfW6m5hukOo
+  - cujcxjSm69g
+  - gPry3-OomII
+  - hOHFvM813vM
+  - pA6ls-oHhX0
+  - -yp3g7EeDqo
+  - IQwcCaAAuRc
+  - KOevOXrOIfg
+  - PHReR7tC_tw
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - u1UNSANB-po
+  - 5ZK50rIFyL4
+  - AL5HDsXTUyI
+  - AsyyZgtHMPw
+  - JQaeGoQox0k
+  - SMAB27z3x0c
+  - 716e30A053U
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - lW0_00jQ52A
+  - r8Qv9to8-bA
+  - tJeI51crrvs
+  - yBC5WYxeQ6Y
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - RFOdxztM01Y
+  - an7tAQTRqLU
+  - g5Y0hfn2CrM
+  - moVynuxM4fc
+  - mrKzvcfKKT4
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - GKoLdOTdtac
+  - NjlxJeT_ATg
+  - Rvs2y6NHcIg
+  - YogZubKl4sw
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - vIG9SbQbqhM
+  - 0AGWwN20pG4
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - Q0CwNpMmUfY
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - Q_IVqDwG1fU
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - f5aUx1KvSF0
+  - foGlgwWk76I
+  - ibtoYyhbhts
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - KTvW8Frskak
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - IqXOWtwEeeM
+  - MilYefF9DjI
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:29:52.623329Z'
+    usd: 0.16188080000000404
+classes:
+- name: Threshold Push
+  image_url: https://images.pexels.com/photos/264084/pexels-photo-264084.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Test your limits in structured threshold intervals designed to build
+    your highest sustainable power. High intensity, real results.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Zone 2 Endurance
+  image_url: https://images.pexels.com/photos/4162595/pexels-photo-4162595.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build your aerobic base with steady zone 2 work. The boring is powerful
+    — consistency wins long-term gains.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: VO2 Shred
+  image_url: https://images.pexels.com/photos/5851030/pexels-photo-5851030.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Short, sharp VO2 max repeats at high intensity. Breathless sprints
+    that unlock new power ceilings.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: FTP Fundamentals
+  image_url: https://images.pexels.com/photos/26655637/pexels-photo-26655637.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Learn to test, interpret, and train by your FTP. Perfect for riders
+    ready to go from feel-based to power-based training.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Cycling shoes
+  image_url: https://upload.wikimedia.org/wikipedia/commons/4/4d/Paar_wielerschoenen%2C_S-Phyre%2C_Annemiek_Van_Vleuten%2C_2020_-_overzicht-1_%28WU3762_-_collectie_KOERS._Museum_van_de_Wielersport%29.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

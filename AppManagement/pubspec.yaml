@@ -37,8 +37,10 @@ dependencies:
   google_fonts: ^8.1.0
   material_symbols_icons: ^4.2928.1
   http: ^1.6.0
-  customization_engine:
-    path: ../CustomizationEngine
+  theme_flutter:
+    path: ../ThemeService/ThemeFlutter
+  scrollable_positioned_list: ^0.3.8
+  flutter_markdown_plus: ^1.0.7
 
 dev_dependencies:
   flutter_test:

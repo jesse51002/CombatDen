@@ -1,0 +1,451 @@
+gym_id: lagree_megaformer
+gym_type:
+- lagree_megaformer
+theme: MegaformerLagree
+videos:
+  specification:
+    short_videos_desc: 'Lagree-method Megaformer training — slow, controlled, high-intensity
+      tempo under heavy spring load, with the signature moves and time-under-tension
+      that define the burn — plus the enjoyable side: instructor vlogs and "day in
+      the life", studio behind-the-scenes, what a Megaformer class is really like,
+      the relatable shake, aesthetic class edits, transformations, and interviews.'
+    short_avoid_desc: No classical/contemporary reformer pilates mislabeled as Lagree,
+      fast bouncy reps that break the slow controlled tempo, or "shred fat in X days"
+      clickbait. Skip "Lagree vs pilates / vs reformer which is better" framings and
+      "Lagree is overrated/a scam" debate clips. (Fun vlogs, studio tours, class edits,
+      and interviews are welcome.)
+    videos_desc: |-
+      # What we surface
+
+      Lagree-method Megaformer instruction for grown-up athletes — plus the fun,
+      human side, so it's a feed members enjoy, not just a how-to library.
+
+      ## Technique & class content
+      - Full-length Megaformer classes and follow-along sessions
+      - Single-move technique breakdowns: catfish, wheelbarrow, bear, scrambled
+        eggs, mega-plank, lunges, teaser
+      - Form corrections and spring-load adjustment coaching from certified
+        Lagree instructors
+      - Slow, deliberate tempo and time-under-tension guidance; no-rest
+        transitions that keep the muscle under fire
+
+      ## The fun & human side
+      - Instructor vlogs and "day in the life" content
+      - Studio behind-the-scenes and "what a Megaformer class is really like"
+      - The relatable mid-set shake and class humour
+      - Aesthetic class edits and before/after transformation stories
+      - "30 days of Lagree" challenges and instructor interviews on the method
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about Lagree / Megaformer training; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Classical or contemporary reformer pilates mislabeled as Lagree
+      - Fast bouncy or jerky reps that break the slow controlled tempo
+      - Generic "core / HIIT burner" workouts dressed up as Megaformer
+      - Clickbait ("shred fat in 7 days", "snatched in 2 weeks"), scams, and
+        misinformation
+      - "Lagree vs pilates / vs reformer which is better" cross-method framings
+      - "Lagree is overrated / a scam" debate or reaction rage-bait
+
+      ## Keep in mind
+      A video is not rejected just for being short, a vlog, a clip, a class
+      edit, or entertaining — fun and creator content is wanted.
+  queries:
+  - lagree megaformer full class follow along
+  - lagree method technique breakdown
+  - megaformer beginner class tutorial
+  - lagree slow tempo time under tension explained
+  - catfish exercise megaformer tutorial
+  - wheelbarrow lagree move technique
+  - bear and scrambled eggs lagree tutorial
+  - mega plank technique megaformer
+  - lagree spring load settings explained
+  - megaformer lunge series tutorial
+  - lagree megaformer common form mistakes
+  - day in the life of a lagree instructor
+  - what a megaformer class is really like
+  - lagree studio behind the scenes
+  - 30 days of lagree transformation results
+  - the lagree shake relatable funny moments
+  - aesthetic megaformer class edit
+  - first lagree class honest review vlog
+  - lagree before and after transformation story
+  - lagree instructor interview on the method
+  good_video_ids:
+  - A1kkw4dT5ho
+  - CLga2_TJ00U
+  - GX6Dt15x76M
+  - HN34nV9Z0wE
+  - PhJQh4xlmsI
+  - Qrg7Ksi2AOM
+  - ZS4QrBm-eKQ
+  - b_62EukOy68
+  - -Et6xw8bv7U
+  - -dgi-33MfC8
+  - 3W0eSXvjP-c
+  - 5FtWhI_24MY
+  - 7fRnA1q6x1Q
+  - T2pqeJRzlPk
+  - _azo3FjbhUE
+  - nfgKMbwVm6g
+  - q5ou18AB6yQ
+  - DUE9VCHeLPA
+  - GHZQPeUQ3aU
+  - KaO8faSPEOA
+  - jf1Xacn_WBM
+  - vnHMEQLKMog
+  - zWiu8fUP4IE
+  - 1hPxYZE9PgE
+  - 7gttgNz3Rfg
+  - 9r1pJcGnsEU
+  - BKgA9o3XxyY
+  - G5nusi89Xpo
+  - L2JdM3wzdxQ
+  - VikqCo-4-O8
+  - swfLl6DgCBU
+  - wi0VC70X-6g
+  - z61U3ubcCbw
+  - 48260Hxx7LU
+  - GcM0D2uFDko
+  - mlmfUg42V8Q
+  - nbLcCF2bVX0
+  - u9BlbMc9GXw
+  - xKW8ZNHmBBQ
+  - 4qwpPOpXrjU
+  - 8DC_9QtRGU4
+  - DeYMzt7YK4Y
+  - QWAblmyoSO0
+  - T3AIgzr2i9M
+  - heVHr3V7XAY
+  - kllFIsIqIzc
+  - wgYcAjoTLMI
+  - 2XnhySw4SnA
+  - DJp5OOIp3MA
+  - PzjCg4O7vl0
+  - a3sMYO9pKhk
+  - b0TsPl0yhnI
+  - fVYAqFeDMj4
+  - gT5fnLxrmDw
+  - hG5O9tSlzfE
+  - rflBQSJ3fi4
+  - -4Ix9nyziaY
+  - 3ONb6S8JRz4
+  - H-XhIEjCoEk
+  - WjDGWD-maA8
+  - aBT_-Wet83Y
+  - e9JmH5uOo_w
+  - gvjubNDr3EE
+  - iq9oDlJBrKs
+  - 9vDMS5s3KVY
+  - FBmTw1wHYxE
+  - Kzy89o7KGOU
+  - sBFIYIxatCM
+  - vm6ZoKRLGh8
+  - wUtfpdb9SaY
+  - GqynXwU13eA
+  - ImePsCf-HPg
+  - Ja3bX9yhsjc
+  - NcsL8yP1MLA
+  - UB5DAYatMHY
+  - biTf26pj1oM
+  - lmQ4yrFwpLI
+  - shKLCnwObtA
+  - soE33DS_vkw
+  - -RySnFMVbFY
+  - 3tZlvIACa9w
+  - 9QKzURAM8Y4
+  - H25UHT2payQ
+  - vgx2SrUzIk4
+  - -32XnpOfQUQ
+  - HlcDs3YoSzs
+  - OiTRRbLRehY
+  - aFxz4Jvx0Kk
+  - lh9E8RwM1Gw
+  - n5clbx4qI7g
+  - wcnxGuCM_-A
+  - J4Vqx6vm7Ms
+  - PFr8IHlijEw
+  - f52z3ELrofY
+  - fODfzQLY7kA
+  - g9ibSGIs4Ao
+  - wAGWJvpuhrE
+  - -PNHSFaMGNw
+  - 6_LsZ2DCPn4
+  - R6rCe9TjAPQ
+  - TL8ETIcudwE
+  - wCwel6FrzRo
+  - 23biK52wFRE
+  - 6eDZ3WerkdA
+  - 9GHxEuCJ0L0
+  - IT552e83UQk
+  - LUivUdEVVGg
+  - VXLTlUjd1qk
+  - n2cGZlLb_A0
+  - LQqn-tWqAp8
+  - hahX90_7sNw
+  - 4X46paI6MFY
+  - LVdwDDBSZDs
+  - W5pwsdNL8jw
+  - YDzBxCfcSmI
+  - cXzuAMR_un4
+  - efWZaxEsjEY
+  - 0bCJusY-Wlk
+  - 7iiBRST8CKw
+  - c7O0jCeXiPs
+  - fzoe75M-GHk
+  - sPypNblGhlA
+  - 3D-03IYuB08
+  - 4a1zkmiALQU
+  - Pa2VujIsh_8
+  - misFYDj97P4
+  - v_03J1Qnd-A
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - INXD5osrkDo
+  - IgJFr3-W-dE
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - yfv9RZRC4pk
+  - 6CwzyELSPDU
+  - 6mT9MG2Tq2Q
+  - 7JYF44bb5_k
+  - 8xEcjoqiiXw
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - Ne8yvlyiO-s
+  - Q-7KCRNLLzc
+  - kThGMgiprF4
+  - nsP3zmX6HSk
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - L_7ErRD6lr8
+  - PJOjY0tKzrs
+  - PPEz1_UPGjg
+  - Q4pBYLcn_7c
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - TzBBZMATWWM
+  - _pM2cUyrfCA
+  - aWadQMEngCA
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - AzMiLVIF_E4
+  - DEkSBn1pKws
+  - DiARAK3Z5DE
+  - ItE7xQpkfMA
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 6IcYWpJ1xes
+  - 6TjXPRkXx9c
+  - BK2HdRp4Oo0
+  - Bup2nLNJsL0
+  - Cq_Nuo8ilak
+  - FQEBVY-pjOw
+  - Sbiqni-nJsk
+  - XaA3qD1EAqg
+  - di8QaNIXR1E
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - yz438beqfe8
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - FhCfY_SJPIA
+  - G6Ldhhox680
+  - SYJu_y6WvEc
+  - YXzzuLcmE_o
+  - ayYuDl_vDME
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - BdWvP-lbb68
+  - KMliGnl7uVo
+  - TN9i9Ni0Xr4
+  - YNHMNVLwy9c
+  - _Gn_z8vF1KA
+  - _J1vKIXj6JA
+  - mLTqcadk8Bw
+  - uKqB5cruu4U
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - Pfse9GxqdAE
+  - g9Er55uc7UM
+  - lvokR_VO8vY
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - 4aIbE91q9AQ
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - SNzl8yif-Ds
+  - cQ4K399DTgI
+  - cTKtjxWhrEk
+  - clD9Yd_Mi4c
+  - qL7Nlexje-M
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - Z414HcUphI0
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - nkLGN9bsktc
+  - r_VHltdyvv4
+  - 6oZfhhEHXU8
+  - AyMUWBUt3WY
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - M4nSM7TBsJg
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - ZVsG8YqdoTA
+  - cq8kvBxthHk
+  - cujcxjSm69g
+  - pA6ls-oHhX0
+  - y33_gi6AJmU
+  - HxinudNFXmw
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - mYIkdePO80Y
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - _-NZ6_Al-6A
+  - froSxJ3T6jE
+  - 716e30A053U
+  - CBnLOlVT4yQ
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - Pa2s7J6Q03o
+  - RwptY-mnf3Y
+  - WprPdJKfaGk
+  - Z8qu2Z5Cfa8
+  - ezOsco9legc
+  - hRoLUTJ4bxs
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - W5vEFqgEfR8
+  - moVynuxM4fc
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 8MfFCFro9YM
+  - 9TzHTKBiy68
+  - LBOFE-DWrD8
+  - Xvihq3BUrIU
+  - eO8W1pWRJ1E
+  - l6SsWCefRhM
+  - 7d2EnR5mS74
+  - 8ajO440Ss0g
+  - Bd4gxNpbJGE
+  - DVgnScnApkg
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - KF3D-Q0C6-c
+  - P6iV-1KBY_k
+  - R69viyjnTbM
+  - RUyOCkLXabA
+  - h9_fV6l3vdE
+  - jdo843M-oCo
+  - p5D-MQxkghM
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - qaz3IBaXtAU
+  - rfGi8W9j9gQ
+  - 0O9bmFhtrHY
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - gyFRstjdf2A
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - 1PwPmY9abdw
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - QwUbqF5HAK0
+  - cnjVc1ctzYs
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:01:04.037832Z'
+    usd: 0.09038501999998694
+classes:
+- name: Burn & Spring
+  image_url: https://images.pexels.com/photos/25599825/pexels-photo-25599825.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master spring-load resistance and time-under-tension techniques with
+    controlled, deliberate movements designed to maximize muscle engagement on the
+    Megaformer.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Power Teaser
+  image_url: https://images.pexels.com/photos/18136885/pexels-photo-18136885.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build explosive core strength through signature Lagree moves like catfish,
+    wheelbarrow, and teaser, focusing on advanced tempo and no-rest transitions.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Glute & Lunge Blitz
+  image_url: https://images.pexels.com/photos/18136886/pexels-photo-18136886.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Target lower-body endurance through the Lagree lunge series and hip-focused
+    exercises, combining controlled tempo with high-intensity spring resistance.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Full-Body Megaburn
+  image_url: https://images.pexels.com/photos/18136888/pexels-photo-18136888.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Complete full-body conditioning hitting every muscle group from bear
+    crawls to mega-plank holds, mastering the foundational moves and building unshakeable
+    fitness.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Grip socks
+  image_url: https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

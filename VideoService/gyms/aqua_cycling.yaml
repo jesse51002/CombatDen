@@ -1,0 +1,364 @@
+gym_id: aqua_cycling
+gym_type:
+- aqua_cycling
+theme: AquaCycling
+videos:
+  specification:
+    short_videos_desc: 'Aqua cycling (aquabike) content — pool-based spin classes
+      on submerged bikes, how water resistance shapes the workout, bike setup and
+      form in the pool, plus the fun side: "what an aqua cycling class is really like",
+      poolside studio vlogs and behind-the-scenes, instructor vibes, funny class moments,
+      transformation stories, and instructor interviews.'
+    short_avoid_desc: Off-topic, clickbait "slim down in the pool in 7 days" gimmicks,
+      and "aqua cycling vs spin / aqua bike vs swimming which is better" or "is aqua
+      cycling a real workout" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Aqua cycling content for people who want real cardio without the joint
+      impact — plus the fun, human side of the studio, so it's a feed members
+      enjoy, not just a how-to library.
+
+      ## Classes & technique
+      - Pool-based spin / aquabike classes on submerged bikes
+      - How water resistance changes the workout
+      - Bike setup and positioning in the pool
+      - Pedalling cadence and form
+      - The upper-body and core moves aqua instructors add in the water
+      - Low-impact benefits for joints, rehab and recovery
+      - Beginner first-class walkthroughs and what to expect from a session
+
+      ## The fun & human side
+      - "What an aqua cycling class is really like"
+      - Poolside studio vlogs and behind-the-scenes
+      - Instructor vibes and playlists
+      - Relatable class humour
+      - Transformation stories and instructor interviews
+
+      A bright, novel, poolside crossover for everyone from joint-surgery
+      recovery to triathletes.
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about aqua cycling / aquabike; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Land-based indoor cycling / spin classes
+      - General swimming, water-aerobics or aqua-zumba content that isn't on a
+        pool bike (this is bike-in-the-water cycling)
+      - Calorie-bait "burn 1000 calories / melt fat fast" gimmick titles
+      - "Aqua cycling vs spin / aqua bike vs swimming which is better"
+        cross-discipline framings
+      - "Is aqua cycling a real workout / aquabike does nothing" debate or
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a clip, a highlight, or
+      entertaining — fun content is wanted.
+  queries:
+  - aqua cycling class what to expect
+  - aquabike pool cycling workout explained
+  - how aqua cycling works water resistance
+  - aqua spin class beginners introduction
+  - how to set up an aqua cycling bike in the pool
+  - aqua cycling form and pedalling technique
+  - low impact aqua cycling for joint pain
+  - aqua cycling for rehab and recovery
+  - aquabike upper body and core moves in the pool
+  - benefits of aqua cycling explained
+  - what an aqua cycling class is really like
+  - aqua cycling studio behind the scenes
+  - instructor vibes aqua cycling class
+  - funny aqua cycling class moments
+  - aqua cycling transformation story
+  - aqua cycling for triathletes cross training
+  - beginner aquabike class follow along
+  - what to wear for an aqua cycling class
+  - aqua cycling instructor interview on coaching
+  - day in the life aqua cycling instructor
+  good_video_ids:
+  - KRTHQOOntvE
+  - nTmVuA68Lpw
+  - 0mJGecBLEi4
+  - NQhAQS79h0o
+  - QlZTxZofZBM
+  - rl4zYmrPgws
+  - zn2JDmCcsEY
+  - KW0XgqE8NM8
+  - yxDly0VHvF4
+  - mGroYzq078M
+  - oa-RA6T_9gk
+  - E5pToygpHjg
+  - M71Zl12VZZs
+  - ZCGokhrwiC4
+  - cVO8DE_1sZo
+  - f3dR46gCKfI
+  - Fy2FVE14pO0
+  - dUbXxGotZ7Q
+  - Fn8B8v50HV4
+  - NKLDUoU9PY0
+  - wL9te9J60zY
+  - n074JenlzgI
+  - 3_RgNAhXpvQ
+  - G54CvJa_HAY
+  - SGiKUGIQZKc
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - INXD5osrkDo
+  - ImI63BUUPwU
+  - PDfzOY9A2hE
+  - WycElKjDNAM
+  - gT6OkjTDcYc
+  - hLntTqJ0WFg
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - sy11C-XJdDI
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - D_AvOKr8ncE
+  - KJBlo6X4Mm4
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - kThGMgiprF4
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - ET2Q4J0MT70
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - UdffZatW-jo
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - jyA-Q7j2UOs
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - vWZHlWDDCQE
+  - z6k8wXfwS94
+  - zG-UCwdyN2w
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - ItE7xQpkfMA
+  - KkHKd_vy4ms
+  - Y-AYC3_DbpY
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - MR4pIQhpu9Q
+  - XaA3qD1EAqg
+  - mS_yuOfyNIM
+  - n5zxKSQ7mOQ
+  - udhRFATkN44
+  - v6B9zgvkos0
+  - wZ9UpsEzx38
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - JEsZo3aRo50
+  - SYJu_y6WvEc
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - cM-giAjfW9w
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - uSesfy4rCFk
+  - vuuqoMs162A
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - QmL8ueGp63M
+  - SHC3zO6w9x4
+  - TN9i9Ni0Xr4
+  - VeHusvcdTM0
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - mLTqcadk8Bw
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - IVEAfdHlnO4
+  - KcPeiyQihlQ
+  - Pfse9GxqdAE
+  - QvzgX9C1LqM
+  - VikuYpj5rmo
+  - clr_xzWBoMw
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 2m5imW2CDYw
+  - ChQaqJx4CTU
+  - EGWIWnXEdrs
+  - HWAOifKGLiE
+  - JGly9i0AVVs
+  - Klk2Y40_Ulg
+  - Mlgs4_54q8Y
+  - cQ4K399DTgI
+  - 5fzTBTfWJ20
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - SF1BZ4p78tw
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - gdJYRWx9g6w
+  - vSSkDos2hzo
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - GakD2BtPdl0
+  - I5q_-qNM28U
+  - SV-KfCQPJJ4
+  - UNf2qsX8uFc
+  - cujcxjSm69g
+  - gPry3-OomII
+  - mlvBaix31Jo
+  - pA6ls-oHhX0
+  - -yp3g7EeDqo
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - hqltBKQa4Is
+  - iSoGxbqkzKw
+  - nRQSfBhd7FE
+  - rGETkKKJ3LM
+  - t-ezOLT2Kv0
+  - 5ZK50rIFyL4
+  - AL5HDsXTUyI
+  - AsyyZgtHMPw
+  - JQaeGoQox0k
+  - SMAB27z3x0c
+  - SpS9Wt9F7pI
+  - WEKB9EGH20I
+  - 716e30A053U
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - lW0_00jQ52A
+  - pA3a-unV9ag
+  - tJeI51crrvs
+  - xEInOjxE1eU
+  - EiTJBa8RpWI
+  - JKxmVGEWwts
+  - KxV8I_YyiaY
+  - moVynuxM4fc
+  - mrKzvcfKKT4
+  - vIXKRg34aZw
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - LBOFE-DWrD8
+  - NjlxJeT_ATg
+  - YogZubKl4sw
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - vIG9SbQbqhM
+  - xaMbvaLk0KY
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - qHdH8jLjpeQ
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 1Q-9w048TS0
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - 9k9nhbqA6Ao
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - -WQEBuRLX2A
+  - 0O9bmFhtrHY
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - KTvW8Frskak
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - bzGSxdGF8z0
+  - kgvvZEsHlrg
+  - qgWn-85iFJk
+  - sLYw8VdVGbw
+  - w8wFlrhoRzc
+  - -GCA92b119Y
+  - 5tgKxxOUOgU
+  - 8mcoT6jTiZs
+  - IqXOWtwEeeM
+  - MilYefF9DjI
+  - Mjo3jWLdvIk
+  - ZFcdVVy2DX8
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T15:08:36.052011Z'
+    usd: 0.06315202999999964
+classes:
+  - name: "Wave Rider"
+    image_url: "https://images.pexels.com/photos/264084/pexels-photo-264084.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "High-energy interval class set to pumping music that builds power and cardiovascular endurance in the water. Expect intense sprints, climbs, and the kind of energy that makes time fly."
+    instructor_name: "James Carter"
+    instructor_bio: "Head coach with over a decade of experience helping members of every level train smarter, move better, and stay consistent."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg"
+  - name: "Aqua Flow"
+    image_url: "https://images.pexels.com/photos/4162595/pexels-photo-4162595.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Technical endurance class focused on proper form, cadence control, and sustainable pacing in the water. Learn how to ride smarter, not just harder, with personalized form correction."
+    instructor_name: "Sarah Mitchell"
+    instructor_bio: "Performance coach focused on building strength, mobility, and confidence through approachable, well-structured sessions."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg"
+  - name: "Splash Sprint"
+    image_url: "https://images.pexels.com/photos/5851030/pexels-photo-5851030.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Structured interval training alternating between intense bursts and recovery periods. Perfect for building explosive power and training the anaerobic system in a low-impact environment."
+    instructor_name: "Daniel Brooks"
+    instructor_bio: "Certified instructor who breaks every movement down step by step so newcomers and regulars alike feel supported."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg"
+  - name: "Dive Deep"
+    image_url: "https://images.pexels.com/photos/26655637/pexels-photo-26655637.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Beginner-friendly fundamentals class covering bike setup, seat positioning, water safety, and proper pedalling technique. Build confidence and lay a strong foundation for your aqua cycling journey."
+    instructor_name: "Maya Bennett"
+    instructor_bio: "Coach passionate about creating an inclusive, high-energy room where members from all backgrounds can thrive."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg"
+rewards:
+  - title: "Bring a friend"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+    price_label: "Free"
+    points_cost: 1000
+  - title: "Club t-shirt"
+    image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    price_label: "Free"
+    points_cost: 1500
+  - title: "Cycling shoes"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/4/4d/Paar_wielerschoenen%2C_S-Phyre%2C_Annemiek_Van_Vleuten%2C_2020_-_overzicht-1_%28WU3762_-_collectie_KOERS._Museum_van_de_Wielersport%29.jpg"
+    price_label: "25% off"
+    points_cost: 2000
+  - title: "1-on-1 PT session"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+    price_label: "50% off"
+    points_cost: 2500

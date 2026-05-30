@@ -1,0 +1,542 @@
+gym_id: prenatal_pilates
+gym_type:
+- prenatal_pilates
+theme: PrePostnatalPilates
+videos:
+  specification:
+    short_videos_desc: 'Pre and postnatal pilates kept safe for pregnancy and recovery
+      — trimester-safe modifications, pelvic floor and deep-core work, and gentle
+      postnatal rebuild (diastasis-aware) — plus the enjoyable side: instructor and
+      pregnant-mum vlogs and "day in the life", studio behind-the-scenes, what a prenatal
+      class is really like, honest postnatal recovery-journey stories, and interviews.'
+    short_avoid_desc: No general pilates with no pregnancy modifications, contraindicated
+      moves (deep flexion/crunches, supine after first trimester, breath-holding),
+      or "bounce back / lose the baby weight in X days" clickbait. Skip "pilates vs
+      prenatal yoga" framings and "prenatal exercise is unsafe / pointless" debate
+      clips. (Fun vlogs, studio tours, class edits, and interviews are welcome.)
+    videos_desc: |-
+      # What we surface
+
+      Pre and postnatal pilates instruction for members training through pregnancy
+      and rebuilding after birth — plus the fun, human side, so it's a feed
+      members enjoy, not just a how-to library.
+
+      ## Technique & classes
+      - Trimester-by-trimester safe modifications and progression guidance
+      - Pelvic-floor and deep transverse-core work, breath, posture, and
+        hip/back relief for the changing body
+      - Careful postnatal return that is diastasis-recti aware: pelvic-floor
+        reconnection, core knitting, and gradual strength rebuild
+      - Which moves to modify or avoid as pregnancy progresses (no deep
+        flexion / crunches, no supine work past the first trimester), props
+        for support, and how to progress safely
+      - Full-length follow-along prenatal and postnatal mat classes and
+        technique breakdowns from credible prenatal-trained and clinically
+        literate teachers
+
+      ## The fun & human side
+      - Instructor and pregnant-mum vlogs and "day in the life"
+      - Studio behind-the-scenes and "what a prenatal pilates class is really like"
+      - Relatable pregnancy and new-mum humour and class moments
+      - Honest postnatal recovery-journey stories
+      - Prenatal-teacher interviews on training safely
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about pre/postnatal pilates; off-topic, genuinely low-quality,
+      or clickbait videos.
+
+      ## Reject
+      - General pilates classes with no pregnancy modifications
+      - Content showing contraindicated moves for pregnancy (deep spinal
+        flexion / full crunches, prolonged supine work after the first
+        trimester, intense ab-isolation, breath-holding)
+      - Uncredentialed advice that ignores safety
+      - Clickbait ("bounce back in 7 days", "lose the baby weight in 2 weeks",
+        "get your pre-baby body back fast"), scams and misinformation
+      - "Pilates vs prenatal yoga / which is better" cross-discipline framings
+      - "Prenatal exercise is unsafe / pointless" debate or reaction rage-bait
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, class edit, or
+      entertaining — fun and creator content is wanted.
+  queries:
+  - prenatal pilates full class follow along
+  - pregnancy safe pilates workout
+  - first trimester pilates class
+  - second trimester pilates modifications
+  - third trimester pilates safe class
+  - prenatal pilates pelvic floor exercises
+  - prenatal pilates for back and hip pain relief
+  - pilates moves to avoid during pregnancy
+  - postnatal pilates diastasis recti safe exercises
+  - postnatal pilates gradual return to exercise
+  - prenatal pilates instructor safety tips
+  - day in the life of a prenatal pilates instructor
+  - what a prenatal pilates class is really like
+  - prenatal pilates studio behind the scenes
+  - pregnant mum pilates routine vlog
+  - relatable pregnancy workout moments funny
+  - aesthetic prenatal pilates class edit
+  - honest postnatal pilates recovery journey story
+  - new mum getting back to pilates vlog
+  - prenatal pilates teacher interview on safety
+  good_video_ids:
+  - 26NPMmROB2Q
+  - 381vixe9lxA
+  - 4CQR-We-BXY
+  - AqAZpLoGa3Y
+  - C7US9CLIg70
+  - Ic9M_rdWLyg
+  - OqGgxx7HJNg
+  - c_yYwKDzVVI
+  - lJpWD-QMPtw
+  - mrjObpvJVSI
+  - pYyddjN0JSg
+  - uc7EdaYWs0s
+  - vcNcwwXcvRg
+  - 0mCvtuG_4Og
+  - 13dKKmf7MQQ
+  - 3RsTPpEp88o
+  - XLKVB7Cvp8I
+  - Z4VjfSWZJQs
+  - _NuvqZG2bDI
+  - _O2lKiqkZmw
+  - gD_g7pSZg90
+  - sd511uts95U
+  - xnTUuhtdWsI
+  - 2EhXLcjcUQE
+  - 2mjc6AdpPpw
+  - 7BQKggpZRxI
+  - BcVOmKUhxnQ
+  - CVwMDg6TLiE
+  - ILYBjg8kdDg
+  - RnSy8ZLwHnw
+  - fLzN_zugyE0
+  - iN6z471tS8o
+  - kTgvTMjPdYY
+  - r49dRuLl9Gs
+  - tYbDHLYrlbc
+  - uyFqgK5U03c
+  - xI82OUlb-T0
+  - zmPAAEAbTiE
+  - -pPiBJvuwFA
+  - 3d4IQuQSjW4
+  - KEDkZzCPqnQ
+  - N4OwU0O7uDI
+  - PpV7K8m_uEk
+  - Yh4f3jHgaJI
+  - jJ_n57etU6c
+  - lokn0miZSV8
+  - q3VpbfTcBGo
+  - qkhLev3bKd0
+  - qlzP9QyUckY
+  - -jtcA7ZjTAU
+  - 0-xHoP9OZY4
+  - 1E2WEsXqVTE
+  - 2mkR5LPhOC4
+  - Ia6dNwVs1M8
+  - p4BP4CU4_8M
+  - yxIASueS9Ng
+  - 8o7RaLzr7Jc
+  - NZNwQ7t9l7g
+  - SYJu_y6WvEc
+  - Sas9eBPTYBI
+  - ZLvv1gPxk8A
+  - ZcNkBh3Pvjc
+  - aTOAdXjmdd4
+  - kv37yff2rME
+  - qn_hUX_QP7I
+  - wPgq-mNjgTA
+  - 64Xkmp7JZKo
+  - D2d7zi6ya58
+  - Kdo5X6n-YF0
+  - aShLpWZP-jc
+  - bWdiFVKW2jo
+  - orWnsnq6nQA
+  - 5iX6ecbz8XE
+  - Atmhf2XHZGs
+  - DrnpHbICylI
+  - JyYKWl2eIPo
+  - RydxPfrOLig
+  - ZdDKj1hoYmM
+  - _kDF7vZWMoQ
+  - aEaQwy4hYLo
+  - joyTsogpk2Q
+  - kg4IwKQKIZM
+  - xmPKAlvZvhY
+  - zCwU4Hgas14
+  - GxEhphkKGi0
+  - V5LMXgBF0PA
+  - VY0GMqZwVD8
+  - ijl9qspF1fg
+  - jyyAoBWb3II
+  - qExDdsc4lcQ
+  - rdtqKP-qRlw
+  - ry2cydyNnn4
+  - ty1A2WAV7dA
+  - 7OtDqPNeYLg
+  - APm6g65q0x0
+  - EoG-SFBAObk
+  - TOkoyBRXbyo
+  - bKtdCS-7Scg
+  - dXoQvLUShQA
+  - lae1ENagN9o
+  - rEkP3PJW5RA
+  - xCrMlgrs0JY
+  - IZ8JLsIqXvE
+  - IphJLf3COkU
+  - rlIWq-kwYVw
+  - sMHgdGv7Lz0
+  - 66mQEB-mIDA
+  - SxNAFFM5aKQ
+  - hWypBMC11bc
+  - kR4i6uK1BQ0
+  - As1UlhYVK9I
+  - KXTKsMh6pm0
+  - ZXeDKE5ADcU
+  - rxSGzFQ-Qc4
+  - sk1PL8j7tL4
+  - -KrcCmEIlsQ
+  - 8M7X73qN-b0
+  - DcKNTjWNQF4
+  - IL_7cI6v2LU
+  - QhzzGfrcRGI
+  - UcXDxaNDzSM
+  - YeilqmXV1H4
+  - aidlHNTTk3c
+  - ezOsco9legc
+  - mILb12cD0JA
+  - 7uzmlxnq2y8
+  - KT79sPpOxJU
+  - KVDBwH4eMSk
+  - RxdbTOkjPBM
+  - ePzyn2mKqDE
+  - y8_O-nTo11A
+  - yGldlUgLiLE
+  - bDsLXioazNc
+  - jGGz4aNK6og
+  - pxACsE_bH-Y
+  - ts6zoSdi5LU
+  - KF3D-Q0C6-c
+  - lKx0sOz31C4
+  - qnDZm_4zVP8
+  - z3KQ9Zgw8wQ
+  - AwK0imsFcDs
+  - D6u8daRaV9g
+  - JujwOOjSJfo
+  - Kl53w560EBs
+  - _I-qMG3OlFM
+  - euPk1XccpiE
+  - sXagpwW1QbA
+  - 0Io61Cal5iI
+  - 7viU4PvQMIE
+  - Ex5xE_ApPvA
+  - RlrmSu5u9bE
+  - RuoGtUOM2gQ
+  - k9hRpsrQJDY
+  - mAE8yZJRNYY
+  - ygJnULGl9tI
+  - zYVSI_BYF1s
+  - CAYNs6eWcg0
+  - FmsRJeyAuM8
+  - TIiIs1TqVJo
+  - hzPmT5TD_Z0
+  - wpB0d56K9tc
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 1hC3_-c5XYk
+  - 9a8nsUPtOlI
+  - Gf5vK4d1vuc
+  - INXD5osrkDo
+  - URYaOI4kwnk
+  - XUqNRbeKErI
+  - bgB91vVONcU
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - hBw7ZzA2iwg
+  - iTPnuchO4WI
+  - jJ_FyKgLNnE
+  - k0QVcaw4A2w
+  - nTzjzMoJpGk
+  - paRmHPWwb50
+  - 2Sq9wuBOH1U
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - D_AvOKr8ncE
+  - JYPzPIA9F6o
+  - KJBlo6X4Mm4
+  - Ne8yvlyiO-s
+  - Q-7KCRNLLzc
+  - YJHW_ZI8aIc
+  - byXfcfeiQeA
+  - kThGMgiprF4
+  - p61nsi42twU
+  - qT9XWi5z9Zo
+  - wu0fU1_q3zc
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - Q4pBYLcn_7c
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - ItE7xQpkfMA
+  - L2JdM3wzdxQ
+  - iK_h-2kot6s
+  - kiPkodTP1Z4
+  - kqyr3kaw5qE
+  - mK5IsS3buCU
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 0NXJVAILuRY
+  - 1QxRih653nY
+  - 6IcYWpJ1xes
+  - 6TjXPRkXx9c
+  - 81v0ih2LxyE
+  - BK2HdRp4Oo0
+  - C25MKm9jN1Y
+  - Cq_Nuo8ilak
+  - FQEBVY-pjOw
+  - MvjMk6BaMtc
+  - Sbiqni-nJsk
+  - YjleTnfeEAs
+  - di8QaNIXR1E
+  - dnRJxbdUa_M
+  - hCAKBDUTDzE
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - CrZLr93JnMg
+  - OGTT-tJwHMI
+  - QJnr0_CVfXE
+  - YXzzuLcmE_o
+  - a0cVuDMgqXM
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - sx6J_ci6KC4
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - wgYcAjoTLMI
+  - BdWvP-lbb68
+  - KMliGnl7uVo
+  - TN9i9Ni0Xr4
+  - TgyBVsdbqKM
+  - YNHMNVLwy9c
+  - YkAxrnE9xb8
+  - _J1vKIXj6JA
+  - mLTqcadk8Bw
+  - rxNtthY7e4s
+  - uKqB5cruu4U
+  - -l2Ngy_x554
+  - 3ONb6S8JRz4
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - Xwdc2bfL6YI
+  - YhIPJwEu6PE
+  - f4Hyy1W1F8Q
+  - g9Er55uc7UM
+  - lvokR_VO8vY
+  - pzYTq2prOg4
+  - q2gvY0KFwmA
+  - w4mdKa97ptM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - 0BIbKxuOFIE
+  - 4H-qbzvL6Hs
+  - HWAOifKGLiE
+  - KO2sWBAhZjg
+  - Mlgs4_54q8Y
+  - O8hHcvDfDOY
+  - S_asGCi6vrI
+  - cQ4K399DTgI
+  - clD9Yd_Mi4c
+  - tYJJyYUrK4c
+  - vLA7IMCpjZI
+  - vm6ZoKRLGh8
+  - 6A98Glp5DuY
+  - 6amk1U-lIKI
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - MM0Q35Pcqa0
+  - XW34jjW3F1o
+  - Z7Ra8Wa-WMI
+  - bLr0h7cEIKc
+  - cJodfpKUFo8
+  - cdPejPpoMFo
+  - iKNZxVWYeK0
+  - rT45E7ITdE8
+  - 6oZfhhEHXU8
+  - 9ulMbvUrYZg
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - JaAc7vXTq8c
+  - RqQqEA-x4_M
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - YSNLuOlUcD4
+  - cujcxjSm69g
+  - gPry3-OomII
+  - p8cfpHBoUus
+  - pA6ls-oHhX0
+  - yduD5IDUF-c
+  - BIisTf1oHdE
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - bN1Ec5zBkaM
+  - nRQSfBhd7FE
+  - oaUrYcoPnlc
+  - t-ezOLT2Kv0
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - HI7-yvAezwk
+  - I6Cy-2RvkuM
+  - JQaeGoQox0k
+  - YKoXfvPIVTQ
+  - 716e30A053U
+  - CBnLOlVT4yQ
+  - F_JOoeHXcmc
+  - GJIuTAzs9-Y
+  - Hu-rVZVSzxs
+  - WprPdJKfaGk
+  - tJeI51crrvs
+  - yy-FuzfmZqU
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - QsdXRoBiPBI
+  - bLnjytMXv_A
+  - moVynuxM4fc
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - GWV1Mk9JlsY
+  - JI3IB5jbZxo
+  - LBOFE-DWrD8
+  - NAsRGSoj0tg
+  - R1QTj9J-SoU
+  - eO8W1pWRJ1E
+  - fn_Xaftdxxc
+  - haX25zafqKo
+  - 7YBncajOVeE
+  - 8ajO440Ss0g
+  - Bd4gxNpbJGE
+  - CEYvLDKvXQ8
+  - IYni6AfrkAY
+  - If9W3kQa254
+  - J-LMiZHWdbU
+  - Ji01F-ZfXYA
+  - TGejJOLjqZ8
+  - f0OaQz3cog4
+  - jdo843M-oCo
+  - rX5zEYzAsCs
+  - t-AVCP3U8l4
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - OTcsB8rrWJ4
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - fTky0-ETtjA
+  - foGlgwWk76I
+  - kEiPal3RrKw
+  - l0GCECJxCZY
+  - qrXgcdOow10
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 7x7T0RuG5CM
+  - BZu_pk7cXVw
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - MCGa9qP_Bo8
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - 8R53vXBP_v0
+  - G9Tf5zpdjFQ
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - P91ECY3eLvQ
+  - cnjVc1ctzYs
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  - qX4ejoqu5_4
+  - wS7NIu01KrM
+  scan_costs:
+  - at: '2026-05-29T16:33:30.498988Z'
+    usd: 0.12540790000000612
+classes:
+- name: Foundations for Two
+  image_url: https://images.pexels.com/photos/25599825/pexels-photo-25599825.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build a strong foundation for pregnancy with safe, trimester-aware
+    modifications. Focus on pelvic floor awareness, deep core engagement, and gentle
+    breathing techniques to support your changing body.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Postpartum Restore
+  image_url: https://images.pexels.com/photos/18136885/pexels-photo-18136885.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Gentle, diastasis-recti aware rebuilding after birth. Reconnect with
+    your pelvic floor and gradually strengthen your core through mindful, progressive
+    movements designed for postpartum recovery.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Pelvic Power & Relief
+  image_url: https://images.pexels.com/photos/18136886/pexels-photo-18136886.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Targeted work for pelvic floor strength and hip and back relief. Controlled
+    stability exercises to alleviate pregnancy-related aches while building functional
+    core stability.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Body Alignment & Breath
+  image_url: https://images.pexels.com/photos/18136888/pexels-photo-18136888.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master posture, alignment, and breathing techniques for a healthier
+    pregnancy and recovery. Learn how to engage your core safely while maintaining
+    excellent form through every trimester and beyond.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Grip socks
+  image_url: https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

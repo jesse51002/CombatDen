@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/rewards/data/mock_points_store.dart';
+import 'package:mobile_app/features/rewards/data/reward.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_card.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_redeem_dialog.dart';
 
@@ -9,12 +9,12 @@ import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/rew
 class StoreGrid extends StatelessWidget {
   const StoreGrid({super.key, required this.items});
 
-  final List<MockPointsStoreItem> items;
+  final List<Reward> items;
 
   @override
   Widget build(BuildContext context) {
-    final left = <MockPointsStoreItem>[];
-    final right = <MockPointsStoreItem>[];
+    final left = <Reward>[];
+    final right = <Reward>[];
     for (var i = 0; i < items.length; i++) {
       (i.isEven ? left : right).add(items[i]);
     }
@@ -37,7 +37,7 @@ class StoreGrid extends StatelessWidget {
 class _StoreColumn extends StatelessWidget {
   const _StoreColumn({required this.items});
 
-  final List<MockPointsStoreItem> items;
+  final List<Reward> items;
 
   @override
   Widget build(BuildContext context) {
@@ -48,14 +48,14 @@ class _StoreColumn extends StatelessWidget {
       children: [
         for (final item in items)
           RewardCard(
-            imageAsset: item.imageAsset,
+            imageUrl: item.imageUrl,
             title: item.title,
             priceLabel: item.priceLabel,
             pointsCost: item.pointsCost,
             buttonText: 'Redeem',
             onPressed: () => RewardRedeemDialog.show(
               context,
-              imageAsset: item.imageAsset,
+              imageUrl: item.imageUrl,
               title: item.title,
               priceLabel: item.priceLabel,
               pointsCost: item.pointsCost,

@@ -1,5 +1,9 @@
 # Supabase Project
 
+## CLAUDE.md is a living document
+
+This file is a living document — exactly like a skill, it must track reality. Whenever the schema, access rules, Python models, or workflow genuinely diverge from what this CLAUDE.md says (a new table/enum, a renamed file, a changed convention), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
+
 ## Schema workflow
 - **Never edit migration files directly.** Only modify schema files in `schemas/` and access rules in `access_rules/`.
 - The user will run the Supabase migration command themselves.

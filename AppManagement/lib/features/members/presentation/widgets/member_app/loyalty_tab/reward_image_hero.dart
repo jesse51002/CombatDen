@@ -5,14 +5,19 @@ import 'package:app_management/core/constants/design_constants.dart';
 /// 3:2 reward image with a brand-orange price tag pinned top-right.
 /// Shared by the admin reward card and the confirm dialog so the visual
 /// identity carries from grid to detail (mirrors the member app).
+///
+/// The live store rewards carry a network [imageUrl]; the mock redemption flow
+/// still passes a bundled [imageAsset]. Pass exactly one.
 class RewardImageHero extends StatelessWidget {
-  final String imageAsset;
+  final String? imageAsset;
+  final String? imageUrl;
   final String? priceLabel;
   final BorderRadius? borderRadius;
 
   const RewardImageHero({
     super.key,
-    required this.imageAsset,
+    this.imageAsset,
+    this.imageUrl,
     this.priceLabel,
     this.borderRadius,
   });
@@ -24,7 +29,15 @@ class RewardImageHero extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(imageAsset, fit: BoxFit.cover),
+          if (imageUrl != null && imageUrl!.isNotEmpty)
+            Image.network(
+              imageUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) =>
+                  const ColoredBox(color: DesignConstants.backgroundColor),
+            )
+          else
+            Image.asset(imageAsset ?? '', fit: BoxFit.cover),
           if (priceLabel != null)
             Positioned(
               top: DesignConstants.spacingMedium,

@@ -1,0 +1,632 @@
+gym_id: orangetheory
+gym_type:
+- orangetheory
+theme: OrangeTheoryStyle
+videos:
+  specification:
+    short_videos_desc: 'Heart-rate-zone HIIT content — treadmill, rower, and floor
+      follow-alongs, zone-training and base/push/all-out explainers, and technique
+      for the movements that recur in the format, from credible coaches — plus the
+      fun side: "what an OTF-style class is really like" vlogs, member first-class
+      and transformation stories, behind-the-scenes, and community and coach interviews.'
+    short_avoid_desc: No "get shredded in 30 days" clickbait, ego-lifting / fake-PR
+      clips, sketchy supplement promos, or "Orangetheory is a scam / OTF vs F45" debate
+      videos. Nothing off-topic.
+    videos_desc: |-
+      # What we surface
+
+      Format, technique, and follow-along content for a zone-based HIIT studio
+      in the Orangetheory-style mould — plus the fun, human side, so it's a
+      feed members enjoy, not just a how-to library.
+
+      ## Zone training & technique
+      - Heart-rate-zone training explained (base, push, all-out, and time-in-zone)
+      - Treadmill pacing and incline interval workouts you can follow along
+      - Rowing technique, pacing, and common-mistake fixes
+      - Floor-block strength and dumbbell technique
+      - Warm-up and recovery content from credible coaches
+
+      ## The fun & human side
+      - "What an OTF-style class is really like" walkthroughs
+      - Member first-class and transformation stories
+      - Studio behind-the-scenes and community moments
+      - Funny workout moments on treadmill and rower
+      - Coach interviews — leaning on independent creator content rather than
+        copyrighted branded class footage
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about zone-based HIIT / interval cardio training; off-topic,
+      genuinely low-quality, or clickbait videos.
+
+      ## Reject
+      - "Get shredded / abs in 30 days" clickbait
+      - Dangerous ego-lifting and fake-PR fail compilations
+      - Sketchy supplement or steroid/SARMs promos
+      - "Orangetheory vs F45 / CrossFit" and "is Orangetheory worth it / OTF is
+        a scam / overrated" cross-discipline or anti-discipline debate and
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, or entertaining
+      — fun content is wanted.
+  queries:
+  - heart rate zone training explained for hiit
+  - base push all out interval workout explained
+  - treadmill interval workout follow along
+  - rowing technique and pacing tutorial
+  - floor block dumbbell strength workout follow along
+  - how to use heart rate zones to train harder
+  - 30 minute treadmill and floor hiit follow along
+  - time in zone training for fat loss explained
+  - rowing machine common mistakes and fixes
+  - full body hiit and cardio circuit follow along
+  - what an orangetheory style class is really like
+  - my first orangetheory class experience vlog
+  - orangetheory transformation story
+  - zone hiit studio behind the scenes
+  - funny treadmill and rower workout moments
+  - hiit studio community fitness motivation
+  - day in the life group fitness coach
+  - hiit coach interview on zone training
+  - heart rate hiit workout day in the life vlog
+  - zone training hiit motivation
+  good_video_ids:
+  - -CTlVxYpUcE
+  - 9RkVBnhaC3E
+  - Kc553Bu7h8o
+  - NHpLsymAb0A
+  - W31eWDidL0g
+  - XVKgRC2w2lA
+  - aglGMqG-Nzg
+  - 4imTQhTlj3M
+  - ATQ2xB7SzCs
+  - OsbUYYF3fd4
+  - YJzle_w53Vs
+  - Yw_WSPG9QEo
+  - gfUg6qWohTk
+  - k5y-8NmmgGE
+  - laO7iSLSIZE
+  - wpWV4MwYaSk
+  - 6H4CQFDucEw
+  - PMgZQ-ptgSc
+  - VQHyorStjA4
+  - XfnXBcB5RIU
+  - eMRRWxVwvsA
+  - usdsv8UZ7ag
+  - ximZfmqh2hI
+  - 9zt6Hc84rjg
+  - E5-WVI-1mUE
+  - NBRv7ShUTm4
+  - NrXe6f4XX6E
+  - Tp7vq2E6X28
+  - Y4eP7ol5vy8
+  - _qpSqEjV55Q
+  - dm8JR9Wkz5Q
+  - fMz5CLtKXC4
+  - q9CKxBMxTlU
+  - qLBImHhCXSw
+  - rlZgtQbRlD0
+  - 0gRjRDR6uG0
+  - 5xfBiYplogg
+  - 8rEfztgwBoc
+  - GY1JhB9BEkk
+  - MR4pIQhpu9Q
+  - PK3Xz3VemYw
+  - g9qUnqwsfsc
+  - m-yc7-CpPZc
+  - mS_yuOfyNIM
+  - o6CXxscL9aM
+  - wRWpp4lrhcU
+  - 2MvZ_7401aI
+  - Ngd-yOvUM3I
+  - SYJu_y6WvEc
+  - knT9cuflX2M
+  - lZjtasHvlN4
+  - s_jNQkalgmU
+  - z2VwsY7ZiJk
+  - 2hON8G8Kky0
+  - AxlTMs58tHw
+  - CsEOZhhPvZ4
+  - P_ouE8obuoU
+  - bO6sOtbUKIM
+  - gImOTwdjAog
+  - gu11txbEKSk
+  - u5RXnVKedvc
+  - xSwbRZDBZN0
+  - 06P5b_u0ut4
+  - V1xHANMueEM
+  - W6wwO_gbn-o
+  - WLPlA_EdOaM
+  - bDCeXbMJVNs
+  - bGKNaw82JNc
+  - i1niTVG4Ht4
+  - kwDQk2siRJs
+  - scIOIOrhYus
+  - Mlgs4_54q8Y
+  - QqZHlbeyj5Q
+  - XwO9ygmPPn4
+  - cQ4K399DTgI
+  - lkSpyqy7y20
+  - mVlQ3eVMa6Q
+  - qL7Nlexje-M
+  - 8lqiBygUFsM
+  - T7Mk9KBuhAU
+  - dX0CoyWExvY
+  - fqETHpJeFBs
+  - 597rCmJ64fc
+  - Ggub5uUtG-U
+  - KaeEA1HI1Zg
+  - SV-KfCQPJJ4
+  - YDactrbACK4
+  - bIE0byxi6rk
+  - p17GwFtNGws
+  - 2DYgrWQblnI
+  - 85Xv_bDDUOM
+  - SoTjgjO_kTk
+  - YghOeTjdEf4
+  - dXSYMg6GZ1I
+  - hOE7E_r0QE0
+  - i6UaRB2r8Yw
+  - j04wOp5R3ZY
+  - u6ZelKyUM6g
+  - AL5HDsXTUyI
+  - E_pKEfYnCrk
+  - WEKB9EGH20I
+  - _17FjwEnJ1E
+  - hmE1fAHgr3E
+  - ixZVPFJWnRY
+  - x5PAjQrG_UM
+  - DAKGiwO9Gj0
+  - NCiL9vAkKvM
+  - atdeJ7OWMbk
+  - gjJOljbTT6U
+  - gvM-WuRfbkY
+  - i8pBVQnvveM
+  - Tt0oGI3olTI
+  - 3qyWpJ34dWw
+  - HWSlRhGzdXU
+  - X-IkR6A3NYc
+  - _JT2xfulR9Q
+  - m8mQ_92_Ylg
+  - nnkiGHM8E-I
+  - 5CGlXgmauIY
+  - WGshtWEzxeA
+  - WeoEgl_TBq8
+  - dc-PGQhCwSc
+  - hiLF_pF3EJM
+  - iFERoFwCTyA
+  - 1e56EV5haFU
+  - rlLwFuokB7g
+  - 0L0cOOpyPpA
+  - 0O9bmFhtrHY
+  - 65ofKc5V-SE
+  - DE9T22Q20Bw
+  - HrWjf8WOsfI
+  - IavyHbJaWRI
+  - LSW5ajmMLJw
+  - bzGSxdGF8z0
+  - mZYu0GRSpHQ
+  - ClgAYjvqP_s
+  - Z_NU3rDCm1E
+  - pPlFSqXnbls
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 0CfdNf9S7S8
+  - EbfdMaV7qqM
+  - FcEqCbfRZZw
+  - INXD5osrkDo
+  - IqKAk7N2GmM
+  - JHZBpgJr584
+  - N8_2Fi3Xy88
+  - T8O5CMhppdo
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - kUTSNVYUG60
+  - pH5bl36t-ik
+  - proINILL4X4
+  - qLccfZ4HEAQ
+  - qOec0er9XdA
+  - vxdQbLZfkJc
+  - yVUcHEOr450
+  - -Et6xw8bv7U
+  - 0MfKBouPSME
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - CEvIs9y1uog
+  - DYHOf_R3XRw
+  - E91hwT81nTQ
+  - KJBlo6X4Mm4
+  - L5J6sgQLvuE
+  - Q-7KCRNLLzc
+  - dBSAURSwuiI
+  - fD-qF0cHAP4
+  - f_Yi3YrWSsk
+  - iKMr1BLeMpc
+  - joI6MmdzMYo
+  - kThGMgiprF4
+  - mL40wGiWbCo
+  - pdUptRE5Dpc
+  - sW_NLt47vPU
+  - uS2XpgGOPuA
+  - w4ntwYkRlcY
+  - yGprClCrPvI
+  - 0mJGecBLEi4
+  - 1u6d1CX7o9c
+  - 2qQBrJkUylU
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4D6wSrXC__0
+  - 6ADogpDq0t4
+  - Cmsr0n0Gd3I
+  - DacqZQC3Hfc
+  - Gqqt0h19vxc
+  - HiJ1uLuTNxo
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - US-EMesKq4Q
+  - VNgfAzTO3xU
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - p40iUjf02j0
+  - pbkrx340TBM
+  - sBObC61uWLs
+  - xHlhEnN60-s
+  - z6k8wXfwS94
+  - 3NeeB6I7AFc
+  - 4L_xcWCOQOA
+  - 5kkBgb426Aw
+  - 6BTBUhAWhSg
+  - 7yX1QN5a6L4
+  - CDDHlGRL3AI
+  - GADfNZHjumU
+  - ItE7xQpkfMA
+  - P1j1j0ttVPU
+  - Y-AYC3_DbpY
+  - dfSmTclf3wk
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - lokn0miZSV8
+  - nMo--6qR61w
+  - ogSfK4fPCwk
+  - r6HHJJXMmdU
+  - rma9n_xL1i0
+  - wd6dkj6p3lM
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - DS6nJkgfAko
+  - EQio6nzPLPw
+  - NJ8NP-UKwHE
+  - NthtMRjIT2I
+  - UXI6j0MJFWw
+  - V5M-gADbaqk
+  - XaA3qD1EAqg
+  - ZDVjEOAU0TM
+  - bGauZyt2Fo0
+  - h4nLNNbR9o8
+  - jy-R9pPBDDM
+  - mtVs-IefHrM
+  - t-X8ITcKS-c
+  - t1zP9ojJ_WE
+  - v6B9zgvkos0
+  - woYIxttRHrw
+  - 0CrX59ulj9U
+  - 1ZccDxDC5UY
+  - 2kui0fFKMyE
+  - 7zjLVDQMY0w
+  - 8wwZEFkGB-Q
+  - EzzHv56zDVc
+  - GFaDWjjWlvs
+  - JTUxuQlS2RU
+  - Kl8V8hyxogY
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - bd2EAn9tJDM
+  - cA1t3TTnTes
+  - dSRLhDyA0-E
+  - e1yx2emPRxA
+  - fd6ZmG6L-TE
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - sL69s4E63pU
+  - t2Ly6-QPMi8
+  - uVMuw2oRyt0
+  - vK_DQYimccw
+  - vuuqoMs162A
+  - wgYcAjoTLMI
+  - 0vmVSEesjAc
+  - 0zKWxM9rwfE
+  - 2oQp_ibJWME
+  - 5tTKSFsgfeI
+  - 7SIjcX5B1Vs
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - KeNObkhENKQ
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - TN9i9Ni0Xr4
+  - UbEQSel4BhQ
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - wejo2SqFZoY
+  - y7_Tc8vS5NU
+  - zSfy8KOcgG0
+  - 0qVlPcJp7c4
+  - 1DN1SijxDUY
+  - 1s_0rUUo0A0
+  - 4zO7i9P8mGE
+  - 5iHQDUvR_vc
+  - 5iX6ecbz8XE
+  - B12MXF0bSFo
+  - D89yRfGIpmg
+  - EKUNGQ4LmH8
+  - G-1gXGG6FiE
+  - IVEAfdHlnO4
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - Yxx-j3J7N6c
+  - eU2cqgesA3w
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - gUZ5VfjBagc
+  - ooEgWahEvEM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - -mpPLGD2iCs
+  - DcoBAXCx9sg
+  - HWAOifKGLiE
+  - KTUNnCNs9UY
+  - KijAPJXjg8c
+  - PvDPhqeRZ7A
+  - adV2t4QrHWg
+  - ghvgvFQS8Y0
+  - jAGt4H5oC5g
+  - qd3vrkQePVQ
+  - vm6ZoKRLGh8
+  - 1EeTvG34xGo
+  - 22AFyTaVs5g
+  - 2LD0Tp3oIDU
+  - 6snqIh6lgsE
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - JKQcQO7fKV4
+  - JyV7mUFSpXs
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - MM0Q35Pcqa0
+  - OeTK66_glm0
+  - Tg0Zz1ckDkA
+  - Z7Ra8Wa-WMI
+  - bZC1ym4Ti24
+  - cdPejPpoMFo
+  - e4xwZuIAZJM
+  - fpjwt77Ra_w
+  - gdJYRWx9g6w
+  - r_VHltdyvv4
+  - 2uPyV7Goj9M
+  - 342ALAEwapQ
+  - 6oZfhhEHXU8
+  - AyMUWBUt3WY
+  - EctwcTwyIsk
+  - FKcr2h7RR-g
+  - M4nSM7TBsJg
+  - N1ZRYx46ye4
+  - UNf2qsX8uFc
+  - UhLNFz20oQU
+  - cujcxjSm69g
+  - gPry3-OomII
+  - gaiQNxnpZa4
+  - gx0RWT7WbmA
+  - iBb7TfmdzCk
+  - mVyqjjC4tRM
+  - pA6ls-oHhX0
+  - sDvar0GLPJA
+  - ucygiLlByFw
+  - x6UyziJYpao
+  - -yp3g7EeDqo
+  - 2-5zmszOu3o
+  - 3ap81sm30P8
+  - 7bC-orwQ2zo
+  - A-PDoo2BXLQ
+  - BXeOYJIq-1I
+  - Dpyutwgczw0
+  - EsglINkJKPs
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - WDhl_906uuI
+  - XVqHVOmLMZw
+  - ZV3fXS2XHeQ
+  - e2a-n2Cl8H8
+  - nRQSfBhd7FE
+  - o0geL60T8jI
+  - t-ezOLT2Kv0
+  - tFOP4-BlW-c
+  - u1UNSANB-po
+  - -ENLFPdXIbA
+  - 5RUWK_51lkU
+  - 5ZK50rIFyL4
+  - 87OSqDBBarM
+  - AqIMz14J-Lw
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - HzfHKN6rmpk
+  - IGGuzpu87f4
+  - KBEezA9ckJQ
+  - PVF2jrr82vo
+  - QVl-xXen7KU
+  - SMAB27z3x0c
+  - T912qM6x080
+  - YQpuGCTXszw
+  - _-qJwnqlJMw
+  - gcX4qN--Zdo
+  - i5Li6GaTU1I
+  - xgv49WM_PuY
+  - 1P088Ervhss
+  - 3irVy7zN47w
+  - 6snSEm_aMo0
+  - 716e30A053U
+  - F4vmk_MhhsM
+  - Hu-rVZVSzxs
+  - OwPGsdNYQGM
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - jLvQTW1llIE
+  - lZTWOdcuI-8
+  - mq1ePlTGBuY
+  - tJeI51crrvs
+  - uQWlzocm6ec
+  - 2-gQlIJukC4
+  - CfgA0hs5ank
+  - CiMn91rtWkk
+  - EiTJBa8RpWI
+  - FiYZDIEdCuQ
+  - KxV8I_YyiaY
+  - OIABpor_4Qw
+  - Wa4f7f5y7uQ
+  - im7xZ7jgyRw
+  - moVynuxM4fc
+  - vcxBPswPszY
+  - -WPcUXLckpU
+  - 0cnjahRSA8A
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - A46HOfXlFa8
+  - B-ePkIehooM
+  - NjlxJeT_ATg
+  - Np6ZwNLknSI
+  - RTELzIAssa0
+  - bKvlpaDR-Eo
+  - bej53DFL4WQ
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - 2-C9QvUala4
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - Pjbxp2kwpiU
+  - SpIQrvqnw0o
+  - U7ppWOd52YU
+  - ctV8NyRWZIo
+  - i98t33E8Eps
+  - j0ZCQFoNx0I
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - Evz8STuQhYw
+  - HKF9mb6FQDg
+  - KosAPIzhNE8
+  - KpzoVMw_rMg
+  - LT_aBQatj5s
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Vib_BSDPTNI
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - oZ1c8IBz7a0
+  - rfGi8W9j9gQ
+  - s8u4PCyTGMo
+  - vx6RkgoxzgQ
+  - -jc4EeIGgRU
+  - 42fVGpylH2Y
+  - AcVj1bB8Jnk
+  - CRUnIbCbH3c
+  - J8YaoUpH-qg
+  - LT-NaeBHmHM
+  - MBaoJffyT5I
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - YSJubcbzJmo
+  - _JEO0KWcP3M
+  - ozpcrgmwyto
+  - sLYw8VdVGbw
+  - sjbbSEcY5wA
+  - -GCA92b119Y
+  - 6c-cp1yRDHs
+  - 82Pd_Kbzim4
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - MilYefF9DjI
+  - Vswrm9dCGEE
+  - ZdTzmfPffl4
+  - mq40ebFwhT8
+  - pdtyvwgpBI0
+  - xqvCmoLULNY
+  scan_costs:
+  - at: '2026-05-29T16:26:27.040125Z'
+    usd: 0.14069356000001143
+classes:
+- name: Base Building
+  image_url: https://images.pexels.com/photos/4662333/pexels-photo-4662333.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master your aerobic foundation with steady-state cardio drills on tread
+    and rower. Learn how to build your base zone capacity and maintain efficient pacing
+    for longer endurance.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Power Push Progressive
+  image_url: https://images.pexels.com/photos/9958667/pexels-photo-9958667.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build explosive strength and power output with progressive resistance
+    work on the floor and push-zone treadmill intervals. Perfect for athletes looking
+    to break through performance plateaus.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: All-Out Intensity
+  image_url: https://images.pexels.com/photos/4720230/pexels-photo-4720230.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Push your limits with sprint intervals and maximum-effort circuits.
+    High-energy class designed to elevate your afterburn and build cardiovascular
+    resilience through true all-out efforts.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Total Body Burn
+  image_url: https://images.pexels.com/photos/8381747/pexels-photo-8381747.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Balanced full-body work combining cardiovascular zones with floor-block
+    strength. Expect power movements, core work, and strategic heart-rate management
+    for complete metabolic conditioning.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Jump rope
+  image_url: https://upload.wikimedia.org/wikipedia/commons/f/fd/BeadedRope.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

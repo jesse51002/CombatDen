@@ -1,17 +1,15 @@
-# CustomYoutubeService — Coding Standards
+# VideoService — Coding Standards
 
-Python/Pydantic package. See `README.md` for what it does.
+Python/Pydantic package. See `README.md` for what it does. (Formerly
+CustomYoutubeService — renamed when the scope expanded beyond YouTube.)
 
-> **Temporary by design.** This is a lightweight, standalone service kept
-> separate for speed. The `videos_config.yaml` contract and its Pydantic models
-> are expected to fold into `../FastApiBackend/` later. Keep the surface small
-> and the schema clean so that migration is a lift-and-shift, not a rewrite.
-> Executing the searches against the YouTube Data API lives in the **manual
-> batch script** `scripts/youtube_batch/` (run with `make youtube APP_ID=<id>`),
-> kept out of `src/api/` and `schema/` so the read-path and contract stay
-> query-free. Curating the fetched feed (removing anti-gym / `avoid_desc`
-> videos) is the **`audit-output` skill** (`/audit-output`), backed by the
-> context-lean `scripts/youtube_batch/audit.py` `list` / `remove` commands.
+> **Standalone by design.** This service owns the full gym-video lifecycle:
+> gym config authoring, video pool scraping + classification, feed scanning, and
+> a read-only API consumed by other systems. The Pydantic schema and models may
+> eventually fold into `../FastApiBackend/`; keep the surface small and the
+> schema clean so that migration stays a lift-and-shift. All data-fetching and
+> scoring lives in `scripts/` — the read path in `src/api/` and `schema/`
+> stays query-free.
 
 ---
 
@@ -24,16 +22,41 @@ choice for the user is not.
 
 ---
 
-## Core principle: company-agnostic
+## Skills are living documents
 
-Nothing company-specific lives in Python code. Each company's brief (its name,
-niche, video descriptions, and search prompts) lives in `apps/<app_id>/
-videos_config.yaml` only. Adding a new company must be a YAML-only change.
+When you're working through a skill (or any reference doc / `SKILL.md` it loads)
+and realize its guidance is wrong, outdated, or actively holding the work back —
+a recommended source that returns bad results, a step that no longer fits, a
+better tool you've found — do **not** silently work around it:
+
+1. Use the better approach for the task in front of you.
+2. **Recommend the specific skill fix to the user and wait for approval** (per
+   *No assumptions* — present it, don't self-apply).
+3. On approval, **update the skill file** so the lesson is baked in next time.
+
+Skills are ever-evolving: every real-world correction should feed back into them.
+
+---
+
+## CLAUDE.md is a living document
+
+This file is a living document — exactly like a skill (above), it must track reality. Whenever the service genuinely diverges from what this CLAUDE.md says (a renamed system, a changed config layout, a new endpoint, a rule the code has outgrown on purpose, an architecture change), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
+
+---
+
+## Core principle: gym-agnostic
+
+Nothing gym-specific lives in Python code. Each gym's config (its
+disciplines / `gym_type`, chosen ThemeService design id, video specification,
+search queries, scan-curated feed of good/rejected video ids + scan costs, and
+optional classes + rewards) lives in `gyms/<gym_id>.yaml` only. The shared
+video pool lives flat in `videos/`, and spend is logged to `cost_log.yaml`.
+Adding a new gym must be a YAML-only change.
 
 If you find yourself adding a constant, enum value, or class branch that only
-makes sense for one company, push back — it belongs in YAML. The one exception
-is the `VideoType` enum: it is the fixed, shared genre vocabulary every brief
-draws from, not a per-company value.
+makes sense for one gym, push back — it belongs in YAML. The one exception is
+the `VideoType` enum: it is the fixed, shared genre vocabulary every gym draws
+from, not a per-gym value.
 
 ---
 
@@ -43,8 +66,9 @@ draws from, not a per-company value.
   for this monorepo (imports, enums, type hints, async, error handling). Apply
   those here unless this file overrides. The schema here will eventually migrate
   into it.
-- `../CustomizationService/` — this service is modelled on its `brand-brief`
-  skill + read-only `src/api`. Mirror its patterns when extending.
+- `../ThemeService/` — this service is modelled on its `brand-brief` skill +
+  read-only `src/api`. Mirror its patterns when extending. Each gym's YAML
+  stores its chosen ThemeService design id.
 
 ---
 
@@ -95,16 +119,54 @@ never a bare `python3` or the raw `.venv/bin/*` entrypoints.
 
 ## Tests
 
-Run the suite with `make test`. Round-trip every example under `apps/<app_id>/`
-against the `VideosConfig` Pydantic model before committing.
+Run the suite with `make test`. Round-trip every example under `gyms/` against
+the `Gym` Pydantic model before committing (`make gym-check GYM_ID=all` also
+validates schema + enum + filename consistency).
 
 ---
 
 ## What NOT to do
 
-- Do not hardcode company-specific names, niches, or search prompts in Python.
-  Anything specific to one company belongs in `apps/<app_id>/videos_config.yaml`.
+- Do not hardcode gym-specific names, disciplines, or search prompts in Python.
+  Anything specific to one gym belongs in `gyms/<gym_id>.yaml`.
 - Do not add `dict[str, Any]` escape hatches to dodge strict typing.
-- Do not add YouTube Data API calls to `src/api/` or `schema/` — querying lives
-  only in the `scripts/youtube_batch/` batch script, so the read-path and
-  contract stay query-free.
+- Do not add scraping or scoring calls to `src/api/` or `schema/` — fetching
+  lives in `scripts/scraper/`, scanning in `scripts/scan/`, so the read-path
+  and contract stay query-free.
+
+---
+
+## Three jobs / workflow
+
+The service has exactly three jobs, each backed by its own `scripts/` module
+and `make` target:
+
+1. **Make/edit a gym** (`make gym-check GYM_ID=<id>`) — author or update a gym
+   file at `gyms/<gym_id>.yaml`, then validate it round-trips the `Gym` schema.
+   This is a YAML-only change; no code touch needed.
+
+2. **Scrape + classify** (`make scrape [GYM_ID=<id>]`) — gather the gyms'
+   search queries, fetch videos via Apify (`scripts/scraper/`), write the shared
+   pool to `videos/` (flat, one YAML per video id), then tag every pooled video
+   with genre + gym_type labels. Appends `SEARCH` + `TAG` entries to
+   `cost_log.yaml`.
+
+3. **Scan** (`make scan GYM_ID=<id|all>`) — run the per-gym keep/drop scan
+   against the gym's specification (`scripts/scan/`), overwriting its
+   `good_video_ids` / `rejected_video_ids` and appending a `ScanCost` to its
+   history. Appends a `SCAN` entry to `cost_log.yaml`.
+
+---
+
+## Read-only API (`src/api/`)
+
+Gym-id-keyed, read-only. Run with `make api` (port 8002).
+
+- `GET /gyms` — list all gym ids.
+- `GET /gyms/{gym_id}` — full `GymDetail` (spec, classes, rewards). The mobile
+  app loads this once at startup.
+- `GET /gyms/{gym_id}/videos` — paginated curated feed.
+- `GET /gyms/{gym_id}/videos/preview` — one-shot "All" preview (a few videos
+  per genre). `?rejected=true` previews the scan's rejected list instead.
+- `/viewer` — internal dev-only HTML viewer (served by `viewer_router.py`);
+  never expose publicly.

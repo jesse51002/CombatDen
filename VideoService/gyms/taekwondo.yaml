@@ -1,0 +1,616 @@
+gym_id: taekwondo
+gym_type:
+- taekwondo
+theme: TaekwondoAcademy
+videos:
+  specification:
+    short_videos_desc: 'Olympic-style taekwondo technique and sparring training —
+      kicks, footwork, combinations, and competition tactics (WT/Kukkiwon) from credible
+      coaches — plus the fun side: Olympic sparring highlights, spinning-kick KO reels,
+      demo-team performances, gym vlogs, and coach and athlete interviews.'
+    short_avoid_desc: Off-topic, clickbait, kids' belt-factory / "black belt in months"
+      McDojo promises, cartoon "hi-YAA" karate-kid parody, street-fight "deadliest
+      kick" fantasy, and "taekwondo vs X / is it useless" anti-taekwondo debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and study content for Olympic-style taekwondo members —
+      plus the fun, human side, so it's a feed members enjoy, not just a drill
+      library.
+
+      ## Technique & training
+      - Kicks: roundhouse, side, back, axe, spinning and jumping kicks
+      - Chamber mechanics, footwork, and stance transitions
+      - Sparring combinations, counters, and distance/timing management
+      - WT/Kukkiwon scoring tactics and competition strategy
+      - Poomsae (forms) practice, follow-along kicking drills, and conditioning
+        from credible coaches and competitive academies
+
+      ## The fun & human side
+      - Olympic and tournament sparring highlights
+      - Spinning- and jumping-kick knockout reels
+      - Demo-team and breaking performances
+      - Gym vlogs and "a day at the taekwondo academy"
+      - Funny training moments and first-tournament stories
+      - Coach and athlete interviews and motivation montages
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about taekwondo; off-topic, genuinely low-quality, or clickbait
+      videos.
+
+      ## Reject
+      - Kids' belt-factory and McDojo-style "get your black belt in months /
+        new belt every few weeks" promises
+      - Cartoon "hi-YAA" karate-kid parody content
+      - Street-fight / self-defense fantasy ("one kick to end any fight",
+        "deadliest taekwondo kick")
+      - "Taekwondo vs karate / kickboxing", "is taekwondo useless in a real
+        fight", and similar cross-discipline or anti-taekwondo debate and
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, demonstration,
+      or entertaining — fun content is wanted.
+  queries:
+  - taekwondo kicks tutorial for beginners
+  - taekwondo roundhouse kick technique
+  - taekwondo side kick and back kick breakdown
+  - spinning hook kick tutorial taekwondo
+  - taekwondo footwork and stepping drills
+  - olympic taekwondo sparring combinations
+  - taekwondo sparring counters and timing
+  - poomsae taegeuk forms tutorial
+  - taekwondo scoring tactics wt rules explained
+  - axe kick and push kick technique taekwondo
+  - olympic taekwondo match analysis
+  - taekwondo competition sparring highlights
+  - best taekwondo spinning kick knockouts reel
+  - taekwondo demo team performance
+  - a day at the taekwondo academy vlog
+  - funny taekwondo training moments
+  - taekwondo athlete first tournament experience
+  - taekwondo black belt demonstration
+  - taekwondo coach interview on competition
+  - taekwondo athlete training motivation montage
+  good_video_ids:
+  - BLZajJBWFXA
+  - S0gbkjyV_MY
+  - WgnwzAArMKc
+  - YhDoCmfHRgU
+  - a07X6EaXbTI
+  - dGQuQbhrFKo
+  - iOC08Ka_oPo
+  - oDNLykieHp8
+  - z1CxCiT2SHM
+  - -XUM2tz3Hm4
+  - 2hgyc3Kkc3E
+  - SQl5Eu2LalA
+  - SyLiApsPcjs
+  - Ycj8hisRXEE
+  - bF0_uoYrxoM
+  - tjO5BiG1mTE
+  - u8cLu90cV20
+  - xeXBRxM8N60
+  - 2J7qlUxzdxw
+  - 6mooMH1Bn5I
+  - G_U77arlUX0
+  - H3oS8anPqX4
+  - Js1uihOc8-8
+  - LTtxyoY59Pc
+  - Nbszdv_A56c
+  - SICvf0Shgwo
+  - aMWYKrTcn6c
+  - mPS46CxLa18
+  - BtnwY-j091A
+  - UHrj67mx6LU
+  - cnzrc0rv_BY
+  - eNVZAExtLcA
+  - jAsYJwSw2w8
+  - kYYXtz9uNYc
+  - qr_8AJZwPcE
+  - rDAIlfTFDqU
+  - sfpixugImdM
+  - yW0aNuhib5A
+  - 29kipLhNL_A
+  - 3SaKycgcKfI
+  - DbEwDrTlz_g
+  - EQio6nzPLPw
+  - F4dRlGq2KPg
+  - FsQq0gUVOt4
+  - PSareMK17ZU
+  - QifLPO_E94k
+  - R-2xe6WISuQ
+  - XuqqQTzZ7tk
+  - qimQgh2umnI
+  - 17g-7KBqm8I
+  - 2MyGf-CuBI8
+  - 588oH3KoNdc
+  - 6gPVtwTQeWA
+  - JrUeTiTAkWw
+  - UxIB6mOfOkM
+  - XbAAiXJuinQ
+  - bORfuh3-KCo
+  - ei824pEYWTE
+  - 1tRt4jpao-4
+  - 7MDrafGFRWw
+  - C8rZzVGrfwI
+  - Db098oKgzpk
+  - DyDxha9KZWA
+  - DzcH9eNFVto
+  - LlkV4EOG2_k
+  - QR9ruMJvc-4
+  - UXM-QltaYow
+  - a2f_JFYTyfo
+  - m9JjW0s_O0k
+  - nf-HwBKWF2M
+  - oFFtocdGCLo
+  - rbzafKjNIp8
+  - vTV3vlEaJD0
+  - xtrETWp_eEA
+  - -ywRvvPIkXw
+  - DhZfMU7M0BQ
+  - H-DcdVE2fSA
+  - HMSoY2uj68E
+  - PjjNWtWy_Fo
+  - Y1rmsLtq96Y
+  - hDJ5AftIfiY
+  - hQaF64yk-N4
+  - k7R0N5sSMLg
+  - kSDwrthpMsQ
+  - okQZb8e4qMk
+  - qbc4fumt5s8
+  - 1vqL6DDM8ec
+  - BpeUUFLpp-c
+  - IuQeTww3c3o
+  - LuK9ZcsHO2A
+  - Z0XM7-NZcgY
+  - aLUcqEKgT_Y
+  - e9qfasu0DaA
+  - epv2RbE5DUo
+  - gWnMU-mBUl0
+  - jerxQEHxgCQ
+  - jfBh4CAjRns
+  - lhDWT3LQdc8
+  - tZvgvURuUDE
+  - 0ZR-VeZ4Jqs
+  - 8fIblMEcMec
+  - B22iX-GqOLc
+  - Ot-rBhiIUKs
+  - PSayoN45r90
+  - PrAARwust9M
+  - U1H4jiGDAdQ
+  - YqyjyXcl3hM
+  - gRCQ3o3yygY
+  - kkbYiYtas5U
+  - zGwHzdgA-QM
+  - 4LhnKH0UlqU
+  - 6EfdqCN6Yps
+  - 718i4E18TBM
+  - 7Q44dUYxS9c
+  - 98boTtEjgfw
+  - L1kwFZY7bvA
+  - TXBNFWPWS24
+  - W5RysGt7JwM
+  - b6JsGHH7uNk
+  - rERjXT_2xTo
+  - uaO64stMmpg
+  - x8V1bLwJNGY
+  - z_XbWqSozvI
+  - 7NE639b_ds8
+  - 7QddB-1zbYg
+  - 8ZDXq0eU8wM
+  - 8v4Cw9xcGbo
+  - BNa53cts5vA
+  - Gvt9i-xy9uE
+  - H1m8nO1QfR8
+  - PbMDd1GDnno
+  - SVnEZpvlf9w
+  - YghOeTjdEf4
+  - aFm7KOX75_w
+  - d1_XpUBo7IM
+  - k48AWAqUcL4
+  - sQR6FSxHZhw
+  - x1B4c4pWn-E
+  - z7qu_IIR2JI
+  - 7Xt-K5FdZrM
+  - CYoaK9LWSl4
+  - CeLD84vV5S0
+  - CsvCbR6F52I
+  - Fv0cEXunsBs
+  - LPK3YXybzHg
+  - MA9j_JUZoAQ
+  - Ozd2aK0nZkE
+  - PcEU2LH-TFI
+  - beuHlBzE5rU
+  - jmZgJXwHNQY
+  - kAmBFBZ1ngI
+  - lRPSxP31Gcg
+  - tHW_H2meV2A
+  - 0alK62UB3BI
+  - 7-iIq3ikA3M
+  - BDORUMu__is
+  - ITTcBwE0_N4
+  - JP1rmDDLyP0
+  - Tw2dsJR8ZZc
+  - XfXheRtg3j8
+  - ZILucgN91GA
+  - aF_GMUEQYRQ
+  - c64SMkkUK18
+  - dEwv0DfXZws
+  - gQuJ47Oa-DU
+  - m0pwJmV-Dig
+  - r8TnanKExq4
+  - vkVFIEOwzL4
+  - yNh-GglYUSw
+  - 6AoDZKmk8oA
+  - 9yrB__GiA0g
+  - Aa7qhgwxGdw
+  - EB-_t9JLqMI
+  - IuAT_-LZE2c
+  - LWlTYaqX--4
+  - ZrEjDLKXZBs
+  - _4z4P937Lnc
+  - b5LvVMBQOcI
+  - bUUE3xpZ550
+  - eanN_llY6ms
+  - nfZBEDURzNY
+  - r5qcDhTaeEM
+  - t_LdQRObv2k
+  - xrbVL-Mpad4
+  - -gYhgW5xAr0
+  - 6Jbev8ONf9I
+  - 9SK4Mydw9hc
+  - B3d4_Gh_96E
+  - D_nMFE1R4G0
+  - DtuABYQETVE
+  - _5llB_goVM0
+  - bmTVYlFzEyI
+  - fM9DqHsovmA
+  - pKBE9nZmh7s
+  - 76mxyDuwhEU
+  - 7H6lJZ0l-Oc
+  - Avr54VCNMXY
+  - HsVq9fF9gdE
+  - MWgsWRn4JXI
+  - Q_w7hr1fZh4
+  - dLFGvGF7h00
+  - jmyF9qEJ4dI
+  - tza6LW8n-js
+  - z64KLyUfC9U
+  - 5c2wDQUEwt8
+  - EBIXIKIrYIE
+  - JQXdsmD6Ibc
+  - LVAnbBO_A8k
+  - PjYQsgRwQEU
+  - QW2F0s5RHyE
+  - RCnmIQiuTlo
+  - WUgiZ_IgAmQ
+  - WcLIeyf446E
+  - YCZULOwqxzg
+  - fRI8r1d-874
+  - l7mpJMncT7I
+  - lkgtoYVQB-E
+  - tADYxaAxeY4
+  - tkFgwveBkdQ
+  - 9VXfAbbSsU8
+  - BZmIA4Sseco
+  - D63nn6dcgiM
+  - DtcNl7CHoAM
+  - e64AtWekQVo
+  - eJoWTlqMuZc
+  - j9lXaigldsc
+  - qI5Yop7c18I
+  - qlIOqJTdog0
+  - uWnf0wUQNQ4
+  - yixWZ_6Rvqk
+  - 1FZrfY6DVdE
+  - E30jYkSS0Lg
+  - GBxxdVM406E
+  - L3Oa3btteok
+  - R6eNf8jXOHQ
+  - dBTQi5kdfW0
+  - fp1oyL672kY
+  - gKCcOv70CAw
+  - hKmOkxUyVsw
+  - nOJxkCkxVSs
+  - ty_jrArrCxA
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - A4f-th_YW2U
+  - HsvRiOM32_Q
+  - INXD5osrkDo
+  - SotLyRb8XjE
+  - T8O5CMhppdo
+  - dBJry3tcX0Q
+  - gT6OkjTDcYc
+  - k0QVcaw4A2w
+  - nE4mvAWZKXw
+  - rgvPJsygNyo
+  - 9Wa9xY88WF8
+  - BbRTXtD_IlI
+  - GQoSnlh3Nbk
+  - KJBlo6X4Mm4
+  - MHrGENGDlX0
+  - MkVsLlxhF1o
+  - Q-7KCRNLLzc
+  - RKzdPmorhmI
+  - X15kOTm_5lw
+  - Z8BkIZgJ5C0
+  - gfUg6qWohTk
+  - kThGMgiprF4
+  - 3_6uMnUPvFA
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - CkwsP85USK8
+  - DIb4ORefBaE
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - KNmxPI86cZs
+  - KY_G2f2R1Tg
+  - O2JyplMHA4A
+  - Q3mqj0S-ECY
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - k6Qp78Hh5DI
+  - v4pezeJWpVM
+  - xHlhEnN60-s
+  - ximZfmqh2hI
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - 9R7wWh6GF24
+  - ILSbK8RnGdI
+  - ItE7xQpkfMA
+  - h1vlqBRmH_g
+  - hZG6Cg8MtEI
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - oIB8kKroCd0
+  - q9CKxBMxTlU
+  - qRDZjEZByZg
+  - wd6dkj6p3lM
+  - yuzEHDxKm_0
+  - 3UCafeK-fac
+  - Cfro_K1cGXc
+  - Cq_Nuo8ilak
+  - XaA3qD1EAqg
+  - bsLsTNhrvxE
+  - ih94yFrMWvU
+  - v6B9zgvkos0
+  - -99HKFiZOWQ
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 2Y9ngBj2HgU
+  - BLYnBNOsxoI
+  - K_-mBWT47_E
+  - Okmz3oq8M_8
+  - SYJu_y6WvEc
+  - U3zQHweg1eI
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - a8sJQRxoXSU
+  - aq92sWWU4FM
+  - bMkEhPX0Vj0
+  - hUeGL63HQk0
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - okzEltau9fA
+  - pkT2yYrvv-Q
+  - q_7LMlxolTg
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - vucFkmTMO2o
+  - vuuqoMs162A
+  - 4VbmiMEs22c
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - OnZCKqTPTdo
+  - QYep9TgZsa4
+  - TN9i9Ni0Xr4
+  - UDf_Ey7FfkY
+  - YNHMNVLwy9c
+  - gn9j2JT9P2k
+  - mLTqcadk8Bw
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 4zQL4ALDOVQ
+  - 5iX6ecbz8XE
+  - Pfse9GxqdAE
+  - VDeVdNwe4Fo
+  - f6yAY1oZUOA
+  - fWHLuFrVW68
+  - g9Er55uc7UM
+  - ooEgWahEvEM
+  - q9kS4nOXPCI
+  - vn6WW3mfFz8
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 5BWvCETiDy4
+  - HWAOifKGLiE
+  - K-yHWxGYIZg
+  - LbJEJ8koehc
+  - Mlgs4_54q8Y
+  - SiH7ny3dHCo
+  - VLVjO4oedmI
+  - ZkwBzPmhtr0
+  - cQ4K399DTgI
+  - jqL3-LD-EJI
+  - BRvvpVLQpIY
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - Z7Ra8Wa-WMI
+  - yRmx06wpGsU
+  - 3_qA-xVRTWw
+  - 6oZfhhEHXU8
+  - F5MODFj28oU
+  - FKcr2h7RR-g
+  - GruTA2Eexz8
+  - UNf2qsX8uFc
+  - cWNVP4Ui22g
+  - cujcxjSm69g
+  - lGIFTWsBXdw
+  - pA6ls-oHhX0
+  - -yp3g7EeDqo
+  - 7bC-orwQ2zo
+  - A-PDoo2BXLQ
+  - A9vN9CdpXLc
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - WEDrp2R3kts
+  - ZV3fXS2XHeQ
+  - _FoW3uJ8uw0
+  - cKFFGVl5t5c
+  - iZjvLtAYkGM
+  - nRQSfBhd7FE
+  - r19LbSZqi84
+  - t-ezOLT2Kv0
+  - t2ROQSBOgiY
+  - 5ZK50rIFyL4
+  - 8c6z8XZ5U7Y
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - etPnQ3XX7kg
+  - gljK90LZqA4
+  - m_vN0WScKQ4
+  - tdYM_Tp5C6c
+  - B833Ddf8feI
+  - EoONbCw0Q6c
+  - Hu-rVZVSzxs
+  - WprPdJKfaGk
+  - o0qP8bxQPyA
+  - t5gLwBWFayY
+  - tJeI51crrvs
+  - vuE94E2an8Y
+  - 9oFJL_9uKGA
+  - KxV8I_YyiaY
+  - ZJBprx7oWAM
+  - aYAmtU72d9g
+  - h54us18qc20
+  - moVynuxM4fc
+  - -0YJUS_CxLo
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - LaeoJFdncp0
+  - Mny7CVbnQVs
+  - NrI9Wp7xA_s
+  - R0WcFxtKFj8
+  - clRLDLbulfI
+  - dtmJOusvWis
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - tsfbPsvOY_4
+  - v0hNnfbeTx4
+  - -BlwvflkPnU
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - SpIQrvqnw0o
+  - aGrdQ97GY64
+  - crXYs7EfnDc
+  - iAlA4gFHdO8
+  - jdo843M-oCo
+  - kQrTufrQChM
+  - p-jIAjWbJbc
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 2DX_U89ocX8
+  - 5PgGohPpvww
+  - 67RpDNWRPDU
+  - 6r27t7loW5I
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - KosAPIzhNE8
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - UD-1rRaK06w
+  - Yt7XVvDSeyU
+  - bxGlq8qbBQI
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - ge4E1TO62cQ
+  - kkbDu0r2zEo
+  - l0GCECJxCZY
+  - oZ1c8IBz7a0
+  - rfGi8W9j9gQ
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - WijfMuL_L5I
+  - dxTRjWyEGtE
+  - epv1zgwHAhc
+  - pDFRv18wOt8
+  - qSAolY3NX-o
+  - sLYw8VdVGbw
+  - tMlpDXwYi6U
+  - 9BZ5ihJpnXc
+  - BMUlEDkIMVg
+  - CYXxBGKrlLw
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - PKt5YUzjBgw
+  - n-MG0gzXwis
+  - pAIdwSnLXW4
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:47:49.629852Z'
+    usd: 0.1265614000000035
+classes:
+- name: Roundhouse Fundamentals
+  image_url: https://images.pexels.com/photos/8612009/pexels-photo-8612009.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the foundational kicks and footwork that make taekwondo effective.
+    Learn chamber mechanics, stance transitions, and precision targeting for all distance
+    ranges.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Sparring Tactics
+  image_url: https://images.pexels.com/photos/29956727/pexels-photo-29956727.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Study Olympic sparring strategy, scoring combinations, and defensive
+    counters. Build the game sense and timing to dominate point-based competition.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Spinning Kicks Mastery
+  image_url: https://images.pexels.com/photos/8612465/pexels-photo-8612465.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Progress from basic spins to advanced spinning and jumping kicks. Develop
+    control, explosiveness, and the confidence to land these spectacular high-value
+    techniques.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Olympic Conditioning
+  image_url: https://images.pexels.com/photos/6765021/pexels-photo-6765021.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build the strength, power, and endurance needed for competition. Conditioning
+    circuits designed to improve kicking speed and match-day stamina.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Taekwondo dobok
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/32/Judo_orange_belt_%28Brusselsshrek%29.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

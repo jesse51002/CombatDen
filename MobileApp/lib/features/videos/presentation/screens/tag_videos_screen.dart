@@ -44,14 +44,12 @@ class _TagList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Video>>(
-      future: VideoFeedRepository.instance.feed(),
+      future: VideoFeedRepository.instance.tagFeed(tag),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
-        final videos = sortByRelevance(
-          (snapshot.data ?? const <Video>[]).where((v) => v.tags.contains(tag)),
-        );
+        final videos = sortByRelevance(snapshot.data ?? const <Video>[]);
         if (snapshot.hasError || videos.isEmpty) {
           return Center(
             child: Text(

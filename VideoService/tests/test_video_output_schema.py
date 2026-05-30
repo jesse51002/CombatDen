@@ -1,12 +1,11 @@
-"""VideosOutput / VideoOutput round-trip, plus the deliberate extra="ignore"
-tolerance (these documents are machine-written from YouTube responses, so they
-must survive unknown fields rather than fail loudly)."""
+"""VideoOutput round-trip — the per-video pool record. ``extra="ignore"`` is
+deliberate: these documents are machine-written from the Apify scraper, so they
+must survive (and drop) unknown fields rather than fail loudly. There is no
+manifest wrapper — the pool is just a folder of these."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-from schema import VideoOutput, VideosOutput
+from schema import VideoOutput
 
 
 def _video() -> dict:
@@ -26,34 +25,10 @@ def _video() -> dict:
     }
 
 
-def _output() -> dict:
-    return {
-        "company_name": "Killer Muay Thai",
-        "app_id": "combatden",
-        "generated_at": datetime.now(timezone.utc),
-        "quota_units_estimate": 1402,
-        "videos": [_video()],
-    }
-
-
 def test_video_output_round_trips() -> None:
     video = VideoOutput.model_validate(_video())
     assert video.tag is not None
     assert video.view_count == 412903
-
-
-def test_videos_output_round_trips() -> None:
-    output = VideosOutput.model_validate(_output())
-    assert output.app_id == "combatden"
-    assert len(output.videos) == 1
-
-
-def test_manifest_queries_default_and_round_trip() -> None:
-    doc = _output()
-    del doc["videos"]
-    assert VideosOutput.model_validate(doc).queries == []  # default empty
-    doc["queries"] = ["bjj fundamentals", "white belt vlog"]
-    assert VideosOutput.model_validate(doc).queries == ["bjj fundamentals", "white belt vlog"]
 
 
 def test_hidden_counts_are_none() -> None:
@@ -66,7 +41,7 @@ def test_hidden_counts_are_none() -> None:
 
 
 def test_extra_keys_are_ignored_not_rejected() -> None:
-    """The whole point of extra="ignore": unknown YouTube fields are dropped."""
+    """The whole point of extra="ignore": unknown scraper fields are dropped."""
     doc = _video()
     doc["dislike_count"] = 7  # field YouTube no longer returns
     doc["some_future_field"] = {"nested": True}
@@ -75,35 +50,29 @@ def test_extra_keys_are_ignored_not_rejected() -> None:
 
 
 def test_untagged_allowed_before_classification() -> None:
-    # The batch writes videos untagged; the classification pass fills the tag.
+    # The scrape writes videos untagged; the classify pass fills tag + gym_type.
     doc = _video()
     del doc["tag"]
     video = VideoOutput.model_validate(doc)
     assert video.tag is None
-    assert video.is_good is None  # not yet classified
+    assert video.gym_type == []  # not yet tagged
 
 
-def test_classification_fields_round_trip() -> None:
+def test_pool_tag_fields_round_trip() -> None:
     doc = _video()
     doc["tag"] = "clips"
-    doc["is_good"] = False
+    doc["gym_type"] = ["muay_thai", "kickboxing"]
     doc["duration_seconds"] = 95
     video = VideoOutput.model_validate(doc)
     assert video.tag.value == "clips"
-    assert video.is_good is False
+    assert [g.value for g in video.gym_type] == ["muay_thai", "kickboxing"]
     assert video.duration_seconds == 95
 
 
-def test_videos_default_to_empty_list() -> None:
-    doc = _output()
-    del doc["videos"]
-    assert VideosOutput.model_validate(doc).videos == []
-
-
 def test_transcript_defaults_none_and_is_last_field() -> None:
-    # Untouched by the batch / classify; filled by the transcripts pass.
+    # Filled inline by the scrape; declared last so it lands at the bottom of
+    # each per-video file.
     assert VideoOutput.model_validate(_video()).transcript is None
-    # Declared last so it lands at the bottom of each per-video file.
     assert list(VideoOutput.model_fields)[-1] == "transcript"
 
 
@@ -121,10 +90,28 @@ def test_transcript_error_defaults_none_and_round_trips() -> None:
     assert VideoOutput.model_validate(doc).transcript_error == "AgeRestricted"
 
 
-def test_reason_defaults_none_and_round_trips() -> None:
-    assert VideoOutput.model_validate(_video()).reason is None
+def test_gym_type_defaults_empty_and_round_trips() -> None:
+    # Untagged until the classify pass runs; then a list of disciplines.
+    assert VideoOutput.model_validate(_video()).gym_type == []
     doc = _video()
-    doc["is_good"] = False
-    doc["reason"] = "no_transcript"
+    doc["gym_type"] = ["rowing"]
+    assert VideoOutput.model_validate(doc).gym_type[0].value == "rowing"
+
+
+def test_is_good_is_not_a_pool_field() -> None:
+    # Approval is per-gym (held on the gym's good/rejected lists), never on the
+    # pool video; a stray is_good is ignored.
+    doc = _video()
+    doc["is_good"] = True
     video = VideoOutput.model_validate(doc)
-    assert video.reason.value == "no_transcript"
+    assert not hasattr(video, "is_good")
+
+
+def test_source_queries_required() -> None:
+    # A pooled video must record at least one query that surfaced it.
+    doc = _video()
+    del doc["source_queries"]
+    import pytest
+
+    with pytest.raises(Exception):
+        VideoOutput.model_validate(doc)

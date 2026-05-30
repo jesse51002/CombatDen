@@ -13,6 +13,8 @@ class AppRoutes {
   static const String scheduleEditClass = '/schedule/class/edit';
   static const String qrCodes = '/qr-codes';
   static const String growth = '/growth';
+  static const String employees = '/employees';
+  static const String employeeDetail = '/employees/detail';
 
   AppRoutes._();
 }

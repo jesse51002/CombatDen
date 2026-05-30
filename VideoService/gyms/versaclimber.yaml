@@ -1,0 +1,416 @@
+gym_id: versaclimber
+gym_type:
+- versaclimber
+theme: VersaClimber
+videos:
+  specification:
+    short_videos_desc: 'VersaClimber vertical-climber intervals — follow-along climb
+      workouts, proper climbing form and cadence, and timed-ascent / metres-climbed
+      sessions, plus the fun side: "what a VersaClimber class is really like", studio
+      vlogs and behind-the-scenes, metres-climbed challenge highlights, funny class
+      moments, transformation stories, and coach interviews.'
+    short_avoid_desc: Off-topic, clickbait "burn 1000 calories climbing" gimmicks,
+      and "VersaClimber vs treadmill / vs stair climber which is better" or "is the
+      VersaClimber worth it" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Vertical-climber cardio content for people who want the hardest
+      twenty-five minutes of their week — plus the fun, human side, so
+      it's a feed members enjoy, not just a how-to library.
+
+      ## Technique & climb training
+      - Follow-along VersaClimber workouts and classes: climb intervals,
+        EMOM and Tabata-style efforts, metres-climbed challenges, and
+        endurance ascents
+      - Instruction on proper climbing form, hand-and-foot coordination,
+        stroke length, cadence, and how to set resistance and pace a climb
+      - Full-body, low-impact conditioning and beginner first-climb
+        walkthroughs
+
+      ## The fun & human side
+      - "What a VersaClimber class is really like" and studio vlogs
+      - Behind-the-scenes at the studio
+      - Metres-climbed challenge highlights
+      - Relatable class humour and funny moments
+      - Transformation stories and coach interviews
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about VersaClimber / vertical-climber training; off-topic,
+      genuinely low-quality, or clickbait videos.
+
+      ## Reject
+      - Rock climbing, outdoor climbing, and bouldering (different discipline)
+      - Stair-climber / StairMaster machine content (different discipline)
+      - Calorie-bait "burn 1000 calories climbing / melt fat fast" gimmick
+        titles
+      - "VersaClimber vs treadmill / vs stair climber which is better"
+        cross-discipline framings
+      - "Is the VersaClimber worth it / vertical climbers are pointless"
+        debate or reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, or
+      entertaining — fun content is wanted.
+  queries:
+  - VersaClimber workout follow along
+  - VersaClimber proper form and technique tutorial
+  - beginner VersaClimber workout what to expect
+  - VersaClimber interval workout session
+  - 20 minute VersaClimber HIIT workout
+  - how to climb efficiently on a VersaClimber
+  - VersaClimber cadence and stroke length explained
+  - VersaClimber EMOM workout follow along
+  - full body low impact climbing workout
+  - VersaClimber resistance settings for beginners
+  - what a VersaClimber class is really like
+  - metres climbed challenge VersaClimber highlights
+  - VersaClimber studio behind the scenes
+  - funny VersaClimber class moments
+  - star VersaClimber instructor full class
+  - VersaClimber transformation story
+  - vertical climber cardio workout for athletes
+  - VersaClimber coach interview on training
+  - day in the life vertical climber studio coach
+  - my first VersaClimber class vlog
+  good_video_ids:
+  - 8T7rdZaxezM
+  - iv-J8ONUoIU
+  - kMcH0LilXRk
+  - JgHyKyyuWhM
+  - n8YVmOmTZn8
+  - vxO2ilM9Tsw
+  - V2LAVMpAei8
+  - XkU8GPuIMNw
+  - ewSRZqBN1yo
+  - GjCixyDkJ18
+  - iWnPyuRljUo
+  - pZ7P4HoiGrw
+  - rlZgtQbRlD0
+  - zxguZt5iomE
+  - -Wbmsp5pNqo
+  - KmZGIG3Jgqs
+  - u1ghQ4_oWNk
+  - xb5VN3D1vZs
+  - 7NwbzrU4Kvg
+  - FBjpsaJJy20
+  - WaodXx2D90A
+  - azGFaxbZO08
+  - 0zKWxM9rwfE
+  - jDjzDseRMYk
+  - 6oyX_eMnyws
+  - Io-JKBgjXv8
+  - cRa6Fih-dZM
+  - u-fLOVKE5ns
+  - KNv-gb4poUk
+  - QJvqYH-Eq9U
+  - uAfoIgCYVbo
+  - 3VsJ8_Zj9I0
+  - 8o35Qob2YwE
+  - Cf20TB4woO8
+  - P1kjo7l8hmE
+  - iCqvFhaGUK4
+  - jpnuYa3DaRs
+  - TRKo_sbpveU
+  - yP-CO9rVAcg
+  - j04wOp5R3ZY
+  - h9NxErt0ge8
+  - Pa2s7J6Q03o
+  - UZyOlXyOCJc
+  - Yjn-dz_h_mw
+  - i9tkCeUWdx0
+  - INCrt2e6JWQ
+  - JNT7bufMFm4
+  - kSqCPJx1S3A
+  - t1smskBhE90
+  - 5oYlFOxRxZY
+  - OxcZsQmJHSA
+  - UmS1O2w8DRg
+  - qxkGHOfQkkQ
+  - K7CDp7euP5M
+  - yL_5fr-VEdQ
+  - 5SAiLr0PbzY
+  - SljTxOddq7M
+  - fopBlR7gR3E
+  - glzy9VqR6Pg
+  - mOM8YkQheGE
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 4WdCdmPsTuM
+  - AwqFcy5GHRQ
+  - FH4-F1V-3uc
+  - INXD5osrkDo
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - sy11C-XJdDI
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - KJBlo6X4Mm4
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - dBSAURSwuiI
+  - fD-qF0cHAP4
+  - kThGMgiprF4
+  - nsP3zmX6HSk
+  - vBy8jXvnyO0
+  - wpWV4MwYaSk
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4D6wSrXC__0
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - EH31c-rIbBU
+  - G7-tJmJwJU8
+  - Gqqt0h19vxc
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - f18-tnn5rew
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - rAzTsfW5kig
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - CDDHlGRL3AI
+  - ItE7xQpkfMA
+  - Y-AYC3_DbpY
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - q9CKxBMxTlU
+  - r6HHJJXMmdU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 4_WPNDsiXxA
+  - BK2HdRp4Oo0
+  - CFLjP1EjBoY
+  - Cq_Nuo8ilak
+  - D1D_y6JbLiM
+  - MR4pIQhpu9Q
+  - RrqXAkfjBdo
+  - UDv2-5XUf1U
+  - XaA3qD1EAqg
+  - bGauZyt2Fo0
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 2kui0fFKMyE
+  - EzzHv56zDVc
+  - LKSC_KujZ4g
+  - SYJu_y6WvEc
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - TN9i9Ni0Xr4
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 5QVCv8ethSY
+  - 5iX6ecbz8XE
+  - IVEAfdHlnO4
+  - Pfse9GxqdAE
+  - YXvpoh_JZHI
+  - _6WTFVd8AAE
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - cQ4K399DTgI
+  - zGZz0xJW_1I
+  - 0Qy51jKYdPQ
+  - 1EeTvG34xGo
+  - 5fzTBTfWJ20
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - SF1BZ4p78tw
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - fyeUoMseqOA
+  - gdJYRWx9g6w
+  - vSSkDos2hzo
+  - 6oZfhhEHXU8
+  - AyMUWBUt3WY
+  - Dy21LB0BvBY
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - SV-KfCQPJJ4
+  - UNf2qsX8uFc
+  - bIE0byxi6rk
+  - cEJOr65B4mQ
+  - cujcxjSm69g
+  - fjT18gEdwNY
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - -yp3g7EeDqo
+  - 8zx2dlOt5F0
+  - D-NYL9jKC38
+  - HK2F00mhK2U
+  - HxinudNFXmw
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - mysVXpc0R1E
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - u1UNSANB-po
+  - -ENLFPdXIbA
+  - 5ZK50rIFyL4
+  - AL5HDsXTUyI
+  - AO-DYLUDssQ
+  - AsyyZgtHMPw
+  - IGGuzpu87f4
+  - JQaeGoQox0k
+  - RF8_N2Tj2Yk
+  - SMAB27z3x0c
+  - WEKB9EGH20I
+  - Z6VLe8SAiI0
+  - 02Aj_kHtJUQ
+  - 6WoZYhV_5xw
+  - 716e30A053U
+  - F6oshxpJ3zk
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - MQ2OEj8BL3M
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - tJeI51crrvs
+  - xkKKF5anfG8
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - moVynuxM4fc
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - EwclzA3FplQ
+  - NjlxJeT_ATg
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - o2iBBzzp3Ys
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - Pjbxp2kwpiU
+  - R0mMyV5OtcM
+  - ctV8NyRWZIo
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 7IELzpq8RxI
+  - 8D6nnYgQdfw
+  - 9O2fnIbrdzw
+  - HKF9mb6FQDg
+  - LABF9V5oQSw
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - LT-NaeBHmHM
+  - MBaoJffyT5I
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - YSJubcbzJmo
+  - bzGSxdGF8z0
+  - liObCeykF_E
+  - p_N9jFCX_jg
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - 19aunTn3SfI
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - MilYefF9DjI
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  scan_costs:
+  - at: '2026-05-29T16:50:18.493574Z'
+    usd: 0.07983440000000286
+classes:
+- name: Climb Intervals
+  image_url: https://images.pexels.com/photos/1954524/pexels-photo-1954524.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: High-intensity interval sessions alternating between fast climbs and
+    recovery periods. Build power and cardiovascular endurance in 20-30 minutes.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Endurance Ascent
+  image_url: https://images.pexels.com/photos/31012865/pexels-photo-31012865.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Steady-paced, longer climbs that build mental toughness and aerobic
+    capacity. Perfect for athletes preparing for distance challenges.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Climbing Form Fundamentals
+  image_url: https://images.pexels.com/photos/7690207/pexels-photo-7690207.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Technique-focused sessions breaking down proper form, cadence, and
+    hand-foot coordination. Ideal for beginners and anyone refining their climb.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Metres Challenge
+  image_url: https://images.pexels.com/photos/3757954/pexels-photo-3757954.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Competitive distance-based workouts where climbers race to achieve
+    metres-climbed goals. Fun leaderboard tracking and personal records.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Running shoes
+  image_url: https://upload.wikimedia.org/wikipedia/commons/9/98/On_Cloud_Running_Shoes.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

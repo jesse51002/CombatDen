@@ -11,3 +11,5 @@ __pycache__/
 
 # Generated preview HTML (scripts/preview.py) — sits next to each app's YAMLs
 apps/*/preview.html
+
+videos/

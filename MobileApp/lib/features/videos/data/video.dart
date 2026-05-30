@@ -1,7 +1,7 @@
 import 'package:mobile_app/features/videos/data/video_helpers.dart';
 
 /// A single video as served by the VideoService
-/// (`GET /apps/{appId}/videos` → `VideoCard`). Field names mirror the
+/// (`GET /gyms/{gymId}/videos` → `VideoCard`). Field names mirror the
 /// API so the JSON parse stays mechanical.
 ///
 /// See `../VideoService/schema/video_feed.py` for the source contract.

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:customization_engine/data/models/customization_style.dart';
+import 'package:theme_flutter/data/models/customization_style.dart';
 
 /// A tappable style preset: its celebration image as a 3:2 hero with
 /// the design name below. The active style shows a check badge. Tapping
@@ -16,7 +16,7 @@ class StyleCard extends StatelessWidget {
     required this.onTap,
   });
 
-  final CustomizationStyle style;
+  final ThemeStyle style;
   final bool isActive;
   final VoidCallback onTap;
 

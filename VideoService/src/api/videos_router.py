@@ -1,6 +1,8 @@
-"""The read-only endpoints: list companies, one company's full brief, its
-search list, its fetched videos (optionally filtered by video type), and its
-class cards."""
+"""The read-only endpoints (single-tenant), all keyed by ``gym_id``: the gym
+browser, one gym's full content detail, and one gym's paginated video feed. The
+gym is the entry point — browse gyms, pick one, then load its detail (classes /
+rewards / feed spec, read into memory once) and page through its video feed. The
+``theme`` a gym carries is used only for branding, never to fetch content."""
 
 from __future__ import annotations
 
@@ -10,9 +12,10 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from schema import (
     BigGroup,
-    ClassOutput,
-    VideoSearch,
-    VideosConfig,
+    FeedPreview,
+    FeedSection,
+    GymDetail,
+    GymsPage,
     VideosFeed,
     VideoType,
 )
@@ -22,135 +25,144 @@ from src.api.service.videos_service import videos_service
 
 logger = logging.getLogger(__name__)
 
-videos_router = APIRouter(prefix="/apps", tags=["videos"])
+videos_router = APIRouter(tags=["videos"])
 
 # Page size when the client doesn't ask: mobile-feed friendly, capped so one
-# request can't pull the whole feed.
+# request can't pull everything.
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
+# Videos per genre in the one-shot "All" preview.
+PREVIEW_PER_TAG = 10
 
 
 @videos_router.get(
-    "",
-    response_model=list[str],
-    summary="List companies that have a videos_config.yaml",
-    responses={200: {"description": "Company ids, sorted"}},
-)
-async def list_apps() -> list[str]:
-    """Return every company id with a brief on disk."""
-    try:
-        return await videos_service().list_apps()
-    except Exception:
-        logger.error("Failed to list companies", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to list companies",
-        ) from None
-
-
-@videos_router.get(
-    "/{app_id}",
-    response_model=VideosConfig,
-    summary="Get a company's full video-discovery brief",
-    responses={
-        200: {"description": "The company's validated videos_config.yaml"},
-        404: {"description": "No such company"},
-        422: {"description": "Brief exists but its videos_config.yaml is stale"},
-    },
-)
-async def get_config(app_id: str) -> VideosConfig:
-    """Return one company's full ``videos_config.yaml``."""
-    try:
-        return await videos_service().load(app_id)
-    except NotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from None
-    except InvalidConfigError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from None
-    except Exception:
-        logger.error("Failed to load brief for %s", app_id, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to load brief",
-        ) from None
-
-
-@videos_router.get(
-    "/{app_id}/searches",
-    response_model=list[VideoSearch],
-    summary="Get a company's search prompts",
-    responses={
-        200: {"description": "The company's search prompts"},
-        404: {"description": "No such company"},
-        422: {"description": "Brief exists but its videos_config.yaml is stale"},
-    },
-)
-async def get_searches(app_id: str) -> list[VideoSearch]:
-    """Return a company's searches. Searches are query-only — genre is decided
-    per-video by the classification pass, so there is no video_type filter
-    here (use ``/videos?video_type=`` for that)."""
-    try:
-        config = await videos_service().load(app_id)
-    except NotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from None
-    except InvalidConfigError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from None
-    except Exception:
-        logger.error("Failed to load searches for %s", app_id, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to load searches",
-        ) from None
-
-    return config.searches
-
-
-@videos_router.get(
-    "/{app_id}/videos",
-    response_model=VideosFeed,
-    summary="Get a page of a company's fetched videos, optionally filtered",
+    "/gyms",
+    response_model=GymsPage,
+    summary="Get a page of gyms (the gym browser)",
     responses={
         200: {
             "description": (
-                "A page of the company's video feed (slim, frontend-only "
-                "fields), excluding off-niche videos (classifier "
-                "`is_good == False`); `total` is the match count before "
-                "pagination. `video_type` filters to one genre tag, `big_group` "
-                "to the coarse educational/entertainment split"
+                "A page of slim gym cards. Each carries the theme to brand with "
+                "when picked + its celebration image; `total` is the gym count "
+                "before pagination. `query` filters on gym id / theme / discipline"
+            )
+        },
+        422: {"description": "A gym file is stale, or bad limit/offset"},
+    },
+)
+async def get_gyms(
+    query: str | None = None,
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+) -> GymsPage:
+    """Return one page of gyms — the entry point. Pick a gym, then fetch its
+    detail (`/gyms/{gym_id}`) and feed (`/gyms/{gym_id}/videos`). `query` is an
+    optional substring filter; paginate with `limit`/`offset`."""
+    try:
+        return await videos_service().list_gyms_page(
+            limit=limit, offset=offset, query=query
+        )
+    except InvalidConfigError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error("Failed to list gyms", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list gyms",
+        ) from None
+
+
+@videos_router.get(
+    "/gyms/{gym_id}",
+    response_model=GymDetail,
+    summary="Get one gym's full content detail (classes, rewards, feed spec)",
+    responses={
+        200: {
+            "description": (
+                "The gym's feed specification, branded class cards, and points-"
+                "store reward cards, served verbatim — everything a member-app "
+                "surface renders except the paginated video feed. The client "
+                "reads this whole object into memory on selection"
+            )
+        },
+        404: {"description": "No such gym"},
+        422: {"description": "The gym file is stale"},
+    },
+)
+async def get_gym(gym_id: str) -> GymDetail:
+    """Return one gym's full detail by ``gym_id`` — its spec, classes, and
+    rewards. The video feed is separate (`/gyms/{gym_id}/videos`) because it
+    pages."""
+    try:
+        gym = await videos_service().load_gym(gym_id)
+        return GymDetail.from_gym(gym)
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except InvalidConfigError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error("Failed to load gym detail for %s", gym_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load gym detail",
+        ) from None
+
+
+@videos_router.get(
+    "/gyms/{gym_id}/videos",
+    response_model=VideosFeed,
+    summary="Get a page of a gym's video feed (approved, or rejected)",
+    responses={
+        200: {
+            "description": (
+                "A page of the gym's feed, hydrated from the shared pool in feed "
+                "order: the scan-approved `good_video_ids` by default, or the "
+                "scan's `rejected_video_ids` when `rejected=true`. "
+                "`video_type`/`big_group` filter as expected"
             )
         },
         400: {"description": "`video_type` and `big_group` are mutually exclusive"},
-        404: {"description": "No such company, or it has no videos_output.yaml yet"},
-        422: {"description": "Output is stale, or bad limit/offset"},
+        404: {"description": "No such gym"},
+        422: {"description": "A pooled video is stale, or bad limit/offset"},
     },
 )
-async def get_videos(
-    app_id: str,
+async def get_gym_videos(
+    gym_id: str,
     video_type: VideoType | None = None,
     big_group: BigGroup | None = None,
+    rejected: bool = Query(False),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     offset: int = Query(0, ge=0),
 ) -> VideosFeed:
-    """Return one page of a company's fetched videos, **excluding off-niche
-    ones** (the classifier's ``is_good == False``); unclassified videos still
-    serve. Filter with **either** ``?video_type=<genre>`` (one tag) **or**
-    ``?big_group=<educational|entertainment>`` (the coarse split) — supplying
-    both is a 400. Paginate with ``?limit=`` (default 20, max 100) and
-    ``?offset=``; ``total`` reports how many videos matched before slicing."""
+    """Return one page of the gym's feed, hydrated from the shared pool in feed
+    order. By default it serves **only that gym's ``good_video_ids``** (the
+    scan's approved feed); ``rejected=true`` serves its ``rejected_video_ids``
+    instead — the one place the rejected list is exposed read-only, so the admin
+    can review and keep videos back. The raw pool is never served."""
     if video_type is not None and big_group is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="video_type and big_group are mutually exclusive; pass at most one",
         )
     try:
-        output = await videos_service().load_output(app_id)
+        service = videos_service()
+        gym = await service.load_gym(gym_id)
+        # Read ONLY this gym's own ids by filename (id == filename stem),
+        # preserving feed order — never the whole pool, so the feed costs
+        # O(feed size), not O(pool size) and never blocks on a 20k-file read.
+        # `rejected` swaps the approved feed for the scan's rejected list.
+        ids = (
+            gym.videos.rejected_video_ids
+            if rejected
+            else gym.videos.good_video_ids
+        )
+        videos = await service.load_videos(ids)
     except NotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -160,54 +172,59 @@ async def get_videos(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from None
     except Exception:
-        logger.error("Failed to load videos for %s", app_id, exc_info=True)
+        logger.error("Failed to load gym videos for %s", gym_id, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to load videos",
+            detail="Failed to load gym videos",
         ) from None
 
-    # Off-niche videos (the classifier's `is_good == False`) are never served —
-    # the verdict is enforced here, not on the client. Unclassified videos
-    # (`is_good is None`, i.e. classify hasn't run) still serve, so a freshly
-    # fetched feed isn't empty.
-    videos = [v for v in output.videos if v.is_good is not False]
     if video_type is not None:
         videos = [v for v in videos if v.tag == video_type]
     elif big_group is not None:
-        # A genre filter excludes unclassified videos (tag is None -> no group).
         videos = [
             v for v in videos if v.tag is not None and big_group_for(v.tag) == big_group
         ]
 
     total = len(videos)
     page = videos[offset : offset + limit]
-    # VideoOutput -> VideoCard projection (drops desc/likes/transcript/
-    # source_queries) via from_attributes on the slim models.
-    return VideosFeed(
-        company_name=output.company_name,
-        app_id=output.app_id,
-        generated_at=output.generated_at,
-        total=total,
-        limit=limit,
-        offset=offset,
-        videos=page,
-    )
+    return VideosFeed(total=total, limit=limit, offset=offset, videos=page)
 
 
 @videos_router.get(
-    "/{app_id}/classes",
-    response_model=ClassOutput,
-    summary="Get a company's four branded class cards",
+    "/gyms/{gym_id}/videos/preview",
+    response_model=FeedPreview,
+    summary="Get the 'All' preview: a few videos per genre in one request",
     responses={
-        200: {"description": "The company's class_output.yaml (4 name + image cards)"},
-        404: {"description": "No such company, or it has no class_output.yaml yet"},
-        422: {"description": "Classes exist but the class_output.yaml is stale"},
+        200: {
+            "description": (
+                "One section per genre present in the gym's feed, each capped to "
+                "`per_tag` videos in feed order. Each genre is sampled "
+                "individually, so none is starved by pagination. `rejected=true` "
+                "previews the rejected list."
+            )
+        },
+        404: {"description": "No such gym"},
+        422: {"description": "A pooled video is stale"},
     },
 )
-async def get_classes(app_id: str) -> ClassOutput:
-    """Return a company's four branded class cards (name + horizontal image)."""
+async def get_gym_videos_preview(
+    gym_id: str,
+    rejected: bool = Query(False),
+    per_tag: int = Query(PREVIEW_PER_TAG, ge=1, le=MAX_LIMIT),
+) -> FeedPreview:
+    """Power the "All" view in one request: hydrate the gym's feed once, group it
+    by genre tag in feed order, and return up to ``per_tag`` videos per genre.
+    Sampling each genre individually means no genre is dropped by global
+    pagination. ``rejected=true`` previews the scan's rejected list instead."""
     try:
-        return await videos_service().load_classes(app_id)
+        service = videos_service()
+        gym = await service.load_gym(gym_id)
+        ids = (
+            gym.videos.rejected_video_ids
+            if rejected
+            else gym.videos.good_video_ids
+        )
+        videos = await service.load_videos(ids)
     except NotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -217,8 +234,23 @@ async def get_classes(app_id: str) -> ClassOutput:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from None
     except Exception:
-        logger.error("Failed to load classes for %s", app_id, exc_info=True)
+        logger.error("Failed to build feed preview for %s", gym_id, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to load classes",
+            detail="Failed to build feed preview",
         ) from None
+
+    # Group by the single genre tag, preserving first-appearance (feed) order,
+    # and cap each genre to `per_tag`. Untagged videos form no section.
+    order: list[VideoType] = []
+    by_tag: dict[VideoType, list] = {}
+    for v in videos:
+        if v.tag is None:
+            continue
+        if v.tag not in by_tag:
+            by_tag[v.tag] = []
+            order.append(v.tag)
+        if len(by_tag[v.tag]) < per_tag:
+            by_tag[v.tag].append(v)
+    sections = [FeedSection(tag=t, videos=by_tag[t]) for t in order]
+    return FeedPreview(sections=sections)

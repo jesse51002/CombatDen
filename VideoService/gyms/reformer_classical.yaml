@@ -1,0 +1,1069 @@
+gym_id: reformer_classical
+gym_type:
+- reformer_classical
+theme: ReformerClassical
+videos:
+  specification:
+    short_videos_desc: 'Classical reformer pilates in the Romana lineage — the traditional
+      order, apparatus and breath taught faithfully, from footwork and the hundred
+      through the full system — plus the enjoyable side: instructor vlogs and "day
+      in the life", studio behind-the-scenes, what a classical class is really like,
+      aesthetic class edits, and teacher interviews on the method.'
+    short_avoid_desc: No mat-only or generic ab routines mislabeled as reformer, "Club-Pilates
+      style" contemporary flows passed off as classical, or "transform your body in
+      X days" clickbait. Skip "reformer vs mat / classical vs contemporary which is
+      better" framings and "pilates is useless/overrated" debate clips. (Fun vlogs,
+      studio tours, class edits, and interviews are welcome.)
+    videos_desc: |-
+      # What we surface
+
+      Classical reformer pilates in the Romana / Joseph Pilates lineage for
+      members learning the method correctly and longtime students refining it
+      — plus the fun, human side, so it's a feed members enjoy, not just a
+      how-to library.
+
+      ## Classical technique & instruction
+      - The traditional exercise order on the wooden reformer: footwork, the
+        hundred, frog, leg circles, stomach massage, short and long box,
+        long stretch series, knee stretches
+      - Spring settings, transitions, breath, and the precision that define
+        the classical system
+      - Full-length classical reformer classes and single-exercise technique
+        breakdowns from senior classically-trained teachers
+      - Credible studio coaching that honors the original work
+
+      ## The fun & human side
+      - Instructor vlogs and "day in the life" of a classical pilates teacher
+      - Studio behind-the-scenes and "what a classical reformer class is
+        really like"
+      - Relatable pilates humour and class moments
+      - Aesthetic class edits and before/after transformation stories
+      - "30 days of reformer" journeys and senior-teacher interviews on the
+        method and lineage
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about classical reformer pilates; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Mat-only routines or generic "core / ab burner" workouts mislabeled
+        as reformer
+      - "Club Pilates / contemporary reformer" flows passed off as the
+        classical order
+      - At-home "reformer alternative" band improvisations sold as the real
+        apparatus
+      - Clickbait ("longer leaner legs in 7 days", "snatched in 2 weeks"),
+        scams and misinformation
+      - "Reformer vs mat / classical vs contemporary which is better"
+        cross-style framings
+      - "Pilates is useless/overrated" debate or reaction rage-bait
+
+      ## Keep in mind
+      A video is not rejected just for being short, a vlog, a clip, a class
+      edit, a highlight, or entertaining — fun and creator content is wanted.
+  queries:
+  - classical reformer pilates full class
+  - classical reformer footwork series tutorial
+  - the hundred on the reformer classical
+  - reformer short box series breakdown
+  - reformer long box series technique
+  - long stretch series reformer classical
+  - reformer stomach massage exercise tutorial
+  - reformer leg circles and frog classical
+  - classical reformer spring settings explained
+  - beginner classical reformer pilates class
+  - reformer pilates common mistakes and corrections
+  - day in the life of a classical pilates teacher
+  - what a classical reformer class is really like
+  - classical pilates studio behind the scenes
+  - 30 days of classical reformer transformation
+  - relatable pilates class moments funny
+  - aesthetic classical reformer class edit
+  - classical pilates teacher interview on the method
+  - senior classical pilates teacher reformer demo
+  - joseph pilates original reformer work explained
+  good_video_ids:
+  - -_SIPkyKIXM
+  - Gi-eNzpk4Xk
+  - HVph4YA198o
+  - HXAPXvSYNYI
+  - Ic9M_rdWLyg
+  - KpBX5zb-tcw
+  - L-CE0dAxnKU
+  - M43CvYO3EOw
+  - MB4D_0xJoa8
+  - NT_yV_DZ5D4
+  - Nfxo6fzAb8w
+  - UIEBbELonyY
+  - UsxKxMzo3yo
+  - WdSbqPm414A
+  - XUqNRbeKErI
+  - _OWgUlYdXJU
+  - _ubONCYfnqA
+  - a9sBK5y9-8s
+  - b3B9tmwR58E
+  - bgB91vVONcU
+  - cQQNS-JrzIo
+  - eTws36LXCgE
+  - fllnZLJ6Lbo
+  - g1ghaMBoOFs
+  - gOQVcOO3t-Y
+  - jJ_FyKgLNnE
+  - jV26HGDDnnM
+  - mrjObpvJVSI
+  - n5WJYBtTPXg
+  - nfMALE8WdoE
+  - paRmHPWwb50
+  - puJudHn0aGY
+  - uFUuZCEb39U
+  - -mSHcG9fbN8
+  - 1STniqqQtrc
+  - 2vlwi8p26c4
+  - 9PlvetPZ9Bs
+  - ANFAB_0YkSs
+  - BfS4czPkHOI
+  - DWky-rEpBhk
+  - FF8JrwJBRzs
+  - Gt9PxNaZ6VM
+  - LeWdb4lfSJ4
+  - ML4qbADKj28
+  - ODJJuGAXhg8
+  - OKEQMJbd6cs
+  - RFfdwH-mSTQ
+  - Rm5gxOxkR1Q
+  - Tti2GMXkG60
+  - VsHbWsZkO30
+  - YEhD2pIj4Fo
+  - YJHW_ZI8aIc
+  - YaoTIbiHb0w
+  - aGYjcjrIiic
+  - aw_pWezUxcc
+  - bBQA7jBHev4
+  - fIXPiKaUQW0
+  - fqzSnavt8k8
+  - gD_g7pSZg90
+  - iycHLPcEKvU
+  - qX6gGmqQIL0
+  - ssIxyiMxG2E
+  - vdUP4MZknFE
+  - weIcZ-Ca8Eo
+  - wu0fU1_q3zc
+  - xqll4jBvdRs
+  - y1FW5EJICCM
+  - 2EhXLcjcUQE
+  - 2mjc6AdpPpw
+  - 3kluurmB2Kw
+  - 4jo0pP4zgO4
+  - 6lL8ZiX7tw0
+  - 9WPe2-HjS7w
+  - AwT23u6LAZw
+  - Euf_7B_A0dk
+  - IJa7WNFXrKs
+  - LXFfLDPgvOs
+  - L_7ErRD6lr8
+  - MaL2wVKNQkc
+  - OL6apcaoWjc
+  - Tecz4qGrLDQ
+  - Toz7qFp-GK4
+  - Vj8iCgQnhwA
+  - WQ6DCLxZbjQ
+  - XF2u7pGDnxo
+  - XoSdNE6Xy9Y
+  - dFelEYJ9X74
+  - e1oTHBaydu0
+  - p0_ZPY7TRBE
+  - s5FSQWddVxI
+  - tJrHxYk0H5w
+  - tYbDHLYrlbc
+  - ttIAqdCR6oU
+  - uoX7rCEaN0U
+  - urZkt09jNrE
+  - xI82OUlb-T0
+  - xQBQN1d-R4g
+  - yjClkfDTgQQ
+  - -yjrW1_JY-E
+  - 0Aij270e1pY
+  - 3K4ydbybufM
+  - 3aDsGE8Y0QE
+  - AH_jqDHNsdY
+  - HbegSZSLKnM
+  - Joh6SKPBRSQ
+  - L2JdM3wzdxQ
+  - OZ_Ow2wmedQ
+  - R3aUIdlqiy0
+  - SBPimt5LN_k
+  - cKVRVrQR-14
+  - jX6HoMVtw-U
+  - lVQZPOSSYzs
+  - lokn0miZSV8
+  - r-WNA5WLt2E
+  - vQtcQxIsSOs
+  - w0mjKPP5Ybw
+  - wYgtJsApEwM
+  - 062NPtboMI0
+  - 0NXJVAILuRY
+  - 0ZZ5lt1Vnug
+  - 1oiQtfOCXTQ
+  - 1xboGdP8lCE
+  - 5yB1La-auJM
+  - 9hyPZ9_0O0w
+  - 9v6mYwGxnuE
+  - APhM_2IXhr4
+  - AisnXDQwjOE
+  - C25MKm9jN1Y
+  - FVDT34DpQCk
+  - FaY8KtQCuMs
+  - J9vYboCrbNU
+  - LfpQaKvzy2Q
+  - MPL0zq_0yP8
+  - O-bbA_TfQcw
+  - PLoycWE0mYA
+  - PT_0FAVeKFY
+  - Sbiqni-nJsk
+  - VsRDOqFB76Q
+  - X1yl_ANvJp8
+  - YjleTnfeEAs
+  - _gbBkToReWI
+  - dnRJxbdUa_M
+  - g7mRrWDMYHU
+  - jWlYbG7UKlY
+  - jhtg5MBms3c
+  - n7HXRGOB-9U
+  - p8be3SEg_dg
+  - rYi2E3FM3_A
+  - rmX5fAQxEuk
+  - tdLnT3UonTQ
+  - uzd61-S5-EY
+  - vt9v3eHIBnY
+  - vx4DdBWY6kQ
+  - xZe5lwxd00I
+  - zKmrKPoKkgw
+  - -KJTKwXWfJk
+  - 0NQC2LkgZ4Y
+  - 2LnDbhMh3CE
+  - 56hw5ULKz7M
+  - 98H52fW-Gic
+  - BUr5zpBgPf0
+  - CrZLr93JnMg
+  - FQ25wO52QrQ
+  - Fkos6uxeZKM
+  - FojyMf7pb2U
+  - GKUF-6hAOHU
+  - HgDmTRkkufU
+  - IALt_ViVnu4
+  - Sas9eBPTYBI
+  - ZcNkBh3Pvjc
+  - _IDm9yQ6-cE
+  - a0cVuDMgqXM
+  - aTOAdXjmdd4
+  - dwwRYqnnk4s
+  - fipj8Mlkk6Y
+  - fuCVF-ZK9pQ
+  - jlWn33D-kbo
+  - lcLWYgvkAHI
+  - mQJi-bMU7Sk
+  - nGYXHtLBpDI
+  - sw1DftJ_NnA
+  - sx6J_ci6KC4
+  - thoaUdyQb5Y
+  - u6R_l3WhHDA
+  - vWkxhtfw0A8
+  - xKmk7Ivpm4s
+  - zKtMzrUoCaU
+  - 0O0SUY70NRE
+  - 11S6HNLInGc
+  - 8tuQpnj9znk
+  - DguQkFo7Gqo
+  - EaUgnIMTX-Q
+  - N5sPusbtP5U
+  - PzjCg4O7vl0
+  - RJ8tl88SesA
+  - SeC5PxBSYeY
+  - SiwKVo_sL28
+  - Ty8DXDtAofA
+  - UiVmh8WEUL8
+  - Umea9-ZNj2w
+  - Wt_horWSoA4
+  - YkAxrnE9xb8
+  - au7s55obWTU
+  - bTXjWy39WeA
+  - g3c7jU5Ecgo
+  - igxr2s0-myo
+  - k1Q5zUbW4t8
+  - rxNtthY7e4s
+  - ucFNm3eQVp8
+  - ztCyLo65FUg
+  - -Qx_FRqNAv4
+  - -cqsFvfuhG8
+  - 5iX6ecbz8XE
+  - 5mKcvTChl_I
+  - 69A7lvKUjDQ
+  - 95dg5cGsTWI
+  - CPf_0qnCho4
+  - DXIUGawadj8
+  - FVBLKOYHz9o
+  - FZn7MlQaFQ4
+  - HSgwEQ2G7IE
+  - O3L3u3Hs6zs
+  - RhStCBpTios
+  - Uduz4e1cACI
+  - UrCj4cNb6kg
+  - _kDF7vZWMoQ
+  - f4Hyy1W1F8Q
+  - hgqmGNm3Jz8
+  - jXulh6_r9Ok
+  - kWpfWnIcmj4
+  - kg4IwKQKIZM
+  - omHCmdCNK4c
+  - q2gvY0KFwmA
+  - sASj1oP9Lf8
+  - sHggOlvbjkI
+  - uw-KS3W79Kw
+  - 0Y80GoHNyaI
+  - 0c3CTUXEj6Q
+  - 2OX6euzZTuE
+  - 6lWTcJYxl7c
+  - 6uD0MKGW0BY
+  - 75Y7IlP-uUw
+  - DhO6u5pB0xo
+  - F7QUSczcDYk
+  - HWp54VnMLew
+  - HshXwmHD-2I
+  - NOYVhGYFB2E
+  - O8hHcvDfDOY
+  - PYbGv3CigL0
+  - QDBzjlhKsco
+  - QqNUFwTn97c
+  - V5LMXgBF0PA
+  - _KZGoZmob1Y
+  - abPHj3OdSgo
+  - b5AmcuY3hgM
+  - bTyhWAMe_bg
+  - ciR7LA23ooY
+  - clD9Yd_Mi4c
+  - dQOlaqg5m-g
+  - evNHa4rhHEc
+  - f7bixF8hA1w
+  - hqHYZupJY_E
+  - pvMN4qKSvdM
+  - qaR-ympZ22g
+  - vLA7IMCpjZI
+  - vLQ9UjZo4nM
+  - wWKF4Sx1d3U
+  - 2IhyJG-s83c
+  - 3N5oYk7jnFQ
+  - 4OD6vFINpLA
+  - 80rQeCMlEUU
+  - 8uqMlRLjUbI
+  - GE0ZkMEjRp8
+  - H0PSr1XjkFk
+  - MjMGX4_eRDA
+  - PL95rT6k03M
+  - QZ9dI_0XCSY
+  - RVXHksa-IcQ
+  - SIGKmOFcfbE
+  - XW34jjW3F1o
+  - Ylg4yDhlOMM
+  - bKtdCS-7Scg
+  - d3zbaFB9WM8
+  - fV_UCskwpb0
+  - feu_0Ougwlc
+  - kVKOnITOYjQ
+  - lae1ENagN9o
+  - pyU8uQkpK8c
+  - q-i8vvFzk5M
+  - rEkP3PJW5RA
+  - tPoNk7cILGs
+  - 1hvEoNiCRqQ
+  - 72IaOiGWeIY
+  - 8H2J_jXSp68
+  - 9IkIDbm6IOI
+  - 9c2d6ODoDmU
+  - 9ulMbvUrYZg
+  - AVEd2T_ForA
+  - BO3NJGIKdic
+  - JaAc7vXTq8c
+  - PSjDPF0zSwI
+  - Rb6K1KOLbSs
+  - RntEmO3A_5g
+  - Sw0UcdRra10
+  - TLZoqYiPWP8
+  - V0Ze6EkUOi8
+  - WFYEMv9KoBU
+  - bv7S4egNa1k
+  - d4_7FnwXF9Y
+  - gm3OKM8HWnE
+  - lQREfvCdEH8
+  - lU6VvT-fGK4
+  - memfEEN0GoI
+  - nFZ-jpGizac
+  - oiQK6toAAYA
+  - p8cfpHBoUus
+  - plbZk8BgBb8
+  - yPjGdhYxZOU
+  - zehYQYILS88
+  - 0aBy-FYUjw0
+  - 3_0ZX_szwV0
+  - 3_dTVCZSXUE
+  - 3bB8JG-XGcc
+  - 7-JBsTkdCrE
+  - 7o_kElA2P9c
+  - 9HaF1sTHMVM
+  - BIisTf1oHdE
+  - BfRY99Ka-zQ
+  - IZ5-cImho_w
+  - ImQFoaPkO7A
+  - LkDQ3_Ydq74
+  - O4Tw9BFWHHo
+  - OSOjH1ZuXqI
+  - QG8HXYs8cOU
+  - UHAbjfsmYMg
+  - WN6_-BzX04s
+  - XMHUw3EhBlI
+  - an36QkeNs0I
+  - bN1Ec5zBkaM
+  - egkrL_QVSqA
+  - h5AZTnD_QW4
+  - rxCwR6OW5fc
+  - sqhwaY0q4zE
+  - tOVGyurskXY
+  - txx262Nmj3Q
+  - 7F1f0bXHzMU
+  - 8JIVi-IWcP8
+  - APZA_eeBSd0
+  - HI7-yvAezwk
+  - HkuMHcyemnw
+  - I6Cy-2RvkuM
+  - JZt51XC9eSs
+  - P1W8gPleXGA
+  - QskIMyfiwXQ
+  - R_hJaIYfVVI
+  - TePkRyv7EHo
+  - XlNp48bKEio
+  - aVcSLoQxBAs
+  - doGkcbAqNho
+  - p5c9Dy84hHE
+  - q4aSiZC1yjo
+  - qp1LgotP5dc
+  - rJIu3rDN-zE
+  - systHpcHseU
+  - vz3kOdMbAMU
+  - waP3du0Lr-o
+  - wfxk7Ei4XSY
+  - 0p9LCkFPPWQ
+  - 8HlBEN8U1KM
+  - B1PoTakYxgY
+  - BLa7ovA1--s
+  - F71iZWvFies
+  - FAAIatAJUIY
+  - I8SVUCYDyYY
+  - LQlaFxGR6Lw
+  - P4zpDtQKQQc
+  - PpTPIGNFqn8
+  - Rk6c7_T0ALA
+  - Vt6IIhDgFas
+  - Y-H98bAOB3M
+  - Z8Yq3w4Wf0c
+  - _LIgLBp4cxY
+  - aidlHNTTk3c
+  - bVnuENNOOsY
+  - jsrPJX7-0Rc
+  - sktInFG4GgE
+  - tD-usRc1aUw
+  - uS2blaMA5jQ
+  - y07z6kYz_3I
+  - ycXPFNKQpdQ
+  - yy-FuzfmZqU
+  - 1WL8jQt1WKM
+  - 3U6FbIowIgw
+  - 9kitjt0h8Vc
+  - I0KY01mTwYY
+  - KrhkS6hKwhs
+  - U-KdYns1CDc
+  - VathDT6L77o
+  - Ys9xXzuBuWU
+  - ePzyn2mKqDE
+  - hOUnIFNkY4Y
+  - hyXmkKy1_wg
+  - jaZeXIWaeqA
+  - kLNWjZ-ehRQ
+  - nXU3GmrrLdg
+  - tKKrIrMnIJg
+  - vnGYPuRT7jM
+  - wtLuF1ghfwQ
+  - 63v6AU-3fqM
+  - 8am4p-yEtiw
+  - 8lt66IqlU3U
+  - 8xalCis0ESk
+  - B8DRudvsu3A
+  - E09nZqqHel0
+  - ItsDdKaznd0
+  - NAsRGSoj0tg
+  - R1QTj9J-SoU
+  - TCuw_GnL31E
+  - TMz2uClI3lA
+  - UqkfgmRd1F0
+  - VDuUVyuIz4g
+  - Vbv5GwiMYLo
+  - dg613JAW6fE
+  - dvA5EL1agrI
+  - fPQramr0pM8
+  - fn_Xaftdxxc
+  - haX25zafqKo
+  - kVkK8VgjltY
+  - khVMDLKHwQI
+  - lJhq8-MuCpQ
+  - p5wzXdhnIX4
+  - rE06xJHUBK0
+  - 4CiJcu57lFw
+  - 9JTy6lMg0sU
+  - CEYvLDKvXQ8
+  - HxNWQZjkLMk
+  - LDr0BNHgRfU
+  - P3h895yE8kY
+  - TGejJOLjqZ8
+  - UyVZ4AT8zoc
+  - ah_wQBqKyFk
+  - g2vBrgPBmFQ
+  - ngV2BLWi_dY
+  - rnbNT6u-FL8
+  - s5Dg_9FKuzc
+  - t-AVCP3U8l4
+  - uHwc55whmng
+  - uq3JX7oaQIg
+  - yGLOrFDEtmY
+  - 3fwbtF1TkIY
+  - 6onkc1noAi8
+  - G0bYJnOA5dg
+  - HD5MdFiXT7k
+  - JujwOOjSJfo
+  - MFhSHxPmXaA
+  - Nqh3lESnrg4
+  - OH1Rw_GdoG0
+  - OTcsB8rrWJ4
+  - Qz81e2bScZM
+  - _I-qMG3OlFM
+  - ay5X5u1Rb9Q
+  - bQExB1_DRpU
+  - bwWf9FpOE9s
+  - ej-I36Nf3YE
+  - jdyOOQQtSI4
+  - pa81jQGYV4E
+  - qrXgcdOow10
+  - rqm57G36KK0
+  - tmNYzgselcY
+  - tq1ZOXz9F5I
+  - uXyIHdmty_U
+  - v-AZ7r41iOE
+  - 0H38ycwhs5Y
+  - 0Io61Cal5iI
+  - 0jL1x9CHWJo
+  - 7x7T0RuG5CM
+  - 85RhZr5MBA8
+  - A4GbqXJFA4k
+  - BZu_pk7cXVw
+  - DxAfPuoJZdY
+  - H--okaL2Duo
+  - JCA6VI66fYE
+  - JW8B56MPmzo
+  - PoGR7NazZjo
+  - R2ubZ8R0F6g
+  - WjdjRB0c8vI
+  - ZGhdpgvYF3s
+  - ZceG4DfWq20
+  - j5G1mhfRZ-U
+  - tCeN2JiaPeg
+  - tYQf71h4zj0
+  - tZhZQVhJs_A
+  - xmWbq-pcSc4
+  - --Bv-mYEpWI
+  - 3iz7WhVghs0
+  - 3zLbH0N40b4
+  - 5kuh6MhQyjc
+  - 8R53vXBP_v0
+  - 8guwhBRV4Ro
+  - 91ykArlEGbI
+  - CAYNs6eWcg0
+  - CIb7qDQ-1ZA
+  - FmsRJeyAuM8
+  - G9Tf5zpdjFQ
+  - GLpwbl1IbM0
+  - JYqeE2N1cOM
+  - KEfebRPH7W4
+  - KilDm5NZprU
+  - P91ECY3eLvQ
+  - SjeqgPmtfYw
+  - n2L20SjMkAM
+  - w9C72gJInsk
+  - wcS1HcRi39o
+  - yWS16EVicIE
+  - yYQMVlya7-Q
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 0a1TTJeazwg
+  - 1hC3_-c5XYk
+  - 8B9UqB3hq7U
+  - 9a8nsUPtOlI
+  - BmwQrokDXrI
+  - Gf5vK4d1vuc
+  - HN34nV9Z0wE
+  - INXD5osrkDo
+  - K3LEQARlE6w
+  - OnXqIJMP1Ic
+  - Oo7IiLwFGLo
+  - OpvOBh_HHZk
+  - URYaOI4kwnk
+  - Zw8aEShJi9Y
+  - czoUHKFCOyQ
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - hBw7ZzA2iwg
+  - iTPnuchO4WI
+  - jZ8xZaAw5xE
+  - k0QVcaw4A2w
+  - lJpWD-QMPtw
+  - nTzjzMoJpGk
+  - of80V-OYkik
+  - q2MzcWy4osY
+  - s8j951FBSvE
+  - t78OY3zKJVc
+  - uPRmNsCm-nQ
+  - uc7EdaYWs0s
+  - yfv9RZRC4pk
+  - 269huWxxXDA
+  - 2Sq9wuBOH1U
+  - 67rjhDf78Go
+  - 6mT9MG2Tq2Q
+  - 7JYF44bb5_k
+  - 8xEcjoqiiXw
+  - 9Wa9xY88WF8
+  - BRDdRI7TmBs
+  - D_AvOKr8ncE
+  - JYPzPIA9F6o
+  - KJBlo6X4Mm4
+  - Ne8yvlyiO-s
+  - Q-7KCRNLLzc
+  - QSQES583fmI
+  - XLKVB7Cvp8I
+  - byXfcfeiQeA
+  - cQx4mVKyg94
+  - hGmrG_xi16A
+  - kThGMgiprF4
+  - l-ws4eCOG3o
+  - lZuPPKVBfjQ
+  - nsP3zmX6HSk
+  - nxj7_0RqZsI
+  - p61nsi42twU
+  - qT9XWi5z9Zo
+  - wKfm7Os8kyc
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - DUE9VCHeLPA
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - HbB7yhXOVFo
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q4pBYLcn_7c
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - TzBBZMATWWM
+  - VBEj7RosCUE
+  - _pM2cUyrfCA
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - uEjpE8eroHE
+  - vXDJIJEySoM
+  - vnHMEQLKMog
+  - xIjWHYJlRU0
+  - z6k8wXfwS94
+  - -eUk7-gFpfo
+  - 2DNQ5XyuJc4
+  - 4XHNuwz4K-0
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - BjM4Ba_mqlE
+  - Cu4BbnpKKRE
+  - DiARAK3Z5DE
+  - HQnIynBd6ls
+  - ItE7xQpkfMA
+  - Kyp3JGykbOo
+  - PpV7K8m_uEk
+  - WTg6KNuNv9Y
+  - e_j47PUJkXc
+  - giu9rpeZZkc
+  - i6cP3CeT0Rs
+  - iK_h-2kot6s
+  - iax8OYRNhSA
+  - kiPkodTP1Z4
+  - kqyr3kaw5qE
+  - mK5IsS3buCU
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - qlzP9QyUckY
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - xJ_ZuU5127I
+  - z61U3ubcCbw
+  - zaUzyqvqrAA
+  - -LWhd51YxMA
+  - 1E2WEsXqVTE
+  - 1QxRih653nY
+  - 2KP6RYAHBIA
+  - 6IcYWpJ1xes
+  - 6Ju7y7yfrbc
+  - 6TjXPRkXx9c
+  - 81v0ih2LxyE
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - FQEBVY-pjOw
+  - GcM0D2uFDko
+  - MvjMk6BaMtc
+  - RWqJtXJuqTE
+  - S08WbhUAq0Q
+  - XaA3qD1EAqg
+  - di8QaNIXR1E
+  - hCAKBDUTDzE
+  - mS_yuOfyNIM
+  - v6B9zgvkos0
+  - wu9yWSF8B_o
+  - y-2zQVeRdAQ
+  - yXo9T_zO_Mg
+  - 0CrX59ulj9U
+  - 1pnuSi4Ee8I
+  - 1slpaacPJb8
+  - 2MvZ_7401aI
+  - 2PudJur_12E
+  - 5X3sfklhloA
+  - B5qekyoZoh0
+  - FhCfY_SJPIA
+  - Np6xaHBGPHs
+  - SYJu_y6WvEc
+  - W8tWW7mgeiQ
+  - YXzzuLcmE_o
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - tTY5QlwqtQc
+  - vuuqoMs162A
+  - wgYcAjoTLMI
+  - 0nZWa_ZhCY0
+  - 5x3V6JaEHX0
+  - BdWvP-lbb68
+  - EQpY2H7rvoM
+  - Fdcgp_1UQQA
+  - KMliGnl7uVo
+  - QfFgA49klVU
+  - TN9i9Ni0Xr4
+  - TgyBVsdbqKM
+  - VzGWun7aad4
+  - YNHMNVLwy9c
+  - _J1vKIXj6JA
+  - cEVAjm_ETtY
+  - ll4pspBf8Q4
+  - mLTqcadk8Bw
+  - rflBQSJ3fi4
+  - uKqB5cruu4U
+  - wOMf4ytECJA
+  - yHyURNTrot4
+  - yIAYXgxONnU
+  - yhhFA3zHAWY
+  - -l2Ngy_x554
+  - 3ONb6S8JRz4
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - 6G4VfPHWUqY
+  - ECoTe6F4h5s
+  - H-XhIEjCoEk
+  - JuAacs4omrs
+  - Pfse9GxqdAE
+  - Qc5uwMN7ej8
+  - UwGFvbZ93Hk
+  - VikuYpj5rmo
+  - Xwdc2bfL6YI
+  - ZwhX8NaYQv0
+  - e9JmH5uOo_w
+  - g9Er55uc7UM
+  - iq9oDlJBrKs
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - nnUWVclg524
+  - nq07Wb8nCEA
+  - pzYTq2prOg4
+  - tt_3s2gW8co
+  - viKZtYd_I74
+  - w4mdKa97ptM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 1WMrnZ60U58
+  - 3lSDwmBN4_M
+  - 4H-qbzvL6Hs
+  - HWAOifKGLiE
+  - KO2sWBAhZjg
+  - Mlgs4_54q8Y
+  - RPr9rj1o2QE
+  - SNzl8yif-Ds
+  - SQF-0s1CckA
+  - cQ4K399DTgI
+  - eb1IWMxtrgM
+  - g8Bj0uvDE-M
+  - qL7Nlexje-M
+  - tYJJyYUrK4c
+  - vm6ZoKRLGh8
+  - wUtfpdb9SaY
+  - 1-SfQdEZUKM
+  - 5fzTBTfWJ20
+  - 6A98Glp5DuY
+  - 6amk1U-lIKI
+  - BfB4lVnL4CM
+  - GzADpx4fEBY
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - MM0Q35Pcqa0
+  - RqtBUe_IHjI
+  - Z414HcUphI0
+  - Z7Ra8Wa-WMI
+  - _QsGfw1aPdY
+  - bLr0h7cEIKc
+  - cJodfpKUFo8
+  - cdPejPpoMFo
+  - f1Sc-79kzDA
+  - iKNZxVWYeK0
+  - kH3Btjuvpww
+  - kucFhaqVj5E
+  - rT45E7ITdE8
+  - r_VHltdyvv4
+  - vpviEF2piEE
+  - xCrMlgrs0JY
+  - zyKd-uBAFwQ
+  - 6oZfhhEHXU8
+  - 8rVQfOTx3xM
+  - AyMUWBUt3WY
+  - AyS7czPwOs8
+  - E62k1_JLi0A
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - JPIPqi--pA8
+  - M4nSM7TBsJg
+  - RqQqEA-x4_M
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - ax5ThUOHTeU
+  - cujcxjSm69g
+  - gPry3-OomII
+  - jc7kwPDwyuM
+  - kwJmSSUtHOs
+  - oFWVM0X9sL4
+  - pA6ls-oHhX0
+  - w7_UbdGVmKM
+  - yduD5IDUF-c
+  - DbPOVLk0twc
+  - H655bn5Mz18
+  - Hc78YBArDAk
+  - JGqAifiyv8I
+  - JJrVESt-qh8
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - hAmFnXnie-o
+  - kR4i6uK1BQ0
+  - nRQSfBhd7FE
+  - nhEzNDNemDU
+  - oaUrYcoPnlc
+  - t-ezOLT2Kv0
+  - wQmv9emrOeU
+  - xNu0dSe0KDQ
+  - 0qllNTo-Isw
+  - 2uMr2C-u-9w
+  - AsyyZgtHMPw
+  - BconsPgpGv8
+  - ClIoWZlQD70
+  - E4msR7HDS7o
+  - Hh6XVxBGx2U
+  - Hw0gEIfqrH8
+  - JQaeGoQox0k
+  - KXTKsMh6pm0
+  - MJZsVpXZmKw
+  - R8zRZ4NxYYA
+  - RDuywKzm7qM
+  - YKoXfvPIVTQ
+  - Z6VLe8SAiI0
+  - _-NZ6_Al-6A
+  - fy1n_pgJwoI
+  - 716e30A053U
+  - CBnLOlVT4yQ
+  - F_JOoeHXcmc
+  - GJIuTAzs9-Y
+  - Hu-rVZVSzxs
+  - RTJSRtkPHbc
+  - UcXDxaNDzSM
+  - WprPdJKfaGk
+  - YHaEF3q2jWU
+  - ZNIMn0xMVAU
+  - ezOsco9legc
+  - iPEMqiNz3Hg
+  - tJeI51crrvs
+  - zSfaT0VkXw0
+  - BDX4UFr9BWM
+  - EiTJBa8RpWI
+  - KT79sPpOxJU
+  - KxV8I_YyiaY
+  - Mxze3PnBXSA
+  - QsdXRoBiPBI
+  - R-Lc5h2RnZI
+  - TEa8K4N6WpU
+  - WfkwzdgGhOg
+  - bLnjytMXv_A
+  - moVynuxM4fc
+  - sR62ssMP68g
+  - w7FFm9ZdLJY
+  - yGldlUgLiLE
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 8MfFCFro9YM
+  - 9--KfQnOUYo
+  - 9TzHTKBiy68
+  - C1T08u1Ygls
+  - GWV1Mk9JlsY
+  - Hk8AIWhIRqw
+  - LBOFE-DWrD8
+  - MvNRN-GlsJg
+  - PW06dlbQghs
+  - Taxj6Vs0Ys0
+  - eO8W1pWRJ1E
+  - jLWt-gYT1BA
+  - l6SsWCefRhM
+  - rDzDTCyB6NY
+  - 8ajO440Ss0g
+  - 8cbfTonRLJo
+  - Bd4gxNpbJGE
+  - EJUB5oTI9cA
+  - IYni6AfrkAY
+  - If9W3kQa254
+  - J-LMiZHWdbU
+  - Ji01F-ZfXYA
+  - KF3D-Q0C6-c
+  - OI2dBLDW7Ew
+  - RUyOCkLXabA
+  - ZltBJq3VqkM
+  - f0OaQz3cog4
+  - h9_fV6l3vdE
+  - jdo843M-oCo
+  - p5D-MQxkghM
+  - rX5zEYzAsCs
+  - wdr9SANDbGA
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 6ZX-PDPXWXE
+  - 7oBTNk9Y01o
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - LMbElXpaBw8
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - VM6b2AFgPg4
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - fTky0-ETtjA
+  - flWrHnL9ZZ0
+  - foGlgwWk76I
+  - kEiPal3RrKw
+  - l0GCECJxCZY
+  - q0TZvWoHEcw
+  - qaz3IBaXtAU
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 3KxFBGJP7rc
+  - 7iiBRST8CKw
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - JeS69edUl5U
+  - MCGa9qP_Bo8
+  - QrDoS0z6DOo
+  - RlrmSu5u9bE
+  - SAhn3sR7ytU
+  - Tv0k_k7mStk
+  - fXpNnWMATFQ
+  - gyFRstjdf2A
+  - sLYw8VdVGbw
+  - y_upJF4trxE
+  - -GCA92b119Y
+  - 0W6tpYrpzEI
+  - 1PwPmY9abdw
+  - 949tHgR2950
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - cnjVc1ctzYs
+  - dBTQi5kdfW0
+  - jf5-Xpco98M
+  - misFYDj97P4
+  - pPlFSqXnbls
+  - qX4ejoqu5_4
+  - wS7NIu01KrM
+  - zJEVis13vv0
+  scan_costs:
+  - at: '2026-05-29T16:35:24.402572Z'
+    usd: 0.26705243999991524
+classes:
+- name: Foundational Order
+  image_url: https://images.pexels.com/photos/25599825/pexels-photo-25599825.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Learn the classical reformer sequence from the beginning. This class
+    covers footwork, the hundred, and the frog series with proper spring settings
+    and breath control.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Core & Stability
+  image_url: https://images.pexels.com/photos/18136885/pexels-photo-18136885.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Deep dive into stomach massage, leg circles, and side-lying core work.
+    Build precision and functional stability through the classical approach to core
+    conditioning.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Box Series Mastery
+  image_url: https://images.pexels.com/photos/18136886/pexels-photo-18136886.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the short and long box series with attention to classical form.
+    Develop spinal articulation and controlled movement through this dynamic part
+    of the order.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Advanced Stretches
+  image_url: https://images.pexels.com/photos/18136888/pexels-photo-18136888.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Complete the classical session with long stretch series, knee stretches,
+    and flowing transitions. Perfect for refining technique and gaining strength and
+    flexibility.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Grip socks
+  image_url: https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

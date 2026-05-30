@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:customization_engine/theme/theme_icon.dart';
+import 'package:theme_flutter/theme/theme_icon.dart';
 
 /// A single icon-over-label navigation target. Used in top-level
 /// navigation (the bottom nav bar). Mirrors the FlutterCRM
 /// `sidebar_nav_item.dart` pattern.
 ///
-/// The icon is CustomizationService-overridable via `ThemeIcon.widget`: it
+/// The icon is ThemeService-overridable via `ThemeIcon.widget`: it
 /// draws the tenant SVG for [iconSlot] when present and falls back to [icon]
 /// (a `Symbols.*_sharp`) otherwise.
 class AppNavItem extends StatelessWidget {
@@ -23,7 +23,7 @@ class AppNavItem extends StatelessWidget {
   /// `Symbols.*_sharp` fallback drawn when [iconSlot] has no override.
   final IconData icon;
 
-  /// Customization slot id for the brandable icon (see `CombatDenSlots`).
+  /// ThemeConfig slot id for the brandable icon (see `CombatDenSlots`).
   final String iconSlot;
   final String label;
   final bool isActive;

@@ -1,0 +1,652 @@
+gym_id: pilates_barre
+gym_type:
+- pilates_barre
+theme: PilatesBarre
+videos:
+  specification:
+    short_videos_desc: 'Pilates barre — the long line of barre fused with the control
+      of pilates: ballet-rooted small pulses and isometric holds blended with pilates
+      core and reformer work — plus the enjoyable side: instructor vlogs and "day
+      in the life", studio behind-the-scenes, what a barre class is really like, aesthetic
+      class edits, transformations, and interviews.'
+    short_avoid_desc: No plain pilates with no barre or pure dance/ballet technique
+      mislabeled as pilates barre, and no "ballerina body in X days" clickbait. Skip
+      "barre vs pilates" framings and "barre is useless / does nothing" debate clips.
+      (Fun vlogs, studio tours, class edits, and interviews are welcome.)
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and method content for pilates barre members who want
+      both the long line of the barre and the precise control of pilates — plus
+      the fun, human side, so it's a feed members enjoy, not just a how-to library.
+
+      ## Technique & classes
+      - Ballet-rooted barre work: pliés, relevés, small pulses, isometric holds,
+        leg lifts at the rail, and turn-out
+      - Pilates core, glute, and reformer sequences fused with barre
+      - Posture and alignment work shared across both methods
+      - Full-length follow-along pilates barre classes
+      - Single-exercise technique breakdowns: proper tuck/neutral, micro-pulses,
+        port de bras, and common corrections from credible barre/pilates teachers
+      - Props-optional variations using light weights, ball, and band
+
+      ## The fun & human side
+      - Instructor vlogs and "day in the life" of a pilates barre teacher
+      - Studio behind-the-scenes and "what a pilates barre class is really like"
+      - Relatable barre humour and class moments (the mid-pulse shake)
+      - Aesthetic class edits
+      - Before/after and "30 days of barre" transformation stories
+      - Teacher interviews on the method
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about pilates barre; off-topic, genuinely low-quality, or
+      clickbait videos.
+
+      ## Reject
+      - Plain pilates classes with no barre element
+      - Pure ballet or dance-technique content and center-floor combinations
+        mislabeled as pilates barre
+      - Generic "booty / HIIT" gym workouts with no barre or pilates principles
+      - Clickbait ("ballerina body in 7 days", "tiny dancer legs in 2 weeks")
+        and scams or misinformation
+      - "Barre vs pilates / which is better" cross-discipline framings
+      - "Barre is useless / does nothing" debate or reaction rage-bait
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, a clip, a class edit, a highlight,
+      or entertaining — fun and creator content is wanted.
+  queries:
+  - pilates barre full class follow along
+  - pilates barre full body workout
+  - beginner pilates barre class
+  - barre and pilates fusion class 30 minutes
+  - pilates barre thigh and seat series
+  - barre pulses and isometric holds tutorial
+  - pilates barre core and abs section
+  - barre technique plies and releves tutorial
+  - pilates barre proper tuck and neutral spine
+  - pilates barre common mistakes and corrections
+  - pilates barre posture and alignment cues
+  - day in the life of a pilates barre instructor
+  - what a pilates barre class is really like
+  - pilates barre studio behind the scenes
+  - 30 days of pilates barre transformation results
+  - relatable barre class shake moments funny
+  - aesthetic pilates barre class edit
+  - first pilates barre class honest review vlog
+  - pilates barre before and after results story
+  - pilates barre instructor interview on the method
+  good_video_ids:
+  - 2q8xRrm2txg
+  - 8JWZehPF9_k
+  - 9a8nsUPtOlI
+  - C_nui61_xqY
+  - Gf5vK4d1vuc
+  - HsLLajO3q7o
+  - KYKBGG9Q2K8
+  - OqGgxx7HJNg
+  - URYaOI4kwnk
+  - X40Emh1fko0
+  - XUqNRbeKErI
+  - ZRWoHDdsJHY
+  - _gxR-eT96l4
+  - bgB91vVONcU
+  - j7GSBvjmX6I
+  - mrjObpvJVSI
+  - paRmHPWwb50
+  - r4eYNOAxoY8
+  - 1OTZ7mMNnss
+  - 58GMcVb2SVA
+  - 5ws9g8JeFMg
+  - JPGTAGUPVQw
+  - JYPzPIA9F6o
+  - L4RAto8NXOo
+  - ODJJuGAXhg8
+  - P33zNuc7krg
+  - UFiGV4GuY_A
+  - XRtwZaDPsLg
+  - XWJZUGf3Q8Y
+  - YJHW_ZI8aIc
+  - gD_g7pSZg90
+  - p61nsi42twU
+  - uZW34OAfd9U
+  - 2mjc6AdpPpw
+  - 3PPPH37W5jY
+  - 5RDQQ9_DkAk
+  - 927ybVdKUII
+  - 9bcVRmWHJbE
+  - DLs6EMn25qg
+  - Kjh0E9LrxRo
+  - LXFfLDPgvOs
+  - L_7ErRD6lr8
+  - Q4c_xQVwgFU
+  - WevEd5z5aFM
+  - XFrTkMiWAKg
+  - kTgvTMjPdYY
+  - kz2zD7F1CTk
+  - tYbDHLYrlbc
+  - xI82OUlb-T0
+  - 4w8_vj3sI-o
+  - L2JdM3wzdxQ
+  - LIMQWvI37t8
+  - MwOaHZ_KyHM
+  - UnpBG_Xq7h0
+  - WTg6KNuNv9Y
+  - c0lWjaN_AxM
+  - e5aDQRbKFWQ
+  - fiL2FYJ2T6k
+  - iax8OYRNhSA
+  - k9m2QjHKfR4
+  - lokn0miZSV8
+  - qkhLev3bKd0
+  - qlzP9QyUckY
+  - u4qObGWjXn0
+  - xJ_ZuU5127I
+  - y7Bp4D5S3KY
+  - 0NXJVAILuRY
+  - C25MKm9jN1Y
+  - GNiyrSWqXJM
+  - I4VbZINYzrI
+  - RS_Ahj2P2l8
+  - Rgj4W6Ivt28
+  - Xzgc-h5ObhA
+  - YjleTnfeEAs
+  - aPhDuNI6XkU
+  - c3eemgYCuOE
+  - dnRJxbdUa_M
+  - hwGxqcSCYXI
+  - mS_yuOfyNIM
+  - ml1y96RlJp4
+  - n7HXRGOB-9U
+  - p7_oM8wTl0E
+  - sadjnbEM-Xc
+  - w09TzNUO-38
+  - w6fpDkxjD_Y
+  - xGrHUGab5XI
+  - AF-FpK6FeBA
+  - CrZLr93JnMg
+  - Durg01AYUEM
+  - RUpotxmYOvo
+  - Sas9eBPTYBI
+  - V2vImGDXikE
+  - VU0-6vy7b1I
+  - XTHZyShHPY0
+  - XvHgu-bvfrU
+  - YTW9_lNacFI
+  - _IDm9yQ6-cE
+  - aTOAdXjmdd4
+  - wUuMIMg00bQ
+  - CsHrYwgJu50
+  - E6IUqTt03EE
+  - EQpY2H7rvoM
+  - FMsSZ4LScn0
+  - IaUJFHbH-dQ
+  - M052j3NIOA8
+  - TgyBVsdbqKM
+  - cYlLsdYFQeg
+  - hpzcNAjA6fU
+  - k8FOuBrTdtw
+  - nalUnBc1JGg
+  - qtZiJpJDt28
+  - zFyw9UCr8m4
+  - 17FJpOKGuws
+  - 3ONb6S8JRz4
+  - 5iX6ecbz8XE
+  - 7R4uTJR8iKg
+  - 98CRAl9j8ZU
+  - BP0c5GJf3Io
+  - E7AMqIO7VB4
+  - ETccQUM5Lok
+  - Jql6BWNsYLU
+  - L5PgWHymdx4
+  - LpuRLBnxFBc
+  - _kDF7vZWMoQ
+  - lF4iwB5ZXB4
+  - nilrmjYbb_E
+  - nnUWVclg524
+  - onNncKQDC7Y
+  - q2gvY0KFwmA
+  - yjT7dENiWvQ
+  - 2TlZ88Cy7EQ
+  - 4BtwmjuEcB4
+  - 4H-qbzvL6Hs
+  - 9z3QWcUmAnI
+  - HshXwmHD-2I
+  - KO2sWBAhZjg
+  - O8hHcvDfDOY
+  - UOxHLlzoWUQ
+  - clD9Yd_Mi4c
+  - oOeSF3GOsVs
+  - tVHvUvD0wEQ
+  - vLA7IMCpjZI
+  - xyZIPYZXzNg
+  - 6A98Glp5DuY
+  - HtUUldu5SVA
+  - I004SD847U8
+  - JbXTIbb4wcw
+  - K7KGCxTr1iQ
+  - URQSkKA46aY
+  - U_4aQ8kcqak
+  - XW34jjW3F1o
+  - bKtdCS-7Scg
+  - iKNZxVWYeK0
+  - lEshAG5wrc0
+  - lae1ENagN9o
+  - mBYAHxuRByE
+  - u3GK8mhS_LY
+  - 9ulMbvUrYZg
+  - AfMqtvyT_QM
+  - GDoEKWchqiQ
+  - JC5lu5SFI9M
+  - JaAc7vXTq8c
+  - RkE_TC1C0Pw
+  - Sw0UcdRra10
+  - _V9sB4Hrmbo
+  - cthM63LpTM8
+  - p8cfpHBoUus
+  - r45YhhswIdw
+  - zY9LPl8Q8vw
+  - 1p4Cqx3Jli0
+  - 4G27yyT3HxQ
+  - 96sk6fBcs2s
+  - 9HaF1sTHMVM
+  - BIisTf1oHdE
+  - G5RfHzurKi8
+  - ImQFoaPkO7A
+  - OC0xmB8r9_8
+  - bN1Ec5zBkaM
+  - cfaRviHdLfk
+  - he8R192qm3M
+  - hqiAwnm1EoY
+  - 2lJmilvNljU
+  - 9L9Zg-OCkdk
+  - EVD-IuncNWk
+  - HI7-yvAezwk
+  - HR0wKfX7xFI
+  - HojOfYAJZrQ
+  - I6Cy-2RvkuM
+  - KXTKsMh6pm0
+  - PxuYfeKAj_M
+  - fiRgur0rcaw
+  - nD4ujDzdagk
+  - systHpcHseU
+  - xb9NhU3qgMM
+  - D7R5tYSg2Xk
+  - JHDHrjFhqkc
+  - QySbrfiywd0
+  - UcEQrmnn3qg
+  - WzsMmXOCmUQ
+  - XPTrVNVXmJk
+  - aidlHNTTk3c
+  - jOQjiX0wYY4
+  - x_BxEfDqDkg
+  - 5dDuzukpX6s
+  - QsdXRoBiPBI
+  - SPhSwuTYOWw
+  - lQsMkCq3I6U
+  - pOHoN1m20F4
+  - qgx9IwlJ2cs
+  - yjzlhVm026M
+  - -GAHhQPmqgI
+  - 59j3Br_ErUA
+  - 6UI_eQjOxMg
+  - 8DsoVhEVDeE
+  - GWV1Mk9JlsY
+  - I60pl0sycm0
+  - ItsDdKaznd0
+  - KTK9QPm2wwo
+  - M3MoDMDKyJ0
+  - NAsRGSoj0tg
+  - R1QTj9J-SoU
+  - Zoh3Sn1iaLA
+  - _1cpiKecXqw
+  - fn_Xaftdxxc
+  - haX25zafqKo
+  - n3resEILtj0
+  - nc6fR9F2VQY
+  - 8ajO440Ss0g
+  - BmQIC7LycYo
+  - CK50pBYKB2o
+  - KL_fP1Wi4Fk
+  - LYYEL3RdDrs
+  - S3tZbyzn5qs
+  - TGejJOLjqZ8
+  - UKgm2eoFWrQ
+  - WEInI5Kxslg
+  - WvQL3X7BIcI
+  - iZzm_4mbJ_c
+  - lqXWTc_e3h0
+  - nzROLm7UdXs
+  - pQKWm03Y0Js
+  - sN9WV--w1Qw
+  - zdC8bMgA6C8
+  - 3Tc_SOPNm-8
+  - 4sqj7Skstas
+  - F64MjQbdjXc
+  - bbyJKTBIBAQ
+  - fTky0-ETtjA
+  - qrXgcdOow10
+  - sYbbZrFS6wo
+  - xjsBoTNNcRI
+  - zvrdR0xGSRE
+  - 08DDYqsHZVY
+  - 0Io61Cal5iI
+  - 22ZPJyVWCAI
+  - 4XN-KsQDMNA
+  - 7x7T0RuG5CM
+  - BZu_pk7cXVw
+  - Q1jih7JMlBM
+  - Q9Csv8jMJCw
+  - R2ubZ8R0F6g
+  - m3z-qEfoVRA
+  - y_upJF4trxE
+  - 8R53vXBP_v0
+  - CAYNs6eWcg0
+  - G9Tf5zpdjFQ
+  - P91ECY3eLvQ
+  - RzkPGWChqfA
+  - W2Xt_GSPy9A
+  - XqqtfJNSSSI
+  - gq8EkaZuJR0
+  - qX4ejoqu5_4
+  - wcS1HcRi39o
+  - x9Y1rVfUjaU
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - -gPOOF1i7Ws
+  - 1hC3_-c5XYk
+  - 8Bl3hGco8F4
+  - HN34nV9Z0wE
+  - INXD5osrkDo
+  - SQlH_pHSa24
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - hBw7ZzA2iwg
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - nTzjzMoJpGk
+  - 2Sq9wuBOH1U
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - BLDEKE08KH8
+  - D_AvOKr8ncE
+  - KHAUSLob0cA
+  - KJBlo6X4Mm4
+  - Ne8yvlyiO-s
+  - Q-7KCRNLLzc
+  - byXfcfeiQeA
+  - kThGMgiprF4
+  - qT9XWi5z9Zo
+  - uDXX3nlqHL4
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - 8nSX1ZgC70c
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - c_EqLDXRPwM
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - vXDJIJEySoM
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - ItE7xQpkfMA
+  - Kyp3JGykbOo
+  - iK_h-2kot6s
+  - kiPkodTP1Z4
+  - kqyr3kaw5qE
+  - mK5IsS3buCU
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 1E2WEsXqVTE
+  - 1QxRih653nY
+  - 6IcYWpJ1xes
+  - 6TjXPRkXx9c
+  - 81v0ih2LxyE
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - FQEBVY-pjOw
+  - MvjMk6BaMtc
+  - NJQf3qat22Y
+  - S6Z7s9EVnTg
+  - Sbiqni-nJsk
+  - W2_AEEy41j8
+  - XaA3qD1EAqg
+  - di8QaNIXR1E
+  - fOzZNZ3Me5A
+  - hCAKBDUTDzE
+  - pnGmJUkCE04
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - EglydgPqOfE
+  - QJnr0_CVfXE
+  - SYJu_y6WvEc
+  - YXzzuLcmE_o
+  - _wXa_vfzvsY
+  - a0cVuDMgqXM
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - o9pWPZ7WnWU
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - sx6J_ci6KC4
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - wgYcAjoTLMI
+  - -2DCFeCah2E
+  - BdWvP-lbb68
+  - KMliGnl7uVo
+  - P6oaA8fuFzY
+  - TN9i9Ni0Xr4
+  - YNHMNVLwy9c
+  - _J1vKIXj6JA
+  - cEVAjm_ETtY
+  - mLTqcadk8Bw
+  - rxNtthY7e4s
+  - uKqB5cruu4U
+  - wOMf4ytECJA
+  - wZOcrp3nsnk
+  - 4SdIyomdJqo
+  - 4gxSIE4eXBo
+  - 4zO7i9P8mGE
+  - KgF2YaXICfk
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - Xwdc2bfL6YI
+  - YhIPJwEu6PE
+  - f4Hyy1W1F8Q
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - nq07Wb8nCEA
+  - pzYTq2prOg4
+  - w4mdKa97ptM
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 4pfSHh8Llys
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - R9m47Lkimkg
+  - SQF-0s1CckA
+  - ZUiCbPmarlk
+  - cQ4K399DTgI
+  - qL7Nlexje-M
+  - tYJJyYUrK4c
+  - vm6ZoKRLGh8
+  - wUtfpdb9SaY
+  - 5fzTBTfWJ20
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - MM0Q35Pcqa0
+  - Z7Ra8Wa-WMI
+  - bLr0h7cEIKc
+  - cdPejPpoMFo
+  - dXoQvLUShQA
+  - rT45E7ITdE8
+  - r_VHltdyvv4
+  - 6oZfhhEHXU8
+  - AyMUWBUt3WY
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - M4nSM7TBsJg
+  - RqQqEA-x4_M
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - cujcxjSm69g
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - yduD5IDUF-c
+  - -xlNss9GBLM
+  - FLCRVPpEV7A
+  - Pui3UaKI2Pk
+  - T8YvyyFkULI
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - nRQSfBhd7FE
+  - oaUrYcoPnlc
+  - t-ezOLT2Kv0
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - JQaeGoQox0k
+  - YKoXfvPIVTQ
+  - 716e30A053U
+  - 7fSDTZkbO20
+  - CBnLOlVT4yQ
+  - F_JOoeHXcmc
+  - GJIuTAzs9-Y
+  - Hu-rVZVSzxs
+  - WprPdJKfaGk
+  - d9SzjMp4Qhs
+  - ezOsco9legc
+  - tJeI51crrvs
+  - tL9C21Waqs8
+  - EiTJBa8RpWI
+  - GmLfOkqJS4k
+  - KxV8I_YyiaY
+  - bLnjytMXv_A
+  - moVynuxM4fc
+  - pUJCwBAHU1I
+  - sVMnwGVdb8k
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - Hk8AIWhIRqw
+  - LBOFE-DWrD8
+  - PmdKCsO6TmM
+  - WQag1L0QVVw
+  - bVR8_Ri-Me8
+  - eO8W1pWRJ1E
+  - x4l4_LGXX_w
+  - Bd4gxNpbJGE
+  - CEYvLDKvXQ8
+  - IYni6AfrkAY
+  - If9W3kQa254
+  - J-LMiZHWdbU
+  - KF3D-Q0C6-c
+  - bOPoItXE6go
+  - f0OaQz3cog4
+  - jdo843M-oCo
+  - k58kGQ7_s_U
+  - rX5zEYzAsCs
+  - t-AVCP3U8l4
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - kEiPal3RrKw
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - vx6RkgoxzgQ
+  - 0H38ycwhs5Y
+  - 0O9bmFhtrHY
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - sLYw8VdVGbw
+  - -GCA92b119Y
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - MLxz0CJjsRI
+  - cnjVc1ctzYs
+  - dBTQi5kdfW0
+  - gzhaszIxR3g
+  - jf5-Xpco98M
+  - pPlFSqXnbls
+  - r0O2-J3L4a0
+  - wS7NIu01KrM
+  - xBulcE3hxto
+  scan_costs:
+  - at: '2026-05-29T16:27:10.150304Z'
+    usd: 0.16152960000000682
+classes:
+- name: Reformer Essentials
+  image_url: https://images.pexels.com/photos/25599825/pexels-photo-25599825.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the fundamentals of reformer pilates with controlled spring
+    work. Build proper alignment and foundational strength through guided progression
+    sequences.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Barre Alignment Flow
+  image_url: https://images.pexels.com/photos/18136885/pexels-photo-18136885.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Ballet-inspired barre work at the rail with precise pilates control.
+    Flow through turnout, leg lifts, and releves while engaging core and posture.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Pulse & Core
+  image_url: https://images.pexels.com/photos/18136886/pexels-photo-18136886.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Intense micro-pulses and isometric holds that ignite your core and
+    glutes. Feel the focused burn of small, controlled movements with deep abdominal
+    engagement.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Strength & Grace
+  image_url: https://images.pexels.com/photos/18136888/pexels-photo-18136888.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Seamless integration of barre elegance and reformer strength. Build
+    long, lean muscles while developing full-body stability and refined posture.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Grip socks
+  image_url: https://upload.wikimedia.org/wikipedia/commons/8/81/Halksockar.JPG
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

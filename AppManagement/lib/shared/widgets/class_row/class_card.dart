@@ -16,7 +16,15 @@ class ClassCard extends StatelessWidget {
   final String name;
   final String timeLabel;
   final String? instructorName;
+
+  /// Instructor photo: a network [instructorPhotoUrl] (the gym feed) is
+  /// preferred, else a bundled [instructorPhotoAsset]; both optional.
+  final String? instructorPhotoUrl;
   final String? instructorPhotoAsset;
+
+  /// Class image: a network [imageUrl] (the gym feed) is preferred, else a
+  /// bundled [imageAsset]; a placeholder shows when neither resolves.
+  final String? imageUrl;
   final String? imageAsset;
   final int? pointsWorth;
   final int? attendingCount;
@@ -27,7 +35,9 @@ class ClassCard extends StatelessWidget {
     required this.name,
     required this.timeLabel,
     this.instructorName,
+    this.instructorPhotoUrl,
     this.instructorPhotoAsset,
+    this.imageUrl,
     this.imageAsset,
     this.pointsWorth,
     this.attendingCount,
@@ -51,7 +61,7 @@ class ClassCard extends StatelessWidget {
           children: [
             // Image bleeds to the full card width; the card clip handles the
             // corners, so the image itself has no separate rounding.
-            _CardImage(asset: imageAsset),
+            _CardImage(asset: imageAsset, imageUrl: imageUrl),
             Padding(
               padding: const EdgeInsets.only(
                 left: DesignConstants.spacingMedium,
@@ -69,16 +79,27 @@ class ClassCard extends StatelessWidget {
 
 class _CardImage extends StatelessWidget {
   final String? asset;
-  const _CardImage({required this.asset});
+  final String? imageUrl;
+  const _CardImage({required this.asset, required this.imageUrl});
 
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: _kCardImageAspect,
-      child: asset != null
-          ? Image.asset(asset!, fit: BoxFit.cover)
-          : const _ImagePlaceholder(),
+      child: _image(),
     );
+  }
+
+  Widget _image() {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return Image.network(
+        imageUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => const _ImagePlaceholder(),
+      );
+    }
+    if (asset != null) return Image.asset(asset!, fit: BoxFit.cover);
+    return const _ImagePlaceholder();
   }
 }
 
@@ -135,6 +156,7 @@ class _InstructorLine extends StatelessWidget {
       spacing: DesignConstants.spacingSmall,
       children: [
         InstructorAvatar(
+          photoUrl: card.instructorPhotoUrl,
           photoAsset: card.instructorPhotoAsset,
           name: card.instructorName,
           diameter: 20,

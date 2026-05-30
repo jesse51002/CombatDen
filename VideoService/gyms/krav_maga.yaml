@@ -1,0 +1,704 @@
+gym_id: krav_maga
+gym_type:
+- krav_maga
+theme: KravMagaSchool
+videos:
+  specification:
+    short_videos_desc: 'Practical Krav Maga self-defence technique and pressure drills
+      — strikes, releases from grabs and chokes, defences against common attacks,
+      and stress-test scenario training from credible, qualified instructors — plus
+      the human side: school vlogs, drill-of-the-week clips, scenario-test footage,
+      and instructor and student interviews.'
+    short_avoid_desc: Off-topic, clickbait, "one move ends any fight / deadliest technique"
+      fantasy, tactical / operator cosplay, weapon-fetish content, macho posturing,
+      and "krav maga vs X / is it useless / fake / a scam" anti-Krav debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and drill content for Krav Maga members focused on
+      practical self-protection — plus the human side of training so it's a
+      feed members enjoy, not just a how-to library.
+
+      ## Technique & self-protection
+      - Fundamental strikes and combatives from credible, qualified instructors
+      - Releases from grabs, chokes, headlocks, and bear hugs
+      - Defences against punches, kicks, and common attacks
+      - Ground defence and getting back to your feet
+      - De-escalation, situational awareness, and under-pressure decision-making
+      - Stress-tested scenario and pressure drills (favour grounded, realistic
+        instruction over theatrics)
+
+      ## The fun & human side of the school
+      - "A day at the Krav Maga school" vlogs and drill-of-the-week clips
+      - Scenario and pressure-test footage
+      - Behind-the-scenes from instructor courses and seminars
+      - Why-I-train stories and student progress journeys
+      - Instructor and student interviews — composed and realistic, never
+        street-fight fantasy or operator cosplay
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about Krav Maga; off-topic, genuinely low-quality, or
+      clickbait videos.
+
+      ## Reject
+      - Street-fight fantasy and "one move to end any fight / deadliest
+        technique" clickbait
+      - Tactical-operator / "tacticool" cosplay and weapon-fetish content
+      - Macho "I'd destroy anyone" posturing
+      - "Krav maga vs bjj / mma", "is krav maga useless / fake / a scam",
+        and similar cross-discipline or anti-Krav debate and reaction videos
+
+      ## Keep in mind
+      A video is NOT rejected just for being short, a vlog, a clip, or
+      entertaining — fun and human content is wanted.
+  queries:
+  - krav maga for beginners technique tutorial
+  - krav maga basic strikes and combatives
+  - krav maga defense against punches
+  - krav maga choke release defense tutorial
+  - krav maga escape from bear hug
+  - krav maga wrist grab releases tutorial
+  - krav maga headlock escape technique
+  - krav maga ground defense and getting up
+  - krav maga 360 defense drill
+  - krav maga situational awareness and de-escalation
+  - krav maga multiple attacker defense principles
+  - krav maga drill of the week clip
+  - krav maga scenario stress test footage
+  - a day at the krav maga school vlog
+  - krav maga pressure test reality check
+  - why i train krav maga student story
+  - krav maga seminar behind the scenes
+  - krav maga combatives training montage
+  - krav maga instructor interview on training
+  - krav maga student interview on confidence
+  good_video_ids:
+  - 7HklgUAt49Q
+  - 95zGmzVFi4o
+  - DxcHVnm8Vuc
+  - EERMNeTfHaY
+  - LGqAKvPaRwY
+  - P1EsUFd-nsE
+  - P4G6AD4B6rQ
+  - hxyrjNkaMHc
+  - s4p-ITRJAas
+  - uMNashfG0QE
+  - wMBhttCyPcg
+  - -aho_7vojm8
+  - 5maGYRMxbfo
+  - A0o4JsHUSHw
+  - CYUFLnzDsds
+  - TIvltmSaT9k
+  - TNm8Y0Y5RJw
+  - WbNc9DzZ6HY
+  - _8ag8qT78A4
+  - ejYueSljn2U
+  - oqQcvLGpZcA
+  - -DL4KasgjA4
+  - 1WoQPdBg5oE
+  - 6lXwED3LW-w
+  - EydeXyoDgAk
+  - FpvYzbK9bE0
+  - PaL3TnyJbWk
+  - dMuTsGCJbbc
+  - h-IUPjZWcRc
+  - i0cZ5xiRqSc
+  - lEijODP6diw
+  - oZJnpVdcPjI
+  - r2OFrZXHQnM
+  - rA29IS3S56c
+  - tM10c6W_gLg
+  - 1xsI3yMLZCc
+  - 3U5NlIXx0OM
+  - 4-vnP1zcifg
+  - 8NFhHP0DcNQ
+  - 8l49jnk-UbY
+  - Ce8_ehVTRxo
+  - L4oa4nIIYGQ
+  - Y16z9PWl4ec
+  - ZX4cwLzK5yk
+  - dHtWrMaVAHE
+  - gEcNwq9v0bg
+  - tipLv3u9lAk
+  - 29kipLhNL_A
+  - 3UCafeK-fac
+  - 7Q4hzJ3Hthk
+  - 7X_DUzxk5os
+  - AfPd0lX0K2U
+  - DpmVqyJvWCc
+  - DwS1JCP0uTQ
+  - IwP3vETJsbs
+  - OTbVDthzVKY
+  - Ryn4JrEGLPQ
+  - XiIudGBieEM
+  - bsLsTNhrvxE
+  - hMe5BgNxq1A
+  - ih94yFrMWvU
+  - r4iG7UMouJs
+  - 0dxhKFseDpU
+  - 1tzmXBq8jx8
+  - Du3Zu2rNQUk
+  - EoD0Yu40jRA
+  - XZTJkC7BLyw
+  - XbAAiXJuinQ
+  - gZuSJ5BOIx8
+  - iYaQ4vj7rqk
+  - jMMX9AuBiFc
+  - nKickawk-rM
+  - naWEqaGRWQA
+  - okzEltau9fA
+  - pAuYDulKmjg
+  - qylLchvemvA
+  - s61AHyQLX1g
+  - 04dlE1xet2A
+  - 602qMgxl5k0
+  - 8UNUHySDpsQ
+  - E_AKDA5iaxw
+  - P7IPcaNiU6s
+  - _7Kzgr_RCWo
+  - bQABhh06ACM
+  - bTt8cGkPHDs
+  - fhc1EGOZDrw
+  - l3KP-KKaHds
+  - pUyi0LZACZU
+  - qxFLyK_UM44
+  - rbe6LJnZIQk
+  - sxRDlr1BFv4
+  - 4sZNfDs2ueA
+  - 7_bsXH02px4
+  - DAym9J0DwRo
+  - bzL0ooWfLQk
+  - d7ixkh37NY0
+  - g_btRZqb5Pg
+  - ikc-Ec1g18o
+  - kuj8bkyZg-Q
+  - mbwzbxgWB9k
+  - rKmz5ASkdcs
+  - -je4EFLJOwg
+  - C9qbfbh-UTo
+  - Fs6TgCUVjRc
+  - HiBbQSos2eY
+  - IQEgubokIww
+  - IbWddLa16T8
+  - MGqkJZERX5g
+  - NZYJffoFm1Y
+  - WgV9nEcWpFQ
+  - XdWTrwS9GcU
+  - gljRj-ydGco
+  - mATtvKmrVAg
+  - n5Qayba3Bjc
+  - r0HtJ0PtYR4
+  - v2Rzhr1OtN4
+  - -90jOnMCfD0
+  - G6pN49a0fpk
+  - JVYJVLVfX-Y
+  - KXbSDrLgdOk
+  - KmGCvVpqjtw
+  - MsxXpT2yTNE
+  - NRJNZrlrD3w
+  - a9Ti5ZbI7Ww
+  - gssuJWy5H6I
+  - mriMwHjMUxM
+  - tcOYroafoRo
+  - vj7-a0Orpz4
+  - y5Gk9d-Eb-k
+  - yV0UXMMuemY
+  - zIqUqswkKL8
+  - zunDUmdfRSY
+  - -Y4OujZ63UE
+  - 4WxlI7oXLMI
+  - 7CnumPUPKBI
+  - 7QRowjLT0mE
+  - ITZ1JaGjtSg
+  - Jz7eLmA2y5A
+  - N7oHRJIbLmE
+  - PbMaF4wwxek
+  - SsctAT-g0Sg
+  - T7prSex2gyE
+  - av5_N128kVo
+  - i75SFd7jJ5Q
+  - iPf30Gxt9l4
+  - lXoJsrE451k
+  - nzy65CT-Gyo
+  - zNr7rOUvnqo
+  - 2mwgROgpGvE
+  - 5dvI9Bkckw0
+  - 5zNJuNaQ4XM
+  - DLbvumoMbR4
+  - Eguo_qKi5P4
+  - Hj3-alVq1TI
+  - IuWzQNCBmls
+  - KM66fYvFl0Y
+  - Onbkotxsqlk
+  - XqgDPIeSIEE
+  - tvd1RXxRA8Y
+  - wuQE-bdWxcA
+  - 0HDDMZM3sT4
+  - 0yrStBEqf-s
+  - 9enAikPH_k8
+  - G80Z51BKT-M
+  - OK2SdFvGMZA
+  - P7m0K1-LXQM
+  - SfIRMYD_kls
+  - SmmoMjLXHyo
+  - TQAgAL6JSqs
+  - V4GUSyN_2_Q
+  - WZRqz849M20
+  - czCnFIFMk-o
+  - dkbxjvZ58SA
+  - kzjKoXxczzc
+  - G7f1XhLk6Zo
+  - JP1rmDDLyP0
+  - NRi2XguadaI
+  - O3uiIRCfV1Y
+  - RgFwY9poHgg
+  - TCHO-OaodBY
+  - Z3FTNt7E3zQ
+  - eRIztguOaVo
+  - kjNODeSVgYQ
+  - ruTTpJVF2YQ
+  - t5gLwBWFayY
+  - yga5umPk-6A
+  - -4lrnpRWNUA
+  - 4xXyEB0faFk
+  - 8gsXKblWgHo
+  - FUIqpUD7POg
+  - Fe6PaSDp7kc
+  - LQq_cVJkHDg
+  - PNCf5xRS90E
+  - fndpAUKoAAY
+  - i_z1DkhzJyw
+  - j2eo3iKs8jk
+  - qyF60uSs7yA
+  - ryt2GK8COfY
+  - sqj0E6oC9Gc
+  - -0YJUS_CxLo
+  - CJ2PbU4K9Ho
+  - Dlql3NIAwBI
+  - IgAZytHWVBE
+  - LaeoJFdncp0
+  - Wto3ycu-YaM
+  - X1aQUl1TdTE
+  - YJUEKhlWpts
+  - _IftWRhWlYs
+  - grIDGe78Kcg
+  - r8MCVQvS_vY
+  - tQmIAWQIMPY
+  - uPkj2aDnDSs
+  - uV1YlmWcEGs
+  - v_eSs6BedxM
+  - yhtoxUzqNmQ
+  - -BlwvflkPnU
+  - 0w10MODyoz0
+  - 6MmF6Ffa6f8
+  - bYq0Cp4tyx4
+  - iAlA4gFHdO8
+  - jmyF9qEJ4dI
+  - kX-wDlHY-o0
+  - l1VvlDfrIvU
+  - oe1gG2xAE9A
+  - pTRvQL0Wdlg
+  - pilAkj9r7Nc
+  - vMkPbZ5D9us
+  - 3IG4DJNfhfk
+  - 4shtn2VGw4g
+  - C9TlcYGXN0Y
+  - M7S45NlffUM
+  - RtYrrkYPigw
+  - V_YlmTerwzc
+  - Wsq5lD_hIJ0
+  - ZASEeRktvIY
+  - Zp-EV8Q7VIY
+  - aHf07oxJqYk
+  - bpBxn-Shq6I
+  - h1toqeNApQw
+  - hXJbGylq1to
+  - v-7p6CAI-5U
+  - 7VNWK5MJmSk
+  - CZcvLqy61hI
+  - DSWAvQeVE5g
+  - IDhy-AqBUmQ
+  - MYekTibaAN4
+  - Sf30caKRqS0
+  - X8QPoZNrQwA
+  - eJoWTlqMuZc
+  - qPKm9WQO3bY
+  - qV-5vufhZSw
+  - wRdtAqubRxE
+  - zPAZMfaR7a4
+  - 15lDzHSIO-k
+  - 1tnOQd7_gkg
+  - 8OlwF0cMP_Q
+  - 9qnnEOnnkwY
+  - DRktCPowNaQ
+  - FxpCNpkJvsg
+  - IO9q79Nc3H4
+  - KkUzasbTvTY
+  - RYenLmlVT-I
+  - jd2EH6Q9CT0
+  - sK6PznzY0oM
+  - xpj436Kcd-A
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - A4f-th_YW2U
+  - HK5-X9hdS7s
+  - INXD5osrkDo
+  - QwLX1P6ogC0
+  - S0gbkjyV_MY
+  - SotLyRb8XjE
+  - T8O5CMhppdo
+  - dBJry3tcX0Q
+  - gT6OkjTDcYc
+  - jvfb5DtqqPY
+  - k0QVcaw4A2w
+  - nE4mvAWZKXw
+  - -QAIncHepH0
+  - 9Wa9xY88WF8
+  - BbRTXtD_IlI
+  - CehXem4jujk
+  - GQoSnlh3Nbk
+  - KJBlo6X4Mm4
+  - MHrGENGDlX0
+  - MkVsLlxhF1o
+  - Q-7KCRNLLzc
+  - WV_OH8cuJFw
+  - X15kOTm_5lw
+  - XxBYWljhplA
+  - Z8BkIZgJ5C0
+  - a7Hs8h_NLJc
+  - cc0tz2LuXvs
+  - gfUg6qWohTk
+  - jq7yqox1D5w
+  - kThGMgiprF4
+  - 0MRi94zwJq8
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - CkwsP85USK8
+  - DIb4ORefBaE
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - JpRJLg9Lq5g
+  - KIjHz3ZTrnk
+  - KNmxPI86cZs
+  - N45Uh3wDaKc
+  - O2JyplMHA4A
+  - Q8udY0uDYL8
+  - R9JmgC1a9y0
+  - TbGqp7mdO04
+  - k6Qp78Hh5DI
+  - lCsR-zxwN1Y
+  - qLMyrLKxsUI
+  - udo0RzY-9Cg
+  - v4pezeJWpVM
+  - xHlhEnN60-s
+  - ximZfmqh2hI
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - 8s5Xgn_Pd-U
+  - 9R7wWh6GF24
+  - Dfy-vjAlMZU
+  - ILSbK8RnGdI
+  - ItE7xQpkfMA
+  - Y0T386UBBHs
+  - b-Hbyii-HGA
+  - deSsG444nU0
+  - dm8JR9Wkz5Q
+  - h1vlqBRmH_g
+  - iK_h-2kot6s
+  - kYYXtz9uNYc
+  - kqyr3kaw5qE
+  - oIB8kKroCd0
+  - q9CKxBMxTlU
+  - wd6dkj6p3lM
+  - yW0aNuhib5A
+  - BK2HdRp4Oo0
+  - C-q6NYWPAVk
+  - Cq_Nuo8ilak
+  - EQio6nzPLPw
+  - J0kcsLXX1Ms
+  - XaA3qD1EAqg
+  - p27vx8Zf3wY
+  - v6B9zgvkos0
+  - vnFcDLQPrLw
+  - xpIZ2HLsTjw
+  - -99HKFiZOWQ
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - BLYnBNOsxoI
+  - MICPyrnGYwg
+  - Okmz3oq8M_8
+  - SYJu_y6WvEc
+  - U3zQHweg1eI
+  - WtunB3RhqBk
+  - X3xKwQcDKM0
+  - YXzzuLcmE_o
+  - a8sJQRxoXSU
+  - hZoeX99CiPE
+  - nNtCUe5EylI
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - qSi4tbWQKZ0
+  - q_7LMlxolTg
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - vucFkmTMO2o
+  - vuuqoMs162A
+  - zhWfajP4EVU
+  - 4VbmiMEs22c
+  - BdWvP-lbb68
+  - C-HIpOy_kwI
+  - HIuN3NzdSPs
+  - OnZCKqTPTdo
+  - QYep9TgZsa4
+  - RyQC_VLi2cg
+  - TN9i9Ni0Xr4
+  - UDf_Ey7FfkY
+  - YNHMNVLwy9c
+  - gn9j2JT9P2k
+  - l8E5GpRuiqg
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - 0qVlPcJp7c4
+  - 4zO7i9P8mGE
+  - 4zQL4ALDOVQ
+  - 5iX6ecbz8XE
+  - HMSoY2uj68E
+  - Pfse9GxqdAE
+  - TXkqQVcT7Kc
+  - VDeVdNwe4Fo
+  - f6yAY1oZUOA
+  - fWHLuFrVW68
+  - g9Er55uc7UM
+  - gZztPMkV9pQ
+  - hQaF64yk-N4
+  - kwDQk2siRJs
+  - m6mEhwaScrE
+  - ooEgWahEvEM
+  - q9kS4nOXPCI
+  - w4sZQAky1Zw
+  - wlMnpkBxNhg
+  - xDbK5xTWILM
+  - yO9lYf_sh6g
+  - -VJ6jNxq7RU
+  - 5BWvCETiDy4
+  - 77EwFrfBdWg
+  - ApRBjb93FJ4
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - SiH7ny3dHCo
+  - Vbv31ShjpEE
+  - WDb8ute4lQs
+  - Z0XM7-NZcgY
+  - ZkwBzPmhtr0
+  - cQ4K399DTgI
+  - epv2RbE5DUo
+  - qL7Nlexje-M
+  - xBa5-FMWeWg
+  - zl6AlpI5QsA
+  - 8O4LbKyhWO4
+  - BRvvpVLQpIY
+  - BfB4lVnL4CM
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - UzONl7k_ZXk
+  - Z7Ra8Wa-WMI
+  - ZOKZCsxHDY8
+  - cbycBqUCygQ
+  - yRmx06wpGsU
+  - 3_qA-xVRTWw
+  - 5KHVacLvqIA
+  - 6oZfhhEHXU8
+  - 7Q44dUYxS9c
+  - BaItmln7Ynw
+  - F5MODFj28oU
+  - FKcr2h7RR-g
+  - GruTA2Eexz8
+  - UNf2qsX8uFc
+  - WUOehPWvEXk
+  - YyA0JAnK5l8
+  - cWNVP4Ui22g
+  - cujcxjSm69g
+  - eF4H6EiwNXk
+  - lSRCNSTcxiM
+  - pA6ls-oHhX0
+  - -P0Keds6qMY
+  - -yp3g7EeDqo
+  - 7bC-orwQ2zo
+  - 8ZDXq0eU8wM
+  - A-PDoo2BXLQ
+  - A9vN9CdpXLc
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - _FoW3uJ8uw0
+  - bOj0WwFx3nE
+  - eE2BQ7rE7OU
+  - iZjvLtAYkGM
+  - nRQSfBhd7FE
+  - oCiaKS1psd8
+  - pr5-pzwukRc
+  - r19LbSZqi84
+  - t-ezOLT2Kv0
+  - t2ROQSBOgiY
+  - 5ZK50rIFyL4
+  - AGt1XTATgkQ
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - WZ5z79XzFuw
+  - Y0CXTyj3WxQ
+  - tdYM_Tp5C6c
+  - v_ejnuAy6Ck
+  - ys7JHNC2qqg
+  - B833Ddf8feI
+  - EoONbCw0Q6c
+  - Hu-rVZVSzxs
+  - TLcSzTb7AgE
+  - WprPdJKfaGk
+  - dVkOoAVQt9g
+  - o0qP8bxQPyA
+  - tJeI51crrvs
+  - yxwfaDpdCMo
+  - 9oFJL_9uKGA
+  - 9yrB__GiA0g
+  - KxV8I_YyiaY
+  - ZJBprx7oWAM
+  - aYAmtU72d9g
+  - b2EaxgTDWZc
+  - h54us18qc20
+  - im7xZ7jgyRw
+  - moVynuxM4fc
+  - qN5QMETjwx4
+  - 066YdprB9sk
+  - 1kbMcU9XE0g
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - DkbDhPNWkao
+  - XLT1DjaOtsQ
+  - YQX-3TxyPuE
+  - dtmJOusvWis
+  - eAwidAAZAmw
+  - eO8W1pWRJ1E
+  - j8NY7oMnnRU
+  - lHWlTYe1_Rk
+  - wcmNBNqdDDg
+  - 7-GDuhjOAU8
+  - 8PtYD_6W7BY
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - KD1uSGjpCQU
+  - KnICbiC9744
+  - SpIQrvqnw0o
+  - crXYs7EfnDc
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - wMpWJC1QyVY
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 2DX_U89ocX8
+  - 2MlxAXBzjXM
+  - 5PgGohPpvww
+  - 5nLkLgtbkGM
+  - 67RpDNWRPDU
+  - 6r27t7loW5I
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - KosAPIzhNE8
+  - LT_aBQatj5s
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - UD-1rRaK06w
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - oZ1c8IBz7a0
+  - rfGi8W9j9gQ
+  - s8u4PCyTGMo
+  - vAp84Bvhunw
+  - -0jnP7Su_2s
+  - A7LOitI_aa0
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - dxTRjWyEGtE
+  - epv1zgwHAhc
+  - k1UZL8tERtM
+  - pbk6XqNpAsc
+  - qSAolY3NX-o
+  - sLYw8VdVGbw
+  - tMlpDXwYi6U
+  - uu5tECJaIJM
+  - B1eG9DyYK9E
+  - CYXxBGKrlLw
+  - GBxxdVM406E
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - Vswrm9dCGEE
+  - dBTQi5kdfW0
+  - hSCZAJsw34E
+  - n-MG0gzXwis
+  - pAIdwSnLXW4
+  - pPlFSqXnbls
+  - sy1Bjs0D8hU
+  scan_costs:
+  - at: '2026-05-29T16:00:22.411609Z'
+    usd: 0.14367178999999908
+classes:
+- name: Fundamentals & Strikes
+  image_url: https://images.pexels.com/photos/7991668/pexels-photo-7991668.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Build a solid foundation with proper stance, footwork, and striking
+    technique. Marcus breaks down hand and body mechanics for consistent, powerful
+    strikes.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Release & Escape
+  image_url: https://images.pexels.com/photos/6296002/pexels-photo-6296002.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master releases from grabs, chokes, headlocks, and bear hugs. Learn
+    functional strength and technique to escape dangerous positions under pressure.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Pressure Drills
+  image_url: https://images.pexels.com/photos/4761788/pexels-photo-4761788.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Train decision-making and technique under realistic stress. David coaches
+    you through progressively challenging defenses and situational responses.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Self-Defense Scenario
+  image_url: https://images.pexels.com/photos/7991616/pexels-photo-7991616.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Apply your skills to real-world scenarios. Train multiple-attacker
+    awareness, tactical spacing, and the calm problem-solving that defines Krav Maga.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Boxing gloves
+  image_url: https://upload.wikimedia.org/wikipedia/commons/c/c8/Boxing_gloves_Bail_10-OZ_%281%29.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

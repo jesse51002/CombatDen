@@ -469,11 +469,6 @@ class _AppDataTableState extends State<AppDataTable> {
   }) {
     final children = <Widget>[];
     for (int i = 0; i < widget.columns.length; i++) {
-      if (i > 0) {
-        children.add(
-          const SizedBox(width: DesignConstants.spacingSmall),
-        );
-      }
       final col = widget.columns[i];
       final cell = Align(
         alignment: Alignment.centerLeft,
@@ -489,7 +484,10 @@ class _AppDataTableState extends State<AppDataTable> {
     }
     return SizedBox(
       height: height,
-      child: Row(children: children),
+      child: Row(
+        spacing: DesignConstants.spacingSmall,
+        children: children,
+      ),
     );
   }
 

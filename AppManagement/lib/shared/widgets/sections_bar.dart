@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:theme_flutter/customization_runtime.dart';
+import 'package:theme_flutter/showcase/showcase_slots.dart';
+import 'package:theme_flutter/theme/theme_image.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
+import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/shared/widgets/sidebar_nav_item.dart';
 
 /// Persistent left-side nav rail (Figma `SectionsBar`, node `5001:4340`).
 ///
-/// Items, top to bottom: COMBAT DEN logo, Add New Member (primary CTA,
+/// Items, top to bottom: the managed gym's logo, Add New Member (primary CTA,
 /// no-op for now — Add Member flow is out of scope this pass), Dashboard,
-/// Members, Growth, Schedule, Member App, Employees (no-op), Sign up
+/// Members, Growth, Schedule, Member App, Employees, Sign up
 /// QR Codes, Settings (no-op). Each tap calls `pushReplacementNamed`
 /// so we don't pile up route history when switching sections.
 class SectionsBar extends StatelessWidget {
@@ -74,10 +78,10 @@ class SectionsBar extends StatelessWidget {
               onTap: () => _go(context, AppRoutes.memberAppPreview),
             ),
             SidebarNavItem(
-              icon: Symbols.watch_sharp,
+              icon: Symbols.badge_sharp,
               label: 'Employees',
-              onTap: () =>
-                  debugPrint('Employees screen is out of scope this pass'),
+              isActive: activeRoute == AppRoutes.employees,
+              onTap: () => _go(context, AppRoutes.employees),
             ),
             SidebarNavItem(
               icon: Symbols.qr_code_sharp,
@@ -98,10 +102,55 @@ class SectionsBar extends StatelessWidget {
   }
 }
 
-/// Apex MMA logo. An image asset, so swapping in a real gym logo is a
-/// one-line change (drop the file in assets/images/ and update the path).
-class _Logo extends StatelessWidget {
+/// The managed gym's logo. Resolves the **selected style's** `logo_primary`
+/// slot — the same brand logo the member app shows — so the rail reflects the
+/// gym the admin is managing instead of a fixed brand. Falls back to the
+/// bundled default until a gym is selected.
+///
+/// Rebrands on two signals: [selectedGym] (the pick) and, once the theme
+/// engine is up, [ThemeRuntime.changes] (the new design's config finishing
+/// loading). The second matters because the config load lands *after* the
+/// pick notifies — listening to the pick alone leaves the logo one selection
+/// behind until the engine catches up.
+class _Logo extends StatefulWidget {
   const _Logo();
+
+  @override
+  State<_Logo> createState() => _LogoState();
+}
+
+class _LogoState extends State<_Logo> {
+  // The engine's change-listenable, held once attached so dispose can detach
+  // without re-resolving it (it throws until the engine is registered).
+  Listenable? _themeChanges;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedGym.addListener(_onChanged);
+    _attachThemeListener();
+  }
+
+  @override
+  void dispose() {
+    selectedGym.removeListener(_onChanged);
+    _themeChanges?.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  // The theme engine initializes lazily (first time the Theme tab mounts), so
+  // its listenable isn't there at app start. Attach as soon as it's ready —
+  // re-tried on every [selectedGym] notify, since a pick guarantees the engine
+  // is up by then.
+  void _attachThemeListener() {
+    if (_themeChanges != null || !ThemeRuntime.isReady) return;
+    _themeChanges = ThemeRuntime.changes..addListener(_onChanged);
+  }
+
+  void _onChanged() {
+    _attachThemeListener();
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -109,10 +158,16 @@ class _Logo extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: DesignConstants.spacingMedium),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-        child: Image.asset(
-          'assets/images/apexmma-logo-simple.png',
+        child: Image(
+          image: ThemeImage.image(
+            ShowcaseSlots.logoPrimary,
+            fallback: const AssetImage(
+              'assets/images/apexmma-logo-simple.png',
+            ),
+          ),
           width: 64,
           height: 64,
+          fit: BoxFit.contain,
         ),
       ),
     );

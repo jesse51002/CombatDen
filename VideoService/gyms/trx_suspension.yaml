@@ -1,0 +1,852 @@
+gym_id: trx_suspension
+gym_type:
+- trx_suspension
+theme: TRXSuspension
+videos:
+  specification:
+    short_videos_desc: 'TRX / suspension-trainer technique and follow-along content
+      — rows, presses, planks, single-leg and core work, angle and progression coaching,
+      and full follow-along workouts from credible instructors — plus the enjoyable
+      side: "what a TRX class is really like" walkthroughs, studio behind-the-scenes,
+      member progress stories, aesthetic workout edits, and instructor interviews.'
+    short_avoid_desc: No "get shredded in 30 days" clickbait, ego-rep / fake-PR clips,
+      sketchy supplement promos, or "TRX is useless / suspension vs weights" debate
+      videos. Nothing off-topic.
+    videos_desc: |-
+      # What we surface
+
+      Technique, class, and progression content for a TRX / suspension-training
+      studio — plus the fun, human side, so it's a feed members enjoy, not just
+      a how-to library.
+
+      ## Technique & training
+      - Exercise breakdowns for suspension-trainer movements: rows, chest and
+        shoulder presses, single-leg squats and lunges, hamstring curls, planks,
+        pikes, and rotational core work
+      - How to set the anchor, adjust body angle, and use stability to scale
+        difficulty
+      - Full follow-along low-impact strength and conditioning workouts from
+        credible instructors
+      - Mobility work and beginner-to-advanced progressions for members from
+        rehab graduates to intermediate athletes
+
+      ## The fun & human side
+      - "What a TRX class is really like" walkthroughs and first-class experiences
+      - Studio behind-the-scenes and community moments
+      - Member progress and comeback stories
+      - Aesthetic workout edits
+      - Instructor interviews
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about TRX / suspension training; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - "Get shredded / abs in 30 days" clickbait
+      - Dangerous ego-rep and fake-PR fail compilations
+      - Sketchy supplement or steroid/SARMs promos
+      - "TRX vs weights / resistance bands" and "is TRX useless / suspension
+        training is a waste" cross-discipline or anti-discipline debate and
+        reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being a vlog, clip, highlight, or entertaining
+      — fun content is wanted.
+  queries:
+  - trx row technique tutorial
+  - trx chest press technique
+  - trx exercises for beginners full guide
+  - trx single leg squat technique
+  - trx plank and pike core exercises
+  - trx full body workout follow along
+  - how to adjust trx difficulty body angle
+  - trx anchor setup and safety
+  - trx core workout follow along
+  - trx common mistakes and fixes
+  - what a trx class is really like
+  - my first trx class experience vlog
+  - trx studio behind the scenes
+  - trx member progress transformation story
+  - aesthetic trx workout edit
+  - trx full body workout follow along 20 minutes
+  - trx low impact comeback after injury story
+  - suspension training community studio moments
+  - suspension training coach interview technique
+  - trx workout motivation follow along
+  good_video_ids:
+  - 89CmryBiYPk
+  - 8hAAN2JO5rM
+  - 982tt4P6mZk
+  - KKJeaIgEjAg
+  - _MOVuZfPdlI
+  - aLn-8t3URpU
+  - c_S5TrS2yiE
+  - i4uWLW-V7eE
+  - wsJXCBiNONo
+  - 6joHZNOOQik
+  - Dn-kOdWQOdk
+  - FYbYfrvkTGY
+  - N_14s8zFOms
+  - Ne8yvlyiO-s
+  - QQekauSzC0Q
+  - YZWf8nqbhtM
+  - goQNcfNup5M
+  - yuHsvTBKq-U
+  - -mXTPqWCk_U
+  - 1TVaD5Ol094
+  - 2jWUPj9xOv8
+  - 6J1besHI9As
+  - Gl_PEgzJaH0
+  - Jbeox02sWf0
+  - Ug9hM9wPXkA
+  - _TbuW-3Mwo8
+  - _r_VVcMcJPo
+  - hfKbxC4_ZC8
+  - sBObC61uWLs
+  - to-RQdfzdXo
+  - BjPG6GZtJ8k
+  - CnqAIXze8Bw
+  - JfueAGI3kW0
+  - LFawJbMAop0
+  - T7JgCNWw2yQ
+  - Uhcu5Dqla8M
+  - VuI393nVoGY
+  - Yts2HMEUZHY
+  - e_j47PUJkXc
+  - g-cKV-oQt1o
+  - rlZgtQbRlD0
+  - 1nYJPDH-y0Y
+  - 2g6IIoLSM0E
+  - 5xfBiYplogg
+  - 7VdE8LAFSWQ
+  - 9i2piWqJAcs
+  - AknXCZ60nz8
+  - aoce4citsfw
+  - dUM1K2kBGrQ
+  - fvdcjqvkRbM
+  - mUpja2QemoY
+  - vjPDT3k3EcE
+  - wn5Xl7wBSLg
+  - -vPgHzuRI7I
+  - AA2feSOpjdk
+  - B3L7J1gKYAI
+  - CrvRfnzhdmE
+  - IWpwYouGTw0
+  - Okmz3oq8M_8
+  - UU6J3ojFAgk
+  - V-UZojXFUs8
+  - Xn8CWkvl-38
+  - ZV-4Fah_EtA
+  - _UggMY1K5TY
+  - bhIOR9mVKsU
+  - nYpcm5B64n4
+  - utsUU0dC2fU
+  - zBaM8Zrx6lc
+  - 5RvyOFOEHVs
+  - Dx1owRthj5Q
+  - Fbh9nhlrKO8
+  - MPYLSbPMaBY
+  - VPUfTRknwbQ
+  - gu11txbEKSk
+  - jrJMC1Fbc34
+  - nfleVhMT4FE
+  - wZOcrp3nsnk
+  - yS4zvJ_30dU
+  - 1oeBvlvi1is
+  - 408PItM46tE
+  - 5iX6ecbz8XE
+  - CgzUz72CUXQ
+  - EG5PIXWTapc
+  - HHHw3tjEho0
+  - LZEcC1Hyx_0
+  - OCqIPSnN54Q
+  - OtPFosoVhXU
+  - P-vY-jmvhNQ
+  - R0FM90gXo1I
+  - Zp4nPOykEIo
+  - fW_jdwZT804
+  - hQaF64yk-N4
+  - hgWkEUk6ifk
+  - lBPkfOVlkTY
+  - lv1PbwClmyM
+  - mO8YJAxVG2M
+  - pfGTsQpf41Q
+  - 3XDriUn0udo
+  - 9-vwH3UNuaQ
+  - BKPMFHrpIFE
+  - HiwN2bG0nYE
+  - KEedOgJSAOQ
+  - KTUNnCNs9UY
+  - TYRUfOZMX7o
+  - TuXgT_yIXik
+  - WJcXoPW2-1g
+  - cQ4K399DTgI
+  - iJYGwXO6mWk
+  - ie_mbVrXB1U
+  - k_3Tqu7RMyw
+  - mcTH8VcVwEk
+  - nXfYNAwB_Lo
+  - qL7Nlexje-M
+  - vA_tK63zC5Y
+  - x2vpBKcnKJU
+  - yuPiTFM-sKU
+  - 47yv0JcBnXc
+  - 6naS0Dia2ZQ
+  - JKQcQO7fKV4
+  - JzeBziLIr_s
+  - LB_kHohKPkE
+  - OZLGDgzCSmc
+  - Tb_1LA5qi8U
+  - UkLcuYGRsM8
+  - bZBIbgcvaZ8
+  - 0ib7iZtzzSc
+  - 6oZfhhEHXU8
+  - 8qXxlMpNowU
+  - B-GTiBeXphE
+  - EctwcTwyIsk
+  - QIRX3-GBnMA
+  - TZ-EP8m_Jns
+  - Xbfovdea034
+  - d6KmVWZtkoM
+  - lggcsDIc_GM
+  - qDHMwG3KuEY
+  - rVGPd0vUWUA
+  - -v2xs6a2JnM
+  - 78rYMrUlpEE
+  - A67kMyzzLWE
+  - CdGv1bPE5Z0
+  - JoTCHtDS8pg
+  - LlItGH2DA3U
+  - MXCD3GrS0OA
+  - NqQtvn7Y4Jc
+  - QK6BFediR3g
+  - YghOeTjdEf4
+  - aAd7EkYVzNQ
+  - apw9kfjG2sY
+  - gj3DlXR98ZY
+  - u6ZelKyUM6g
+  - 0pF20o_xyUE
+  - JHofyNjrA8w
+  - K5-AKETVMqs
+  - PMzBcToFnUs
+  - StaTPvoeyEs
+  - jFmCrA6fo78
+  - kVYTXABTBRo
+  - p8d2pFLDkEs
+  - pJ4gl5W2sss
+  - sV0wD-7etik
+  - tKWKKaQotZA
+  - w5PjwXBvi0Y
+  - 3-0oskEC3KU
+  - FF8rkUl92BE
+  - HK8_l5x5vVI
+  - MvQwJalp7oo
+  - VcCnR_vOkQg
+  - Y5zRRfsuPZc
+  - _beGY-RkodM
+  - dnnXqF3A1XE
+  - oEqCR80Vn6A
+  - 2-gQlIJukC4
+  - 4VUMnl8IX3w
+  - 7WrkhP9AMt0
+  - AjeTNgMaBx4
+  - EikFkVx8l-I
+  - JWWmdeySvFQ
+  - K-OfNcjvL6E
+  - MsWU3VKUduA
+  - QteZv-_2glM
+  - T6KR83qugXM
+  - Updc22qspyY
+  - akV4J56L9B8
+  - cGaOUa1iUos
+  - faTAF530fXI
+  - 2Us5CUj29wc
+  - C2CnkUmpRv4
+  - CHTjzv284R4
+  - H6vi9c-0Sjw
+  - KJuKxMlm8-o
+  - Mzb9qjvW5z8
+  - Z_JFYaLU2X4
+  - _q51iVh73IA
+  - t9LR-wHAtpE
+  - xHvCv4NIR2c
+  - zF1VdGvEUzk
+  - 2IlqVViRKmg
+  - 50zZKbBoazg
+  - 644NJ6tA7JE
+  - S83ZRbNDnng
+  - TqSPp_khzRM
+  - WeoEgl_TBq8
+  - aCEgy3v0KWc
+  - lfi4_8_RRMg
+  - q_Y01PbNGII
+  - 2b5XdPDDDug
+  - 4xmqPayoh2o
+  - 5WhxEbK0nhw
+  - 9rR-hFZmh_4
+  - HKF9mb6FQDg
+  - HopD3-JnQ8Y
+  - IAmnLlwNloU
+  - SYL6qAvCIss
+  - _yeU7vpIytU
+  - aCwgqqDqAz8
+  - d3U5QMBH2yg
+  - uw70hBv5vPg
+  - voeegEJMfcA
+  - 3Wc-ND3a2-M
+  - 6QQqvEeKvHA
+  - 8M3STSv89U0
+  - IrtDn1QJDOQ
+  - LA7Up35cOig
+  - MIH8XfhxdK0
+  - Q7frPdMk7hI
+  - SAhn3sR7ytU
+  - UBhC7XlYHW0
+  - XvG82uAyhE4
+  - c-2FXRkY9UM
+  - cOpr2l-Ehso
+  - miPND7yAYOo
+  - oA0xKixjwIc
+  - oXXmd2wMpfs
+  - -GCA92b119Y
+  - 81_9dfZmmyE
+  - A3txj13u96A
+  - Er8Cjr0A0ic
+  - Qa1McMhIdFQ
+  - WDMz6XeP1Ak
+  - _wTnziOp_7g
+  - kz_5yS-VumE
+  - rT7FwxpYSZs
+  - tv3zBIexSp8
+  - vGleJdHv4E4
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 0CfdNf9S7S8
+  - 3TmILdma93s
+  - 3vjc4afb1Qc
+  - AwqFcy5GHRQ
+  - CudrTd6IiJc
+  - FH4-F1V-3uc
+  - INXD5osrkDo
+  - IT94xC35u6k
+  - ImI63BUUPwU
+  - IzTFCZv0--E
+  - JFzEp-wwRKk
+  - JkwpCAIuRH8
+  - OPhaINgaL9I
+  - T8O5CMhppdo
+  - TvkOIcNtWso
+  - U0bhE67HuDY
+  - W31eWDidL0g
+  - fmZzbi694AY
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - iv-J8ONUoIU
+  - k0QVcaw4A2w
+  - pH5bl36t-ik
+  - qw2BaTS9ElE
+  - sy11C-XJdDI
+  - ymuQtR_-Loc
+  - -Et6xw8bv7U
+  - 4imTQhTlj3M
+  - 4sJJ2pUugaw
+  - 5AytrRfp9FI
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - BRDdRI7TmBs
+  - CEvIs9y1uog
+  - D_AvOKr8ncE
+  - E1cBWmy2ohA
+  - KJBlo6X4Mm4
+  - L5J6sgQLvuE
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - W9-WkkaoS2A
+  - byXfcfeiQeA
+  - dBSAURSwuiI
+  - fD-qF0cHAP4
+  - fFffzT8eqlQ
+  - gfUg6qWohTk
+  - joI6MmdzMYo
+  - kThGMgiprF4
+  - laO7iSLSIZE
+  - v1unDXm5fAI
+  - vBy8jXvnyO0
+  - wri5U76ITV4
+  - zeguxAGWODw
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4D6wSrXC__0
+  - 56GonmVMkaM
+  - 6ADogpDq0t4
+  - 7q2YwOE4okA
+  - DacqZQC3Hfc
+  - DviZkUHitHs
+  - G7-tJmJwJU8
+  - GcZJhNi2yOM
+  - Gqqt0h19vxc
+  - HiJ1uLuTNxo
+  - KIjHz3ZTrnk
+  - KNmxPI86cZs
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - RX6L7y0r6Ok
+  - TbGqp7mdO04
+  - aWadQMEngCA
+  - bqt7qh5oq38
+  - fZNblui4CGc
+  - fseCPPrO3rA
+  - g2jocInockU
+  - k6Qp78Hh5DI
+  - mghGz0ZUt8A
+  - n_yuiYV-_Zo
+  - rk4k-pbN1ts
+  - tk1GvMoePgo
+  - xHlhEnN60-s
+  - ximZfmqh2hI
+  - z6k8wXfwS94
+  - zss9jRW4oWw
+  - 5kkBgb426Aw
+  - 7yX1QN5a6L4
+  - AjAVhtQ2vok
+  - BvnVtpQkrHE
+  - CDDHlGRL3AI
+  - FRKBEl5nu_A
+  - ItE7xQpkfMA
+  - MhtUQRDeIzI
+  - NBRv7ShUTm4
+  - PEwEc2ve5r4
+  - Y-AYC3_DbpY
+  - _b-QCeCN8DU
+  - dfSmTclf3wk
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - nMo--6qR61w
+  - q9CKxBMxTlU
+  - qLBImHhCXSw
+  - r6HHJJXMmdU
+  - wd6dkj6p3lM
+  - 1skBf6h2ksI
+  - 4_WPNDsiXxA
+  - 6IcYWpJ1xes
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - EQio6nzPLPw
+  - I3TCx8Yd_Lk
+  - NJ8NP-UKwHE
+  - NthtMRjIT2I
+  - RiD13TveEpg
+  - RrqXAkfjBdo
+  - S08WbhUAq0Q
+  - SLxy6n7BI28
+  - V5M-gADbaqk
+  - XaA3qD1EAqg
+  - ZDVjEOAU0TM
+  - _y7AJMZ07nE
+  - bGauZyt2Fo0
+  - c2N665i31C8
+  - kjZ_b7ul-dQ
+  - m1UF4RgGoY0
+  - mS_yuOfyNIM
+  - nOkS7WiFbTA
+  - t1zP9ojJ_WE
+  - v6B9zgvkos0
+  - vrA0pTgN1xg
+  - xewBaDLnfBQ
+  - 0CrX59ulj9U
+  - 25Hp_pgrVkM
+  - 2DBCXNkkQBE
+  - 2MvZ_7401aI
+  - 2kui0fFKMyE
+  - 6ox5L87YY2U
+  - 7UI4XbHDpss
+  - BLYnBNOsxoI
+  - DcrKNPtqmGM
+  - EzzHv56zDVc
+  - GFaDWjjWlvs
+  - KO_OVfzKSHc
+  - LKSC_KujZ4g
+  - SSQAGz5kDtM
+  - SYJu_y6WvEc
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - bd2EAn9tJDM
+  - dSRLhDyA0-E
+  - dYIaf_9ecFQ
+  - hZoeX99CiPE
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - tTY5QlwqtQc
+  - vK_DQYimccw
+  - vuuqoMs162A
+  - wgYcAjoTLMI
+  - 2xPxOHXyBJk
+  - 4VbmiMEs22c
+  - BdWvP-lbb68
+  - ECHc1L8etXo
+  - HIuN3NzdSPs
+  - IcHek6FRbsI
+  - J2uBfbaDnLk
+  - KMliGnl7uVo
+  - KeNObkhENKQ
+  - LU9qW1WWV_Y
+  - LXhSYcBoJoE
+  - Ntv6r0gZUFc
+  - P_ouE8obuoU
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - RV2rqYuSFGQ
+  - RW0AqPHaPgw
+  - Ru93sHNNMCM
+  - TN9i9Ni0Xr4
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - bO6sOtbUKIM
+  - cEVAjm_ETtY
+  - gSrVC1he540
+  - lZgYqGDvDcU
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - r78WzW27-UI
+  - tj0o8aH9vJw
+  - zJL3pIvs6Bg
+  - 0qVlPcJp7c4
+  - 1DN1SijxDUY
+  - 4zO7i9P8mGE
+  - 5iHQDUvR_vc
+  - 6_A4-3vX1j0
+  - B12MXF0bSFo
+  - Bk6UF0uEV2E
+  - BwKKhqZWkEQ
+  - D7KaRcUTQeE
+  - EKUNGQ4LmH8
+  - El3AyikL0Bg
+  - IUZuBZkcyUo
+  - IVEAfdHlnO4
+  - KgF2YaXICfk
+  - NOSYLa77C_8
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - W6wwO_gbn-o
+  - YXvpoh_JZHI
+  - Yxx-j3J7N6c
+  - f6yAY1oZUOA
+  - fIoHZk3s_DU
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - ooEgWahEvEM
+  - q2gvY0KFwmA
+  - qHaW-Y3D3Fo
+  - scIOIOrhYus
+  - v2qdx-naMWs
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - 0BIbKxuOFIE
+  - 7RluZFIyXqc
+  - BYVtFRvEK5U
+  - CWEvEU4-tvg
+  - HWAOifKGLiE
+  - Mlgs4_54q8Y
+  - PvDPhqeRZ7A
+  - SQF-0s1CckA
+  - SREL1K0cUs8
+  - ZkwBzPmhtr0
+  - adV2t4QrHWg
+  - m9GQRXD7b8k
+  - oLsonHQJOUc
+  - qd3vrkQePVQ
+  - weFpc9ExLVE
+  - -0kZ3uvdSHM
+  - 18hPypKsQ8w
+  - 22AFyTaVs5g
+  - 5fzTBTfWJ20
+  - 6A98Glp5DuY
+  - 6snqIh6lgsE
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - JyV7mUFSpXs
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - OeTK66_glm0
+  - OebvKizCLkw
+  - T7Mk9KBuhAU
+  - Z7Ra8Wa-WMI
+  - cdPejPpoMFo
+  - fJQmoPKvjTg
+  - gdJYRWx9g6w
+  - jed4Bg1dyEI
+  - l-Z4uNHDS9g
+  - mdSbBgqTP9M
+  - r_VHltdyvv4
+  - vSSkDos2hzo
+  - xQVjYfGw0mE
+  - 2CV06_l75us
+  - 2rz13GdC-n8
+  - 2uPyV7Goj9M
+  - 342ALAEwapQ
+  - AyMUWBUt3WY
+  - Bjl23NHuoPw
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - M4nSM7TBsJg
+  - N1ZRYx46ye4
+  - UNf2qsX8uFc
+  - bIE0byxi6rk
+  - cWNVP4Ui22g
+  - cujcxjSm69g
+  - fGjh5WLOby4
+  - gPry3-OomII
+  - iBb7TfmdzCk
+  - pA6ls-oHhX0
+  - tkH2-_jMCSk
+  - -yp3g7EeDqo
+  - 57q3nj9iDbM
+  - 7bC-orwQ2zo
+  - 7xTLXLw6lhQ
+  - 9l5YBl_-F9M
+  - 9lVBk1gS6qc
+  - A-PDoo2BXLQ
+  - BXeOYJIq-1I
+  - D-NYL9jKC38
+  - Dpyutwgczw0
+  - IQwcCaAAuRc
+  - KnbQRn7mU6s
+  - Me2tF4TLQ1w
+  - Pui3UaKI2Pk
+  - VieWY28QIPQ
+  - YwO3pccYbKo
+  - ZV3fXS2XHeQ
+  - eDv9bnz3GT8
+  - gpg5679ZZCs
+  - hntwy-fZEi8
+  - i6UaRB2r8Yw
+  - j04wOp5R3ZY
+  - jhjRyKDUMB4
+  - nEXS50jqH7o
+  - nRQSfBhd7FE
+  - p5AnG9fub-Q
+  - t-ezOLT2Kv0
+  - -ENLFPdXIbA
+  - 2y4AaFqofLY
+  - 5ZK50rIFyL4
+  - AL5HDsXTUyI
+  - AqIMz14J-Lw
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - EoWGGNHvVxA
+  - H5Uhvu4bzA8
+  - IGGuzpu87f4
+  - IgdaYVW9n50
+  - JQaeGoQox0k
+  - Jpxc0TUr9BI
+  - Ohr1ZbPVz7M
+  - RtqzCetpdKA
+  - SMAB27z3x0c
+  - T2TvY5AFLd0
+  - WEKB9EGH20I
+  - Z6VLe8SAiI0
+  - Z_4djaNyKEE
+  - h-UQdAMg6Rc
+  - hZZ9WWElZ6Y
+  - hmE1fAHgr3E
+  - iObsUlFU4qE
+  - mqVYOYK7UQU
+  - vESlU4uJbdw
+  - xgv49WM_PuY
+  - 2q1IkC7WFN4
+  - 3irVy7zN47w
+  - 716e30A053U
+  - FHNib8tLYpw
+  - F_JOoeHXcmc
+  - Hu-rVZVSzxs
+  - LkHH7f0AODs
+  - Me60HEa1PIc
+  - NCiL9vAkKvM
+  - OrsBKKYipwk
+  - WE3VJu5iINk
+  - WprPdJKfaGk
+  - XmayQvljPd0
+  - bJgN9jGYEV0
+  - cUemRzQHblU
+  - ezOsco9legc
+  - jLvQTW1llIE
+  - mPf-zJKOXvQ
+  - mq1ePlTGBuY
+  - tJeI51crrvs
+  - 11VqZqlcPBM
+  - 79yebGL3NX0
+  - BSh4zJHVxs0
+  - E3Kt5qUYWfY
+  - EiTJBa8RpWI
+  - HVeSc4jOfgU
+  - JWqoZrraZt8
+  - KxV8I_YyiaY
+  - Wa4f7f5y7uQ
+  - eVJo98Fs-bc
+  - im7xZ7jgyRw
+  - kcIhqyXyV0M
+  - moVynuxM4fc
+  - obaHTHabvXM
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - Dh77sKTYZIk
+  - EwclzA3FplQ
+  - NjlxJeT_ATg
+  - bKvlpaDR-Eo
+  - cZnsLVArIt8
+  - eO8W1pWRJ1E
+  - g5X38VuqbEM
+  - i3X-IG9sBJQ
+  - lHWlTYe1_Rk
+  - nl7Wdb8qyXY
+  - ragF69J6llw
+  - xaMbvaLk0KY
+  - 4MQGjcdGwgo
+  - AFry8ND5ZmY
+  - Bd4gxNpbJGE
+  - F2-LZpD7r60
+  - Fk-kT2hb31U
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - M8FJOEKV-LM
+  - Pjbxp2kwpiU
+  - QGDUDHlIHAA
+  - QsiImYTLvTk
+  - SpIQrvqnw0o
+  - U7ppWOd52YU
+  - Xw5b9prgVkU
+  - YA4kNBMx5bA
+  - ctV8NyRWZIo
+  - jbWVogETlmQ
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - sD5VWN5Jt5U
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 2DX_U89ocX8
+  - 2MlxAXBzjXM
+  - 8D6nnYgQdfw
+  - 9O2fnIbrdzw
+  - HYB6jQMYEb0
+  - KosAPIzhNE8
+  - LABF9V5oQSw
+  - LT_aBQatj5s
+  - OTrTqs9FLq0
+  - Qa_fGGT-GYQ
+  - QfSBj_IAtfQ
+  - Sb0lMiurinA
+  - Slzk17RnOrc
+  - Vib_BSDPTNI
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - kEiPal3RrKw
+  - kJcfRla_Tz0
+  - l0GCECJxCZY
+  - pvIjsG5Svck
+  - r6MBg8-FlD4
+  - rfGi8W9j9gQ
+  - rlLwFuokB7g
+  - vx6RkgoxzgQ
+  - -jc4EeIGgRU
+  - 0O9bmFhtrHY
+  - 42fVGpylH2Y
+  - 7AhIZkvQCwk
+  - AcVj1bB8Jnk
+  - CRUnIbCbH3c
+  - DnYpuyU0XRA
+  - J8YaoUpH-qg
+  - LT-NaeBHmHM
+  - MBaoJffyT5I
+  - MCGa9qP_Bo8
+  - QAj0VHx43fM
+  - RlrmSu5u9bE
+  - YSJubcbzJmo
+  - _jfGk5me0dY
+  - bzGSxdGF8z0
+  - cO8cccJkQ1c
+  - eqTF-rDHm2I
+  - gkHH_w-CCd4
+  - lZjh-qJaLLQ
+  - ozpcrgmwyto
+  - qQyCK_rxzN0
+  - sLYw8VdVGbw
+  - 19aunTn3SfI
+  - B1eG9DyYK9E
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - JiA5iZsbYC4
+  - MilYefF9DjI
+  - P5a7I-4GaYI
+  - UqnP07MXDfw
+  - ZdTzmfPffl4
+  - bDr6ayl0_Rs
+  - dBTQi5kdfW0
+  - pPlFSqXnbls
+  - qO19Pv36o3U
+  - qfF5EjxWiBs
+  scan_costs:
+  - at: '2026-05-29T16:49:59.497856Z'
+    usd: 0.2057601000000524
+classes:
+- name: Suspension Foundations
+  image_url: https://images.pexels.com/photos/4662333/pexels-photo-4662333.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the fundamentals of suspension training with proper form and
+    body angle progression. Ideal for beginners discovering TRX or anyone sharpening
+    foundational technique.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: Core Control
+  image_url: https://images.pexels.com/photos/9958667/pexels-photo-9958667.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Deep-dive into planks, pikes, and rotational core work using the suspension
+    trainer. Build stability and control through progressive resistance patterns.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Full-Body Strength
+  image_url: https://images.pexels.com/photos/4720230/pexels-photo-4720230.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Comprehensive full-body workout combining rows, presses, and single-leg
+    work. Build functional strength with controlled movements and smart progressions.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Power & Conditioning
+  image_url: https://images.pexels.com/photos/8381747/pexels-photo-8381747.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: High-energy metabolic conditioning class that pushes strength endurance
+    and cardiovascular capacity. Fast-paced, challenging, and designed to elevate
+    performance.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Jump rope
+  image_url: https://upload.wikimedia.org/wikipedia/commons/f/fd/BeadedRope.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

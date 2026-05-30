@@ -4,7 +4,6 @@ import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
 import 'package:app_management/features/home/data/mock_attendance.dart';
 import 'package:app_management/features/home/data/mock_member_stats.dart';
-import 'package:app_management/features/home/data/mock_upcoming_classes.dart';
 import 'package:app_management/features/home/presentation/widgets/live_attendance_card/live_attendance_card.dart';
 import 'package:app_management/features/home/presentation/widgets/total_members_hero/total_members_hero.dart';
 import 'package:app_management/features/home/presentation/widgets/upcoming_classes_card/upcoming_classes_card.dart';
@@ -59,8 +58,8 @@ class _DashboardColumns extends StatelessWidget {
             child: LiveAttendanceCard(entries: kMockLiveAttendance),
           ),
           const Hairline(vertical: true),
-          Expanded(
-            child: UpcomingClassesCard(dayGroups: kMockUpcomingClasses),
+          const Expanded(
+            child: UpcomingClassesCard(),
           ),
         ],
       ),

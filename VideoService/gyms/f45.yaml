@@ -1,0 +1,613 @@
+gym_id: f45
+gym_type:
+- f45
+theme: F45Indie
+videos:
+  specification:
+    short_videos_desc: 'F45-style team-circuit content — station-based HIIT follow-alongs,
+      exercise technique for circuit movements, and how to run and prep for 45-minute
+      timed-station workouts from credible coaches — plus the fun side: "what an F45-style
+      class is really like" vlogs, member first-class and transformation stories,
+      behind-the-scenes, and community and coach interviews.'
+    short_avoid_desc: No "get shredded in 30 days" clickbait, ego-lifting / fake-PR
+      clips, sketchy supplement promos, or "F45 is a scam / F45 vs CrossFit" debate
+      videos. Nothing off-topic.
+    videos_desc: |-
+      # What we surface
+
+      Format, technique, and follow-along content for an F45-style
+      team-circuit studio — plus the fun, human side, so it's a feed members
+      enjoy, not just a how-to library. Modern, programmed, station-to-station
+      tone throughout.
+
+      ## Format & technique
+      - 45-minute station-based HIIT and functional circuits you can do at home
+      - Technique breakdowns for the movements that recur on the floor:
+        kettlebell swings, dumbbell work, rowing, sled, box jumps, sled pushes,
+        battle ropes, bodyweight conditioning
+      - Interval-timer and station-rotation formats
+      - Warm-up, mobility, and prep that serve the circuit, from credible
+        coaches
+
+      ## The fun & human side
+      - "What an F45-style class is really like" walkthroughs
+      - Member first-class and transformation stories
+      - Studio behind-the-scenes and community moments
+      - Funny workout moments and coach interviews
+      - Leaning on independent creator content rather than copyrighted branded
+        class footage
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about HIIT / functional circuit training; off-topic,
+      genuinely low-quality, or clickbait videos.
+
+      ## Reject
+      - "Get shredded / abs in 30 days" clickbait
+      - Dangerous ego-lifting and fake-PR fail compilations
+      - Sketchy supplement or steroid/SARMs promos
+      - "F45 vs CrossFit / Orangetheory" and "is F45 worth it / F45 is a scam /
+        overpriced" cross-discipline or anti-discipline debate and reaction
+        videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a clip, a highlight, or
+      entertaining — fun content is wanted.
+  queries:
+  - 45 minute hiit circuit workout follow along
+  - functional circuit training workout at home
+  - station based interval workout follow along
+  - kettlebell circuit workout technique
+  - dumbbell hiit circuit full workout
+  - how to structure a 45 minute circuit workout
+  - bodyweight hiit circuit no equipment
+  - timed station rotation workout format explained
+  - circuit training movement technique fixes
+  - full body hiit circuit 30 minutes
+  - what an f45 style class is really like
+  - my first f45 class experience vlog
+  - f45 transformation 8 week challenge story
+  - team circuit studio behind the scenes
+  - funny hiit circuit workout moments
+  - team training community fitness motivation
+  - day in the life group fitness coach
+  - group hiit coach interview programming circuits
+  - hiit circuit workout day in the life vlog
+  - hiit circuit training motivation
+  good_video_ids:
+  - L-AQL8b9FrU
+  - W31eWDidL0g
+  - qLccfZ4HEAQ
+  - 0MfKBouPSME
+  - 4imTQhTlj3M
+  - YJzle_w53Vs
+  - gfUg6qWohTk
+  - Cmsr0n0Gd3I
+  - FUfm8efxJ8M
+  - OfShDTYfKjM
+  - US-EMesKq4Q
+  - aWadQMEngCA
+  - obHp1D15-6s
+  - p40iUjf02j0
+  - pbkrx340TBM
+  - ximZfmqh2hI
+  - 3NeeB6I7AFc
+  - 9zt6Hc84rjg
+  - A_XlcOIjf1g
+  - E5-WVI-1mUE
+  - FlvhqSg6FmE
+  - NBRv7ShUTm4
+  - _qpSqEjV55Q
+  - dm8JR9Wkz5Q
+  - fMz5CLtKXC4
+  - qLBImHhCXSw
+  - rlZgtQbRlD0
+  - rma9n_xL1i0
+  - 5xfBiYplogg
+  - BL6JcHyR5WI
+  - EQio6nzPLPw
+  - GY1JhB9BEkk
+  - MR4pIQhpu9Q
+  - NJ8NP-UKwHE
+  - Oqp5RLT4xac
+  - PK3Xz3VemYw
+  - bGauZyt2Fo0
+  - mS_yuOfyNIM
+  - 3paaqYQrXOg
+  - 8wwZEFkGB-Q
+  - lZjtasHvlN4
+  - vK_DQYimccw
+  - z8qosIG17OU
+  - -6WMiAUaYNI
+  - 0zKWxM9rwfE
+  - AxlTMs58tHw
+  - P_ouE8obuoU
+  - SYPDs-njtRw
+  - gu11txbEKSk
+  - uyhrnJyccsM
+  - wejo2SqFZoY
+  - 06P5b_u0ut4
+  - 5iHQDUvR_vc
+  - 9P7zOo8i-lE
+  - GpDaVBhYJ-8
+  - W6wwO_gbn-o
+  - bDCeXbMJVNs
+  - bGKNaw82JNc
+  - kwDQk2siRJs
+  - 0Ru6VXCiZUI
+  - KTUNnCNs9UY
+  - _vZWbSMFR2A
+  - adV2t4QrHWg
+  - cQ4K399DTgI
+  - mVlQ3eVMa6Q
+  - qL7Nlexje-M
+  - 05HBOX7x5SE
+  - 22AFyTaVs5g
+  - 2LD0Tp3oIDU
+  - 8lqiBygUFsM
+  - J04zrKOr7RY
+  - JBCMXfEMM8o
+  - JKQcQO7fKV4
+  - T7Mk9KBuhAU
+  - hqiBUFGwS1k
+  - 2A9UVroNf0k
+  - 6oZfhhEHXU8
+  - EctwcTwyIsk
+  - N1ZRYx46ye4
+  - Tr_Vt7YCDC0
+  - YDactrbACK4
+  - gx0RWT7WbmA
+  - n2LLVSVf6k4
+  - -7yP6pYfjfk
+  - 7d2ShM3acVk
+  - 85Xv_bDDUOM
+  - SoTjgjO_kTk
+  - YghOeTjdEf4
+  - dXSYMg6GZ1I
+  - j04wOp5R3ZY
+  - s02N_88wkVY
+  - u6ZelKyUM6g
+  - HzfHKN6rmpk
+  - PVF2jrr82vo
+  - R4GFdbqJ26g
+  - V4er7-5uc5w
+  - ixZVPFJWnRY
+  - x5PAjQrG_UM
+  - -nB_IOKlrds
+  - 3irVy7zN47w
+  - DAKGiwO9Gj0
+  - NCiL9vAkKvM
+  - gvM-WuRfbkY
+  - je-IwnH6ZPI
+  - mbnb_tXsISU
+  - uQWlzocm6ec
+  - 2-gQlIJukC4
+  - CiMn91rtWkk
+  - lvSNbMGVrLg
+  - 3qyWpJ34dWw
+  - DnG-XhHe5oc
+  - HWSlRhGzdXU
+  - SIBTpr5arsE
+  - XrkWKsagH-k
+  - bej53DFL4WQ
+  - m8mQ_92_Ylg
+  - 09ijnl90ulE
+  - 1mbQP8VAuw0
+  - 5CGlXgmauIY
+  - 7lNfA_P6xAc
+  - hiLF_pF3EJM
+  - 5sJr8RSeuEA
+  - KpzoVMw_rMg
+  - bENAtujWL9c
+  - t7AoTz4aPB0
+  - 0L0cOOpyPpA
+  - DE9T22Q20Bw
+  - _JEO0KWcP3M
+  - -GCA92b119Y
+  - ZdTzmfPffl4
+  - mq40ebFwhT8
+  - pPlFSqXnbls
+  - xqvCmoLULNY
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 0CfdNf9S7S8
+  - EbfdMaV7qqM
+  - FcEqCbfRZZw
+  - INXD5osrkDo
+  - IqKAk7N2GmM
+  - T8O5CMhppdo
+  - XVKgRC2w2lA
+  - aglGMqG-Nzg
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - kUTSNVYUG60
+  - pH5bl36t-ik
+  - proINILL4X4
+  - qOec0er9XdA
+  - vc7v73nIAqE
+  - vxdQbLZfkJc
+  - yVUcHEOr450
+  - -Et6xw8bv7U
+  - 7JYF44bb5_k
+  - 9Wa9xY88WF8
+  - ATQ2xB7SzCs
+  - CEvIs9y1uog
+  - DYHOf_R3XRw
+  - E91hwT81nTQ
+  - KJBlo6X4Mm4
+  - OsbUYYF3fd4
+  - Q-7KCRNLLzc
+  - crlkPeiHfEM
+  - dBSAURSwuiI
+  - fD-qF0cHAP4
+  - f_Yi3YrWSsk
+  - iKMr1BLeMpc
+  - joI6MmdzMYo
+  - kThGMgiprF4
+  - laO7iSLSIZE
+  - mL40wGiWbCo
+  - pdUptRE5Dpc
+  - sW_NLt47vPU
+  - uS2XpgGOPuA
+  - w4ntwYkRlcY
+  - wpWV4MwYaSk
+  - 0mJGecBLEi4
+  - 1u6d1CX7o9c
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4D6wSrXC__0
+  - 6ADogpDq0t4
+  - DacqZQC3Hfc
+  - Gqqt0h19vxc
+  - HiJ1uLuTNxo
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - VNgfAzTO3xU
+  - bqt7qh5oq38
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - sBObC61uWLs
+  - xHlhEnN60-s
+  - z6k8wXfwS94
+  - 4L_xcWCOQOA
+  - 5kkBgb426Aw
+  - 6BTBUhAWhSg
+  - 7yX1QN5a6L4
+  - CDDHlGRL3AI
+  - GADfNZHjumU
+  - ItE7xQpkfMA
+  - P1j1j0ttVPU
+  - Ws_0Ji4to7w
+  - Y-AYC3_DbpY
+  - dfSmTclf3wk
+  - iH_F2n7MjIQ
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - lokn0miZSV8
+  - nMo--6qR61w
+  - ogSfK4fPCwk
+  - q9CKxBMxTlU
+  - r6HHJJXMmdU
+  - sbBC9eIF7f4
+  - wd6dkj6p3lM
+  - 8rEfztgwBoc
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - DS6nJkgfAko
+  - NthtMRjIT2I
+  - UXI6j0MJFWw
+  - V5M-gADbaqk
+  - XaA3qD1EAqg
+  - ZDVjEOAU0TM
+  - dedmmHfyGjs
+  - h4nLNNbR9o8
+  - jy-R9pPBDDM
+  - mtVs-IefHrM
+  - t-X8ITcKS-c
+  - t1zP9ojJ_WE
+  - v6B9zgvkos0
+  - woYIxttRHrw
+  - 0CrX59ulj9U
+  - 1ZccDxDC5UY
+  - 2MvZ_7401aI
+  - 2kui0fFKMyE
+  - 7zjLVDQMY0w
+  - EzzHv56zDVc
+  - GFaDWjjWlvs
+  - JTUxuQlS2RU
+  - SYJu_y6WvEc
+  - W6ydiO7SUIM
+  - WtunB3RhqBk
+  - YXzzuLcmE_o
+  - bd2EAn9tJDM
+  - cA1t3TTnTes
+  - dSRLhDyA0-E
+  - fd6ZmG6L-TE
+  - hZoeX99CiPE
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - sL69s4E63pU
+  - s_jNQkalgmU
+  - t2Ly6-QPMi8
+  - uVMuw2oRyt0
+  - vuuqoMs162A
+  - wgYcAjoTLMI
+  - x0jPxX6nW6E
+  - 0vmVSEesjAc
+  - 2oQp_ibJWME
+  - 5tTKSFsgfeI
+  - 7SIjcX5B1Vs
+  - BdWvP-lbb68
+  - HIuN3NzdSPs
+  - KMliGnl7uVo
+  - KeNObkhENKQ
+  - QYep9TgZsa4
+  - QmL8ueGp63M
+  - TN9i9Ni0Xr4
+  - UbEQSel4BhQ
+  - XPNBBJHjRk8
+  - YNHMNVLwy9c
+  - gImOTwdjAog
+  - mLTqcadk8Bw
+  - oFFtocdGCLo
+  - y7_Tc8vS5NU
+  - zSfy8KOcgG0
+  - 0qVlPcJp7c4
+  - 1DN1SijxDUY
+  - 1s_0rUUo0A0
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - B12MXF0bSFo
+  - D89yRfGIpmg
+  - EKUNGQ4LmH8
+  - G-1gXGG6FiE
+  - IVEAfdHlnO4
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - Yxx-j3J7N6c
+  - eU2cqgesA3w
+  - f6yAY1oZUOA
+  - g9Er55uc7UM
+  - gUZ5VfjBagc
+  - ooEgWahEvEM
+  - scIOIOrhYus
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - -VJ6jNxq7RU
+  - -mpPLGD2iCs
+  - 33oyFrEYxS0
+  - 87yO62CSawA
+  - HWAOifKGLiE
+  - KijAPJXjg8c
+  - Mlgs4_54q8Y
+  - PvDPhqeRZ7A
+  - daKmt-sRkRo
+  - jAGt4H5oC5g
+  - qd3vrkQePVQ
+  - vm6ZoKRLGh8
+  - 1EeTvG34xGo
+  - 6snqIh6lgsE
+  - BfB4lVnL4CM
+  - Bhln-_9IbnY
+  - HSj7EPqPoLA
+  - JyV7mUFSpXs
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - MM0Q35Pcqa0
+  - OeTK66_glm0
+  - Tg0Zz1ckDkA
+  - Z7Ra8Wa-WMI
+  - bZC1ym4Ti24
+  - cdPejPpoMFo
+  - e4xwZuIAZJM
+  - gdJYRWx9g6w
+  - r_VHltdyvv4
+  - 2uPyV7Goj9M
+  - 342ALAEwapQ
+  - AyMUWBUt3WY
+  - FKcr2h7RR-g
+  - M4nSM7TBsJg
+  - SV-KfCQPJJ4
+  - UNf2qsX8uFc
+  - UhLNFz20oQU
+  - bIE0byxi6rk
+  - cujcxjSm69g
+  - gPry3-OomII
+  - gaiQNxnpZa4
+  - iBb7TfmdzCk
+  - p17GwFtNGws
+  - pA6ls-oHhX0
+  - qPnwA5g66eM
+  - sDvar0GLPJA
+  - ucygiLlByFw
+  - x6UyziJYpao
+  - -yp3g7EeDqo
+  - 2-5zmszOu3o
+  - 3ap81sm30P8
+  - 7bC-orwQ2zo
+  - A-PDoo2BXLQ
+  - BXeOYJIq-1I
+  - D-NYL9jKC38
+  - Dpyutwgczw0
+  - EsglINkJKPs
+  - IQwcCaAAuRc
+  - Pui3UaKI2Pk
+  - WDhl_906uuI
+  - ZV3fXS2XHeQ
+  - dFiBVley3o0
+  - e2a-n2Cl8H8
+  - nRQSfBhd7FE
+  - o0geL60T8jI
+  - t-ezOLT2Kv0
+  - tFOP4-BlW-c
+  - u1UNSANB-po
+  - -ENLFPdXIbA
+  - 5RUWK_51lkU
+  - 5ZK50rIFyL4
+  - 87OSqDBBarM
+  - AL5HDsXTUyI
+  - AqIMz14J-Lw
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - IGGuzpu87f4
+  - QVl-xXen7KU
+  - SMAB27z3x0c
+  - T912qM6x080
+  - WEKB9EGH20I
+  - YQpuGCTXszw
+  - _-qJwnqlJMw
+  - gcX4qN--Zdo
+  - i5Li6GaTU1I
+  - xgv49WM_PuY
+  - 1P088Ervhss
+  - 6snSEm_aMo0
+  - 716e30A053U
+  - F4vmk_MhhsM
+  - Hu-rVZVSzxs
+  - OwPGsdNYQGM
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - jLvQTW1llIE
+  - lZTWOdcuI-8
+  - mq1ePlTGBuY
+  - tJeI51crrvs
+  - EiTJBa8RpWI
+  - HcJYEExiGkU
+  - KxV8I_YyiaY
+  - Wa4f7f5y7uQ
+  - im7xZ7jgyRw
+  - moVynuxM4fc
+  - vcxBPswPszY
+  - 0cnjahRSA8A
+  - 5tg9dpQMYHk
+  - 9TzHTKBiy68
+  - A46HOfXlFa8
+  - B-ePkIehooM
+  - NjlxJeT_ATg
+  - Np6ZwNLknSI
+  - RTELzIAssa0
+  - bKvlpaDR-Eo
+  - eO8W1pWRJ1E
+  - lHWlTYe1_Rk
+  - 2-C9QvUala4
+  - Bd4gxNpbJGE
+  - IYni6AfrkAY
+  - KF3D-Q0C6-c
+  - Pjbxp2kwpiU
+  - SpIQrvqnw0o
+  - TG-B80w8LFs
+  - U7ppWOd52YU
+  - WGshtWEzxeA
+  - ctV8NyRWZIo
+  - dc-PGQhCwSc
+  - i98t33E8Eps
+  - j0ZCQFoNx0I
+  - jdo843M-oCo
+  - p-jIAjWbJbc
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 27QcGyxxdUo
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - Evz8STuQhYw
+  - HKF9mb6FQDg
+  - KosAPIzhNE8
+  - LT_aBQatj5s
+  - OTrTqs9FLq0
+  - Slzk17RnOrc
+  - Vib_BSDPTNI
+  - Yt7XVvDSeyU
+  - e1JQq7xMohI
+  - eX-fmOOIIiA
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - oZ1c8IBz7a0
+  - rfGi8W9j9gQ
+  - s8u4PCyTGMo
+  - vx6RkgoxzgQ
+  - -jc4EeIGgRU
+  - 0O9bmFhtrHY
+  - 42fVGpylH2Y
+  - AcVj1bB8Jnk
+  - CRUnIbCbH3c
+  - HrWjf8WOsfI
+  - J8YaoUpH-qg
+  - LT-NaeBHmHM
+  - MBaoJffyT5I
+  - MCGa9qP_Bo8
+  - RlrmSu5u9bE
+  - YSJubcbzJmo
+  - bzGSxdGF8z0
+  - ozpcrgmwyto
+  - sLYw8VdVGbw
+  - 6c-cp1yRDHs
+  - 82Pd_Kbzim4
+  - ClgAYjvqP_s
+  - IqXOWtwEeeM
+  - JXNCc71d888
+  - MilYefF9DjI
+  - Vswrm9dCGEE
+  - fRo_W2xNn5g
+  - pdtyvwgpBI0
+  scan_costs:
+  - at: '2026-05-29T15:39:54.298491Z'
+    usd: 0.13722780000000068
+classes:
+- name: Ramp Up
+  image_url: https://images.pexels.com/photos/4662333/pexels-photo-4662333.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Master the fundamentals of station-based training. Learn proper form
+    on core movements like kettlebell swings and dumbbell circuits in this beginner-friendly
+    class designed to build confidence and endurance.
+  instructor_name: James Carter
+  instructor_bio: Head coach with over a decade of experience helping members of every
+    level train smarter, move better, and stay consistent.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg
+- name: The Circuit
+  image_url: https://images.pexels.com/photos/9958667/pexels-photo-9958667.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Experience the full F45 workout - 45 minutes of team-circuit intensity
+    with timed station rotations. Combines power, cardio, and strength in a fast-paced
+    group setting that pushes you to your limit.
+  instructor_name: Sarah Mitchell
+  instructor_bio: Performance coach focused on building strength, mobility, and confidence
+    through approachable, well-structured sessions.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg
+- name: Peak Performance
+  image_url: https://images.pexels.com/photos/4720230/pexels-photo-4720230.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Advanced metabolic conditioning for the experienced athlete. High-rep
+    circuits, battle ropes, sled work, and explosive movements that test your limits
+    and unlock peak performance in a group team environment.
+  instructor_name: Daniel Brooks
+  instructor_bio: Certified instructor who breaks every movement down step by step
+    so newcomers and regulars alike feel supported.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg
+- name: Recovery & Mobility
+  image_url: https://images.pexels.com/photos/8381747/pexels-photo-8381747.jpeg?auto=compress&cs=tinysrgb&w=1200
+  description: Active recovery through functional mobility and light circuit work.
+    Restore your body between intense sessions with guided stretching, breathing,
+    and low-impact movements that enhance overall performance.
+  instructor_name: Maya Bennett
+  instructor_bio: Coach passionate about creating an inclusive, high-energy room where
+    members from all backgrounds can thrive.
+  instructor_image_url: https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg
+rewards:
+- title: Bring a friend
+  image_url: https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg
+  price_label: Free
+  points_cost: 1000
+- title: Club t-shirt
+  image_url: https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200
+  price_label: Free
+  points_cost: 1500
+- title: Jump rope
+  image_url: https://upload.wikimedia.org/wikipedia/commons/f/fd/BeadedRope.jpg
+  price_label: 25% off
+  points_cost: 2000
+- title: 1-on-1 PT session
+  image_url: https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG
+  price_label: 50% off
+  points_cost: 2500

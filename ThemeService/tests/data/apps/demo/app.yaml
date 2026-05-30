@@ -1,0 +1,52 @@
+id: demo
+display_name: Demo App
+
+images:
+  - id: hero
+    description: Bold hero illustration on a flat solid background.
+
+colors:
+  - id: primary
+    description: Dominant brand colour for primary CTAs and key accents.
+  - id: background
+    description: App background surface colour.
+    role: background
+  - id: text
+    description: Primary readable text colour for headings and body.
+    role: text
+  - id: accent
+    description: Secondary highlight colour for badges and small accents.
+
+fonts:
+  - id: display
+    description: Headlines and hero typography at large sizes.
+  - id: body
+    description: Running UI text — buttons, labels, body copy.
+
+icons:
+  - id: home_tab
+    description: Navigation tab that returns to the home screen.
+  - id: search_action
+    description: Action that opens search.
+  - id: celebration_badge
+    description: Celebratory award badge shown when a milestone is hit.
+
+texts:
+  - id: booked_screen
+    description: CTA shown to the user the moment a session is booked.
+    min_words: 1
+    max_words: 4
+    min_chars: 3
+    max_chars: 24
+  - id: cancel_cta
+    description: Button label that cancels a pending session.
+    min_words: 1
+    max_words: 3
+    min_chars: 4
+    max_chars: 18
+  - id: home_greeting
+    description: Top-of-home-screen greeting shown when the app opens.
+    min_words: 2
+    max_words: 6
+    min_chars: 6
+    max_chars: 40

@@ -29,7 +29,11 @@ class RedemptionCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          RewardImageHero(imageAsset: r.imageAsset, priceLabel: r.priceLabel),
+          RewardImageHero(
+            imageAsset: r.imageAsset,
+            imageUrl: r.imageUrl,
+            priceLabel: r.priceLabel,
+          ),
           Padding(
             padding: const EdgeInsets.all(DesignConstants.paddingSmall),
             child: Column(

@@ -1,0 +1,96 @@
+id: smoketest
+display_name: Smoke Test
+
+# One image only — keeps a pipeline run cheap/fast (image gen + background
+# removal is the expensive part). Swap the description to test other prompts.
+images:
+  - id: celebration_image
+    description: >-
+      The single hero that celebrates a successful class booking. Fills the
+      ClassBookedScreen as a full-bleed centred hero (~50-60% of the
+      viewport), revealed with a scale-in pop after a brief loading +
+      done-check sequence, with a "Class Booked" headline directly below it
+      and a Continue button at the bottom. It appears the instant the user
+      commits to booking a class and is the ONLY place a booking success is
+      celebrated — the first positive payoff for that action and a key
+      retention moment. The emotion is peak, congratulatory success:
+      "you're in, your spot is locked".
+
+# All four colour slots so the full colour flow (harmony + WCAG contrast) runs.
+colors:
+  - id: primary
+    description: >-
+      Dominant brand colour. Drives primary buttons / CTAs and the key
+      interactive accents the product leans on.
+  - id: background
+    description: >-
+      The app's base surface — the large, calm canvas every screen and all
+      content sits on. Its lightness/darkness follows the brief's theme,
+      not this description.
+    role: background
+  - id: text
+    description: >-
+      Primary readable text colour for headings and body copy; must stay
+      comfortably legible against the base surface.
+    role: text
+  - id: accent
+    description: >-
+      Secondary highlight colour for small accents — badges, indicators,
+      progress and minor emphasis. Used sparingly; never competes with the
+      primary.
+
+# Two-slot font system: a display face for headlines/heroes and a body
+# face for running UI text. Keeps the smoke test exercising both lanes
+# of the selection prompt without ballooning the run cost.
+fonts:
+  - id: display
+    description: >-
+      Headline / hero / celebration typography — the "Class Booked"
+      title and any large titles. Used at 24–64px in short bursts. Must
+      carry the brand's energy and feel distinctive at a glance.
+  - id: body
+    description: >-
+      All running UI text — buttons, labels, list rows, body copy. Used
+      at 13–18px in long sessions. Must be highly legible at small
+      sizes, comfortable to read, and visually quiet so the display
+      font and the rest of the UI lead.
+
+# Two text slots — just enough to exercise the batched rewrite call,
+# the per-slot length-bounds check, and the retry loop without
+# ballooning the smoke-test cost.
+texts:
+  - id: booking_headline
+    description: >-
+      The hero headline shown the moment a booking succeeds — sits
+      directly below the celebration image, large display weight.
+      The single high point of the booking flow; the brand's first
+      positive payoff for the user committing.
+    min_words: 1
+    max_words: 3
+    min_chars: 4
+    max_chars: 22
+  - id: primary_cta
+    description: >-
+      A primary action button label — verb-led, imperative,
+      single-line on a pill button. Reads as the brand's voice
+      asking the user to commit (book, claim, reserve, lock in).
+    min_words: 1
+    max_words: 4
+    min_chars: 4
+    max_chars: 20
+
+# Two icon slots to exercise the full icon flow: one obvious match to the
+# curated set (→ settings) that just copies the SVG, and one concept the set
+# can't honestly cover (a spin bike) that forces a null match and routes to
+# Recraft generation. Keeps the smoke test cheap while hitting both branches.
+icons:
+  - id: profile_settings
+    description: >-
+      The settings / preferences icon in the profile tab — opens app
+      settings and account preferences. A standard, calm gear-style
+      settings affordance, unobtrusive and rounded in line with the brand.
+  - id: class_type_cycling
+    description: >-
+      A stationary indoor cycling / spin-bike icon used to mark a ride
+      class in the schedule. Should clearly read as an exercise bike,
+      gentle and rounded to match the studio's calm, airy aesthetic.

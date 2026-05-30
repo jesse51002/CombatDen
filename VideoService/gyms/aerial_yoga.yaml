@@ -1,0 +1,753 @@
+gym_id: aerial_yoga
+gym_type:
+- aerial_yoga
+theme: AerialYoga
+videos:
+  specification:
+    short_videos_desc: 'Aerial-yoga classes and tutorials in a hanging silk hammock
+      or hoop — supported postures, suspended flows, inversions and spinal decompression,
+      plus hammock setup and safety — and the fun, human side: teacher vlogs, studio
+      behind-the-scenes, playful skill and flow clips, funny first-time-in-the-silk
+      moments, aesthetic flow-with-music, and instructor interviews. Suspended, supported,
+      follow-along.'
+    short_avoid_desc: Off-topic, genuinely low-quality, or clickbait "aerial yoga
+      for weight loss / flat abs" videos, gear/leggings hauls and product shilling,
+      and "yoga vs pilates" or "is aerial yoga dangerous/pointless" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Aerial-yoga instruction and full classes for members — from curious
+      first-timers who saw an upside-down photo to seasoned aerialists training
+      inversion work — plus the fun, human side, so it's a feed members enjoy,
+      not just a how-to library. Theatrical, a little dramatic throughout: yoga
+      lifted off the floor and into the silk.
+
+      ## Classes & technique
+      - Postures supported, suspended, or inverted in a hanging silk hammock or
+        aerial hoop
+      - Beginner foundations and hammock orientation
+      - Supported flows, and gentle and deeper inversions
+      - Spinal decompression and traction work
+      - Hammock height and rigging/safety basics
+      - Wrap and transition tutorials
+      - Restorative aerial sequences (the cocoon/savasana)
+      - Core and flexibility work in the silk
+
+      ## The fun & human side
+      - Instructor and practitioner vlogs and "what an aerial class is really
+        like"
+      - Studio behind-the-scenes
+      - Playful aerial skill and flow clips
+      - Funny first-time-in-the-silk moments
+      - Aesthetic flow-with-music edits
+      - Instructor interviews and aerial-journey transformation stories
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about aerial / hammock yoga; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Calorie-burn "aerial yoga for weight loss / flat abs in X days" promises
+      - Heavy chanted-Sanskrit devotional sermons sold as the main point
+      - Gear/leggings hauls and product shilling
+      - Dangerous untrained-rigging stunts
+      - "Yoga vs pilates / which is better" or "is aerial yoga dangerous /
+        pointless" debate and reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a highlight, or
+      entertaining — fun and creator content is wanted.
+  queries:
+  - aerial yoga full class for beginners
+  - aerial yoga hammock setup and height
+  - aerial yoga inversions for beginners tutorial
+  - aerial yoga spinal decompression sequence
+  - aerial silk hammock wrap tutorial
+  - aerial yoga flow follow along
+  - aerial yoga supported backbend tutorial
+  - aerial yoga core workout in hammock
+  - restorative aerial yoga cocoon savasana
+  - aerial yoga safety and rigging basics
+  - aerial hoop yoga beginner poses
+  - aerial yoga first class what to expect vlog
+  - what an aerial yoga class is really like
+  - funny aerial yoga first time in the silk moments
+  - aerial yoga studio behind the scenes
+  - beautiful aerial yoga flow with music aesthetic
+  - playful aerial yoga skill clips compilation
+  - aerial yoga instructor interview on inversions
+  - my aerial yoga journey transformation
+  - what is aerial yoga explained for beginners
+  good_video_ids:
+  - BnYNRUzfdGM
+  - H6B7ACH_tbI
+  - Qci_ckL16oA
+  - ULTF8gly4fQ
+  - W7GeXPK994g
+  - _AuJVPa_F_c
+  - g8pN7yweZA8
+  - hD7ufBNzDoE
+  - lF-7l1V_GuY
+  - vzYp_b2P_GY
+  - 53YGckKJZng
+  - EHi8GS-n4gg
+  - HX9AZIw5Le8
+  - TGpE3LSCJvk
+  - X2Dp-1EDqEM
+  - ciz5FnpeB74
+  - m19iGZQfATc
+  - o7x_OITmypM
+  - oNpHyEvqnrs
+  - scyNzk5NlYo
+  - z45IGWokrFc
+  - -goQYCnwBr0
+  - 3XIKiGnUDRw
+  - CqGYY0sD-zY
+  - DXmmWBiCVfE
+  - KRgLWEOJLkM
+  - S8Ab-cAyaqo
+  - UOSPAbQqhXo
+  - g4ndoI8McBw
+  - hUu6SfVCipE
+  - wEoU9z-I3Io
+  - zCE7Mv20zog
+  - 3LPGZPOi488
+  - 5xqaavLr66s
+  - 6h6_X_FbOZA
+  - DLiMPlHF9hk
+  - Dv1Gs3mp1Ps
+  - LT0fWD-nVIk
+  - M-_G1UauSyg
+  - Nfmpa3SePjI
+  - RszHt7TiX6g
+  - Xz66eA9uW1Q
+  - e7IHU-w50Wk
+  - n62EdBpmdE0
+  - n9LTJkuPHzk
+  - wJb-bEN_rF4
+  - xI0RtWVpgw8
+  - yPX6u_O_2fM
+  - 8vFPHCRlANc
+  - A3c_VVKRN80
+  - OErHItMcnG8
+  - QpcAJajOmQI
+  - TYvg8c0Sg60
+  - VlbQKSTlQvo
+  - X-QDBZhhDo0
+  - XAB21WHLjuI
+  - XOO5h482VV8
+  - XVbguGz5S80
+  - cycpIwDFwGA
+  - gcow81rrn18
+  - zCJK6Gq8L5c
+  - -FVtshGc_No
+  - 2WsDlIXvHB4
+  - GxXgzu4ykQU
+  - MFkNCuG2bm0
+  - Mvz6I0X-RX0
+  - Rf_YTqMnCCo
+  - XOKXRo78K3k
+  - _EerWz9f7Bw
+  - _wwYZFF5tVE
+  - dd2qbwPaAYM
+  - dyfg1aWn1eA
+  - jArB2fslKFI
+  - 2x8bFgAGfq8
+  - 4hlUrk8pqkc
+  - 7TFWBzo_cXc
+  - GtkJfkiTI9E
+  - JzLeewrYfSI
+  - S2wOUsQxWz8
+  - e1nJeGisd1U
+  - hVOCiaeSuNc
+  - hdDZT_r21EU
+  - jjiMIOUh5IM
+  - jmjl-ycwfYg
+  - kXV8Dgy8778
+  - oP3zf2VczTQ
+  - p0LUGIxxGgY
+  - rHN61yYAAN0
+  - sLziuKpyx2E
+  - wG0Lbxi_zP4
+  - wU8Th_606gM
+  - yeO_l2BFcE8
+  - 0ReZ3HoU9a8
+  - GYI3tTexJcQ
+  - I5qqe6_urok
+  - JBeyZBLSbm0
+  - LYV5vdqxJ8I
+  - Pdf4cCPJ3qs
+  - QsZaXeTGINQ
+  - TQQ12mZr4wY
+  - WJapvc86PgQ
+  - YZ0HbjNZjLQ
+  - ciNmEbP3ZUQ
+  - oed6hm6IGyg
+  - p8rwjArDcIo
+  - tnnYVS9jZxQ
+  - tzrHDzakWNY
+  - xiDilEHelPI
+  - 18gy7GAXDDQ
+  - 2QC_F_dufFo
+  - 2xRE5ob6kuo
+  - 3o-tJCRcFxE
+  - 8INIT7k9Q7I
+  - A1eGpM9VXi8
+  - IVSZx0b5GZA
+  - QEDXC9mr0b8
+  - U80Y3188M34
+  - UaVMAn_RN2o
+  - YwpgdZGDkh0
+  - cVJvGPbJX3Y
+  - dfo9TcPbxYs
+  - gY1Ilm03gjc
+  - m34d5nFjmhc
+  - nFm5YJDN_yw
+  - qVdfY49FspI
+  - zLuHQmxaO8I
+  - -i8lc4YvG00
+  - 4IBtGNSEjbU
+  - CjibFMO_OHU
+  - Dn2rmiW2W4g
+  - FijG8hDfhss
+  - NWzH6TT-CuY
+  - UE_zMEn6iFI
+  - UdXF89HElek
+  - Wa6JFWUinrc
+  - XJDPzNzQ3RE
+  - Z7DdDyriZ-c
+  - b-L6qjnNBdw
+  - bYRRNZANE9M
+  - cNuNvYIDfKQ
+  - hgsxB4JjdPA
+  - k8y9nINPODc
+  - nAjKwAfT4i8
+  - ogjsPb907Ns
+  - sfaw1WrSLDc
+  - uxgjaacMkPs
+  - wXIZNNfoQbI
+  - -hos6sF__ks
+  - 5xEjH1fw2gU
+  - 8D-8SEnVAG4
+  - BSpoGCg_OkI
+  - HsJmAnNZipM
+  - QPL0pohBeUo
+  - RJFAYafOMHw
+  - V0n0zrdRTxE
+  - fq4tJNY9CDY
+  - jdygLntd-tY
+  - ptRn3j03dfA
+  - vDgJAMBbSDA
+  - vN4rAN8M5-Y
+  - wNyCYiC--T8
+  - -8JgBEZW460
+  - BcEQOVbUt30
+  - M7JRGCkcz0w
+  - NoT-yakF98g
+  - O_9XuhNwSQc
+  - SGJuJApC6IE
+  - UgyslU2IQxs
+  - Wb42P0alDZ0
+  - ZUevPdW8MgI
+  - bWcinDsiSE0
+  - eQJAt0kdXdI
+  - j6prF4y5D0E
+  - jCr7kQJBVGY
+  - kNUBXBXkJG4
+  - p5AnG9fub-Q
+  - tqN7qaipYAU
+  - yHbCp_4tSss
+  - B_vD2HUQGKs
+  - EhogLOdd8Hs
+  - Eu1FsJSi3Xk
+  - FA6WPP6hMtI
+  - Gowet_LomtY
+  - OBx3qjkKG3E
+  - OuK_bTXhFt4
+  - QGwUhH2ONHA
+  - WfGKcmjTpuc
+  - Z8qEdKdpoh0
+  - ZtZQSq_UxNA
+  - alNXYnpRtOE
+  - drzrkKgd6hI
+  - luJAStSNykc
+  - n4oRm84fRoA
+  - nFU9YU85wd8
+  - o2wM02gyFgk
+  - rVcWJkgkdjA
+  - uih8DrzEXPA
+  - 1b7bNqx3A74
+  - 2KqEyVvGNVo
+  - 5qboG-rRSN0
+  - 6i1BqolgPek
+  - 9q2XGp-xLdM
+  - Dn0l80Sulrk
+  - EMDAbNqh6RA
+  - LPye8HhigZo
+  - MzeFBh9u3tY
+  - NcwS-6bsnM8
+  - NxMvUtCfgSo
+  - OSLdy_G8C7I
+  - PMstRgi1DVs
+  - QOSX_fMArsM
+  - R_B--WADRiA
+  - X_t_mTYJLS4
+  - _S_eyouRgug
+  - fL2jcSq8Nzw
+  - pAiCrdBAHdg
+  - u6mGPxWo6pI
+  - 282Uz5wz5MQ
+  - 3IcCweY5M2Q
+  - A5CFXn889p4
+  - CSplxLH6H2o
+  - RqsQRZe_Cdk
+  - SbDRp5s7znE
+  - TXjVsP_wsKI
+  - a-cPFaO-3lQ
+  - asqz-E-W6fg
+  - cI0Tl-qqc9Y
+  - g1xJLHw7Joc
+  - hqPxOTzTwJM
+  - luLM8XH9bqU
+  - nNcu8hINyYU
+  - rtOmEVZx1jY
+  - sVMnwGVdb8k
+  - -jptW39Kd04
+  - 06W47IufyUc
+  - 2rdH_VPp4qQ
+  - 3EJdUuHB6kY
+  - 3NfPaiD3meU
+  - GCGQ8p-KsAc
+  - GPMBkWukmdU
+  - KZAjIQf0kpI
+  - eez4p7pHltg
+  - gJf0LMVb3Hc
+  - hKzL-S2aW_A
+  - mP9U5QwPRxU
+  - nD31Xzgkf_A
+  - oU6_a9Wq-No
+  - sCGAJRm5bmw
+  - zIfIUgrqfCE
+  - 1yHA4_ZfoOc
+  - 64-9OJubsno
+  - 9mRxzTZ3KQA
+  - LRkdDMCYObE
+  - LWAJ39pDUZM
+  - PnC5ORkxWxw
+  - Q5xxPjrtEUI
+  - RM9sUmDKqKI
+  - Y7MO8hGiRKI
+  - _ZE8QRa4nPY
+  - abrExOjsZ4I
+  - eYOD90tpGKs
+  - oOGWr2x820g
+  - tF6rR2ZJh_w
+  - tPGoK_whiIM
+  - -jgjQBrmfhE
+  - AUBf-ktoV5I
+  - MVv4esb2lwI
+  - Ope9Rz1D3js
+  - RsN41pGxIVM
+  - TYyoQvFl9Sg
+  - VsAzUJqVGQ4
+  - Zs9uPfd7sZM
+  - h2KXqmt0rLI
+  - kA42BwMdw4c
+  - lM4iOXW3t_s
+  - ogTHq0JHmCA
+  - rl3M3gmZNxE
+  - uz0LKS7Hp4c
+  - yDJKxl3WknA
+  - zobOOTj9BvU
+  - 5BZevTgt1KE
+  - 9M5JRDk9B1I
+  - 9S3yytI4_PY
+  - Abb53rMMpOw
+  - Bg0KNsXv2CQ
+  - CcyRbYdMupY
+  - DtF_EOofln0
+  - EgK-wKAdv8E
+  - FGBOhTwrBAo
+  - KPoGnxde85w
+  - a5a-ZxMecdY
+  - dnTS1bJTRl4
+  - olxvMz3--Ns
+  - 0VbdIQFjWRI
+  - 43BccyTbgNI
+  - BtI6l6JvJLk
+  - CEnCyCP3YrA
+  - Ccf5YGjnVHk
+  - E1VPGTe3vWk
+  - In4zfG_zmiI
+  - LDnfLsTMGMw
+  - MAL-dxBPRQ0
+  - NbcE8S_DSLo
+  - jiHoDiTLwL0
+  - jkGQ_fin2ns
+  - roRl09LO6YE
+  - z3Mmrl-bf50
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - HW4ADAzkxDo
+  - INXD5osrkDo
+  - PJxtuyocguY
+  - PdACrLzekyI
+  - Sy-tEHxVe90
+  - URYaOI4kwnk
+  - a4ZpSs195I4
+  - bDtBE5Xacbc
+  - bEhhGXfIWM8
+  - eDTw82eh9PA
+  - eFmjckKXEoA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - suV7BjHE0wc
+  - 3yMZfEO60UY
+  - 70ydbjksIns
+  - 7JYF44bb5_k
+  - 7X4yVWfxQb4
+  - 96WjC49dagg
+  - 9Wa9xY88WF8
+  - GnWRwUR7GAY
+  - KJBlo6X4Mm4
+  - Q-7KCRNLLzc
+  - Sc1zAX0p0k0
+  - byXfcfeiQeA
+  - fzeSycdeA8A
+  - kThGMgiprF4
+  - khflFFpKpsI
+  - nDTxyW0QES8
+  - oiXzQcf2eWk
+  - r3NjrnANKq0
+  - rHCL4nouzfI
+  - sSwwUqy5qXQ
+  - 064uUn5syz0
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 4QjgTZZhzcE
+  - 6ADogpDq0t4
+  - DIWnZDGZsVg
+  - DacqZQC3Hfc
+  - FXcYeeTZ894
+  - G7-tJmJwJU8
+  - HrcQlCBEk6k
+  - KIjHz3ZTrnk
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - Wwbuv7v9B0E
+  - dVX8SaU37O8
+  - k6Qp78Hh5DI
+  - n_yuiYV-_Zo
+  - q1W0EbH2ajw
+  - tqXnQ-zHLBg
+  - wqYR_qdJnHw
+  - yWvRIpqyszM
+  - z6k8wXfwS94
+  - 5kkBgb426Aw
+  - ItE7xQpkfMA
+  - U2n_nDlAEmY
+  - YGm7FDrGODw
+  - gZI7w0IT8fo
+  - iK_h-2kot6s
+  - kqyr3kaw5qE
+  - no5LW1penE0
+  - q9CKxBMxTlU
+  - u3cd85x7mVU
+  - vtMvB4ErfZU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - 06KsU8rYhC0
+  - 6TjXPRkXx9c
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - Kl4l3FhCM1o
+  - M5g7jKeHu8w
+  - XaA3qD1EAqg
+  - _4cCdUuMOPA
+  - c7g-Z8a6Np0
+  - f0HjzspnZms
+  - mS_yuOfyNIM
+  - ncORPosDrjI
+  - v6B9zgvkos0
+  - vGA1_81TqFw
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 9VA1X-Cpfcw
+  - Fqptx5fNXR4
+  - MAnmPsdT5wA
+  - SYJu_y6WvEc
+  - TThkfAnxULM
+  - U7nT5qC48XI
+  - YXzzuLcmE_o
+  - Z2AOmI3aQpQ
+  - c-Rj8eGbx4s
+  - cqDH7vHRcEw
+  - dWV1oC1fI4M
+  - g8CYKFjUUDo
+  - hZoeX99CiPE
+  - jEjhDcUIwrA
+  - nYpcm5B64n4
+  - ohIDn6dpkq8
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - y8doO6933Ks
+  - -KJBu7ZhkF0
+  - 3UxesqwPuEo
+  - BdWvP-lbb68
+  - KMliGnl7uVo
+  - Knpr3ZZu1TQ
+  - LyGKTFW5geU
+  - TN9i9Ni0Xr4
+  - WBx9-n8aFsc
+  - YNHMNVLwy9c
+  - acKgy9JxhMw
+  - hfi-KBG0Wz8
+  - kXitig9Ro60
+  - mLTqcadk8Bw
+  - vizFoFnJPis
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - 7mumwqwPRFQ
+  - D1nl5PpXiAc
+  - DJ8K4_EClus
+  - KAhv3sXorAQ
+  - Pfse9GxqdAE
+  - YZP90lvS7G0
+  - YhIPJwEu6PE
+  - YsW9GKlUvmI
+  - eE-VtAKgQEE
+  - g9Er55uc7UM
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - mY6DZF6nDtc
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - 6-AXfni2zd0
+  - 99kVvs5a59U
+  - Aoc1WlXPAxw
+  - DehBBCPZ66I
+  - E_52Qu9nXJA
+  - HWAOifKGLiE
+  - HmZ-57fKJJA
+  - Mlgs4_54q8Y
+  - R9m47Lkimkg
+  - VGzzdrTuwj0
+  - YDbpNA4MqPs
+  - cQ4K399DTgI
+  - eKNtpGzNyIk
+  - hsL_SsDaO0U
+  - jBz27QzoV6s
+  - jNBBCrOCcdE
+  - qL7Nlexje-M
+  - 1bFVoTGDUws
+  - 66BCas_-ekI
+  - 8ZYJ64opv6I
+  - A_K8m_bw6Cg
+  - BSfOzy0Dpqk
+  - BfB4lVnL4CM
+  - CtCjY5CBZNA
+  - GZqgvEWyOUI
+  - HSj7EPqPoLA
+  - K2bomS-KLQA
+  - LqYx6A4WAHM
+  - M4K0s792wAU
+  - Ok2w5YnrosQ
+  - P26sJBTOaEo
+  - UCHnsgFpxsk
+  - VyV0oDX80dU
+  - Z7Ra8Wa-WMI
+  - blad0omDwIA
+  - cdPejPpoMFo
+  - kDPJaT-YZus
+  - qeDWB9AVxzI
+  - 4AWzeCNDJUI
+  - 6M-_SuAlOcE
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - IICS9-EhGF0
+  - M4nSM7TBsJg
+  - QkWcmL07SHI
+  - Rg9ZoNT-5P0
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - bOwJrqhjk2k
+  - c3HVnxtoqd0
+  - cujcxjSm69g
+  - gPry3-OomII
+  - pA6ls-oHhX0
+  - 1hoGJhFWORo
+  - 89yNR1IfIO4
+  - CZtOVFsTSuY
+  - GqaeVihADW8
+  - LCFZkeCHfag
+  - Pui3UaKI2Pk
+  - XX52rqTshA8
+  - YYZI3pczGqQ
+  - YghOeTjdEf4
+  - ZV3fXS2XHeQ
+  - iu_7JEConqY
+  - nRQSfBhd7FE
+  - pJajNovFYOE
+  - t-ezOLT2Kv0
+  - viQG0SC73hs
+  - 4pLO3g2qHyU
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - MdokfHJK4mQ
+  - PgXU4btYnSY
+  - RPSApPXcdV8
+  - WEKB9EGH20I
+  - WgO5bJ6sZq0
+  - XItaktao2QU
+  - ZDqkZibM8iA
+  - Zz8SZ-XkDUk
+  - _X6rsR5yCNo
+  - _w7BirEE9Ao
+  - idbNasHM5kw
+  - qlq-prZ4KfA
+  - r1UMA4TvHr0
+  - vnpraKh91DM
+  - 716e30A053U
+  - CBnLOlVT4yQ
+  - Hu-rVZVSzxs
+  - WprPdJKfaGk
+  - ezOsco9legc
+  - lhdBL0ZFHnY
+  - tJeI51crrvs
+  - tUTKsxHKcjg
+  - w9YWEbihNr0
+  - -xF6y-RxELI
+  - 5cRV8AqvNsM
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - MK8sBaAHzqA
+  - NQHF7qdH0rM
+  - QsdXRoBiPBI
+  - Xz-38jZ1zY8
+  - hyvggsDIhak
+  - moVynuxM4fc
+  - ucWD2CuSKSo
+  - 3qyWpJ34dWw
+  - 3r5P2kXtJyc
+  - 5tg9dpQMYHk
+  - 8DsoVhEVDeE
+  - 9TzHTKBiy68
+  - D9yXpd5dyYI
+  - FBLcOucDCzU
+  - JJD0EUDw6og
+  - eO8W1pWRJ1E
+  - gEDXDaisk3M
+  - hY9KeU42L9M
+  - zeBHjHKtpYM
+  - 3IzmT5MG9NA
+  - 3viV1hs6CM4
+  - 5OVlqlcjiZw
+  - 8tXIITCbHgQ
+  - B9AT0WneXPI
+  - Bd4gxNpbJGE
+  - BnvhJKnGuCE
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - KF3D-Q0C6-c
+  - VWdAR4M3El4
+  - jdo843M-oCo
+  - rX5zEYzAsCs
+  - x1AFmHEiYns
+  - -sbMsutmgBU
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - RoFCMBOUixI
+  - Slzk17RnOrc
+  - Yt7XVvDSeyU
+  - aiEh6GpqDxU
+  - eX-fmOOIIiA
+  - fhY0pUKtsyQ
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - rfGi8W9j9gQ
+  - sJWoWC6h244
+  - tTGY0G8OZQM
+  - vx6RkgoxzgQ
+  - 0O9bmFhtrHY
+  - 36BFKo9P3EU
+  - 3SBBDKJ1ETM
+  - AjQAJTmSzkM
+  - BZu_pk7cXVw
+  - CRUnIbCbH3c
+  - MCGa9qP_Bo8
+  - QAj0VHx43fM
+  - RlrmSu5u9bE
+  - VcK3KNRQ8j0
+  - eMgBZ9KvLvE
+  - oThDZBWEXMk
+  - sLYw8VdVGbw
+  - xdLy8PCcmwA
+  - -ErUOq78R7A
+  - -GCA92b119Y
+  - 2uxFKO-KUCA
+  - 6XcKnnfiVN0
+  - 7Y-KdTpQS_k
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - No2hP68s2gI
+  - Pg4WPKuDxmQ
+  - dBTQi5kdfW0
+  - jiJ1c9eWA60
+  - pPlFSqXnbls
+  - qcyY0tsGm6A
+  - r3qPX9qPEgg
+  - tC05QrP0ZtU
+  scan_costs:
+  - at: '2026-05-29T15:07:36.129979Z'
+    usd: 0.1515493999999996
+classes:
+  - name: "Silks Foundations"
+    image_url: "https://images.pexels.com/photos/30131194/pexels-photo-30131194.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Begin your aerial journey with essential silk hammock techniques. This class covers safe setup, foundational wraps, and supported postures to build confidence and body awareness."
+    instructor_name: "James Carter"
+    instructor_bio: "Head coach with over a decade of experience helping members of every level train smarter, move better, and stay consistent."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg"
+  - name: "Partner Flow & Acrobatics"
+    image_url: "https://images.pexels.com/photos/9306115/pexels-photo-9306115.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Explore dynamic partner-based aerial movement and acroyoga sequences. Build trust, strength, and creative flow through engaging partner balancing and collaborative suspended work."
+    instructor_name: "Sarah Mitchell"
+    instructor_bio: "Performance coach focused on building strength, mobility, and confidence through approachable, well-structured sessions."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg"
+  - name: "Strength & Conditioning"
+    image_url: "https://images.pexels.com/photos/4323299/pexels-photo-4323299.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Build the foundational strength and body control needed for advanced aerial skills. Focus on core conditioning, grip power, and progressive skill development in the silk."
+    instructor_name: "Daniel Brooks"
+    instructor_bio: "Certified instructor who breaks every movement down step by step so newcomers and regulars alike feel supported."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg"
+  - name: "Restorative Inversions"
+    image_url: "https://images.pexels.com/photos/8713850/pexels-photo-8713850.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Unwind in the silk with gentle, supported inversions and restorative sequences. Experience the therapeutic benefits of spinal decompression and mobility work in the hammock cocoon."
+    instructor_name: "Maya Bennett"
+    instructor_bio: "Coach passionate about creating an inclusive, high-energy room where members from all backgrounds can thrive."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg"
+rewards:
+  - title: "Bring a friend"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+    price_label: "Free"
+    points_cost: 1000
+  - title: "Club t-shirt"
+    image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    price_label: "Free"
+    points_cost: 1500
+  - title: "Yoga mat"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Fitness_mats_%2851543374690%29.jpg"
+    price_label: "25% off"
+    points_cost: 2000
+  - title: "1-on-1 PT session"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+    price_label: "50% off"
+    points_cost: 2500

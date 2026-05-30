@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/rewards/data/mock_my_rewards.dart';
+import 'package:mobile_app/features/rewards/data/reward.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_card.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_redeem_dialog.dart';
 
@@ -9,12 +9,12 @@ import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/rew
 class RewardsGrid extends StatelessWidget {
   const RewardsGrid({super.key, required this.rewards});
 
-  final List<MockReward> rewards;
+  final List<Reward> rewards;
 
   @override
   Widget build(BuildContext context) {
-    final left = <MockReward>[];
-    final right = <MockReward>[];
+    final left = <Reward>[];
+    final right = <Reward>[];
     for (var i = 0; i < rewards.length; i++) {
       (i.isEven ? left : right).add(rewards[i]);
     }
@@ -37,7 +37,7 @@ class RewardsGrid extends StatelessWidget {
 class _RewardsColumn extends StatelessWidget {
   const _RewardsColumn({required this.rewards});
 
-  final List<MockReward> rewards;
+  final List<Reward> rewards;
 
   @override
   Widget build(BuildContext context) {
@@ -48,14 +48,14 @@ class _RewardsColumn extends StatelessWidget {
       children: [
         for (final reward in rewards)
           RewardCard(
-            imageAsset: reward.imageAsset,
+            imageUrl: reward.imageUrl,
             title: reward.title,
             priceLabel: reward.priceLabel,
             pointsCost: reward.pointsCost,
             buttonText: 'Use',
             onPressed: () => RewardRedeemDialog.show(
               context,
-              imageAsset: reward.imageAsset,
+              imageUrl: reward.imageUrl,
               title: reward.title,
               priceLabel: reward.priceLabel,
               pointsCost: reward.pointsCost,

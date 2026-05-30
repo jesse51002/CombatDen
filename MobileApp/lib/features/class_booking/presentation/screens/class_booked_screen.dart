@@ -2,21 +2,25 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
-import 'package:customization_engine/theme/theme_text.dart';
+import 'package:theme_flutter/theme/theme_text.dart';
 import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/animation/scale_reveal.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:customization_engine/theme/theme_image.dart';
-import 'package:customization_engine/theme/lottie/theme_lottie.dart';
+import 'package:theme_flutter/theme/theme_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
 // Slower scale-in for the booked image so the "pop" reads as deliberate.
 const Duration _kImageScaleDuration = Duration(milliseconds: 720);
+// Cap the celebration image so it doesn't dominate tall phones. Matches
+// the Lottie's _kDoneMaxSize so the success check and the booked image
+// peak at the same size.
+const double _kCelebrationMaxHeight = 420;
 // Lottie sized as a fraction of the smaller screen dimension — much
 // bigger than a fixed 240px on modern phones, with a sensible cap so it
 // doesn't dominate landscape.
@@ -145,14 +149,22 @@ class _DoneIntro extends StatelessWidget {
       math.min(screen.width, screen.height) * _kDoneScreenFraction,
       _kDoneMaxSize,
     );
+    // Bundled, always-used checkmark animation, recoloured to the live brand
+    // primary via a wildcard value delegate (tints every fill + stroke).
+    final brand = DesignConstants.primaryColor;
     return SizedBox(
       width: size,
       height: size,
-      child: ThemeLottie(
-        slot: CombatDenSlots.bookingCelebration,
-        fallbackAsset: _kDoneLottieAsset,
+      child: Lottie.asset(
+        _kDoneLottieAsset,
         controller: controller,
         fit: BoxFit.contain,
+        delegates: LottieDelegates(
+          values: [
+            ValueDelegate.color(const ['**'], value: brand),
+            ValueDelegate.strokeColor(const ['**'], value: brand),
+          ],
+        ),
         onLoaded: (composition) {
           controller
             ..duration = composition.duration
@@ -174,14 +186,21 @@ class _BookedContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingBig,
       children: [
-        ScaleReveal(
-          duration: _kImageScaleDuration,
-          child: Image(
-            image: ThemeImage.image(
-              CombatDenSlots.celebrationImage,
-              fallback: ApiImage.asset('class_booked_celebration.png'),
+        Flexible(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxHeight: _kCelebrationMaxHeight,
             ),
-            fit: BoxFit.contain,
+            child: ScaleReveal(
+              duration: _kImageScaleDuration,
+              child: Image(
+                image: ThemeImage.image(
+                  CombatDenSlots.celebrationImage,
+                  fallback: ApiImage.asset('class_booked_celebration.png'),
+                ),
+                fit: BoxFit.contain,
+              ),
+            ),
           ),
         ),
         StaggeredReveal(

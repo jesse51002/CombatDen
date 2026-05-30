@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/navigation/app_routes.dart';
+import 'package:app_management/features/employees/presentation/screens/employee_detail_screen.dart';
+import 'package:app_management/features/employees/presentation/screens/employees_screen.dart';
 import 'package:app_management/features/growth/presentation/screens/growth_screen.dart';
 import 'package:app_management/features/home/presentation/screens/home_screen.dart';
 import 'package:app_management/features/members/presentation/screens/member_app_screen.dart';
@@ -24,18 +26,33 @@ class AppManagementRoot extends StatelessWidget {
       theme: AppTheme.light,
       debugShowCheckedModeBanner: false,
       initialRoute: AppRoutes.home,
-      routes: {
-        AppRoutes.home: (_) => const HomeScreen(),
-        AppRoutes.members: (_) => const MembersScreen(),
-        AppRoutes.memberDetail: (_) => const SpecificMemberScreen(),
-        AppRoutes.memberAppPreview: (_) => const MemberAppScreen(),
-        AppRoutes.schedule: (_) => const ScheduleScreen(),
-        AppRoutes.scheduleAddClass: (_) => const ClassFormScreen(),
-        AppRoutes.scheduleEditClass: (_) =>
-            ClassFormScreen(existing: kSampleClass),
-        AppRoutes.qrCodes: (_) => const QrCodesScreen(),
-        AppRoutes.growth: (_) => const GrowthScreen(),
-      },
+      // `onGenerateRoute` (rather than a `routes:` map) so a route name can
+      // carry a query string and still resolve. The theme preview deep-links
+      // the previewed theme as `…/app-preview?theme=…`; we match on the path
+      // and the screen reads the query off `Uri.base`.
+      onGenerateRoute: _onGenerateRoute,
     );
   }
+}
+
+/// Path → screen builder. Same set the old `routes:` map held; matching is
+/// done on the URL path only (see [_onGenerateRoute]).
+final Map<String, WidgetBuilder> _routeBuilders = {
+  AppRoutes.home: (_) => const HomeScreen(),
+  AppRoutes.members: (_) => const MembersScreen(),
+  AppRoutes.memberDetail: (_) => const SpecificMemberScreen(),
+  AppRoutes.memberAppPreview: (_) => const MemberAppScreen(),
+  AppRoutes.schedule: (_) => const ScheduleScreen(),
+  AppRoutes.scheduleAddClass: (_) => const ClassFormScreen(),
+  AppRoutes.scheduleEditClass: (_) => ClassFormScreen(existing: kSampleClass),
+  AppRoutes.qrCodes: (_) => const QrCodesScreen(),
+  AppRoutes.growth: (_) => const GrowthScreen(),
+  AppRoutes.employees: (_) => const EmployeesScreen(),
+  AppRoutes.employeeDetail: (_) => const EmployeeDetailScreen(),
+};
+
+Route<dynamic> _onGenerateRoute(RouteSettings settings) {
+  final path = Uri.parse(settings.name ?? AppRoutes.home).path;
+  final builder = _routeBuilders[path] ?? _routeBuilders[AppRoutes.home]!;
+  return MaterialPageRoute<dynamic>(builder: builder, settings: settings);
 }

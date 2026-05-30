@@ -1,26 +1,30 @@
-"""The structured verdict the classification pass gets back from the model.
+"""The structured verdict the **pool tagging** pass gets back from the model.
 
-One LLM call per video returns this: whether the video belongs in the company's
-feed (``is_good``) and the single content genre it actually is (``tag``).
+One LLM call per pooled video returns this: the single content genre the video
+is (``tag``) and the disciplines it is relevant to (``gym_type``, a list). Both
+are judged from the video's real content (title / description / runtime /
+transcript), gym-agnostic — there is NO approval here. Approval (``is_good``) is
+a per-gym verdict produced by the separate scan pass (see ``ScanVerdict``).
+
 ``extra="forbid"`` so a malformed reply is rejected and re-asked by
 ``complete_structured`` rather than silently accepted.
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
+from schema.gym_type import GymType
 from schema.video_type import VideoType
 
 
 class VideoClassification(BaseModel):
-    """The model's per-video verdict: keep/drop and genre."""
+    """The model's per-video pool verdict: genre + the disciplines it fits."""
 
     model_config = ConfigDict(extra="forbid")
 
-    # Does this video belong in the company's feed? False for off-niche content
-    # or anything matching the brief's avoid_desc — kept, not dropped.
-    is_good: bool
-    # The video's single content genre, judged from its actual title /
-    # description / runtime (not the search that surfaced it).
+    # The video's single content genre, judged from its actual content.
     tag: VideoType
+    # Every discipline this video is relevant to (>=1). Routes the video into the
+    # candidate slices gyms scan; it is NOT an approval.
+    gym_type: list[GymType] = Field(min_length=1)

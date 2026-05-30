@@ -1,0 +1,55 @@
+- execution_type: search
+  at: '2026-05-29T03:49:52.770886Z'
+  breakdown:
+    apify_usd: 0.924
+  note: 385 new of 385 scraped from 20 queries; pool now 385
+- execution_type: tag
+  at: '2026-05-29T03:50:17.829147Z'
+  breakdown:
+    llm_usd: 0.11672302000000002
+  note: 363 videos tagged (0 failures); 0 skipped
+- execution_type: search
+  at: '2026-05-29T04:11:18.431482Z'
+  breakdown:
+    apify_usd: 0.9096
+  note: 379 new of 379 scraped from 20 queries; pool now 764
+- execution_type: tag
+  at: '2026-05-29T04:11:46.744937Z'
+  breakdown:
+    llm_usd: 0.09735717000000012
+  note: 345 videos tagged (0 failures); 363 skipped
+- execution_type: search
+  at: '2026-05-29T05:03:19.573734Z'
+  breakdown:
+    apify_usd: 18.3504
+  note: 7284 new of 7646 scraped from 1506 queries; pool now 8048
+- execution_type: tag
+  at: '2026-05-29T05:08:02.197753Z'
+  breakdown:
+    llm_usd: 1.2529669000000043
+  note: 5665 videos tagged (821 failures); 708 skipped
+- execution_type: search
+  at: '2026-05-29T06:11:47.219100Z'
+  breakdown:
+    apify_usd: 38.6232
+  note: 14913 new of 16093 scraped from 1035 queries; pool now 22961
+- execution_type: tag
+  at: '2026-05-29T06:40:19.032252Z'
+  breakdown:
+    llm_usd: 3.649280750000005
+  note: 13369 videos tagged (44 failures); 5552 skipped
+- execution_type: scan
+  at: '2026-05-29T07:08:01.782573Z'
+  breakdown:
+    llm_usd: 0.5883666600000016
+  note: 1 gym(s) scanned
+- execution_type: scan
+  at: '2026-05-29T07:13:11.572734Z'
+  breakdown:
+    llm_usd: 0.41135940000000026
+  note: 1 gym(s) scanned
+- execution_type: scan
+  at: '2026-05-29T16:56:15.373863Z'
+  breakdown:
+    llm_usd: 22.955372399999877
+  note: 76 gym(s) scanned

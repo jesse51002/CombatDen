@@ -3,7 +3,7 @@ import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:customization_engine/theme/theme_image.dart';
+import 'package:theme_flutter/theme/theme_image.dart';
 
 class InfoBar extends StatelessWidget {
   const InfoBar({

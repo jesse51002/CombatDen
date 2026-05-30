@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:app_management/features/members/data/mock_loyalty.dart';
+import 'package:app_management/features/members/data/gym_detail.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/loyalty_tab/reward_image_hero.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/app_primary_button.dart';
 
 /// One reward in the admin's points store: the member-facing card art,
-/// title, and points cost, with Edit / Remove actions for the admin.
+/// title, and points cost, with Edit / Remove actions for the admin. Driven
+/// live by the selected gym's [Reward] (a network image url).
 class AdminRewardCard extends StatelessWidget {
-  final LoyaltyReward reward;
+  final Reward reward;
 
   const AdminRewardCard({super.key, required this.reward});
 
@@ -26,7 +27,7 @@ class AdminRewardCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           RewardImageHero(
-            imageAsset: reward.imageAsset,
+            imageUrl: reward.imageUrl,
             priceLabel: reward.priceLabel,
           ),
           Padding(

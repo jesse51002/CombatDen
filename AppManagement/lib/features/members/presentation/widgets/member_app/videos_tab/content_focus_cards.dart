@@ -2,40 +2,59 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:app_management/features/members/data/mock_videos.dart';
+import 'package:app_management/core/state/selected_gym.dart';
 
 /// The agent-authored descriptions that steer the feed: "We surface" and
-/// "We avoid" side by side. Plain blocks (no card chrome) so they can sit
-/// inside another card without nesting cards.
+/// "We avoid" side by side, for the selected gym. Each shows the SHORT summary
+/// for an at-a-glance read; the full prompt lives in the agent view's prompt
+/// panel. Plain blocks (no card chrome) so they sit inside another card
+/// without nesting.
 class ContentFocusCards extends StatelessWidget {
   const ContentFocusCards({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final brief = kMockVideos.brief;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          Expanded(
-            child: _DescBlock(
-              icon: Symbols.check_circle_sharp,
-              iconColor: DesignConstants.goodGreen,
-              heading: 'We surface',
-              body: brief.videosDesc,
-            ),
+    return ListenableBuilder(
+      listenable: selectedGym,
+      builder: (context, _) {
+        if (selectedGym.gymId == null) {
+          return const _FocusMessage(
+            'Select a gym in the Theme tab to see its content focus.',
+          );
+        }
+        final spec = selectedGym.detail?.spec;
+        if (spec == null) {
+          return _FocusMessage(
+            selectedGym.error != null
+                ? 'Could not reach the video service to load the content focus.'
+                : null,
+          );
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingBig,
+            children: [
+              Expanded(
+                child: _DescBlock(
+                  icon: Symbols.check_circle_sharp,
+                  iconColor: DesignConstants.goodGreen,
+                  heading: 'We surface',
+                  body: spec.surfaceSummary,
+                ),
+              ),
+              Expanded(
+                child: _DescBlock(
+                  icon: Symbols.block_sharp,
+                  iconColor: DesignConstants.badRed,
+                  heading: 'We avoid',
+                  body: spec.avoidSummary,
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: _DescBlock(
-              icon: Symbols.block_sharp,
-              iconColor: DesignConstants.badRed,
-              heading: 'We avoid',
-              body: brief.avoidDesc,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -78,6 +97,38 @@ class _DescBlock extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
       ],
+    );
+  }
+}
+
+/// Loading (null message) / error chrome while the gym detail resolves.
+class _FocusMessage extends StatelessWidget {
+  final String? message;
+
+  const _FocusMessage(this.message);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(DesignConstants.paddingBig),
+      child: Center(
+        child: message == null
+            ? SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: DesignConstants.primaryColor,
+                ),
+              )
+            : Text(
+                message!,
+                style: DesignConstants.p.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+                textAlign: TextAlign.center,
+              ),
+      ),
     );
   }
 }

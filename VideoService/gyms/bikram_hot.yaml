@@ -1,0 +1,723 @@
+gym_id: bikram_hot
+gym_type:
+- bikram_hot
+theme: BikramHot
+videos:
+  specification:
+    short_videos_desc: 'Bikram 26-and-2 instruction and full hot classes — the traditional
+      sequence of 26 postures and two breathing exercises, posture breakdowns, dialogue,
+      and hot-room practice tips — plus the human side: practitioner vlogs, studio
+      behind-the-scenes, relatable hot-room humour, 30-day challenge stories, and
+      teacher interviews. Ritualised, intense, old-school.'
+    short_avoid_desc: Off-topic, genuinely low-quality, or clickbait "hot yoga for
+      weight loss / flat abs" videos, gear/leggings hauls and product shilling, and
+      "yoga vs pilates" or "hot yoga is dangerous/pointless" debate clips.
+    videos_desc: |-
+      # What we surface
+
+      Bikram-method instruction and full hot classes for members from
+      first-timers braving the heat to long-time practitioners who time their
+      lives around the 90-minute set — plus the human side of the hot-room
+      ritual, so it's something members enjoy scrolling, not just a how-to
+      library.
+
+      ## The 26-and-2 method & hot-room practice
+      - The traditional 26-and-2 sequence (26 postures plus the two breathing
+        exercises) taught in order
+      - Posture-by-posture breakdowns and alignment, and the Bikram dialogue
+      - How to safely practice in a hot, mirror-walled room, with hydration
+        and heat-acclimation tips
+      - Modifications for common postures (Standing Bow, Camel, Eagle,
+        Triangle)
+      - Follow-along full and shortened 26-and-2 classes
+
+      ## The fun & human side
+      - Practitioner vlogs and "surviving my first Bikram class"
+      - Studio behind-the-scenes
+      - Relatable hot-room humour and class moments
+      - 30-day-challenge and transformation stories
+      - Aesthetic practice edits and teacher interviews
+
+      Ritualised, old-school tone throughout — the same room, the same
+      sequence, every class.
+    avoid_desc: |-
+      # What we avoid
+
+      Anything not about Bikram / the 26-and-2 sequence; off-topic, genuinely
+      low-quality, or clickbait videos.
+
+      ## Reject
+      - Calorie-burn "hot yoga for weight loss / flat abs in X days" promises
+      - Heavy chanted-Sanskrit devotional sermons sold as the main point
+      - Gear/leggings hauls and product shilling
+      - "Yoga vs pilates / which is better" cross-discipline framings
+      - "Is hot yoga dangerous / Bikram is bad" debate and reaction videos
+
+      ## Keep in mind
+      Don't drop a video just for being short, a vlog, a highlight, or
+      entertaining — fun and creator content is wanted.
+  queries:
+  - bikram yoga 26 and 2 full class
+  - bikram yoga sequence posture breakdown
+  - bikram yoga two breathing exercises tutorial
+  - bikram standing bow pose tutorial
+  - bikram camel pose alignment
+  - bikram yoga for beginners first class tips
+  - bikram eagle pose breakdown
+  - bikram triangle pose alignment
+  - 26 and 2 hot yoga follow along class
+  - bikram yoga hydration and heat tips
+  - bikram yoga modifications for tight backs
+  - surviving my first bikram hot yoga class vlog
+  - what a bikram 26 and 2 class is really like
+  - relatable hot yoga class moments funny
+  - bikram yoga studio behind the scenes
+  - 30 day bikram yoga challenge transformation
+  - hot yoga practice with music aesthetic
+  - bikram yoga teacher interview on the sequence
+  - my bikram yoga journey one year vlog
+  - what is bikram yoga 26 and 2 explained
+  good_video_ids:
+  - 2GDhDJsVyvA
+  - 4F4lTh09Z5E
+  - 4jRSVHGASsQ
+  - 6YH-k91yhOo
+  - 8PyOAff4t5Q
+  - IvGx1fDi4ZM
+  - J4AXxNYx1XY
+  - SwNW4QRuoyA
+  - Xc3FOKlCXZM
+  - _gOBlF47mrU
+  - hTVKL5GhDfU
+  - tp1pl32UPHQ
+  - 4qh6QjhXsX0
+  - 53YGckKJZng
+  - 5tIGrEdjwYw
+  - 9GJdfvtVVeg
+  - EfHBVzi85rQ
+  - NPfHOziNeqg
+  - R5LhuaqUhis
+  - V0Njkh1mNvo
+  - V34lIKYpee8
+  - Vy4K9OXSRVs
+  - XoUe3V6Vw1c
+  - ZbtcjBEo9wQ
+  - l2FHJ9gFaqo
+  - pli9ee6GpRc
+  - qbRM2Sr1q7A
+  - xfLF5UOqj0s
+  - 4xFTNLen12E
+  - 8S69K4f024k
+  - LPqWz4pUwuY
+  - ZUyXxCcEB6Q
+  - b_Qufe58LyM
+  - dVX8SaU37O8
+  - kgFK4Xe_s-Q
+  - lt2vZoTntKI
+  - mJFltN0AXq8
+  - miNlSQED4MY
+  - oZ0iqh0SQxc
+  - xf4EX_oeOy0
+  - -oKdT8RfQas
+  - 7B_vQvhDsIA
+  - 84E-sYFvo8I
+  - G1PQrFcAr8A
+  - L-_7YbDMLko
+  - L47Xq9MfgmI
+  - LVJsP6CXZsc
+  - UdE2ah6V08E
+  - k0PhIN9G0hg
+  - lRYTrnaCyUo
+  - p_rSPKWrQqg
+  - qVfwkdyrlx4
+  - rqyoWmMjJIE
+  - u3cd85x7mVU
+  - v6TH5VjdXFk
+  - x-Aw6TuzO2Q
+  - zcBMbmnO7Jk
+  - -VcyNMdxE_8
+  - 1prMFKJB-2Q
+  - HXrZqO12md8
+  - MUj2aU2md5M
+  - NLCi_G55jZk
+  - RgsvwzXPkDY
+  - Uav2ekzbBrQ
+  - bSBqUmvnkPY
+  - gV-qy_Unkf0
+  - h1GU6nwutN8
+  - lnbbDQ1sPZk
+  - -ox5xW8D_f8
+  - 0NvqT1j3000
+  - 3wzzgI_GrXE
+  - 8pqXiUouydU
+  - 938Ri7vctQA
+  - CUNTZgERH-I
+  - G6AmsC76N58
+  - Ocg3InAEZMU
+  - SvpEAqLEvkQ
+  - X8zVheSPoUs
+  - iLauuDCmW38
+  - iO0zM6P_atI
+  - npN1qSo5fS8
+  - p0MOWW1lfpY
+  - zQisY3p72a8
+  - 6CXX1Ha4XO8
+  - 6jWWQHdBhHU
+  - FGAVX1wij-I
+  - O3Knh7RnNZk
+  - P7l5kgIjOTc
+  - R4KkMGcSCNs
+  - R7rf6fRKwPc
+  - Udo2TEnPPT4
+  - ec7HgcttWGk
+  - gDRw6HYdhoc
+  - mNsBMC-sU3c
+  - szS3BOJJK9g
+  - 1lxzUeRG8z8
+  - 2ZYZz66XOus
+  - 8uTG9CPONmI
+  - AIXgtGMk-Ts
+  - BQIPGYEtscs
+  - EWJiT1zBpU0
+  - JRB76HVN23E
+  - Jzxvx79DQzM
+  - SmPQz1THW1o
+  - ZyahUQopy38
+  - __-cM33hUoo
+  - _pmFiFxPyp4
+  - iNyq2Oa8Y4k
+  - kWQ8GP_jjSE
+  - lT8TL12jqlI
+  - vkiPwPk_wNY
+  - 0EKgTG87Xx0
+  - 53L2e3Nj1OQ
+  - DQ3gmTG-NW0
+  - DylBbH-GfN4
+  - LwVjMU8qMEc
+  - RuU3jqWgCu4
+  - V5i5Qz2IGJE
+  - ZQruwcNjt4Y
+  - n9v55pPi-HE
+  - yb9uekA_2H0
+  - 15AcK0-eR2Q
+  - 7S5sK2SvXaI
+  - 8ZYJ64opv6I
+  - D-bDA4lo2mc
+  - HwHKN28z218
+  - IMFlZJwE-rc
+  - Jvf14-O5nTE
+  - UiCe1IyCf7Q
+  - hz0c204d-xI
+  - nwUIQrRFIFY
+  - xb6LSLb4RJU
+  - zUEC0kpvf6c
+  - -8fgQx5BT28
+  - 1zUWuwvQyRQ
+  - 27uD-poLYtU
+  - 9D8ie-U7mHQ
+  - 9b-NIqthNMo
+  - BMqjQcMrNkU
+  - YThR1_CkWFQ
+  - ZuVe7wQ00GA
+  - lMpxGJFIXQ4
+  - qcMjOCpUfoo
+  - 1e2pDKZHNaI
+  - 6gK4Q-YsleM
+  - 8gNkf_QcClg
+  - IslcCVqOyec
+  - RhQx78GtZWs
+  - TiZqENYXuy4
+  - XYLBkLQa2cA
+  - dIPEkaT9R8E
+  - op685VA5yYM
+  - sFcd208SaPo
+  - tbQknts3Eb4
+  - vuxuS2Fk-dI
+  - vyIGbIwHung
+  - xBUUDcCLDLo
+  - xHg4HadFg7M
+  - -F9YN814lqw
+  - -OZXvR2M8sU
+  - 2n4GfahJDfc
+  - 9l4iIC-JbVU
+  - 9n8FmIqa3Ro
+  - RPSApPXcdV8
+  - WVizUFW4ch0
+  - WzczxQuEtUw
+  - ZrkhOUnJhCU
+  - _w7BirEE9Ao
+  - eNRNMQ9bAXM
+  - gdGvcongZ-w
+  - tkgc_4lMreQ
+  - 6yJfpaeUc2w
+  - 9biZ1CyqCy0
+  - C5rt6ZLehTg
+  - FGS2spuqjFw
+  - LGCs9X__lT4
+  - S9wle_xyRhM
+  - WUgiP4bkdJ4
+  - XvdeWtuk3Bk
+  - _2_PlKroWQw
+  - chjPNxvdVww
+  - gNnpd_4CmFo
+  - hkSflgR5dDM
+  - ro1OVRQV6T4
+  - tPVq0VgQjis
+  - 3Nvx4ghktLA
+  - 4QSgW07cyQM
+  - 4rpqo-xQ5fo
+  - 6CdpvgjZox0
+  - 6rkaj-ZVyyk
+  - LeNKwG695h4
+  - TTSpVpBhI0c
+  - UUJS7l8c43o
+  - Yu0D5GtID1g
+  - cjZg43Glh0o
+  - irD9xkNtsNk
+  - s42wgJQXSOk
+  - 5VWhew-oMIs
+  - 9XudNmAf6P0
+  - M_kaNlhUDS0
+  - UJEUpUdlydM
+  - gihO0-DAnPI
+  - jg8iLOcBLL0
+  - pHMi1bOgOkw
+  - 0KzyEgkq7zw
+  - 33PO30nsg1I
+  - 3IzmT5MG9NA
+  - 8GFekFSlUhk
+  - DCYcAKZ2jEw
+  - Kp5s7OIw_gg
+  - LEbIIO4KK54
+  - Z4L-2W_Hsvk
+  - gdRiRHWUkWo
+  - jVSYGtY0o3Q
+  - upUw1jQsI40
+  - vJwzZX5WGgQ
+  - ymz_3AztkD8
+  - -r5NE1dnpzw
+  - M2zYtxsBdAQ
+  - gMzZ8d7exiU
+  - iudEJR7ebuw
+  - 8dPMOtr3zIA
+  - CnkUSm7lgCA
+  - Gr4ZNu3d2xY
+  - VcK3KNRQ8j0
+  - ajQDz27Fe3s
+  - bNquPbqs0Cw
+  - k5CbSRFh1ts
+  - kOBYNPaUe_I
+  - poWmsGY_QYM
+  - 08ZOhpJ0Cgk
+  - 6RnhXxrzEIs
+  - 6qSB_8KVz-Y
+  - NlvSvp8tN9E
+  - k8zwQeOQPCQ
+  - mHKFkZTmXB0
+  - oKJI3b8gByM
+  - tQjuoLAjUPc
+  rejected_video_ids:
+  - -fpPqD8joW8
+  - 2E2ROQJM_tY
+  - Cv-GBnsHiyI
+  - FGNOucXGZb4
+  - HN34nV9Z0wE
+  - HW4ADAzkxDo
+  - INXD5osrkDo
+  - RIXslLqSYTM
+  - URYaOI4kwnk
+  - W5lhq6HpT8o
+  - a4ZpSs195I4
+  - eDTw82eh9PA
+  - gT6OkjTDcYc
+  - iTPnuchO4WI
+  - k0QVcaw4A2w
+  - lJpWD-QMPtw
+  - pXsfUDCk808
+  - suV7BjHE0wc
+  - 2RWs1W9rzNQ
+  - 3yMZfEO60UY
+  - 70ydbjksIns
+  - 7CqEkly3Em8
+  - 7JYF44bb5_k
+  - 96WjC49dagg
+  - 9Wa9xY88WF8
+  - D_AvOKr8ncE
+  - KJBlo6X4Mm4
+  - Q-7KCRNLLzc
+  - UtXzq-EGM8U
+  - _8kV4FHSdNA
+  - byXfcfeiQeA
+  - kThGMgiprF4
+  - khflFFpKpsI
+  - nDTxyW0QES8
+  - --cZBfdGr58
+  - 064uUn5syz0
+  - 2mjc6AdpPpw
+  - 3dgIOZk7g2s
+  - 4C6uxkH6V6A
+  - 6ADogpDq0t4
+  - 8nSX1ZgC70c
+  - DIWnZDGZsVg
+  - DacqZQC3Hfc
+  - G7-tJmJwJU8
+  - JW6H_MjQXvs
+  - KIjHz3ZTrnk
+  - KekMX-2Ij9k
+  - LJRFzLOFK_g
+  - Ms7Nybi2qVA
+  - OpMNNBRx9ZI
+  - PPEz1_UPGjg
+  - Q8udY0uDYL8
+  - TbGqp7mdO04
+  - Wwbuv7v9B0E
+  - joJZyqiXQNA
+  - k6Qp78Hh5DI
+  - kf33e00VlF0
+  - n_yuiYV-_Zo
+  - qZVCfMZQjtw
+  - tqXnQ-zHLBg
+  - vXDJIJEySoM
+  - yWvRIpqyszM
+  - z6k8wXfwS94
+  - zBnKgwnn7i4
+  - 0y4FPuwr1Ts
+  - 4ViO9NUp7qc
+  - 5kkBgb426Aw
+  - ItE7xQpkfMA
+  - PUzjCmFQnE4
+  - YGm7FDrGODw
+  - _cB2i8pzFKY
+  - iK_h-2kot6s
+  - iZTXTzc8Gj8
+  - kqyr3kaw5qE
+  - moCiVEL8LaQ
+  - oEeVTKI0-pk
+  - q9CKxBMxTlU
+  - vtMvB4ErfZU
+  - wWuI8LQ1_Xs
+  - wd6dkj6p3lM
+  - xpHKwJNCArs
+  - 06KsU8rYhC0
+  - 18PC14fhqCI
+  - 6TjXPRkXx9c
+  - BK2HdRp4Oo0
+  - Cq_Nuo8ilak
+  - DtjZo2WQnC4
+  - LtyuIYGmDNc
+  - M5g7jKeHu8w
+  - XaA3qD1EAqg
+  - ZXwwyatwSFo
+  - fV_sWSQVEUg
+  - mREzOsy0kO0
+  - mS_yuOfyNIM
+  - ncORPosDrjI
+  - v6B9zgvkos0
+  - 0CrX59ulj9U
+  - 2MvZ_7401aI
+  - 9dHwxwxVcl8
+  - A4t7hBD1RoU
+  - F7IHOaO6K2Y
+  - HCoD4UH0s2U
+  - SYJu_y6WvEc
+  - Sas9eBPTYBI
+  - U7nT5qC48XI
+  - YXzzuLcmE_o
+  - Z2AOmI3aQpQ
+  - aE8VlMFralI
+  - cqDH7vHRcEw
+  - hZoeX99CiPE
+  - jEjhDcUIwrA
+  - lQKXdALWwSs
+  - nYpcm5B64n4
+  - pkT2yYrvv-Q
+  - rOiUwfzQr9Y
+  - sCJx0plgWfg
+  - t2Ly6-QPMi8
+  - vuuqoMs162A
+  - -KJBu7ZhkF0
+  - 57CfzoI9eEY
+  - 6jVw0-0m1Tc
+  - BdWvP-lbb68
+  - IN6nQSNGpZE
+  - KMliGnl7uVo
+  - Knpr3ZZu1TQ
+  - TN9i9Ni0Xr4
+  - YNHMNVLwy9c
+  - _J1vKIXj6JA
+  - acKgy9JxhMw
+  - g5wYrCAH_5w
+  - kXitig9Ro60
+  - mLTqcadk8Bw
+  - vizFoFnJPis
+  - 4SdIyomdJqo
+  - 4zO7i9P8mGE
+  - 5iX6ecbz8XE
+  - 7mumwqwPRFQ
+  - D1nl5PpXiAc
+  - JEAd8sSQWnw
+  - Pfse9GxqdAE
+  - VikuYpj5rmo
+  - Xl1-dllmzS8
+  - YhIPJwEu6PE
+  - _bvOsaNdlRE
+  - _u3NOB8pZf8
+  - eE-VtAKgQEE
+  - g9Er55uc7UM
+  - h6t88-NmIDQ
+  - kwDQk2siRJs
+  - lvokR_VO8vY
+  - mY6DZF6nDtc
+  - w4sZQAky1Zw
+  - xDbK5xTWILM
+  - yTSrl9ukVgs
+  - 3jwAGWky98c
+  - 5ByUy7CQR0o
+  - 6-AXfni2zd0
+  - 9Kwk25RgFDU
+  - AbsaUHdxGHg
+  - BGl5kyviQA4
+  - HWAOifKGLiE
+  - Hkr4s0uYUSk
+  - JGly9i0AVVs
+  - Mlgs4_54q8Y
+  - VGzzdrTuwj0
+  - YDbpNA4MqPs
+  - bwfDuoakRSs
+  - cQ4K399DTgI
+  - dfeqKsgTjPo
+  - gZNvMOAw3FE
+  - hsL_SsDaO0U
+  - jNBBCrOCcdE
+  - liAUwvkB1uM
+  - qL7Nlexje-M
+  - 1bFVoTGDUws
+  - 3oo1-EaIZk8
+  - 50MlmnUSrWo
+  - AnvAmLqgsbc
+  - BSfOzy0Dpqk
+  - BfB4lVnL4CM
+  - FjO3CpihTjQ
+  - GZqgvEWyOUI
+  - HSj7EPqPoLA
+  - HV92CZXgza4
+  - K2bomS-KLQA
+  - M4K0s792wAU
+  - Ok2w5YnrosQ
+  - P26sJBTOaEo
+  - Rp5V_n4Q7aY
+  - UCHnsgFpxsk
+  - Z7Ra8Wa-WMI
+  - blad0omDwIA
+  - cdPejPpoMFo
+  - kDPJaT-YZus
+  - lqu9GBG4HLg
+  - qeDWB9AVxzI
+  - 0MigPK7uuak
+  - 0Pa1QpQGNzU
+  - 4AWzeCNDJUI
+  - 65ZauXgbpkQ
+  - 6oZfhhEHXU8
+  - FKcr2h7RR-g
+  - I5q_-qNM28U
+  - M4nSM7TBsJg
+  - MrTEd41g02Q
+  - SCxcO3Os_OE
+  - UNf2qsX8uFc
+  - bumTp3-SZNo
+  - cujcxjSm69g
+  - gPry3-OomII
+  - lILTDQdPbK8
+  - pA6ls-oHhX0
+  - y4hHsX_FIkU
+  - 1hoGJhFWORo
+  - 4xXwNevlemY
+  - CZtOVFsTSuY
+  - D0p33QKxgbg
+  - Db1jJjzDQ38
+  - Ga-G8sjWzqY
+  - LCFZkeCHfag
+  - Pui3UaKI2Pk
+  - RRVPR9L2i1o
+  - YYZI3pczGqQ
+  - YghOeTjdEf4
+  - Z0UgTG37Bq4
+  - ZV3fXS2XHeQ
+  - iu_7JEConqY
+  - jsBTcnf3NHk
+  - nRQSfBhd7FE
+  - t-ezOLT2Kv0
+  - viQG0SC73hs
+  - AsyyZgtHMPw
+  - ClIoWZlQD70
+  - Dua3zWsebsM
+  - GIS8Azenl8A
+  - SpS9Wt9F7pI
+  - WEKB9EGH20I
+  - ZDqkZibM8iA
+  - _X6rsR5yCNo
+  - idbNasHM5kw
+  - pscEh5Xj4iY
+  - qLwcrykMzbs
+  - qlq-prZ4KfA
+  - r1UMA4TvHr0
+  - vnpraKh91DM
+  - zpA9F6vPhFU
+  - -bgL0Ik_fvI
+  - 716e30A053U
+  - 7ZNllP4WQuQ
+  - CBnLOlVT4yQ
+  - Hu-rVZVSzxs
+  - KzKAnT_hiLE
+  - WprPdJKfaGk
+  - Wvt5jdys8Fg
+  - ezOsco9legc
+  - tJeI51crrvs
+  - w9YWEbihNr0
+  - zVxYv8jFvbc
+  - -EsjpqszZY4
+  - 6Xf6DtvOwpo
+  - B6mth7-L9yQ
+  - EiTJBa8RpWI
+  - KxV8I_YyiaY
+  - NQHF7qdH0rM
+  - Q82YnmL0Kr8
+  - QsdXRoBiPBI
+  - moVynuxM4fc
+  - sNyVJ_07cjs
+  - ucWD2CuSKSo
+  - 1c2xZ-blv1I
+  - 3qyWpJ34dWw
+  - 5tg9dpQMYHk
+  - 7Po7uCqPkZY
+  - 9TzHTKBiy68
+  - CDT6FWU5Vm0
+  - FBLcOucDCzU
+  - Hk8AIWhIRqw
+  - L2gG5FCLxkI
+  - LBOFE-DWrD8
+  - N0QSPJX57YM
+  - QV3UxTPCX5A
+  - Twnx2b2mMg0
+  - bsOIl6weWCc
+  - eO8W1pWRJ1E
+  - gEDXDaisk3M
+  - hY9KeU42L9M
+  - q5iSsdzWhwE
+  - v0leJCYGEwY
+  - 5OVlqlcjiZw
+  - B9AT0WneXPI
+  - Bd4gxNpbJGE
+  - BnvhJKnGuCE
+  - IYni6AfrkAY
+  - J-LMiZHWdbU
+  - KF3D-Q0C6-c
+  - WUXWYxOTCnk
+  - Xl8JeA0Cc2U
+  - ZXibUMAHBik
+  - _QjhWVG5hXQ
+  - jdo843M-oCo
+  - og-mcIIy9v4
+  - rX5zEYzAsCs
+  - -sbMsutmgBU
+  - 21FPC9sMVLc
+  - 23GoED5ce1s
+  - 2DX_U89ocX8
+  - 8D6nnYgQdfw
+  - HKF9mb6FQDg
+  - OTrTqs9FLq0
+  - RoFCMBOUixI
+  - Slzk17RnOrc
+  - WGPlUTCPh2E
+  - Yt7XVvDSeyU
+  - aPVAp_3YDWA
+  - eX-fmOOIIiA
+  - fhY0pUKtsyQ
+  - foGlgwWk76I
+  - l0GCECJxCZY
+  - nGkHoLSkzcI
+  - rfGi8W9j9gQ
+  - tTGY0G8OZQM
+  - vx6RkgoxzgQ
+  - xUJO9a2Zo_8
+  - 0O9bmFhtrHY
+  - 3SBBDKJ1ETM
+  - 9VZ5jfiYlN0
+  - BZu_pk7cXVw
+  - CRUnIbCbH3c
+  - HrWjf8WOsfI
+  - MCGa9qP_Bo8
+  - QAj0VHx43fM
+  - RlrmSu5u9bE
+  - YSJubcbzJmo
+  - ef6q8ykSD3g
+  - kyqpSycLASY
+  - oThDZBWEXMk
+  - sLYw8VdVGbw
+  - uS_7OcpXD00
+  - xdLy8PCcmwA
+  - -GCA92b119Y
+  - 0hynzjke640
+  - EOJTEVZLvjY
+  - IqXOWtwEeeM
+  - KZlcGcWJx4Q
+  - Pg4WPKuDxmQ
+  - WWisVvsYB8A
+  - _UKpfook4fA
+  - d-A0mpc5mes
+  - dBTQi5kdfW0
+  - ek7TCRH67mw
+  - fzkCheAGV_c
+  - jiJ1c9eWA60
+  - p7vz3xByvV0
+  - pPlFSqXnbls
+  - qcyY0tsGm6A
+  - sECSM8pIWS4
+  - tC05QrP0ZtU
+  - vhb-B3lFfB8
+  - xRcWlA1I9z0
+  scan_costs:
+  - at: '2026-05-29T15:15:55.833619Z'
+    usd: 0.1579299000000005
+classes:
+  - name: "26-and-2 Fundamentals"
+    image_url: "https://images.pexels.com/photos/8436589/pexels-photo-8436589.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "The complete traditional Bikram sequence of 26 postures and 2 breathing exercises. Perfect for all levels, from first-timers to experienced practitioners looking to maintain perfect form."
+    instructor_name: "James Carter"
+    instructor_bio: "Head coach with over a decade of experience helping members of every level train smarter, move better, and stay consistent."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Alec_Penix.jpg"
+  - name: "Deep Dive Postures"
+    image_url: "https://images.pexels.com/photos/8436587/pexels-photo-8436587.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Explore standing, balancing, and floor postures with in-depth alignment cues and modifications. Build strength and flexibility while learning the nuances of proper technique."
+    instructor_name: "Sarah Mitchell"
+    instructor_bio: "Performance coach focused on building strength, mobility, and confidence through approachable, well-structured sessions."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/8/8b/Athlete_portrait_Marianna_Gillespie.jpg"
+  - name: "Standing Sequence Mastery"
+    image_url: "https://images.pexels.com/photos/8436426/pexels-photo-8436426.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Deep dive into the standing series — Eagle, Standing Bow, Warrior poses and more. Develop powerful legs, steady balance, and unshakeable foundation for your entire practice."
+    instructor_name: "Daniel Brooks"
+    instructor_bio: "Certified instructor who breaks every movement down step by step so newcomers and regulars alike feel supported."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/e/e3/Branden_Loera_Headshot.jpg"
+  - name: "Heat Endurance Challenge"
+    image_url: "https://images.pexels.com/photos/8436605/pexels-photo-8436605.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    description: "Full 90-minute Bikram practice with emphasis on building heat tolerance and mental resilience. Learn hydration strategies and how to thrive in the hot room."
+    instructor_name: "Maya Bennett"
+    instructor_bio: "Coach passionate about creating an inclusive, high-energy room where members from all backgrounds can thrive."
+    instructor_image_url: "https://upload.wikimedia.org/wikipedia/commons/2/2e/Torrie_Lewis_for_Signet_Packaging%2C_headshot.jpg"
+rewards:
+  - title: "Bring a friend"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg"
+    price_label: "Free"
+    points_cost: 1000
+  - title: "Club t-shirt"
+    image_url: "https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    price_label: "Free"
+    points_cost: 1500
+  - title: "Yoga mat"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/6/68/Fitness_mats_%2851543374690%29.jpg"
+    price_label: "25% off"
+    points_cost: 2000
+  - title: "1-on-1 PT session"
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG"
+    price_label: "50% off"
+    points_cost: 2500

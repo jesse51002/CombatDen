@@ -1,17 +1,14 @@
 """The public video feed the API serves: the slim, frontend-only projection of
-``videos_output.yaml``.
+a pooled ``VideoOutput``.
 
-``VideoOutput`` (in ``video_output.py``) is the full cached record; it carries a
+``VideoOutput`` (in ``video_output.py``) is the full pooled record; it carries a
 few fields kept only for offline validation/data checks (``description``,
-``like_count``, ``source_queries``) plus run accounting (``quota_units_estimate``).
-The API drops all of those and serves just what a client renders. ``VideoCard``
-and ``VideosFeed`` are that slim view; ``from_attributes`` lets FastAPI build
-them straight from the loaded ``VideosOutput`` object.
+``like_count``, ``source_queries``). The API drops those and serves just what a
+client renders. ``VideoCard`` and ``VideosFeed`` are that slim view;
+``from_attributes`` lets FastAPI build them straight from a ``VideoOutput``.
 """
 
 from __future__ import annotations
-
-from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
@@ -34,12 +31,9 @@ class VideoCard(BaseModel):
     duration_seconds: int | None = None  # runtime; for a length badge
     # 0 = top search hit; lower is more relevant. For secondary sorting.
     relevance_index: int = Field(ge=0)
-    # The video's single genre tag, assigned by the classification pass. None
-    # until a feed is classified; clients group on it.
+    # The video's single genre tag, assigned by the pool tagging pass. None
+    # until the pool is tagged; clients group on it.
     tag: VideoType | None = None
-    # The classifier's keep/drop verdict; clients filter off-niche videos.
-    # None until classified.
-    is_good: bool | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -53,17 +47,36 @@ class VideosFeed(BaseModel):
     """A company's served video feed: one page of the slim, public projection.
 
     The endpoint paginates with ``limit``/``offset``: ``videos`` is the current
-    page (after the ``is_good``/``video_type``/``big_group`` filters), and
-    ``total`` is how many videos matched the filters before slicing — so the
-    client can compute how many pages remain.
+    page (after the ``video_type``/``big_group`` genre filters), and ``total`` is
+    how many videos matched the filters before slicing — so the client can
+    compute how many pages remain. Every video here is already gym-approved (the
+    feed is the gym's ``good_video_ids``), so there is no ``is_good`` filter.
     """
 
     model_config = ConfigDict(extra="ignore", from_attributes=True)
 
-    company_name: str
-    app_id: str
-    generated_at: datetime
     total: int = Field(ge=0)  # videos matching the filters, before pagination
     limit: int = Field(ge=1)  # page size that produced `videos`
     offset: int = Field(ge=0)  # start index of this page
     videos: list[VideoCard] = Field(default_factory=list)
+
+
+class FeedSection(BaseModel):
+    """One genre's preview row: the tag plus its first few videos, in feed
+    order. ``from_attributes`` lets FastAPI build the cards from ``VideoOutput``."""
+
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
+
+    tag: VideoType
+    videos: list[VideoCard] = Field(default_factory=list)
+
+
+class FeedPreview(BaseModel):
+    """The whole "All" preview in one response: one section per genre present in
+    the gym's feed, each capped to a few videos, in feed order. Each genre is
+    sampled individually server-side, so no genre is starved by global
+    pagination — and the client makes one request instead of one per genre."""
+
+    model_config = ConfigDict(extra="ignore", from_attributes=True)
+
+    sections: list[FeedSection] = Field(default_factory=list)
