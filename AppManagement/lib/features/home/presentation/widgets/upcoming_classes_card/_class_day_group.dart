@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
-import 'package:app_management/features/home/data/mock_upcoming_classes.dart';
+import 'package:app_management/features/home/data/upcoming_classes.dart';
 import 'package:app_management/shared/widgets/class_row/class_row.dart';
 
 /// One day section inside the Upcoming Classes card: day label header
@@ -39,7 +39,7 @@ class _ClassesList extends StatelessWidget {
           name: c.name,
           timeLabel: '${c.startTime} - ${c.endTime} (${c.durationLabel})',
           instructorName: c.instructorName,
-          imageAsset: c.imageAsset,
+          imageUrl: c.imageUrl,
           attendingCount: c.attendingCount,
           checkedInCount: c.checkedInCount,
           inSession: c.inSession,

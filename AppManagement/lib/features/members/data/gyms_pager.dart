@@ -58,6 +58,15 @@ class GymsPager extends ChangeNotifier {
   int _queryGeneration = 0;
   Timer? _debounce;
 
+  // An in-flight loadMore() resumes after its await even if the picker was
+  // closed mid-fetch; notifying a disposed ChangeNotifier throws. Guard every
+  // notify behind this so a late continuation degrades to a no-op.
+  bool _disposed = false;
+
+  void _safeNotify() {
+    if (!_disposed) notifyListeners();
+  }
+
   // Design id -> the theme's celebration-image URL carrying its content-hash
   // `?v=` token (from the ThemeService styles catalog), so a card's art
   // refreshes when the image is regenerated instead of sitting on the browser's
@@ -103,7 +112,7 @@ class GymsPager extends ChangeNotifier {
     _total = 0;
     _errored = false;
     _hasLoadedFirstPage = false;
-    notifyListeners();
+    _safeNotify();
     _debounce?.cancel();
     _debounce = Timer(_searchDebounce, _loadFirstPage);
   }
@@ -114,7 +123,7 @@ class GymsPager extends ChangeNotifier {
     final generation = _queryGeneration;
     _isLoading = true;
     _errored = false;
-    notifyListeners();
+    _safeNotify();
     try {
       final uri = Uri.parse('$_kVideoBaseUrl/gyms').replace(
         queryParameters: {
@@ -154,7 +163,7 @@ class GymsPager extends ChangeNotifier {
     } finally {
       if (generation == _queryGeneration) {
         _isLoading = false;
-        notifyListeners();
+        _safeNotify();
       }
     }
   }
@@ -193,6 +202,7 @@ class GymsPager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _debounce?.cancel();
     super.dispose();
   }

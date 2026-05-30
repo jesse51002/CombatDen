@@ -29,6 +29,12 @@ Skills are ever-evolving: every real-world correction should feed back into them
 
 ---
 
+## CLAUDE.md is a living document
+
+This file is a living document — exactly like a skill (above), it must track reality. Whenever the pipeline code genuinely diverges from what this CLAUDE.md says (a removed module, a renamed system, a changed schema, a rule the code has outgrown on purpose, an architecture change), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
+
+---
+
 ## Iron-clad rule: never hand-edit a produced run
 
 A run directory's **produced artifacts** — `output.yaml`, `expansion_cost.yaml`,

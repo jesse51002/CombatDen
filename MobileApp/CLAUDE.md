@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase.
 
-- **Mostly no backend.** No Supabase, no auth. **Two features are live exceptions** that do real read-only HTTP via `dio` + disk-cached `cached_network_image`: the **customization engine** (the shared `theme_flutter` package, `../ThemeService/ThemeFlutter`, fetches the tenant's branding) and the **videos feature** (`lib/features/videos/`, fetches the tenant's feed from the VideoService — see *Videos feature is live* below). Don't add HTTP anywhere else without asking.
+- **Mostly no backend.** No Supabase, no auth. The live exceptions all do real **read-only** HTTP via `dio` + disk-cached `cached_network_image`: (a) the **customization engine** (the shared `theme_flutter` package, `../ThemeService/ThemeFlutter`, fetches the tenant's branding), and (b) the **VideoService-backed content** (`../VideoService/`) — the **videos feature** (`lib/features/videos/`, the feed), the **gym detail** read that supplies classes + rewards (`lib/features/gym/`, consumed by `lib/features/class_booking/`), and the **gym-browser / style picker** (`lib/features/style_select/`). All of these read the active gym **by id** — see *Videos feature is live* below. Don't add HTTP anywhere else without asking.
 - **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller). The live features fetch via `FutureBuilder` + a cached repository, not a state framework.
 - **No real data, except the live features above.** Every other list, card, and detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
@@ -24,11 +24,13 @@ HTTP API). Architecture, mirroring the customization engine:
 - **`core/video_service_config.dart`** — `kVideoBaseUrl`, the VideoService base
   URL (defaults to `localhost:8002`, overridable with
   `--dart-define=VIDEO_BASE_URL`), shared by the video + class-card features.
-  There is **no app-side theme→feed table** anymore: the app fetches the active
-  theme's content **by design id** (`GET /apps/{appId}/themes/{designId}/...`),
-  and the VideoService resolves the theme → its gym → that gym's approved feed.
-  `appId` is `AppConfig.appId` (the tenant pool, `combatden`); the active design
-  is `ThemeRuntime.activeDesignId ?? AppConfig.designId`.
+  Content is fetched **by gym id**: the app reads the gym's whole detail once
+  (`GET /gyms/{gymId}` → spec + classes + rewards, held in memory) and the
+  paginated feed from `GET /gyms/{gymId}/videos` (+ `/videos/preview`). The gym
+  is the active selection (`selectedGym.gymId`); a theme is **branding-only**,
+  and the old theme-keyed content endpoints
+  (`/apps/{appId}/themes/{designId}/...`) were **removed**. There is no app-side
+  theme→feed table.
 - **`data/video.dart`** — the `Video` model (matches the API's `VideoCard`). The
   fine-grained `tags` and the server-derived coarse `bigGroups` both come down on
   each video as plain `List<String>`, taken verbatim from the API. The app owns
@@ -57,6 +59,16 @@ home feed **in place**; sub-groups are per-`tag` carousels. Tapping a video is a
 `debugPrint` no-op (real YouTube playback needs `url_launcher`, a deliberate
 follow-up). Mock video data and the old detail screen were deleted.
 
+**The home schedule is a live/mock hybrid.**
+`lib/features/home/data/schedule_generator.dart` builds the day's classes from
+the selected gym's **live** classes (from the `GET /gyms/{gymId}` detail), then
+drapes demo-only texture over them: real calendar day labels via `DateTime.now()`,
+fixed time slots the classes rotate through, and seeded attending/booked flags.
+This is intentional — generated demo texture computed on top of live feed data
+(seeded `Random`, real dates) is **not** a "no real data" violation. "Every
+other screen is hardcoded mock" applies to the screens that are *not* on a live
+carve-out.
+
 ## Search the web for conventions before designing
 
 When the UX question is "how do good apps usually present X?" — login flows, empty states, error states, onboarding, pull-to-refresh, list/detail patterns, settings screens, paywalls, billing screens, permission prompts, password reset, account deletion, etc. — **search the web first.** Look at what proven mobile apps actually ship (Stripe, Linear, Notion, Cash App, Robinhood, Airbnb, etc.). Don't guess.
@@ -76,6 +88,10 @@ How to apply:
 **KISS** — favor simplicity over complexity.
 **YAGNI** — don't add features until needed.
 **Separation of Concerns** — separate UI from any logic that creeps in.
+
+## CLAUDE.md is a living document
+
+This file is a living document — exactly like a skill, it must track reality. Whenever the code genuinely diverges from what this CLAUDE.md says (a new live backend call, a renamed system, an added dependency, a rule the code has outgrown on purpose, a feature that changed the architecture), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
 
 ## Always delete dead code
 

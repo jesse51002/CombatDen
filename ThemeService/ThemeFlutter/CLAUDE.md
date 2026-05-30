@@ -23,6 +23,10 @@ pipeline that *generates* the configs this package *consumes*. Different system,
 different language; the name collision is why this package is
 `theme_flutter`.
 
+## CLAUDE.md is a living document
+
+This file is a living document — exactly like a skill, it must track reality. Whenever this package genuinely diverges from what this CLAUDE.md says (a removed/added resolver, a changed `ThemeRuntime.initialize` signature, a moved file, a rule the code has outgrown on purpose), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
+
 ## Hard rules
 
 - **App-agnostic by construction.** This package must NEVER import from

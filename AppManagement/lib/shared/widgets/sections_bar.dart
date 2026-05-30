@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:theme_flutter/showcase/showcase_slots.dart';
+import 'package:theme_flutter/theme/theme_image.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
+import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/shared/widgets/sidebar_nav_item.dart';
 
 /// Persistent left-side nav rail (Figma `SectionsBar`, node `5001:4340`).
 ///
-/// Items, top to bottom: COMBAT DEN logo, Add New Member (primary CTA,
+/// Items, top to bottom: the managed gym's logo, Add New Member (primary CTA,
 /// no-op for now — Add Member flow is out of scope this pass), Dashboard,
-/// Members, Growth, Schedule, Member App, Employees (no-op), Sign up
+/// Members, Growth, Schedule, Member App, Employees, Sign up
 /// QR Codes, Settings (no-op). Each tap calls `pushReplacementNamed`
 /// so we don't pile up route history when switching sections.
 class SectionsBar extends StatelessWidget {
@@ -74,10 +77,10 @@ class SectionsBar extends StatelessWidget {
               onTap: () => _go(context, AppRoutes.memberAppPreview),
             ),
             SidebarNavItem(
-              icon: Symbols.watch_sharp,
+              icon: Symbols.badge_sharp,
               label: 'Employees',
-              onTap: () =>
-                  debugPrint('Employees screen is out of scope this pass'),
+              isActive: activeRoute == AppRoutes.employees,
+              onTap: () => _go(context, AppRoutes.employees),
             ),
             SidebarNavItem(
               icon: Symbols.qr_code_sharp,
@@ -98,8 +101,11 @@ class SectionsBar extends StatelessWidget {
   }
 }
 
-/// Apex MMA logo. An image asset, so swapping in a real gym logo is a
-/// one-line change (drop the file in assets/images/ and update the path).
+/// The managed gym's logo. Resolves the **selected style's** `logo_primary`
+/// slot — the same brand logo the member app shows — so the rail reflects the
+/// gym the admin is managing instead of a fixed brand. Falls back to the
+/// bundled default until a gym is selected. Watches [selectedGym] so picking a
+/// gym re-brands the rail live.
 class _Logo extends StatelessWidget {
   const _Logo();
 
@@ -109,10 +115,19 @@ class _Logo extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: DesignConstants.spacingMedium),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-        child: Image.asset(
-          'assets/images/apexmma-logo-simple.png',
-          width: 64,
-          height: 64,
+        child: ListenableBuilder(
+          listenable: selectedGym,
+          builder: (context, _) => Image(
+            image: ThemeImage.image(
+              ShowcaseSlots.logoPrimary,
+              fallback: const AssetImage(
+                'assets/images/apexmma-logo-simple.png',
+              ),
+            ),
+            width: 64,
+            height: 64,
+            fit: BoxFit.contain,
+          ),
         ),
       ),
     );

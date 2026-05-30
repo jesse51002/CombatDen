@@ -81,54 +81,60 @@ const List<RewardTemplate> kMockRewardTemplates = [
   ),
 ];
 
-/// One member's reward redemptions for the member-detail page — a mix of
-/// pending (awaiting desk confirmation) and already-approved, shown together
-/// in a single grid.
-const List<PendingRedemption> kMockMemberRedemptions = [
-  PendingRedemption(
+/// Per-member redemption-history chrome for the member-detail page. The reward
+/// **identity** (art / title / points / price) is now pulled live from the
+/// selected gym's store — see `MemberRedemptionsSection`, which pairs each event
+/// with one of that gym's rewards so the history follows the selected style.
+/// What stays mock is the per-member flow the gym file can't carry: who
+/// redeemed, the desk code, when, and whether the desk has already confirmed it.
+class MemberRedemptionEvent {
+  final String memberName;
+
+  /// The code the member reads off their phone; the admin matches it.
+  final String code;
+
+  /// When the member requested it. Pre-formatted for the prototype.
+  final String requestedAt;
+
+  /// True once the desk has confirmed it — the card shows an "Approved" marker
+  /// instead of the Review & confirm action.
+  final bool approved;
+
+  const MemberRedemptionEvent({
+    required this.memberName,
+    required this.code,
+    required this.requestedAt,
+    this.approved = false,
+  });
+}
+
+/// One member's redemption history — a mix of pending (awaiting desk
+/// confirmation) and already-approved, shown together in a single grid.
+const List<MemberRedemptionEvent> kMemberRedemptionEvents = [
+  MemberRedemptionEvent(
     memberName: 'Justin Stemmons',
-    rewardTitle: 'Private Training (15 min)',
-    priceLabel: 'Free',
-    pointsCost: 1800,
-    imageAsset: 'assets/images/reward_private_training.png',
     code: 'QP7-M2L4',
     requestedAt: 'Today, 5:48 PM',
   ),
-  PendingRedemption(
+  MemberRedemptionEvent(
     memberName: 'Justin Stemmons',
-    rewardTitle: 'Hand wraps',
-    priceLabel: '30% off',
-    pointsCost: 1500,
-    imageAsset: 'assets/images/reward_hand_wraps.png',
     code: 'TXR-3K9P',
     requestedAt: 'Today, 6:12 PM',
   ),
-  PendingRedemption(
+  MemberRedemptionEvent(
     memberName: 'Justin Stemmons',
-    rewardTitle: 'Bring a friend to a class',
-    priceLabel: 'Free',
-    pointsCost: 750,
-    imageAsset: 'assets/images/reward_bring_friend.png',
     code: 'BF1-A7K2',
     requestedAt: 'Mar 2, 7:30 PM',
     approved: true,
   ),
-  PendingRedemption(
+  MemberRedemptionEvent(
     memberName: 'Justin Stemmons',
-    rewardTitle: 'Gym t-shirt',
-    priceLabel: 'Free',
-    pointsCost: 1500,
-    imageAsset: 'assets/images/reward_gym_tshirt.png',
     code: 'TS4-9QW1',
     requestedAt: 'Feb 24, 6:05 PM',
     approved: true,
   ),
-  PendingRedemption(
+  MemberRedemptionEvent(
     memberName: 'Justin Stemmons',
-    rewardTitle: 'Boxing gloves',
-    priceLabel: '10% off',
-    pointsCost: 3000,
-    imageAsset: 'assets/images/reward_boxing_gloves.png',
     code: 'GL8-2VK7',
     requestedAt: 'Feb 18, 8:40 PM',
     approved: true,

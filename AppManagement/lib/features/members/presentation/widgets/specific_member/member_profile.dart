@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
-import 'package:app_management/features/members/data/mock_loyalty.dart';
 import 'package:app_management/features/members/data/mock_member_history.dart';
-import 'package:app_management/features/members/presentation/widgets/member_app/loyalty_tab/redemptions_section.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/back_link.dart';
+import 'package:app_management/features/members/presentation/widgets/specific_member/member_redemptions_section.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/profile_header/profile_header.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/rank_section/rank_section.dart';
 import 'package:app_management/features/members/presentation/widgets/specific_member/retention_section/retention_section.dart';
@@ -44,10 +43,7 @@ class MemberProfile extends StatelessWidget {
           child: RankSection(member: member, stats: stats),
         ),
         const Hairline(),
-        const RedemptionsSection(
-          redemptions: kMockMemberRedemptions,
-          title: 'Reward Redemptions',
-        ),
+        const MemberRedemptionsSection(),
       ],
     );
   }

@@ -16,6 +16,7 @@ class Video {
     required this.relevanceIndex,
     required this.tags,
     required this.bigGroups,
+    this.durationSeconds,
   });
 
   final String url;
@@ -38,6 +39,9 @@ class Video {
   /// `entertainment`); the feed's top-level grouping.
   final List<String> bigGroups;
 
+  /// Video length in seconds (`duration_seconds`); null when omitted.
+  final int? durationSeconds;
+
   /// "Combat Culture ‧ 168K views" (drops the views clause when hidden).
   String get metaLabel {
     final views = formatViewCount(viewCount);
@@ -59,6 +63,7 @@ class Video {
       // MobileApp's `Video.fromJson`).
       tags: _wrap(json['tag']),
       bigGroups: _wrap(json['big_group']),
+      durationSeconds: (json['duration_seconds'] as num?)?.toInt(),
     );
   }
 

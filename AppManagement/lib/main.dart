@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/navigation/app_routes.dart';
+import 'package:app_management/features/employees/presentation/screens/employee_detail_screen.dart';
+import 'package:app_management/features/employees/presentation/screens/employees_screen.dart';
 import 'package:app_management/features/growth/presentation/screens/growth_screen.dart';
 import 'package:app_management/features/home/presentation/screens/home_screen.dart';
 import 'package:app_management/features/members/presentation/screens/member_app_screen.dart';
@@ -45,6 +47,8 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   AppRoutes.scheduleEditClass: (_) => ClassFormScreen(existing: kSampleClass),
   AppRoutes.qrCodes: (_) => const QrCodesScreen(),
   AppRoutes.growth: (_) => const GrowthScreen(),
+  AppRoutes.employees: (_) => const EmployeesScreen(),
+  AppRoutes.employeeDetail: (_) => const EmployeeDetailScreen(),
 };
 
 Route<dynamic> _onGenerateRoute(RouteSettings settings) {

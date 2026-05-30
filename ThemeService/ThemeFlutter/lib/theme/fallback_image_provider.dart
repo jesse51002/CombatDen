@@ -70,32 +70,51 @@ class FallbackImageProvider extends ImageProvider<FallbackImageProvider> {
 
 /// Forwards [primary]'s image events; on a primary error, logs once and
 /// forwards [fallback]'s events instead.
+///
+/// Listeners are removed when this completer's own last listener is removed
+/// (via [addOnLastListenerRemovedCallback]), so neither the primary nor the
+/// fallback upstream retains a stale closure reference.
 class _FallbackImageStreamCompleter extends ImageStreamCompleter {
   _FallbackImageStreamCompleter(
     ImageProvider primary,
     ImageProvider fallback,
     ImageConfiguration configuration,
   ) {
-    primary.resolve(configuration).addListener(
-      ImageStreamListener(
-        (ImageInfo image, bool synchronousCall) => setImage(image),
-        onChunk: (ImageChunkEvent event) => reportImageChunkEvent(event),
-        onError: (Object exception, StackTrace? stackTrace) {
-          // Swallow the failure visually but keep it diagnosable.
-          debugPrint('[CUSTOMIZATION] image slot fell back: $exception');
-          fallback.resolve(configuration).addListener(
-            ImageStreamListener(
-              (ImageInfo image, bool synchronousCall) => setImage(image),
-              onChunk: (ImageChunkEvent event) =>
-                  reportImageChunkEvent(event),
-              // The bundled fallback failing is a real (build) bug —
-              // surface it normally.
-              onError: (Object exception, StackTrace? stackTrace) =>
-                  reportError(exception: exception, stack: stackTrace),
-            ),
-          );
-        },
-      ),
+    _primaryStream = primary.resolve(configuration);
+    _primaryListener = ImageStreamListener(
+      (ImageInfo image, bool synchronousCall) => setImage(image),
+      onChunk: (ImageChunkEvent event) => reportImageChunkEvent(event),
+      onError: (Object exception, StackTrace? stackTrace) {
+        // Swallow the failure visually but keep it diagnosable.
+        debugPrint('[CUSTOMIZATION] image slot fell back: $exception');
+        _fallbackStream = fallback.resolve(configuration);
+        _fallbackListener = ImageStreamListener(
+          (ImageInfo image, bool synchronousCall) => setImage(image),
+          onChunk: (ImageChunkEvent event) => reportImageChunkEvent(event),
+          // The bundled fallback failing is a real (build) bug —
+          // surface it normally.
+          onError: (Object exception, StackTrace? stackTrace) =>
+              reportError(exception: exception, stack: stackTrace),
+        );
+        _fallbackStream!.addListener(_fallbackListener!);
+      },
     );
+    _primaryStream.addListener(_primaryListener);
+
+    addOnLastListenerRemovedCallback(_detach);
+  }
+
+  late final ImageStream _primaryStream;
+  late final ImageStreamListener _primaryListener;
+  ImageStream? _fallbackStream;
+  ImageStreamListener? _fallbackListener;
+
+  void _detach() {
+    _primaryStream.removeListener(_primaryListener);
+    final fallbackStream = _fallbackStream;
+    final fallbackListener = _fallbackListener;
+    if (fallbackStream != null && fallbackListener != null) {
+      fallbackStream.removeListener(fallbackListener);
+    }
   }
 }

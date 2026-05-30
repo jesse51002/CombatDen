@@ -91,9 +91,14 @@ class VideosService:
     async def list_gyms(self) -> list[str]:
         """The gym ids that have a ``gyms/<id>.yaml`` file, sorted. Empty when
         there is no ``gyms/`` directory yet."""
-        if not self._gyms_dir.is_dir():
+        if not await asyncio.to_thread(self._gyms_dir.is_dir):
             return []
-        return sorted(f.stem for f in self._gyms_dir.glob("*.yaml"))
+        return sorted(
+            f.stem
+            for f in await asyncio.to_thread(
+                lambda: list(self._gyms_dir.glob("*.yaml"))
+            )
+        )
 
     async def load_gym(self, gym_id: str) -> Gym:
         """One gym by id. Missing -> ``NotFoundError``; stale ->
@@ -101,10 +106,11 @@ class VideosService:
         if not _ID_PATTERN.match(gym_id):
             raise NotFoundError(f"no gym {gym_id!r}")
         gym_file = self._gyms_dir / f"{gym_id}.yaml"
-        if not gym_file.is_file():
+        if not await asyncio.to_thread(gym_file.is_file):
             raise NotFoundError(f"no gym {gym_id!r}")
         try:
-            return Gym.model_validate(yaml.safe_load(gym_file.read_text()))
+            raw = await asyncio.to_thread(gym_file.read_text)
+            return Gym.model_validate(yaml.safe_load(raw))
         except (yaml.YAMLError, ValidationError) as exc:
             raise InvalidConfigError(
                 f"gym {gym_id!r} does not match the current schema; regenerate it"
@@ -114,8 +120,11 @@ class VideosService:
         """Write (or overwrite) one gym's ``gyms/<gym_id>.yaml``."""
         if not _ID_PATTERN.match(gym.gym_id):
             raise InvalidConfigError(f"invalid gym_id {gym.gym_id!r}")
-        self._gyms_dir.mkdir(parents=True, exist_ok=True)
-        _dump_yaml(gym.model_dump(mode="json"), self._gyms_dir / f"{gym.gym_id}.yaml")
+        dest = self._gyms_dir / f"{gym.gym_id}.yaml"
+        data = gym.model_dump(mode="json")
+        await asyncio.to_thread(
+            lambda: (self._gyms_dir.mkdir(parents=True, exist_ok=True), _dump_yaml(data, dest))
+        )
 
     async def list_gyms_page(
         self, *, limit: int, offset: int, query: str | None = None
@@ -162,13 +171,17 @@ class VideosService:
         """The whole shared pool — every ``videos/<id>.yaml`` — in a stable
         ``(relevance_index, video_id)`` order. Empty when there is no pool yet;
         a stale per-video file -> ``InvalidConfigError``."""
-        if not self._videos_dir.is_dir():
+        if not await asyncio.to_thread(self._videos_dir.is_dir):
             return []
-        try:
-            videos = [
+
+        def _read_pool() -> list[VideoOutput]:
+            return [
                 VideoOutput.model_validate(yaml.safe_load(f.read_text()))
                 for f in sorted(self._videos_dir.glob("*.yaml"))
             ]
+
+        try:
+            videos = await asyncio.to_thread(_read_pool)
         except (yaml.YAMLError, ValidationError) as exc:
             raise InvalidConfigError(
                 "a pooled video file does not match the current schema; "
@@ -214,30 +227,39 @@ class VideosService:
     async def save_pool(self, videos: list[VideoOutput]) -> None:
         """Replace the whole pool: clear ``videos/`` and write one file per
         video. A fresh fetch is a full replacement."""
-        self._videos_dir.mkdir(parents=True, exist_ok=True)
-        for stale in self._videos_dir.glob("*.yaml"):
-            stale.unlink()
-        for video in videos:
-            self._write_video(video)
+        def _replace_pool() -> None:
+            self._videos_dir.mkdir(parents=True, exist_ok=True)
+            for stale in self._videos_dir.glob("*.yaml"):
+                stale.unlink()
+            for video in videos:
+                self._write_video(video)
+
+        await asyncio.to_thread(_replace_pool)
 
     async def save_video(self, video: VideoOutput) -> None:
         """Write (or overwrite) one pooled video — the cheap partial update the
         tagging pass uses so it never rewrites the whole pool."""
-        self._write_video(video)
+        await asyncio.to_thread(self._write_video, video)
 
     async def list_video_ids(self) -> list[str]:
         """The pooled video ids, sorted. Empty when there is no pool yet."""
-        if not self._videos_dir.is_dir():
+        if not await asyncio.to_thread(self._videos_dir.is_dir):
             return []
-        return sorted(f.stem for f in self._videos_dir.glob("*.yaml"))
+        return sorted(
+            f.stem
+            for f in await asyncio.to_thread(
+                lambda: list(self._videos_dir.glob("*.yaml"))
+            )
+        )
 
     async def load_video(self, video_id: str) -> VideoOutput:
         """One pooled video by id. Missing -> ``NotFoundError``."""
         video_file = self._video_path(video_id)
-        if not video_file.is_file():
+        if not await asyncio.to_thread(video_file.is_file):
             raise NotFoundError(f"no video {video_id!r}")
         try:
-            return VideoOutput.model_validate(yaml.safe_load(video_file.read_text()))
+            raw = await asyncio.to_thread(video_file.read_text)
+            return VideoOutput.model_validate(yaml.safe_load(raw))
         except (yaml.YAMLError, ValidationError) as exc:
             raise InvalidConfigError(
                 f"video {video_id!r} does not match the current schema"
@@ -259,9 +281,9 @@ class VideosService:
     async def delete_video(self, video_id: str) -> bool:
         """Remove one pooled video's file. Returns whether a file was removed."""
         video_file = self._video_path(video_id)
-        if not video_file.is_file():
+        if not await asyncio.to_thread(video_file.is_file):
             return False
-        video_file.unlink()
+        await asyncio.to_thread(video_file.unlink)
         return True
 
     def _write_video(self, video: VideoOutput) -> None:
@@ -282,21 +304,27 @@ class VideosService:
         """Append one entry to the append-only ``cost_log.yaml`` ledger (created
         on first append). Never overwrites prior entries."""
         log_file = self._root / COST_LOG_FILENAME
-        existing: list[dict] = []
-        if log_file.is_file():
-            loaded = yaml.safe_load(log_file.read_text())
-            if isinstance(loaded, list):
-                existing = loaded
-        existing.append(entry.model_dump(mode="json"))
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        _dump_yaml(existing, log_file)
+        new_entry = entry.model_dump(mode="json")
+
+        def _append() -> None:
+            existing: list[dict] = []
+            if log_file.is_file():
+                loaded = yaml.safe_load(log_file.read_text())
+                if isinstance(loaded, list):
+                    existing = loaded
+            existing.append(new_entry)
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            _dump_yaml(existing, log_file)
+
+        await asyncio.to_thread(_append)
 
     async def load_cost_log(self) -> list[CostEntry]:
         """The cost ledger as validated entries (empty if none yet)."""
         log_file = self._root / COST_LOG_FILENAME
-        if not log_file.is_file():
+        if not await asyncio.to_thread(log_file.is_file):
             return []
-        loaded = yaml.safe_load(log_file.read_text()) or []
+        raw = await asyncio.to_thread(log_file.read_text)
+        loaded = yaml.safe_load(raw) or []
         return [CostEntry.model_validate(e) for e in loaded]
 
 

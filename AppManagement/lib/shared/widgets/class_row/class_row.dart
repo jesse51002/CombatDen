@@ -11,6 +11,11 @@ class ClassRow extends StatelessWidget {
   final String name;
   final String timeLabel;
   final String? instructorName;
+
+  /// Thumbnail: a network [imageUrl] (the gym feed) is preferred, else a
+  /// bundled [imageAsset]; an empty slot keeps the row's layout when neither
+  /// resolves.
+  final String? imageUrl;
   final String? imageAsset;
   final int? attendingCount;
   final int? checkedInCount;
@@ -22,6 +27,7 @@ class ClassRow extends StatelessWidget {
     required this.name,
     required this.timeLabel,
     this.instructorName,
+    this.imageUrl,
     this.imageAsset,
     this.attendingCount,
     this.checkedInCount,
@@ -43,7 +49,7 @@ class ClassRow extends StatelessWidget {
           spacing: DesignConstants.spacingLarge,
           children: [
             Expanded(child: _ClassDetails(row: this)),
-            _Thumbnail(asset: imageAsset),
+            _Thumbnail(asset: imageAsset, imageUrl: imageUrl),
           ],
         ),
       ),
@@ -97,14 +103,39 @@ class _ClassDetails extends StatelessWidget {
 
 class _Thumbnail extends StatelessWidget {
   final String? asset;
-  const _Thumbnail({required this.asset});
+  final String? imageUrl;
+  const _Thumbnail({required this.asset, required this.imageUrl});
+
+  static const double _kWidth = 122;
+  static const double _kHeight = 73;
 
   @override
   Widget build(BuildContext context) {
-    if (asset == null) return const SizedBox(width: 122, height: 73);
+    final image = _image();
+    if (image == null) {
+      return const SizedBox(width: _kWidth, height: _kHeight);
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-      child: Image.asset(asset!, width: 122, height: 73, fit: BoxFit.cover),
+      child: image,
     );
+  }
+
+  Widget? _image() {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return Image.network(
+        imageUrl!,
+        width: _kWidth,
+        height: _kHeight,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) =>
+            const SizedBox(width: _kWidth, height: _kHeight),
+      );
+    }
+    if (asset != null) {
+      return Image.asset(asset!, width: _kWidth, height: _kHeight,
+          fit: BoxFit.cover);
+    }
+    return null;
   }
 }

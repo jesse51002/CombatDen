@@ -5,10 +5,9 @@ import 'package:app_management/features/members/data/mock_members.dart';
 import 'package:app_management/features/members/presentation/widgets/table/cells/member_contact_cell.dart';
 import 'package:app_management/features/members/presentation/widgets/table/cells/member_last_class_cell.dart';
 import 'package:app_management/features/members/presentation/widgets/table/cells/member_name_cell.dart';
-import 'package:app_management/features/members/presentation/widgets/table/cells/member_rank_cell.dart';
 import 'package:app_management/shared/widgets/app_data_table.dart';
 
-/// Members table — Name / Contact / Rank / Last Class columns.
+/// Members table — Name / Contact / Last Class columns.
 ///
 /// Wraps [AppDataTable] so the sticky-header / sized-column /
 /// row-tap behaviour stays consistent with every other table in
@@ -25,7 +24,6 @@ class MembersTable extends StatelessWidget {
       columns: const [
         AppDataTableColumn(label: 'Name', minWidth: 200, fill: true),
         AppDataTableColumn(label: 'Contact', minWidth: 220, fill: true),
-        AppDataTableColumn(label: 'Rank', minWidth: 140, fill: true),
         AppDataTableColumn(label: 'Last Class', minWidth: 140, fill: true),
       ],
       rows: members.map((m) {
@@ -39,7 +37,6 @@ class MembersTable extends StatelessWidget {
           cells: [
             MemberNameCell(member: m),
             MemberContactCell(email: m.email),
-            MemberRankCell(rank: m.rank),
             MemberLastClassCell(daysAgo: m.lastClassDaysAgo),
           ],
         );

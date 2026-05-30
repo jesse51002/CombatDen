@@ -6,10 +6,6 @@
 // Class" column — the screen maps the bucket to a [DesignConstants]
 // status color rather than baking the color into the data.
 
-/// Loyalty/skill rank for a member. Rendered with a belt icon next to
-/// the label.
-enum MemberRank { silver, gold, bronze, unknown }
-
 /// Membership lifecycle status. Drives any future status pill / filter
 /// logic. Field names match what the API will hand us.
 enum MemberStatus { active, frozen, unknown }
@@ -19,7 +15,6 @@ class Member {
   final String firstName;
   final String lastName;
   final String email;
-  final MemberRank rank;
   final MemberStatus status;
   final int lastClassDaysAgo;
 
@@ -28,7 +23,6 @@ class Member {
     required this.firstName,
     required this.lastName,
     required this.email,
-    required this.rank,
     required this.status,
     required this.lastClassDaysAgo,
   });
@@ -53,15 +47,14 @@ const MembersSummary kMockMembersSummary = MembersSummary(
   frozen: 3,
 );
 
-/// ~20 members with intentionally varied names, ranks, and recency
-/// buckets so the design has texture to evaluate.
+/// ~20 members with intentionally varied names and recency buckets so the
+/// design has texture to evaluate.
 const List<Member> kMockMembers = [
   Member(
     id: 'm_001',
     firstName: 'Lily',
     lastName: 'Altega',
     email: 'lillymthree@gmail.com',
-    rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 3,
   ),
@@ -70,7 +63,6 @@ const List<Member> kMockMembers = [
     firstName: 'Ben',
     lastName: 'Ama',
     email: 'ben.ama@gmail.com',
-    rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 11,
   ),
@@ -79,7 +71,6 @@ const List<Member> kMockMembers = [
     firstName: 'Timothy',
     lastName: 'Tom',
     email: 'tim.tom@outlook.com',
-    rank: MemberRank.bronze,
     status: MemberStatus.active,
     lastClassDaysAgo: 5,
   ),
@@ -88,7 +79,6 @@ const List<Member> kMockMembers = [
     firstName: 'Sylvia',
     lastName: 'Crivia',
     email: 'sylvia.crivia@protonmail.com',
-    rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 12,
   ),
@@ -97,7 +87,6 @@ const List<Member> kMockMembers = [
     firstName: 'Amy',
     lastName: 'Traver',
     email: 'amy.traver@gmail.com',
-    rank: MemberRank.bronze,
     status: MemberStatus.frozen,
     lastClassDaysAgo: 18,
   ),
@@ -106,7 +95,6 @@ const List<Member> kMockMembers = [
     firstName: 'Marcus',
     lastName: 'Pell',
     email: 'marcuspell@gmail.com',
-    rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 2,
   ),
@@ -115,7 +103,6 @@ const List<Member> kMockMembers = [
     firstName: 'Dion',
     lastName: 'Reyes',
     email: 'dion.reyes@hey.com',
-    rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 9,
   ),
@@ -124,7 +111,6 @@ const List<Member> kMockMembers = [
     firstName: 'Kim',
     lastName: 'Baranov',
     email: 'kim.b@gmail.com',
-    rank: MemberRank.bronze,
     status: MemberStatus.active,
     lastClassDaysAgo: 5,
   ),
@@ -133,7 +119,6 @@ const List<Member> kMockMembers = [
     firstName: 'Priya',
     lastName: 'Shah',
     email: 'priya.shah@gmail.com',
-    rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 13,
   ),
@@ -142,7 +127,6 @@ const List<Member> kMockMembers = [
     firstName: 'Jordan',
     lastName: 'Vega',
     email: 'jvega@gmail.com',
-    rank: MemberRank.bronze,
     status: MemberStatus.active,
     lastClassDaysAgo: 19,
   ),
@@ -151,7 +135,6 @@ const List<Member> kMockMembers = [
     firstName: 'Ravi',
     lastName: 'Okafor',
     email: 'ravi.okafor@gmail.com',
-    rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 1,
   ),
@@ -160,7 +143,6 @@ const List<Member> kMockMembers = [
     firstName: 'Nora',
     lastName: 'Linwood',
     email: 'nora.linwood@gmail.com',
-    rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 7,
   ),
@@ -169,7 +151,6 @@ const List<Member> kMockMembers = [
     firstName: 'Hugo',
     lastName: 'Marchetti',
     email: 'hugo.m@gmail.com',
-    rank: MemberRank.bronze,
     status: MemberStatus.active,
     lastClassDaysAgo: 4,
   ),
@@ -178,7 +159,6 @@ const List<Member> kMockMembers = [
     firstName: 'Aiko',
     lastName: 'Tanaka',
     email: 'aiko.tanaka@gmail.com',
-    rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 14,
   ),
@@ -187,7 +167,6 @@ const List<Member> kMockMembers = [
     firstName: 'Diego',
     lastName: 'Salinas',
     email: 'diego.salinas@gmail.com',
-    rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 6,
   ),
@@ -196,7 +175,6 @@ const List<Member> kMockMembers = [
     firstName: 'Emma',
     lastName: 'Whitfield',
     email: 'emmawhit@gmail.com',
-    rank: MemberRank.bronze,
     status: MemberStatus.active,
     lastClassDaysAgo: 21,
   ),
@@ -205,7 +183,6 @@ const List<Member> kMockMembers = [
     firstName: 'Owen',
     lastName: 'Brennan',
     email: 'owen.brennan@gmail.com',
-    rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 3,
   ),
@@ -214,7 +191,6 @@ const List<Member> kMockMembers = [
     firstName: 'Zara',
     lastName: 'Mehmood',
     email: 'zara.m@gmail.com',
-    rank: MemberRank.gold,
     status: MemberStatus.active,
     lastClassDaysAgo: 10,
   ),
@@ -223,7 +199,6 @@ const List<Member> kMockMembers = [
     firstName: 'Felix',
     lastName: 'Donovan',
     email: 'felix.donovan@gmail.com',
-    rank: MemberRank.bronze,
     status: MemberStatus.frozen,
     lastClassDaysAgo: 24,
   ),
@@ -232,7 +207,6 @@ const List<Member> kMockMembers = [
     firstName: 'Sana',
     lastName: 'Aldridge',
     email: 'sana.a@gmail.com',
-    rank: MemberRank.silver,
     status: MemberStatus.active,
     lastClassDaysAgo: 8,
   ),

@@ -8,7 +8,8 @@ import 'package:app_management/features/members/data/gym_detail.dart';
 ///
 /// Part of the read-only VideoService carve-out (alongside `VideoApiClient`).
 /// The selected gym is fetched once and held in [SelectedGym] memory, so the
-/// loyalty store, the videos content focus, and the preview all read its
+/// loyalty store, the videos content focus, the phone preview, the Schedule
+/// screen, and the dashboard's Upcoming Classes card all read its
 /// rewards / classes / spec without further calls. Base URL mirrors the video
 /// carve-out: override with `--dart-define=VIDEO_BASE_URL=http://<host>:8002`.
 class GymApiClient {

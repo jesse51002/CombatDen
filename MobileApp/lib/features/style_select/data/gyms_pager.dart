@@ -64,6 +64,15 @@ class GymsPager extends ChangeNotifier {
   int _queryGeneration = 0;
   Timer? _debounce;
 
+  // An in-flight loadMore() resumes after its await even if the picker was
+  // closed mid-fetch; notifying a disposed ChangeNotifier throws. Guard every
+  // notify behind this so a late continuation degrades to a no-op.
+  bool _disposed = false;
+
+  void _safeNotify() {
+    if (!_disposed) notifyListeners();
+  }
+
   void setQuery(String next) {
     final trimmed = next.trim();
     if (trimmed == _query) return;
@@ -73,7 +82,7 @@ class GymsPager extends ChangeNotifier {
     _total = 0;
     _errored = false;
     _hasLoadedFirstPage = false;
-    notifyListeners();
+    _safeNotify();
     _debounce?.cancel();
     _debounce = Timer(_searchDebounce, _loadFirstPage);
   }
@@ -84,7 +93,7 @@ class GymsPager extends ChangeNotifier {
     final generation = _queryGeneration;
     _isLoading = true;
     _errored = false;
-    notifyListeners();
+    _safeNotify();
     try {
       final response = await _dio.get<dynamic>(
         '/gyms',
@@ -104,7 +113,9 @@ class GymsPager extends ChangeNotifier {
                 .toList(growable: false)
           : const <ThemeStyle>[];
       _items.addAll(styles);
-      _total = (data is Map && data['total'] is int) ? data['total'] as int : _items.length;
+      _total = (data is Map && data['total'] is int)
+          ? data['total'] as int
+          : _items.length;
       _hasLoadedFirstPage = true;
     } catch (_) {
       if (generation != _queryGeneration) return;
@@ -112,7 +123,7 @@ class GymsPager extends ChangeNotifier {
     } finally {
       if (generation == _queryGeneration) {
         _isLoading = false;
-        notifyListeners();
+        _safeNotify();
       }
     }
   }
@@ -148,6 +159,7 @@ class GymsPager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _debounce?.cancel();
     super.dispose();
   }

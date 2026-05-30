@@ -16,12 +16,13 @@ The whole point is to make screens that **look right** so the design can be eval
 
 **Theme/design rules are NOT relaxed because this is a prototype.** See *Theming System* below.
 
-## VideoService carve-out (the one live backend call)
+## VideoService carve-out (read-only live backend access)
 
-This prototype makes exactly **one** real network call, and it is deliberate. The member-app **videos tab** pulls its feed live from the VideoService so the admin previews real thumbnails and titles instead of mock art.
+This prototype's live backend access is **read-only and limited to the VideoService** — two endpoints, both deliberate. The member-app **videos tab** pulls its feed live so the admin previews real thumbnails and titles instead of mock art; a second read fetches the selected gym's **detail** (classes / rewards / spec) once into memory (see *Gym detail* below).
 
-- **Scope:** read-only, one endpoint — `GET /gyms/{gymId}/videos` (gym-id-keyed: serves that gym's feed, paginated). The feed follows the selected gym (`SelectedGym` global). No writes, no auth, no other endpoints. The one query knob beyond paging/genre is `?rejected=true`, which serves the scan's **rejected** list instead of the approved feed (it backs the videos tab's rejected-videos section, where the admin can keep a video back) — still read-only, still this same endpoint. This boolean is a deliberate, user-approved widening of the carve-out; do not add further parameters or endpoints without asking.
-- **Where it lives:** `lib/features/members/data/video_api_client.dart` (`VideoApiClient`, wraps `package:http`) feeds `member_feed_section.dart`, which is the **only** place a `StatefulWidget` + `FutureBuilder` driving a network call is allowed. Models live in `lib/features/members/data/video_feed.dart` (`Video.fromJson`).
+- **Scope (feed):** read-only — `GET /gyms/{gymId}/videos` (gym-id-keyed: serves that gym's feed, paginated). The feed follows the selected gym (`SelectedGym` global). No writes, no auth, no other feed endpoints. The one query knob beyond paging/genre is `?rejected=true`, which serves the scan's **rejected** list instead of the approved feed (it backs the videos tab's rejected-videos section, where the admin can keep a video back) — still read-only, still this same endpoint. This boolean is a deliberate, user-approved widening of the carve-out; do not add further parameters or endpoints without asking.
+- **Gym detail (the second read):** `GET /gyms/{gymId}` via `lib/features/members/data/gym_api_client.dart` (`GymApiClient`, also `package:http`) fetches the selected gym's whole content detail (spec + classes + rewards) **once** into the `SelectedGym` global. Read-only, gym-id-keyed, same 5s-timeout-then-degrade behavior. It backs the loyalty rewards store, the videos content focus, the phone preview, and the admin **Schedule screen** (`features/schedule/`) + the dashboard's **Upcoming Classes** card — those read the gym's classes/rewards from memory (no extra calls), so they are **gym-driven, not mock, by design**. Don't add further endpoints or writes without asking.
+- **Where it lives:** `lib/features/members/data/` — `video_api_client.dart` (`VideoApiClient`, the feed + `GET /gyms/{gymId}/videos/preview`), `gym_api_client.dart` (`GymApiClient`), and `gyms_pager.dart` (pages the gyms list for the theme/gym picker), all wrapping `package:http`; models in `video_feed.dart` / `gym_detail.dart` (`*.fromJson`). The `StatefulWidget` + `FutureBuilder` pattern that drives these reads is allowed in the widgets that consume them (`member_feed_section.dart`, `library_view.dart`).
 - **Dependency:** the VideoService (sibling, see below) must be running. Base URL defaults to `http://localhost:8002`; override at launch with `--dart-define=VIDEO_BASE_URL=http://<host>:<port>`.
 - **Failure behavior:** the call has a 5s timeout and degrades quietly (empty feed) so the rest of the demo never breaks if the service is down.
 - **`http` is whitelisted for this call only.** Do **not** reuse `VideoApiClient` or `package:http` to wire any other screen to a backend — every other list/card/detail stays on co-located mock data per the rules above. Widening this carve-out is a decision for the user, not a default. (The ThemeService carve-out below does NOT use `http`; it goes through the `theme_flutter` package's own `dio` client.)
@@ -64,6 +65,10 @@ How to apply:
 **KISS** — favor simplicity over complexity.
 **YAGNI** — don't add features until needed.
 **Separation of Concerns** — separate UI from any logic that creeps in.
+
+## CLAUDE.md is a living document
+
+This file is a living document — exactly like a skill, it must track reality. Whenever the code genuinely diverges from what this CLAUDE.md says (a new live backend call, a renamed system, an added dependency, a rule the code has outgrown on purpose, a feature that changed the architecture), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
 
 ## Theming System
 

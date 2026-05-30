@@ -18,6 +18,7 @@ process holds one process-scoped instance (see
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 from pathlib import Path
@@ -94,12 +95,11 @@ class OutputService:
         no longer conforms — that is not a server fault.
         """
         output_file = self._safe_run_dir(app_id, run_id) / OUTPUT_FILENAME
-        if not output_file.is_file():
+        if not await asyncio.to_thread(output_file.is_file):
             raise NotFoundError(f"no output for {app_id}/{run_id}")
         try:
-            return Output.model_validate(
-                yaml.safe_load(output_file.read_text())
-            )
+            raw = await asyncio.to_thread(output_file.read_text)
+            return Output.model_validate(yaml.safe_load(raw))
         except (yaml.YAMLError, ValidationError) as exc:
             raise InvalidRunError(
                 f"run {app_id}/{run_id} exists but its "
@@ -137,7 +137,7 @@ class OutputService:
             / FINAL_IMAGES_DIRNAME
             / f"{slot_id}{IMAGE_SUFFIX}"
         )
-        if not image.is_file():
+        if not await asyncio.to_thread(image.is_file):
             raise NotFoundError(
                 f"slot {slot_id!r} is declared but its image is missing "
                 f"from {FINAL_IMAGES_DIRNAME}/ — run {app_id}/{run_id} "
@@ -169,7 +169,7 @@ class OutputService:
             / ICONS_DIRNAME
             / f"{slot_id}{ICON_SUFFIX}"
         )
-        if not icon.is_file():
+        if not await asyncio.to_thread(icon.is_file):
             raise NotFoundError(
                 f"icon slot {slot_id!r} is declared but its SVG is missing "
                 f"from {ICONS_DIRNAME}/ — run {app_id}/{run_id} is incomplete"
@@ -204,7 +204,7 @@ class OutputService:
             raise NotFoundError(f"no app {app_id!r}")
         apps_root = self._apps_root.resolve()
         app_dir = (apps_root / app_id).resolve()
-        if app_dir.parent != apps_root or not app_dir.is_dir():
+        if app_dir.parent != apps_root or not await asyncio.to_thread(app_dir.is_dir):
             raise NotFoundError(f"no app {app_id!r}")
 
         all_styles = await self._cached_full_style_list(app_id, app_dir)
@@ -230,7 +230,7 @@ class OutputService:
         """Return the full sorted style list for ``app_id``, building
         it on cache miss and reusing the cached copy when the apps dir
         mtime is unchanged."""
-        mtime = app_dir.stat().st_mtime_ns
+        mtime = (await asyncio.to_thread(app_dir.stat)).st_mtime_ns
         cached = self._styles_cache.get(app_id)
         if cached is not None and cached[0] == mtime:
             return cached[1]
@@ -247,20 +247,9 @@ class OutputService:
         output.yaml / celebration_image PNG skipped, stale output.yaml
         skipped). Expensive — one ``load()`` per surviving dir —
         which is why callers go through the cache."""
+        candidates = await asyncio.to_thread(self._scan_candidate_dirs, app_dir)
         styles: list[StyleSummary] = []
-        for child in sorted(app_dir.iterdir()):
-            run_id = child.name
-            if not child.is_dir() or _RUN_STAMP_PATTERN.match(run_id):
-                continue
-            if not _RUN_ID_PATTERN.match(run_id):
-                continue
-            if not (child / OUTPUT_FILENAME).is_file():
-                continue
-            celebration = (
-                child / FINAL_IMAGES_DIRNAME / f"{CELEBRATION_SLOT}{IMAGE_SUFFIX}"
-            )
-            if not celebration.is_file():
-                continue
+        for run_id, celebration in candidates:
             try:
                 output = await self.load(app_id, run_id)
             except (NotFoundError, InvalidRunError):
@@ -290,6 +279,29 @@ class OutputService:
             )
         styles.sort(key=lambda s: s.display_name)
         return styles
+
+    @staticmethod
+    def _scan_candidate_dirs(app_dir: Path) -> list[tuple[str, Path]]:
+        """Synchronous scan of ``app_dir`` — returns ``(run_id, celebration_path)``
+        pairs that pass all filesystem pre-filters (named dir, non-stamp id,
+        output.yaml present, celebration PNG present). Called via
+        ``asyncio.to_thread`` so no blocking I/O touches the event loop."""
+        candidates: list[tuple[str, Path]] = []
+        for child in sorted(app_dir.iterdir()):
+            run_id = child.name
+            if not child.is_dir() or _RUN_STAMP_PATTERN.match(run_id):
+                continue
+            if not _RUN_ID_PATTERN.match(run_id):
+                continue
+            if not (child / OUTPUT_FILENAME).is_file():
+                continue
+            celebration = (
+                child / FINAL_IMAGES_DIRNAME / f"{CELEBRATION_SLOT}{IMAGE_SUFFIX}"
+            )
+            if not celebration.is_file():
+                continue
+            candidates.append((run_id, celebration))
+        return candidates
 
     def _safe_run_dir(self, app_id: str, run_id: str) -> Path:
         """``apps_root/app_id/run_id``, but only if the ids are

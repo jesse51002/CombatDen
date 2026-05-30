@@ -10,9 +10,10 @@ import 'package:app_management/features/members/data/gym_detail.dart';
 /// The gym is the unit: it carries its theme (for branding) AND its content
 /// (rewards / classes / feed spec). Picking a gym in the theme picker records
 /// it here, applies its theme via [ThemeRuntime.selectDesign], and fetches the
-/// whole [GymDetail] **once**; the loyalty store, the videos content focus, and
-/// the phone preview then read it from memory. The video feed is fetched
-/// separately by `gymId` (it pages).
+/// whole [GymDetail] **once**; the loyalty store, the videos content focus, the
+/// phone preview, the Schedule screen, and the dashboard's Upcoming Classes
+/// card then read it from memory. The video feed is fetched separately by
+/// `gymId` (it pages).
 ///
 /// A plain global [ChangeNotifier] — the same shape as [ThemeRuntime]'s
 /// listenable, not a state-management framework. Surfaces watch it with

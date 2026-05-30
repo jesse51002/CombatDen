@@ -87,29 +87,41 @@ class _LibraryViewState extends State<LibraryView> {
         final visible = _visible(_pager.items);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.center,
+          spacing: DesignConstants.spacingBig,
           children: [
             // Chrome cluster: title → search → filters, all centered,
             // closer-related siblings get tighter gaps.
-            Text(
-              'Theme library',
-              style: DesignConstants.h1,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: DesignConstants.spacingLarge),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _kSearchMaxWidth),
-              child: ThemeSearchBar(onChanged: _pager.setQuery),
-            ),
-            const SizedBox(height: DesignConstants.spacingMedium),
-            FilterPills(
-              labels: chips,
-              selectedIndex: selectedIndex,
-              onSelected: (i) => setState(() => _selected = chips[i]),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              spacing: DesignConstants.spacingLarge,
+              children: [
+                Text(
+                  'Theme library',
+                  style: DesignConstants.h1,
+                  textAlign: TextAlign.center,
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  spacing: DesignConstants.spacingMedium,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: _kSearchMaxWidth,
+                      ),
+                      child: ThemeSearchBar(onChanged: _pager.setQuery),
+                    ),
+                    FilterPills(
+                      labels: chips,
+                      selectedIndex: selectedIndex,
+                      onSelected: (i) =>
+                          setState(() => _selected = chips[i]),
+                    ),
+                  ],
+                ),
+              ],
             ),
             // Largest break on the page: chrome above, grid below.
-            const SizedBox(height: DesignConstants.spacingBig),
             const Hairline(),
-            const SizedBox(height: DesignConstants.spacingBig),
             Expanded(
               child: _Grid(
                 visible: visible,

@@ -68,27 +68,40 @@ bool _isClassBooked(int dayOffset, int classIndex) {
       (dayOffset * 3 + classIndex * 2) % 11 == 0;
 }
 
-/// Builds one day's schedule by looping the live [classes] into the fixed
-/// time slots — class i at slot i. Every day shows the same four classes at
-/// the same times (per-day variation is just the demo attending/booked flags).
+/// Builds one day's schedule from the selected gym's live [classes]. Every day
+/// shows the *same* four classes — only their time slots rotate by [dayOffset],
+/// so a class at 9am today lands at a later slot tomorrow and no two adjacent
+/// days look the same. The rotation is a bijection over the slots, so each
+/// class still appears exactly once per day. Per-day attending/booked flags add
+/// demo texture on top.
 MockDay dayAt(int dayOffset, List<ClassInfo> classes) {
   final count = min(_classTimes.length, classes.length);
   return MockDay(
     label: formatFullDayLabel(dayOffset),
     classes: [
-      for (var i = 0; i < count; i++)
-        MockClass(
-          name: classes[i].name,
-          timeRange: _classTimes[i],
-          durationMinutes: _kClassDurationMinutes,
-          mentor: classes[i].instructorName,
-          imageUrl: classes[i].imageUrl,
-          description: classes[i].description,
-          instructorBio: classes[i].instructorBio,
-          instructorImageUrl: classes[i].instructorImageUrl,
-          attending: _seededAttending(dayOffset, i),
-          isBooked: _isClassBooked(dayOffset, i),
+      for (var slot = 0; slot < count; slot++)
+        _classForSlot(
+          dayOffset,
+          slot,
+          classes[(slot + dayOffset) % count],
         ),
     ],
+  );
+}
+
+/// One scheduled class: the live [info] placed into the fixed time [slot], with
+/// demo-only attending/booked flags seeded per (day, slot).
+MockClass _classForSlot(int dayOffset, int slot, ClassInfo info) {
+  return MockClass(
+    name: info.name,
+    timeRange: _classTimes[slot],
+    durationMinutes: _kClassDurationMinutes,
+    mentor: info.instructorName,
+    imageUrl: info.imageUrl,
+    description: info.description,
+    instructorBio: info.instructorBio,
+    instructorImageUrl: info.instructorImageUrl,
+    attending: _seededAttending(dayOffset, slot),
+    isBooked: _isClassBooked(dayOffset, slot),
   );
 }
