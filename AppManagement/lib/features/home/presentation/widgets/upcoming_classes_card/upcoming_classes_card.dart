@@ -10,21 +10,31 @@ import 'package:app_management/features/home/presentation/widgets/upcoming_class
 /// each with a thumbnail and instructor. Driven live by the selected gym (the
 /// same [selectedGym] memory the rewards store and phone preview read), so the
 /// card shows only that gym's classes.
+///
+/// The card is **capped at the viewport height** and the day list renders
+/// top-down: once it fills the cap it stops, and anything beyond is clipped
+/// ("cut off") rather than growing the dashboard unbounded. Tapping any class
+/// opens the full Schedule screen, so the clipped rows stay reachable.
 class UpcomingClassesCard extends StatelessWidget {
   const UpcomingClassesCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        Text('Upcoming Classes', style: DesignConstants.h1),
-        ListenableBuilder(
-          listenable: selectedGym,
-          builder: (context, _) => _body(),
-        ),
-      ],
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingBig,
+        children: [
+          Text('Upcoming Classes', style: DesignConstants.h1),
+          Expanded(
+            child: ListenableBuilder(
+              listenable: selectedGym,
+              builder: (context, _) => _body(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -43,7 +53,17 @@ class UpcomingClassesCard extends StatelessWidget {
     if (detail.classes.isEmpty) {
       return const _UpcomingMessage('This gym has no classes yet.');
     }
-    return _DayGroups(dayGroups: gymUpcomingClasses(detail.classes));
+    // Lay the day list out at its natural height but clip it to the card's
+    // (viewport-capped) bounds, top-aligned, so it cuts off instead of
+    // extending. No scroll — the clipped rows live on the Schedule screen.
+    return ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.topCenter,
+        minHeight: 0,
+        maxHeight: double.infinity,
+        child: _DayGroups(dayGroups: gymUpcomingClasses(detail.classes)),
+      ),
+    );
   }
 }
 

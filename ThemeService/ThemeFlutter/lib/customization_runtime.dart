@@ -59,6 +59,14 @@ class ThemeRuntime {
     await service.initialize();
   }
 
+  /// Whether the engine has been initialized (its [ThemeService] is
+  /// registered). [changes], [activeDesignId], and [selectDesign] all throw
+  /// until this is true, so a consumer that may build *before* the first
+  /// [initialize] — e.g. an app-wide chrome widget that paints on screens
+  /// other than the one that boots the engine — must guard on this before
+  /// touching [changes].
+  static bool get isReady => getIt.isRegistered<ThemeService>();
+
   /// Listenable that fires whenever the active customization changes
   /// (initial load + every [selectDesign]). Wrap the app root in a
   /// `ListenableBuilder` on this so the whole tree re-themes live.
