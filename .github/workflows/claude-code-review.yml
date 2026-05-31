@@ -43,7 +43,7 @@ jobs:
             2. Group the changed files by their top-level directory. Each
                top-level directory that has its own `CLAUDE.md` is a subsystem
                (examples in this repo today: `AppManagement/`, `MobileApp/`,
-               `FlutterCRM/`, `FastApiBackend/`, `Database/`, `LandingPage/`).
+               `FastApiBackend/`, `Database/`, `LandingPage/`).
                Files at the repo root (e.g. `CLAUDE.md`, `.github/`,
                `pyrightconfig.json`) are not a subsystem — call those "root".
 
