@@ -5,6 +5,7 @@ import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/features/home/data/upcoming_classes.dart';
 import 'package:app_management/features/home/data/upcoming_classes_generator.dart';
 import 'package:app_management/features/home/presentation/widgets/upcoming_classes_card/_class_day_group.dart';
+import 'package:app_management/shared/widgets/app_spinner.dart';
 
 /// Right-hand panel under the hero: a day-grouped list of upcoming classes,
 /// each with a thumbnail and instructor. Driven live by the selected gym (the
@@ -94,14 +95,7 @@ class _UpcomingMessage extends StatelessWidget {
       padding: const EdgeInsets.all(DesignConstants.paddingBig),
       child: Center(
         child: message == null
-            ? SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: DesignConstants.primaryColor,
-                ),
-              )
+            ? const AppSpinner()
             : Text(
                 message!,
                 style: DesignConstants.p.copyWith(

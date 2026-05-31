@@ -41,34 +41,35 @@ class ClassScreen extends StatelessWidget {
             ).pushReplacementNamed(AppRoutes.postClassStreak);
           }
         },
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AppTopbar(
-                mode: AppTopbarMode.nameOnly,
-                showBackButton: true,
-                gymName: selectedGym.displayName,
-                logoAsset: gym.logoAsset,
-                streakDays: gym.streakDays,
-                pointsLabel: gym.pointsLabel,
-                rankBadgeAsset: gym.rankBadgeAsset,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    AppTopbar(
+                      mode: AppTopbarMode.nameOnly,
+                      showBackButton: true,
+                      gymName: selectedGym.displayName,
+                      logoAsset: gym.logoAsset,
+                      streakDays: gym.streakDays,
+                      pointsLabel: gym.pointsLabel,
+                      rankBadgeAsset: gym.rankBadgeAsset,
+                    ),
+                    ClassImageBanner(imageUrl: classData.imageUrl),
+                    _Body(detail: detail),
+                  ],
+                ),
               ),
-              ClassImageBanner(imageUrl: classData.imageUrl),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: DesignConstants.spacingBig,
-                children: [
-                  _Body(detail: detail),
-                  ClassReserveFooter(
-                    onReserve: () => Navigator.of(
-                      context,
-                    ).pushReplacementNamed(AppRoutes.reservingLoading),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+            ClassReserveFooter(
+              onReserve: () => Navigator.of(
+                context,
+              ).pushReplacementNamed(AppRoutes.reservingLoading),
+            ),
+          ],
         ),
       ),
     );
@@ -87,7 +88,7 @@ class _Body extends StatelessWidget {
         DesignConstants.screenHorizontalPadding,
         DesignConstants.spacingBig,
         DesignConstants.screenHorizontalPadding,
-        0,
+        DesignConstants.spacingBig,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

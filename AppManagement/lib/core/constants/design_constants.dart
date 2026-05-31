@@ -62,6 +62,7 @@ class DesignConstants {
 
   static final Color divider = card;
   static const double sideNavWidth = 100.0;
+  static const double quickListWidth = 240.0;
   static const double tableRowHeight = 35.0;
 
   // Two lines of h2, so every reward card's title block is the same height

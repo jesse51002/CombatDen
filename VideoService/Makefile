@@ -1,4 +1,4 @@
-.PHONY: api test gym-check scrape scan
+.PHONY: api test gym-check scrape scan docker-build ecr-push pause resume
 
 # `python -m uvicorn` (not the console script) survives stale .venv shebangs
 # left over from the CustomYoutubeService -> VideoService rename.
@@ -33,3 +33,25 @@ scrape:
 # Usage: make scan GYM_ID=vinyasa   (or GYM_ID=all for every gym).
 scan:
 	poetry run python -m scripts.scan.run $(if $(filter all,$(GYM_ID)),--all-gyms,--gym-id $(GYM_ID))
+
+# --- Production (AWS App Runner) — see ../DEPLOYMENT.md ---------------------
+ECR ?= 259645229668.dkr.ecr.us-east-1.amazonaws.com/combatden-videoservice
+SERVICE_ARN ?= arn:aws:apprunner:us-east-1:259645229668:service/combatden-videoservice/e86bea56dcdd4b6d8f71af2fe61dbf4c
+
+# Build the serving image (gyms/ + videos/ baked in; see Dockerfile).
+docker-build:
+	docker build -t combatden-videoservice:latest .
+
+# Build + push to ECR + trigger an App Runner deploy (AutoDeployments are off).
+ecr-push: docker-build
+	aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 259645229668.dkr.ecr.us-east-1.amazonaws.com
+	docker tag combatden-videoservice:latest $(ECR):latest
+	docker push $(ECR):latest
+	aws apprunner start-deployment --region us-east-1 --service-arn $(SERVICE_ARN) --query 'OperationId' --output text
+
+# Demo on/off: pause stops compute billing between demos; resume (~1 min) before.
+pause:
+	aws apprunner pause-service --region us-east-1 --service-arn $(SERVICE_ARN) --query 'Service.Status' --output text
+
+resume:
+	aws apprunner resume-service --region us-east-1 --service-arn $(SERVICE_ARN) --query 'Service.Status' --output text

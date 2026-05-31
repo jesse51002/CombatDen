@@ -28,7 +28,9 @@ from src.api import videos_router
 from src.api.service.videos_service import VideosService
 
 
-def _video(vid: str, *, relevance: int, tag: str | None) -> VideoOutput:
+def _video(
+    vid: str, *, relevance: int, tag: str | None, avatar: str = "a"
+) -> VideoOutput:
     return VideoOutput(
         url=f"https://www.youtube.com/watch?v={vid}",
         title=f"Video {vid}",
@@ -36,7 +38,7 @@ def _video(vid: str, *, relevance: int, tag: str | None) -> VideoOutput:
         thumbnail_url="t",
         channel_name="Some Channel",
         channel_url="cu",
-        channel_avatar_url="a",
+        channel_avatar_url=avatar,
         source_queries=["q"],
         relevance_index=relevance,
         tag=tag,
@@ -240,6 +242,59 @@ def test_gym_feed_both_filters_is_400(service: VideosService) -> None:
     with pytest.raises(HTTPException) as exc:
         _get_gym_videos(video_type=VideoType.EDUCATIONAL, big_group=BigGroup.EDUCATIONAL)
     assert exc.value.status_code == 400
+
+
+# --- empty-avatar backfill (serve-time instructor-headshot fallback) ---------
+
+
+def _seed_empty_avatar_pool(service: VideosService) -> None:
+    """A pool whose videos have no channel avatar — the real-world case (Apify
+    never returned them)."""
+    asyncio.run(
+        service.save_pool(
+            [
+                _video("edu1", relevance=0, tag="educational", avatar=""),
+                _video("ent1", relevance=1, tag="memes", avatar=""),
+            ]
+        )
+    )
+
+
+def test_feed_backfills_empty_avatars_from_instructors(service: VideosService) -> None:
+    _seed_empty_avatar_pool(service)
+    classes = _class_cards()
+    _write_gym(service, good=("edu1", "ent1"), classes=classes)
+    feed = _get_gym_videos()
+    pool = {c.instructor_image_url for c in classes}
+    assert feed.videos and all(c.channel_avatar_url in pool for c in feed.videos)
+
+
+def test_feed_keeps_a_real_avatar(service: VideosService) -> None:
+    asyncio.run(
+        service.save_pool(
+            [_video("edu1", relevance=0, tag="educational", avatar="https://real/a.jpg")]
+        )
+    )
+    _write_gym(service, good=("edu1",), classes=_class_cards())
+    feed = _get_gym_videos()
+    assert feed.videos[0].channel_avatar_url == "https://real/a.jpg"
+
+
+def test_feed_no_classes_leaves_avatar_empty(service: VideosService) -> None:
+    _seed_empty_avatar_pool(service)
+    _write_gym(service, good=("edu1",))  # no classes authored -> nothing to fill from
+    feed = _get_gym_videos()
+    assert feed.videos[0].channel_avatar_url == ""
+
+
+def test_preview_backfills_empty_avatars(service: VideosService) -> None:
+    _seed_empty_avatar_pool(service)
+    classes = _class_cards()
+    _write_gym(service, good=("edu1", "ent1"), classes=classes)
+    preview = _get_preview()
+    pool = {c.instructor_image_url for c in classes}
+    cards = [c for s in preview.sections for c in s.videos]
+    assert cards and all(c.channel_avatar_url in pool for c in cards)
 
 
 # --- gym browser -------------------------------------------------------------

@@ -1,0 +1,39 @@
+# CombatDen
+
+> CombatDen is a member retention app for premium class-based gyms. It runs alongside your current gym software (no payment migration) and keeps members from quitting with a branded app, an AI-curated video feed, and a built-in loyalty program. Built for fighting gyms (BJJ, MMA, Muay Thai, boxing, kickboxing) and any premium studio (yoga, pilates, CrossFit, boutique fitness).
+
+## What it does
+
+- **An app built for your gym.** Branded with your look, not a template with a logo on it. Choose from 75+ ready-made designs, one for every kind of gym, or get a custom app built for you.
+- **A video feed that knows your gym.** An AI agent interviews you, curates a feed that fits your gym, prioritizes your own videos, and learns from every correction.
+- **The right video at the right time.** When a member books a class, they get a preview tuned to that class and their level. After class, a follow-up reinforces what they learned. Content shows up when it matters, so members stay engaged between classes and keep coming back.
+- **A loyalty program that pays.** Members earn points per class and redeem them for rewards you set (branded gear, guest passes, discounted private training). Turns attendance into a habit.
+- **Works alongside your current software.** No payment migration. Imports member names, emails, ranks, and class schedule. Your CRM and payment processor stay where they are.
+
+## Why it matters
+
+- 5× cheaper to keep a member than to find a new one.
+- Keeping 5% more members in a 100-member gym is worth ~$9k a year (at $150/mo per member).
+- A retained member is worth $150+/month. A $20 branded shirt that keeps them one extra month is 7× ROI, before word-of-mouth.
+
+## Pricing
+
+- **$100/mo** — Shared app. Full retention engine. Your gym's locked theme (one of 75+ gym-type designs), plus your logo and colors.
+- **$300/mo** — Your own branded App Store app, customized for your gym. Done for you.
+- **$500/mo flat** — Multi-location, up to 3 locations. Everything in the $300 plan.
+- **Enterprise** — Quote.
+
+## Pages
+
+- [Home](https://www.combatden.net/): what it is, the branded app, the AI video feed, contextual content, the loyalty program, retention ROI, and a demo booking form.
+- [Pricing](https://www.combatden.net/pricing.html): the four plans above.
+
+## Audience
+
+Premium, branding-conscious class-based gym owners. Beachhead: independent fighting gyms (BJJ, MMA, Muay Thai, boxing, kickboxing). Expanding to any premium class-based studio (yoga, pilates, CrossFit, barre, cycling, boutique). They already use a CRM (Mindbody, PushPress, Kilo, Gymdesk, ZenPlanner, etc.) and want better retention without switching it.
+
+## Contact
+
+- Email: jesse@combatden.net
+- Phone: 832-871-2702
+- Demo: 15-minute call, booked from the home page.

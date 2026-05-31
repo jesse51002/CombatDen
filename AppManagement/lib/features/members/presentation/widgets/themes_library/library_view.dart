@@ -15,11 +15,19 @@ import 'package:app_management/features/members/data/gyms_pager.dart';
 const String _kAllChip = 'All';
 const int _kPageSize = 50;
 const double _kSearchMaxWidth = 480;
+// Responsive grid: the column count is whatever fits at this min card width, so
+// the wider full-screen standalone browser shows more columns (≈4 on a typical
+// desktop) than the narrower embedded admin tab. Never drop below 2 columns.
+// See `FillGrid.minItemWidth` / `minColumns`.
+const double _kGridMinItemWidth = 280;
+const int _kGridMinColumns = 2;
 
-/// Themes library — title + search + filter pills, then a hairline,
-/// then a 3-up `FillGrid` of theme cards. Centered chrome, system
-/// object-card grid. Picking a card calls
-/// [ThemeRuntime.selectDesign] then [onPicked].
+/// Themes library — a collapsing title over a persistent search + filter-pill
+/// bar, a hairline, then a responsive `FillGrid` of theme cards (column count
+/// scales with width). Scrolling the grid collapses the title away and tightens
+/// the chrome; the search + filters stay put. Centered chrome, system
+/// object-card grid. Picking a card calls [ThemeRuntime.selectDesign] then
+/// [onPicked].
 class LibraryView extends StatefulWidget {
   const LibraryView({super.key, required this.onPicked});
 
@@ -76,6 +84,27 @@ class _LibraryViewState extends State<LibraryView> {
     widget.onPicked();
   }
 
+  // Collapsed once the grid is scrolled past a small threshold: the big
+  // "Theme library" title animates away and the chrome tightens, leaving the
+  // search + filter pills at the top. The search/filters live above the
+  // scrolling grid, so they're always visible — only the title collapses.
+  bool _collapsed = false;
+
+  bool _onScroll(ScrollNotification n) {
+    final pixels = n.metrics.pixels;
+    // Hysteresis: collapsing grows the viewport (the title's space is freed),
+    // which can nudge `pixels` back across a single threshold and flicker.
+    // Separate collapse/expand thresholds keep it stable.
+    var next = _collapsed;
+    if (!_collapsed && pixels > 24) {
+      next = true;
+    } else if (_collapsed && pixels < 8) {
+      next = false;
+    }
+    if (next != _collapsed) setState(() => _collapsed = next);
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -85,52 +114,67 @@ class _LibraryViewState extends State<LibraryView> {
         final selectedIndex =
             chips.indexOf(_selected).clamp(0, chips.length - 1);
         final visible = _visible(_pager.items);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          spacing: DesignConstants.spacingBig,
-          children: [
-            // Chrome cluster: title → search → filters, all centered,
-            // closer-related siblings get tighter gaps.
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              spacing: DesignConstants.spacingLarge,
-              children: [
-                Text(
-                  'Theme library',
-                  style: DesignConstants.h1,
-                  textAlign: TextAlign.center,
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  spacing: DesignConstants.spacingMedium,
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: _kSearchMaxWidth,
+        return NotificationListener<ScrollNotification>(
+          onNotification: _onScroll,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            // Tighter vertical rhythm once collapsed (reduced padding).
+            spacing: _collapsed
+                ? DesignConstants.spacingMedium
+                : DesignConstants.spacingBig,
+            children: [
+              // Chrome cluster: a collapsing title above the persistent
+              // search + filters. Closer-related siblings get tighter gaps.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                // The title→search gap closes as the title collapses away.
+                spacing:
+                    _collapsed ? 0.0 : DesignConstants.spacingLarge,
+                children: [
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    alignment: Alignment.topCenter,
+                    child: _collapsed
+                        ? const SizedBox(width: double.infinity)
+                        : Text(
+                            'Theme library',
+                            style: DesignConstants.h1,
+                            textAlign: TextAlign.center,
+                          ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    spacing: DesignConstants.spacingMedium,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: _kSearchMaxWidth,
+                        ),
+                        child: ThemeSearchBar(onChanged: _pager.setQuery),
                       ),
-                      child: ThemeSearchBar(onChanged: _pager.setQuery),
-                    ),
-                    FilterPills(
-                      labels: chips,
-                      selectedIndex: selectedIndex,
-                      onSelected: (i) =>
-                          setState(() => _selected = chips[i]),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            // Largest break on the page: chrome above, grid below.
-            const Hairline(),
-            Expanded(
-              child: _Grid(
-                visible: visible,
-                isLoading: _pager.isLoading,
-                errored: _pager.errored,
-                onPick: _pick,
+                      FilterPills(
+                        labels: chips,
+                        selectedIndex: selectedIndex,
+                        onSelected: (i) =>
+                            setState(() => _selected = chips[i]),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ),
-          ],
+              // Largest break on the page: chrome above, grid below.
+              const Hairline(),
+              Expanded(
+                child: _Grid(
+                  visible: visible,
+                  isLoading: _pager.isLoading,
+                  errored: _pager.errored,
+                  onPick: _pick,
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -168,7 +212,8 @@ class _Grid extends StatelessWidget {
         final active = ThemeRuntime.activeDesignId;
         return SingleChildScrollView(
           child: FillGrid(
-            columns: 3,
+            minItemWidth: _kGridMinItemWidth,
+            minColumns: _kGridMinColumns,
             children: [
               for (final s in visible)
                 LibraryCard(

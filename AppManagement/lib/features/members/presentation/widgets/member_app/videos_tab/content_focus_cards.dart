@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/state/selected_gym.dart';
+import 'package:app_management/shared/widgets/app_spinner.dart';
 
 /// The agent-authored descriptions that steer the feed: "We surface" and
 /// "We avoid" side by side, for the selected gym. Each shows the SHORT summary
@@ -113,14 +114,7 @@ class _FocusMessage extends StatelessWidget {
       padding: const EdgeInsets.all(DesignConstants.paddingBig),
       child: Center(
         child: message == null
-            ? SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: DesignConstants.primaryColor,
-                ),
-              )
+            ? const AppSpinner()
             : Text(
                 message!,
                 style: DesignConstants.p.copyWith(

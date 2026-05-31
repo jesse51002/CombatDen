@@ -22,7 +22,7 @@ class EmployeeQuickList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 240,
+      width: DesignConstants.quickListWidth,
       padding: const EdgeInsets.all(DesignConstants.paddingBig),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

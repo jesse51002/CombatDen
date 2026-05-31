@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
-import 'package:mobile_app/features/stats/data/mock_stats.dart';
+import 'package:mobile_app/features/stats/presentation/widgets/rewards/reward_slide.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/rewards/rewards_carousel.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
@@ -23,9 +23,19 @@ const int _kBurstStarCount = 14;
 /// carousel + featured caption. The orange points line pulses once per
 /// advance to draw attention.
 class RewardsBody extends StatefulWidget {
-  const RewardsBody({super.key, required this.stats, this.controller});
+  const RewardsBody({
+    super.key,
+    required this.slides,
+    required this.title,
+    required this.subtitle,
+    required this.featuredIndex,
+    this.controller,
+  });
 
-  final MockRewardsStats stats;
+  final List<RewardSlide> slides;
+  final String title;
+  final String subtitle;
+  final int featuredIndex;
   final PostClassController? controller;
 
   @override
@@ -37,14 +47,15 @@ class _RewardsBodyState extends State<RewardsBody> {
   static const _slideDuration = Duration(milliseconds: 450);
 
   // Large offset lets the user swipe backward "forever" without hitting
-  // page 0. The actual item shown is `_page % items.length`.
+  // page 0. The actual item shown is `_page % slides.length`.
   static const _initialPageBase = 10000;
 
   late final PageController _controller;
+  late final int _count = widget.slides.length;
   late int _page = _initialPageBase -
-      (_initialPageBase % widget.stats.items.length) +
-      widget.stats.featuredIndex;
-  late int _index = _page % widget.stats.items.length;
+      (_initialPageBase % _count) +
+      widget.featuredIndex.clamp(0, _count - 1);
+  late int _index = _page % _count;
   Timer? _timer;
   bool _showCarousel = false;
 
@@ -99,7 +110,7 @@ class _RewardsBodyState extends State<RewardsBody> {
   void _onPageChanged(int page) {
     setState(() {
       _page = page;
-      _index = page % widget.stats.items.length;
+      _index = page % _count;
     });
     _scheduleNext();
   }
@@ -112,7 +123,9 @@ class _RewardsBodyState extends State<RewardsBody> {
       );
     }
     return _CarouselLayout(
-      stats: widget.stats,
+      slides: widget.slides,
+      title: widget.title,
+      subtitle: widget.subtitle,
       controller: _controller,
       featuredIndex: _index,
       onPageChanged: _onPageChanged,
@@ -123,14 +136,18 @@ class _RewardsBodyState extends State<RewardsBody> {
 
 class _CarouselLayout extends StatelessWidget {
   const _CarouselLayout({
-    required this.stats,
+    required this.slides,
+    required this.title,
+    required this.subtitle,
     required this.controller,
     required this.featuredIndex,
     required this.onPageChanged,
     required this.slideDuration,
   });
 
-  final MockRewardsStats stats;
+  final List<RewardSlide> slides;
+  final String title;
+  final String subtitle;
   final PageController controller;
   final int featuredIndex;
   final ValueChanged<int> onPageChanged;
@@ -138,7 +155,7 @@ class _CarouselLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final featured = stats.items[featuredIndex];
+    final featured = slides[featuredIndex];
     final subtitleDelay = CelebrationTimings.revealStagger;
     final carouselDelay = subtitleDelay + CelebrationTimings.revealDuration;
     return Column(
@@ -152,7 +169,7 @@ class _CarouselLayout extends StatelessWidget {
           children: [
             StaggeredReveal(
               child: Text(
-                stats.title,
+                title,
                 textAlign: TextAlign.center,
                 style: DesignConstants.big2,
               ),
@@ -160,7 +177,7 @@ class _CarouselLayout extends StatelessWidget {
             StaggeredReveal(
               delay: subtitleDelay,
               child: Text(
-                stats.subtitle,
+                subtitle,
                 textAlign: TextAlign.center,
                 style: DesignConstants.pBig.copyWith(
                   color: DesignConstants.text3rd,
@@ -173,7 +190,7 @@ class _CarouselLayout extends StatelessWidget {
           delay: carouselDelay,
           offset: 0,
           child: RewardsCarousel(
-            items: stats.items,
+            items: slides,
             controller: controller,
             onPageChanged: onPageChanged,
           ),

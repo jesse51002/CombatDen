@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase. It is the **gym admin web app** — staff/owners managing their gym from a browser.
 
-- This is a **web-only Flutter app** (no Android, no iOS) — mirrors `../FlutterCRM/`'s platform setup.
+- This is a **web-only Flutter app** (no Android, no iOS).
 - **Backend is off-limits with TWO read-only carve-outs.** No Supabase, no auth, no general-purpose API client. The two deliberate exceptions are the **read-only VideoService feed** and the **read-only ThemeService theme catalog + live preview** — see *VideoService carve-out* and *ThemeService carve-out* below. Everything else stays mock-only; do not add HTTP, clients, or live data to any other screen without asking first.
 - **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller).
 - **No real data.** Every list, every card, every detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
 
-The whole point is to make screens that **look right** so the design can be evaluated, screenshotted for sales, and iterated on quickly. When this app graduates to real data, this CLAUDE.md gets revised and the data/state sections from `../FlutterCRM/CLAUDE.md` come back.
+The whole point is to make screens that **look right** so the design can be evaluated, screenshotted for sales, and iterated on quickly.
 
 **Theme/design rules are NOT relaxed because this is a prototype.** See *Theming System* below.
 
@@ -21,7 +21,7 @@ The whole point is to make screens that **look right** so the design can be eval
 This prototype's live backend access is **read-only and limited to the VideoService** — two endpoints, both deliberate. The member-app **videos tab** pulls its feed live so the admin previews real thumbnails and titles instead of mock art; a second read fetches the selected gym's **detail** (classes / rewards / spec) once into memory (see *Gym detail* below).
 
 - **Scope (feed):** read-only — `GET /gyms/{gymId}/videos` (gym-id-keyed: serves that gym's feed, paginated). The feed follows the selected gym (`SelectedGym` global). No writes, no auth, no other feed endpoints. The one query knob beyond paging/genre is `?rejected=true`, which serves the scan's **rejected** list instead of the approved feed (it backs the videos tab's rejected-videos section, where the admin can keep a video back) — still read-only, still this same endpoint. This boolean is a deliberate, user-approved widening of the carve-out; do not add further parameters or endpoints without asking.
-- **Gym detail (the second read):** `GET /gyms/{gymId}` via `lib/features/members/data/gym_api_client.dart` (`GymApiClient`, also `package:http`) fetches the selected gym's whole content detail (spec + classes + rewards) **once** into the `SelectedGym` global. Read-only, gym-id-keyed, same 5s-timeout-then-degrade behavior. It backs the loyalty rewards store, the videos content focus, the phone preview, and the admin **Schedule screen** (`features/schedule/`) + the dashboard's **Upcoming Classes** card — those read the gym's classes/rewards from memory (no extra calls), so they are **gym-driven, not mock, by design**. Don't add further endpoints or writes without asking.
+- **Gym detail (the second read):** `GET /gyms/{gymId}` via `lib/features/members/data/gym_api_client.dart` (`GymApiClient`, also `package:http`) fetches the selected gym's whole content detail (spec + classes + rewards) **once** into the `SelectedGym` global. Read-only, gym-id-keyed, same 5s-timeout-then-degrade behavior. It backs the loyalty rewards store, the videos content focus, the videos tab's **"Your videos"** row/grid (`videos_tab/your_video_tile.dart` derives each tile from `detail.classes` — class image, instructor photo, class name; falls back to bundled mock when no live classes), the phone preview, and the admin **Schedule screen** (`features/schedule/`) + the dashboard's **Upcoming Classes** card — those read the gym's classes/rewards from memory (no extra calls), so they are **gym-driven, not mock, by design**. Don't add further endpoints or writes without asking.
 - **Where it lives:** `lib/features/members/data/` — `video_api_client.dart` (`VideoApiClient`, the feed + `GET /gyms/{gymId}/videos/preview`), `gym_api_client.dart` (`GymApiClient`), and `gyms_pager.dart` (pages the gyms list for the theme/gym picker), all wrapping `package:http`; models in `video_feed.dart` / `gym_detail.dart` (`*.fromJson`). The `StatefulWidget` + `FutureBuilder` pattern that drives these reads is allowed in the widgets that consume them (`member_feed_section.dart`, `library_view.dart`).
 - **Dependency:** the VideoService (sibling, see below) must be running. Base URL defaults to `http://localhost:8002`; override at launch with `--dart-define=VIDEO_BASE_URL=http://<host>:<port>`.
 - **Failure behavior:** the call has a 5s timeout and degrades quietly (empty feed) so the rest of the demo never breaks if the service is down.
@@ -38,9 +38,19 @@ The member-app **Theme tab** (`member_app_screen.dart` → `LiveThemePreviewTab`
 - **Failure behavior:** the engine's resolvers never throw — they fall back to bundled defaults. The catalog grid degrades quietly (an error message, no crash) if the service is down, and the phone still renders the fallback look.
 - **Two design systems coexist, intentionally.** Inside the phone frame the showcase uses the engine's *tenant-brand* tokens (the member-app look); everything around it uses AppManagement's own forked `DesignConstants`. No collision — different package URIs. Don't try to make the preview match the admin chrome; it's previewing the *member* app.
 
+## Standalone theme browser (second build target)
+
+The Theme tab doubles as a **public theme browser** that the marketing landing page links out to (prospects browse the theme library live). It ships as a **second build target of this same app** — not a separate package — so one codebase powers both surfaces and the browser is never rewritten twice.
+
+- **The module is `LiveThemePreviewTab`** (`features/members/presentation/widgets/member_app/theme_tab/live_theme_preview_tab.dart`). The admin member-app preview embeds it; the standalone target mounts it full-screen. It is self-contained: it bootstraps `ThemeRuntime` itself and owns its selection state (`selectedGym` global + `GymsPager`). The **only** host-specific knob is its `routePath` constructor param — the URL path the previewed theme is mirrored onto as `?theme=…`. It defaults to `AppRoutes.memberAppPreview` (embedded/admin behavior, unchanged); the standalone passes `AppRoutes.home` for root-anchored deep links.
+- **The standalone shell lives in `features/theme_browser/`** — `theme_browser_app.dart` (a minimal `MaterialApp` reusing `AppTheme.light`), `theme_browser_page.dart` (full-screen: top bar + the module, no `AppShell` nav rail), and `widgets/theme_browser_top_bar.dart`. Entry point: `lib/main_theme_browser.dart`.
+- **Do NOT restyle the browser.** Both surfaces use the same widgets and `DesignConstants` verbatim — the browser looks identical embedded and standalone. The top bar is a **placeholder** (CombatDen wordmark + a back-to-site link) styled with existing tokens; it will be replaced with a bar matching the new landing page once that exists. The back-link target is the `LANDING_URL` dart-define (default `https://www.combatden.net`).
+- **URL strategy is the Flutter web default (hash).** No `usePathUrlStrategy` is configured (deliberately — adding it would change the admin app's URLs too). Deep links round-trip via the fragment (`themes.combatden.net/#/?theme=…`); `_themeFromUrl` tolerates both hash and path strategies.
+- **Same backend carve-outs.** The standalone browser hits the same read-only ThemeService + VideoService (catalog + gym detail). Both must be running locally (`:8000` / `:8002`); prod uses the same two dart-defines as the admin build.
+- **Build / deploy:** `make run-themes` (dev, port 8082), `make build-themes` (`--target lib/main_theme_browser.dart` + the two API dart-defines), `make deploy-themes` (S3 + CloudFront at `themes.combatden.net`). See *Production deployment* below.
+
 ## Sibling repos in this monorepo
 
-- `../FlutterCRM/` — staff/CRM web app, **fully wired** (BLoC + Supabase + Stripe). Source of truth for the design system and most shared widget patterns. When this app graduates, it follows FlutterCRM's stack.
 - `../MobileApp/` — member-facing mobile prototype, same visual-only model as this app. Shared widget candidates often live here too.
 - `../LandingPage/` — React marketing site. Not a Flutter sibling, but its `COPY` dict and design choices may inform copy/voice for admin screens. Read `../LandingPage/CLAUDE.md` if you're writing user-facing strings that should match marketing voice.
 - `../Database/` — Supabase schemas and `openapi.json`. Irrelevant while we're prototype-only, but model field names should already match what the API will eventually return so the future swap is mechanical.
@@ -66,6 +76,14 @@ How to apply:
 **YAGNI** — don't add features until needed.
 **Separation of Concerns** — separate UI from any logic that creeps in.
 
+## No assumptions
+
+When a decision has more than one reasonable answer, ask and wait for the user's explicit response. Never assume, recommend-and-proceed, or defer the choice unilaterally. Presenting researched options is encouraged; making the choice for the user is not.
+
+## Skills are living documents
+
+When working through a skill (or a reference doc / `SKILL.md` it loads) you realize its guidance is wrong, outdated, or holding the work back — a recommended data/image source that returns bad results, a step that no longer fits, a better tool you've found — do not silently work around it. Use the better approach for the task, then **recommend the specific skill fix to the user and wait for approval** (per *No assumptions*); on approval, **update the skill file** so the lesson sticks. Skills are ever-evolving — every real-world correction should feed back into them.
+
 ## CLAUDE.md is a living document
 
 This file is a living document — exactly like a skill, it must track reality. Whenever the code genuinely diverges from what this CLAUDE.md says (a new live backend call, a renamed system, an added dependency, a rule the code has outgrown on purpose, a feature that changed the architecture), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
@@ -79,7 +97,7 @@ This file is a living document — exactly like a skill, it must track reality. 
 - **NEVER hardcode font properties** — no inline `fontFamily`, no inline `fontSize`, no inline `fontWeight`. Use the text styles in `DesignConstants` (`h1`, `h2`, `h3`, `p`, `pBig`, `pSmall`, etc.).
 - **NEVER hardcode spacing, padding, radius, or border widths.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorderSize`.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/radius/padding, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
-- **`design_constants.dart` is this app's own design system and may be edited deliberately.** AppManagement has **forked** its tokens to its own identity (warm light theme, sapphire accent, Hanken Grotesk, tight 12/8 corners, de-carded layout). It is **no longer immutable** and **no longer byte-for-byte identical** with `../FlutterCRM/` or `../MobileApp/` — do **NOT** mirror token changes to them. Keep all token changes centralized in this file (so one edit reskins the whole app) and add/rename tokens only when the design genuinely needs it. See `DESIGN.md` for the system.
+- **`design_constants.dart` is this app's own design system and may be edited deliberately.** AppManagement has **forked** its tokens to its own identity (warm light theme, sapphire accent, Hanken Grotesk, tight 12/8 corners, de-carded layout). It is **no longer immutable** and **no longer byte-for-byte identical** with `../MobileApp/` — do **NOT** mirror token changes to it. Keep all token changes centralized in this file (so one edit reskins the whole app) and add/rename tokens only when the design genuinely needs it. See `DESIGN.md` for the system.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
 **Icons: Prefer Material Symbols, Material `Icons.*` allowed**
@@ -243,7 +261,7 @@ Bad: nesting the cascade but cramming it all into one giant `build` method — t
 - One public widget per file.
 - **MANDATORY: check `lib/shared/widgets/` before writing a single line of new widget code.** This is not a soft suggestion — it is the first step on every UI task. Run `ls lib/shared/widgets/` (and `ls lib/shared/widgets/*/` for subfolders) BEFORE you start composing widgets. If a shared widget already covers the pattern (cards, buttons, headers, tables, list rows, info rows, dialogs, search boxes, filter bars, view switchers, etc.), USE IT. Do not build a parallel implementation, do not "simplify" it inline, do not write a one-off version because yours is "just a little different." Pass parameters or extend the shared widget. The whole point of having a shared widget library is that every screen looks identical because every screen uses the same primitives. Two parallel implementations is the bug we are designing this rule to prevent.
 - **Tables specifically:** if you are about to write any kind of table (header row + data rows + dividers + sticky-or-not + tappable-or-not), the answer is `AppDataTable` from `lib/shared/widgets/app_data_table.dart`. Do not handroll headers, rows, or dividers. Configure `AppDataTableColumn` and `AppDataTableRow` instead.
-- **Before building a new shared widget, also check `../FlutterCRM/lib/shared/widgets/` AND `../MobileApp/lib/shared/widgets/`.** Both apps share a design language with this one. If a version of the pattern exists there (e.g. `app_data_table.dart`, `info_row.dart`, `section_card.dart`, `app_primary_button.dart`, `subtitle_section.dart`), copy and adapt it (rewrite imports from `package:crm/` → `package:app_management/`) rather than building from scratch. The goal is parity, not divergence.
+- **Before building a new shared widget, also check `../MobileApp/lib/shared/widgets/`.** The member app shares a design language with this one. If a version of the pattern exists there (e.g. a shared data table, info rows, section cards, primary buttons), copy and adapt it (rewrite imports from `package:mobile_app/` → `package:app_management/`) rather than building from scratch. The goal is parity, not divergence.
 - **If you skip this check, you will be asked to redo the work.** This has already happened once — a contributor built a custom table for a list-of-rows pattern when `AppDataTable` was sitting in shared, and the work had to be torn out and rewritten.
 
 ## Project Structure
@@ -269,7 +287,10 @@ lib/
 
 ## Development Commands
 
-- `make run` — serve the web app on `http://localhost:8081` (port chosen to avoid colliding with FlutterCRM on `8080`).
+- `make run` — serve the admin web app on `http://localhost:8081`.
+- `make run-themes` — serve the **standalone theme browser** on
+  `http://localhost:8082` (second build target — see *Standalone theme browser*
+  below). Runs alongside `make run` on its own port.
 - `make analyze` — static analysis. **Must be clean before committing — this is the gate.**
 - `make format` — `dart format lib test`. **Avoid in this app** (see *Formatting* above): the repo isn't format-clean, so it churns ~60 files including the forked `design_constants.dart`. Hand-format instead.
 - `make test` — run all tests.
@@ -296,27 +317,51 @@ Direct equivalents if you don't want the Makefile:
 - **Add dependencies with `flutter pub add <package>`.** Never edit `pubspec.yaml` by hand.
 - Dev dependencies: `flutter pub add --dev <package>`.
 
-Current dependencies (intentionally minimal):
+**This list is not an exhaustive inventory of `pubspec.yaml`.** It documents only the dependencies that carry **rules or scope** — what they're for and where they may (or may not) be used. A routine, self-explanatory UI utility (e.g. a scroll-position helper like `scrollable_positioned_list`) does **not** need a line here; only document a dependency when its use is **scoped, restricted, or architecturally significant** (a carve-out, the design-system font, or the no-go list below). Adding a minor utility is not a "real divergence" that the living-document rule requires you to record.
+
+Scoped / significant dependencies (intentionally minimal):
 - `google_fonts` — for Hanken Grotesk via `GoogleFonts.hankenGrotesk()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
 - `flutter_markdown_plus` — renders the agent view's read-only prompt panel (the feed's `videos_desc` / `avoid_desc`, which the VideoService stores as markdown). A maintained fork of the discontinued `flutter_markdown`; styling is driven from `DesignConstants`. Used only there.
 - `http` — **for the VideoService carve-out only** (see above). It backs `VideoApiClient` and nothing else. Adding `http` to any other client is not allowed; reach for the user first.
 - `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — **for the live theme preview carve-out only** (see *ThemeService carve-out* above). It is the shared white-label runtime + showcase screens. It transitively pulls in `dio`, `flutter_svg`, `cached_network_image`, and `get_it`. **This is a named, user-approved exception scoped to the theme preview feature** — those transitive packages are NOT a license to wire `dio` into other screens or to start the real-data stack. Do not import them directly elsewhere.
+- `url_launcher` — used **only** by the standalone theme browser's top bar (`features/theme_browser/.../theme_browser_top_bar.dart`) to open the back-to-landing link. Routine UI utility; not part of the real-data stack.
 
-If you find yourself wanting to add `flutter_bloc`, `supabase_flutter`, or anything else from the FlutterCRM stack — or to use the transitive `dio` for a new client — **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in. (`http` and the `theme_flutter` dependency being present are **not** that signal — they are the scoped exceptions above, not the start of the real-data stack.)
+If you find yourself wanting to add `flutter_bloc`, `supabase_flutter`, or anything else from the real-data stack — or to use the transitive `dio` for a new client — **stop**. That's the signal that this app is leaving prototype mode. Talk to the user before pulling those in. (`http` and the `theme_flutter` dependency being present are **not** that signal — they are the scoped exceptions above, not the start of the real-data stack.)
 
-## What changes when this becomes real
+## Production deployment (web)
 
-When this app moves past visual-only:
+The app deploys as a static build to **S3 + CloudFront** at
+`https://app.combatden.net` (mirrors `../LandingPage/deploy/`). See
+`../DEPLOYMENT.md` for the full runbook.
 
-1. State management gets added — feature-by-feature BLoC, mirroring `../FlutterCRM/`.
-2. `mock_*.dart` files get deleted in favor of `repositories/` + an `ApiClient` + Supabase auth.
-3. Models gain `fromJson`/`toJson`, validated against `../Database/openapi.json`.
-4. Money fields move to `int` minor units; date fields convert to UTC at the API boundary.
-5. Tests get added (unit, widget, bloc).
-6. This CLAUDE.md gets revised, importing the data/state sections from `../FlutterCRM/CLAUDE.md`.
+- **Build for prod with the two API URLs** — they override the `localhost`
+  carve-out defaults documented above:
+  `make build-web` → `flutter build web --release --base-href=/ --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net`.
+- **Deploy tooling lives in `deploy/`** (boto3, its own `pyproject.toml`):
+  `make deploy-provision` (S3 bucket + ACM cert), `make deploy-finalize`
+  (CloudFront — includes a 403/404 → `/index.html` SPA fallback so deep links
+  and refresh resolve), then `make deploy` (build + upload + invalidate). DNS
+  records are added by hand at Squarespace.
+- Both backends are served over HTTPS at their own subdomains
+  (`theme.`/`video.combatden.net`), so there is **no mixed-content issue** and
+  the APIs' open CORS (`["*"]`) covers the cross-origin calls. **No Dart code
+  changes are needed for prod** — only the two dart-defines at build time.
 
-Until that work happens, none of those concerns belong in this repo.
+**Second deployment — the standalone theme browser** (see *Standalone theme
+browser* above) ships from the **same project, a different `--target`**, to its
+own subdomain `https://themes.combatden.net`.
+
+- **Build:** `make build-themes` →
+  `flutter build web --release --base-href=/ --target lib/main_theme_browser.dart`
+  plus the same two API dart-defines as the admin build.
+- **Deploy tooling lives in `deploy-themes/`** — a copy of `deploy/` whose
+  `config.py` points at bucket `combatden-themes` / domain
+  `themes.combatden.net`. The boto3 scripts are config-driven and otherwise
+  identical: `make deploy-themes-provision` / `-finalize` / `deploy-themes`.
+- Both targets emit to `build/web`, so the admin and themes deploys are
+  **sequential, never simultaneous** (build admin → `deploy`; build themes →
+  `deploy-themes`). Fine for manual deploys.
 
 ---
 

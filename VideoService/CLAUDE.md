@@ -168,5 +168,34 @@ Gym-id-keyed, read-only. Run with `make api` (port 8002).
 - `GET /gyms/{gym_id}/videos` — paginated curated feed.
 - `GET /gyms/{gym_id}/videos/preview` — one-shot "All" preview (a few videos
   per genre). `?rejected=true` previews the scan's rejected list instead.
+- **Channel-avatar backfill (both feed endpoints).** The scraped pool has no
+  channel avatars — Apify never returned them, so every pooled
+  `channel_avatar_url` is empty. At serve time, an empty avatar is filled with
+  one of the gym's own instructor headshots (`gym.classes[].instructor_image_url`),
+  picked deterministically per video (so it never flickers / stays cacheable). A
+  real avatar, or a gym with no classes, is left untouched. Pure read-path
+  transform — no data/schema change. See `src/api/service/avatar_fallback.py`.
 - `/viewer` — internal dev-only HTML viewer (served by `viewer_router.py`);
-  never expose publicly.
+  never expose publicly. ⚠️ **Known gap on the demo deployment:** the App Runner
+  image includes `viewer_router`, so `/viewer` is currently reachable at
+  `https://video.combatden.net/viewer` (read-only, but it serves the rejected
+  list too). Gating/removing it for prod is a pending user decision — see
+  `../DEPLOYMENT.md`.
+
+---
+
+## Production deployment (read-only API)
+
+The read-only API (`src/api/main.py`, `make api`, port 8002) ships to **AWS App
+Runner** as a Docker image at `https://video.combatden.net`. See
+`../DEPLOYMENT.md` for the full runbook (ARNs, DNS, redeploy, pause/resume).
+
+- `Dockerfile` + `.dockerignore` build a `python:3.13-slim` image that **bakes in
+  the served `gyms/` + `videos/` data** (~300 MB — not in git). Pipeline dirs
+  (`scripts/`, `tests/`) are excluded; only `src/`, `schema/`, `gyms/`,
+  `videos/`, and `cost_log.yaml` are copied. `config.py` resolves `data_root` to
+  `<root>`, so the layout is unchanged inside the container.
+- No runtime secrets (the read path is disk-only).
+- `make docker-build` / `make ecr-push` build + push + trigger a redeploy;
+  `make pause` / `make resume` toggle the demo (App Runner Pause/Resume).
+- Only the **read path** is containerized; the scrape/scan scripts stay local.

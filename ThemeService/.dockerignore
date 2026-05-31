@@ -1,0 +1,25 @@
+# Keep the build context lean: the 208 MB in-project .venv and the 38 MB
+# pipeline-only assets/ must never be sent to the daemon or land in the image.
+# Only the deps (pyproject/lock), src/, schema/, resources/, and apps/ are
+# needed to serve — see Dockerfile COPY list.
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Pipeline-only (image generation source material, not served by the API).
+assets/
+scripts/
+tests/
+
+# Secrets + local-only config (GOOGLE_FONTS_API_KEY is injected by App Runner).
+.env
+poetry.toml
+
+# Docs / scratch.
+*.md
+ThemeFlutter/
+figma/

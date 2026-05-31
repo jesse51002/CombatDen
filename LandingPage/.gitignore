@@ -1,0 +1,17 @@
+# Python — deploy/ uses poetry + boto3 (see deploy/)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Secrets / local env
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

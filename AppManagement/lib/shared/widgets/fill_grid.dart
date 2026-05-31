@@ -12,11 +12,13 @@ import 'package:app_management/core/constants/design_constants.dart';
 ///
 /// Pass [minItemWidth] for a responsive column count that scales with the
 /// screen (as many columns as fit at that minimum), or [columns] for a
-/// fixed count.
+/// fixed count. With [minItemWidth], [minColumns] sets a floor on the
+/// responsive count so a narrow viewport never collapses below it.
 class FillGrid extends StatelessWidget {
   final List<Widget> children;
   final int columns;
   final double? minItemWidth;
+  final int minColumns;
   final double spacing;
 
   const FillGrid({
@@ -24,6 +26,7 @@ class FillGrid extends StatelessWidget {
     required this.children,
     this.columns = 3,
     this.minItemWidth,
+    this.minColumns = 1,
     this.spacing = DesignConstants.spacingLarge,
   });
 
@@ -36,9 +39,15 @@ class FillGrid extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final fit = ((width + spacing) / (minItemWidth! + spacing)).floor();
-        // Never reserve more columns than there are items, so a short row
-        // stretches to fill the width instead of leaving a ragged gap.
-        return _grid(math.max(1, math.min(fit, children.length)));
+        // Hold a floor of [minColumns] so a narrow viewport keeps a sensible
+        // grid instead of a single stacked column — but never reserve more
+        // columns than there are items, so a short row stretches to fill the
+        // width instead of leaving a ragged gap.
+        final cols = math.max(
+          1,
+          math.min(math.max(minColumns, fit), children.length),
+        );
+        return _grid(cols);
       },
     );
   }

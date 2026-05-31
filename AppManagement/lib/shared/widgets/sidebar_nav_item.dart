@@ -4,7 +4,6 @@ import 'package:app_management/core/constants/design_constants.dart';
 
 /// A single navigation item in the left sidebar (icon + 1-2 line label).
 ///
-/// Adapted from `../FlutterCRM/lib/shared/widgets/sidebar_nav_item.dart`.
 /// `isPrimary` paints the item in `primaryColor` regardless of `isActive`
 /// — used for the "Add New Member" CTA.
 class SidebarNavItem extends StatelessWidget {

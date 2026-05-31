@@ -203,6 +203,27 @@ breakage the `.venv/bin/*` scripts hit when this package was renamed.
 
 ---
 
+## Production deployment (read-only API)
+
+The read-only API (`src/api/main.py`, `make api`, port 8000) ships to **AWS App
+Runner** as a Docker image at `https://theme.combatden.net`. See
+`../DEPLOYMENT.md` for the full runbook (ARNs, DNS, redeploy, pause/resume).
+
+- `Dockerfile` + `.dockerignore` build a `python:3.13-slim` image that **bakes in
+  the served `apps/` runs** (~2.6 GB — they are not in git, so the image is the
+  delivery vehicle). Pipeline-only dirs (`assets/`, `scripts/`, `tests/`,
+  `ThemeFlutter/`) are excluded; only `src/`, `schema/`, `resources/`, and
+  `apps/` are copied. `config.py` resolves `apps_root` to `<root>/apps`, so the
+  layout is unchanged inside the container.
+- `GOOGLE_FONTS_API_KEY` is the one runtime secret (font-delivery endpoint); it
+  is set as an App Runner env var, never baked into the image.
+- `make docker-build` / `make ecr-push` build + push + trigger a redeploy;
+  `make pause` / `make resume` toggle the demo (App Runner Pause/Resume).
+- Only the **read path** is containerized. The pipeline (`src/cli.py`, scripts)
+  is not — it stays a local tool.
+
+---
+
 ## Tests
 
 Run the suite with `make test`.

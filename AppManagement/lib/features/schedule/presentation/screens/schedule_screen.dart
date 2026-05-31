@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/navigation/app_routes.dart';
+import 'package:app_management/shared/widgets/app_spinner.dart';
 import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/features/schedule/data/mock_schedule.dart';
 import 'package:app_management/features/schedule/data/schedule_generator.dart';
@@ -93,14 +94,7 @@ class _ScheduleMessage extends StatelessWidget {
       padding: const EdgeInsets.all(DesignConstants.paddingBig),
       child: Center(
         child: message == null
-            ? SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: DesignConstants.primaryColor,
-                ),
-              )
+            ? const AppSpinner()
             : Text(
                 message!,
                 style: DesignConstants.p.copyWith(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
+import 'package:app_management/features/members/data/gym_detail.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/add_custom_video_button.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/view_all_button.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/videos_tab/your_video_tile.dart';
@@ -12,15 +13,23 @@ const int _kRowCap = 10;
 
 /// The "Your videos" preview row inside the member feed's "All" view: a
 /// header with a "View all" jump, a scrollable strip of up to ten of the
-/// gym's own uploads, and the "Add custom video" action beneath it.
+/// gym's own uploads (derived from its classes), and the "Add custom video"
+/// action beneath it.
 class YourVideosRow extends StatelessWidget {
   final VoidCallback onViewAll;
+  final GymDetail? detail;
+  final String gymName;
 
-  const YourVideosRow({super.key, required this.onViewAll});
+  const YourVideosRow({
+    super.key,
+    required this.onViewAll,
+    required this.detail,
+    required this.gymName,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final tiles = buildYourVideoTiles();
+    final tiles = buildYourVideoTiles(detail, gymName: gymName);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingLarge,

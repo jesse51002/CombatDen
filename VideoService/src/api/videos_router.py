@@ -21,6 +21,7 @@ from schema import (
 )
 from schema.big_group import big_group_for
 from src.api.errors import InvalidConfigError, NotFoundError
+from src.api.service.avatar_fallback import card_with_avatar, instructor_avatars
 from src.api.service.videos_service import videos_service
 
 logger = logging.getLogger(__name__)
@@ -187,7 +188,11 @@ async def get_gym_videos(
 
     total = len(videos)
     page = videos[offset : offset + limit]
-    return VideosFeed(total=total, limit=limit, offset=offset, videos=page)
+    # Backfill empty channel avatars from the gym's instructor headshots (the
+    # scraped pool has none). Built only for the page slice, so no extra cost.
+    avatars = instructor_avatars(gym)
+    cards = [card_with_avatar(v, avatars) for v in page]
+    return VideosFeed(total=total, limit=limit, offset=offset, videos=cards)
 
 
 @videos_router.get(
@@ -252,5 +257,11 @@ async def get_gym_videos_preview(
             order.append(v.tag)
         if len(by_tag[v.tag]) < per_tag:
             by_tag[v.tag].append(v)
-    sections = [FeedSection(tag=t, videos=by_tag[t]) for t in order]
+    # Backfill empty channel avatars from the gym's instructor headshots, as in
+    # the paginated feed — the scraped pool carries none.
+    avatars = instructor_avatars(gym)
+    sections = [
+        FeedSection(tag=t, videos=[card_with_avatar(v, avatars) for v in by_tag[t]])
+        for t in order
+    ]
     return FeedPreview(sections=sections)
