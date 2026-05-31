@@ -93,9 +93,9 @@ Emotional goal on first viewport: recognition ("this person understands my gym")
 
 ## Pricing (current)
 
-- **$100/mo** — Shared shell. Multi-tenant CombatDen app. Full retention engine (loyalty, ranks, content). Gym gets the locked theme for their gym type — one of 75+ pre-generated themes, assigned, not editable. Logo and colors on top. Entry point priced below the ~$200 CRM reflex.
-- **$300/mo** — Customization. The gym's own native App Store app, customized via the agent. Done-for-you at MVP (founder runs the pipeline); self-serve agent is the destination. Freelancer-replacement ROI: a $10k–$50k custom app for $300/mo.
-- **$500/mo flat** — Multi-location. Up to 3 locations. Everything in Customization.
+- **Starter ($100/mo)** — shared shell. Multi-tenant CombatDen app. Full retention engine (loyalty, ranks, content). Gym gets the locked theme for their gym type — one of 75+ pre-generated themes, assigned, not editable. Logo and colors on top. Entry point priced below the ~$200 CRM reflex.
+- **Premium ($300/mo)** — customization. The gym's own native App Store app, customized via the agent. Done-for-you at MVP (founder runs the pipeline); self-serve agent is the destination. Freelancer-replacement ROI: a $10k–$50k custom app for $300/mo.
+- **Scale ($500/mo flat)** — multi-location. Up to 3 locations. Everything in Premium.
 - **Enterprise** — Quote. For scale where recommendation system cost-to-serve climbs.
 
 ## Accessibility & Inclusion

@@ -105,9 +105,9 @@ const COPY = {
     ctaPaid: 'Book a demo',
     ctaEnterprise: 'Contact us',
     tiers: [
-      { id: 'shell',  name: 'Shared Shell',  price: '$100',  cadence: '/mo', blurb: 'Get live on a shared app.', featured: false },
-      { id: 'custom', name: 'Customization', price: '$300',  cadence: '/mo', blurb: 'Your own branded app.',     featured: true },
-      { id: 'multi',  name: 'Multi-Location',price: '$500',  cadence: '/mo', blurb: 'Up to 3 locations.',        featured: false },
+      { id: 'shell',  name: 'Starter',    price: '$100',  cadence: '/mo', blurb: 'Get live on a shared app.', featured: false },
+      { id: 'custom', name: 'Premium',    price: '$300',  cadence: '/mo', blurb: 'Your own branded app.',     featured: true },
+      { id: 'multi',  name: 'Scale',      price: '$500',  cadence: '/mo', blurb: 'Up to 3 locations.',        featured: false },
       { id: 'ent',    name: 'Enterprise',    price: 'Custom',cadence: '',    blurb: 'For 4+ locations.',         featured: false },
     ],
     rows: [

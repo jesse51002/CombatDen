@@ -18,10 +18,19 @@
 
 ## Pricing
 
-- **$100/mo** — Shared app. Full retention engine. Your gym's locked theme (one of 75+ gym-type designs), plus your logo and colors.
-- **$300/mo** — Your own branded App Store app, customized for your gym. Done for you.
-- **$500/mo flat** — Multi-location, up to 3 locations. Everything in the $300 plan.
-- **Enterprise** — Quote.
+| Feature                                        | Starter<br>$100/mo | Premium<br>$300/mo | Scale<br>$500/mo | Enterprise<br>Custom |
+| ---------------------------------------------- | :----------------: | :----------------: | :--------------: | :------------------: |
+| **Class booking**                              |         ✓          |         ✓          |        ✓         |          ✓           |
+| **Agentic video feed**                         |         ✓          |         ✓          |        ✓         |          ✓           |
+| **Member video recommendations**               |         ✓          |         ✓          |        ✓         |          ✓           |
+| **Loyalty program** — points, rewards, streaks |         ✓          |         ✓          |        ✓         |          ✓           |
+| **Rank system** — divisions + tier promotion   |         ✓          |         ✓          |        ✓         |          ✓           |
+| **Themes**                                     |   Limited&nbsp;†   |         ✓          |        ✓         |          ✓           |
+| **Fully custom design**                        |         —          |         ✓          |        ✓         |          ✓           |
+| **Your own app on the App Store**              |         —          |         ✓          |        ✓         |          ✓           |
+| **Number of locations**                        |         1          |         1          |     Up to 3      |          4+          |
+| **Apple / Google fees covered**                |         —          |         ✓          |        ✓         |          ✓           |
+
 
 ## Pages
 

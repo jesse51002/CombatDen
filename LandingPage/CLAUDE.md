@@ -29,7 +29,7 @@ This file is a living document — exactly like a skill, it must track reality. 
 
 **Load order matters** — there is no module system; files share globals via `window`. Order is `ds → theme-store → copy → chrome → footer → mocks → sections → inline render`. When you add a file, wire it into the HTML in dependency order (anything it references must load first). Each file ends with `window.X = …` / `Object.assign(window, {…})`.
 
-**Don't move paths.** `deploy/upload.py` uploads root `*.html` (non-recursive), `hifi/**/*`, and `assets/**/*`, and excludes `onepager/`. Keep pages at root, JSX under `hifi/`, and any image the JSX references under `assets/` (landing images live in `assets/landing/`). Move these and deploy globbing silently drops files.
+**Don't move paths.** `deploy/upload.py` uploads root `*.html` (non-recursive), the root single-file globs `robots.txt`, `sitemap.xml`, and `llms.txt`, plus `hifi/**/*` and `assets/**/*`, and excludes `onepager/`. Keep pages at root, JSX under `hifi/`, and any image the JSX references under `assets/` (landing images live in `assets/landing/`). The three root text files (`robots.txt`/`sitemap.xml`/`llms.txt`) are each matched by name, so a NEW root file of another kind would be silently dropped — add its own glob to `INCLUDE_GLOBS` if it must ship. Move any of these and deploy globbing silently drops files.
 
 ## Modular, never a mega-file
 
