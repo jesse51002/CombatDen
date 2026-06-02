@@ -122,6 +122,17 @@ function GymAppScreen() {
 // screenshots), so the synthetic notch doesn't double up.
 function PhoneFrame({ width = 300, tilt = 'none', glow = true, glowColor, island = true, children, style = {} }) {
   const height = Math.round(width * 2.04);
+  // Bezel thickness + corner radii scale with width (ratios pinned to the 300px
+  // reference: pad 11, radii 46/36/34, island 86×24@9). A fixed 11px frame looks
+  // gigantic on a scaled-down phone, so everything is proportional to `width`.
+  const pad = Math.max(4, Math.round(width * 0.0367));         // 11 at 300
+  const outerR = Math.round(width * 0.1533);                   // 46 at 300
+  const bezelR = Math.round(width * 0.12);                     // 36 at 300
+  const screenR = Math.round(width * 0.1133);                  // 34 at 300
+  const innerB = Math.max(1, Math.round(width * 0.0067));      // 2 at 300
+  const islandW = Math.round(width * 0.287);                   // 86 at 300
+  const islandH = Math.round(width * 0.08);                    // 24 at 300
+  const islandTop = Math.round(width * 0.03);                  // 9 at 300
   const transforms = {
     none: 'none',
     left: 'perspective(2100px) rotateY(16deg) rotateX(3deg) rotateZ(0.5deg)',
@@ -134,9 +145,9 @@ function PhoneFrame({ width = 300, tilt = 'none', glow = true, glowColor, island
         <div style={{ position: 'absolute', inset: '-18% -22%', background: `radial-gradient(50% 46% at 50% 46%, ${gwRgba(glowColor || GW.accent, 0.34)}, transparent 72%)`, filter: 'blur(8px)', zIndex: 0, pointerEvents: 'none', transition: 'background .3s ease' }}></div>
       )}
       <div style={{
-        position: 'relative', zIndex: 1, width, height, borderRadius: 46,
+        position: 'relative', zIndex: 1, width, height, borderRadius: outerR,
         background: '#c7cbd2',
-        padding: 11,
+        padding: pad,
         boxShadow: isTilt
           ? '0 2px 4px rgba(20,22,30,0.18), 42px 60px 90px -30px rgba(20,22,40,0.42), inset 0 0 0 1px rgba(255,255,255,0.14)'
           : '0 2px 4px rgba(20,22,30,0.14), 0 44px 80px -28px rgba(20,22,40,0.36), inset 0 0 0 1px rgba(255,255,255,0.14)',
@@ -144,10 +155,10 @@ function PhoneFrame({ width = 300, tilt = 'none', glow = true, glowColor, island
         transformStyle: 'preserve-3d',
       }}>
         {/* inner bezel */}
-        <div style={{ position: 'relative', height: '100%', borderRadius: 36, overflow: 'hidden', background: '#000', boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0.85)' }}>
+        <div style={{ position: 'relative', height: '100%', borderRadius: bezelR, overflow: 'hidden', background: '#000', boxShadow: `inset 0 0 0 ${innerB}px rgba(0,0,0,0.85)` }}>
           {/* dynamic island */}
-          {island && <div style={{ position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)', width: 86, height: 24, borderRadius: 999, background: '#0a0a0c', zIndex: 5 }}></div>}
-          <div style={{ height: '100%', borderRadius: 34, overflow: 'hidden' }}>
+          {island && <div style={{ position: 'absolute', top: islandTop, left: '50%', transform: 'translateX(-50%)', width: islandW, height: islandH, borderRadius: 999, background: '#0a0a0c', zIndex: 5 }}></div>}
+          <div style={{ height: '100%', borderRadius: screenR, overflow: 'hidden' }}>
             {children}
           </div>
         </div>

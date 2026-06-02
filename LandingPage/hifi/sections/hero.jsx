@@ -169,7 +169,9 @@ function HeroSection() {
             display: "flex",
             justifyContent: "center",
             alignItems: "flex-start",
-            height: isMobile ? 330 : 430,
+            // shorter than the phone height (~70%) so the bottoms bleed off and
+            // fade into the next section, same as desktop
+            height: isMobile ? 212 : 430,
             overflow: "hidden",
           }}
         >
@@ -223,7 +225,7 @@ function HeroSection() {
             left: 0,
             right: 0,
             bottom: 0,
-            height: 150,
+            height: isMobile ? 100 : 150,
             background: `linear-gradient(to top, ${GW.bg} 12%, transparent)`,
             pointerEvents: "none",
             zIndex: 3,
