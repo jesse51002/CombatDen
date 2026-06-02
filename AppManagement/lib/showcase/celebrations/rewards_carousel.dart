@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:theme_flutter/showcase/celebrations/showcase_celebration_stats.dart';
-import 'package:theme_flutter/showcase/showcase_assets.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/celebrations/showcase_celebration_stats.dart';
+import 'package:app_management/showcase/showcase_assets.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 
 /// Clone of MobileApp's `RewardsCarousel`: swipeable cover-flow reward
 /// carousel — the active page is full size and face-on, adjacent pages shrink
@@ -63,6 +63,7 @@ class RewardsCarousel extends StatelessWidget {
               );
             },
             child: _RewardCircle(
+              imageUrl: items[index].imageUrl,
               imageAsset: items[index].imageAsset,
               size: _featuredSize,
             ),
@@ -74,8 +75,13 @@ class RewardsCarousel extends StatelessWidget {
 }
 
 class _RewardCircle extends StatelessWidget {
-  const _RewardCircle({required this.imageAsset, required this.size});
+  const _RewardCircle({
+    this.imageUrl,
+    required this.imageAsset,
+    required this.size,
+  });
 
+  final String? imageUrl;
   final String imageAsset;
   final double size;
 
@@ -93,8 +99,10 @@ class _RewardCircle extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Image(
-        image: ShowcaseAsset.image(imageAsset),
+        // Injected gym reward photo when present, else the bundled fallback.
+        image: ShowcaseAsset.imageOrNetwork(imageUrl, imageAsset),
         fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => ColoredBox(color: ShowcaseTokens.card),
       ),
     );
   }

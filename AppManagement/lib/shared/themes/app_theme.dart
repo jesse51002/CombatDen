@@ -7,13 +7,13 @@ class AppTheme {
   static ThemeData get light {
     final colorScheme = ColorScheme.light(
       primary: DesignConstants.primaryColor,
-      onPrimary: DesignConstants.backgroundColor,
+      onPrimary: DesignConstants.surface,
       secondary: DesignConstants.darkPrimary,
-      onSecondary: DesignConstants.backgroundColor,
+      onSecondary: DesignConstants.surface,
       surface: DesignConstants.backgroundColor,
       onSurface: DesignConstants.text,
       error: DesignConstants.badRed,
-      onError: DesignConstants.backgroundColor,
+      onError: DesignConstants.surface,
     );
 
     final textTheme = TextTheme(

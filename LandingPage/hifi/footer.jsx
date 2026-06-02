@@ -83,9 +83,7 @@ function FooterSection() {
         {/* slim bottom bar */}
         <div style={{ marginTop: 72, paddingTop: 26, borderTop: `1px solid ${GW.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(150deg, ${GW.accent}, ${GW.accentDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontFamily: GW.mono, fontSize: 7, color: 'rgba(255,255,255,0.92)' }}>{COPY.nav.logoMark}</span>
-            </div>
+            <img src="assets/landing/logo_tiny.png" alt="" style={{ height: 28, width: 'auto', display: 'block' }} />
             <span style={{ fontSize: 15, fontWeight: 650, letterSpacing: -0.3, color: GW.ink }}>{BRAND}</span>
           </div>
           <span style={{ fontFamily: GW.mono, fontSize: 11, letterSpacing: 0.3, color: GW.inkFaint }}>{COPY.footer.copyright} {BRAND}</span>

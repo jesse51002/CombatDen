@@ -209,18 +209,41 @@ The read-only API (`src/api/main.py`, `make api`, port 8000) ships to **AWS App
 Runner** as a Docker image at `https://theme.combatden.net`. See
 `../DEPLOYMENT.md` for the full runbook (ARNs, DNS, redeploy, pause/resume).
 
-- `Dockerfile` + `.dockerignore` build a `python:3.13-slim` image that **bakes in
-  the served `apps/` runs** (~2.6 GB — they are not in git, so the image is the
-  delivery vehicle). Pipeline-only dirs (`assets/`, `scripts/`, `tests/`,
-  `ThemeFlutter/`) are excluded; only `src/`, `schema/`, `resources/`, and
-  `apps/` are copied. `config.py` resolves `apps_root` to `<root>/apps`, so the
-  layout is unchanged inside the container.
-- `GOOGLE_FONTS_API_KEY` is the one runtime secret (font-delivery endpoint); it
-  is set as an App Runner env var, never baked into the image.
+- **Images/icons are served from S3 + CloudFront (`cdn.combatden.net`), not the
+  container.** The image no longer bakes the ~2.6 GB of bytes — only the per-run
+  `output.yaml` metadata is copied (`.dockerignore` excludes
+  `apps/**/{images,final_images,icons}/`; `COPY apps/` then brings just the
+  yaml). `ASSETS_CDN_BASE_URL` **defaults to the prod CDN in code**
+  (`src/api/config.py`), so the API always emits absolute CDN URLs and the byte
+  endpoints 307-redirect there — no App Runner env var required (a relative path
+  would 404 now that the bytes are de-baked). Set it empty to serve relative
+  paths + local files in the dev loop. See `src/core/asset_urls.py` +
+  `src/api/schema/output_response.py`.
+- Cache-busting stays `?v=<content-hash>` (already stamped by the Writer);
+  CloudFront is configured to include `v` in the cache key, so a regenerated
+  asset busts the CDN with no invalidation. **Never serve via the CDN without
+  that cache-policy setting** (see `../DEPLOYMENT.md`) or regenerated images go stale.
+- **CORS is mandatory on the CDN.** The clients are Flutter **web** apps; their
+  CanvasKit renderer fetches each image via XHR and decodes it, which the browser
+  blocks cross-origin unless the response carries `Access-Control-Allow-Origin`.
+  The bytes are on `cdn.combatden.net`, a different origin than the apps, so
+  without the CORS header every image is a broken placeholder *despite* a 200.
+  `deploy-assets/finalize.py` attaches a response-headers policy (`*`) at the
+  edge; re-running `make assets-finalize` patches a live distribution. This is
+  inherent to cross-origin images in Flutter web — not a CloudFront quirk.
+- **Bytes → S3:** `make sync-assets` (`scripts/sync_assets/`) mirrors every
+  `final_images/` + `icons/` file to the bucket (backfill + repair, skips
+  unchanged). New runs self-upload from the `Writer` when `ASSET_UPLOAD_ENABLED=1`
+  (opt-in; off locally) — see `src/core/asset_uploader.py`. boto3 is an
+  upload-only dep, imported lazily so the read path/tests don't need it.
+- Runtime env (App Runner vars, never baked): `GOOGLE_FONTS_API_KEY` (required,
+  font delivery). `ASSETS_CDN_BASE_URL` is **optional** — it defaults to the prod
+  CDN in code, so prod works without it; only set it to target a different CDN
+  (or empty for local serving). `CORS_ORIGINS` optional.
 - `make docker-build` / `make ecr-push` build + push + trigger a redeploy;
   `make pause` / `make resume` toggle the demo (App Runner Pause/Resume).
-- Only the **read path** is containerized. The pipeline (`src/cli.py`, scripts)
-  is not — it stays a local tool.
+- Only the **read path** is containerized. The pipeline (`src/cli.py`, scripts,
+  `make sync-assets`) is not — it stays a local tool.
 
 ---
 

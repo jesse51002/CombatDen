@@ -4,7 +4,7 @@ start:
 	npx supabase migration up
 
 migration: start
-	npx supabase db diff --use-pg-delta -f $(name)
+	npx supabase db diff -f $(name)
 	npx supabase migration up
 
 push:

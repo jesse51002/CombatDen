@@ -21,22 +21,22 @@ The whole point is to make screens that **look right** so the design can be eval
 This prototype's live backend access is **read-only and limited to the VideoService** — two endpoints, both deliberate. The member-app **videos tab** pulls its feed live so the admin previews real thumbnails and titles instead of mock art; a second read fetches the selected gym's **detail** (classes / rewards / spec) once into memory (see *Gym detail* below).
 
 - **Scope (feed):** read-only — `GET /gyms/{gymId}/videos` (gym-id-keyed: serves that gym's feed, paginated). The feed follows the selected gym (`SelectedGym` global). No writes, no auth, no other feed endpoints. The one query knob beyond paging/genre is `?rejected=true`, which serves the scan's **rejected** list instead of the approved feed (it backs the videos tab's rejected-videos section, where the admin can keep a video back) — still read-only, still this same endpoint. This boolean is a deliberate, user-approved widening of the carve-out; do not add further parameters or endpoints without asking.
-- **Gym detail (the second read):** `GET /gyms/{gymId}` via `lib/features/members/data/gym_api_client.dart` (`GymApiClient`, also `package:http`) fetches the selected gym's whole content detail (spec + classes + rewards) **once** into the `SelectedGym` global. Read-only, gym-id-keyed, same 5s-timeout-then-degrade behavior. It backs the loyalty rewards store, the videos content focus, the videos tab's **"Your videos"** row/grid (`videos_tab/your_video_tile.dart` derives each tile from `detail.classes` — class image, instructor photo, class name; falls back to bundled mock when no live classes), the phone preview, and the admin **Schedule screen** (`features/schedule/`) + the dashboard's **Upcoming Classes** card — those read the gym's classes/rewards from memory (no extra calls), so they are **gym-driven, not mock, by design**. Don't add further endpoints or writes without asking.
+- **Gym detail (the second read):** `GET /gyms/{gymId}` via `lib/features/members/data/gym_api_client.dart` (`GymApiClient`, also `package:http`) fetches the selected gym's whole content detail (spec + classes + rewards) **once** into the `SelectedGym` global. Read-only, gym-id-keyed, same 15s-timeout-then-degrade behavior. It backs the loyalty rewards store, the videos content focus, the videos tab's **"Your videos"** row/grid (`videos_tab/your_video_tile.dart` derives each tile from `detail.classes` — class image, instructor photo, class name; falls back to bundled mock when no live classes), the phone preview, and the admin **Schedule screen** (`features/schedule/`) + the dashboard's **Upcoming Classes** card — those read the gym's classes/rewards from memory (no extra calls), so they are **gym-driven, not mock, by design**. Tapping a class card on the schedule board to **edit** carries that class's gym image + name into the Add/Edit Class form (`classFromEntry` in `mock_schedule.dart`, passed as a route argument); the form's other fields stay sample defaults and "Add New Class" stays an empty upload prompt. Don't add further endpoints or writes without asking.
 - **Where it lives:** `lib/features/members/data/` — `video_api_client.dart` (`VideoApiClient`, the feed + `GET /gyms/{gymId}/videos/preview`), `gym_api_client.dart` (`GymApiClient`), and `gyms_pager.dart` (pages the gyms list for the theme/gym picker), all wrapping `package:http`; models in `video_feed.dart` / `gym_detail.dart` (`*.fromJson`). The `StatefulWidget` + `FutureBuilder` pattern that drives these reads is allowed in the widgets that consume them (`member_feed_section.dart`, `library_view.dart`).
 - **Dependency:** the VideoService (sibling, see below) must be running. Base URL defaults to `http://localhost:8002`; override at launch with `--dart-define=VIDEO_BASE_URL=http://<host>:<port>`.
-- **Failure behavior:** the call has a 5s timeout and degrades quietly (empty feed) so the rest of the demo never breaks if the service is down.
+- **Failure behavior:** the gym browser (`/gyms`) and gym-detail (`/gyms/{id}`) calls time out after **15s** — raised from 5s because the `/gyms` list response can take ~9s to load all gym files on the small App Runner instance in production — and the video feed after 30s; all degrade quietly (empty feed / error state) so the rest of the demo never breaks if the service is down.
 - **`http` is whitelisted for this call only.** Do **not** reuse `VideoApiClient` or `package:http` to wire any other screen to a backend — every other list/card/detail stays on co-located mock data per the rules above. Widening this carve-out is a decision for the user, not a default. (The ThemeService carve-out below does NOT use `http`; it goes through the `theme_flutter` package's own `dio` client.)
 
 ## ThemeService carve-out (live theme preview)
 
 The member-app **Theme tab** (`member_app_screen.dart` → `LiveThemePreviewTab`) is a **live theme preview**: a phone frame renders branded member-app showcase screens that re-theme the instant the admin picks a theme, with the animated ones looping. This is the second deliberate live backend dependency, and it is **read-only**.
 
-- **How it works:** the tab depends on the shared **`theme_flutter`** package (path dep, `../ThemeService/ThemeFlutter`). That package owns the real customization runtime + the four showcase widgets (Home, Booking, Stats, Rewards). The tab calls `ThemeRuntime.initialize(appId: 'combatden', designId: 'ApexMMA', …ShowcaseSlots…)` once (lazily, in `LiveThemePreviewTab.initState` — idempotent), `ThemeRuntime.fetchStyles()` for the theme catalog, and `ThemeRuntime.selectDesign(id)` on tap.
+- **How it works:** the tab depends on the shared **`theme_flutter`** package (path dep, `../ThemeService/ThemeFlutter`) for the customization **runtime + resolvers** only. The **showcase widgets themselves live locally** in `lib/showcase/` (Home, Booking, Stats, Rewards, etc. — moved out of `theme_flutter`, since this app is their only consumer; they still resolve branding through `theme_flutter`'s `ThemeColor`/`ThemeImage`/`ThemeFont`/`ThemeText`/`ThemeIcon`). The tab calls `ThemeRuntime.initialize(appId: 'combatden', designId: 'ApexMMA', …ShowcaseSlots…)` once (lazily, in `LiveThemePreviewTab.initState` — idempotent), `ThemeRuntime.fetchStyles()` for the theme catalog, and `ThemeRuntime.selectDesign(id)` on tap.
 - **Scope:** read-only. The engine fetches the resolved branding + the catalog (`GET /apps/{appId}/styles`) and per-style assets from the ThemeService. **No writes, no persistence** — picking a theme drives only the in-session preview; it does not save the gym's choice anywhere (that's future work needing a DB table + a FastApiBackend endpoint).
-- **Where it lives:** `lib/features/members/presentation/widgets/member_app/theme_tab/` (`live_theme_preview_tab.dart`, `theme_preview_pane.dart`, `theme_grid.dart`, `theme_card.dart`) + the shared `lib/shared/widgets/phone_frame.dart`. The catalog model is the engine's `ThemeStyle` (no AppManagement-side model — we consume the engine's, DRY). The two `StatefulWidget`s here (`LiveThemePreviewTab`, `_MemberFeedSection`) are allowed by the StatefulWidget rule.
+- **Where it lives:** the tab chrome is in `lib/features/members/presentation/widgets/member_app/theme_tab/` (`live_theme_preview_tab.dart`, `theme_preview_pane.dart`, `theme_grid.dart`, `theme_card.dart`) + the shared `lib/shared/widgets/phone_frame.dart`; the **showcase screens it renders are in `lib/showcase/`** (a self-contained module: the screens + `showcase_screen.dart` router, `showcase_slots.dart`, `showcase_content.dart`, `showcase_tokens.dart`, `showcase_assets.dart`, and the `celebrations/` / `home/` / `rewards/` / `support/` subfolders; bundled fallback images in `assets/showcase/`). The catalog model is the engine's `ThemeStyle` (no AppManagement-side model — we consume the engine's, DRY). The two `StatefulWidget`s here (`LiveThemePreviewTab`, `_MemberFeedSection`) are allowed by the StatefulWidget rule.
 - **Dependency:** the ThemeService (top-level Python pipeline's read-only API) must be running. Base URL defaults to `http://localhost:8000`; override at launch with `--dart-define=CUST_BASE_URL=http://<host>:<port>`.
 - **Failure behavior:** the engine's resolvers never throw — they fall back to bundled defaults. The catalog grid degrades quietly (an error message, no crash) if the service is down, and the phone still renders the fallback look.
-- **Two design systems coexist, intentionally.** Inside the phone frame the showcase uses the engine's *tenant-brand* tokens (the member-app look); everything around it uses AppManagement's own forked `DesignConstants`. No collision — different package URIs. Don't try to make the preview match the admin chrome; it's previewing the *member* app.
+- **Two design systems coexist, intentionally.** Inside the phone frame the showcase uses its own member-app-look tokens (`lib/showcase/showcase_tokens.dart` — `ShowcaseTokens`, which resolve the tenant brand live); everything around it uses AppManagement's own forked `DesignConstants`. **`ShowcaseTokens` is NOT `DesignConstants` — never merge them**; they intentionally describe two different surfaces (the previewed *member* app vs. the admin chrome). Don't try to make the preview match the admin chrome.
 
 ## Standalone theme browser (second build target)
 
@@ -44,7 +44,7 @@ The Theme tab doubles as a **public theme browser** that the marketing landing p
 
 - **The module is `LiveThemePreviewTab`** (`features/members/presentation/widgets/member_app/theme_tab/live_theme_preview_tab.dart`). The admin member-app preview embeds it; the standalone target mounts it full-screen. It is self-contained: it bootstraps `ThemeRuntime` itself and owns its selection state (`selectedGym` global + `GymsPager`). The **only** host-specific knob is its `routePath` constructor param — the URL path the previewed theme is mirrored onto as `?theme=…`. It defaults to `AppRoutes.memberAppPreview` (embedded/admin behavior, unchanged); the standalone passes `AppRoutes.home` for root-anchored deep links.
 - **The standalone shell lives in `features/theme_browser/`** — `theme_browser_app.dart` (a minimal `MaterialApp` reusing `AppTheme.light`), `theme_browser_page.dart` (full-screen: top bar + the module, no `AppShell` nav rail), and `widgets/theme_browser_top_bar.dart`. Entry point: `lib/main_theme_browser.dart`.
-- **Do NOT restyle the browser.** Both surfaces use the same widgets and `DesignConstants` verbatim — the browser looks identical embedded and standalone. The top bar is a **placeholder** (CombatDen wordmark + a back-to-site link) styled with existing tokens; it will be replaced with a bar matching the new landing page once that exists. The back-link target is the `LANDING_URL` dart-define (default `https://www.combatden.net`).
+- **The browser shares `DesignConstants` with the admin app.** Both ride the same landing-aligned design system (see *Theming System*), so the catalog grid looks identical embedded and standalone — restyle through the tokens, not per-surface. What differs is the chrome: the admin nav rail vs. the browser's **top bar** (`widgets/theme_browser_top_bar.dart`), now a Flutter port of the landing nav (CombatDen logo + wordmark · Home / Pricing links · gradient "Book a demo" CTA, reusing the shared `AppPrimaryButton`), so the browser reads as a continuation of the marketing site. Link targets are dart-defines: `LANDING_URL` (Home + wordmark, default `https://www.combatden.net`), `PRICING_URL` (default `…/pricing.html`), `BOOK_URL` (default `…/#book`).
 - **URL strategy is the Flutter web default (hash).** No `usePathUrlStrategy` is configured (deliberately — adding it would change the admin app's URLs too). Deep links round-trip via the fragment (`themes.combatden.net/#/?theme=…`); `_themeFromUrl` tolerates both hash and path strategies.
 - **Same backend carve-outs.** The standalone browser hits the same read-only ThemeService + VideoService (catalog + gym detail). Both must be running locally (`:8000` / `:8002`); prod uses the same two dart-defines as the admin build.
 - **Build / deploy:** `make run-themes` (dev, port 8082), `make build-themes` (`--target lib/main_theme_browser.dart` + the two API dart-defines), `make deploy-themes` (S3 + CloudFront at `themes.combatden.net`). See *Production deployment* below.
@@ -97,12 +97,12 @@ This file is a living document — exactly like a skill, it must track reality. 
 - **NEVER hardcode font properties** — no inline `fontFamily`, no inline `fontSize`, no inline `fontWeight`. Use the text styles in `DesignConstants` (`h1`, `h2`, `h3`, `p`, `pBig`, `pSmall`, etc.).
 - **NEVER hardcode spacing, padding, radius, or border widths.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorderSize`.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/radius/padding, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
-- **`design_constants.dart` is this app's own design system and may be edited deliberately.** AppManagement has **forked** its tokens to its own identity (warm light theme, sapphire accent, Hanken Grotesk, tight 12/8 corners, de-carded layout). It is **no longer immutable** and **no longer byte-for-byte identical** with `../MobileApp/` — do **NOT** mirror token changes to it. Keep all token changes centralized in this file (so one edit reskins the whole app) and add/rename tokens only when the design genuinely needs it. See `DESIGN.md` for the system.
+- **`design_constants.dart` is this app's own design system and may be edited deliberately.** AppManagement's tokens are **landing-aligned** — they match the marketing landing page's design system (`../LandingPage/hifi/ds.jsx`) so the public theme browser reads as an extension of it: cool off-white ground (`#F3F5F8`), white lifted cards with soft layered shadows (`cardShadow` / `buttonShadow`), the sapphire accent + its `primaryGradient`, Geist (`baseFont` / `monoFont`), tight 12/8 corners with 20px object cards. It is **no longer immutable** and **no longer byte-for-byte identical** with `../MobileApp/` — do **NOT** mirror token changes to it. Keep all token changes centralized in this file (so one edit reskins the whole app) and add/rename tokens only when the design genuinely needs it. See `DESIGN.md` for the system.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
 **Icons: Prefer Material Symbols, Material `Icons.*` allowed**
 
-- **Default to `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart` — they're the design system's primary glyph set and carry the variable `weight` axis the look depends on.
+- **Default to `Symbols.*_sharp`** from `package:material_symbols_icons/symbols.dart` — they're the design system's primary glyph set and carry the variable `weight` axis the look depends on. (That variable `weight` axis is exactly why prod builds must pass `--no-tree-shake-icons` — see *Production deployment*.)
 - **`Icons.*` from Flutter's built-in Material icons is permitted.** The design system is its own fork now and isn't locked to a single icon family; `Icons.*` values are plain `IconData` and are fine to use directly — including stored on plain mock-data models. There's no need to round-trip them back to `Symbols.*` at render time.
 - **Set `weight: DesignConstants.iconWeight` on `Symbols.*_sharp` icons** (it drives their stroke weight). Plain `Icons.*` glyphs don't honor the weight axis, so it's a no-op there — don't bother.
 - **NEVER hardcode `size:` on any `Icon()`** (either family). Use `DesignConstants.iconSize*` — `iconSizeBig` (32), `iconSizeLarge` (24), `iconSizeMedium` (20, the default), `iconSizeSmall` (18), `iconSizeTiny` (16). Same Big→Tiny cadence as `spacing*`. If a size doesn't match one, snap to the nearest token or ask before adding a new one.
@@ -279,10 +279,13 @@ lib/
 │       └── presentation/
 │           ├── screens/
 │           └── widgets/
-└── shared/
-    ├── themes/
-    │   └── app_theme.dart
-    └── widgets/                    # cross-feature reusables
+├── shared/
+│   ├── themes/
+│   │   └── app_theme.dart
+│   └── widgets/                    # cross-feature reusables
+└── showcase/                       # member-app preview screens rendered in the
+                                    # theme tab (moved from theme_flutter); see
+                                    # the ThemeService carve-out above
 ```
 
 ## Development Commands
@@ -320,12 +323,13 @@ Direct equivalents if you don't want the Makefile:
 **This list is not an exhaustive inventory of `pubspec.yaml`.** It documents only the dependencies that carry **rules or scope** — what they're for and where they may (or may not) be used. A routine, self-explanatory UI utility (e.g. a scroll-position helper like `scrollable_positioned_list`) does **not** need a line here; only document a dependency when its use is **scoped, restricted, or architecturally significant** (a carve-out, the design-system font, or the no-go list below). Adding a minor utility is not a "real divergence" that the living-document rule requires you to record.
 
 Scoped / significant dependencies (intentionally minimal):
-- `google_fonts` — for Hanken Grotesk via `GoogleFonts.hankenGrotesk()` (referenced by `DesignConstants.baseFont`).
+- `google_fonts` — for Geist (the landing page's typeface) via `GoogleFonts.geist()` / `GoogleFonts.geistMono()` (referenced by `DesignConstants.baseFont` / `monoFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
 - `flutter_markdown_plus` — renders the agent view's read-only prompt panel (the feed's `videos_desc` / `avoid_desc`, which the VideoService stores as markdown). A maintained fork of the discontinued `flutter_markdown`; styling is driven from `DesignConstants`. Used only there.
 - `http` — **for the VideoService carve-out only** (see above). It backs `VideoApiClient` and nothing else. Adding `http` to any other client is not allowed; reach for the user first.
-- `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — **for the live theme preview carve-out only** (see *ThemeService carve-out* above). It is the shared white-label runtime + showcase screens. It transitively pulls in `dio`, `flutter_svg`, `cached_network_image`, and `get_it`. **This is a named, user-approved exception scoped to the theme preview feature** — those transitive packages are NOT a license to wire `dio` into other screens or to start the real-data stack. Do not import them directly elsewhere.
-- `url_launcher` — used **only** by the standalone theme browser's top bar (`features/theme_browser/.../theme_browser_top_bar.dart`) to open the back-to-landing link. Routine UI utility; not part of the real-data stack.
+- `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — **for the live theme preview carve-out only** (see *ThemeService carve-out* above). It is the shared white-label runtime + resolvers (the showcase screens now live locally in `lib/showcase/`). It transitively pulls in `dio`, `flutter_svg`, and `get_it`. **This is a named, user-approved exception scoped to the theme preview feature** — those transitive packages are NOT a license to wire `dio` into other screens or to start the real-data stack. Do not import them directly elsewhere.
+- `cached_network_image` — **for the relocated `lib/showcase/` only** (it backs `ShowcaseAsset.network`, which loads the gym's reward / class photos in the preview). It came in as a direct dep when the showcase moved here from `theme_flutter`. Scoped to the showcase; don't reach for it in other screens (the schedule board / class form use plain `Image.network`).
+- `url_launcher` — used **only** by the standalone theme browser's top bar (`features/theme_browser/.../theme_browser_top_bar.dart`) to open the header's Home / Pricing / Book-a-demo links (`LANDING_URL` / `PRICING_URL` / `BOOK_URL`). Routine UI utility; not part of the real-data stack.
 
 If you find yourself wanting to add `flutter_bloc`, `supabase_flutter`, or anything else from the real-data stack — or to use the transitive `dio` for a new client — **stop**. That's the signal that this app is leaving prototype mode. Talk to the user before pulling those in. (`http` and the `theme_flutter` dependency being present are **not** that signal — they are the scoped exceptions above, not the start of the real-data stack.)
 
@@ -335,9 +339,29 @@ The app deploys as a static build to **S3 + CloudFront** at
 `https://app.combatden.net` (mirrors `../LandingPage/deploy/`). See
 `../DEPLOYMENT.md` for the full runbook.
 
+`web/` is CombatDen-branded (not the Flutter template): the tab `<title>`,
+`manifest.json`, and the favicon + PWA icons (generated from the logo in
+`assets/images/combatden_logo.png`) all carry the brand. `web/` is shared by
+both build targets, so the admin app and the theme browser get the same
+favicon/title in the browser.
+
 - **Build for prod with the two API URLs** — they override the `localhost`
   carve-out defaults documented above:
-  `make build-web` → `flutter build web --release --base-href=/ --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net`.
+  `make build-web` → `flutter build web --release --base-href=/ --no-tree-shake-icons --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net`,
+  followed by `python3 deploy/prune_web_fonts.py build/web`.
+- **`--no-tree-shake-icons` is required, and the font prune that follows it is
+  not optional.** Icon tree-shaking only runs in release builds (never in
+  `flutter run`), and it corrupts the variable `weight` axis of the
+  `MaterialSymbolsSharp` font — so every `Symbols.*_sharp` icon (the whole nav
+  bar, etc.) renders in debug but **disappears on deploy** (flutter/flutter#183381).
+  The flag fixes that by shipping the full font with its axes intact. But it also
+  ships the package's two **unused** families full (Rounded ~15 MB + Outlined
+  ~10 MB), and Flutter web loads every `FontManifest.json` font eagerly at
+  startup, so `deploy/prune_web_fonts.py` deletes those two `.ttf`s from
+  `build/web` and strips them from the manifest post-build (~25 MB saved; the app
+  uses only Sharp). Both `make build-web` and `make build-themes` run the flag +
+  prune. **Don't remove either piece without restoring the other** — the flag
+  alone bloats the bundle; the prune alone (without the flag) re-breaks icons.
 - **Deploy tooling lives in `deploy/`** (boto3, its own `pyproject.toml`):
   `make deploy-provision` (S3 bucket + ACM cert), `make deploy-finalize`
   (CloudFront — includes a 403/404 → `/index.html` SPA fallback so deep links

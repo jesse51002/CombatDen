@@ -18,7 +18,7 @@ const COPY = {
     logoMark: 'LOGO',
     links: [
       { label: 'Home', href: 'index.html' },
-      { label: 'Themes', href: '#themes' },
+      { label: 'Themes', href: 'https://themes.combatden.net' },
       { label: 'Pricing', href: 'pricing.html' },
     ],
     cta: 'Book a demo',
@@ -45,16 +45,15 @@ const COPY = {
     heading: 'Your brand, everywhere.',
     body: "Immerse members in your brand's vibe, imagery, colors. Choose from 75+ ready-made designs, or we'll build one custom, no extra charge.",
     button: 'Browse themes',
-    themeLibraryUrl: '#themes',
+    themeLibraryUrl: 'https://themes.combatden.net',
     rail: ['tidal', 'forge', 'refrm', 'pulse', 'sunup', 'coast', 'night', 'clay'],
   },
 
   // §4 Agentic video feed ----------------------------------------------------
   feed: {
-    heading: 'Videos to engage',
-    lead: 'Video feed keeps members engaged, making them stay longer.',
+    lead: 'Video feed keeps members engaged, making them stay longer. Use our agent to create a feed with a few prompts.',
     items: [
-      { id: 'create', n: '01', text: 'Create a video feed with our agent.' },
+      { id: 'create', n: '01', text: 'Make a feed that engages.' },
       { id: 'tell',   n: '02', text: "Tell the agent what you want (and don't want)." },
       { id: 'add',    n: '03', text: 'Add your own videos, and they get prioritized.' },
       { id: 'remove', n: '04', text: 'Remove a video once, and it keeps similar out.' },
@@ -79,11 +78,11 @@ const COPY = {
     ],
     rewardsLabel: 'Reward examples',
     rewards: [
-      { key: 'shirt', name: 'Free gym shirt', cost: '1,500', classes: '~15 classes',
+      { key: 'shirt', img: 'assets/landing/reward-shirt.jpg', name: 'Free gym shirt', cost: '1,500', classes: '~15 classes',
         benefit: 'Members love wearing gear from your gym, and every shirt becomes a walking ad for your gym.' },
-      { key: 'friend', name: 'Bring a friend free', cost: '1,000', classes: '~10 classes',
+      { key: 'friend', img: 'assets/landing/reward-friend.jpg', name: 'Bring a friend free', cost: '1,000', classes: '~10 classes',
         benefit: 'Members love training with friends, and every guest pass brings a new potential customer in for free.' },
-      { key: 'training', name: 'Discounted private training', cost: '2,500', classes: '~25 classes',
+      { key: 'training', img: 'assets/landing/reward-training.jpg', name: 'Discounted private training', cost: '2,500', classes: '~25 classes',
         benefit: "Members love affordable 1-on-1 time, and it's how new high-value private training relationships start." },
     ],
   },

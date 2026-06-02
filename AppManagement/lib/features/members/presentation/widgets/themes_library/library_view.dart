@@ -39,12 +39,19 @@ class LibraryView extends StatefulWidget {
 
 class _LibraryViewState extends State<LibraryView> {
   final GymsPager _pager = GymsPager(pageSize: _kPageSize);
+  final ScrollController _scrollController = ScrollController();
+  // Tags the card of the already-selected gym so we can center it on entry.
+  final GlobalKey _selectedCardKey = GlobalKey();
+  bool _didAnchor = false;
   String _selected = _kAllChip;
 
   @override
   void initState() {
     super.initState();
     _pager.addListener(_pullUntilDone);
+    // Returning to the library after picking a gym: center its card once, the
+    // same "build around the selection" the phone-mode side pane does.
+    _anchorOnSelectedOnce();
   }
 
   void _pullUntilDone() {
@@ -52,15 +59,35 @@ class _LibraryViewState extends State<LibraryView> {
     // The library is the gym-select screen — it deliberately does NOT
     // auto-select a gym; picking a card does (via `_pick`). (The phone-mode
     // side pane reconciles a deep-linked theme to its gym; the library doesn't.)
+    // The already-selected card may live on a later page; keep trying to center
+    // as pages stream in.
+    _anchorOnSelectedOnce();
     if (!_pager.isLoading && _pager.hasMore) {
       _pager.loadMore();
     }
+  }
+
+  // One-shot: once a gym is already selected and its card is built, center it in
+  // the grid — by the card's context, instant (no scroll animation). Only fires
+  // when there's a real selection (`selectedGym.designId`), so a fresh load with
+  // nothing picked stays at the top. Retries until the card streams in.
+  void _anchorOnSelectedOnce() {
+    if (_didAnchor) return;
+    if (selectedGym.designId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_didAnchor || !mounted) return;
+      final ctx = _selectedCardKey.currentContext;
+      if (ctx == null) return; // card not built yet (later page / filtered out).
+      _didAnchor = true;
+      Scrollable.ensureVisible(ctx, alignment: 0.5, duration: Duration.zero);
+    });
   }
 
   @override
   void dispose() {
     _pager.removeListener(_pullUntilDone);
     _pager.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -171,6 +198,9 @@ class _LibraryViewState extends State<LibraryView> {
                   isLoading: _pager.isLoading,
                   errored: _pager.errored,
                   onPick: _pick,
+                  scrollController: _scrollController,
+                  selectedDesignId: selectedGym.designId,
+                  selectedCardKey: _selectedCardKey,
                 ),
               ),
             ],
@@ -187,12 +217,18 @@ class _Grid extends StatelessWidget {
     required this.isLoading,
     required this.errored,
     required this.onPick,
+    required this.scrollController,
+    required this.selectedDesignId,
+    required this.selectedCardKey,
   });
 
   final List<ThemeStyle> visible;
   final bool isLoading;
   final bool errored;
   final ValueChanged<ThemeStyle> onPick;
+  final ScrollController scrollController;
+  final String? selectedDesignId;
+  final GlobalKey selectedCardKey;
 
   @override
   Widget build(BuildContext context) {
@@ -211,12 +247,19 @@ class _Grid extends StatelessWidget {
       builder: (context, _) {
         final active = ThemeRuntime.activeDesignId;
         return SingleChildScrollView(
+          controller: scrollController,
           child: FillGrid(
             minItemWidth: _kGridMinItemWidth,
             minColumns: _kGridMinColumns,
+            // Keep the grid fixed on search: a single result is one normal-
+            // width card in the top-left, not a card stretched full-width.
+            stretchShortRows: false,
             children: [
               for (final s in visible)
                 LibraryCard(
+                  // Tag the already-selected gym's card so the view can center
+                  // on it when re-entering the library.
+                  key: s.id == selectedDesignId ? selectedCardKey : null,
                   style: s,
                   isActive: s.id == active,
                   onTap: () => onPick(s),

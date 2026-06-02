@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/home/class_list_item.dart';
-import 'package:theme_flutter/showcase/home/home_class.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/home/class_list_item.dart';
+import 'package:app_management/showcase/home/home_class.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 
 /// Clone of MobileApp's `DayClassGroup`: a day label over its class rows.
 class DayClassGroup extends StatelessWidget {

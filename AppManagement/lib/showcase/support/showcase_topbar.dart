@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import 'package:theme_flutter/showcase/showcase_assets.dart';
-import 'package:theme_flutter/showcase/showcase_slots.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/showcase_assets.dart';
+import 'package:app_management/showcase/showcase_slots.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 import 'package:theme_flutter/theme/theme_text.dart';
 

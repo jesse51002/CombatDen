@@ -1,9 +1,12 @@
 # ThemeService — read-only theme catalog + asset API (AWS App Runner target).
 #
-# Serves apps/<app_id>/<run_id>/ (output.yaml + final_images/ + icons/) over a
-# GET-only FastAPI. The 2.6 GB of `apps/` assets are NOT in git, so the image is
-# the delivery vehicle — they are baked in here. Pipeline-only material
-# (assets/, scripts/, tests/) is excluded via .dockerignore and never copied.
+# Serves the theme catalog + design detail (the per-run output.yaml) over a
+# GET-only FastAPI. Image/icon BYTES are served from S3/CloudFront, NOT here, so
+# the heavy apps/**/{images,final_images,icons}/ dirs are excluded via
+# .dockerignore — `COPY apps/` brings only the small output.yaml metadata
+# (~MB, not ~2.6 GB). The API defaults ASSETS_CDN_BASE_URL to the prod CDN, so
+# it emits CDN URLs out of the box (no runtime env var needed).
+# Pipeline-only material (assets/, scripts/, tests/) is also excluded.
 #
 # config.py resolves apps_root to <root>/apps and the package root is <root>/src,
 # so with WORKDIR=/app everything lands at /app/* and paths resolve unchanged.
@@ -29,8 +32,12 @@ COPY schema/ ./schema/
 COPY resources/ ./resources/
 COPY apps/ ./apps/
 
-# GOOGLE_FONTS_API_KEY is required at runtime (the font-delivery endpoint hits
-# Google's catalog). It is supplied as an App Runner env var, never baked in.
-# CORS_ORIGINS is optional (defaults to ["*"]).
+# Runtime env (App Runner service vars, never baked in):
+#  - GOOGLE_FONTS_API_KEY (required) — the font-delivery endpoint hits Google's catalog.
+#  - ASSETS_CDN_BASE_URL — OPTIONAL. Defaults to the prod CDN
+#    (https://cdn.combatden.net) in code, so the API emits absolute CDN URLs
+#    without it being set. Only set it to point at a different CDN, or set it
+#    empty to serve relative/local paths (dev only — bytes aren't baked here).
+#  - CORS_ORIGINS is optional (defaults to ["*"]).
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

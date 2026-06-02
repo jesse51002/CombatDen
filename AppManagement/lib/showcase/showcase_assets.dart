@@ -1,11 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/widgets.dart';
 
-/// Centralises the `packages/<pkg>/...` prefix every consumer must use to
-/// reach an asset declared in THIS package's pubspec. Declaring the assets
-/// in `theme_flutter`'s `flutter.assets` ships them automatically
-/// with any app that depends on the package — no re-declaration needed in
-/// the consuming app's pubspec.
+/// Centralises the path prefix for the showcase's bundled fallback images.
+/// They live in `app_management`'s own `assets/showcase/` (declared in this
+/// app's pubspec), so they use the plain asset key — NOT a `packages/<pkg>/`
+/// prefix, which only aliases assets from *dependency* packages, not the app's
+/// own (these moved here from the `theme_flutter` package).
 ///
 /// These are the showcase screens' bundled fallbacks (the same role
 /// MobileApp's own bundled assets play for its real screens). The engine's
@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 class ShowcaseAsset {
   ShowcaseAsset._();
 
-  static const String _images = 'packages/theme_flutter/assets/images/';
+  static const String _images = 'assets/showcase/';
 
   /// An [ImageProvider] for a packaged image, e.g. `streak_icon.png`.
   static ImageProvider image(String file) => AssetImage('$_images$file');

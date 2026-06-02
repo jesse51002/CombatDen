@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 
 /// Horizontal-padding variant — clone of MobileApp's
 /// `AppScreenHorizontalPadding`.

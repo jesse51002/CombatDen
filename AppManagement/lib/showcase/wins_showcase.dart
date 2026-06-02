@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/celebrations/showcase_celebration_stats.dart';
-import 'package:theme_flutter/showcase/celebrations/sparkle_burst.dart';
-import 'package:theme_flutter/showcase/celebrations/wins_tile_row.dart';
-import 'package:theme_flutter/showcase/showcase_assets.dart';
-import 'package:theme_flutter/showcase/showcase_slots.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
-import 'package:theme_flutter/showcase/support/showcase_scaffold.dart';
-import 'package:theme_flutter/showcase/support/staggered_reveal.dart';
+import 'package:app_management/showcase/celebrations/showcase_celebration_stats.dart';
+import 'package:app_management/showcase/celebrations/sparkle_burst.dart';
+import 'package:app_management/showcase/celebrations/wins_tile_row.dart';
+import 'package:app_management/showcase/showcase_assets.dart';
+import 'package:app_management/showcase/showcase_slots.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/support/showcase_scaffold.dart';
+import 'package:app_management/showcase/support/staggered_reveal.dart';
 import 'package:theme_flutter/theme/animation/celebration_timings.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 import 'package:theme_flutter/theme/theme_text.dart';

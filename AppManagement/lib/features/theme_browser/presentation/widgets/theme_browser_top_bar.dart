@@ -1,66 +1,151 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
-import 'package:app_management/shared/widgets/app_outline_button.dart';
+import 'package:app_management/shared/widgets/app_primary_button.dart';
 
-/// Top bar for the standalone theme-browser deployment.
+/// Top bar for the standalone theme-browser deployment — a Flutter port of the
+/// landing page's sticky nav (`LandingPage/hifi/chrome.jsx` `GWNav`): a frosted
+/// translucent bar with the CombatDen wordmark on the left and the Home /
+/// Pricing links + a gradient "Book a demo" CTA on the right, so the browser
+/// reads as one continuous site with the marketing page.
 ///
-/// **Placeholder.** The real bar will match the (not-yet-built) new landing
-/// page; for now it's a minimal CombatDen wordmark plus a link back to the
-/// marketing site, styled with the app's own [DesignConstants] (no new colors).
-/// Swap this out once the new landing page exists. The back-link target is the
-/// `LANDING_URL` dart-define.
+/// Link targets are overridable at build time via dart-defines (defaults are
+/// the prod marketing URLs):
+///   `--dart-define=LANDING_URL=…`  (Home + wordmark)
+///   `--dart-define=PRICING_URL=…`  (Pricing)
+///   `--dart-define=BOOK_URL=…`     (Book a demo)
 class ThemeBrowserTopBar extends StatelessWidget {
   const ThemeBrowserTopBar({super.key});
 
-  // Where "Back to CombatDen" goes. Overridden at build time, e.g.
-  // `--dart-define=LANDING_URL=https://www.combatden.net` (the prod default).
   static const String _landingUrl = String.fromEnvironment(
     'LANDING_URL',
     defaultValue: 'https://www.combatden.net',
   );
+  static const String _pricingUrl = String.fromEnvironment(
+    'PRICING_URL',
+    defaultValue: 'https://www.combatden.net/pricing.html',
+  );
+  static const String _bookUrl = String.fromEnvironment(
+    'BOOK_URL',
+    defaultValue: 'https://www.combatden.net/#book',
+  );
 
-  void _openLanding() {
-    // Same-tab navigation — this is a "back to the site" link, not a new window.
-    unawaited(
-      launchUrl(Uri.parse(_landingUrl), webOnlyWindowName: '_self'),
-    );
+  void _open(String url) {
+    // Same-tab navigation — these are "back to the marketing site" links.
+    unawaited(launchUrl(Uri.parse(url), webOnlyWindowName: '_self'));
   }
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: DesignConstants.card,
-        border: Border(
-          bottom: BorderSide(color: DesignConstants.divider),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: DesignConstants.backgroundColor.withValues(alpha: 0.78),
+            border: const Border(
+              bottom: BorderSide(color: DesignConstants.line),
+            ),
+          ),
+          child: SizedBox(
+            height: DesignConstants.navHeight,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: DesignConstants.navMaxWidth,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: DesignConstants.paddingBig,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _Wordmark(onTap: () => _open(_landingUrl)),
+                      _NavActions(
+                        onHome: () => _open(_landingUrl),
+                        onPricing: () => _open(_pricingUrl),
+                        onBook: () => _open(_bookUrl),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _Wordmark extends StatelessWidget {
+  const _Wordmark({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          Image.asset(
+            'assets/images/combatden_logo.png',
+            height: DesignConstants.iconSizeBig,
+          ),
+          Text('CombatDen', style: DesignConstants.navWordmark),
+        ],
+      ),
+    );
+  }
+}
+
+class _NavActions extends StatelessWidget {
+  const _NavActions({
+    required this.onHome,
+    required this.onPricing,
+    required this.onBook,
+  });
+
+  final VoidCallback onHome;
+  final VoidCallback onPricing;
+  final VoidCallback onBook;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        _NavLink(label: 'Home', onTap: onHome),
+        _NavLink(label: 'Pricing', onTap: onPricing),
+        AppPrimaryButton(text: 'Book a demo', onPressed: onBook),
+      ],
+    );
+  }
+}
+
+class _NavLink extends StatelessWidget {
+  const _NavLink({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: DesignConstants.paddingBig,
-          vertical: DesignConstants.spacingLarge,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('CombatDen', style: DesignConstants.h1),
-            AppOutlineButton(
-              text: 'Back to CombatDen',
-              icon: Icon(
-                Symbols.arrow_back_sharp,
-                size: DesignConstants.iconSizeMedium,
-                weight: DesignConstants.iconWeight,
-                color: DesignConstants.text,
-              ),
-              onPressed: _openLanding,
-            ),
-          ],
-        ),
+        padding: const EdgeInsets.all(DesignConstants.spacingSmall),
+        child: Text(label, style: DesignConstants.navLink),
       ),
     );
   }

@@ -46,12 +46,16 @@ class ShowcasePointsStats {
 
 class ShowcaseRewardItem {
   const ShowcaseRewardItem({
+    this.imageUrl,
     required this.imageAsset,
     required this.name,
     required this.discountLabel,
     required this.pointsCost,
   });
 
+  /// Network image (the injected gym's reward photo); preferred over
+  /// [imageAsset] when set. Null for the bundled sample items below.
+  final String? imageUrl;
   final String imageAsset;
   final String name;
   final String discountLabel;

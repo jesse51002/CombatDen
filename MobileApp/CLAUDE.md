@@ -372,6 +372,22 @@ lib/
     └── widgets/                    # cross-feature reusables
 ```
 
+Outside `lib/`, **`tools/capture/`** holds dev-only Flutter capture entrypoints
+that render real screens to frame-exact PNGs (1080×1920 or 1080×2340) for the
+landing page: `capture_main.dart` (the theme-reel scroll), `capture_booking_main.dart`
+(the class-booking clips — "Perfectly timed content"/Video-Before-Class, plus the
+"you're in" booked-confirm variant via `CAPTURE_BOOKING_END=confirm`), and
+`capture_app_main.dart` (the Home / Points / Streak screen clips), sharing
+`capture_frame.dart`. NOT shipping code — its only app-side hooks are opt-in and
+inert in normal use (all null / false / clock-unset): `captureController` on
+`VideosScreen`; `classData` on `ClassScreen`; `captureContentOnly` on
+`ClassBookedScreen`; and the global `captureRevealClock`
+(`lib/shared/widgets/animation/capture_reveal_clock.dart`) that drives the
+reveal + post-class celebration animations deterministically — read by
+`ScaleReveal`, `StaggeredReveal`, `CountUpText`, `LoadingDots`, the points/streak
+intro controllers (`_PointSphere`/`_StreakOrbit`), and the streak badge pulse.
+See `tools/capture/README.md`.
+
 ## Development Commands
 
 - `flutter run` — run the app in debug mode (hot reload).
@@ -380,6 +396,17 @@ lib/
 - `flutter pub get` — install dependencies.
 - `flutter pub upgrade` — upgrade dependencies.
 - `flutter clean` — clean build artifacts.
+- `make capture` / `make capture-booking` / `make capture-app` / `make
+  capture-shots` / `make stitch` — dev-only landing-page capture: render real
+  screens to frame-exact webm (or PNG screenshots). `capture` = the video-feed
+  theme reel (one per theme); `capture-booking` = the class-booking clips (class
+  detail → ~1s dots → "Video Before Class", one per discipline; or the "you're
+  in" confirm variant); `capture-app` = the Home / Points / Streak screen clips,
+  each branded to barre / muaythai / reformer; `capture-shots` = static
+  screenshots of the Home / Rewards / Videos screens for any discipline (PNGs to
+  `LandingPage/media-src/screenshots/`). Needs a running emulator + both backends
+  (`make api` in `../ThemeService` and `../VideoService`). See
+  `tools/capture/README.md`.
 
 ## Code Quality
 
@@ -397,6 +424,10 @@ lib/
 Current dependencies (intentionally minimal):
 - `google_fonts` — for Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
+- `path_provider` — used **only** by the dev-only capture harness
+  (`tools/capture/`) to write exported frames to the device's external files
+  dir. Not used by any shipping screen; it's a benign platform util, not part of
+  the real-data stack.
 - `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — the shared white-label runtime extracted from this app's old `lib/customization/`. It carries the live-feature deps (`dio`, `flutter_svg`, `cached_network_image`, `get_it`, `shared_preferences`) that back the customization engine; those are the documented live exceptions, not the start of the real-data stack. (`lottie` is a direct MobileApp dep — it backs only the bundled booking "done" checkmark animation, which the app plays and tints to the brand primary itself; the engine no longer renders Lottie.)
 
 If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the real-data stack, **stop**. That's the signal that this app is leaving prototype mode. Talk to the user before pulling those in.

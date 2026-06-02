@@ -2,41 +2,45 @@
 name: AppManagement
 description: Gym admin web app — a calm, premium, daylit control desk for the member-retention engine.
 colors:
-  paper: "#F6F3EE"
-  ink: "#27231E"
+  ground: "#F3F5F8"
+  surface: "#FFFFFF"
+  ink: "#16181D"
   sapphire: "#2A67BD"
+  accent-dark: "#1F5099"
   deep-sapphire: "#274777"
   status-good: "#1D7D3E"
   status-warn: "#915C08"
   status-bad: "#B6322D"
-  link: "#0E5CAF"
+  link: "#1F5099"
 typography:
   display:
-    fontFamily: "Hanken Grotesk, sans-serif"
+    fontFamily: "Geist, sans-serif"
     fontSize: "32px"
     fontWeight: 600
-    letterSpacing: "0"
+    letterSpacing: "-0.01em"
   headline:
-    fontFamily: "Hanken Grotesk, sans-serif"
+    fontFamily: "Geist, sans-serif"
     fontSize: "24px"
     fontWeight: 700
-    letterSpacing: "-0.02em"
+    letterSpacing: "-0.025em"
   title:
-    fontFamily: "Hanken Grotesk, sans-serif"
+    fontFamily: "Geist, sans-serif"
     fontSize: "16px"
     fontWeight: 600
+    letterSpacing: "-0.0125em"
   label:
-    fontFamily: "Hanken Grotesk, sans-serif"
+    fontFamily: "Geist, sans-serif"
     fontSize: "13px"
     fontWeight: 600
   body:
-    fontFamily: "Hanken Grotesk, sans-serif"
+    fontFamily: "Geist, sans-serif"
     fontSize: "12px"
     fontWeight: 400
     letterSpacing: "0.03em"
 rounded:
   sm: "8px"
   md: "12px"
+  card: "20px"
 spacing:
   tiny: "2px"
   small: "4px"
@@ -45,8 +49,8 @@ spacing:
   big: "32px"
 components:
   button-primary:
-    backgroundColor: "{colors.sapphire}"
-    textColor: "{colors.paper}"
+    background: "linear-gradient({colors.sapphire} -> {colors.accent-dark})"
+    textColor: "{colors.surface}"
     rounded: "{rounded.md}"
     padding: "8px 16px"
   button-outline:
@@ -54,8 +58,10 @@ components:
     rounded: "{rounded.md}"
     padding: "8px 16px"
   object-card:
-    backgroundColor: "{colors.ink}"
-    rounded: "{rounded.md}"
+    backgroundColor: "{colors.surface}"
+    border: "1px hairline (ink @ 9%)"
+    shadow: "soft layered (cardShadow)"
+    rounded: "{rounded.card}"
 ---
 
 # Design System: AppManagement
@@ -64,11 +70,17 @@ components:
 
 **Creative North Star: "The Daylit Control Desk"**
 
-A calm, well-lit front desk you trust at a glance. Warm paper, near-black ink, and a single
-sapphire accent that marks the one thing needing attention. The surface is quiet and
-premium; structure comes from whitespace, thin hairline rules, and type hierarchy, not from
-boxing every section in a card. The owner glances between classes and reads the retention
-engine (attendance, ranks, points, rewards, redemptions) in seconds.
+A calm, well-lit front desk you trust at a glance. A cool, bright off-white ground, white
+lifted surfaces, near-black ink, and a single sapphire accent that marks the one thing
+needing attention. The surface is quiet and premium; structure comes from whitespace, thin
+hairline rules, and type hierarchy, not from boxing every section in a card. The owner
+glances between classes and reads the retention engine (attendance, ranks, points, rewards,
+redemptions) in seconds.
+
+It is **landing-aligned**: it shares the marketing landing page's design system
+(`../LandingPage/hifi/ds.jsx` — cool ground, white cards, sapphire + gradient, Geist) so the
+public theme browser (`themes.combatden.net`, a second build target of this app) reads as a
+direct extension of the marketing site rather than a separate admin tool.
 
 It is **vertical-neutral** by mandate: it must feel as right behind a pilates studio as a BJJ
 gym, so it carries no combat-sports coding (no fists, cages, aggressive type) and no
@@ -80,56 +92,67 @@ density, and the generic Bootstrap-y SaaS dashboard. If a viewer could say "a te
 that," the screen has failed.
 
 **Key Characteristics:**
-- Warm paper background, warm-ink text; never pure white or black.
-- One sapphire accent, used sparingly and meaningfully.
-- A single humanist sans (Hanken Grotesk) with tabular figures; hierarchy from weight + scale.
-- De-carded: sections live on the page, separated by hairlines; cards are reserved for
-  discrete, repeated objects (reward / redemption / class cards).
-- Tight 12 / 8px corners. Calm, confident, credible.
+- Cool off-white ground (`#F3F5F8`), white lifted surfaces, a cool near-black ink ramp.
+- One sapphire accent (with a gradient partner for primary actions), used sparingly.
+- Geist (the landing page's typeface) with tabular figures; hierarchy from weight + scale.
+- De-carded sections: sections live on the page, separated by hairlines. Discrete, repeated
+  objects (reward / redemption / class / theme cards) are white cards that lift on a soft,
+  layered shadow.
+- Tight 12 / 8px corners (20px on object cards). Calm, confident, credible.
 
 ## 2. Colors
 
-A warm near-monochrome paper field with one sapphire voice and a small, deliberately darkened
-set of semantic status hues that read on light.
+A cool near-monochrome field with one sapphire voice (plus its gradient partner) and a small,
+deliberately darkened set of semantic status hues that read on light.
 
 ### Primary
 - **Sapphire** (`#2A67BD`): the single accent. Active nav, primary action, focus rings,
-  progress arcs, chart series, the one figure that matters. As a fill it carries a paper
-  label; as text/icons on paper it reads at 5:1.
+  progress arcs, chart series, the one figure that matters. As text/icons on the ground it
+  reads at AA; as a fill it carries a white label.
+- **Accent Dark** (`#1F5099`): the gradient partner. Primary actions are a top→bottom
+  `sapphire → accent-dark` gradient (`primaryGradient`) with a soft blue shadow; also the
+  hyperlink color.
 
 ### Secondary
 - **Deep Sapphire** (`#274777`): the darker companion (the donut "inactive" arc, the Material
   `secondary` slot). Quiet, recedes behind the primary.
 
-### Tertiary — Semantic Status (functional, darkened for paper)
+### Tertiary — Semantic Status (functional, darkened for the light ground)
 - **Good** (`#1D7D3E`): on-track / checked-in / streak alive.
-- **Warn** (`#915C08`): at-risk / slipping (amber, not yellow, so it reads on paper).
+- **Warn** (`#915C08`): at-risk / slipping (amber, not yellow, so it reads on light).
 - **Bad** (`#B6322D`): churn-risk / error.
-- **Link** (`#0E5CAF`): hyperlinks (email, etc.).
+- **Link** (`#1F5099`): hyperlinks (email, etc.) — the accent-dark.
 
 ### Neutral
-- **Paper** (`#F6F3EE`): the surface. Warm off-white, never `#fff`. Also doubles as the
-  knockout label color on sapphire fills.
-- **Ink** (`#27231E`): primary text. Warm near-black, never `#000`. `text2nd` / `text3rd` are
-  ink at 75% / 50% for secondary and muted copy.
-- **Panel** (ink @ 10%): the only "surface" tint, used as the background of discrete object
-  cards, the sidebar rail, and small controls (search box, pills). Hairlines/dividers use this
-  same low-contrast tint.
+- **Ground** (`#F3F5F8`): the page field. Cool off-white, never `#fff`. The scaffold sits on
+  it; cards lift off it.
+- **Surface** (`#FFFFFF`): white card surface. Discrete object cards and small controls
+  (search box, pills) are white, lifted off the ground by a hairline border + soft shadow.
+- **Ink** (`#16181D`): primary text. Cool near-black, never `#000`. `text2nd` (`#565B66`) /
+  `text3rd` (`#878D99`) are the fixed cool-ink ramp for secondary and muted copy (no longer
+  alpha-derived).
+- **Line** (ink @ 9%): the hairline. Used for dividers and card/control borders — decoupled
+  from the card fill (a white card needs a visible border).
 
 ### Named Rules
 **The One Light Rule.** Sapphire appears on ≤10% of any screen; it marks the single most
 important thing. Status hues are functional and exempt but stay muted so they never read as a
 second accent.
 
-**The Tinted Neutral Rule.** No pure black, no pure white. Paper and ink are both warm-tinted.
+**The Cool-Tinted Rule.** No pure black. The ground and ink are cool-tinted (`#F3F5F8` /
+`#16181D`), never warm and never `#000`. Cards are pure white (`#FFFFFF`) so they lift cleanly
+off the cool ground.
 
 ## 3. Typography
 
-**Display / Body Font:** Hanken Grotesk (humanist sans), with `sans-serif` fallback.
+**Display / Body Font:** Geist (the landing page's typeface), with `sans-serif` fallback.
+Loaded via `GoogleFonts.geist()`; `GoogleFonts.geistMono()` (`monoFont`) is available for
+tracked micro-labels.
 **Numerals:** tabular figures everywhere, so columns and metrics align.
 
-**Character:** one warm humanist sans does all the work, crafted and approachable rather than
-the cold geometric grotesque of generic SaaS.
+**Character:** one clean, product-grade sans does all the work — the same typeface as the
+marketing site, so admin and landing read as one product. Headings carry tight negative
+tracking; body stays neutral.
 
 ### Hierarchy
 - **Display** (`big2`, 600, 32px): the one big figure or the member name. Used sparingly.
@@ -139,29 +162,38 @@ the cold geometric grotesque of generic SaaS.
 - **Body** (`p`, 400, 12px, 0.03em): default reading text; cap measured text at 65–75ch.
 
 ### Named Rules
-**The Weight-Not-Family Rule.** Hierarchy comes from weight and scale within Hanken Grotesk,
-never from switching typefaces. Keep ≥1.25 scale steps; flat scales read as a spreadsheet.
+**The Weight-Not-Family Rule.** Hierarchy comes from weight and scale within Geist, never from
+switching typefaces. Keep ≥1.25 scale steps; flat scales read as a spreadsheet.
 
 ## 4. Elevation
 
-Flat. Depth comes from **whitespace, hairline rules, and tonal panels**, not drop shadows.
-Page sections sit directly on the paper, separated by 32px rhythm and 1px `Hairline` rules
-(horizontal between stacked sections, vertical between side-by-side panes). The only raised
-surface is a discrete object card (ink @ 10% panel, 12px corners); even those are flat at
-rest. Shadows are reserved for genuinely transient surfaces (menus, dialogs).
+Page **sections** stay flat: they sit directly on the cool ground, separated by 32px rhythm
+and 1px `Hairline` rules (horizontal between stacked sections, vertical between side-by-side
+panes) — depth there comes from whitespace + hairlines, not boxes.
+
+Discrete **object cards** (and the browser's top nav) do lift, with the landing page's soft,
+layered shadow: white surface, a hairline border, and a diffuse `cardShadow` (a tight contact
+shadow + a wide soft drop). Primary buttons carry a tighter blue `buttonShadow` under the
+gradient. The browser's top bar is a frosted, translucent strip. Shadows are soft and diffuse,
+never a single hard drop; transient surfaces (menus, dialogs) lift too.
 
 ### Named Rules
-**The De-Card Rule.** Do not box a page section in a card. Cards are only for discrete,
-repeated *objects* (a reward, a redemption, a class). Sections are structured by space +
-hairlines + titles. Nested cards are always wrong.
+**The De-Card Rule.** Do not box a page *section* in a card. Cards are only for discrete,
+repeated *objects* (a reward, a redemption, a class, a theme). Sections are structured by
+space + hairlines + titles. Nested cards are always wrong.
+
+**The Soft-Shadow Rule.** Elevation is always the soft, layered `cardShadow` / `buttonShadow`
+(diffuse, low-contrast), never Material's default hard elevation or a single sharp drop.
 
 ## 5. Components
 
 ### Buttons
 - **Shape:** 12px corners (`radiusBig`).
-- **Primary:** sapphire fill, **paper** label (knockout), used for the one main action.
-- **Outline:** 2px ink border, ink label, transparent fill, for secondary actions (Print,
-  Edit, Promote, View all).
+- **Primary** (`AppPrimaryButton`): the landing CTA — a `sapphire → accent-dark` gradient with
+  a soft blue shadow and a **white** label, for the one main action. Pass `backgroundColor` to
+  swap in a solid fill for a destructive/confirm action (that drops the gradient + shadow).
+- **Outline** (`AppOutlineButton`): 2px ink border, ink label, transparent fill, for secondary
+  actions (Print, Edit, Promote, View all).
 
 ### Hairline
 - A 1px rule in the panel tint. Horizontal separates stacked sections; `vertical: true`

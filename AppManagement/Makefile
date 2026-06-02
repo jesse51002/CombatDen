@@ -55,8 +55,16 @@ doctor:
 # Build the web bundle pointed at the production API subdomains. The two
 # dart-defines override the localhost defaults in the VideoService/ThemeService
 # carve-outs (see CLAUDE.md). Output: build/web.
+#
+# --no-tree-shake-icons is REQUIRED: the icon tree-shaker corrupts the variable
+# `weight` axis of the MaterialSymbolsSharp font in release builds, so Symbols
+# icons render in `flutter run` (debug) but vanish on deploy (flutter#183381).
+# That flag would otherwise ship the full unused Rounded/Outlined families
+# (~25 MB, eagerly loaded), so prune_web_fonts.py strips them post-build. Keep
+# both lines together — see CLAUDE.md "Production deployment".
 build-web:
-	flutter build web --release --base-href=/ --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net
+	flutter build web --release --base-href=/ --no-tree-shake-icons --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net
+	python3 deploy/prune_web_fonts.py build/web
 
 # One-time AWS infra (mirrors LandingPage/deploy): bucket + ACM cert, then the
 # CloudFront distribution. Each prints a Squarespace DNS record to add by hand.
@@ -81,8 +89,11 @@ deploy: build-web deploy-upload
 # admin build (the carve-out backends are shared). Output: build/web — so admin
 # and themes deploys are sequential, never simultaneous. Infra mirrors deploy/
 # but targets its own bucket/domain (see deploy-themes/config.py).
+# --no-tree-shake-icons + post-build font prune for the same reason as build-web
+# (the theme browser uses the same Symbols.*_sharp icons; same build/web output).
 build-themes:
-	flutter build web --release --base-href=/ --target lib/main_theme_browser.dart --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net
+	flutter build web --release --base-href=/ --no-tree-shake-icons --target lib/main_theme_browser.dart --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net
+	python3 deploy/prune_web_fonts.py build/web
 
 deploy-themes-install:
 	cd deploy-themes && poetry install

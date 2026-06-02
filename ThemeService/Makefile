@@ -1,4 +1,4 @@
-.PHONY: run smoke api test docker-build ecr-push pause resume
+.PHONY: run smoke api test sync-assets assets-install assets-provision assets-finalize docker-build ecr-push pause resume
 
 run:
 	poetry run python -m src --app-yaml apps/combatden/app.yaml --customization-yaml apps/combatden/customization.yaml
@@ -11,6 +11,23 @@ api:
 
 test:
 	poetry run pytest tests/ -v
+
+# Mirror all generated images/icons to S3 (backfill + repair). Needs boto3 + AWS
+# creds; bucket defaults to combatden-assets. New runs self-upload via the Writer
+# when ASSET_UPLOAD_ENABLED=1; this is the one-shot backfill (skips unchanged).
+sync-assets:
+	poetry run python -m scripts.sync_assets.run
+
+# --- Asset CDN provisioning (combatden-assets + cdn.combatden.net) ----------
+# One-time, own boto3-only venv in deploy-assets/ (no uvloop). See ../DEPLOYMENT.md.
+assets-install:
+	cd deploy-assets && poetry install
+# Ensure the bucket + request the ACM cert; prints the validation CNAME.
+assets-provision:
+	cd deploy-assets && poetry run python provision.py
+# After the cert validates: OAC + cache policy (keyed on ?v=) + CloudFront distro.
+assets-finalize:
+	cd deploy-assets && poetry run python finalize.py
 
 # --- Production (AWS App Runner) — see ../DEPLOYMENT.md ---------------------
 ECR ?= 259645229668.dkr.ecr.us-east-1.amazonaws.com/combatden-themeservice

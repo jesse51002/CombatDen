@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/rewards/sparkle_hero.dart';
+import 'package:app_management/showcase/rewards/sparkle_hero.dart';
 
 /// Showcase clone of MobileApp's `PointsHeadline`: the "YOU EARNED / 3,400 /
 /// POINTS" hero — a formatted points total ringed by sparkles.

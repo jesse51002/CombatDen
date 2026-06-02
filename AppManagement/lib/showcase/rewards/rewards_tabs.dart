@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 
 /// Which tab is currently selected in the rewards tab strip.
 enum RewardsTab { pointsStore, myRewards }

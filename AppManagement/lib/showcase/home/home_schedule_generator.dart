@@ -1,7 +1,7 @@
 import 'dart:math';
 
-import 'package:theme_flutter/showcase/home/home_class.dart';
-import 'package:theme_flutter/showcase/showcase_content.dart';
+import 'package:app_management/showcase/home/home_class.dart';
+import 'package:app_management/showcase/showcase_content.dart';
 
 /// Clone of MobileApp's `schedule_generator.dart`. Builds one day's schedule
 /// by looping the const showcase classes into fixed time slots, with

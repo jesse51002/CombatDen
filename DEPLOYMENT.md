@@ -7,8 +7,9 @@ app backed by its two read-only APIs, on `combatden.net`. AWS account
 ```
 app.combatden.net     → CloudFront → S3 (combatden-app)         static Flutter build/web
 themes.combatden.net  → CloudFront → S3 (combatden-themes)      static Flutter build/web (theme browser)
-theme.combatden.net   → App Runner → ECR combatden-themeservice  uvicorn :8000  (apps/ 2.6GB)
-video.combatden.net   → App Runner → ECR combatden-videoservice  uvicorn :8002  (gyms/+videos/)
+theme.combatden.net   → App Runner → ECR combatden-themeservice  uvicorn :8000  (output.yaml metadata; images on CDN)
+video.combatden.net   → App Runner → ECR combatden-videoservice  uvicorn :8002  (reads Supabase Postgres)
+cdn.combatden.net     → CloudFront → S3 (combatden-assets)       theme images/icons (PNG/SVG, OAC)
 ```
 
 `themes.combatden.net` is the **public theme browser** — a second build target of
@@ -19,6 +20,14 @@ page just links to it (and it links back). See `AppManagement/CLAUDE.md`
 
 The app build bakes in the two API URLs via `--dart-define` (CUST_BASE_URL,
 VIDEO_BASE_URL). CORS on both APIs is `["*"]`; both are GET-only, no auth.
+
+> **⚠️ Platform note — migrate off App Runner post-demo.** App Runner is
+> effectively in maintenance mode (no meaningful new features). Treat the current
+> App Runner setup as **demo-only**; **after the demo, move both services (theme +
+> video) to Amazon ECS Express Mode** (or equivalent). The migration is mostly a
+> lift-and-shift of the same ECR images — the runtime env vars documented below
+> (e.g. VideoService `DATABASE_URL`) carry over as the new platform's
+> service/task environment; same principle, different console.
 
 ## Resources
 
@@ -69,6 +78,106 @@ docker tag combatden-themeservice:latest 259645229668.dkr.ecr.us-east-1.amazonaw
 docker push 259645229668.dkr.ecr.us-east-1.amazonaws.com/combatden-themeservice:latest
 aws apprunner start-deployment --region us-east-1 --service-arn <theme ARN>   # AutoDeployments are off
 ```
+
+### VideoService runtime config — `DATABASE_URL` (App Runner env var, NOT in the image)
+
+VideoService no longer bakes data into the image; it **reads the shared Supabase
+Postgres at runtime**, so its container needs `DATABASE_URL`. (ThemeService
+already uses this same App Runner env-var pattern for `GOOGLE_FONTS_API_KEY`, and
+now `ASSETS_CDN_BASE_URL` too — see the assets section below.) The rule:
+
+- **Never copy `.env` into the image / `Dockerfile`.** That bakes the DB password
+  into an ECR layer, and the local `.env` points at `127.0.0.1` — the prod
+  container would try to reach localhost. The image stays env-agnostic (`src/` +
+  `schema/` only).
+- Set `DATABASE_URL` as a **runtime environment variable on the App Runner
+  service** (one-time; it persists across `start-deployment` redeploys). Pydantic
+  reads it straight from the environment — no `.env` file in the container.
+  - Console: video service → Configuration → Edit → *Environment variables* →
+    `DATABASE_URL = postgresql://...@db.rgmvgevwclvqhjeirzfb.supabase.co:5432/postgres`
+    (raw `postgresql://` is fine — `src/shared/database.py` normalises it to asyncpg).
+  - CLI: `aws apprunner update-service --service-arn <video ARN> --source-configuration 'ImageRepository={ImageConfiguration={RuntimeEnvironmentVariables={DATABASE_URL=postgresql://...}}}'`
+- **Preferred for the secret:** store the URL in AWS Secrets Manager / SSM and
+  reference it via App Runner `RuntimeEnvironmentSecrets` (ARN), so the password
+  isn't sitting in the service config either.
+- After setting it, redeploy as above. Without it the container starts but 500s
+  on the first query.
+
+**Schema + data on prod** (run from your machine, never baked/automated):
+- Schema: applied via Supabase migrations from `Database/` (you run them). **Never
+  `supabase db pull` while local schema is ahead of prod** — it generates a
+  destructive migration that drops the new tables.
+- Content: load/refresh the prod DB with the pipeline pointed at prod via the
+  `ENV_FILE` flag — `ENV_FILE=.env.prod make sync-gyms-prod GYM_ID=all` then
+  `make import-yaml-prod` (prod secrets live in the gitignored `VideoService/.env.prod`).
+
+### ThemeService assets — S3 + CloudFront (`cdn.combatden.net`)
+
+ThemeService images/icons are served from CloudFront, not the container (the
+Dockerfile no longer bakes the ~2.6 GB — only `output.yaml` metadata). One-time
+provision via `ThemeService/deploy-assets/` (boto3, its own isolated venv — no
+uvloop; mirrors `AppManagement/deploy/`):
+
+```bash
+cd ThemeService
+make assets-install      # boto3-only venv in deploy-assets/
+make assets-provision    # ensures bucket (private) + ACM cert → prints validation CNAME
+#   add the printed CNAME at Squarespace, wait ~5 min for the cert to validate
+make assets-finalize     # OAC + cache policy (keyed on ?v=) + CORS headers + CloudFront → prints the cdn CNAME
+#   add the cdn CNAME, wait for the distribution to Deploy (~5 min)
+```
+
+The scripts get right the three things that are easy to botch by hand:
+- **OAC** — private bucket, readable only by this CloudFront distribution (Block
+  Public Access stays ON; no public bucket). This is also why you can't hand the
+  client a raw `…s3.amazonaws.com/…` URL — the bucket returns 403; CloudFront is
+  the only public read path.
+- **A custom cache policy keyed on `v`** — AWS's managed CachingOptimized policy
+  *ignores* query strings, so regenerated `?v=<hash>` images would serve stale.
+  `finalize.py` creates a policy that includes `v` in the cache key. (This is why
+  we kept `?v=` instead of versioned filenames.)
+- **A CORS response-headers policy (`Access-Control-Allow-Origin: *`)** — the
+  clients are Flutter **web** apps (admin + theme browser) whose CanvasKit
+  renderer *fetches* each image via XHR and decodes the bytes; the browser blocks
+  that cross-origin unless the response carries a CORS header. The images live on
+  a different origin (`cdn.combatden.net`) than the apps, so without this every
+  card shows a broken-image placeholder **even though the PNG returns 200**.
+  `finalize.py` attaches the header at the edge (applied on cache hits too — no
+  invalidation needed). This is NOT specific to CloudFront: any cross-origin image
+  host (raw S3 included) needs it; the only CORS-free option is same-origin
+  serving, which is the slow container path we left.
+
+> **Re-running `make assets-finalize` is safe and is how you patch a live CDN.**
+> It reuses the existing bucket/cert/distribution and only ensures the OAC, cache
+> policy, and CORS policy are attached (idempotent). The CORS policy was added
+> after the distribution already existed, so a re-run is exactly what wires it
+> into the running distribution without recreating it.
+
+No SPA 403/404→index rewrite — it's an asset CDN; a missing key should 404.
+
+> **DNS Host field is base-domain-relative.** Squarespace auto-appends
+> `combatden.net` to the Host, so the scripts print the host **without** it (e.g.
+> `_1ed0…cdn`, or `cdn`) — paste exactly that. Do **not** add `.combatden.net`
+> yourself or it doubles (`…cdn.combatden.net.combatden.net`). The Value
+> (cert target / CloudFront domain) keeps its full form + trailing dot.
+
+Then:
+- `ASSETS_CDN_BASE_URL` is **no longer required as an env var** — both services
+  default it to `https://cdn.combatden.net` in code (ThemeService
+  `src/api/config.py`, VideoService `src/api/config.py`), so they always emit
+  absolute CDN URLs (theme: image/icon URLs; video: the gym celebration URL)
+  even when the App Runner var is unset. Only set it to point at a *different*
+  CDN; set it empty for local serving. (This replaced the earlier "must be set
+  in prod or paths 404" requirement — the de-baked container can't serve the
+  bytes, so CDN is now the safe default rather than an opt-in.)
+- Backfill: from `ThemeService/`, with AWS creds configured, run `make sync-assets`
+  (~760 PNG + 304 SVG, skips unchanged). The bucket name defaults to
+  `combatden-assets` (override via `ASSETS_BUCKET` only if it ever changes). Needs
+  boto3 installed (`poetry install` on a machine that can build uvloop).
+- New theme runs self-upload when `ASSET_UPLOAD_ENABLED=1` in the pipeline env;
+  `make sync-assets` is the always-available backstop.
+- Then `make ecr-push` (ThemeService) to ship the de-baked image. **No Flutter
+  change needed** — the clients render whatever URL the API returns.
 
 **App** (from `AppManagement/`): `make deploy-provision` → add app cert record →
 `make deploy-finalize` → add the `app` CNAME → `make deploy` (build + upload +

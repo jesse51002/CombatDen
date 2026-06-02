@@ -7,11 +7,11 @@ The ``videoservice`` skill (its ``gym_maker.md`` guide) authors a
 ``gyms/<gym_id>.yaml`` by hand, then runs this to confirm the file round-trips:
 the schema is valid, the enum (``gym_type``) values exist, and the ``gym_id``
 inside the file matches its filename stem. A green check means the gym is ready
-for the scraper + scan; a red one prints exactly what to fix. This is the only
-job in the pipeline that authors gyms — it never scrapes or scans.
+to ``sync-gyms`` into SQL and then scan. This is the only job that authors gyms —
+it never scrapes or scans.
 
-Loads each gym through the same ``VideosService`` the API uses, so "valid here"
-== "serveable by the API".
+Validates the authored YAML directly (the gym files stay the source of truth);
+``sync-gyms`` then loads the same files into SQL.
 """
 
 from __future__ import annotations
@@ -22,23 +22,24 @@ import logging
 import sys
 from pathlib import Path
 
-from src.api.errors import InvalidConfigError, NotFoundError
-from src.api.service.videos_service import VideosService
+from pydantic import ValidationError
+
+from scripts.shared.gym_yaml_store import list_gym_ids, load_gym_yaml
 
 logger = logging.getLogger(__name__)
 
-# scripts/gym_maker/run.py -> <root> (the single-tenant data root, holds gyms/).
+# scripts/gym_maker/run.py -> <root> (holds gyms/).
 _DEFAULT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-async def _check_one(service: VideosService, gym_id: str) -> bool:
-    """Validate one gym. Returns whether it is OK (logs the verdict either way)."""
+def _check_one(root: Path, gym_id: str) -> bool:
+    """Validate one gym file. Returns whether it is OK (logs the verdict)."""
     try:
-        gym = await service.load_gym(gym_id)
-    except NotFoundError:
+        gym = load_gym_yaml(root, gym_id)
+    except FileNotFoundError:
         logger.error("✗ %s: no such gym file (gyms/%s.yaml)", gym_id, gym_id)
         return False
-    except InvalidConfigError as exc:
+    except (ValidationError, ValueError) as exc:
         logger.error("✗ %s: %s", gym_id, exc)
         return False
     if gym.gym_id != gym_id:
@@ -66,15 +67,13 @@ async def _check_one(service: VideosService, gym_id: str) -> bool:
 async def run(*, root: Path, gym_id: str | None, all_gyms: bool) -> bool:
     """Validate one gym (``gym_id``) or every gym (``all_gyms``). Returns whether
     everything checked passed."""
-    service = VideosService(root=root)
-    gym_ids = await service.list_gyms() if all_gyms else [gym_id]  # type: ignore[list-item]
+    gym_ids = list_gym_ids(root) if all_gyms else [gym_id]  # type: ignore[list-item]
     if all_gyms and not gym_ids:
         logger.warning("no gyms found under %s/gyms/", root)
         return True
-    results = [await _check_one(service, gid) for gid in gym_ids]
-    ok = all(results)
+    results = [_check_one(root, gid) for gid in gym_ids]
     logger.info("%d/%d gym(s) valid", sum(results), len(results))
-    return ok
+    return all(results)
 
 
 def main(argv: list[str] | None = None) -> int:

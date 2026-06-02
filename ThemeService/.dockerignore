@@ -15,6 +15,13 @@ assets/
 scripts/
 tests/
 
+# Image/icon BYTES are served from S3/CloudFront now, not the container — only
+# the per-run output.yaml metadata is needed at serve time. Excluding the heavy
+# dirs leaves `COPY apps/` copying just the metadata (drops ~2.6 GB).
+apps/**/images/
+apps/**/final_images/
+apps/**/icons/
+
 # Secrets + local-only config (GOOGLE_FONTS_API_KEY is injected by App Runner).
 .env
 poetry.toml

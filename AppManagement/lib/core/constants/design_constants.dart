@@ -2,27 +2,48 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class DesignConstants {
+  // Accent — the single brand blue + its gradient partner. Shared verbatim with
+  // the marketing landing page (LandingPage/hifi/ds.jsx `accent`/`accentDark`).
   static const Color primaryColor = Color(0xFF2A67BD);
+  static const Color accentDark = Color(0xFF1F5099);
+  static const Color accentSoft = Color(0xFFE8F0FB);
   static final Color primaryColor50 = primaryColor.withValues(alpha: 0.5);
   static final Color primaryColor25 = primaryColor.withValues(alpha: 0.25);
   static final Color primaryColor10 = primaryColor.withValues(alpha: 0.1);
 
   static final Color darkPrimary = Color(0xFF274777);
 
-  // Warm-stone light theme: paper background, warm near-black ink.
-  static const Color backgroundColor = Color(0xFFF6F3EE);
+  // Top-to-bottom gradient for primary actions (landing GWButton primary).
+  static const LinearGradient primaryGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [primaryColor, accentDark],
+  );
 
-  static const Color text = Color(0xFF27231E);
-  static final Color text2nd = text.withValues(alpha: 0.75);
-  static final Color text3rd = text.withValues(alpha: 0.50);
+  // Landing-aligned light system: cool off-white ground, white lifted surfaces,
+  // a cool ink ramp (matches LandingPage/hifi/ds.jsx bg/surface/ink).
+  static const Color backgroundColor = Color(0xFFF3F5F8);
+  static const Color backgroundAlt = Color(0xFFEEF1F6);
+  static const Color surface = Color(0xFFFFFFFF);
 
-  static final Color card = text.withValues(alpha: 0.1);
+  static const Color text = Color(0xFF16181D);
+  static const Color text2nd = Color(0xFF565B66);
+  static const Color text3rd = Color(0xFF878D99);
+
+  // Cards lift off the cool ground as white surfaces with a hairline border and
+  // a soft shadow — never the old flat translucent fill.
+  static const Color card = surface;
+  // Hairline border / divider (ds.jsx `line`). Decoupled from `card`: a white
+  // card with a white divider would be invisible.
+  static const Color line = Color.fromARGB(23, 20, 22, 30);
+  static const Color divider = line;
+
   static final Color popup = Color.alphaBlend(
-    backgroundColor, 
-    text.withValues(alpha: 0.05)
-    );
+    surface,
+    text.withValues(alpha: 0.04),
+  );
 
-  static const Color hyperlink = Color(0xFF0E5CAF);
+  static const Color hyperlink = accentDark;
   static const Color goodGreen = Color(0xFF1D7D3E);
   static const Color okYellow = Color(0xFF915C08);
   static const Color badRed = Color(0xFFB6322D);
@@ -33,10 +54,41 @@ class DesignConstants {
   static final Color blueDark = Color(0xFF405677).withValues(alpha: 0.25);
   static final Color redDark = Color(0xFF7C423E).withValues(alpha: 0.25);
 
+  // Elevation — soft, layered, diffuse (landing DESIGN.md). Flutter has no CSS
+  // `inset`, so the inner highlight from the web shadows is dropped.
+  static const List<BoxShadow> cardShadow = [
+    BoxShadow(
+      color: Color.fromARGB(13, 20, 22, 40),
+      blurRadius: 2,
+      offset: Offset(0, 1),
+    ),
+    BoxShadow(
+      color: Color.fromARGB(31, 20, 22, 50),
+      blurRadius: 30,
+      spreadRadius: -10,
+      offset: Offset(0, 18),
+    ),
+  ];
+
+  static const List<BoxShadow> buttonShadow = [
+    BoxShadow(
+      color: Color.fromARGB(82, 15, 45, 95),
+      blurRadius: 2,
+      offset: Offset(0, 1),
+    ),
+    BoxShadow(
+      color: Color.fromARGB(128, 30, 80, 160),
+      blurRadius: 22,
+      spreadRadius: -6,
+      offset: Offset(0, 8),
+    ),
+  ];
 
   // Design values
   static const double radiusBig = 12.0;
   static const double radiusSmall = 8.0;
+  // Rounder corner for object cards (landing card cells ≈ 22px).
+  static const double radiusCard = 20.0;
 
   static const double paddingBig = 32;
   static const double paddingSmall = 16;
@@ -60,25 +112,32 @@ class DesignConstants {
   static const double buttonBorderSize = 3.0;
   static const double screenHorizontalPadding = 16.0;
 
-  static final Color divider = card;
   static const double sideNavWidth = 100.0;
   static const double quickListWidth = 240.0;
   static const double tableRowHeight = 35.0;
+
+  // Landing-style top nav (LandingPage/hifi/chrome.jsx GWNav).
+  static const double navHeight = 68.0;
+  static const double navMaxWidth = 1180.0;
 
   // Two lines of h2, so every reward card's title block is the same height
   // whether the title wraps to one line or two.
   static const double rewardCardTitleHeight = 42;
 
-  static final TextStyle baseFont = GoogleFonts.hankenGrotesk(
+  // Geist — the landing page's typeface (LandingPage/hifi/ds.jsx `sans`).
+  static final TextStyle baseFont = GoogleFonts.geist(
     fontFeatures: const [FontFeature.tabularFigures()],
   );
 
-  /// H1 text style (light, 30)
+  // Geist Mono — for tracked eyebrow / category micro-labels (ds.jsx `mono`).
+  static final TextStyle monoFont = GoogleFonts.geistMono();
+
+  /// H1 text style (bold, 24)
   static final TextStyle h1 = baseFont.copyWith(
     fontWeight: FontWeight.w700,
     fontSize: 24,
     color: text,
-    letterSpacing: -0.02,
+    letterSpacing: -0.6,
   );
 
   static final TextStyle h1Regular = h1.copyWith(fontWeight: FontWeight.w500);
@@ -89,12 +148,12 @@ class DesignConstants {
   static final TextStyle big2Light =
       big2.copyWith(fontWeight: FontWeight.w300);
 
-  /// H2 text style (light, 18)
+  /// H2 text style (semibold, 16)
   static final TextStyle h2 = baseFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 16,
     color: text,
-    letterSpacing: 0,
+    letterSpacing: -0.2,
   );
 
   static final TextStyle h2Regular = h2.copyWith(fontWeight: FontWeight.w400,
@@ -103,7 +162,7 @@ class DesignConstants {
 
   static final TextStyle h2Bold = h2.copyWith(fontWeight: FontWeight.w700);
 
-  /// H3 text style (regular, 15)
+  /// H3 text style (semibold, 13)
   static final TextStyle h3 = baseFont.copyWith(
     fontWeight: FontWeight.w600,
     fontSize: 13,
@@ -124,6 +183,21 @@ class DesignConstants {
 
   static final TextStyle pSmallBold =
       pSmall.copyWith(fontWeight: FontWeight.w700);
+
+  // Landing top-nav text: wordmark + nav links (chrome.jsx GWNav).
+  static final TextStyle navWordmark = baseFont.copyWith(
+    fontWeight: FontWeight.w600,
+    fontSize: 18,
+    color: text,
+    letterSpacing: -0.4,
+  );
+
+  static final TextStyle navLink = baseFont.copyWith(
+    fontWeight: FontWeight.w500,
+    fontSize: 14.5,
+    color: text2nd,
+    letterSpacing: -0.1,
+  );
 
   // Private constructor to prevent instantiation
   DesignConstants._();

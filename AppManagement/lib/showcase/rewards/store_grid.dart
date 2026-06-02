@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/rewards/mock_points_store.dart';
-import 'package:theme_flutter/showcase/rewards/reward_card.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/rewards/mock_points_store.dart';
+import 'package:app_management/showcase/rewards/reward_card.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 
 /// Showcase clone of MobileApp's `StoreGrid`: two-column points-store
 /// layout. Items zig-zag down (even indices left, odd right) so neighboring

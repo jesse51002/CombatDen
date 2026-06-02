@@ -114,10 +114,13 @@ function GymAppScreen() {
   );
 }
 
-// PhoneMock — the device frame around GymAppScreen. The glow tints to the
-// active theme so a theme change re-skins the whole device, not just the screen.
-function PhoneMock({ width = 300, tilt = 'none', glow = true, style = {} }) {
-  const { theme } = useTheme();
+// PhoneFrame — the bare device shell: bezel, optional accent glow, optional
+// tilt, optional dynamic island. Children render inside the rounded screen.
+// Shared by PhoneMock (synthetic theme screen) and the hero's ScreenshotPhone
+// (real app screenshots). `glowColor` defaults to the brand accent. Set
+// `island={false}` when the child already carries its own status bar (real
+// screenshots), so the synthetic notch doesn't double up.
+function PhoneFrame({ width = 300, tilt = 'none', glow = true, glowColor, island = true, children, style = {} }) {
   const height = Math.round(width * 2.04);
   const transforms = {
     none: 'none',
@@ -128,24 +131,24 @@ function PhoneMock({ width = 300, tilt = 'none', glow = true, style = {} }) {
   return (
     <div style={{ position: 'relative', width, height, ...style }}>
       {glow && (
-        <div style={{ position: 'absolute', inset: '-18% -22%', background: `radial-gradient(50% 46% at 50% 46%, ${gwRgba(theme.accent, 0.34)}, transparent 72%)`, filter: 'blur(8px)', zIndex: 0, pointerEvents: 'none', transition: 'background .3s ease' }}></div>
+        <div style={{ position: 'absolute', inset: '-18% -22%', background: `radial-gradient(50% 46% at 50% 46%, ${gwRgba(glowColor || GW.accent, 0.34)}, transparent 72%)`, filter: 'blur(8px)', zIndex: 0, pointerEvents: 'none', transition: 'background .3s ease' }}></div>
       )}
       <div style={{
         position: 'relative', zIndex: 1, width, height, borderRadius: 46,
-        background: 'linear-gradient(150deg, #fafbfc, #e7e9ee)',
+        background: '#c7cbd2',
         padding: 11,
         boxShadow: isTilt
-          ? '0 2px 4px rgba(20,22,30,0.18), 42px 60px 90px -30px rgba(20,22,40,0.42), inset 0 0 0 1px rgba(255,255,255,0.7)'
-          : '0 2px 4px rgba(20,22,30,0.14), 0 44px 80px -28px rgba(20,22,40,0.36), inset 0 0 0 1px rgba(255,255,255,0.7)',
+          ? '0 2px 4px rgba(20,22,30,0.18), 42px 60px 90px -30px rgba(20,22,40,0.42), inset 0 0 0 1px rgba(255,255,255,0.14)'
+          : '0 2px 4px rgba(20,22,30,0.14), 0 44px 80px -28px rgba(20,22,40,0.36), inset 0 0 0 1px rgba(255,255,255,0.14)',
         transform: transforms[tilt],
         transformStyle: 'preserve-3d',
       }}>
         {/* inner bezel */}
         <div style={{ position: 'relative', height: '100%', borderRadius: 36, overflow: 'hidden', background: '#000', boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0.85)' }}>
           {/* dynamic island */}
-          <div style={{ position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)', width: 86, height: 24, borderRadius: 999, background: '#0a0a0c', zIndex: 5 }}></div>
+          {island && <div style={{ position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)', width: 86, height: 24, borderRadius: 999, background: '#0a0a0c', zIndex: 5 }}></div>}
           <div style={{ height: '100%', borderRadius: 34, overflow: 'hidden' }}>
-            <GymAppScreen />
+            {children}
           </div>
         </div>
       </div>
@@ -153,4 +156,16 @@ function PhoneMock({ width = 300, tilt = 'none', glow = true, style = {} }) {
   );
 }
 
-window.PhoneMock = PhoneMock;
+// PhoneMock — synthetic, theme-driven app screen inside the device frame. The
+// glow tints to the active theme. NOTE: currently not rendered on the landing
+// page (the hero uses ScreenshotPhone with real screenshots); kept for reuse.
+function PhoneMock({ width = 300, tilt = 'none', glow = true, style = {} }) {
+  const { theme } = useTheme();
+  return (
+    <PhoneFrame width={width} tilt={tilt} glow={glow} glowColor={theme.accent} style={style}>
+      <GymAppScreen />
+    </PhoneFrame>
+  );
+}
+
+Object.assign(window, { PhoneFrame, PhoneMock });

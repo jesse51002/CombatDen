@@ -63,11 +63,11 @@ _What it says:_
 
 - **Heading:** "Your brand, everywhere."
 - **Body:** "Immerse members in your brand's vibe, imagery, colors. Choose from 75+ ready-made designs, or we'll build one custom, no extra charge."
-- **Button:** "Browse themes" → links to the theme library (placeholder `#themes` until the live library URL is wired)
+- **Button:** "Browse themes" → links to the live theme browser at `https://themes.combatden.net` (same tab)
 
 Structure: immersion result first, library (75+ presets) as the hero, custom build as the short tail. No comparisons / no "what we're not" framing. No em dashes.
 
-_How it's displayed:_ centered copy + the required **Browse themes** button, above an **infinite, slowly-looping marquee** of themed app-preview cards (each a different brand). The marquee never wraps; it scrolls continuously to the side and never stops. Cards are clickable: selecting one sets the global theme, re-skinning the hero mocks.
+_How it's displayed:_ a split layout — copy + the required **Browse themes** button on the left, and a transparent looping video (`assets/landing/gymworld-3phones.webm`) of the member app shown across three brand themes on the right.
 
 ---
 
@@ -77,17 +77,19 @@ _How it's displayed:_ centered copy + the required **Browse themes** button, abo
 
 _What it says:_
 
-- **Heading:** "Videos to engage"
-- **Why-a-feed lead (sits in the 01 cell):** "Video feed keeps members engaged, making them stay longer."
+- **Heading:** none. The §4 heading ("Videos to engage") was removed; the section opens directly on the 01 card.
+- **Why-a-feed lead (sits in the 01 cell):** "Video feed keeps members engaged, making them stay longer. Use our agent to create a feed with a few prompts."
 - **Sub-sections (owner-facing — what the owner can do; each gets its own visual):**
-  1. "Create a video feed with our agent."
+  1. "Make a feed that engages."
   2. "Tell the agent what you want (and don't want)."
   3. "Add your own videos, and they get prioritized."
   4. "Remove a video once, and it keeps similar out."
 
-Order is flexible (founder said so) — currently arranged create → refine → add your own → it learns, ending on the self-improving line as the strongest note. Owner-facing throughout. "Our agent" makes clear it's part of the product. No em dashes.
+Order is flexible (founder said so) — currently arranged make → refine → add your own → it learns, ending on the self-improving line as the strongest note. The 01 title now leads with the benefit ("Make a feed that engages"); the how (our agent, a few prompts) sits in the lead beneath it, per value-first. Owner-facing throughout. "Our agent" is named in the 01 lead and again in 02. No em dashes.
 
-_How it's displayed:_ a big 01 feature card (copy + lead beside a real app screenshot cropped in a phone) over a row of three soft cards (02/03/04), each with its own visual (thumbs with check/x marks, prioritized uploads, a "Not this one" removal).
+_How it's displayed:_ a big 01 feature card (copy + lead beside a looping screen-recording of the app's video feed, cropped in a phone) over a row of three soft cards (02/03/04), each with its own visual (thumbs with check/x marks, prioritized uploads, a "Not this one" removal).
+
+The section runs on two independent clocks. The 01 card (phone + prompt bubble) is linked to the screen-recording: the clip cycles through 6 gym types (yoga, muay thai, running, bjj, barre, hyrox), 3 seconds each, and the prompt bubble ("Video feed for a ___") names the gym currently on screen. The lower 02/03/04 grids are deliberately unlinked, cycling through the same gyms on their own slower timer (each gym holds about 8 seconds) so the section does not flip everything at once. Both crossfade gently (about a 1 second fade) on change. Thumbnails are real content from the VideoService library: accepted YouTube thumbnails on the 02 and 04 cards, and class photos on the 03 "your own videos" card (so uploads read like real footage). This is a per-widget state machine local to the section, not the global brand theme.
 
 ---
 
@@ -102,7 +104,7 @@ _What it says:_
 
 Just title + subtext. Keeps the original benefit line and adds one sentence naming the contextual signals (class, skill level, preferences). The phone animation carries the timing. No third paragraph.
 
-_How it's displayed:_ **horizontally aligned** — a copy column (header + subheader only) beside the phone, which auto-loops a booking flow (book a class → booked → the matched warm-up video pops up 30 minutes before). Stacks to one column on narrow screens.
+_How it's displayed:_ **vertically stacked and center-aligned** — centered copy (header + subheader) above a centered phone that loops a real app screen-recording of the flow (book a class → the matched warm-up video surfaces before class). The phone screen is sized to the video's exact aspect ratio (1080x2340), so the clip fills the frame with no cropping.
 
 ---
 
@@ -119,7 +121,7 @@ _What it says:_ current loyalty copy (`COPY.loyalty`):
 
 Founder wants to trim this later but leave it for now. Revisit for leanness in a later pass.
 
-_How it's displayed:_ an auto-cycling 4-step points loop, then a 3-card reward carousel (focused centre card, two peeking sides, prev/next + dots, benefit caption per reward).
+_How it's displayed:_ an auto-cycling 4-step points loop, then a 3-card reward carousel (focused centre card, two peeking sides, prev/next + dots, benefit caption per reward). Each reward card is led by a photo of the reward (a branded gym tee as a product shot, two training partners grappling and laughing on the mats, a 1-on-1 PT session); the line-icon remains a fallback if a reward has no image. The shirt and friend-pass images are founder-supplied (`assets/images/`), the PT image is Pexels stock.
 
 ---
 

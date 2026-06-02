@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import 'package:theme_flutter/showcase/home/home_class.dart';
-import 'package:theme_flutter/showcase/showcase_assets.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/home/home_class.dart';
+import 'package:app_management/showcase/showcase_assets.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 
 const double _kClassImageWidth = 122;
 const double _kClassImageHeight = 73;

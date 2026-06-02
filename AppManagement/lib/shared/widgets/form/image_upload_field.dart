@@ -8,19 +8,25 @@ import 'package:app_management/core/constants/design_constants.dart';
 const double _kUploadAspect = 16 / 9;
 const double _kUploadMaxWidth = 360;
 
-/// Labeled image upload box. Shows an upload prompt when empty, or a
-/// preview of [imageAsset] when set. The prototype tap is a no-op.
+/// Labeled image upload box. Shows an upload prompt when empty, or a preview
+/// when set. A network [imageUrl] (the selected gym's class image) is preferred,
+/// else a bundled [imageAsset]. The prototype tap is a no-op.
 class ImageUploadField extends StatelessWidget {
   final String label;
+  final String? imageUrl;
   final String? imageAsset;
   final VoidCallback? onTap;
 
   const ImageUploadField({
     super.key,
     required this.label,
+    this.imageUrl,
     this.imageAsset,
     this.onTap,
   });
+
+  bool get _hasImage =>
+      (imageUrl != null && imageUrl!.isNotEmpty) || imageAsset != null;
 
   @override
   Widget build(BuildContext context) {
@@ -49,9 +55,9 @@ class ImageUploadField extends StatelessWidget {
                       width: DesignConstants.buttonBorder,
                     ),
                   ),
-                  child: imageAsset == null
-                      ? const _UploadPrompt()
-                      : _Preview(asset: imageAsset!),
+                  child: _hasImage
+                      ? _Preview(imageUrl: imageUrl, asset: imageAsset)
+                      : const _UploadPrompt(),
                 ),
               ),
             ),
@@ -89,15 +95,35 @@ class _UploadPrompt extends StatelessWidget {
 }
 
 class _Preview extends StatelessWidget {
-  final String asset;
-  const _Preview({required this.asset});
+  final String? imageUrl;
+  final String? asset;
+  const _Preview({this.imageUrl, this.asset});
+
+  // Network (the gym's class image) wins; on a load error or no URL, fall back
+  // to the bundled asset, then a plain card-colored box. Mirrors
+  // `ClassCard._CardImage`.
+  Widget _image() {
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return Image.network(
+        imageUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _fallback(),
+      );
+    }
+    return _fallback();
+  }
+
+  Widget _fallback() {
+    if (asset != null) return Image.asset(asset!, fit: BoxFit.cover);
+    return ColoredBox(color: DesignConstants.card);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.asset(asset, fit: BoxFit.cover),
+        _image(),
         Positioned(
           right: DesignConstants.spacingMedium,
           bottom: DesignConstants.spacingMedium,

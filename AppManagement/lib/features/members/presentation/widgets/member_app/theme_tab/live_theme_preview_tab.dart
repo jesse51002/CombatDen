@@ -10,8 +10,8 @@ import 'package:app_management/features/members/presentation/widgets/member_app/
 import 'package:app_management/features/members/presentation/widgets/themes_library/library_view.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:theme_flutter/customization_runtime.dart';
-import 'package:theme_flutter/showcase/showcase_screen.dart';
-import 'package:theme_flutter/showcase/showcase_slots.dart';
+import 'package:app_management/showcase/showcase_screen.dart';
+import 'package:app_management/showcase/showcase_slots.dart';
 
 // The tenant + the preset the engine initializes on, only so the customization
 // runtime has something to fetch on first paint (the library/gym-select screen

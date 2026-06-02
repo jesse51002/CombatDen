@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 import 'package:theme_flutter/theme/animation/celebration_timings.dart';
 
 /// Clone of MobileApp's `SparkleBurst`: a decorative one-shot sparkle scatter

@@ -1,13 +1,13 @@
 import 'package:flutter/widgets.dart';
 
-import 'package:theme_flutter/showcase/booking_showcase.dart';
-import 'package:theme_flutter/showcase/home_showcase.dart';
-import 'package:theme_flutter/showcase/showcase_content.dart';
-import 'package:theme_flutter/showcase/points_showcase.dart';
-import 'package:theme_flutter/showcase/rewards_card_showcase.dart';
-import 'package:theme_flutter/showcase/rewards_showcase.dart';
-import 'package:theme_flutter/showcase/stats_showcase.dart';
-import 'package:theme_flutter/showcase/wins_showcase.dart';
+import 'package:app_management/showcase/booking_showcase.dart';
+import 'package:app_management/showcase/home_showcase.dart';
+import 'package:app_management/showcase/showcase_content.dart';
+import 'package:app_management/showcase/points_showcase.dart';
+import 'package:app_management/showcase/rewards_card_showcase.dart';
+import 'package:app_management/showcase/rewards_showcase.dart';
+import 'package:app_management/showcase/stats_showcase.dart';
+import 'package:app_management/showcase/wins_showcase.dart';
 
 /// The member-app surfaces previewable in the live theme preview, in
 /// slideshow order. Each maps to a self-contained showcase widget that
@@ -38,8 +38,9 @@ enum ShowcaseScreen {
   /// surfaces running; [onCycleComplete] fires once per loop. [gymName] /
   /// [gymLogo] are the host app's gym identity, used only by the surfaces
   /// that render the gym header. [rewards] / [classes] are the selected gym's
-  /// real content, injected into the catalog surfaces (the Store grid and the
-  /// Home schedule); null on the others, which stay on bundled samples.
+  /// real content: [rewards] feed the Store grid and the "Rewards You Can Get"
+  /// carousel, [classes] feed the Home schedule; null falls back to bundled
+  /// samples. The remaining surfaces stay on bundled samples regardless.
   Widget build({
     bool loop = true,
     VoidCallback? onCycleComplete,
@@ -67,6 +68,7 @@ enum ShowcaseScreen {
         return RewardsCardShowcase(
           loop: loop,
           onCycleComplete: onCycleComplete,
+          rewards: rewards,
         );
       case ShowcaseScreen.wins:
         return WinsShowcase(loop: loop, onCycleComplete: onCycleComplete);

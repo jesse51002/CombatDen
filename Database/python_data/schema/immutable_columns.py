@@ -147,3 +147,55 @@ MEMBER_ACTIVITIES: frozenset[str] = frozenset(
         "time",  # auto-generated timestamp
     }
 )
+
+# ============================================================
+# VideoService demo content (video_* tables). Written by service-role only
+# (no user-facing updates), but kept in sync per the Database convention.
+# ============================================================
+
+VIDEO_GYM: frozenset[str] = frozenset(
+    {
+        "gym_id",  # PK (text id == YAML filename stem)
+    }
+)
+
+VIDEO_GYM_QUERY: frozenset[str] = frozenset(
+    {
+        "query_id",  # PK, identity
+        "gym_id",  # identity FK, per-gym resource
+    }
+)
+
+VIDEO_GYM_CLASS: frozenset[str] = frozenset(
+    {
+        "class_id",  # PK, identity
+        "gym_id",  # identity FK, per-gym resource
+    }
+)
+
+VIDEO_GYM_REWARD: frozenset[str] = frozenset(
+    {
+        "reward_id",  # PK, identity
+        "gym_id",  # identity FK, per-gym resource
+    }
+)
+
+VIDEO: frozenset[str] = frozenset(
+    {
+        "video_id",  # PK (YouTube id)
+    }
+)
+
+VIDEO_GYM_FEED: frozenset[str] = frozenset(
+    {
+        "gym_id",  # composite PK / identity FK
+        "video_id",  # composite PK / identity FK
+    }
+)
+
+VIDEO_COST_LOG: frozenset[str] = frozenset(
+    {
+        "entry_id",  # PK, identity (append-only)
+        "gym_id",  # identity FK, set at insert (append-only)
+    }
+)

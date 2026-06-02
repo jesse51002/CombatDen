@@ -3,13 +3,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/celebrations/rewards_carousel.dart';
-import 'package:theme_flutter/showcase/celebrations/showcase_celebration_stats.dart';
-import 'package:theme_flutter/showcase/showcase_assets.dart';
-import 'package:theme_flutter/showcase/showcase_slots.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
-import 'package:theme_flutter/showcase/support/showcase_scaffold.dart';
-import 'package:theme_flutter/showcase/support/staggered_reveal.dart';
+import 'package:app_management/showcase/celebrations/rewards_carousel.dart';
+import 'package:app_management/showcase/celebrations/showcase_celebration_stats.dart';
+import 'package:app_management/showcase/showcase_assets.dart';
+import 'package:app_management/showcase/showcase_content.dart';
+import 'package:app_management/showcase/showcase_slots.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/support/showcase_scaffold.dart';
+import 'package:app_management/showcase/support/staggered_reveal.dart';
 import 'package:theme_flutter/theme/animation/celebration_timings.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 
@@ -33,10 +34,16 @@ class RewardsCardShowcase extends StatefulWidget {
     super.key,
     this.loop = true,
     this.onCycleComplete,
+    this.rewards,
   });
 
   final bool loop;
   final VoidCallback? onCycleComplete;
+
+  /// The selected gym's rewards, injected by the host. When non-empty the
+  /// carousel shows them (with their network images) instead of the bundled
+  /// sample rewards; null/empty falls back to [showcaseRewardsStats].
+  final List<ShowcaseReward>? rewards;
 
   @override
   State<RewardsCardShowcase> createState() => _RewardsCardShowcaseState();
@@ -50,7 +57,7 @@ class _RewardsCardShowcaseState extends State<RewardsCardShowcase> {
   // The actual item shown is `_page % items.length`.
   static const _initialPageBase = 10000;
 
-  final ShowcaseRewardsStats _stats = showcaseRewardsStats;
+  late ShowcaseRewardsStats _stats;
 
   late PageController _controller;
   late int _page;
@@ -63,7 +70,49 @@ class _RewardsCardShowcaseState extends State<RewardsCardShowcase> {
   @override
   void initState() {
     super.initState();
+    _stats = _buildStats();
     _resetPaging();
+  }
+
+  @override
+  void didUpdateWidget(RewardsCardShowcase oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The preview re-keys this widget on a gym/theme switch (so a fresh State
+    // normally picks up new rewards), but rebuild the stats + paging defensively
+    // if the injected rewards change in place.
+    if (!identical(oldWidget.rewards, widget.rewards)) {
+      _stats = _buildStats();
+      _advanceTimer?.cancel();
+      _holdTimer?.cancel();
+      _controller.dispose();
+      _showCarousel = false;
+      _cycle++;
+      _resetPaging();
+    }
+  }
+
+  // Build the carousel data from the injected gym rewards (keeping the bundled
+  // title/subtitle), or fall back to the bundled sample set. The featured index
+  // is clamped so paging math stays valid for any reward count.
+  ShowcaseRewardsStats _buildStats() {
+    final rewards = widget.rewards;
+    if (rewards == null || rewards.isEmpty) return showcaseRewardsStats;
+    final items = [
+      for (final r in rewards)
+        ShowcaseRewardItem(
+          imageUrl: r.imageUrl,
+          imageAsset: '',
+          name: r.title,
+          discountLabel: r.priceLabel,
+          pointsCost: r.pointsCost,
+        ),
+    ];
+    return ShowcaseRewardsStats(
+      title: showcaseRewardsStats.title,
+      subtitle: showcaseRewardsStats.subtitle,
+      featuredIndex: items.length <= 1 ? 0 : items.length ~/ 2,
+      items: items,
+    );
   }
 
   void _resetPaging() {

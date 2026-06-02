@@ -1,11 +1,11 @@
 {
-    "name": "app_management",
-    "short_name": "app_management",
+    "name": "CombatDen",
+    "short_name": "CombatDen",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F3F5F8",
+    "theme_color": "#2A67BD",
+    "description": "CombatDen — the app that keeps your members from quitting.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

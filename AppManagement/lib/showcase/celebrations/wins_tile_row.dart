@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:theme_flutter/showcase/celebrations/showcase_celebration_stats.dart';
-import 'package:theme_flutter/showcase/celebrations/wins_tile.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/celebrations/showcase_celebration_stats.dart';
+import 'package:app_management/showcase/celebrations/wins_tile.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 import 'package:theme_flutter/theme/animation/celebration_timings.dart';
 
 /// Clone of MobileApp's `WinsTileRow`: three equally-sized [WinsTile]s in a

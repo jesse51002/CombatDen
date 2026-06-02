@@ -302,3 +302,94 @@ Ref: member_activities.member_id > members.member_id
 Ref: member_activities.gym_id > gyms.gym_id
 
 Ref: gym_history.gym_id > gyms.gym_id
+
+// ============================================================
+// VideoService demo content (video_* tables). The gym here is a gym-TYPE
+// template keyed by a text id (e.g. 'boxing') — NOT the customer `gyms` table.
+// ============================================================
+
+Table video_gym {
+  gym_id text [primary key, note: 'text id == YAML filename stem']
+  gym_type jsonb [not null, note: 'JSONB array of disciplines; [0] = primary (drives parent_gym_type)']
+  theme varchar [not null, note: 'ThemeService design id']
+  short_videos_desc text
+  short_avoid_desc text
+  videos_desc text [not null]
+  avoid_desc text [not null]
+  has_classes boolean [not null, default: false]
+  has_rewards boolean [not null, default: false]
+}
+
+Table video_gym_query {
+  query_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id text [not null]
+  query text [not null]
+}
+
+Table video_gym_class {
+  class_id uuid [primary key, default: `uuid_generate_v4()`, note: 'serve ORDER BY name']
+  gym_id text [not null]
+  name text [not null]
+  image_url text [not null]
+  description text [not null]
+  instructor_name text [not null]
+  instructor_bio text [not null]
+  instructor_image_url text [not null]
+}
+
+Table video_gym_reward {
+  reward_id uuid [primary key, default: `uuid_generate_v4()`, note: 'serve ORDER BY points_cost']
+  gym_id text [not null]
+  title text [not null]
+  image_url text [not null]
+  price_label text [not null]
+  points_cost integer [not null]
+}
+
+Table video {
+  video_id text [primary key, note: 'YouTube id']
+  url text [not null]
+  title text [not null]
+  description text [not null, default: '']
+  thumbnail_url text [not null]
+  channel_name text [not null]
+  channel_url text [not null]
+  channel_avatar_url text [not null, default: '', note: 'empty post-scrape; backfilled at serve']
+  view_count integer
+  like_count integer
+  duration_seconds integer
+  tag video_genre [note: 'enum: single content genre; null until classified']
+  disciplines jsonb [not null, default: '[]', note: 'JSONB array of disciplines (GIN-indexed for the scan slice)']
+  source_queries jsonb [not null, default: '[]', note: 'JSONB array; tracing only']
+  relevance_index integer [not null]
+  transcript_error text
+  transcript text
+}
+
+Table video_gym_feed {
+  gym_id text [not null]
+  video_id text [not null]
+  status video_gym_feed_status [not null, note: 'enum: good | rejected']
+
+  indexes {
+    (gym_id, video_id) [pk]
+    (gym_id, status)
+  }
+}
+
+Table video_cost_log {
+  entry_id uuid [primary key, default: `uuid_generate_v4()`, note: 'append-only']
+  execution_type video_execution_type [not null, note: 'enum: search|transcript|tag|scan']
+  gym_id text [note: 'set on scan entries; NULL for pool-wide search/tag runs']
+  at timestamptz [not null]
+  breakdown jsonb [not null, default: '{}', note: 'USD component map']
+  note text
+}
+
+Ref: video_gym_query.gym_id > video_gym.gym_id
+Ref: video_gym_class.gym_id > video_gym.gym_id
+Ref: video_gym_reward.gym_id > video_gym.gym_id
+
+Ref: video_gym_feed.gym_id > video_gym.gym_id
+Ref: video_gym_feed.video_id > video.video_id
+Ref: video_cost_log.gym_id > video_gym.gym_id

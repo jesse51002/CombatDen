@@ -24,7 +24,7 @@ This file is a living document — exactly like a skill, it must track reality. 
 - `hifi/copy.jsx` — `COPY`: all marketing/section strings (mirrors `contents.md`).
 - `hifi/chrome.jsx` — shared chrome: `GWButton`, `GWNav`, `GWDisclaimer`.
 - `hifi/footer.jsx` — `FooterSection` (shared by both pages; Google Form POST + Calendly open).
-- `hifi/mocks/` — `phone-mock.jsx` (theme-driven `PhoneMock`/`GymAppScreen`), `theme-preview.jsx` (prop-driven `ThemePreview` for the §3 rail).
+- `hifi/mocks/` — `phone-mock.jsx` (`PhoneFrame` device shell + the theme-driven `PhoneMock`/`GymAppScreen`; the hero defines its own `ScreenshotPhone` around `PhoneFrame` for real screenshots), `theme-preview.jsx` (prop-driven `ThemePreview` card, no longer rendered on the page).
 - `hifi/sections/` — one file per section: `hero`, `what-it-is`, `brand`, `feed`, `recs`, `loyalty`, `why`, `pricing-table`.
 
 **Load order matters** — there is no module system; files share globals via `window`. Order is `ds → theme-store → copy → chrome → footer → mocks → sections → inline render`. When you add a file, wire it into the HTML in dependency order (anything it references must load first). Each file ends with `window.X = …` / `Object.assign(window, {…})`.
@@ -48,7 +48,7 @@ If you find yourself typing a marketing string literal inside a section, stop an
 
 ## Stateful theme store
 
-`theme-store.jsx` holds a single global active brand theme in React context. It is **not** the product's CustomizationEngine — it's presentation-only: a `THEMES` list plus a hardcoded `THEME_ASSETS` `{ themeId → image/gif }` dict. Single-device mocks (`PhoneMock`/`GymAppScreen`, and the recs/feed phones) read `useTheme()` and re-skin (accent + screen image) on every theme change. The §3 `ThemePreview` rail is prop-driven so it can show many brands at once; clicking a rail card sets the global theme. To swap in real per-brand screenshots later, edit `THEME_ASSETS` — that dict is the one intended edit point.
+`theme-store.jsx` holds a single global active brand theme in React context. It is **not** the product's CustomizationEngine — it's presentation-only: a `THEMES` list plus a hardcoded `THEME_ASSETS` `{ themeId → image/gif }` dict. The theme store is currently **dormant on the live page**: no rendered section consumes `useTheme()` anymore, so switching the active theme has no visible effect. The theme-driven `PhoneMock`/`GymAppScreen` and `ThemeSwitcher` are kept for reuse but are not rendered. The §1 hero now renders a trio of `ScreenshotPhone` frames (rewards · home · videos, sharing `PhoneFrame`) showing **real** screenshots from `assets/landing/screenshots/` (`{screen}-{gym}.png`), cycling all six gyms together every 5s with an opacity crossfade (starting on yoga); the full-res PNGs (~16MB) load progressively via a lazy `seen` set (the incoming gym is preloaded one tick ahead). The §3 brand section is a split layout: copy on the left and, on the right, a transparent looping video (`assets/landing/gymworld-3phones.webm`) of the member app fanned across three brand themes (the phones are baked into the alpha clip); it plays only while in view (see the videos rule below). (The prop-driven `ThemePreview` card component still exists for reuse but is no longer rendered on the landing page.) The §5 recs phone and the §4 feed phone do **not** use the global theme: recs uses static demo assets, and the §4 feed runs its own per-widget state machine on two clocks: the 01 prompt bubble is video-linked (`gym` from the phone video's `currentTime`, 3s/gym), while the lower 02/03/04 grids cycle on a separate slower timer (`gridGym`, 8s hold) unlinked from the video. Both crossfade on change (~1s); thumbnails are real VideoService assets under `assets/landing/feed/` (see `sections/feed.jsx`). If the theme-driven mocks are ever brought back, `THEME_ASSETS` is their image edit point; the hero's screenshots are plain files under `assets/landing/screenshots/` named `{screen}-{gym}.png`.
 
 ## Use the impeccable skill for design work
 
@@ -70,9 +70,17 @@ How to apply:
 
 **Never spawn `serve.py` / `make serve` in the background to smoke-test.** The harness doesn't reliably reap backgrounded processes, and the leftover servers squat on port 4173 — next time the user runs `make serve`, it fails with "port taken" and they have to hunt down PIDs.
 
-Default assumption: the user has `make serve` running in their own terminal. To verify a change, just point them at the URL (`http://localhost:4173/` for the landing, `http://localhost:4173/pricing.html` for pricing, `http://localhost:4173/onepager/onepager.html` for the internal one-pager).
+Default assumption: the user has `make serve` running in their own terminal. To verify a change, just point them at the URL (`http://localhost:4173/` for the landing, `http://localhost:4173/pricing.html` for pricing).
 
 If you genuinely need the server running (e.g. for a Bash HTTP check), **ask first.** Don't background it yourself. If a smoke-test can be done by checking the filesystem (`ls`, `stat`, Read) instead of HTTP, prefer that.
+
+## Videos play only while in view
+
+**Every `<video>` on the landing page must play only while it is on screen, and restart (reset to the start) when it scrolls out of view.** No clip ever plays off-screen, and a viewer always catches it from the top. This is a standing rule, not a per-section choice.
+
+Don't use the `autoPlay` attribute. Instead attach a ref to the `<video>` and call the shared `useVideoInView(videoRef[, onVisible])` hook from `hifi/ds.jsx` — an IntersectionObserver that calls `play()` on enter and `pause()` + `currentTime = 0` on exit. Keep `loop muted playsInline preload="auto"` on the element. The optional `onVisible(bool)` callback is for callers (like the §4 feed) that also need the in-view state for their own logic. The §3 brand video (`sections/brand.jsx`, transparent alpha clip), the §4 feed phone (`sections/feed.jsx`), and the §5 recs phone (`sections/recs.jsx`) all use it; any new video must too.
+
+**Shared reveal point — `IN_VIEW_MARGIN` (`ds.jsx`).** Scroll-triggered animations must not fire the instant a sliver peeks in. `useVideoInView` and every other scroll-gated animation — the §7 count-up (`why.jsx`), the §6 loyalty loops (`loyalty.jsx`), and the hero gym-cycle (`hero.jsx`) — observe with `rootMargin: IN_VIEW_MARGIN` (a bottom inset of `-25%`), so an element only counts as "in view" once it has scrolled ~25% up into the viewport. It's a bottom `rootMargin`, not an element-ratio `threshold`, on purpose — ratio thresholds misfire on phone mockups taller than the fold. Tune that one constant to move where every animation begins; any new scroll-triggered animation should reuse it. (Exception: the §4 feed's separate `threshold: 0` observer is intentional — it only **preloads thumbnails** ahead of the reveal, it doesn't start playback.)
 
 ## Line breaks in copy (\n)
 

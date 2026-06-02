@@ -14,12 +14,19 @@ class LoadingDots extends StatefulWidget {
     this.spacing = 16,
     this.bounceHeight = 28,
     this.cycleDuration = const Duration(milliseconds: 1100),
+    this.value,
   });
 
   final double dotSize;
   final double spacing;
   final double bounceHeight;
   final Duration cycleDuration;
+
+  /// When null (the default, used everywhere in the app) the dots animate
+  /// themselves on a repeating controller. When set (0..1), the wave is rendered
+  /// at exactly that phase instead — the capture harness (`tools/capture/`)
+  /// drives this per frame so the exported clip plays at true speed.
+  final double? value;
 
   @override
   State<LoadingDots> createState() => _LoadingDotsState();
@@ -32,7 +39,13 @@ class _LoadingDotsState extends State<LoadingDots>
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
     duration: widget.cycleDuration,
-  )..repeat();
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.value == null) _ctrl.repeat();
+  }
 
   @override
   void dispose() {
@@ -52,9 +65,10 @@ class _LoadingDotsState extends State<LoadingDots>
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (context, _) {
+          final v = widget.value ?? _ctrl.value;
           return Stack(
             children: [
-              for (int i = 0; i < _kDotCount; i++) _dot(i, brand),
+              for (int i = 0; i < _kDotCount; i++) _dot(i, brand, v),
             ],
           );
         },
@@ -62,8 +76,8 @@ class _LoadingDotsState extends State<LoadingDots>
     );
   }
 
-  Widget _dot(int index, Color color) {
-    final phase = (_ctrl.value + index / _kDotCount) % 1.0;
+  Widget _dot(int index, Color color, double cycleValue) {
+    final phase = (cycleValue + index / _kDotCount) % 1.0;
     // Half-sine bounce: 0 at rest → 1 at peak → 0 at rest.
     final wave = math.max(0.0, math.sin(phase * 2 * math.pi));
     final left = index * (widget.dotSize + widget.spacing);

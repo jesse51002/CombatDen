@@ -15,3 +15,7 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# Heavy media SOURCES (raw recordings/gifs). Converted, web-sized derivatives
+# live under assets/landing/ and ARE committed + deployed. Sources are not.
+media-src/

@@ -14,12 +14,21 @@ import 'package:app_management/core/constants/design_constants.dart';
 /// screen (as many columns as fit at that minimum), or [columns] for a
 /// fixed count. With [minItemWidth], [minColumns] sets a floor on the
 /// responsive count so a narrow viewport never collapses below it.
+///
+/// By default a collection smaller than the column count [stretchShortRows]:
+/// the column count is capped at the item count so a short row fills the width
+/// with no ragged trailing gap. Pass `stretchShortRows: false` to keep the
+/// column count fixed instead — a short collection then leaves reserved empty
+/// cells, so each item keeps its normal column width (e.g. a single search
+/// result sits as one normal card in the top-left rather than ballooning to
+/// fill the row).
 class FillGrid extends StatelessWidget {
   final List<Widget> children;
   final int columns;
   final double? minItemWidth;
   final int minColumns;
   final double spacing;
+  final bool stretchShortRows;
 
   const FillGrid({
     super.key,
@@ -28,26 +37,32 @@ class FillGrid extends StatelessWidget {
     this.minItemWidth,
     this.minColumns = 1,
     this.spacing = DesignConstants.spacingLarge,
+    this.stretchShortRows = true,
   });
 
   @override
   Widget build(BuildContext context) {
     if (minItemWidth == null) {
-      return _grid(math.max(1, math.min(columns, children.length)));
+      final cols = stretchShortRows
+          ? math.min(columns, children.length)
+          : columns;
+      return _grid(math.max(1, cols));
     }
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final fit = ((width + spacing) / (minItemWidth! + spacing)).floor();
         // Hold a floor of [minColumns] so a narrow viewport keeps a sensible
-        // grid instead of a single stacked column — but never reserve more
-        // columns than there are items, so a short row stretches to fill the
-        // width instead of leaving a ragged gap.
-        final cols = math.max(
-          1,
-          math.min(math.max(minColumns, fit), children.length),
-        );
-        return _grid(cols);
+        // grid instead of a single stacked column.
+        final desired = math.max(minColumns, fit);
+        // By default never reserve more columns than there are items, so a
+        // short row stretches to fill the width instead of leaving a ragged
+        // gap. With [stretchShortRows] off the count stays fixed and the short
+        // row's empty cells are reserved, keeping each card at column width.
+        final cols = stretchShortRows
+            ? math.min(desired, children.length)
+            : desired;
+        return _grid(math.max(1, cols));
       },
     );
   }

@@ -3,12 +3,12 @@
 // BRAND, and all labels from COPY. Exports GWButton, GWNav, GWDisclaimer.
 
 // Primary / secondary button. label defaults to the demo CTA.
-function GWButton({ label = COPY.cta.demo, size = 'md', arrow = true, onClick, href, kind = 'primary' }) {
+function GWButton({ label = COPY.cta.demo, size = 'md', arrow = true, onClick, href, kind = 'primary', newTab = true }) {
   const pad = size === 'lg' ? '15px 26px' : size === 'sm' ? '9px 16px' : '13px 22px';
   const fs = size === 'lg' ? 16 : size === 'sm' ? 14 : 15;
   const primary = kind === 'primary';
   const Tag = href ? 'a' : 'button';
-  const extra = href ? { href, target: '_blank', rel: 'noopener' } : { onClick };
+  const extra = href ? { href, ...(newTab ? { target: '_blank', rel: 'noopener' } : {}) } : { onClick };
   return (
     <Tag {...extra} style={{
       display: 'inline-flex', alignItems: 'center', gap: 9, border: primary ? 'none' : `1px solid ${GW.line}`,
@@ -49,16 +49,14 @@ function GWNav() {
     }}>
       <div style={{ maxWidth: GW.maxW, margin: '0 auto', padding: '0 32px', height: 68, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <a href="index.html" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none' }}>
-          <div style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(150deg, ${GW.accent}, ${GW.accentDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(30,80,160,0.35)' }}>
-            <span style={{ fontFamily: GW.mono, fontSize: 8, color: 'rgba(255,255,255,0.92)', letterSpacing: 0.2 }}>{COPY.nav.logoMark}</span>
-          </div>
+          <img src="assets/landing/logo_tiny.png" alt="" style={{ height: 34, width: 'auto', display: 'block' }} />
           <span style={{ fontFamily: GW.sans, fontSize: 18, fontWeight: 650, letterSpacing: -0.4, color: GW.ink }}>{BRAND}</span>
         </a>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
           {COPY.nav.links.map(({ label, href }) => (
             <a key={label} href={href} style={{ fontFamily: GW.sans, fontSize: 14.5, fontWeight: 500, color: GW.inkSoft, letterSpacing: -0.1, cursor: 'pointer', textDecoration: 'none' }}>{label}</a>
           ))}
-          <GWButton label={COPY.nav.cta} size="sm" arrow={false} href="#book" />
+          <GWButton label={COPY.nav.cta} size="sm" arrow={false} href="#book" newTab={false} />
         </div>
       </div>
     </div>

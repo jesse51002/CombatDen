@@ -56,4 +56,32 @@ function GWGlow({ style }) {
   return <div style={{ position: 'absolute', borderRadius: '50%', pointerEvents: 'none', zIndex: 0, ...style }}></div>;
 }
 
-Object.assign(window, { GW, BRAND, gwRgba, GWDotGrid, GWGlow });
+// Landing-page video rule (see LandingPage/CLAUDE.md): a <video> plays only while
+// it's on screen and restarts from the start when it scrolls out of view, so no clip
+// ever plays off-screen. Attach a ref to the <video> (drop `autoPlay`) and call this
+// hook. `onVisible(bool)` is optional, for callers that also need the in-view state.
+// Shared scroll-reveal gate. An animation/video starts only once it has scrolled
+// ~25% up into the viewport, not the instant its top edge peeks in. Implemented as
+// a bottom rootMargin (the bottom 25% of the viewport doesn't count as "in view"),
+// which is height-independent — it works for tall phone mockups where an element
+// ratio threshold would misfire. Reused by every scroll-triggered animation (the
+// videos, the §7 count-up, the §6 loyalty loops, the hero cycle) so they all reveal
+// at the same point.
+const IN_VIEW_MARGIN = '0px 0px -25% 0px';
+
+function useVideoInView(videoRef, onVisible) {
+  React.useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const io = new IntersectionObserver((entries) => {
+      const vis = entries[0].isIntersecting;
+      if (vis) v.play().catch(() => {});
+      else { v.pause(); v.currentTime = 0; }
+      if (onVisible) onVisible(vis);
+    }, { rootMargin: IN_VIEW_MARGIN, threshold: 0 });
+    io.observe(v);
+    return () => io.disconnect();
+  }, []);
+}
+
+Object.assign(window, { GW, BRAND, gwRgba, GWDotGrid, GWGlow, useVideoInView, IN_VIEW_MARGIN });

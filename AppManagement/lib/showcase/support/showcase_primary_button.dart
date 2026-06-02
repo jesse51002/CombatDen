@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 
 /// Clone of MobileApp's `AppPrimaryButton`: primary action button on the
 /// brand fill. Preview-only — [onPressed] defaults to a no-op.

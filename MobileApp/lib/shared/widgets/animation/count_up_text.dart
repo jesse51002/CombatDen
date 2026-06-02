@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:mobile_app/shared/widgets/animation/capture_reveal_clock.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 
 /// A number that rolls from 0 to [target] using a steep ease-out-exp curve
@@ -46,6 +47,10 @@ class _CountUpTextState extends State<CountUpText>
     super.initState();
     _ctrl = AnimationController(vsync: this, duration: widget.duration);
     _digitSize = _measureDigitCell(widget.style);
+    // When the capture clock is driving, the harness sets the progress (with
+    // [delay] read as this reel's absolute offset on the global timeline);
+    // don't run the self-animation. Mirrors ScaleReveal/StaggeredReveal.
+    if (captureRevealClock.value != null) return;
     if (widget.delay == Duration.zero) {
       _ctrl.forward();
     } else {
@@ -53,6 +58,17 @@ class _CountUpTextState extends State<CountUpText>
         if (mounted) _ctrl.forward();
       });
     }
+  }
+
+  /// Raw 0..1 progress: from the capture clock (minus this reel's [delay], used
+  /// as its absolute start offset on the global timeline) when capturing, else
+  /// the controller. The easeOutExpo shaping is applied per-reel in [_DigitReel].
+  double _effectiveValue() {
+    final clock = captureRevealClock.value;
+    if (clock == null) return _ctrl.value;
+    return ((clock - widget.delay).inMicroseconds /
+            widget.duration.inMicroseconds)
+        .clamp(0.0, 1.0);
   }
 
   @override
@@ -95,7 +111,8 @@ class _CountUpTextState extends State<CountUpText>
           Text(widget.prefix, style: widget.style),
         for (int p = positions - 1; p >= 0; p--) ...[
           _DigitReel(
-            controller: _ctrl,
+            listenable: Listenable.merge([_ctrl, captureRevealClock]),
+            value: _effectiveValue,
             target: widget.target,
             position: p,
             digitSize: _digitSize,
@@ -118,14 +135,19 @@ class _CountUpTextState extends State<CountUpText>
 /// "blur scroll" early and the clean landing late.
 class _DigitReel extends StatefulWidget {
   const _DigitReel({
-    required this.controller,
+    required this.listenable,
+    required this.value,
     required this.target,
     required this.position,
     required this.digitSize,
     required this.style,
   });
 
-  final AnimationController controller;
+  /// Rebuild trigger — the controller merged with the capture clock.
+  final Listenable listenable;
+
+  /// Raw 0..1 progress for the current frame (controller- or clock-driven).
+  final double Function() value;
   final int target;
   final int position;
   final Size digitSize;
@@ -166,10 +188,10 @@ class _DigitReelState extends State<_DigitReel> {
       height: widget.digitSize.height,
       child: ClipRect(
         child: AnimatedBuilder(
-          animation: widget.controller,
+          animation: widget.listenable,
           child: _strip,
           builder: (context, child) {
-            final eased = Curves.easeOutExpo.transform(widget.controller.value);
+            final eased = Curves.easeOutExpo.transform(widget.value());
             final reelValue = (eased * widget.target / _divisor)
                 .clamp(0.0, _maxIndex.toDouble());
             return OverflowBox(

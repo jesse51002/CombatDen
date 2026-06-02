@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/showcase_assets.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
-import 'package:theme_flutter/showcase/support/showcase_primary_button.dart';
+import 'package:app_management/showcase/showcase_assets.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/support/showcase_primary_button.dart';
 
 // Reserve two lines of h2 (16px font, ~1.3 line height) so all cards have
 // the same title block whether the title is one line or two.

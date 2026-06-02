@@ -20,13 +20,31 @@ import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 /// Accepts a [MockClass] via `Navigator.pushNamed` route arguments and
 /// falls back to the canonical Muay Thai sample if none is provided.
 class ClassScreen extends StatelessWidget {
-  const ClassScreen({super.key});
+  const ClassScreen({
+    super.key,
+    this.classData,
+    this.captureController,
+    this.imageKey,
+    this.reserveKey,
+  });
+
+  /// Injected by the capture harness (`tools/capture/`) to render a specific
+  /// class detail without a route. Falls back to the route argument (then the
+  /// canonical Muay Thai sample) in normal app use.
+  final MockClass? classData;
+
+  /// Capture-only: a scroll controller for the body, a key on the class photo
+  /// (to scroll the topbar off / start at the image), and a key on the reserve
+  /// CTA (to centre a tap pulse on it). All null in normal app use.
+  final ScrollController? captureController;
+  final GlobalKey? imageKey;
+  final GlobalKey? reserveKey;
 
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
-    final classData = args is MockClass ? args : fallbackClass;
-    final detail = detailFor(classData);
+    final data = classData ?? (args is MockClass ? args : fallbackClass);
+    final detail = detailFor(data);
     final gym = mockGym;
 
     return AppScreenScaffold(
@@ -46,6 +64,7 @@ class ClassScreen extends StatelessWidget {
           children: [
             Expanded(
               child: SingleChildScrollView(
+                controller: captureController,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -58,13 +77,17 @@ class ClassScreen extends StatelessWidget {
                       pointsLabel: gym.pointsLabel,
                       rankBadgeAsset: gym.rankBadgeAsset,
                     ),
-                    ClassImageBanner(imageUrl: classData.imageUrl),
+                    KeyedSubtree(
+                      key: imageKey,
+                      child: ClassImageBanner(imageUrl: data.imageUrl),
+                    ),
                     _Body(detail: detail),
                   ],
                 ),
               ),
             ),
             ClassReserveFooter(
+              buttonKey: reserveKey,
               onReserve: () => Navigator.of(
                 context,
               ).pushReplacementNamed(AppRoutes.reservingLoading),

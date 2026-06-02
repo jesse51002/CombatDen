@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/showcase_slots.dart';
+import 'package:app_management/showcase/showcase_slots.dart';
 import 'package:theme_flutter/theme/theme_color.dart';
 import 'package:theme_flutter/theme/theme_derivation.dart';
 import 'package:theme_flutter/theme/theme_font.dart';

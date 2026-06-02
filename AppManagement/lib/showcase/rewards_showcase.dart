@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/rewards/mock_points_store.dart';
-import 'package:theme_flutter/showcase/rewards/points_headline.dart';
-import 'package:theme_flutter/showcase/rewards/rewards_tabs.dart';
-import 'package:theme_flutter/showcase/rewards/store_grid.dart';
-import 'package:theme_flutter/showcase/showcase_content.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
-import 'package:theme_flutter/showcase/support/showcase_bottom_nav.dart';
-import 'package:theme_flutter/showcase/support/showcase_scaffold.dart';
-import 'package:theme_flutter/showcase/support/showcase_topbar.dart';
+import 'package:app_management/showcase/rewards/mock_points_store.dart';
+import 'package:app_management/showcase/rewards/points_headline.dart';
+import 'package:app_management/showcase/rewards/rewards_tabs.dart';
+import 'package:app_management/showcase/rewards/store_grid.dart';
+import 'package:app_management/showcase/showcase_content.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/support/showcase_bottom_nav.dart';
+import 'package:app_management/showcase/support/showcase_scaffold.dart';
+import 'package:app_management/showcase/support/showcase_topbar.dart';
 
 /// Exact visual clone of the member app's **Points Store** (`PointsStoreScreen`):
 /// the Points Store / My Rewards tabs, the sparkle "YOU EARNED — POINTS" hero

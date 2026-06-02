@@ -7,8 +7,8 @@ import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:app_management/shared/widgets/app_spinner.dart';
 import 'package:app_management/shared/widgets/phone_frame.dart';
 import 'package:theme_flutter/customization_runtime.dart';
-import 'package:theme_flutter/showcase/showcase_content.dart';
-import 'package:theme_flutter/showcase/showcase_screen.dart';
+import 'package:app_management/showcase/showcase_content.dart';
+import 'package:app_management/showcase/showcase_screen.dart';
 
 // Phone-like page push between showcase screens. Same spirit (and curve) as
 // theme_grid.dart's scroll animation — a local const, not a design token.

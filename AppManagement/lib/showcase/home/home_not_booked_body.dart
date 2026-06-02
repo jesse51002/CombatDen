@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/home/date_tab.dart';
-import 'package:theme_flutter/showcase/home/day_class_group.dart';
-import 'package:theme_flutter/showcase/home/home_schedule_generator.dart';
-import 'package:theme_flutter/showcase/showcase_content.dart';
-import 'package:theme_flutter/showcase/support/showcase_topbar.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/home/date_tab.dart';
+import 'package:app_management/showcase/home/day_class_group.dart';
+import 'package:app_management/showcase/home/home_schedule_generator.dart';
+import 'package:app_management/showcase/showcase_content.dart';
+import 'package:app_management/showcase/support/showcase_topbar.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
 
 // How many date pills the static strip shows (no horizontal scroll in the
 // preview). Three fits the device width comfortably.

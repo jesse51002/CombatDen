@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:theme_flutter/showcase/celebrations/showcase_celebration_stats.dart';
-import 'package:theme_flutter/showcase/showcase_tokens.dart';
-import 'package:theme_flutter/showcase/support/count_up_text.dart';
-import 'package:theme_flutter/showcase/support/staggered_reveal.dart';
+import 'package:app_management/showcase/celebrations/showcase_celebration_stats.dart';
+import 'package:app_management/showcase/showcase_tokens.dart';
+import 'package:app_management/showcase/support/count_up_text.dart';
+import 'package:app_management/showcase/support/staggered_reveal.dart';
 
 /// Clone of MobileApp's `WinsTile`: bordered info-tile shown in the Wins grid
 /// — icon + value + caption. If [tile.value] parses as a clean integer

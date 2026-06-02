@@ -53,6 +53,18 @@ class Settings(BaseSettings):
     # so a 24h TTL is generous and cheap.
     google_fonts_ttl_seconds: int = 24 * 60 * 60
 
+    # --- S3/CloudFront asset delivery -------------------------------------
+    # Generated images/icons are mirrored to S3, served via CloudFront. The bucket
+    # + region are fixed project resources (hardcoded like the ECR repos / other
+    # bucket names), so they default — `make sync-assets` works with just AWS
+    # creds. `asset_upload_enabled` gates the on-generation upload from the Writer
+    # (opt-in: off locally; `make sync-assets` is the backstop). The CDN base for
+    # *emitting* URLs lives on the read-API config (`src/api/config.py`), not here:
+    # this pipeline-side config only moves bytes, it never mints URLs.
+    asset_upload_enabled: bool = False
+    assets_bucket: str = "combatden-assets"
+    aws_region: str = "us-east-1"
+
     log_level: str = "DEBUG"
 
 

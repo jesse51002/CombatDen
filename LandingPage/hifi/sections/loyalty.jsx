@@ -26,12 +26,17 @@ const rewardIcons = {
 function PointsLoop() {
   const [active, setActive] = React.useState(0);
   const steps = COPY.loyalty.loop;
+  const wrap = React.useRef(null);
+  const inView = React.useRef(false);
   React.useEffect(() => {
-    const t = setInterval(() => setActive((a) => (a + 1) % steps.length), 950);
-    return () => clearInterval(t);
+    const el = wrap.current;
+    const io = new IntersectionObserver((e) => { inView.current = e[0].isIntersecting; }, { rootMargin: IN_VIEW_MARGIN });
+    if (el) io.observe(el);
+    const t = setInterval(() => { if (inView.current) setActive((a) => (a + 1) % steps.length); }, 950);
+    return () => { io.disconnect(); clearInterval(t); };
   }, []);
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+    <div ref={wrap} style={{ maxWidth: 800, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6 }}>
         {steps.map((s, i) => {
           const on = i === active;
@@ -62,16 +67,18 @@ function PointsLoop() {
 
 const CARD_W = 296;
 
-// image-dominant reward card (photo placeholder until real assets land)
+// image-dominant reward card: real reward photo from the gym reward library
+// (COPY.loyalty.rewards[].img), with the line-icon kept as a fallback.
 function RewardCard({ r }) {
   return (
     <div style={{ width: CARD_W, ...rlCard, padding: 20, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
       <div style={{ width: '100%', aspectRatio: '4 / 3', borderRadius: 16, overflow: 'hidden', marginBottom: 18, position: 'relative',
         background: `radial-gradient(120% 120% at 50% 0%, ${GW.accentSoft}, #eef1f6)`, border: `1px solid ${GW.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 64, height: 64, borderRadius: 18, background: '#fff', border: `1px solid ${GW.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px -8px rgba(20,22,50,0.2)' }}>
-          {rewardIcons[r.key](GW.accentDark, 30)}
-        </div>
-        <span style={{ position: 'absolute', left: 10, bottom: 9, fontFamily: GW.mono, fontSize: 8.5, letterSpacing: 0.4, color: GW.inkFaint, textTransform: 'uppercase', background: 'rgba(255,255,255,0.7)', padding: '2px 6px', borderRadius: 5 }}>reward photo</span>
+        {r.img
+          ? <img src={r.img} alt={r.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          : <div style={{ width: 64, height: 64, borderRadius: 18, background: '#fff', border: `1px solid ${GW.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px -8px rgba(20,22,50,0.2)' }}>
+              {rewardIcons[r.key](GW.accentDark, 30)}
+            </div>}
       </div>
       <div style={{ fontSize: 17, fontWeight: 650, color: GW.ink, letterSpacing: -0.3, lineHeight: 1.25, minHeight: 42, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r.name}</div>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 7, marginTop: 8 }}>
@@ -107,7 +114,7 @@ function RewardsCarousel() {
   };
   React.useEffect(() => {
     const el = wrap.current;
-    const io = new IntersectionObserver((e) => { inView.current = e[0].isIntersecting; }, { threshold: 0 });
+    const io = new IntersectionObserver((e) => { inView.current = e[0].isIntersecting; }, { rootMargin: IN_VIEW_MARGIN });
     if (el) io.observe(el);
     restart();
     return () => { io.disconnect(); if (timer.current) clearInterval(timer.current); };

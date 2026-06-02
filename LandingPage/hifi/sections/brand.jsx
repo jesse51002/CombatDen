@@ -1,41 +1,39 @@
-// brand.jsx — §3 "Your brand, everywhere": centered copy + a rail of themed
-// app previews. Each rail card is clickable: picking one sets the GLOBAL active
-// theme, so the hero mocks (and every live mock) re-skin to that brand. The rail
-// itself stays multi-theme (each card shows its own brand). Copy from COPY.brand.
-// Exports BrandSection.
+// brand.jsx — §3 "Your brand, everywhere": split layout. Copy on the left
+// (heading + body + Browse themes button), and a transparent looping video on
+// the right showing the same member app fanned across three gym brand themes.
+// The phones are baked into the clip on an alpha background, so it sits
+// seamlessly over the page. Plays only while in view (shared landing rule).
+// Copy from COPY.brand. Exports BrandSection.
 
 function BrandSection() {
-  const { activeId, setTheme } = useTheme();
   const c = COPY.brand;
-  const rail = c.rail.map((id) => THEMES.find((t) => t.id === id)).filter(Boolean);
+  const videoRef = React.useRef(null);
+  useVideoInView(videoRef); // play only while in view + restart on exit (shared landing rule)
   return (
     <section id="themes" data-screen-label="03 Your brand" style={{ position: 'relative', background: GW.bg, fontFamily: GW.sans, padding: '40px 0 130px' }}>
-      <div style={{ textAlign: 'center', padding: '0 32px', maxWidth: GW.maxW, margin: '0 auto' }}>
-        <h2 style={{ margin: 0, fontSize: 'clamp(30px,3.4vw,44px)', lineHeight: 1.08, letterSpacing: -1.5, fontWeight: 600, color: GW.ink, textWrap: 'balance' }}>{c.heading}</h2>
-        <p style={{ margin: '18px auto 0', maxWidth: 620, fontSize: 'clamp(16px,1.7vw,19px)', lineHeight: 1.5, fontWeight: 450, color: GW.inkSoft, textWrap: 'pretty' }}>
-          {c.body}
-        </p>
-        <div style={{ marginTop: 26 }}><GWButton label={c.button} href={c.themeLibraryUrl} arrow /></div>
-      </div>
-      {/* infinite, slow, looping marquee — never wraps. The track is two copies
-          of the rail; translateX(-50%) lands exactly on the second copy, so the
-          loop is seamless. Scrolls continuously; cards stay clickable while moving. */}
-      <div style={{ position: 'relative', marginTop: 52, overflow: 'hidden' }}>
-        <style>{`
-          @keyframes brandMarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-          .brand-marquee { animation: brandMarquee 70s linear infinite; will-change: transform; }
-          @media (prefers-reduced-motion: reduce) { .brand-marquee { animation: none; } }
-        `}</style>
-        <div className="brand-marquee" style={{ display: 'flex', gap: 22, width: 'max-content', padding: '24px 0 48px' }}>
-          {[...rail, ...rail].map((t, i) => (
-            <div key={i} aria-hidden={i >= rail.length ? true : undefined} style={{ flex: '0 0 auto', transform: `translateY(${i % 2 ? 18 : 0}px)` }}>
-              <ThemePreview theme={t} width={176} active={t.id === activeId} onClick={() => setTheme(t.id)} />
-            </div>
-          ))}
+      <div style={{ maxWidth: GW.maxW, margin: '0 auto', padding: '0 32px', display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'center', gap: 24 }}>
+        {/* left — copy */}
+        <div>
+          <h2 style={{ margin: 0, fontSize: 'clamp(30px,3.4vw,44px)', lineHeight: 1.08, letterSpacing: -1.5, fontWeight: 600, color: GW.ink, textWrap: 'balance' }}>{c.heading}</h2>
+          <p style={{ margin: '18px 0 0', maxWidth: 460, fontSize: 'clamp(16px,1.7vw,19px)', lineHeight: 1.5, fontWeight: 450, color: GW.inkSoft, textWrap: 'pretty' }}>
+            {c.body}
+          </p>
+          <div style={{ marginTop: 28 }}><GWButton label={c.button} href={c.themeLibraryUrl} arrow newTab={false} /></div>
         </div>
-        {/* edge fades soften where the marquee enters/exits */}
-        <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 120, background: `linear-gradient(to right, ${GW.bg}, transparent)`, pointerEvents: 'none', zIndex: 2 }}></div>
-        <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: 120, background: `linear-gradient(to left, ${GW.bg}, transparent)`, pointerEvents: 'none', zIndex: 2 }}></div>
+        {/* right — transparent looping video: the app shown across three brand
+            themes. The clip carries its own alpha, so no background/frame here. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <video
+            ref={videoRef}
+            src="assets/landing/gymworld-3phones.webm"
+            loop
+            muted
+            playsInline
+            preload="auto"
+            aria-label="The member app shown in three gym brand themes"
+            style={{ width: '100%', maxWidth: 520, aspectRatio: '1134 / 1213', height: 'auto', display: 'block' }}
+          />
+        </div>
       </div>
     </section>
   );

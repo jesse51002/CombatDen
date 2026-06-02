@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'package:theme_flutter/showcase/home/home_not_booked_body.dart';
-import 'package:theme_flutter/showcase/showcase_content.dart';
-import 'package:theme_flutter/showcase/support/showcase_bottom_nav.dart';
-import 'package:theme_flutter/showcase/support/showcase_scaffold.dart';
-import 'package:theme_flutter/showcase/support/showcase_topbar.dart';
+import 'package:app_management/showcase/home/home_not_booked_body.dart';
+import 'package:app_management/showcase/showcase_content.dart';
+import 'package:app_management/showcase/support/showcase_bottom_nav.dart';
+import 'package:app_management/showcase/support/showcase_scaffold.dart';
+import 'package:app_management/showcase/support/showcase_topbar.dart';
 
 // Dummy non-identity data. Gym name + logo come from the host (arguments);
 // these stand in for the streak/points/rank chips in the info bar.

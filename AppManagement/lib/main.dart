@@ -44,7 +44,8 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   AppRoutes.memberAppPreview: (_) => const MemberAppScreen(),
   AppRoutes.schedule: (_) => const ScheduleScreen(),
   AppRoutes.scheduleAddClass: (_) => const ClassFormScreen(),
-  AppRoutes.scheduleEditClass: (_) => ClassFormScreen(existing: kSampleClass),
+  // scheduleEditClass is handled in `_onGenerateRoute` so it can read the
+  // tapped class off `settings.arguments` (a `WidgetBuilder` can't see them).
   AppRoutes.qrCodes: (_) => const QrCodesScreen(),
   AppRoutes.growth: (_) => const GrowthScreen(),
   AppRoutes.employees: (_) => const EmployeesScreen(),
@@ -53,6 +54,15 @@ final Map<String, WidgetBuilder> _routeBuilders = {
 
 Route<dynamic> _onGenerateRoute(RouteSettings settings) {
   final path = Uri.parse(settings.name ?? AppRoutes.home).path;
+  // Edit Class carries the tapped class as a route argument; fall back to the
+  // sample for a direct nav (e.g. deep link) with no argument.
+  if (path == AppRoutes.scheduleEditClass) {
+    final existing = settings.arguments as ScheduleClass? ?? kSampleClass;
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => ClassFormScreen(existing: existing),
+      settings: settings,
+    );
+  }
   final builder = _routeBuilders[path] ?? _routeBuilders[AppRoutes.home]!;
   return MaterialPageRoute<dynamic>(builder: builder, settings: settings);
 }

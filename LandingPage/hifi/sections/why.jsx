@@ -5,7 +5,7 @@ function useInView(ref) {
   const [seen, setSeen] = React.useState(false);
   React.useEffect(() => {
     const el = ref.current; if (!el) return;
-    const io = new IntersectionObserver((e) => { if (e[0].isIntersecting) { setSeen(true); io.disconnect(); } }, { threshold: 0.2 });
+    const io = new IntersectionObserver((e) => { if (e[0].isIntersecting) { setSeen(true); io.disconnect(); } }, { rootMargin: IN_VIEW_MARGIN });
     io.observe(el); return () => io.disconnect();
   }, []);
   return seen;
