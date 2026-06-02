@@ -88,11 +88,14 @@ class ManagedVideo {
 class MockVideosData {
   final VideoBrief brief;
 
-  /// The single special "intro" video, shown first in "Your videos" with
-  /// an intro pill. The live member feed comes from the API, not here.
+  /// Bundled fallback for the "Your videos" intro tile. "Your videos" now
+  /// derives its tiles from the selected gym's classes (see
+  /// `videos_tab/your_video_tile.dart`); this renders only when live class
+  /// data isn't available. The live member feed comes from the API, not here.
   final ManagedVideo? introVideo;
 
-  /// The gym's own uploads.
+  /// Bundled fallback for the rest of "Your videos" when the selected gym has
+  /// no live classes to render (see [introVideo]).
   final List<ManagedVideo> customVideos;
 
   const MockVideosData({

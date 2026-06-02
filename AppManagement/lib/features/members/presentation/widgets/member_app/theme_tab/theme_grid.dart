@@ -6,6 +6,7 @@ import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_card.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_search_bar.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
+import 'package:app_management/shared/widgets/app_spinner.dart';
 import 'package:app_management/shared/widgets/section_card.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:app_management/features/members/data/gyms_pager.dart';
@@ -171,14 +172,7 @@ class _CatalogMessage extends StatelessWidget {
       padding: const EdgeInsets.all(DesignConstants.paddingBig),
       child: Center(
         child: message == null
-            ? SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: DesignConstants.primaryColor,
-                ),
-              )
+            ? const AppSpinner()
             : Text(
                 message!,
                 style: DesignConstants.p.copyWith(

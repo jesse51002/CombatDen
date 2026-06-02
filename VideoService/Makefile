@@ -1,4 +1,4 @@
-.PHONY: api test gym-check scrape scan
+.PHONY: api test gym-check sync-gyms import-yaml sync-gyms-prod import-yaml-prod scrape scan docker-build ecr-push pause resume
 
 # `python -m uvicorn` (not the console script) survives stale .venv shebangs
 # left over from the CustomYoutubeService -> VideoService rename.
@@ -15,6 +15,33 @@ test:
 # never scrapes or scans. Usage: make gym-check GYM_ID=vinyasa  (GYM_ID=all for all).
 gym-check:
 	poetry run python -m scripts.gym_maker.run check $(if $(filter all,$(GYM_ID)),--all,--gym-id $(GYM_ID))
+
+# Sync the authored gym YAML files into SQL (video_gym + query/class/reward
+# tables). Idempotent; never touches the curated feed. Run after the migration
+# creates the video_* tables. Usage: make sync-gyms GYM_ID=vinyasa (GYM_ID=all).
+# Targets the local DB (.env) by default; ENV_FILE=.env.prod targets prod, e.g.
+#   ENV_FILE=.env.prod make sync-gyms GYM_ID=all
+sync-gyms:
+	poetry run python -m scripts.sync_gyms.run $(if $(filter all,$(GYM_ID)),--all,--gym-id $(GYM_ID))
+
+# One-time cutover: load the EXISTING videos/ pool + each gym's good/rejected
+# feeds + cost_log.yaml into SQL (no re-scrape). Run AFTER `make sync-gyms
+# GYM_ID=all`. Re-runnable; pass --skip-cost-log to avoid duplicate ledger rows.
+# Local DB (.env) by default; ENV_FILE=.env.prod targets prod, e.g.
+#   ENV_FILE=.env.prod make import-yaml
+import-yaml:
+	poetry run python -m scripts.import_yaml.run
+
+# --- Prod (.env.prod) — same as above but against the prod DB ---------------
+# Needs a .env.prod with the prod DATABASE_URL (gitignored). The host is logged
+# before any write so you can confirm you're hitting prod.
+# Usage: make sync-gyms-prod GYM_ID=all
+sync-gyms-prod:
+	ENV_FILE=.env.prod $(MAKE) --no-print-directory sync-gyms GYM_ID=$(GYM_ID)
+
+# Usage: make import-yaml-prod
+import-yaml-prod:
+	ENV_FILE=.env.prod $(MAKE) --no-print-directory import-yaml
 
 # Scrape + classify the shared pool in one run: gather the gyms' queries, fetch
 # from Apify (ONE actor does search + metadata + channel avatar + the transcript
@@ -33,3 +60,25 @@ scrape:
 # Usage: make scan GYM_ID=vinyasa   (or GYM_ID=all for every gym).
 scan:
 	poetry run python -m scripts.scan.run $(if $(filter all,$(GYM_ID)),--all-gyms,--gym-id $(GYM_ID))
+
+# --- Production (AWS App Runner) — see ../DEPLOYMENT.md ---------------------
+ECR ?= 259645229668.dkr.ecr.us-east-1.amazonaws.com/combatden-videoservice
+SERVICE_ARN ?= arn:aws:apprunner:us-east-1:259645229668:service/combatden-videoservice/e86bea56dcdd4b6d8f71af2fe61dbf4c
+
+# Build the serving image (gyms/ + videos/ baked in; see Dockerfile).
+docker-build:
+	docker build -t combatden-videoservice:latest .
+
+# Build + push to ECR + trigger an App Runner deploy (AutoDeployments are off).
+ecr-push: docker-build
+	aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 259645229668.dkr.ecr.us-east-1.amazonaws.com
+	docker tag combatden-videoservice:latest $(ECR):latest
+	docker push $(ECR):latest
+	aws apprunner start-deployment --region us-east-1 --service-arn $(SERVICE_ARN) --query 'OperationId' --output text
+
+# Demo on/off: pause stops compute billing between demos; resume (~1 min) before.
+pause:
+	aws apprunner pause-service --region us-east-1 --service-arn $(SERVICE_ARN) --query 'Service.Status' --output text
+
+resume:
+	aws apprunner resume-service --region us-east-1 --service-arn $(SERVICE_ARN) --query 'Service.Status' --output text

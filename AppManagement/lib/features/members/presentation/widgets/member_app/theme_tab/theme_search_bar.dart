@@ -50,6 +50,7 @@ class _ThemeSearchBarState extends State<ThemeSearchBar> {
       decoration: BoxDecoration(
         color: DesignConstants.card,
         borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
+        border: Border.all(color: DesignConstants.line),
       ),
       child: Row(
         spacing: DesignConstants.spacingMedium,

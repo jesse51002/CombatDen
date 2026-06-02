@@ -139,6 +139,10 @@ const mockPointsStats = MockPointsStats(
   totalPoints: 3400,
 );
 
+// The post-class Rewards card shows the active gym's LIVE rewards
+// (`GET /gyms/{gymId}`). This is the bundled CombatDen fallback used only
+// when that fetch fails or the gym has no rewards; `title` / `subtitle` /
+// `featuredIndex` are the card's presentation chrome in both cases.
 const mockRewardsStats = MockRewardsStats(
   title: 'Rewards You Can Get',
   subtitle: 'Swipe to view rewards',

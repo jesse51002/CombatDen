@@ -51,8 +51,11 @@ class _DayCards extends StatelessWidget {
             imageUrl: e.imageUrl,
             pointsWorth: e.pointsWorth,
             attendingCount: e.attendingCount,
-            onTap: () =>
-                Navigator.pushNamed(context, AppRoutes.scheduleEditClass),
+            onTap: () => Navigator.pushNamed(
+              context,
+              AppRoutes.scheduleEditClass,
+              arguments: classFromEntry(e),
+            ),
           ),
       ],
     );

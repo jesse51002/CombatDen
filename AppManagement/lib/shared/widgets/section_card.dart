@@ -6,8 +6,7 @@ import 'package:app_management/core/constants/design_constants.dart';
 /// `radiusBig` corners. Used as the chrome around major dashboard
 /// regions (Live Attendance, Upcoming Classes, Revenue Card).
 ///
-/// Adapted from `FlutterCRM/lib/shared/widgets/section_card.dart` —
-/// kept minimal because the prototype rarely needs the title slot.
+/// Kept minimal because the prototype rarely needs the title slot.
 class SectionCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;

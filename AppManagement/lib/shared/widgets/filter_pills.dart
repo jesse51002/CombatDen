@@ -60,6 +60,9 @@ class _Pill extends StatelessWidget {
               ? DesignConstants.primaryColor
               : DesignConstants.card,
           borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
+          border: isSelected
+              ? null
+              : Border.all(color: DesignConstants.line),
         ),
         child: Text(
           label,

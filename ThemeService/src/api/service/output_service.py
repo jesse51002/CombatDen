@@ -31,6 +31,7 @@ from src.api.config import settings
 from src.api.errors import InvalidRunError, NotFoundError
 from src.api.schema.style_list_response import StyleListResponse
 from src.api.schema.style_summary import StyleSummary
+from src.core.asset_urls import cdn_url, image_key
 from src.core.run_context import (
     FINAL_IMAGES_DIRNAME,
     ICONS_DIRNAME,
@@ -247,29 +248,38 @@ class OutputService:
         output.yaml / celebration_image PNG skipped, stale output.yaml
         skipped). Expensive — one ``load()`` per surviving dir —
         which is why callers go through the cache."""
-        candidates = await asyncio.to_thread(self._scan_candidate_dirs, app_dir)
+        cdn = settings.assets_cdn_base_url
+        candidates = await asyncio.to_thread(
+            self._scan_candidate_dirs, app_dir, not cdn
+        )
         styles: list[StyleSummary] = []
         for run_id, celebration in candidates:
             try:
                 output = await self.load(app_id, run_id)
             except (NotFoundError, InvalidRunError):
                 continue
-            # Carry the celebration image's content fingerprint as a `?v=`
-            # cache-buster (same token the run's config uses), so a picker's
-            # card art refreshes when the image is regenerated instead of
-            # sitting on the cached copy. Use the stamped/backfilled slot
-            # version when declared; otherwise hash the on-disk PNG on the spot
-            # (the file is guaranteed present — it's how this style qualified),
-            # so the token is ALWAYS there.
+            # Card-art `?v=` cache-buster: prefer the stamped slot version from
+            # output.yaml; locally fall back to hashing the on-disk PNG.
             declared = output.image_set.images.get(CELEBRATION_SLOT)
+            # Under a CDN there is no on-disk PNG to fall back on, so the
+            # celebration card art must be declared in output.yaml to qualify.
+            if cdn and declared is None:
+                continue
             version = (
                 declared.version
                 if declared and declared.version
                 else _content_version(celebration)
             )
-            celebration_image = f"/apps/{app_id}/{run_id}/images/{CELEBRATION_SLOT}"
-            if version:
-                celebration_image = f"{celebration_image}?v={version}"
+            if cdn:
+                celebration_image = cdn_url(
+                    cdn, image_key(app_id, run_id, CELEBRATION_SLOT), version
+                )
+            else:
+                celebration_image = (
+                    f"/apps/{app_id}/{run_id}/images/{CELEBRATION_SLOT}"
+                )
+                if version:
+                    celebration_image = f"{celebration_image}?v={version}"
             styles.append(
                 StyleSummary(
                     id=run_id,
@@ -281,11 +291,16 @@ class OutputService:
         return styles
 
     @staticmethod
-    def _scan_candidate_dirs(app_dir: Path) -> list[tuple[str, Path]]:
+    def _scan_candidate_dirs(
+        app_dir: Path, require_celebration_file: bool
+    ) -> list[tuple[str, Path]]:
         """Synchronous scan of ``app_dir`` — returns ``(run_id, celebration_path)``
-        pairs that pass all filesystem pre-filters (named dir, non-stamp id,
-        output.yaml present, celebration PNG present). Called via
-        ``asyncio.to_thread`` so no blocking I/O touches the event loop."""
+        pairs that pass the filesystem pre-filters (named dir, non-stamp id,
+        output.yaml present). When ``require_celebration_file`` (local serving,
+        no CDN) a dir also needs its celebration PNG on disk; under a CDN the
+        bytes live on S3, so that gate moves to the declared-slot check in the
+        caller. Called via ``asyncio.to_thread`` so no blocking I/O touches the
+        event loop."""
         candidates: list[tuple[str, Path]] = []
         for child in sorted(app_dir.iterdir()):
             run_id = child.name
@@ -298,7 +313,7 @@ class OutputService:
             celebration = (
                 child / FINAL_IMAGES_DIRNAME / f"{CELEBRATION_SLOT}{IMAGE_SUFFIX}"
             )
-            if not celebration.is_file():
+            if require_celebration_file and not celebration.is_file():
                 continue
             candidates.append((run_id, celebration))
         return candidates

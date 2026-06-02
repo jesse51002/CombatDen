@@ -9,12 +9,14 @@ import 'package:app_management/shared/widgets/subtitle_section.dart';
 class ClassDetailsSection extends StatelessWidget {
   final TextEditingController nameController;
   final TextEditingController descriptionController;
+  final String? imageUrl;
   final String? imageAsset;
 
   const ClassDetailsSection({
     super.key,
     required this.nameController,
     required this.descriptionController,
+    this.imageUrl,
     this.imageAsset,
   });
 
@@ -28,6 +30,7 @@ class ClassDetailsSection extends StatelessWidget {
         children: [
           ImageUploadField(
             label: 'Class image',
+            imageUrl: imageUrl,
             imageAsset: imageAsset,
             onTap: () => debugPrint('TODO: pick class image'),
           ),

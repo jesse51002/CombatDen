@@ -15,7 +15,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from src.api.config import settings
+from src.api.config import Settings, settings
 from src.api.errors import NotFoundError
 from src.api.main import app
 from src.api.service import font_service, output_service
@@ -37,8 +37,15 @@ def _use_fixture_apps(monkeypatch: pytest.MonkeyPatch) -> None:
     required because ``OutputService`` captures ``apps_root`` at
     construction, so without it the lazily-built default would freeze
     on whatever ``settings.apps_root`` was when the first test ran.
+
+    Also pins ``assets_cdn_base_url`` to empty so this suite exercises the
+    LOCAL serving path (relative URLs + on-disk bytes) by default. The
+    setting now defaults to the prod CDN (see ``test_cdn_*``), so the local
+    path has to be selected explicitly; tests that want the CDN behaviour
+    re-set this within the test.
     """
     monkeypatch.setattr(settings, "apps_root", FIXTURE_APPS)
+    monkeypatch.setattr(settings, "assets_cdn_base_url", "")
     monkeypatch.setattr(
         output_service,
         "_DEFAULT",
@@ -280,6 +287,59 @@ def test_list_styles_cache_invalidates_when_a_new_style_lands(
     resp = client.get(f"/apps/{APP}/run1/images/no_such_slot")
     assert resp.status_code == 404
     assert "not declared" in resp.json()["detail"]
+
+
+def test_cdn_base_url_defaults_to_prod_cdn() -> None:
+    """The setting defaults to the prod CDN, so the de-baked container emits
+    absolute CDN URLs even when the App Runner env var is never set — a
+    relative path would 404 since the image bytes aren't baked in anymore."""
+    assert (
+        Settings.model_fields["assets_cdn_base_url"].default
+        == "https://cdn.combatden.net"
+    )
+
+
+def test_get_output_emits_absolute_cdn_urls_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With a CDN base set, image URLs become absolute ``cdn/themes/...`` links
+    keyed by app/run/slot, carrying the same ``?v=`` content fingerprint."""
+    monkeypatch.setattr(settings, "assets_cdn_base_url", "https://cdn.test")
+    body = client.get(f"/apps/{APP}/run1").json()
+    assert body["images"] == {
+        "hero": "https://cdn.test/themes/demo/run1/images/hero.png?v=testhash1234"
+    }
+
+
+def test_image_endpoint_redirects_to_cdn_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The legacy byte endpoint 307-redirects to the CDN object when a CDN is
+    configured (it doesn't even touch disk — the bytes live on S3)."""
+    monkeypatch.setattr(settings, "assets_cdn_base_url", "https://cdn.test")
+    resp = client.get(
+        f"/apps/{APP}/run1/images/hero", follow_redirects=False
+    )
+    assert resp.status_code == 307
+    assert (
+        resp.headers["location"]
+        == "https://cdn.test/themes/demo/run1/images/hero.png"
+    )
+
+
+def test_icon_endpoint_redirects_to_cdn_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same CDN redirect for the icon byte endpoint."""
+    monkeypatch.setattr(settings, "assets_cdn_base_url", "https://cdn.test")
+    resp = client.get(
+        f"/apps/{APP}/run1/icons/some_icon", follow_redirects=False
+    )
+    assert resp.status_code == 307
+    assert (
+        resp.headers["location"]
+        == "https://cdn.test/themes/demo/run1/icons/some_icon.svg"
+    )
 
 
 def test_traversal_ids_are_rejected_by_the_guard() -> None:

@@ -12,12 +12,27 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from schema import ColorPalette, Output, TextSet
+from src.core.asset_urls import cdn_url, icon_key, image_key
 
 
 def _versioned(url: str, version: str) -> str:
     """Append the asset's content fingerprint as a cache-busting ``?v=``
     token. Empty version (legacy runs) → the URL is returned unchanged."""
     return f"{url}?v={version}" if version else url
+
+
+def _image_url(app_id: str, run_id: str, slot_id: str, version: str, cdn: str) -> str:
+    """Absolute CDN URL when a CDN base is configured (prod), else the relative
+    container path (local dev). Both carry the ``?v=`` cache-buster."""
+    if cdn:
+        return cdn_url(cdn, image_key(app_id, run_id, slot_id), version)
+    return _versioned(f"/apps/{app_id}/{run_id}/images/{slot_id}", version)
+
+
+def _icon_url(app_id: str, run_id: str, slot_id: str, version: str, cdn: str) -> str:
+    if cdn:
+        return cdn_url(cdn, icon_key(app_id, run_id, slot_id), version)
+    return _versioned(f"/apps/{app_id}/{run_id}/icons/{slot_id}", version)
 
 
 class OutputResponse(BaseModel):
@@ -38,11 +53,12 @@ class OutputResponse(BaseModel):
 
     @classmethod
     def from_output(
-        cls, output: Output, app_id: str, run_id: str
+        cls, output: Output, app_id: str, run_id: str, cdn_base_url: str = ""
     ) -> OutputResponse:
         """Project an `Output` onto the wire shape, minting a per-slot
         fetch URL for each image and icon, and collapsing each font slot
-        to its Google Fonts family."""
+        to its Google Fonts family. ``cdn_base_url`` (when set) makes the
+        image/icon URLs absolute CDN links; empty → relative container paths."""
         return cls(
             app=output.app,
             display_name=output.display_name,
@@ -50,8 +66,8 @@ class OutputResponse(BaseModel):
             color_set=output.color_set,
             text_set=output.text_set,
             images={
-                slot_id: _versioned(
-                    f"/apps/{app_id}/{run_id}/images/{slot_id}", image.version
+                slot_id: _image_url(
+                    app_id, run_id, slot_id, image.version, cdn_base_url
                 )
                 for slot_id, image in output.image_set.images.items()
             },
@@ -60,8 +76,8 @@ class OutputResponse(BaseModel):
                 for slot_id, font in output.font_set.fonts.items()
             },
             icons={
-                slot_id: _versioned(
-                    f"/apps/{app_id}/{run_id}/icons/{slot_id}", icon.version
+                slot_id: _icon_url(
+                    app_id, run_id, slot_id, icon.version, cdn_base_url
                 )
                 for slot_id, icon in output.icon_set.icons.items()
             },

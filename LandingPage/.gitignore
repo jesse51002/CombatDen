@@ -1,0 +1,21 @@
+# Python — deploy/ uses poetry + boto3 (see deploy/)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Secrets / local env
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Heavy media SOURCES (raw recordings/gifs). Converted, web-sized derivatives
+# live under assets/landing/ and ARE committed + deployed. Sources are not.
+media-src/

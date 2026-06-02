@@ -5,6 +5,7 @@ import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
+import 'package:mobile_app/shared/widgets/animation/capture_reveal_clock.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
@@ -69,35 +70,60 @@ class _PointsBodyState extends State<PointsBody> {
 
   @override
   Widget build(BuildContext context) {
-    final stats = widget.stats;
+    // Rebuild as the capture clock advances so the intro→stats switch and the
+    // reveals below are driven deterministically. Inert in normal app use (the
+    // clock stays null; the switch falls back to the setState-driven flag).
+    return ListenableBuilder(
+      listenable: captureRevealClock,
+      builder: (context, _) {
+        final stats = widget.stats;
+        final clock = captureRevealClock.value;
+        // Capturing: cross into the stats cascade once the sphere's window is
+        // up. Normal app: the controller's onComplete flips _showPoints.
+        final showFinal =
+            clock != null ? clock >= _kSphereDuration : _showPoints;
+        // The stats reveals' delays are relative to mount in the app, but
+        // absolute on the global timeline under capture — so add the sphere's
+        // duration as their base offset.
+        final captureOffset = clock != null ? _kSphereDuration : null;
 
-    if (!_showPoints) {
-      return SizedBox.expand(
-        child: _PointSphere(onComplete: _onSphereDone),
-      );
-    }
-    return SizedBox.expand(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Spacer(),
-          _FocusedContent(stats: stats),
-          const Spacer(),
-          _TotalCaption(total: stats.totalPoints),
-        ],
-      ),
+        if (!showFinal) {
+          return SizedBox.expand(
+            child: _PointSphere(onComplete: _onSphereDone),
+          );
+        }
+        return SizedBox.expand(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Spacer(),
+              _FocusedContent(stats: stats, captureOffset: captureOffset),
+              const Spacer(),
+              _TotalCaption(
+                total: stats.totalPoints,
+                captureOffset: captureOffset,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
 class _FocusedContent extends StatelessWidget {
-  const _FocusedContent({required this.stats});
+  const _FocusedContent({required this.stats, this.captureOffset});
 
   final MockPointsStats stats;
+
+  /// Set only under capture: this block's absolute start on the global capture
+  /// timeline (= the sphere intro's duration). Null in normal app use.
+  final Duration? captureOffset;
 
   @override
   Widget build(BuildContext context) {
     return StaggeredReveal(
+      delay: captureOffset ?? Duration.zero,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -114,6 +140,7 @@ class _FocusedContent extends StatelessWidget {
           ),
           CountUpText(
             target: stats.gained,
+            delay: captureOffset ?? Duration.zero,
             prefix: '+',
             suffix: ' points',
             style: DesignConstants.big2,
@@ -126,14 +153,19 @@ class _FocusedContent extends StatelessWidget {
 }
 
 class _TotalCaption extends StatelessWidget {
-  const _TotalCaption({required this.total});
+  const _TotalCaption({required this.total, this.captureOffset});
 
   final int total;
+
+  /// Set only under capture: the global-timeline base offset added to this
+  /// caption's normal (post-count-up) delay. Null in normal app use.
+  final Duration? captureOffset;
 
   @override
   Widget build(BuildContext context) {
     return StaggeredReveal(
-      delay: CelebrationTimings.countUpDuration +
+      delay: (captureOffset ?? Duration.zero) +
+          CelebrationTimings.countUpDuration +
           CelebrationTimings.revealStagger,
       child: Text(
         '${_formatThousands(total)} total points',
@@ -168,7 +200,20 @@ class _PointSphereState extends State<_PointSphere>
   void initState() {
     super.initState();
     _ctrl = AnimationController(vsync: this, duration: _kSphereDuration);
+    // Under capture the harness drives the swarm via the global clock; don't
+    // self-run (and so never fire onComplete — the body switches to stats on
+    // the clock threshold instead). Mirrors ScaleReveal/StaggeredReveal.
+    if (captureRevealClock.value != null) return;
     _ctrl.forward().whenComplete(widget.onComplete);
+  }
+
+  /// Raw 0..1 swarm progress from the capture clock (offset 0 — the sphere is
+  /// the first thing on the timeline), or null when not capturing.
+  double? _captureT() {
+    final clock = captureRevealClock.value;
+    if (clock == null) return null;
+    return (clock.inMicroseconds / _kSphereDuration.inMicroseconds)
+        .clamp(0.0, 1.0);
   }
 
   @override
@@ -206,9 +251,9 @@ class _PointSphereState extends State<_PointSphere>
             math.min(constraints.maxWidth, constraints.maxHeight);
         final renderScale = smallerExtent / _kReferenceExtent;
         return AnimatedBuilder(
-          animation: _ctrl,
+          animation: Listenable.merge([_ctrl, captureRevealClock]),
           builder: (context, _) {
-            final t = _ctrl.value;
+            final t = _captureT() ?? _ctrl.value;
             final spin = t * 2 * math.pi * _kSpinTurns;
             final converge =
                 ((t - _kConvergeStart) / (1 - _kConvergeStart)).clamp(0.0, 1.0);

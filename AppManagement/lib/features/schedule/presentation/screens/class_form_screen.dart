@@ -36,6 +36,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
   DateTime? _endDate;
   Set<int> _selectedDays = {};
   Map<int, String?> _instructorByDay = {};
+  String? _imageUrl;
   String? _imageAsset;
 
   @override
@@ -55,6 +56,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
     _endDate = c.endDate;
     _selectedDays = {...c.activeDays};
     _instructorByDay = {...c.instructorIdByDay};
+    _imageUrl = c.imageUrl;
     _imageAsset = c.imageAsset;
   }
 
@@ -105,6 +107,7 @@ class _ClassFormScreenState extends State<ClassFormScreen> {
             ClassDetailsSection(
               nameController: _nameController,
               descriptionController: _descriptionController,
+              imageUrl: _imageUrl,
               imageAsset: _imageAsset,
             ),
             ClassRewardsSection(

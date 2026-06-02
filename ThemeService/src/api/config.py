@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     # No auth: the emulator hits this directly. `["*"]` keeps it open.
     cors_origins: list[str] = ["*"]
 
+    # CDN base for image/icon assets. Defaults to the prod CDN so the API ALWAYS
+    # emits absolute CDN URLs (and the byte endpoints 307-redirect there) without
+    # depending on an App Runner env var being set — the container no longer bakes
+    # the image bytes, so a relative path would 404. To serve local files in the
+    # dev loop instead, set ASSETS_CDN_BASE_URL= (empty) in `.env`. See
+    # src/core/asset_urls.py.
+    assets_cdn_base_url: str = "https://cdn.combatden.net"
+
     # Google Fonts Developer API. The font delivery endpoint resolves the
     # per-variant TTF URLs by hitting Google's catalog, so the API process
     # needs the key too. Required — fail loud if absent, matching how the

@@ -1,344 +1,198 @@
-"""VideosService — the single-tenant filesystem store behind the API + scripts.
+"""VideosService — the SQL read path behind the API.
 
-Flat layout (no tenant nesting):
-
-    <root>/gyms/<gym_id>.yaml      — the gyms (each owns its videos config,
-                                     classes, rewards, and scan-cost history)
-    <root>/videos/<video_id>.yaml — the shared video pool (a `list[VideoOutput]`,
-                                     one file per video; no manifest wrapper)
-    <root>/cost_log.yaml          — the append-only spend ledger
-
-``root`` is injected so tests can point at a tmp tree. The API process holds one
-process-scoped instance (see ``videos_service`` below). The theme→gym link is the
-set of gym files (each gym carries its ``theme``); VideoService never reads
-ThemeService.
+Reads the shared Supabase Postgres (the ``video_*`` tables) via the
+``DirectDatabasePool`` + externalised ``.sql`` files. It keeps the exact public
+methods and return types the routers / viewer / avatar fallback depend on
+(``Gym``, ``VideoOutput``, ``GymsPage``), so only the data *source* changed — not
+the API contract. All writes live in the pipeline scripts (scrape / scan /
+sync-gyms / import), never here; this module is read-only.
 """
 
 from __future__ import annotations
 
-import asyncio
-import re
+import json
 from collections.abc import Iterable
 from pathlib import Path
 
-import yaml
-from pydantic import ValidationError
+from sqlalchemy import text
 
-try:  # libyaml — ~35x faster YAML parsing than the pure-Python loader
-    from yaml import CSafeLoader as _FAST_LOADER
-except ImportError:  # pragma: no cover - libyaml is virtually always present
-    from yaml import SafeLoader as _FAST_LOADER
-
-from schema import (
-    CostEntry,
-    Gym,
-    GymCard,
-    GymsPage,
-    VideoOutput,
-)
+from schema import Gym, GymCard, GymsPage, GymType, VideoOutput
 from schema.parent_gym_type import parent_of
 from src.api.config import settings
-from src.api.errors import InvalidConfigError, NotFoundError
-from src.shared.util.video_id import video_id_from_url
+from src.api.errors import NotFoundError
+from src.shared.database import DirectDatabasePool
+from src.shared.sql_loader import load_sql
 
-GYMS_DIRNAME = "gyms"
-VIDEOS_DIRNAME = "videos"
-COST_LOG_FILENAME = "cost_log.yaml"
-# Threads for load_videos_by_id: each does a disk read + libyaml parse (both
-# release the GIL), so a small pool overlaps the IO and the parse.
-_LOAD_WORKERS = 16
-# A gym's card art is its theme's celebration image, served by ThemeService's
-# styles convention (`/apps/<theme_app>/<run_id>/images/celebration_image`) and
-# resolved by the client against the ThemeService base URL. DERIVED from the
-# gym's theme. The themes this single tenant serves live under ThemeService's
-# `combatden` app.
+SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
+
+# A gym's card art is its theme's celebration image. DERIVED from the gym's
+# theme: an absolute CDN URL by default (`assets_cdn_base_url` defaults to the
+# prod CDN), or — when that setting is emptied for local dev — a ThemeService-
+# relative path the client absolutises. The CDN object key mirrors ThemeService's
+# scheme (themes/<app>/<theme>/images/<slot>.png); no `?v=` here — the styles
+# catalog's versioned URL is what clients prefer, so this is only the fallback.
 THEME_SERVICE_APP_ID = "combatden"
+CELEBRATION_SLOT = "celebration_image"
 CELEBRATION_IMAGE_URL_TEMPLATE = (
     "/apps/" + THEME_SERVICE_APP_ID + "/{theme}/images/celebration_image"
 )
-# snake_case gym ids; also a path-traversal guard (no dots or slashes).
-_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-# YouTube video ids — the per-video filename stem + a path-traversal guard.
-_VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-def _dump_yaml(data: object, path: Path) -> None:
-    """Write ``data`` as YAML (insertion order preserved, unicode kept)."""
-    path.write_text(
-        yaml.safe_dump(
-            data, sort_keys=False, allow_unicode=True, default_flow_style=False
-        ),
-        encoding="utf-8",
-    )
+def _celebration_image_url(theme: str) -> str:
+    """The gym card's celebration-image URL: absolute CDN when configured, else
+    the ThemeService-relative path the client absolutises."""
+    base = settings.assets_cdn_base_url
+    if base:
+        return (
+            f"{base.rstrip('/')}/themes/{THEME_SERVICE_APP_ID}"
+            f"/{theme}/images/{CELEBRATION_SLOT}.png"
+        )
+    return CELEBRATION_IMAGE_URL_TEMPLATE.format(theme=theme)
+
+
+def _as_list(value: object) -> list:
+    """A JSONB column as a Python list — tolerant of the driver returning either
+    a decoded list or the raw JSON string."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return json.loads(value)
+    return value  # already decoded by the driver
 
 
 class VideosService:
-    """The single-tenant store: gyms, the shared video pool, and the cost log."""
+    """The SQL-backed read store: gyms, their feeds, and the shared video pool."""
 
-    def __init__(self, root: Path) -> None:
-        self._root = root
-
-    @property
-    def _gyms_dir(self) -> Path:
-        return self._root / GYMS_DIRNAME
-
-    @property
-    def _videos_dir(self) -> Path:
-        return self._root / VIDEOS_DIRNAME
+    def __init__(self, db_pool: DirectDatabasePool) -> None:
+        self._db = db_pool
 
     # --- gyms ----------------------------------------------------------------
 
     async def list_gyms(self) -> list[str]:
-        """The gym ids that have a ``gyms/<id>.yaml`` file, sorted. Empty when
-        there is no ``gyms/`` directory yet."""
-        if not await asyncio.to_thread(self._gyms_dir.is_dir):
-            return []
-        return sorted(
-            f.stem
-            for f in await asyncio.to_thread(
-                lambda: list(self._gyms_dir.glob("*.yaml"))
-            )
-        )
+        """Every gym id, sorted."""
+        sql = load_sql(SQL_DIR / "list_gym_ids.sql")
+        async with self._db.session() as session:
+            rows = (await session.execute(text(sql))).mappings().all()
+        return [r["gym_id"] for r in rows]
 
     async def load_gym(self, gym_id: str) -> Gym:
-        """One gym by id. Missing -> ``NotFoundError``; stale ->
-        ``InvalidConfigError``. ``gym_id`` is pattern-checked (no traversal)."""
-        if not _ID_PATTERN.match(gym_id):
+        """One gym by id, assembled in a single query. Missing -> ``NotFoundError``."""
+        sql = load_sql(SQL_DIR / "load_gym.sql")
+        async with self._db.session() as session:
+            row = (
+                await session.execute(text(sql), {"gym_id": gym_id})
+            ).mappings().fetchone()
+        if row is None:
             raise NotFoundError(f"no gym {gym_id!r}")
-        gym_file = self._gyms_dir / f"{gym_id}.yaml"
-        if not await asyncio.to_thread(gym_file.is_file):
-            raise NotFoundError(f"no gym {gym_id!r}")
-        try:
-            raw = await asyncio.to_thread(gym_file.read_text)
-            return Gym.model_validate(yaml.safe_load(raw))
-        except (yaml.YAMLError, ValidationError) as exc:
-            raise InvalidConfigError(
-                f"gym {gym_id!r} does not match the current schema; regenerate it"
-            ) from exc
+        return self._row_to_gym(row)
 
-    async def save_gym(self, gym: Gym) -> None:
-        """Write (or overwrite) one gym's ``gyms/<gym_id>.yaml``."""
-        if not _ID_PATTERN.match(gym.gym_id):
-            raise InvalidConfigError(f"invalid gym_id {gym.gym_id!r}")
-        dest = self._gyms_dir / f"{gym.gym_id}.yaml"
-        data = gym.model_dump(mode="json")
-        await asyncio.to_thread(
-            lambda: (self._gyms_dir.mkdir(parents=True, exist_ok=True), _dump_yaml(data, dest))
+    @staticmethod
+    def _row_to_gym(row: object) -> Gym:
+        """Build a ``Gym`` from a ``load_gym.sql`` row. ``has_classes`` /
+        ``has_rewards`` distinguish "absent" (None) from "authored but empty"."""
+        return Gym.model_validate(
+            {
+                "gym_id": row["gym_id"],
+                "gym_type": _as_list(row["gym_type"]),
+                "theme": row["theme"],
+                "videos": {
+                    "specification": {
+                        "short_videos_desc": row["short_videos_desc"],
+                        "short_avoid_desc": row["short_avoid_desc"],
+                        "videos_desc": row["videos_desc"],
+                        "avoid_desc": row["avoid_desc"],
+                    },
+                    "queries": _as_list(row["queries"]),
+                    "good_video_ids": _as_list(row["good_video_ids"]),
+                    "rejected_video_ids": _as_list(row["rejected_video_ids"]),
+                },
+                "classes": _as_list(row["classes"]) if row["has_classes"] else None,
+                "rewards": _as_list(row["rewards"]) if row["has_rewards"] else None,
+            }
         )
 
     async def list_gyms_page(
         self, *, limit: int, offset: int, query: str | None = None
     ) -> GymsPage:
-        """One page of slim gym cards for the gym browser, sorted by gym id.
-        ``query`` is an optional case-insensitive substring filter on gym id /
-        theme / discipline. Empty page (not 404) when there are no gyms (or none
-        match); a stale gym file -> ``InvalidConfigError``."""
-        gyms = [await self.load_gym(gid) for gid in await self.list_gyms()]
+        """One page of slim gym cards, sorted by gym id. ``query`` is an optional
+        case-insensitive substring filter on gym id / theme / discipline. Filtered
+        and paginated in Python (only ~76 gyms), matching the prior behaviour."""
+        sql = load_sql(SQL_DIR / "list_gym_cards.sql")
+        async with self._db.session() as session:
+            rows = (await session.execute(text(sql))).mappings().all()
+        items = [(r, _as_list(r["gym_type"])) for r in rows]
         if query:
             needle = query.strip().lower()
-            gyms = [
-                g
-                for g in gyms
-                if needle in g.gym_id.lower()
-                or needle in g.theme.lower()
-                or any(needle in t.value for t in g.gym_type)
+            items = [
+                (r, disc)
+                for (r, disc) in items
+                if needle in r["gym_id"].lower()
+                or needle in r["theme"].lower()
+                or any(needle in d.lower() for d in disc)
             ]
-        total = len(gyms)
+        total = len(items)
         cards = [
             GymCard(
-                gym_id=gym.gym_id,
-                gym_type=gym.gym_type,
-                # Coarse parent bucket from the primary discipline — the filter
-                # category the gym browser groups by.
-                parent_gym_type=parent_of(gym.gym_type[0]),
-                theme=gym.theme,
-                # Derived from the theme; the client resolves it against the
-                # ThemeService base URL, same as the theme picker.
-                celebration_image_url=CELEBRATION_IMAGE_URL_TEMPLATE.format(
-                    theme=gym.theme
-                ),
-                video_count=len(gym.videos.good_video_ids),
-                has_classes=gym.classes is not None,
-                has_rewards=gym.rewards is not None,
+                gym_id=r["gym_id"],
+                gym_type=disc,
+                parent_gym_type=parent_of(GymType(disc[0])),
+                theme=r["theme"],
+                celebration_image_url=_celebration_image_url(r["theme"]),
+                video_count=r["video_count"],
+                has_classes=r["has_classes"],
+                has_rewards=r["has_rewards"],
             )
-            for gym in gyms[offset : offset + limit]
+            for (r, disc) in items[offset : offset + limit]
         ]
         return GymsPage(total=total, limit=limit, offset=offset, gyms=cards)
 
     # --- the shared video pool ----------------------------------------------
 
-    async def load_pool(self) -> list[VideoOutput]:
-        """The whole shared pool — every ``videos/<id>.yaml`` — in a stable
-        ``(relevance_index, video_id)`` order. Empty when there is no pool yet;
-        a stale per-video file -> ``InvalidConfigError``."""
-        if not await asyncio.to_thread(self._videos_dir.is_dir):
-            return []
-
-        def _read_pool() -> list[VideoOutput]:
-            return [
-                VideoOutput.model_validate(yaml.safe_load(f.read_text()))
-                for f in sorted(self._videos_dir.glob("*.yaml"))
-            ]
-
-        try:
-            videos = await asyncio.to_thread(_read_pool)
-        except (yaml.YAMLError, ValidationError) as exc:
-            raise InvalidConfigError(
-                "a pooled video file does not match the current schema; "
-                "regenerate it"
-            ) from exc
-        videos.sort(key=lambda v: (v.relevance_index, video_id_from_url(v.url)))
-        return videos
+    async def load_videos(self, video_ids: list[str]) -> list[VideoOutput]:
+        """Load the given pooled videos by id, preserving the given order and
+        skipping any id with no row (so a feed costs O(feed size))."""
+        by_id = await self.load_videos_by_id(video_ids)
+        return [by_id[v] for v in video_ids if v in by_id]
 
     async def load_videos_by_id(
         self, ids: Iterable[str]
     ) -> dict[str, VideoOutput]:
-        """Load ONLY the named pool videos (skipping the rest of the pool), keyed
-        by id. Each read is a disk read + libyaml parse; they run across a small
-        thread pool (``_LOAD_WORKERS``) so the IO and the GIL-releasing parse
-        overlap instead of blocking the event loop one file at a time. A missing
-        or stale file is skipped — the caller simply won't get that id. Use this
-        when you already know which ids you need (e.g. a gym's good/rejected feed)
-        rather than paying to load the whole pool."""
-        wanted = [i for i in dict.fromkeys(ids) if _VIDEO_ID_PATTERN.match(i)]
+        """Load ONLY the named pooled videos, keyed by id. A row that fails to
+        validate is skipped (the card just won't show), matching the prior
+        tolerant behaviour."""
+        wanted = list(dict.fromkeys(ids))
         if not wanted:
             return {}
-
-        def _read_chunk(chunk: list[str]) -> dict[str, VideoOutput]:
-            out: dict[str, VideoOutput] = {}
-            for vid in chunk:
-                path = self._videos_dir / f"{vid}.yaml"
-                try:
-                    data = yaml.load(path.read_text(encoding="utf-8"), Loader=_FAST_LOADER)
-                    out[vid] = VideoOutput.model_validate(data)
-                except (OSError, yaml.YAMLError, ValidationError):
-                    continue  # missing / stale -> omit; the card just won't show
-            return out
-
-        chunks = [wanted[i::_LOAD_WORKERS] for i in range(_LOAD_WORKERS)]
-        maps = await asyncio.gather(
-            *(asyncio.to_thread(_read_chunk, chunk) for chunk in chunks if chunk)
-        )
-        merged: dict[str, VideoOutput] = {}
-        for part in maps:
-            merged.update(part)
-        return merged
-
-    async def save_pool(self, videos: list[VideoOutput]) -> None:
-        """Replace the whole pool: clear ``videos/`` and write one file per
-        video. A fresh fetch is a full replacement."""
-        def _replace_pool() -> None:
-            self._videos_dir.mkdir(parents=True, exist_ok=True)
-            for stale in self._videos_dir.glob("*.yaml"):
-                stale.unlink()
-            for video in videos:
-                self._write_video(video)
-
-        await asyncio.to_thread(_replace_pool)
-
-    async def save_video(self, video: VideoOutput) -> None:
-        """Write (or overwrite) one pooled video — the cheap partial update the
-        tagging pass uses so it never rewrites the whole pool."""
-        await asyncio.to_thread(self._write_video, video)
-
-    async def list_video_ids(self) -> list[str]:
-        """The pooled video ids, sorted. Empty when there is no pool yet."""
-        if not await asyncio.to_thread(self._videos_dir.is_dir):
-            return []
-        return sorted(
-            f.stem
-            for f in await asyncio.to_thread(
-                lambda: list(self._videos_dir.glob("*.yaml"))
-            )
-        )
-
-    async def load_video(self, video_id: str) -> VideoOutput:
-        """One pooled video by id. Missing -> ``NotFoundError``."""
-        video_file = self._video_path(video_id)
-        if not await asyncio.to_thread(video_file.is_file):
-            raise NotFoundError(f"no video {video_id!r}")
-        try:
-            raw = await asyncio.to_thread(video_file.read_text)
-            return VideoOutput.model_validate(yaml.safe_load(raw))
-        except (yaml.YAMLError, ValidationError) as exc:
-            raise InvalidConfigError(
-                f"video {video_id!r} does not match the current schema"
-            ) from exc
-
-    async def load_videos(self, video_ids: list[str]) -> list[VideoOutput]:
-        """Load the given pooled videos **by id** (the filename stem), preserving
-        the given order and skipping any id with no file. Reads only those files —
-        never the whole pool — so serving a gym's feed costs O(feed size), not
-        O(pool size). A *stale* file still raises ``InvalidConfigError``."""
-        out: list[VideoOutput] = []
-        for vid in video_ids:
+        sql = load_sql(SQL_DIR / "load_videos.sql")
+        async with self._db.session() as session:
+            rows = (
+                await session.execute(text(sql), {"ids": wanted})
+            ).mappings().all()
+        out: dict[str, VideoOutput] = {}
+        for row in rows:
+            data = dict(row)
+            video_id = data.pop("video_id")
+            data["gym_type"] = _as_list(data.get("gym_type"))
+            data["source_queries"] = _as_list(data.get("source_queries"))
             try:
-                out.append(await self.load_video(vid))
-            except NotFoundError:
-                continue  # id not in the pool (or malformed) — skip, as before
+                out[video_id] = VideoOutput.model_validate(data)
+            except ValueError:
+                continue  # malformed row -> omit, as the YAML path did
         return out
 
-    async def delete_video(self, video_id: str) -> bool:
-        """Remove one pooled video's file. Returns whether a file was removed."""
-        video_file = self._video_path(video_id)
-        if not await asyncio.to_thread(video_file.is_file):
-            return False
-        await asyncio.to_thread(video_file.unlink)
-        return True
 
-    def _write_video(self, video: VideoOutput) -> None:
-        video_id = video_id_from_url(video.url)
-        if not video_id:
-            raise InvalidConfigError(f"video has no id in its url: {video.url!r}")
-        self._videos_dir.mkdir(parents=True, exist_ok=True)
-        _dump_yaml(video.model_dump(mode="json"), self._videos_dir / f"{video_id}.yaml")
-
-    def _video_path(self, video_id: str) -> Path:
-        if not _VIDEO_ID_PATTERN.match(video_id):
-            raise NotFoundError(f"no video {video_id!r}")
-        return self._videos_dir / f"{video_id}.yaml"
-
-    # --- cost ledger ---------------------------------------------------------
-
-    async def append_cost(self, entry: CostEntry) -> None:
-        """Append one entry to the append-only ``cost_log.yaml`` ledger (created
-        on first append). Never overwrites prior entries."""
-        log_file = self._root / COST_LOG_FILENAME
-        new_entry = entry.model_dump(mode="json")
-
-        def _append() -> None:
-            existing: list[dict] = []
-            if log_file.is_file():
-                loaded = yaml.safe_load(log_file.read_text())
-                if isinstance(loaded, list):
-                    existing = loaded
-            existing.append(new_entry)
-            log_file.parent.mkdir(parents=True, exist_ok=True)
-            _dump_yaml(existing, log_file)
-
-        await asyncio.to_thread(_append)
-
-    async def load_cost_log(self) -> list[CostEntry]:
-        """The cost ledger as validated entries (empty if none yet)."""
-        log_file = self._root / COST_LOG_FILENAME
-        if not await asyncio.to_thread(log_file.is_file):
-            return []
-        raw = await asyncio.to_thread(log_file.read_text)
-        loaded = yaml.safe_load(raw) or []
-        return [CostEntry.model_validate(e) for e in loaded]
-
-
-# Process-scoped singleton the router depends on. Built lazily on first call so
-# tests that override ``settings.data_root`` (or assign a stub to ``_DEFAULT``)
-# before first use pick the override up automatically.
+# Process-scoped singleton the routers depend on. Built lazily on first call so
+# tests can assign a stub to ``_DEFAULT`` before first use without ever opening a
+# real connection.
 _DEFAULT: VideosService | None = None
+_POOL: DirectDatabasePool | None = None
 
 
 def videos_service() -> VideosService:
-    """The one process-scoped VideosService, lazily built on first call. Reads
-    ``data_root`` from Settings; reset ``_DEFAULT = None`` (or assign a stub) in
-    tests if you change ``settings.data_root`` after the first hit."""
-    global _DEFAULT
+    """The one process-scoped VideosService, lazily built on first call (which
+    opens the DB pool). Assign a stub to ``_DEFAULT`` in tests to avoid the DB."""
+    global _DEFAULT, _POOL
     if _DEFAULT is None:
-        _DEFAULT = VideosService(root=settings.data_root)
+        _POOL = DirectDatabasePool()
+        _DEFAULT = VideosService(_POOL)
     return _DEFAULT

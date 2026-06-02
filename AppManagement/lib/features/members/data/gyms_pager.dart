@@ -134,7 +134,7 @@ class GymsPager extends ChangeNotifier {
       );
       final response = await http
           .get(uri, headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 15));
       if (generation != _queryGeneration) return;
       if (response.statusCode != 200) {
         throw Exception('gyms fetch failed (${response.statusCode})');

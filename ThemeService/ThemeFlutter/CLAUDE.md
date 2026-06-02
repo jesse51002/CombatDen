@@ -8,15 +8,23 @@ This file guides Claude Code when working in this package.
 white-label customization **runtime**: it fetches a tenant's resolved branding
 from the ThemeService API at startup, disk-caches the last-good copy,
 and exposes brand-overridable resolvers (`ThemeColor`, `ThemeImage`,
-`ThemeIcon`, `ThemeFont`, `ThemeText`) plus
-a set of **showcase** preview screens (`lib/showcase/`).
+`ThemeIcon`, `ThemeFont`, `ThemeText`). It is **runtime + resolvers only** — it
+ships no screens and no bundled assets of its own.
+
+The **showcase** preview screens (Home/Booking/Stats/Rewards/etc.) used to live
+here (`lib/showcase/`) but were **moved into `../AppManagement`**
+(`AppManagement/lib/showcase/`), since the admin app's live theme preview is
+their only consumer. They still depend on this package's resolvers/runtime —
+that's the allowed direction (an app importing the shared package), and it keeps
+this package app-agnostic (see *Hard rules*).
 
 It was extracted from `../MobileApp/lib/customization/` so two systems can share
 it:
 - **`../MobileApp`** — the member app; its real screens consume the resolvers,
   and `lib/core/design_constants.dart` is driven by them.
-- **`../AppManagement`** — the admin app; its live theme preview renders the
-  showcase screens in a phone frame and switches themes via `selectDesign`.
+- **`../AppManagement`** — the admin app; its live theme preview owns the
+  showcase screens (`lib/showcase/`) and switches themes via `selectDesign`,
+  resolving branding through this package's runtime.
 
 **NOT to be confused with `../ThemeService`** — that is the Python
 pipeline that *generates* the configs this package *consumes*. Different system,
@@ -39,18 +47,16 @@ This file is a living document — exactly like a skill, it must track reality. 
     empty.
 - **Brand values resolve LIVE.** Colours/fonts/images/text/icons come
   from the loaded customization via the resolvers; the only hardcoded values are
-  the const CombatDen fallbacks (in `EngineTokens` / `ShowcaseTokens`) used when
-  nothing is loaded. Resolvers never throw.
-- **`ShowcaseTokens` is NOT `DesignConstants`.** It reproduces the member-app
-  look for the showcase island. Do not merge it with either app's
-  `DesignConstants` (see the comment in `showcase_tokens.dart`).
+  the const CombatDen fallbacks (in `EngineTokens`) used when nothing is loaded.
+  Resolvers never throw. (`ShowcaseTokens`, the showcase's member-app-look
+  fallbacks, moved to AppManagement with the showcase.)
 - **Web-safe.** Both consumers build for Flutter web (AppManagement is web).
   No `dart:io`, no `File`, no `Platform.*`. Verify with a consumer's
   `flutter build web`.
-- **Package assets** live in `assets/` and are referenced by consumers as
-  `packages/theme_flutter/assets/...` (centralized in
-  `lib/showcase/showcase_assets.dart`). Don't require consumers to re-declare
-  them.
+- **No bundled assets.** This package ships no `assets/` of its own — the
+  showcase's bundled fallback images moved to AppManagement
+  (`AppManagement/assets/showcase/`) with the showcase code. Brand images
+  resolve live via `ThemeImage`; the consuming app owns any bundled fallbacks.
 
 ## Style
 

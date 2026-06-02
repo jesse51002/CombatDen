@@ -5,6 +5,7 @@ import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/streak/streak_week_strip.dart';
+import 'package:mobile_app/shared/widgets/animation/capture_reveal_clock.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
@@ -31,6 +32,11 @@ const double _kIconSize = 120;
 // `extent / _kReferenceExtent` so larger screens scale proportionally.
 const double _kReferenceExtent = 280;
 const double _kEdgePad = 28;
+// Total length of the orbit intro — the single source of truth shared by the
+// controller's duration and the capture intro→stats threshold. (Top-level
+// `final` because Duration's `+` isn't a const operator.)
+final Duration _kOrbitDuration =
+    _kDelay + _kRingGrow + _kRingCollapse + _kIconPop + _kIconHold + _kIconExit;
 
 /// Streak celebration. A pure-Flutter intro (`_StreakOrbit`) pops the streak
 /// icon out at center, expands a continuously-rotating ring of star particles
@@ -72,12 +78,30 @@ class _StreakBodyState extends State<StreakBody> {
 
   @override
   Widget build(BuildContext context) {
-    if (_showStats) {
-      return _StatsContent(stats: widget.stats);
-    }
-    // The orbit intro plays the pop → expand → collapse beats; when it
-    // finishes we cross into the stats cascade.
-    return SizedBox.expand(child: _StreakOrbit(onComplete: _toStats));
+    // Rebuild as the capture clock advances so the intro→stats switch and the
+    // cascade below are deterministic. Inert in normal app use (clock null →
+    // the switch falls back to the setState-driven flag).
+    return ListenableBuilder(
+      listenable: captureRevealClock,
+      builder: (context, _) {
+        final clock = captureRevealClock.value;
+        final showStats =
+            clock != null ? clock >= _kOrbitDuration : _showStats;
+        // The cascade's delays are relative to mount in the app, but absolute
+        // on the global timeline under capture — base them off the intro's end.
+        final captureOffset = clock != null ? _kOrbitDuration : null;
+
+        if (showStats) {
+          return _StatsContent(
+            stats: widget.stats,
+            captureOffset: captureOffset,
+          );
+        }
+        // The orbit intro plays the pop → expand → collapse beats; when it
+        // finishes we cross into the stats cascade.
+        return SizedBox.expand(child: _StreakOrbit(onComplete: _toStats));
+      },
+    );
   }
 }
 
@@ -106,17 +130,21 @@ class _StreakOrbitState extends State<_StreakOrbit>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration:
-          _kDelay +
-          _kRingGrow +
-          _kRingCollapse +
-          _kIconPop +
-          _kIconHold +
-          _kIconExit,
-    );
+    _ctrl = AnimationController(vsync: this, duration: _kOrbitDuration);
+    // Under capture the harness drives the orbit via the global clock; don't
+    // self-run (and so never fire onComplete — the body switches to stats on
+    // the clock threshold instead). Mirrors ScaleReveal/StaggeredReveal.
+    if (captureRevealClock.value != null) return;
     _ctrl.forward().whenComplete(widget.onComplete);
+  }
+
+  /// Raw 0..1 intro progress from the capture clock (offset 0 — the orbit is
+  /// the first thing on the timeline), or null when not capturing.
+  double? _captureT() {
+    final clock = captureRevealClock.value;
+    if (clock == null) return null;
+    return (clock.inMicroseconds / _kOrbitDuration.inMicroseconds)
+        .clamp(0.0, 1.0);
   }
 
   @override
@@ -139,9 +167,9 @@ class _StreakOrbitState extends State<_StreakOrbit>
         final maxRadius = smallerExtent / 2 - _kEdgePad - orbitSize / 2;
 
         return AnimatedBuilder(
-          animation: _ctrl,
+          animation: Listenable.merge([_ctrl, captureRevealClock]),
           builder: (context, _) {
-            final t = _ctrl.value;
+            final t = _captureT() ?? _ctrl.value;
             final total = _ctrl.duration!.inMilliseconds.toDouble();
             // Phase boundaries as fractions of the controller timeline.
             final d = _kDelay.inMilliseconds;
@@ -245,13 +273,18 @@ class _StreakOrbitState extends State<_StreakOrbit>
 }
 
 class _StatsContent extends StatelessWidget {
-  const _StatsContent({required this.stats});
+  const _StatsContent({required this.stats, this.captureOffset});
 
   final MockStreakStats stats;
 
+  /// Set only under capture: the cascade's absolute start on the global capture
+  /// timeline (= the orbit intro's duration). Null in normal app use.
+  final Duration? captureOffset;
+
   @override
   Widget build(BuildContext context) {
-    final subtitleDelay = CelebrationTimings.countUpDuration;
+    final base = captureOffset ?? Duration.zero;
+    final subtitleDelay = base + CelebrationTimings.countUpDuration;
     final stripDelay = subtitleDelay + CelebrationTimings.revealStagger;
 
     return Column(
@@ -259,7 +292,7 @@ class _StatsContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingLarge,
       children: [
-        _MainStatement(weekCount: stats.weekCount),
+        _MainStatement(weekCount: stats.weekCount, captureOffset: captureOffset),
         StaggeredReveal(
           delay: subtitleDelay,
           child: Text(
@@ -275,19 +308,25 @@ class _StatsContent extends StatelessWidget {
 }
 
 class _MainStatement extends StatelessWidget {
-  const _MainStatement({required this.weekCount});
+  const _MainStatement({required this.weekCount, this.captureOffset});
 
   final int weekCount;
+
+  /// Set only under capture: this block's absolute start on the global capture
+  /// timeline (= the orbit intro's duration). Null in normal app use.
+  final Duration? captureOffset;
 
   @override
   Widget build(BuildContext context) {
     return StaggeredReveal(
+      delay: captureOffset ?? Duration.zero,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           CountUpText(
             target: weekCount,
+            delay: captureOffset ?? Duration.zero,
             style: DesignConstants.big1,
             textAlign: TextAlign.center,
           ),

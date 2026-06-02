@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
+import 'package:mobile_app/shared/widgets/animation/capture_reveal_clock.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 
@@ -84,6 +85,10 @@ class _PulseOnLandState extends State<_PulseOnLand>
   @override
   void initState() {
     super.initState();
+    // Under capture the harness drives the pulse via the global clock (with
+    // [delay] read as its absolute offset on the timeline); don't self-run.
+    // Mirrors ScaleReveal/StaggeredReveal.
+    if (captureRevealClock.value != null) return;
     if (widget.delay == Duration.zero) {
       _ctrl.forward();
     } else {
@@ -102,12 +107,23 @@ class _PulseOnLandState extends State<_PulseOnLand>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _t,
+      animation: Listenable.merge([_t, captureRevealClock]),
       builder: (context, child) {
-        final v = _t.value;
+        final v = _captureValue() ?? _t.value;
         return Transform.scale(scale: 0.9 + 0.1 * v, child: child);
       },
       child: widget.child,
     );
+  }
+
+  /// Curved progress from the capture clock (minus this badge's [delay], used
+  /// as its absolute offset on the global timeline), or null when not capturing.
+  double? _captureValue() {
+    final clock = captureRevealClock.value;
+    if (clock == null) return null;
+    final raw = ((clock - widget.delay).inMicroseconds /
+            CelebrationTimings.pulseDuration.inMicroseconds)
+        .clamp(0.0, 1.0);
+    return Curves.easeOutQuart.transform(raw);
   }
 }

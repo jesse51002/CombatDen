@@ -8,9 +8,10 @@ import 'package:app_management/features/members/presentation/widgets/member_app/
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_grid.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/theme_tab/theme_preview_pane.dart';
 import 'package:app_management/features/members/presentation/widgets/themes_library/library_view.dart';
+import 'package:app_management/shared/widgets/app_outline_button.dart';
 import 'package:theme_flutter/customization_runtime.dart';
-import 'package:theme_flutter/showcase/showcase_screen.dart';
-import 'package:theme_flutter/showcase/showcase_slots.dart';
+import 'package:app_management/showcase/showcase_screen.dart';
+import 'package:app_management/showcase/showcase_slots.dart';
 
 // The tenant + the preset the engine initializes on, only so the customization
 // runtime has something to fetch on first paint (the library/gym-select screen
@@ -19,14 +20,35 @@ import 'package:theme_flutter/showcase/showcase_slots.dart';
 const String _kAppId = 'combatden';
 const String _kSeedDesignId = 'ApexMMA';
 
+// Below this preview width the phone goes full-bleed (mobile): no side-by-side
+// theme list and no horizontal layout — just the phone with its own
+// back-to-library button. At or above it, the phone sits beside the scrollable
+// theme picker (the side pane that carries its own back link).
+const double _kSideBySideMinWidth = 700;
+const double _kSidePaneWidth = 300;
+
 enum _Mode { library, phone }
 
 /// Theme tab — defaults to the **themes library** (filter + search +
 /// grid). Tapping a theme card switches to the phone-frame preview;
 /// the side pane's "Back to library" link returns. Engine init runs
 /// once per mount and is shared across both modes.
+///
+/// This widget is the reusable theme-browser **module**: the admin member-app
+/// preview embeds it (default [routePath]), and the standalone theme-browser
+/// build target (`lib/main_theme_browser.dart`) mounts it full-screen. The only
+/// host-specific knob is [routePath] — the URL path the previewed theme is
+/// mirrored onto (see [_syncUrl]).
 class LiveThemePreviewTab extends StatefulWidget {
-  const LiveThemePreviewTab({super.key});
+  /// The URL path the current preview state is mirrored onto as `?theme=…`.
+  /// Defaults to the admin preview route so the embedded tab is unchanged; the
+  /// standalone deploy passes [AppRoutes.home] for clean root deep links.
+  final String routePath;
+
+  const LiveThemePreviewTab({
+    super.key,
+    this.routePath = AppRoutes.memberAppPreview,
+  });
 
   @override
   State<LiveThemePreviewTab> createState() => _LiveThemePreviewTabState();
@@ -104,7 +126,7 @@ class _LiveThemePreviewTabState extends State<LiveThemePreviewTab> {
     final theme =
         _mode == _Mode.phone ? ThemeRuntime.activeDesignId : null;
     final uri = Uri(
-      path: AppRoutes.memberAppPreview,
+      path: widget.routePath,
       queryParameters: (theme == null || theme.isEmpty)
           ? null
           : <String, String>{'theme': theme},
@@ -208,28 +230,51 @@ class _PhonePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        Expanded(
-          child: ThemePreviewPane(
-            engineReady: engineReady,
-            slide: slide,
-            forward: forward,
-            gymName: gymName,
-            gymLogo: gymLogo,
-            onPrev: onPrev,
-            onNext: onNext,
-            onSelect: onSelectSlide,
-            onEditBranding: onEditBranding,
-          ),
-        ),
-        SizedBox(
-          width: 300,
-          child: ThemeGrid(onBackToLibrary: onBackToLibrary),
-        ),
-      ],
+    final pane = ThemePreviewPane(
+      engineReady: engineReady,
+      slide: slide,
+      forward: forward,
+      gymName: gymName,
+      gymLogo: gymLogo,
+      onPrev: onPrev,
+      onNext: onNext,
+      onSelect: onSelectSlide,
+      onEditBranding: onEditBranding,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Mobile / narrow: the phone is the whole thing — no side list, no
+        // horizontal layout. The side pane's back link is gone, so the phone
+        // gets its own back-to-library button stacked above it.
+        if (constraints.maxWidth < _kSideBySideMinWidth) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingLarge,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: AppOutlineButton(
+                  text: '← Back to library',
+                  onPressed: onBackToLibrary,
+                ),
+              ),
+              Expanded(child: pane),
+            ],
+          );
+        }
+        // Wide: phone preview beside the scrollable theme picker.
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingBig,
+          children: [
+            Expanded(child: pane),
+            SizedBox(
+              width: _kSidePaneWidth,
+              child: ThemeGrid(onBackToLibrary: onBackToLibrary),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -14,6 +14,7 @@ dependencies = [
     "uvicorn[standard] (>=0.47.0,<0.48.0)",
     "networkx (>=3.6.1,<4.0.0) ; python_version >= \"3.13\" and python_full_version != \"3.14.1\" and python_version < \"4.0\"",
     "coloraide (>=8.8.1,<9.0.0)",
+    "boto3 (>=1.43.18,<2.0.0)",
 ]
 
 [tool.poetry]

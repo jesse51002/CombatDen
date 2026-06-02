@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
+import 'package:app_management/shared/widgets/app_spinner.dart';
 import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/features/members/data/video_api_client.dart';
 import 'package:app_management/features/members/data/video_feed.dart';
@@ -178,7 +179,10 @@ class _Feed extends StatelessWidget {
             onSelected: onSelected,
           )
         else if (showYourVideos && index == 1)
-          const YourVideosGrid()
+          YourVideosGrid(
+            detail: selectedGym.detail,
+            gymName: selectedGym.displayName,
+          )
         else
           _TagPager(
             key: ValueKey('$gymId-$rejected-${tags[index - genreOffset]}'),
@@ -217,7 +221,12 @@ class _AllSections extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
       children: [
-        if (!rejected) YourVideosRow(onViewAll: () => onSelected(1)),
+        if (!rejected)
+          YourVideosRow(
+            onViewAll: () => onSelected(1),
+            detail: selectedGym.detail,
+            gymName: selectedGym.displayName,
+          ),
         _genres(),
       ],
     );
@@ -406,18 +415,9 @@ class _InlineLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(DesignConstants.paddingBig),
-      child: Center(
-        child: SizedBox(
-          height: 24,
-          width: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: DesignConstants.primaryColor,
-          ),
-        ),
-      ),
+    return const Padding(
+      padding: EdgeInsets.all(DesignConstants.paddingBig),
+      child: Center(child: AppSpinner()),
     );
   }
 }
@@ -434,14 +434,7 @@ class _FeedMessage extends StatelessWidget {
       padding: const EdgeInsets.all(DesignConstants.paddingBig),
       child: Center(
         child: message == null
-            ? SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: DesignConstants.primaryColor,
-                ),
-              )
+            ? const AppSpinner()
             : Text(
                 message!,
                 style: DesignConstants.p.copyWith(

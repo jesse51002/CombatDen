@@ -25,20 +25,19 @@ the gym's existing CRM and never touches the operational critical path.
 
 ## Product Purpose
 
-AppManagement is the **gym admin web app** for a member-retention layer that runs alongside
-a class-based gym's existing CRM. The member-facing mobile app delivers contextual training
-content, points-based rewards, and attendance-based rank progression; AppManagement is where
-the owner configures and monitors all of that.
+AppManagement is the **gym admin web app** for a member-retention layer that runs alongside a class-based gym's existing CRM. The member-facing mobile app delivers contextual training content, points-based rewards, and attendance-based rank progression; AppManagement is where the owner configures and monitors all of that.
 
-The company's bet is **retention engagement + design**, not feature parity. Incumbents
-(Mindbody, PushPress, Zen Planner, Wodify, Glofox, Trainerize, Mighty Pro) handle billing
-and scheduling and stop there; none ship a real between-class engagement layer, and all cap
-brand customization at logo + palette. AppManagement wins by making the retention engine
-legible and by *looking* like a product worth premium money.
+The company's bet is **retention + design**, not feature parity. Incumbents (Mindbody, PushPress, Zen Planner, Wodify, Glofox, Trainerize, Mighty Pro) handle billing and scheduling and stop there; none ship a real between-class engagement layer, and all cap brand customization at logo + palette.
 
-Success for this surface: an owner can answer "is my retention engine working, and what do I
-change?" in under a minute, and a prospect watching a sales demo of these screens believes
-the product is more crafted than anything else they're shopping.
+AppManagement surfaces two things the admin needs to manage:
+
+1. **The retention engine** — attendance, ranks/divisions, points, rewards, member engagement. The owner's one-minute question: "is it working, what do I change?"
+
+2. **The gym's identity** — the design theme (one of ~80 AI-generated gym-type themes, customizable via the agent at the $300 tier) and the agentic video feed (an AI agent that interviews the owner, generates a content specification for the gym, curates hundreds of videos against that spec, and self-improves from manual feedback). Both surfaces express the same product thesis: this app is actually built for your gym, not a generic template.
+
+**The Videos tab specifically** surfaces the agent-edit experience: a "We surface / We avoid" content focus panel pulled live from the gym's spec, an "Edit with Agent" conversation that rewrites the spec by asking about gym personality, audience, and values, a live feed preview with real thumbnails by genre, a rejected-feed toggle, and a teach-the-agent feedback dialog when removing or recovering videos.
+
+Success for this surface: an owner can answer "is my retention engine working, and what do I change?" in under a minute, and a prospect watching a sales demo of these screens believes the product is more crafted than anything else they're shopping.
 
 **Note on scope:** this is currently a visual-only prototype (no backend, no state framework,
 hardcoded mock data) built for demos and design iteration during pre-build sales / MVP. It
@@ -46,7 +45,7 @@ also doubles as a live sales artifact — screens get screenshotted to sell. Des
 not relaxed because it's a prototype.
 
 **Note on visual direction:** AppManagement has a fresh, standalone visual identity, forked
-from the sibling member app and FlutterCRM (which share an immutable token file). The fork is
+from the sibling member app's design tokens. The fork is
 deliberate: the admin tool is staff-facing and lives in a different context than what members
 see, so it does not have to wear the members' skin. The "byte-for-byte identical
 design_constants" rule in CLAUDE.md no longer binds this repo. The shipped direction is a warm

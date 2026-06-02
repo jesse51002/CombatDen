@@ -1,0 +1,15 @@
+[project]
+name = "combatden-assets-deploy"
+version = "0.1.0"
+description = "Provision the combatden-assets S3 + CloudFront CDN for ThemeService images."
+requires-python = ">=3.11"
+dependencies = ["boto3 (>=1.34,<2.0)"]
+
+[tool.poetry]
+# Scripts-only (config.py / provision.py / finalize.py); nothing to package.
+# Isolated boto3-only venv (no uvloop), so `poetry install` works anywhere.
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"

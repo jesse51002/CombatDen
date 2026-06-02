@@ -37,6 +37,10 @@ class ScheduleClass {
   final String id;
   final String className;
   final String? description;
+
+  /// Class image: a network [imageUrl] (the selected gym's class image, carried
+  /// in from the tapped board card) is preferred, else a bundled [imageAsset].
+  final String? imageUrl;
   final String? imageAsset;
   final int pointsWorth;
   final int? maxCapacity;
@@ -58,6 +62,7 @@ class ScheduleClass {
     required this.id,
     required this.className,
     this.description,
+    this.imageUrl,
     this.imageAsset,
     this.pointsWorth = 50,
     this.maxCapacity,
@@ -116,11 +121,14 @@ class ScheduleDayGroup {
 const String kScheduleMonthLabel = 'February, 2026';
 const String kScheduleRangeLabel = 'Feb 1st, 2026 - Feb 7th, 2026';
 
-// The Edit-form prefill keeps a bundled sample image — that form is still
-// mock. Only the live schedule board reads the selected gym's network images.
+// Bundled fallback image for the Add-New-Class default. Editing a class from
+// the board carries that class's name + the selected gym's network image in
+// (see [classFromEntry]); only this base sample still points at a bundled asset.
 const String _kSampleClassImage = 'assets/images/class_muay_thai_session.png';
 
-/// Sample class used to prefill the Edit Class form in the prototype.
+/// Sample class used as the base prefill for the Class form in the prototype.
+/// Editing a board card overrides its name + image via [classFromEntry]; the
+/// remaining fields (schedule, days, instructors) stay these sample defaults.
 final ScheduleClass kSampleClass = ScheduleClass(
   id: 'sc_001',
   className: 'Muay Thai All Levels',
@@ -141,3 +149,23 @@ final ScheduleClass kSampleClass = ScheduleClass(
   },
   startDate: DateTime(2026, 2, 1),
 );
+
+/// Builds the Edit-form prefill for a tapped board card: the card's name and the
+/// selected gym's network image (per the chosen scope), with every other field
+/// kept on the [kSampleClass] defaults (the gym feed carries no schedule).
+ScheduleClass classFromEntry(ScheduleClassEntry e) => ScheduleClass(
+      id: e.id,
+      className: e.name,
+      description: kSampleClass.description,
+      imageUrl: e.imageUrl,
+      pointsWorth: e.pointsWorth ?? kSampleClass.pointsWorth,
+      maxCapacity: kSampleClass.maxCapacity,
+      classTime: kSampleClass.classTime,
+      durationMinutes: kSampleClass.durationMinutes,
+      recurringUnit: kSampleClass.recurringUnit,
+      recurringInterval: kSampleClass.recurringInterval,
+      activeDays: kSampleClass.activeDays,
+      instructorIdByDay: kSampleClass.instructorIdByDay,
+      startDate: kSampleClass.startDate,
+      endDate: kSampleClass.endDate,
+    );

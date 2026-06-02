@@ -72,6 +72,14 @@ schema_paths = [
     "./schemas/member_reward_redemptions.sql",
     "./schemas/member_activities.sql",
     "./schemas/gym_history.sql",
+    # VideoService demo content (video_* tables) — ordered by FK dependency.
+    "./schemas/video_gym.sql",
+    "./schemas/video_gym_query.sql",
+    "./schemas/video_gym_class.sql",
+    "./schemas/video_gym_reward.sql",
+    "./schemas/video.sql",
+    "./schemas/video_gym_feed.sql",
+    "./schemas/video_cost_log.sql",
     "./schemas/*.sql",
     "./access_rules/*.sql"
 ]

@@ -28,7 +28,7 @@ class GymApiClient {
     final uri = Uri.parse('$baseUrl/gyms/$gymId');
     final response = await http
         .get(uri, headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 5));
+        .timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       throw Exception('Gym detail fetch failed (${response.statusCode})');
     }

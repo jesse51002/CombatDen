@@ -10,6 +10,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 
+from src.core.asset_uploader import upload_run_assets
+from src.core.config import settings
 from src.core.run_context import RUN_ID_FORMAT, RunContext
 from src.executor.orchestrator import PipelineResult
 from schema import (
@@ -53,6 +55,12 @@ class Writer:
         self._dump_model(run_ctx.cust, cust_path)
         self._dump_model(output, output_path)
 
+        self._upload_assets(
+            run_ctx,
+            list(output.image_set.images),
+            list(output.icon_set.icons),
+        )
+
         logger.debug(
             "wrote provenance + output (cost $%.6f: llm $%.6f, "
             "image $%.6f, bg $%.6f, icon $%.6f): %s, %s, %s",
@@ -95,6 +103,12 @@ class Writer:
         output = result.output.model_copy(update={"cost": original_cost})
         self._stamp_versions(output, run_ctx)
         self._dump_model(output, run_ctx.output_path())
+
+        self._upload_assets(
+            run_ctx,
+            [s for s in result.generated if s in output.image_set.images],
+            [s for s in result.generated if s in output.icon_set.icons],
+        )
 
         ledger_path = run_ctx.expansion_cost_path()
         log = self._load_expansion_log(ledger_path)
@@ -202,6 +216,38 @@ class Writer:
         if not path.is_file():
             return ""
         return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+
+    @staticmethod
+    def _upload_assets(
+        run_ctx: RunContext, image_slots: list[str], icon_slots: list[str]
+    ) -> None:
+        """Opt-in on-generation mirror of the run's image/icon bytes to S3
+        (gated by ``ASSET_UPLOAD_ENABLED``). Best-effort — a failure here never
+        fails the run; ``make sync-assets`` is the always-available backstop."""
+        if not settings.asset_upload_enabled:
+            return
+        try:
+            n = upload_run_assets(
+                run_ctx.app_id,
+                run_ctx.run_id,
+                image_slots,
+                icon_slots,
+                run_ctx.final_image_dir,
+                run_ctx.icon_dir,
+            )
+            logger.info(
+                "mirrored %d asset(s) to S3 for %s/%s",
+                n,
+                run_ctx.app_id,
+                run_ctx.run_id,
+            )
+        except Exception:  # noqa: BLE001 - best-effort; sync-assets backstops
+            logger.warning(
+                "asset upload failed for %s/%s (continuing)",
+                run_ctx.app_id,
+                run_ctx.run_id,
+                exc_info=True,
+            )
 
     @staticmethod
     def _dump_model(model: BaseModel, path: Path) -> None:

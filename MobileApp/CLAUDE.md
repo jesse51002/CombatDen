@@ -6,12 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 **Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase.
 
-- **Mostly no backend.** No Supabase, no auth. The live exceptions all do real **read-only** HTTP via `dio` + disk-cached `cached_network_image`: (a) the **customization engine** (the shared `theme_flutter` package, `../ThemeService/ThemeFlutter`, fetches the tenant's branding), and (b) the **VideoService-backed content** (`../VideoService/`) — the **videos feature** (`lib/features/videos/`, the feed), the **gym detail** read that supplies classes + rewards (`lib/features/gym/`, consumed by `lib/features/class_booking/`), and the **gym-browser / style picker** (`lib/features/style_select/`). All of these read the active gym **by id** — see *Videos feature is live* below. Don't add HTTP anywhere else without asking.
+- **Mostly no backend.** No Supabase, no auth. The live exceptions all do real **read-only** HTTP via `dio` + disk-cached `cached_network_image`: (a) the **customization engine** (the shared `theme_flutter` package, `../ThemeService/ThemeFlutter`, fetches the tenant's branding), and (b) the **VideoService-backed content** (`../VideoService/`) — the **videos feature** (`lib/features/videos/`, the feed), the **gym detail** read that supplies classes + rewards (`lib/features/gym/`; classes consumed by `lib/features/class_booking/` + the home schedule; rewards consumed by the rewards feature's Points Store / My Rewards `lib/features/rewards/` and the post-class stats **Rewards card** `lib/features/stats/`, which renders the live rewards with a bundled-asset fallback), and the **gym-browser / style picker** (`lib/features/style_select/`). All of these read the active gym **by id** — see *Videos feature is live* below. Don't add HTTP anywhere else without asking.
 - **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller). The live features fetch via `FutureBuilder` + a cached repository, not a state framework.
 - **No real data, except the live features above.** Every other list, card, and detail screen is fed by hardcoded mock data co-located with the feature.
 - **No persistence.** Buttons can be no-ops or `print` for now.
 
-The whole point is to make screens that **look right** so the design can be evaluated, screenshotted for sales, and iterated on quickly. When this app graduates to real data, this CLAUDE.md gets revised and the data/state sections from `../FlutterCRM/CLAUDE.md` come back.
+The whole point is to make screens that **look right** so the design can be evaluated, screenshotted for sales, and iterated on quickly.
 
 **Theme/design rules are NOT relaxed because this is a prototype.** See *Theming System* below.
 
@@ -89,6 +89,14 @@ How to apply:
 **YAGNI** — don't add features until needed.
 **Separation of Concerns** — separate UI from any logic that creeps in.
 
+## No assumptions
+
+When a decision has more than one reasonable answer, ask and wait for the user's explicit response. Never assume, recommend-and-proceed, or defer the choice unilaterally. Presenting researched options is encouraged; making the choice for the user is not.
+
+## Skills are living documents
+
+When working through a skill (or a reference doc / `SKILL.md` it loads) you realize its guidance is wrong, outdated, or holding the work back — a recommended data/image source that returns bad results, a step that no longer fits, a better tool you've found — do not silently work around it. Use the better approach for the task, then **recommend the specific skill fix to the user and wait for approval** (per *No assumptions*); on approval, **update the skill file** so the lesson sticks. Skills are ever-evolving — every real-world correction should feed back into them.
+
 ## CLAUDE.md is a living document
 
 This file is a living document — exactly like a skill, it must track reality. Whenever the code genuinely diverges from what this CLAUDE.md says (a new live backend call, a renamed system, an added dependency, a rule the code has outgrown on purpose, a feature that changed the architecture), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
@@ -129,7 +137,7 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 - **`_kFoo` private file-scoped constants are also allowed for scroll-position math, sliver / pinned-header heights, and pure layout arithmetic that has no `DesignConstants` equivalent.** Examples: `_kTopbarHeight = 268`, `_kDateRowHeight = 50`, `_kCardWidth = 258`. The carve-out is for *layout math that is intrinsically per-screen and not a fungible design token*. If the same number appears across multiple screens or controls, it's not a `_k` candidate — escalate to add a `DesignConstants` token instead.
 - **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/padding/radius/border/divider/icon-size, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
 - **`design_constants.dart` is runtime-driven, not immutable.** The brand colours (`primaryColor`, `backgroundColor`, `text`, `accent`) are static getters that resolve live from the loaded tenant customization via `BrandColor.color(slot, fallback: <const CombatDen default>)`. Derived shades (`primaryColor50/25/10`, `darkPrimary`, `text2nd/3rd`, `card`, `popup`, `divider`) are getters off those bases. Status/semantic colours (`goodGreen`, `okYellow`, `badRed`, `hyperlink`, the `*Dark` variants) stay hardcoded and are NOT brandable. The const fallback is the CombatDen palette, used verbatim when no customization is loaded. Do not hand-edit token values or the `BrandColor` wiring, and do not add/rename tokens without explicit permission.
-- The customization **engine** (the shared `theme_flutter` package, imported as `package:theme_flutter/...`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/app_slots.dart` (`CombatDenSlots`) is missing. The engine was extracted from this app's old `lib/customization/` so AppManagement can share it for the live theme preview; this app injects its `CombatDenSlots` manifest + `AppConfig` into `ThemeRuntime.initialize`. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is no longer byte-identical with FlutterCRM, which was reverted; this app is the customization host.)
+- The customization **engine** (the shared `theme_flutter` package, imported as `package:theme_flutter/...`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/app_slots.dart` (`CombatDenSlots`) is missing. The engine was extracted from this app's old `lib/customization/` so AppManagement can share it for the live theme preview; this app injects its `CombatDenSlots` manifest + `AppConfig` into `ThemeRuntime.initialize`. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is runtime-driven from the engine; this app is the customization host.)
 - Images: the `BrandImage` widget is URL-first — a bundled-asset filename that maps to a customization slot renders the fetched image (disk-cached via `cached_network_image`) and falls back to the bundled asset otherwise. Call sites are unchanged.
 - **ALWAYS reference DesignConstants** for every color, every text style, every padding, every radius, every spacing.
 
@@ -339,7 +347,7 @@ Bad: nesting the cascade but cramming it all into one giant `build` method — t
 - **Default location is shared.** A widget belongs in `lib/features/<feature>/presentation/widgets/` only if it's specifically tied to that feature's content (e.g. a class-schedule list item that knows about classes). Topbars, buttons, cards, list rows, tables, dialogs, dividers, info rows, badges, chips, sections — all live in `lib/shared/widgets/`. **When unsure, prefer shared.** Moving a feature widget to shared later is cheap; building two parallel versions because the first one was buried in a feature folder is not.
 - One public widget per file.
 - **Always check `lib/shared/widgets/` before building custom UI.** If a shared widget already exists for the pattern (cards, buttons, headers), use it instead of creating a parallel implementation.
-- **Before building a new shared widget, also check `../FlutterCRM/lib/shared/widgets/`.** If a version of the pattern exists there (e.g. `app_data_table.dart`, `info_row.dart`, `section_card.dart`, `app_primary_button.dart`, `subtitle_section.dart`), copy and adapt it rather than building from scratch. The two apps share a design language; the goal is parity, not divergence.
+- **Before building a new shared widget, also check `../AppManagement/lib/shared/widgets/`.** If a version of the pattern exists there (e.g. a shared data table, info rows, section cards, primary buttons), copy and adapt it rather than building from scratch. The two apps share a design language; the goal is parity, not divergence.
 
 ## Project Structure
 
@@ -364,6 +372,22 @@ lib/
     └── widgets/                    # cross-feature reusables
 ```
 
+Outside `lib/`, **`tools/capture/`** holds dev-only Flutter capture entrypoints
+that render real screens to frame-exact PNGs (1080×1920 or 1080×2340) for the
+landing page: `capture_main.dart` (the theme-reel scroll), `capture_booking_main.dart`
+(the class-booking clips — "Perfectly timed content"/Video-Before-Class, plus the
+"you're in" booked-confirm variant via `CAPTURE_BOOKING_END=confirm`), and
+`capture_app_main.dart` (the Home / Points / Streak screen clips), sharing
+`capture_frame.dart`. NOT shipping code — its only app-side hooks are opt-in and
+inert in normal use (all null / false / clock-unset): `captureController` on
+`VideosScreen`; `classData` on `ClassScreen`; `captureContentOnly` on
+`ClassBookedScreen`; and the global `captureRevealClock`
+(`lib/shared/widgets/animation/capture_reveal_clock.dart`) that drives the
+reveal + post-class celebration animations deterministically — read by
+`ScaleReveal`, `StaggeredReveal`, `CountUpText`, `LoadingDots`, the points/streak
+intro controllers (`_PointSphere`/`_StreakOrbit`), and the streak badge pulse.
+See `tools/capture/README.md`.
+
 ## Development Commands
 
 - `flutter run` — run the app in debug mode (hot reload).
@@ -372,6 +396,17 @@ lib/
 - `flutter pub get` — install dependencies.
 - `flutter pub upgrade` — upgrade dependencies.
 - `flutter clean` — clean build artifacts.
+- `make capture` / `make capture-booking` / `make capture-app` / `make
+  capture-shots` / `make stitch` — dev-only landing-page capture: render real
+  screens to frame-exact webm (or PNG screenshots). `capture` = the video-feed
+  theme reel (one per theme); `capture-booking` = the class-booking clips (class
+  detail → ~1s dots → "Video Before Class", one per discipline; or the "you're
+  in" confirm variant); `capture-app` = the Home / Points / Streak screen clips,
+  each branded to barre / muaythai / reformer; `capture-shots` = static
+  screenshots of the Home / Rewards / Videos screens for any discipline (PNGs to
+  `LandingPage/media-src/screenshots/`). Needs a running emulator + both backends
+  (`make api` in `../ThemeService` and `../VideoService`). See
+  `tools/capture/README.md`.
 
 ## Code Quality
 
@@ -389,22 +424,13 @@ lib/
 Current dependencies (intentionally minimal):
 - `google_fonts` — for Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
 - `material_symbols_icons` — for `Symbols.*_sharp` icons.
+- `path_provider` — used **only** by the dev-only capture harness
+  (`tools/capture/`) to write exported frames to the device's external files
+  dir. Not used by any shipping screen; it's a benign platform util, not part of
+  the real-data stack.
 - `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — the shared white-label runtime extracted from this app's old `lib/customization/`. It carries the live-feature deps (`dio`, `flutter_svg`, `cached_network_image`, `get_it`, `shared_preferences`) that back the customization engine; those are the documented live exceptions, not the start of the real-data stack. (`lottie` is a direct MobileApp dep — it backs only the bundled booking "done" checkmark animation, which the app plays and tints to the brand primary itself; the engine no longer renders Lottie.)
 
-If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the FlutterCRM stack, **stop**. That's the signal that this app is graduating out of prototype mode. Talk to the user before pulling those in.
-
-## What changes when this becomes real
-
-When this app moves past visual-only:
-
-1. State management gets added — feature-by-feature BLoC, mirroring `../FlutterCRM/`.
-2. `mock_*.dart` files get deleted in favor of `repositories/` + an `ApiClient` + Supabase auth.
-3. Models gain `fromJson`/`toJson`, validated against `../Database/openapi.json`.
-4. Money fields move to `int` minor units; date fields convert to UTC at the API boundary.
-5. Tests get added (unit, widget, bloc).
-6. This CLAUDE.md gets revised, importing the data/state sections from `../FlutterCRM/CLAUDE.md`.
-
-Until that work happens, none of those concerns belong in this repo.
+If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the real-data stack, **stop**. That's the signal that this app is leaving prototype mode. Talk to the user before pulling those in.
 
 ---
 

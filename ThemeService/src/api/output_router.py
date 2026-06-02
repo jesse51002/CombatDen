@@ -6,14 +6,16 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
+from src.api.config import settings
 from src.api.errors import InvalidRunError, NotFoundError
 from src.api.schema.font_delivery import FontDeliveryResponse
 from src.api.schema.output_response import OutputResponse
 from src.api.schema.style_list_response import StyleListResponse
 from src.api.service.font_service import font_service
 from src.api.service.output_service import output_service
+from src.core.asset_urls import cdn_url, icon_key, image_key
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +96,9 @@ async def get_output(app_id: str, run_id: str) -> OutputResponse:
     """Return one run's ``output.yaml`` with streamable image URLs."""
     try:
         output = await output_service().load(app_id, run_id)
-        return OutputResponse.from_output(output, app_id, run_id)
+        return OutputResponse.from_output(
+            output, app_id, run_id, settings.assets_cdn_base_url
+        )
     except NotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
@@ -127,8 +131,16 @@ async def get_output(app_id: str, run_id: str) -> OutputResponse:
 async def get_image(
     app_id: str, run_id: str, slot_id: str
 ) -> FileResponse:
-    """Stream the generated PNG for one declared image slot."""
+    """Stream the generated PNG for one declared image slot. When a CDN is
+    configured the bytes live on S3, so this legacy endpoint just redirects
+    there (a safety net for stale clients; the styles/output JSON already
+    carries the absolute CDN URL)."""
     try:
+        if settings.assets_cdn_base_url:
+            return RedirectResponse(
+                cdn_url(settings.assets_cdn_base_url, image_key(app_id, run_id, slot_id)),
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            )
         path = await output_service().image_file(app_id, run_id, slot_id)
         return FileResponse(
             path, media_type="image/png", headers=_ASSET_CACHE_CONTROL
@@ -172,8 +184,15 @@ async def get_image(
 async def get_icon(
     app_id: str, run_id: str, slot_id: str
 ) -> FileResponse:
-    """Stream the resolved monochrome SVG for one declared icon slot."""
+    """Stream the resolved monochrome SVG for one declared icon slot. Redirects
+    to the CDN when one is configured (bytes live on S3); otherwise serves the
+    local file."""
     try:
+        if settings.assets_cdn_base_url:
+            return RedirectResponse(
+                cdn_url(settings.assets_cdn_base_url, icon_key(app_id, run_id, slot_id)),
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            )
         path = await output_service().icon_file(app_id, run_id, slot_id)
         return FileResponse(
             path, media_type="image/svg+xml", headers=_ASSET_CACHE_CONTROL

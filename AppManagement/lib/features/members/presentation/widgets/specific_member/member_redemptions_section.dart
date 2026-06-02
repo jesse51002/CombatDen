@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/state/selected_gym.dart';
+import 'package:app_management/shared/widgets/app_spinner.dart';
 import 'package:app_management/features/members/data/gym_detail.dart';
 import 'package:app_management/features/members/data/mock_loyalty.dart';
 import 'package:app_management/features/members/presentation/widgets/member_app/loyalty_tab/redemptions_section.dart';
@@ -79,14 +80,7 @@ class _RedemptionsMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: message == null
-          ? const SizedBox(
-              height: 24,
-              width: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: DesignConstants.primaryColor,
-              ),
-            )
+          ? const AppSpinner()
           : Text(
               message!,
               style: DesignConstants.p.copyWith(

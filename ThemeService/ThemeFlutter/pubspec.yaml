@@ -33,5 +33,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/images/
+  # The showcase preview screens (and their bundled fallback images) moved to
+  # the AppManagement app — this package is now runtime + resolvers only, with
+  # no bundled assets of its own.

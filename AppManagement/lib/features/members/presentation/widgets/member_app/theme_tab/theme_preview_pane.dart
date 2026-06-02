@@ -4,10 +4,11 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:app_management/core/constants/design_constants.dart';
 import 'package:app_management/core/state/selected_gym.dart';
 import 'package:app_management/shared/widgets/app_outline_button.dart';
+import 'package:app_management/shared/widgets/app_spinner.dart';
 import 'package:app_management/shared/widgets/phone_frame.dart';
 import 'package:theme_flutter/customization_runtime.dart';
-import 'package:theme_flutter/showcase/showcase_content.dart';
-import 'package:theme_flutter/showcase/showcase_screen.dart';
+import 'package:app_management/showcase/showcase_content.dart';
+import 'package:app_management/showcase/showcase_screen.dart';
 
 // Phone-like page push between showcase screens. Same spirit (and curve) as
 // theme_grid.dart's scroll animation — a local const, not a design token.
@@ -99,16 +100,7 @@ class _PreviewContent extends StatelessWidget {
         if (snapshot.connectionState != ConnectionState.done) {
           return ColoredBox(
             color: DesignConstants.card,
-            child: Center(
-              child: SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: DesignConstants.primaryColor,
-                ),
-              ),
-            ),
+            child: const Center(child: AppSpinner()),
           );
         }
         final reduceMotion = MediaQuery.disableAnimationsOf(context);

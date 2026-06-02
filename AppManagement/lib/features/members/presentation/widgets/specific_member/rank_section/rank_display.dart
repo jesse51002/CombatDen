@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:theme_flutter/showcase/showcase_slots.dart';
+import 'package:app_management/showcase/showcase_slots.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 
 import 'package:app_management/core/constants/design_constants.dart';

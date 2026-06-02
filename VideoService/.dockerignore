@@ -1,0 +1,21 @@
+# Keep the build context lean: the 324 MB in-project .venv must never be sent
+# to the daemon. Only deps (pyproject/lock), src/, schema/, gyms/, videos/, and
+# cost_log.yaml are needed to serve — see Dockerfile COPY list.
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Pipeline-only (scrape/classify/scan), not the serving path.
+scripts/
+tests/
+
+# Local-only config.
+.env
+poetry.toml
+
+# Docs / scratch.
+*.md

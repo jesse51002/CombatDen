@@ -5,17 +5,24 @@ everything: a member browses gyms, picks one (by `gym_id`), and gets that gym's
 videos / classes / rewards. The **theme it carries** is used only for branding
 (loading the design), never to fetch content.
 
-Everything lives flat under `VideoService/`:
+Data lives in the **shared Supabase Postgres** (the `video_*` tables defined in
+`../Database/`). The hand-authored gym configs stay git-tracked YAML and are
+loaded into SQL with `make sync-gyms`; everything machine-generated (the shared
+video pool, each gym's curated feed, the spend ledger) lives only in Postgres:
 
 ```
-gyms/<gym_id>.yaml      one gym
-videos/<video_id>.yaml  the shared video pool (one file per video, no manifest)
-cost_log.yaml           append-only spend ledger
+gyms/<gym_id>.yaml   one gym — git-tracked source of truth, synced into SQL
+video_gym + children (Postgres)   gyms, queries, classes, rewards
+video                (Postgres)   the shared video pool (one row per video)
+video_gym_feed       (Postgres)   each gym's curated good/rejected feed
+video_cost_log       (Postgres)   append-only spend ledger
 ```
 
-There is **no tenant layer, no `app_id`, no manifest**. The theme→gym link is
-just each gym's `theme` field (a ThemeService design id), so VideoService never
-reads ThemeService.
+The read API queries these tables (needs `DATABASE_URL`); the pipeline scripts
+write them. There is **no tenant layer, no `app_id`**. The theme→gym link is just
+each gym's `theme` field (a ThemeService design id), so VideoService never reads
+ThemeService. (The legacy flat `videos/` + `cost_log.yaml` files are only read
+once, by `make import-yaml`, to seed the DB at cutover.)
 
 ## The gym
 
@@ -129,7 +136,8 @@ usd}` per scan run), so per-gym spend is auditable on the gym itself.
 
 ```bash
 poetry install
-make api          # uvicorn on http://localhost:8002
+# .env needs DATABASE_URL=postgresql+asyncpg://...  (a raw postgresql:// Supabase URL also works)
+make api          # uvicorn on http://localhost:8002 — queries the video_* tables
 ```
 
 Read-only endpoints:
@@ -139,7 +147,7 @@ Read-only endpoints:
 | `GET /health` | liveness probe |
 | `GET /gyms` | a **page** of the gym browser (`GymsPage`) — slim cards (id, disciplines, derived `parent_gym_type`, `theme`, derived `celebration_image_url`, counts). Paginate with `?limit=` (default 20, max 100) / `?offset=`; filter with `?query=` (substring over id / theme / discipline) |
 | `GET /gyms/{gym_id}` | one gym's whole content detail (`GymDetail`) — its feed `specification` (short + full descriptions), branded `classes`, and points-store `rewards`, served verbatim. The client reads this into memory once on selection. `404` if there's no such gym |
-| `GET /gyms/{gym_id}/videos` | a **page** of the gym's feed (`VideosFeed`) — **only that gym's `good_video_ids`**, hydrated from the pool in feed order. Paginate; filter with **either** `?video_type=<genre>` **or** `?big_group=<educational\|entertainment>` (both → `400`). `404` if there's no such gym |
+| `GET /gyms/{gym_id}/videos` | a **page** of the gym's feed (`VideosFeed`) — **only that gym's good feed**, hydrated from the pool in `relevance_index` order. Paginate; filter with **either** `?video_type=<genre>` **or** `?big_group=<educational\|entertainment>` (both → `400`); `?rejected=true` serves the rejected list. `404` if there's no such gym |
 
 Everything is keyed by `gym_id` — the gym is the unit. Browse `/gyms`, pick one,
 read its detail (`/gyms/{gym_id}`) into memory, and page its feed
@@ -171,17 +179,23 @@ scraper, or run a scan.
 All run via **`poetry run`** (never bare `python3` / `.venv/bin/*`):
 
 ```bash
-make gym-check GYM_ID=vinyasa     # validate one gym file round-trips the Gym model
-make scrape                        # scrape + classify across every gym's queries
-make scrape GYM_ID=vinyasa         # only one gym's queries
-make scan GYM_ID=vinyasa           # scan one gym  (GYM_ID=all for every gym)
+make gym-check GYM_ID=all          # validate gym files round-trip the Gym model
+make sync-gyms GYM_ID=all          # load authored gym YAML -> SQL (idempotent)
+make import-yaml                    # one-time cutover: existing pool + feeds + cost log -> SQL
+make scrape                        # scrape + classify the pool   (⚠ pending SQL-writer migration)
+make scan GYM_ID=all               # per-gym keep/drop scan        (⚠ pending SQL-writer migration)
 ```
 
-Env in `.env`: `APIFY_TOKEN` (scrape) and the tagging/scan model key (e.g.
-`GEMINI_API_KEY`).
+The write scripts pick their DB via the `ENV_FILE` flag (default `.env`). To
+target prod: `ENV_FILE=.env.prod make sync-gyms GYM_ID=all`, or the
+`make sync-gyms-prod` / `make import-yaml-prod` helpers (prod secrets live in the
+gitignored `.env.prod`).
+
+Env in `.env`: `DATABASE_URL` (the API + all scripts), plus `APIFY_TOKEN` (scrape)
+and the tagging/scan model key (e.g. `GEMINI_API_KEY`).
 
 ## Tests
 
 ```bash
-make test
+make test   # unit tests run with no DB; the DB-integration tests run only if DATABASE_URL is set
 ```

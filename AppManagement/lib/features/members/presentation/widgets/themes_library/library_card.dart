@@ -26,63 +26,72 @@ class LibraryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gymType = (style.gymType ?? '').trim();
-    return Material(
-      color: DesignConstants.card,
-      borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Stack(
-          children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Hero(imageUrl: style.celebrationImageUrl),
-                Padding(
-                  padding: const EdgeInsets.all(DesignConstants.paddingSmall),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: DesignConstants.spacingSmall,
-                    children: [
-                      SizedBox(
-                        height: DesignConstants.rewardCardTitleHeight,
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: Text(
-                            style.displayName,
-                            style: DesignConstants.h2,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DesignConstants.card,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusCard),
+        border: Border.all(color: DesignConstants.line),
+        boxShadow: DesignConstants.cardShadow,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusCard),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Stack(
+            children: [
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Hero(imageUrl: style.celebrationImageUrl),
+                  Padding(
+                    padding:
+                        const EdgeInsets.all(DesignConstants.paddingSmall),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      spacing: DesignConstants.spacingSmall,
+                      children: [
+                        SizedBox(
+                          height: DesignConstants.rewardCardTitleHeight,
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: Text(
+                              style.displayName,
+                              style: DesignConstants.h2,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        if (gymType.isNotEmpty)
+                          Text(
+                            gymType.toUpperCase(),
+                            style: DesignConstants.h3.copyWith(
+                              color: DesignConstants.text2nd,
+                              letterSpacing:
+                                  0.08 * DesignConstants.h3.fontSize!,
+                            ),
                             textAlign: TextAlign.center,
-                            maxLines: 2,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ),
-                      if (gymType.isNotEmpty)
-                        Text(
-                          gymType.toUpperCase(),
-                          style: DesignConstants.h3.copyWith(
-                            color: DesignConstants.text2nd,
-                            letterSpacing: 0.08 *
-                                DesignConstants.h3.fontSize!,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            if (isActive)
-              const Positioned(
-                top: DesignConstants.spacingMedium,
-                right: DesignConstants.spacingMedium,
-                child: _ActivePill(),
+                ],
               ),
-          ],
+              if (isActive)
+                const Positioned(
+                  top: DesignConstants.spacingMedium,
+                  right: DesignConstants.spacingMedium,
+                  child: _ActivePill(),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -110,14 +119,14 @@ class _ActivePill extends StatelessWidget {
         children: [
           Icon(
             Symbols.check_sharp,
-            color: DesignConstants.backgroundColor,
+            color: DesignConstants.surface,
             weight: DesignConstants.iconWeight,
             size: DesignConstants.iconSizeSmall,
           ),
           Text(
             'Active',
             style: DesignConstants.pSmallBold.copyWith(
-              color: DesignConstants.backgroundColor,
+              color: DesignConstants.surface,
             ),
           ),
         ],

@@ -45,6 +45,7 @@ dependencies:
   lottie: ^3.3.3
   material_symbols_icons: ^4.2928.1
   shared_preferences: ^2.5.5
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

@@ -16,7 +16,12 @@ import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 /// actually carries: an `All` tab plus one per distinct group. `null` scope =
 /// the `All` filter.
 class VideosScreen extends StatefulWidget {
-  const VideosScreen({super.key});
+  const VideosScreen({super.key, this.captureController});
+
+  /// Injected ONLY by the offline capture harness (`tools/capture/`) to drive a
+  /// deterministic scroll for the landing-page theme reel. Null in normal app
+  /// use, where the `SingleChildScrollView` owns its own implicit controller.
+  final ScrollController? captureController;
 
   @override
   State<VideosScreen> createState() => _VideosScreenState();
@@ -54,6 +59,7 @@ class _VideosScreenState extends State<VideosScreen> {
       horizontalPadding: AppScreenHorizontalPadding.none,
       bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.videos),
       child: SingleChildScrollView(
+        controller: widget.captureController,
         padding: EdgeInsets.only(bottom: DesignConstants.spacingBig),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

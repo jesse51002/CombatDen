@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/stats/data/mock_stats.dart';
-import 'package:mobile_app/shared/widgets/api_image.dart';
+import 'package:mobile_app/features/stats/presentation/widgets/rewards/reward_slide.dart';
 
 /// Swipeable cover-flow reward carousel: the active page is full size and
 /// face-on, adjacent pages shrink and tilt away in 3D for depth.
@@ -13,7 +12,7 @@ class RewardsCarousel extends StatelessWidget {
     required this.onPageChanged,
   });
 
-  final List<MockRewardItem> items;
+  final List<RewardSlide> items;
   final PageController controller;
   final ValueChanged<int> onPageChanged;
 
@@ -62,7 +61,7 @@ class RewardsCarousel extends StatelessWidget {
               );
             },
             child: _RewardCircle(
-              imageAsset: items[index].imageAsset,
+              image: items[index].image,
               size: _featuredSize,
             ),
           );
@@ -73,9 +72,9 @@ class RewardsCarousel extends StatelessWidget {
 }
 
 class _RewardCircle extends StatelessWidget {
-  const _RewardCircle({required this.imageAsset, required this.size});
+  const _RewardCircle({required this.image, required this.size});
 
-  final String imageAsset;
+  final ImageProvider image;
   final double size;
 
   @override
@@ -92,8 +91,9 @@ class _RewardCircle extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Image(
-        image: ApiImage.rewardAsset(imageAsset),
+        image: image,
         fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => ColoredBox(color: DesignConstants.card),
       ),
     );
   }

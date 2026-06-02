@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/shared/widgets/animation/capture_reveal_clock.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 
 /// One-shot scale + fade entrance. Fires once on `initState` after [delay].
@@ -40,6 +41,9 @@ class _ScaleRevealState extends State<ScaleReveal>
   @override
   void initState() {
     super.initState();
+    // When the capture clock is driving, the harness sets the progress; don't
+    // run the self-animation.
+    if (captureRevealClock.value != null) return;
     if (widget.delay == Duration.zero) {
       _ctrl.forward();
     } else {
@@ -58,9 +62,9 @@ class _ScaleRevealState extends State<ScaleReveal>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _t,
+      animation: Listenable.merge([_t, captureRevealClock]),
       builder: (context, child) {
-        final v = _t.value;
+        final v = _captureValue() ?? _t.value;
         final scale = widget.startScale + (1 - widget.startScale) * v;
         return Opacity(
           opacity: v,
@@ -69,5 +73,16 @@ class _ScaleRevealState extends State<ScaleReveal>
       },
       child: widget.child,
     );
+  }
+
+  /// Curved progress derived from the capture clock (minus this reveal's own
+  /// delay), or null when not capturing.
+  double? _captureValue() {
+    final clock = captureRevealClock.value;
+    if (clock == null) return null;
+    final raw = ((clock - widget.delay).inMicroseconds /
+            widget.duration.inMicroseconds)
+        .clamp(0.0, 1.0);
+    return Curves.easeOutQuart.transform(raw);
   }
 }

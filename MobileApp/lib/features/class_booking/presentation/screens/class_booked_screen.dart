@@ -48,7 +48,13 @@ const Duration _kCtaFadeIn = Duration(milliseconds: 220);
 /// The Continue button is hidden until every animation has settled —
 /// this screen is intentionally **not skippable**.
 class ClassBookedScreen extends StatefulWidget {
-  const ClassBookedScreen({super.key});
+  const ClassBookedScreen({super.key, this.captureContentOnly = false});
+
+  /// Capture-only: skip the loading dots, the Lottie checkmark, and the
+  /// Continue CTA, and show the booked image + caption directly — its
+  /// ScaleReveal/StaggeredReveal are then driven by the global capture clock
+  /// (the "you're in" landing-page clip). False in normal app use.
+  final bool captureContentOnly;
 
   @override
   State<ClassBookedScreen> createState() => _ClassBookedScreenState();
@@ -67,6 +73,9 @@ class _ClassBookedScreenState extends State<ClassBookedScreen>
   @override
   void initState() {
     super.initState();
+    // Capture: the booked content is shown directly (no dots/checkmark/CTA),
+    // its reveals driven by the global capture clock — so skip the timeline.
+    if (widget.captureContentOnly) return;
     _doneCtrl.addStatusListener(_onDoneStatus);
     _loadingTimer = Timer(_kLoadingDuration, () {
       if (mounted) setState(() => _showDone = true);
@@ -98,7 +107,9 @@ class _ClassBookedScreenState extends State<ClassBookedScreen>
   }
 
   Widget _buildBody() {
-    if (_showContent) return const _BookedContent();
+    if (widget.captureContentOnly || _showContent) {
+      return const _BookedContent();
+    }
     if (_showDone) {
       return Center(child: _DoneIntro(controller: _doneCtrl));
     }
