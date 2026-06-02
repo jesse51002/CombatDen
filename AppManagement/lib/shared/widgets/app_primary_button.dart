@@ -53,8 +53,8 @@ class AppPrimaryButton extends StatelessWidget {
 
     final content = isLoading
         ? SizedBox(
-            height: DesignConstants.iconSizeTiny,
-            width: DesignConstants.iconSizeTiny,
+            height: DesignConstants.iconSizeMedium,
+            width: DesignConstants.iconSizeMedium,
             child: CircularProgressIndicator(
               strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation<Color>(fg),

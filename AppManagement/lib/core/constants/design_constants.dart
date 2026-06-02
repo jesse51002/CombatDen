@@ -41,8 +41,8 @@ class DesignConstants {
   static const Color divider = line;
 
   static final Color popup = Color.alphaBlend(
-    surface,
     text.withValues(alpha: 0.04),
+    surface,
   );
 
   static const Color hyperlink = accentDark;

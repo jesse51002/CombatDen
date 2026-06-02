@@ -1,3 +1,5 @@
+# NOTE: byte-identical twin across this app's deploy/ and deploy-themes/ trees
+# (only config.py differs per target). Apply any fix to every copy.
 import json
 import sys
 import time

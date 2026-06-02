@@ -48,7 +48,7 @@ PREVIEW_PER_TAG = 10
                 "before pagination. `query` filters on gym id / theme / discipline"
             )
         },
-        422: {"description": "A gym file is stale, or bad limit/offset"},
+        422: {"description": "A gym config is invalid, or bad limit/offset"},
     },
 )
 async def get_gyms(
@@ -89,7 +89,7 @@ async def get_gyms(
             )
         },
         404: {"description": "No such gym"},
-        422: {"description": "The gym file is stale"},
+        422: {"description": "The gym config is invalid"},
     },
 )
 async def get_gym(gym_id: str) -> GymDetail:
@@ -154,10 +154,10 @@ async def get_gym_videos(
     try:
         service = videos_service()
         gym = await service.load_gym(gym_id)
-        # Read ONLY this gym's own ids by filename (id == filename stem),
-        # preserving feed order — never the whole pool, so the feed costs
-        # O(feed size), not O(pool size) and never blocks on a 20k-file read.
-        # `rejected` swaps the approved feed for the scan's rejected list.
+        # Read ONLY this gym's own ids from its row (load_gym), preserving feed
+        # order — never the whole pool, so the feed costs O(feed size), not
+        # O(pool size). `rejected` swaps the approved feed for the scan's
+        # rejected list.
         ids = (
             gym.videos.rejected_video_ids
             if rejected

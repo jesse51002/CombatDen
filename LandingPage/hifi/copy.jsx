@@ -15,7 +15,6 @@
 const COPY = {
   // shared chrome ------------------------------------------------------------
   nav: {
-    logoMark: 'LOGO',
     links: [
       { label: 'Home', href: 'index.html' },
       { label: 'Themes', href: 'https://themes.combatden.net' },
