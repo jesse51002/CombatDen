@@ -7,15 +7,16 @@
 
 function BrandSection() {
   const c = COPY.brand;
+  const isMobile = useIsMobile();
   const videoRef = React.useRef(null);
   useVideoInView(videoRef); // play only while in view + restart on exit (shared landing rule)
   return (
-    <section id="themes" data-screen-label="03 Your brand" style={{ position: 'relative', background: GW.bg, fontFamily: GW.sans, padding: '40px 0 130px' }}>
-      <div style={{ maxWidth: GW.maxW, margin: '0 auto', padding: '0 32px', display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'center', gap: 24 }}>
-        {/* left — copy */}
-        <div>
+    <section id="themes" data-screen-label="03 Your brand" style={{ position: 'relative', background: GW.bg, fontFamily: GW.sans, padding: isMobile ? '24px 0 90px' : '40px 0 130px' }}>
+      <div style={{ maxWidth: GW.maxW, margin: '0 auto', padding: isMobile ? '0 20px' : '0 32px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', alignItems: 'center', gap: isMobile ? 28 : 24 }}>
+        {/* left — copy (centered on mobile) */}
+        <div style={{ textAlign: isMobile ? 'center' : 'left' }}>
           <h2 style={{ margin: 0, fontSize: 'clamp(30px,3.4vw,44px)', lineHeight: 1.08, letterSpacing: -1.5, fontWeight: 600, color: GW.ink, textWrap: 'balance' }}>{c.heading}</h2>
-          <p style={{ margin: '18px 0 0', maxWidth: 460, fontSize: 'clamp(16px,1.7vw,19px)', lineHeight: 1.5, fontWeight: 450, color: GW.inkSoft, textWrap: 'pretty' }}>
+          <p style={{ margin: isMobile ? '18px auto 0' : '18px 0 0', maxWidth: 460, fontSize: 'clamp(16px,1.7vw,19px)', lineHeight: 1.5, fontWeight: 450, color: GW.inkSoft, textWrap: 'pretty' }}>
             {c.body}
           </p>
           <div style={{ marginTop: 28 }}><GWButton label={c.button} href={c.themeLibraryUrl} arrow newTab={false} /></div>

@@ -84,4 +84,24 @@ function useVideoInView(videoRef, onVisible) {
   }, []);
 }
 
-Object.assign(window, { GW, BRAND, gwRgba, GWDotGrid, GWGlow, useVideoInView, IN_VIEW_MARGIN });
+// Mobile breakpoint (see LandingPage/CLAUDE.md "Mobile responsiveness"). The page
+// is 100% inline styles, so a <style> media query can't override them without
+// !important — responsiveness is JS-driven instead. `useIsMobile()` returns true
+// at phone widths. Lazy-init from matchMedia so the first paint is already correct
+// (no flash), and listen only to the `change` event so a re-render fires ONLY when
+// the viewport crosses the breakpoint — never on scroll/resize within it, so the
+// effect-driven video/animation state is never disturbed. Sections call this and
+// swap a few style values (grid columns, padding) on the result.
+const MOBILE_Q = '(max-width: 768px)';
+function useIsMobile(q = MOBILE_Q) {
+  const [m, setM] = React.useState(() => window.matchMedia(q).matches);
+  React.useEffect(() => {
+    const mq = window.matchMedia(q);
+    const h = (e) => setM(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, [q]);
+  return m;
+}
+
+Object.assign(window, { GW, BRAND, gwRgba, GWDotGrid, GWGlow, useVideoInView, IN_VIEW_MARGIN, useIsMobile, MOBILE_Q });

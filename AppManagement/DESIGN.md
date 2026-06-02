@@ -196,36 +196,45 @@ space + hairlines + titles. Nested cards are always wrong.
   actions (Print, Edit, Promote, View all).
 
 ### Hairline
-- A 1px rule in the panel tint. Horizontal separates stacked sections; `vertical: true`
-  separates side-by-side columns (dashboard panes, KPI stats, the member rail).
+- A 1px rule in the `line` tint (ink @ 9%). Horizontal separates stacked sections;
+  `vertical: true` separates side-by-side columns (dashboard panes, KPI stats, the member
+  rail).
 
-### Object Cards (reward / redemption / class)
-- Panel background (ink @ 10%), 12px corners, image hero on top with a sapphire **price pill**
-  (top-right), then centered title, points in sapphire, and a status/action footer
-  ("Review & confirm" when pending, a green "Approved" when done). Laid out in a `FillGrid`
-  that caps columns at item count so a short row fills the width.
+### Object Cards (reward / redemption / class / theme)
+- White surface (`surface`), 20px corners (`radiusCard`), a hairline border + soft `cardShadow`
+  lift. Image hero on top with a sapphire **price/Active pill** (top-right), then centered
+  title, points in sapphire, and a status/action footer ("Review & confirm" when pending, a
+  green "Approved" when done). Laid out in a `FillGrid` that caps columns at item count so a
+  short row fills the width.
 
 ### Pills / Chips
-- Small rounded (`radiusSmall`) tints: the sapphire price pill (paper label), the muted
-  sapphire KPI delta chip, the filter pills (sapphire fill + paper label when selected).
+- Small rounded (`radiusSmall` / `radiusBig`) controls: the sapphire price/Active pill (white
+  label), the muted sapphire KPI delta chip, the filter pills (white + hairline border when
+  unselected, sapphire fill + white label when selected).
 
 ### Tables
 - `AppDataTable` only (header row + hairline-separated rows). Status values are colored text
   (good/warn/bad), never filled cells. Numerals are tabular.
 
 ### Navigation
-- Left rail (panel tint), the Apex MMA mark on top, then icon + label items. Active item is
-  ink; the primary "Add New Member" CTA is sapphire.
+- **Admin:** left rail, the gym mark on top, then icon + label items. Active item is ink; the
+  primary "Add New Member" CTA is the gradient button.
+- **Theme browser:** the rail is replaced by a frosted, translucent **top bar** — a Flutter
+  port of the landing nav (`ThemeBrowserTopBar`): CombatDen logo + wordmark on the left; Home /
+  Pricing links + a gradient "Book a demo" CTA on the right — so the browser reads as one
+  continuous site with the marketing page.
 
 ## 6. Do's and Don'ts
 
 ### Do:
 - **Do** keep sapphire to ≤10% of a screen; let it mark the single most important thing.
 - **Do** separate sections with whitespace + hairlines + titles, not cards (the De-Card Rule).
-- **Do** reserve cards for discrete repeated objects (reward / redemption / class cards).
-- **Do** tint every neutral; paper not `#fff`, ink not `#000`.
-- **Do** build hierarchy from weight + scale in Hanken Grotesk; use tabular figures for data.
-- **Do** put a **paper** label on sapphire fills, and use **sapphire** for accent text on paper.
+- **Do** reserve cards for discrete repeated objects (reward / redemption / class / theme); let
+  them lift on the soft `cardShadow`, not Material's hard elevation (the Soft-Shadow Rule).
+- **Do** keep the ground and ink cool-tinted (ground not `#fff`, ink not `#000`); cards are
+  white that lifts off the ground.
+- **Do** build hierarchy from weight + scale in Geist; use tabular figures for data.
+- **Do** put a **white** label on sapphire/gradient fills, and use **sapphire** for accent text.
 - **Do** hold text + meaningful UI to WCAG AA; respect `prefers-reduced-motion`.
 
 ### Don't:
@@ -235,5 +244,8 @@ space + hairlines + titles. Nested cards are always wrong.
 - **Don't** fall into generic SaaS admin, grey cards, blue hyperlinks, default-everything,
   the hero-metric-with-gradient cliche.
 - **Don't** use combat-sports machismo, fight imagery, cages, aggressive condensed type.
-- **Don't** box page sections in cards or nest cards. Don't add a second accent.
-- **Don't** use side-stripe borders, gradient text, or decorative glassmorphism.
+- **Don't** box page sections in cards or nest cards. Don't add a second accent (the
+  accent-dark is the gradient/link partner, not a separate voice).
+- **Don't** use side-stripe borders or gradient **text** (gradient *fills* on the primary
+  button are correct). The frosted top nav is the only blurred surface; don't scatter
+  glassmorphism onto content.

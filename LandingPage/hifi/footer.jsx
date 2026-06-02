@@ -8,6 +8,7 @@ const GOOGLE_FORM_ACTION = 'https://docs.google.com/forms/d/e/1FAIpQLSeaRZoyYuP9
 const FORM_ENTRY_IDS = { name: 'entry.643842673', gym: 'entry.714252564', email: 'entry.1844120895' };
 
 function FooterSection() {
+  const isMobile = useIsMobile();
   const [form, setForm] = React.useState({ name: '', email: '', gym: '' });
   const [status, setStatus] = React.useState('idle'); // idle | submitting | submitted | error
   const onChange = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -50,10 +51,10 @@ function FooterSection() {
   return (
     <footer id="book" data-screen-label="08 Footer" style={{ width: '100%', background: GW.bg, fontFamily: GW.sans, position: 'relative' }}>
       <GWGlow style={{ top: -120, left: '50%', transform: 'translateX(-50%)', width: 900, height: 520, background: `radial-gradient(50% 50% at 50% 50%, ${GW.accentGlow}, transparent 72%)` }} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: GW.maxW, margin: '0 auto', padding: '104px 32px 48px' }}>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: GW.maxW, margin: '0 auto', padding: isMobile ? '80px 20px 40px' : '104px 32px 48px' }}>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {/* one cohesive booking card: headline + reassurance + form together */}
-          <form onSubmit={onSubmit} style={{ background: 'linear-gradient(180deg, #ffffff, #f5f7fb)', border: '1px solid rgba(20,22,40,0.07)', borderRadius: 24, boxShadow: '0 1px 2px rgba(20,22,40,0.03), 0 24px 54px -30px rgba(20,22,50,0.22), inset 0 1px 0 rgba(255,255,255,0.9)', padding: '44px 64px 40px', display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 800, textAlign: 'left' }}>
+          <form onSubmit={onSubmit} style={{ background: 'linear-gradient(180deg, #ffffff, #f5f7fb)', border: '1px solid rgba(20,22,40,0.07)', borderRadius: 24, boxShadow: '0 1px 2px rgba(20,22,40,0.03), 0 24px 54px -30px rgba(20,22,50,0.22), inset 0 1px 0 rgba(255,255,255,0.9)', padding: isMobile ? '32px 22px 28px' : '44px 64px 40px', display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 800, textAlign: 'left' }}>
             {/* card header */}
             <div style={{ textAlign: 'center', marginBottom: 10 }}>
               <h2 style={{ margin: 0, fontSize: 'clamp(27px,3.2vw,40px)', lineHeight: 1.04, letterSpacing: -1.4, fontWeight: 600, color: GW.ink, textWrap: 'balance' }}>{c.headline}</h2>
@@ -81,7 +82,7 @@ function FooterSection() {
         </div>
 
         {/* slim bottom bar */}
-        <div style={{ marginTop: 72, paddingTop: 26, borderTop: `1px solid ${GW.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{ marginTop: 72, paddingTop: 26, borderTop: `1px solid ${GW.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img src="assets/landing/logo_tiny.png" alt="" style={{ height: 28, width: 'auto', display: 'block' }} />
             <span style={{ fontSize: 15, fontWeight: 650, letterSpacing: -0.3, color: GW.ink }}>{BRAND}</span>

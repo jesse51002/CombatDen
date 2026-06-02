@@ -36,6 +36,8 @@ class DesignConstants {
   // Hairline border / divider (ds.jsx `line`). Decoupled from `card`: a white
   // card with a white divider would be invisible.
   static const Color line = Color.fromARGB(23, 20, 22, 30);
+  // Softer hairline (ds.jsx `lineSoft`) — e.g. the mobile menu's link separators.
+  static const Color lineSoft = Color.fromARGB(15, 20, 22, 30);
   static const Color divider = line;
 
   static final Color popup = Color.alphaBlend(
@@ -84,6 +86,15 @@ class DesignConstants {
     ),
   ];
 
+  // Subtle neutral lift for small white controls (the mobile menu button).
+  static const List<BoxShadow> controlShadow = [
+    BoxShadow(
+      color: Color.fromARGB(13, 20, 22, 40),
+      blurRadius: 2,
+      offset: Offset(0, 1),
+    ),
+  ];
+
   // Design values
   static const double radiusBig = 12.0;
   static const double radiusSmall = 8.0;
@@ -119,6 +130,10 @@ class DesignConstants {
   // Landing-style top nav (LandingPage/hifi/chrome.jsx GWNav).
   static const double navHeight = 68.0;
   static const double navMaxWidth = 1180.0;
+  // Below this width the nav collapses to a hamburger + dropdown (ds.jsx
+  // MOBILE_Q `(max-width: 768px)`).
+  static const double navMobileBreakpoint = 768.0;
+  static const double navMenuButtonSize = 42.0;
 
   // Two lines of h2, so every reward card's title block is the same height
   // whether the title wraps to one line or two.
@@ -196,6 +211,14 @@ class DesignConstants {
     fontWeight: FontWeight.w500,
     fontSize: 14.5,
     color: text2nd,
+    letterSpacing: -0.1,
+  );
+
+  // Larger, ink-colored nav link for the mobile dropdown rows.
+  static final TextStyle navLinkMobile = baseFont.copyWith(
+    fontWeight: FontWeight.w500,
+    fontSize: 16,
+    color: text,
     letterSpacing: -0.1,
   );
 

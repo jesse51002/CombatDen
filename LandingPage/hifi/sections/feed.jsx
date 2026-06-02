@@ -120,10 +120,12 @@ function FFCap({ children, size = 17, max }) {
   );
 }
 
-// column card (Raycast-style soft surface)
+// column card (Raycast-style soft surface). Captions/bubbles center on mobile;
+// textAlign only (not alignItems) so the grid thumbnails keep their full width.
 function FeedCell({ children }) {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ ...ffCard, padding: 22, display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ ...ffCard, padding: 22, display: 'flex', flexDirection: 'column', height: '100%', textAlign: isMobile ? 'center' : undefined }}>
       {children}
     </div>
   );
@@ -132,6 +134,7 @@ function FeedCell({ children }) {
 function FeedFinal() {
   const items = COPY.feed.items;
   const g = FEED_GYMS;
+  const isMobile = useIsMobile();
   // per-widget state: `gym` is driven by the phone video; `ready` defers thumbnail
   // loading until the section is in view (it sits below the fold).
   const [gym, setGym] = React.useState(0);          // video-linked: drives the 01 prompt label
@@ -185,12 +188,12 @@ function FeedFinal() {
   return (
     <section ref={wrap} data-screen-label="04 Video feed" style={{ width: '100%', background: GW.bg, fontFamily: GW.sans }}>
       <style>{`@keyframes ffBlink{0%,50%{opacity:1}50.01%,100%{opacity:0}}@keyframes ffFade{from{opacity:0}to{opacity:1}}`}</style>
-      <div style={{ maxWidth: GW.maxW, margin: '0 auto', padding: '88px 32px 96px' }}>
+      <div style={{ maxWidth: GW.maxW, margin: '0 auto', padding: isMobile ? '64px 20px 72px' : '88px 32px 96px' }}>
         {/* 01 — create; Raycast-style soft card (heading removed; section opens on the card) */}
-        <div style={{ ...ffCard, marginTop: 0, borderRadius: 28, overflow: 'hidden', display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'stretch' }}>
-          <div style={{ padding: '40px 28px 44px 44px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ ...ffCard, marginTop: 0, borderRadius: 28, overflow: 'hidden', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', alignItems: 'stretch' }}>
+          <div style={{ padding: isMobile ? '34px 24px 26px' : '40px 28px 44px 44px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: isMobile ? 'center' : undefined, textAlign: isMobile ? 'center' : undefined }}>
             <FFCap size={24} max={500}>{items[0].text}</FFCap>
-            <p style={{ margin: '16px 0 0', fontSize: 16.5, lineHeight: 1.5, fontWeight: 450, color: GW.inkSoft, maxWidth: 420, textWrap: 'pretty' }}>{COPY.feed.lead}</p>
+            <p style={{ margin: isMobile ? '16px auto 0' : '16px 0 0', fontSize: 16.5, lineHeight: 1.5, fontWeight: 450, color: GW.inkSoft, maxWidth: 420, textWrap: 'pretty' }}>{COPY.feed.lead}</p>
           </div>
           {/* phone: prompt bubble + arrow pointing into the phone, screen bleeds off bottom */}
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 26, overflow: 'hidden' }}>
@@ -206,8 +209,8 @@ function FeedFinal() {
           </div>
         </div>
 
-        {/* ROW of 3 — 02 / 03 / 04 soft cards */}
-        <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
+        {/* ROW of 3 — 02 / 03 / 04 soft cards (stack on mobile) */}
+        <div style={{ marginTop: isMobile ? 16 : 24, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: isMobile ? 16 : 24 }}>
 
           {/* 02 — tell what you want / don't */}
           <FeedCell>

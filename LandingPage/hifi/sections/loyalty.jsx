@@ -22,12 +22,21 @@ const rewardIcons = {
   training: (c, s = 30) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 6.5l11 11M4 9l-2 2 3 3M9 4l2-2 3 3M15 20l2-2M4 15l-2 2 3 3 2-2M20 9l2-2-3-3-2 2"/></svg>),
 };
 
-// the loyalty loop (centered focal)
+// the loyalty loop (centered focal). On mobile the 4 steps + 3 arrows are shrunk
+// (step/icon/arrow widths) so the whole loop fits a phone without clipping.
 function PointsLoop() {
   const [active, setActive] = React.useState(0);
   const steps = COPY.loyalty.loop;
+  const isMobile = useIsMobile();
   const wrap = React.useRef(null);
   const inView = React.useRef(false);
+  // mobile-shrunk dimensions (4×SW + 3×AW + 6×GAP must fit a phone)
+  const SW = isMobile ? 64 : 132;   // step column width
+  const IB = isMobile ? 48 : 66;    // icon box
+  const IS = isMobile ? 20 : 26;    // icon glyph
+  const AW = isMobile ? 14 : 22;    // arrow width
+  const AH = isMobile ? 48 : 66;    // arrow height
+  const GAP = isMobile ? 3 : 6;
   React.useEffect(() => {
     const el = wrap.current;
     const io = new IntersectionObserver((e) => { inView.current = e[0].isIntersecting; }, { rootMargin: IN_VIEW_MARGIN });
@@ -37,23 +46,23 @@ function PointsLoop() {
   }, []);
   return (
     <div ref={wrap} style={{ maxWidth: 800, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: GAP }}>
         {steps.map((s, i) => {
           const on = i === active;
           return (
             <React.Fragment key={s.key}>
-              <div style={{ width: 132, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, transition: 'transform .4s ease', transform: on ? 'translateY(-4px)' : 'none' }}>
-                <div style={{ position: 'relative', width: 66, height: 66, borderRadius: 19, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .4s ease',
+              <div style={{ width: SW, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: isMobile ? 9 : 12, transition: 'transform .4s ease', transform: on ? 'translateY(-4px)' : 'none' }}>
+                <div style={{ position: 'relative', width: IB, height: IB, borderRadius: isMobile ? 15 : 19, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .4s ease',
                   background: on ? GW.accentSoft : '#fff', border: `1px solid ${on ? GW.accent + '55' : GW.line}`, boxShadow: on ? `0 12px 26px -10px ${GW.accent}66` : '0 1px 2px rgba(20,22,40,0.05)' }}>
-                  {loopIcons[s.key](on ? GW.accentDark : GW.inkSoft, 26)}
+                  {loopIcons[s.key](on ? GW.accentDark : GW.inkSoft, IS)}
                   {s.badge && (
-                    <div style={{ position: 'absolute', top: -10, right: -14, fontFamily: GW.mono, fontSize: 11, fontWeight: 600, color: '#fff', background: GW.accent, padding: '3px 7px', borderRadius: 999, boxShadow: `0 4px 10px ${GW.accent}66` }}>{s.badge}</div>
+                    <div style={{ position: 'absolute', top: isMobile ? -9 : -10, right: isMobile ? -8 : -14, fontFamily: GW.mono, fontSize: isMobile ? 9 : 11, fontWeight: 600, color: '#fff', background: GW.accent, padding: isMobile ? '2px 5px' : '3px 7px', borderRadius: 999, boxShadow: `0 4px 10px ${GW.accent}66` }}>{s.badge}</div>
                   )}
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 650, color: GW.ink, letterSpacing: -0.2 }}>{s.label}</div>
+                <div style={{ fontSize: isMobile ? 11.5 : 14, fontWeight: 650, color: GW.ink, letterSpacing: -0.2, lineHeight: 1.2 }}>{s.label}</div>
               </div>
               {i < steps.length - 1 && (
-                <svg width="22" height="66" viewBox="0 0 22 66" fill="none" style={{ flex: '0 0 auto' }}>
+                <svg width={AW} height={AH} viewBox="0 0 22 66" fill="none" style={{ flex: '0 0 auto' }}>
                   <path d="M3 33h13M12 28l5 5-5 5" stroke={i < active ? GW.accent : GW.line} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'stroke .4s ease' }}/>
                 </svg>
               )}
@@ -68,10 +77,11 @@ function PointsLoop() {
 const CARD_W = 296;
 
 // image-dominant reward card: real reward photo from the gym reward library
-// (COPY.loyalty.rewards[].img), with the line-icon kept as a fallback.
-function RewardCard({ r }) {
+// (COPY.loyalty.rewards[].img), with the line-icon kept as a fallback. `w` is the
+// card width (shrunk on mobile by the carousel).
+function RewardCard({ r, w = CARD_W }) {
   return (
-    <div style={{ width: CARD_W, ...rlCard, padding: 20, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
+    <div style={{ width: w, ...rlCard, padding: 20, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
       <div style={{ width: '100%', aspectRatio: '4 / 3', borderRadius: 16, overflow: 'hidden', marginBottom: 18, position: 'relative',
         background: `radial-gradient(120% 120% at 50% 0%, ${GW.accentSoft}, #eef1f6)`, border: `1px solid ${GW.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {r.img
@@ -90,10 +100,10 @@ function RewardCard({ r }) {
   );
 }
 
-function NavBtn({ dir, onClick }) {
+function NavBtn({ dir, onClick, size = 44 }) {
   return (
     <button onClick={onClick} aria-label={dir < 0 ? 'Previous reward' : 'Next reward'} style={{
-      width: 44, height: 44, borderRadius: 999, border: `1px solid ${GW.line}`, background: '#fff', cursor: 'pointer',
+      width: size, height: size, borderRadius: 999, border: `1px solid ${GW.line}`, background: '#fff', cursor: 'pointer',
       display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(20,22,40,0.08)', flex: '0 0 auto' }}>
       <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke={GW.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ transform: dir < 0 ? 'scaleX(-1)' : 'none' }}><path d="M6 3l5 5-5 5"/></svg>
     </button>
@@ -104,6 +114,7 @@ function NavBtn({ dir, onClick }) {
 function RewardsCarousel() {
   const REWARDS = COPY.loyalty.rewards;
   const n = REWARDS.length;
+  const isMobile = useIsMobile();
   const [active, setActive] = React.useState(0);
   const inView = React.useRef(true);
   const wrap = React.useRef(null);
@@ -122,29 +133,31 @@ function RewardsCarousel() {
   const go = (d) => { setActive((a) => (a + d + n) % n); restart(); };
 
   const slotFor = (i) => { let r = i - active; if (r > n / 2) r -= n; if (r < -n / 2) r += n; return r; };
-  const sideOffset = Math.round(CARD_W * 0.62);
+  // mobile: shrink the card + arrows so the focused card + flanking buttons fit a phone
+  const CW = isMobile ? 224 : CARD_W;
+  const sideOffset = Math.round(CW * 0.62);
 
   return (
-    <div ref={wrap} style={{ marginTop: 64 }}>
+    <div ref={wrap} style={{ marginTop: isMobile ? 44 : 64 }}>
       <div style={{ fontFamily: GW.mono, fontSize: 10.5, letterSpacing: 0.6, color: GW.inkFaint, textTransform: 'uppercase', textAlign: 'center', marginBottom: 30 }}>{COPY.loyalty.rewardsLabel}</div>
 
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22 }}>
-        <NavBtn dir={-1} onClick={() => go(-1)} />
-        <div style={{ position: 'relative', width: CARD_W + sideOffset * 2, maxWidth: '100%', height: 360 }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 6 : 22 }}>
+        <NavBtn dir={-1} onClick={() => go(-1)} size={isMobile ? 34 : 44} />
+        <div style={{ position: 'relative', width: CW + sideOffset * 2, maxWidth: '100%', height: 360 }}>
           {REWARDS.map((r, i) => {
             const slot = slotFor(i);
             const focused = slot === 0;
             return (
-              <div key={r.key} style={{ position: 'absolute', top: 0, left: '50%', width: CARD_W,
+              <div key={r.key} style={{ position: 'absolute', top: 0, left: '50%', width: CW,
                 transform: `translateX(-50%) translateX(${slot * sideOffset}px) scale(${focused ? 1 : 0.84})`,
                 opacity: Math.abs(slot) > 1 ? 0 : focused ? 1 : 0.36, zIndex: focused ? 3 : 1,
                 filter: focused ? 'none' : 'saturate(0.85)', transition: 'transform .55s cubic-bezier(.4,.1,.2,1), opacity .55s ease', pointerEvents: focused ? 'auto' : 'none' }}>
-                <RewardCard r={r} />
+                <RewardCard r={r} w={CW} />
               </div>
             );
           })}
         </div>
-        <NavBtn dir={1} onClick={() => go(1)} />
+        <NavBtn dir={1} onClick={() => go(1)} size={isMobile ? 34 : 44} />
       </div>
 
       {/* benefit caption for the focused reward */}
@@ -167,10 +180,11 @@ function RewardsCarousel() {
 }
 
 function LoyaltySection() {
+  const isMobile = useIsMobile();
   return (
     <section data-screen-label="06 Loyalty" style={{ width: '100%', background: GW.bg, fontFamily: GW.sans, position: 'relative', overflow: 'hidden' }}>
       <GWGlow style={{ top: 120, left: '50%', transform: 'translateX(-50%)', width: 820, height: 540, background: `radial-gradient(50% 50% at 50% 50%, ${GW.accentGlow}, transparent 72%)` }} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: GW.maxW, margin: '0 auto', padding: '100px 32px 108px' }}>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: GW.maxW, margin: '0 auto', padding: isMobile ? '76px 18px 84px' : '100px 32px 108px' }}>
         <div style={{ textAlign: 'center', maxWidth: 900, margin: '0 auto' }}>
           <h2 style={{ margin: 0, fontSize: 'clamp(32px,3.6vw,48px)', lineHeight: 1.05, letterSpacing: -1.8, fontWeight: 600, color: GW.ink, textWrap: 'balance' }}>{COPY.loyalty.heading}</h2>
           <p style={{ margin: '18px auto 0', maxWidth: 1040, fontSize: 'clamp(17px,1.9vw,20px)', lineHeight: 1.5, fontWeight: 450, color: GW.inkSoft, textWrap: 'pretty' }}>{COPY.loyalty.blurb}</p>

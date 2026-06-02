@@ -82,6 +82,19 @@ Don't use the `autoPlay` attribute. Instead attach a ref to the `<video>` and ca
 
 **Shared reveal point — `IN_VIEW_MARGIN` (`ds.jsx`).** Scroll-triggered animations must not fire the instant a sliver peeks in. `useVideoInView` and every other scroll-gated animation — the §7 count-up (`why.jsx`), the §6 loyalty loops (`loyalty.jsx`), and the hero gym-cycle (`hero.jsx`) — observe with `rootMargin: IN_VIEW_MARGIN` (a bottom inset of `-25%`), so an element only counts as "in view" once it has scrolled ~25% up into the viewport. It's a bottom `rootMargin`, not an element-ratio `threshold`, on purpose — ratio thresholds misfire on phone mockups taller than the fold. Tune that one constant to move where every animation begins; any new scroll-triggered animation should reuse it. (Exception: the §4 feed's separate `threshold: 0` observer is intentional — it only **preloads thumbnails** ahead of the reveal, it doesn't start playback.)
 
+## Mobile responsiveness
+
+The page is responsive via a **JS breakpoint hook, not CSS media queries.** Because every style is an inline `style={{…}}` object, a `<style>`-block `@media` rule can't override one without `!important` — so responsiveness is driven from JS instead.
+
+- **The hook:** `useIsMobile(query = '(max-width: 768px)')` in `hifi/ds.jsx` (exported on `window`, alongside `MOBILE_Q`). It lazy-inits from `window.matchMedia(...).matches` so the **first paint is already correct** (no flash), and subscribes only to the matchMedia `change` event — so a re-render fires **only when the viewport crosses 768px**, never on scroll/resize within a breakpoint. The animated sections (videos, count-up, carousel, hero cycle) drive state via refs + `useEffect(…, [])`, so a breakpoint-cross re-render does not re-run those effects or reset playback.
+- **One breakpoint, phone-only:** `max-width: 768px`. There is no separate tablet tier; ≥769px renders the desktop layout unchanged.
+- **How sections use it:** a section calls `const isMobile = useIsMobile();` and swaps a few values — typically `gridTemplateColumns: isMobile ? '1fr' : '<existing>'` and tighter side padding (`20px` instead of `32px`). When adding a section or a multi-column layout, do the same: collapse to a single column on mobile and verify no horizontal overflow at 375px.
+- **Non-trivial mobile treatments (don't regress these):**
+  - **Nav (`chrome.jsx`):** mobile renders logo + a hamburger button that toggles a dropdown panel of `COPY.nav.links` + the CTA; the bar goes solid while the menu is open, and leaving mobile closes it. Desktop keeps the inline link row.
+  - **Hero (`hero.jsx`):** the 3-phone overlapping trio is **kept on mobile but scaled down** (phone widths + negative-margin overlap shrink proportionally) so all three still fit a phone screen instead of clipping.
+  - **Loyalty (`loyalty.jsx`):** the points-loop step/icon/arrow sizes shrink so 4 steps + 3 arrows fit a phone; the reward carousel's card width (`CW`) and `sideOffset` are computed from `isMobile` and the card width is passed to `RewardCard` via the `w` prop (it no longer hard-reads the module `CARD_W`).
+  - **Pricing (`pricing-table.jsx`):** mobile renders `StackedTiers` (one card per tier, transposing `rows`/`vals`) instead of the wide comparison `<table>`, so there's no sideways scroll.
+
 ## Line breaks in copy (\n)
 
 The page root (the `<main>` in `index.html` / `pricing.html`) sets `whiteSpace: "pre-line"`. Because CSS `white-space` is inherited, every `\n` inside a `COPY` string renders as a real line break, while runs of regular spaces still collapse normally. To force a line break in copy, just put `\n` in the string — no `<br />`, no extra wrapper element, no per-element `whiteSpace` override.

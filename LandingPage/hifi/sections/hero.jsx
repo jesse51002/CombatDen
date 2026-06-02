@@ -53,6 +53,7 @@ function ScreenshotPhone({
 
 function HeroSection() {
   const n = HERO_GYMS.length;
+  const isMobile = useIsMobile();
   const [gym, setGym] = React.useState(0);
   // Lazy, progressive loading: an image only gets a real src once its gym is
   // "seen". Seed {0,1} and queue one gym ahead each tick, so the incoming gym is
@@ -118,7 +119,7 @@ function HeroSection() {
           flexDirection: "column",
           alignItems: "center",
           textAlign: "center",
-          padding: "92px 32px 0",
+          padding: isMobile ? "76px 20px 0" : "92px 32px 0",
           maxWidth: 940,
           margin: "0 auto",
         }}
@@ -160,21 +161,22 @@ function HeroSection() {
 
       {/* phone trio (real screenshots): rewards · home · videos, cycling all gyms
           together every 5s. Tops fully visible, bottoms bleed off & fade into the
-          next section. */}
-      <div style={{ position: "relative", zIndex: 2, marginTop: 60 }}>
+          next section. The whole trio scales down on mobile so all three still fit
+          a phone screen (sizes/overlap shrink proportionally). */}
+      <div style={{ position: "relative", zIndex: 2, marginTop: isMobile ? 36 : 60 }}>
         <div
           style={{
             display: "flex",
             justifyContent: "center",
             alignItems: "flex-start",
-            height: 430,
+            height: isMobile ? 330 : 430,
             overflow: "hidden",
           }}
         >
           <div
             style={{
-              transform: "translateY(56px)",
-              marginRight: -44,
+              transform: `translateY(${isMobile ? 28 : 56}px)`,
+              marginRight: isMobile ? -22 : -44,
               zIndex: 1,
             }}
           >
@@ -182,7 +184,7 @@ function HeroSection() {
               screen="rewards"
               gym={gym}
               seen={seen}
-              width={250}
+              width={isMobile ? 122 : 250}
               tilt="left"
               glow={false}
             />
@@ -192,15 +194,15 @@ function HeroSection() {
               screen="home"
               gym={gym}
               seen={seen}
-              width={300}
+              width={isMobile ? 148 : 300}
               tilt="none"
               glow={true}
             />
           </div>
           <div
             style={{
-              transform: "translateY(56px)",
-              marginLeft: -44,
+              transform: `translateY(${isMobile ? 28 : 56}px)`,
+              marginLeft: isMobile ? -22 : -44,
               zIndex: 1,
             }}
           >
@@ -208,7 +210,7 @@ function HeroSection() {
               screen="videos"
               gym={gym}
               seen={seen}
-              width={250}
+              width={isMobile ? 122 : 250}
               tilt="right"
               glow={false}
             />

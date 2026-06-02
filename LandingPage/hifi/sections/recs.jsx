@@ -22,11 +22,12 @@ function RecVideoPhone({ width = 274, videoRef }) {
 }
 
 function RecsSection() {
+  const isMobile = useIsMobile();
   const videoRef = React.useRef(null);
   useVideoInView(videoRef); // play only while in view + restart on exit (shared landing rule)
   return (
     <section data-screen-label="05 Perfectly timed" style={{ width: '100%', background: GW.bg, fontFamily: GW.sans, overflow: 'hidden' }}>
-      <div style={{ position: 'relative', maxWidth: GW.maxW, margin: '0 auto', padding: '96px 32px 104px' }}>
+      <div style={{ position: 'relative', maxWidth: GW.maxW, margin: '0 auto', padding: isMobile ? '72px 20px 80px' : '96px 32px 104px' }}>
         <GWGlow style={{ top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 820, height: 560, background: `radial-gradient(50% 50% at 50% 50%, ${GW.accentGlow}, transparent 70%)` }} />
         <GWDotGrid color="rgba(20,22,40,0.05)" fade="radial-gradient(80% 80% at 50% 50%, #000 30%, transparent 80%)" />
 

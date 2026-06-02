@@ -42,14 +42,15 @@ function Stat({ prefix = '', value, suffix = '', format, line, math, run }) {
 function WhyMattersSection() {
   const ref = React.useRef(null);
   const run = useInView(ref);
+  const isMobile = useIsMobile();
   const c = COPY.why;
   return (
     <section ref={ref} data-screen-label="07 Why it matters" style={{ width: '100%', background: GW.bg, fontFamily: GW.sans, position: 'relative', overflow: 'visible' }}>
       <GWGlow style={{ top: -160, left: '50%', transform: 'translateX(-50%)', width: 880, height: 480, background: `radial-gradient(50% 50% at 50% 50%, ${GW.accentGlow}, transparent 72%)` }} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: GW.maxW, margin: '0 auto', padding: '100px 32px 108px' }}>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: GW.maxW, margin: '0 auto', padding: isMobile ? '76px 20px 84px' : '100px 32px 108px' }}>
         <h2 style={{ margin: 0, textAlign: 'center', fontSize: 'clamp(30px,3.4vw,44px)', lineHeight: 1.08, letterSpacing: -1.5, fontWeight: 600, color: GW.ink, textWrap: 'balance' }}>{c.heading}</h2>
 
-        <div style={{ marginTop: 72, display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'center', gap: 0, maxWidth: 920, marginLeft: 'auto', marginRight: 'auto' }}>
+        <div style={{ marginTop: isMobile ? 48 : 72, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', alignItems: 'center', gap: isMobile ? 56 : 0, maxWidth: 920, marginLeft: 'auto', marginRight: 'auto' }}>
           <Stat value={c.stats[0].value} suffix={c.stats[0].suffix} run={run} line={c.stats[0].line} />
           <Stat prefix={c.stats[1].prefix} value={c.stats[1].value} run={run}
             format={(v) => Math.round(v).toLocaleString('en-US')}
