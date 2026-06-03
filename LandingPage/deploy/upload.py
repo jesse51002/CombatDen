@@ -19,8 +19,9 @@ INCLUDE_GLOBS = [
 # Internal-only directories that must never be uploaded to the public bucket.
 # Today nothing under these prefixes matches INCLUDE_GLOBS — but keep this as
 # a defensive guard in case a future glob accidentally catches them.
-#   onepager/  — sales leave-behind + design scratch (not a public page)
-EXCLUDE_PREFIXES = ("onepager/",)
+#   one_pager/  — static print-sheet leave-behind (one_pager.html + img/, not a public page)
+#   onepager/   — legacy spelling kept as a belt-and-suspenders guard
+EXCLUDE_PREFIXES = ("one_pager/", "onepager/")
 
 
 def iter_site_files():

@@ -1,14 +1,19 @@
-// Offline capture harness for the landing-page app-screen clips.
+// Offline capture harness for the landing-page app-screen clips + stills.
 //
-// Renders ONE clip per run — a screen (CAPTURE_SCREEN = home | points | streak)
-// branded to a discipline (CAPTURE_CLIP_INDEX into the 3-discipline list below)
-// at a fixed 1080x2340:
+// Renders ONE clip/still per run — a screen (CAPTURE_SCREEN) branded to a
+// discipline (CAPTURE_CLIP_INDEX into the 3-discipline list below, or the
+// CAPTURE_GYM_ID/THEME/SLUG overrides) at a fixed 1080x2340. Clips:
 //   home   -> the real Home (class-schedule view), held static ~2s,
 //   points -> the full points celebration (sphere -> +points count-up), 2s hold,
 //   streak -> the full streak celebration (orbit -> week count + strip), 2s hold.
-// The animated screens are driven deterministically by the global capture clock
+// The animated clips are driven deterministically by the global capture clock
 // (see lib/shared/widgets/animation/capture_reveal_clock.dart) so they export at
 // true speed despite the slow per-frame toImage.
+//
+// CAPTURE_SHOT=true grabs a single static still instead: rewards/videos/home grab
+// a plain frame; wins (the "Today's wins" stats-final card), booked (the "Class
+// Booked" confirmation) and prevideo (the "Video Before Class" screen) pin the
+// capture clock past every reveal and grab a settled final frame.
 //
 // The booking "you're in" clip is a separate entrypoint
 // (capture_booking_main.dart with CAPTURE_BOOKING_END=confirm).
@@ -105,6 +110,12 @@ AppScreen _resolveScreen() {
       return AppScreen.rewards;
     case 'videos':
       return AppScreen.videos;
+    case 'wins':
+      return AppScreen.wins;
+    case 'booked':
+      return AppScreen.booked;
+    case 'prevideo':
+      return AppScreen.videoBefore;
     case 'points':
     default:
       return AppScreen.points;
@@ -206,7 +217,18 @@ class _AppCaptureAppState extends State<_AppCaptureApp> {
     await _warmUp();
 
     if (_kShot) {
-      await _captureScreenshot();
+      switch (_screen) {
+        case AppScreen.wins:
+        case AppScreen.booked:
+        case AppScreen.videoBefore:
+          await _captureSettledFrame();
+        case AppScreen.home:
+        case AppScreen.points:
+        case AppScreen.streak:
+        case AppScreen.rewards:
+        case AppScreen.videos:
+          await _captureScreenshot();
+      }
     } else {
       switch (_screen) {
         case AppScreen.home:
@@ -215,6 +237,10 @@ class _AppCaptureAppState extends State<_AppCaptureApp> {
           await _captureAnimated(_kPointsWindowMs);
         case AppScreen.streak:
           await _captureAnimated(_kStreakWindowMs);
+        case AppScreen.wins:
+        case AppScreen.booked:
+        case AppScreen.videoBefore:
+          await _captureSettledFrame();
         case AppScreen.rewards:
         case AppScreen.videos:
           await _captureScreenshot(); // static screens are screenshot-only
@@ -278,6 +304,8 @@ class _AppCaptureAppState extends State<_AppCaptureApp> {
           }
         }
       case AppScreen.videos:
+      case AppScreen.videoBefore:
+        // The video feed (home carousels / the "Video Before Class" pick).
         for (var attempt = 0; attempt < 3; attempt++) {
           try {
             await VideoFeedRepository.instance.feed();
@@ -286,6 +314,13 @@ class _AppCaptureAppState extends State<_AppCaptureApp> {
             await Future<void>.delayed(const Duration(milliseconds: 500));
           }
         }
+      case AppScreen.wins:
+        await _precacheThemed(CombatDenSlots.trophyImage, 'stat_wins_trophy.png');
+      case AppScreen.booked:
+        await _precacheThemed(
+          CombatDenSlots.celebrationImage,
+          'class_booked_celebration.png',
+        );
     }
     await GoogleFonts.pendingFonts();
     await Future<void>.delayed(const Duration(seconds: 1));
@@ -321,6 +356,19 @@ class _AppCaptureAppState extends State<_AppCaptureApp> {
   /// A single static screenshot: let the screen's data + images settle, then
   /// grab one frame (the home/rewards/videos stills — no animation).
   Future<void> _captureScreenshot() async {
+    await _settle(8);
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    await _settle(6);
+    _writeFrame(await _grab());
+  }
+
+  /// A single settled final frame of an animated screen: pin the global capture
+  /// clock past every reveal (so the clock-aware StaggeredReveal/ScaleReveal
+  /// render fully revealed deterministically), let the non-clock animations
+  /// (e.g. the Wins SparkleBurst) self-settle, then grab one frame. Used for the
+  /// Wins / booked-confirm / pre-class-video stills.
+  Future<void> _captureSettledFrame() async {
+    captureRevealClock.value = const Duration(seconds: 10);
     await _settle(8);
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     await _settle(6);

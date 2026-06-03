@@ -133,21 +133,34 @@ overflows at the reel's 360. Tunables (dart-defines): `CAPTURE_HOLD_MS` (2000),
 ## Static screenshots
 
 ```bash
-make capture-shots                                 # home/rewards/videos × 6 disciplines (18 PNGs)
-make capture-shots SCREENS=videos                  # one screen × 6
-make capture-shots SCREENS=home DISCS=bjj,boxing   # a subset
+make capture-shots                                       # default screens × 6 disciplines
+make capture-shots SCREENS=videos                        # one screen × 6
+make capture-shots SCREENS=home DISCS=bjj,boxing         # a subset
+make capture-shots SCREENS=wins,booked DISCS=nogi        # stats-final + booking-completed
+make capture-shots SCREENS=prevideo DISCS=nogi           # the "Video Before Class" still
 ```
 
-`capture_app_main.dart` in `CAPTURE_SHOT` mode grabs a single static frame (no
-animation/intro/hold) of the **home**, **rewards** (`PointsStoreScreen`), or
-**videos** (`VideosScreen`) screen. The discipline is passed directly via
-`CAPTURE_GYM_ID/THEME/SLUG` (so any gym works, not just the clip three); the gym
-is selected in `initState` so the **content** (classes/rewards/feed, all keyed by
-`selectedGym.gymId`) matches the theme. A cold theme can exceed `selectDesign`'s
-5s fetch timeout, so the harness retries the theme load before capturing.
-`capture_shots.sh` loops `(screen, discipline)` — disciplines `bjj` (bjj_gi/ZenBJJ),
-`muaythai`, `boxing` (boxing/SweetScienceBoxing), `barre`, `yoga` (vinyasa/
-VinyasaFlow), `crossfit` (crossfit/CrossFitBox) — and writes
+`capture_app_main.dart` in `CAPTURE_SHOT` mode grabs a single static frame of one
+screen:
+
+- **home**, **rewards** (`PointsStoreScreen`), **videos** (`VideosScreen`) — a
+  plain settled frame (no animation/intro/hold).
+- **wins** — the "Today's wins" stats-final recap (`WinsBody`), **booked** — the
+  "Class Booked" confirmation (`ClassBookedScreen(captureContentOnly: true)`),
+  **prevideo** — the "Video Before Class" screen (`VideoReccScreen`). These pin the
+  global capture clock past every reveal and grab a settled final frame (so the
+  clock-aware reveals render fully revealed and the Wins sparkle burst settles).
+  wins/booked are clean (no CTA/X), matching the points/streak clips.
+
+The discipline is passed directly via `CAPTURE_GYM_ID/THEME/SLUG` (so any gym
+works, not just the clip three); the gym is selected in `initState` so the
+**content** (classes/rewards/feed, all keyed by `selectedGym.gymId`) matches the
+theme. A cold theme can exceed `selectDesign`'s 5s fetch timeout, so the harness
+retries the theme load before capturing. `capture_shots.sh` loops
+`(screen, discipline)` — disciplines `bjj` (bjj_gi/ZenBJJ), `muaythai`, `boxing`
+(boxing/SweetScienceBoxing), `barre`, `yoga` (vinyasa/VinyasaFlow), `crossfit`
+(crossfit/CrossFitBox), `nogi` (no_gi_grappling/FrictionGrappling), `matpilates`
+(mat_pilates/MatPilates), `flowbarre` (flow_barre/Barre3Flow) — and writes
 `LandingPage/media-src/screenshots/<screen>-<discipline>.png`.
 
 ## Notes

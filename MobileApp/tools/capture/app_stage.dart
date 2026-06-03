@@ -6,12 +6,15 @@ import 'package:theme_flutter/theme/theme_image.dart';
 
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/features/class_booking/presentation/screens/class_booked_screen.dart';
 import 'package:mobile_app/features/home/data/mock_gym.dart';
 import 'package:mobile_app/features/home/presentation/screens/home_screen.dart';
 import 'package:mobile_app/features/rewards/presentation/screens/points_store_screen.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/points/points_body.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/streak/streak_body.dart';
+import 'package:mobile_app/features/stats/presentation/widgets/wins/wins_body.dart';
+import 'package:mobile_app/features/videos/presentation/screens/video_recc_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/videos_screen.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
@@ -30,8 +33,10 @@ const double _kBgFadeStart = 0.62; // brand bg fades out from here
 const double _kLogoFadeStart = 0.9; // splash logo fades to hand off to the real one
 
 /// The app screens captured by `capture_app_main.dart`. home/points/streak are
-/// the animated clips; rewards/videos are static screenshot-only screens.
-enum AppScreen { home, points, streak, rewards, videos }
+/// the animated clips; rewards/videos/wins/booked/videoBefore are static
+/// screenshot-only screens (wins/booked/videoBefore grab a settled final frame
+/// via the global capture clock — see `_captureSettledFrame`).
+enum AppScreen { home, points, streak, rewards, videos, wins, booked, videoBefore }
 
 /// Mounts the requested [screen] inside the shared fixed-size [CaptureFrame]
 /// (at [stageHeight]):
@@ -107,6 +112,17 @@ class AppStage extends StatelessWidget {
         return const PointsStoreScreen();
       case AppScreen.videos:
         return const VideosScreen();
+      case AppScreen.wins:
+        // The "Today's wins" recap — the post-class flow's final stats card.
+        // Clean (CTA faded out, no X), matching the points/streak clips.
+        return _hiddenCta(const WinsBody(stats: mockWinsStats));
+      case AppScreen.booked:
+        // The settled "Class Booked" confirmation (booked image + caption,
+        // no loading dots / checkmark / CTA) — the existing capture hook.
+        return const ClassBookedScreen(captureContentOnly: true);
+      case AppScreen.videoBefore:
+        // The real "Video Before Class" recommendation screen.
+        return const VideoReccScreen();
     }
   }
 

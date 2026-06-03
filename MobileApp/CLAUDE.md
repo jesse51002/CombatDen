@@ -403,8 +403,10 @@ See `tools/capture/README.md`.
   detail → ~1s dots → "Video Before Class", one per discipline; or the "you're
   in" confirm variant); `capture-app` = the Home / Points / Streak screen clips,
   each branded to barre / muaythai / reformer; `capture-shots` = static
-  screenshots of the Home / Rewards / Videos screens for any discipline (PNGs to
-  `LandingPage/media-src/screenshots/`). Needs a running emulator + both backends
+  screenshots for any discipline (PNGs to `LandingPage/media-src/screenshots/`) of
+  the Home / Rewards / Videos screens plus the `wins` (Today's wins stats-final),
+  `booked` ("Class Booked" confirmation) and `prevideo` ("Video Before Class")
+  screens. Needs a running emulator + both backends
   (`make api` in `../ThemeService` and `../VideoService`). See
   `tools/capture/README.md`.
 

@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# Capture static screenshots (one PNG each) of the home / rewards / videos
-# screens, branded to each discipline — via capture_app_main.dart in CAPTURE_SHOT
-# mode. One app run per (screen, discipline), uninstall-first, pulling the single
+# Capture static screenshots (one PNG each) of an app screen, branded to each
+# discipline — via capture_app_main.dart in CAPTURE_SHOT mode. Screens:
+#   home / rewards / videos  -> a plain settled frame,
+#   wins                     -> the "Today's wins" stats-final card,
+#   booked                   -> the "Class Booked" confirmation,
+#   prevideo                 -> the "Video Before Class" screen.
+# One app run per (screen, discipline), uninstall-first, pulling the single
 # frame to LandingPage/media-src/screenshots/<screen>-<discipline>.png.
 #
-#   make capture-shots                                 # 3 screens × 6 disciplines
-#   make capture-shots SCREENS=videos                  # one screen × 6
-#   make capture-shots SCREENS=home DISCS=bjj,muaythai # a subset
+#   make capture-shots                                          # default screens × 6 disciplines
+#   make capture-shots SCREENS=videos                           # one screen × 6
+#   make capture-shots SCREENS=wins,booked DISCS=boxing,nogi    # a subset
+#   make capture-shots SCREENS=prevideo DISCS=nogi              # one still
 set -uo pipefail
 
 APP_ID="com.combatden.mobile_app"
@@ -21,12 +26,15 @@ DISCS="${DISCS//,/ }"
 
 # discipline slug -> "gym_id theme"
 gym_for() { case "$1" in
-  bjj)      echo "bjj_gi ZenBJJ" ;;
-  muaythai) echo "muay_thai KillerMuayThai" ;;
-  boxing)   echo "boxing SweetScienceBoxing" ;;
-  barre)    echo "classic_barre ClassicBarre" ;;
-  yoga)     echo "vinyasa VinyasaFlow" ;;
-  crossfit) echo "crossfit CrossFitBox" ;;
+  bjj)        echo "bjj_gi ZenBJJ" ;;
+  muaythai)   echo "muay_thai KillerMuayThai" ;;
+  boxing)     echo "boxing SweetScienceBoxing" ;;
+  barre)      echo "classic_barre ClassicBarre" ;;
+  yoga)       echo "vinyasa VinyasaFlow" ;;
+  crossfit)   echo "crossfit CrossFitBox" ;;
+  nogi)       echo "no_gi_grappling FrictionGrappling" ;;
+  matpilates) echo "mat_pilates MatPilates" ;;
+  flowbarre)  echo "flow_barre Barre3Flow" ;;
   *) echo "" ;;
 esac; }
 
