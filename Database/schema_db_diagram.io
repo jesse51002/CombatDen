@@ -1,7 +1,8 @@
 // dbdiagram.io markup — paste into https://dbdiagram.io/d to visualize.
 // Includes the full CRM billing layer: membership_plans, membership_plan_prices,
-// gym_discounts, member_memberships, member_invoices, member_invoice_line_items,
-// member_invoice_applied_discounts, member_charges, stripe_webhook_events. Member
+// gym_discounts, member_memberships, member_membership_applied_discounts,
+// member_invoices, member_invoice_line_items, member_invoice_applied_discounts,
+// member_charges, stripe_webhook_events. Member
 // identity + billing live together on the unified `members` table (billing columns
 // are service-role-written, NULL for engagement-only members); `member_billing_profile`
 // is a filtered view of it (stripe_customer_id IS NOT NULL). Class scheduling is
@@ -99,7 +100,6 @@ Table members {
   freeze_start_date date [note: 'nullable; must pair with freeze_end_date']
   freeze_end_date date [note: 'nullable']
   account_linked_to_id uuid [note: 'nullable; self-FK (account_linked_to_id, gym_id) -> members(member_id, gym_id)']
-  linked_discount_id uuid [note: 'nullable; FK to gym_discounts_unfiltered; must be type=linked']
   stripe_customer_id varchar [note: 'immutable once set (trigger); member_billing_profile view filters WHERE NOT NULL']
   stripe_sub_id_month varchar
   stripe_payment_method_id varchar
@@ -260,7 +260,6 @@ Ref: members.user_id > auth_users.id
 Ref: members.gym_id > gyms.gym_id
 Ref: members.current_rank_id > gym_ranks.rank_id
 Ref: members.account_linked_to_id > members.member_id
-Ref: members.linked_discount_id > gym_discounts_unfiltered.discount_id
 
 Ref: gym_ranks.gym_id > gyms.gym_id
 
@@ -343,20 +342,20 @@ Table gym_discounts_unfiltered {
   discount_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
   discount_name varchar [not null]
-  discount_type varchar [not null, note: 'CHECK: preset | custom | linked']
+  discount_type varchar [not null, note: 'CHECK: preset | custom (regular-only; linked dissolved)']
   percentage_off float [note: 'nullable; exactly one of percentage_off/dollar_off set']
   dollar_off integer [note: 'nullable']
-  membership_plan_id uuid [note: 'nullable; required for linked discounts']
-  linked_discount_num integer [note: 'nullable; sequential per (gym_id, membership_plan_id)']
-  duration varchar [not null, note: 'CHECK: once | repeating | forever']
-  duration_in_months integer [note: 'nullable; required when duration = repeating']
+  discount_mode discount_mode [not null, note: 'enum: once | ongoing']
+  duration_amount integer [note: 'nullable; pairs with duration_unit']
+  duration_unit discount_duration_unit [note: 'nullable; enum: day | week | month']
+  end_date date [note: 'nullable; explicit absolute end; XOR with duration span']
   is_deleted boolean [not null, default: false]
-  stripe_coupon_id varchar [note: 'set by backend; view filters WHERE NOT NULL']
   created_at timestamptz [not null, default: `now()`]
+  // lifetime: discount_mode + (duration_amount+duration_unit) XOR end_date; neither = forever.
+  // coupon-free now: stripe_coupon_id moved off the preset (computed at sync).
 
   indexes {
     (discount_id, gym_id) [unique]
-    (gym_id, membership_plan_id, linked_discount_num) [unique]
   }
 }
 
@@ -374,7 +373,6 @@ Table member_memberships_unfiltered {
   cancel_date date [note: 'nullable; immutable once set']
   last_paid_date date
   next_due_date date
-  discount_ids jsonb [note: 'JSONB array of discount UUIDs; trigger validates gym match']
   stripe_item_id varchar [note: 'immutable once set; view filters WHERE NOT NULL']
   prorate boolean [not null, default: true]
   total_price integer [not null, note: 'CHECK >= 0']
@@ -383,6 +381,34 @@ Table member_memberships_unfiltered {
   indexes {
     (item_id, member_id) [unique]
     (item_id, gym_id) [unique]
+  }
+}
+
+// Immutable applied-discount snapshots: one row = one discount frozen onto one
+// membership (item_id) at apply-time. Apply = INSERT, remove = DELETE, never an
+// edit. end_date + stripe_coupon_id are sync writebacks (outcome fields). The
+// view exposes only rows with stripe_coupon_id written back.
+Table member_membership_applied_discounts_unfiltered {
+  applied_discount_id uuid [primary key, default: `uuid_generate_v4()`]
+  item_id uuid [not null, note: 'FK (item_id, gym_id) -> member_memberships_unfiltered']
+  member_id uuid [not null]
+  gym_id uuid [not null]
+  discount_type varchar [not null, note: 'CHECK: preset | custom | linked (linked marker lives here)']
+  source_discount_id uuid [note: 'nullable; provenance FK to gym_discounts (regular rows)']
+  linked_discount_planid uuid [note: 'nullable; linked: plan it derives from']
+  linked_discount_num integer [note: 'nullable; linked: level/tier']
+  discount_name varchar [not null, note: 'snapshot']
+  percentage_off float [note: 'nullable; exactly one of percentage_off/dollar_off set']
+  dollar_off integer [note: 'nullable']
+  discount_mode discount_mode [not null, note: 'enum: once | ongoing']
+  end_date date [note: 'nullable; resolved absolute end / once-consumption stamp (sync)']
+  stripe_coupon_id varchar [note: 'nullable; SYSTEM writeback; view filters WHERE NOT NULL']
+  created_at timestamptz [not null, default: `now()`]
+  // CHECK: linked rows require planid+num (no source); regular rows require source_discount_id.
+
+  indexes {
+    item_id
+    (member_id, gym_id)
   }
 }
 
@@ -473,7 +499,6 @@ Ref: membership_plans_unfiltered.gym_id > gyms.gym_id
 Ref: membership_plan_prices_unfiltered.plan_id > membership_plans_unfiltered.plan_id
 Ref: membership_plan_prices_unfiltered.gym_id > gyms.gym_id
 Ref: gym_discounts_unfiltered.gym_id > gyms.gym_id
-Ref: gym_discounts_unfiltered.membership_plan_id > membership_plans_unfiltered.plan_id
 
 // member_billing_profile_unfiltered FKs merged into `members` (see members refs above).
 
@@ -481,6 +506,11 @@ Ref: member_memberships_unfiltered.member_id > members.member_id
 Ref: member_memberships_unfiltered.gym_id > gyms.gym_id
 Ref: member_memberships_unfiltered.plan_id > membership_plans_unfiltered.plan_id
 Ref: member_memberships_unfiltered.price_id > membership_plan_prices_unfiltered.price_id
+
+Ref: member_membership_applied_discounts_unfiltered.item_id > member_memberships_unfiltered.item_id
+Ref: member_membership_applied_discounts_unfiltered.member_id > members.member_id
+Ref: member_membership_applied_discounts_unfiltered.gym_id > gyms.gym_id
+Ref: member_membership_applied_discounts_unfiltered.source_discount_id > gym_discounts_unfiltered.discount_id
 
 Ref: member_invoices.member_id > members.member_id
 Ref: member_invoices.gym_id > gyms.gym_id

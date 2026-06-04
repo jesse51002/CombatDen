@@ -51,7 +51,6 @@ REVOKE INSERT, UPDATE (
     freeze_start_date,
     freeze_end_date,
     account_linked_to_id,
-    linked_discount_id,
     stripe_customer_id,
     stripe_sub_id_month,
     stripe_payment_method_id,

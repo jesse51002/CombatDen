@@ -41,7 +41,6 @@ class MemberCreate(SeedModel):
     freeze_start_date: date | None = None
     freeze_end_date: date | None = None
     account_linked_to_id: UUID | None = None
-    linked_discount_id: UUID | None = None
     stripe_customer_id: str | None = None
     stripe_sub_id_month: str | None = None
     stripe_payment_method_id: str | None = None
