@@ -205,7 +205,7 @@ breakage the `.venv/bin/*` scripts hit when this package was renamed.
 
 ## Production deployment (read-only API)
 
-The read-only API (`src/api/main.py`, `make api`, port 8000) ships to **AWS App
+The read-only API (`src/api/main.py`, `make api`, port 8001 locally) ships to **AWS App
 Runner** as a Docker image at `https://theme.combatden.net`. See
 `../DEPLOYMENT.md` for the full runbook (ARNs, DNS, redeploy, pause/resume).
 

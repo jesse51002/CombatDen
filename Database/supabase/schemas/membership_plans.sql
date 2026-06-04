@@ -1,0 +1,38 @@
+CREATE TABLE membership_plans_unfiltered (
+    plan_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+    gym_id UUID NOT NULL CONSTRAINT fk_plan_gym REFERENCES gyms(gym_id),
+    plan_name VARCHAR NOT NULL CHECK (plan_name <> ''),
+    plan_type VARCHAR NOT NULL CHECK (plan_type IN ('trial', 'recurring', 'one_time')),
+    class_count INTEGER CHECK (class_count > 0),
+    duration_amount INTEGER CHECK (duration_amount > 0),
+    duration_unit VARCHAR CHECK (duration_unit IN ('week', 'month', 'year')),
+    CONSTRAINT recurring_must_be_monthly
+        CHECK (
+            plan_type <> 'recurring'
+            OR (duration_unit = 'month' AND duration_amount = 1)
+        ),
+    CONSTRAINT duration_both_or_neither
+        CHECK (
+            (duration_amount IS NULL) = (duration_unit IS NULL)
+        ),
+    CONSTRAINT duration_required_unless_class_count
+        CHECK (
+            (duration_amount IS NOT NULL AND duration_unit IS NOT NULL)
+            OR (plan_type <> 'recurring' AND class_count IS NOT NULL)
+        ),
+    is_public BOOLEAN NOT NULL DEFAULT TRUE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    stripe_product_id VARCHAR,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (plan_id),
+    UNIQUE (plan_id, gym_id)
+);
+
+-- View: only exposes plans with a completed Stripe product sync
+CREATE VIEW membership_plans
+WITH (security_invoker = true)
+AS
+SELECT * FROM membership_plans_unfiltered
+WHERE stripe_product_id IS NOT NULL;
+
+ALTER VIEW membership_plans SET (security_invoker = true);

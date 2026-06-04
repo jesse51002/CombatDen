@@ -1,0 +1,105 @@
+flowchart TB
+  %% ---------- CLIENTS ----------
+  MobileApp["📱 <b>MobileApp</b> — Flutter member app<br/>videos feed · gym detail · home / booking<br/>rewards / stats · style-select · core / AppConfig"]
+  CRM["🖥️ <b>CRM</b> — gym admin web (full CRM)<br/>login · Supabase auth<br/>api_client (dio + auth interceptor) · BLoC repositories → FastApiBackend<br/>members list · member detail (billing) · gym setup (Stripe Connect)<br/>members video tab (VideoService — read-only)<br/>live theme preview + showcase (ThemeService — read-only)<br/>theme-browser target · schedule board · shared widgets / deploy"]
+  LandingPage["🌐 <b>LandingPage</b> — React-via-CDN site<br/>hero carousel · feed demo · loyalty loop<br/>pricing table · hifi/ copy + ds · S3 deploy"]
+
+  %% ---------- THEME SERVICE: creation vs api (separate) ----------
+  subgraph TS_create["🎨 ThemeService · CREATION (generator)"]
+    direction TB
+    TSc_brief["brand-brief skill →<br/>customization.yaml"]
+    TSc_orch["CLI / orchestrator<br/>(async DAG)"]
+    TSc_mods["modules<br/>color · font · image<br/>icon · text · lottie"]
+    TSc_writer["writer → output.yaml"]
+    TSc_up["asset uploader"]
+    TSc_edit["edit_theme skill"]
+    TS_scripts["scripts<br/>regen · regen_image · edit_customization · expand<br/>remove_bg · sync_assets · fetch_icon_sets"]
+    TSc_brief --> TSc_orch --> TSc_mods --> TSc_writer --> TSc_up
+    TSc_edit -. "operates" .-> TSc_orch
+    TS_scripts -. "operate" .-> TSc_orch
+  end
+  subgraph TS_api["🎨 ThemeService · READ API"]
+    direction TB
+    TSa_api["read API<br/>/apps/{id}/styles"]
+    TSa_pkg["ThemeFlutter pkg<br/>(client SDK)"]
+    TSa_pkg -. "reads" .-> TSa_api
+  end
+
+  %% ---------- VIDEO SERVICE: creation vs api (separate) ----------
+  subgraph VS_create["🎬 VideoService · CREATION (pipeline)"]
+    direction TB
+    VSc_skill["videoservice skill<br/>make-gym · scrape · scan"]
+    VSc_gym["gym_maker → gym YAML"]
+    VSc_scrape["scraper"]
+    VSc_scan["scan (keep / drop)"]
+    VSc_sync["sync_gyms · import_yaml · sql"]
+    VSc_writer["VideoDbWriter"]
+    VSc_skill -. "drives" .-> VSc_gym
+    VSc_gym --> VSc_scrape --> VSc_scan --> VSc_writer
+    VSc_sync --> VSc_writer
+  end
+  subgraph VS_api["🎬 VideoService · READ API"]
+    direction TB
+    VSa_api["read API<br/>/gyms · /gyms/{id} · /videos"]
+    VSa_svc["service layer<br/>feed · avatar fallback"]
+    VSa_api --> VSa_svc
+  end
+
+  %% ---------- BACKEND + DATABASE ----------
+  subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing API (not deployed)"]
+    direction TB
+    FB_r["routers<br/>members · gyms · classes · ranks · rewards<br/>memberships · plans · discounts · payments · webhooks"]
+    FB_s["services<br/>payments/Stripe · memberships · management · discounts"]
+    FB_q["per-domain SQL"]
+    FB_core["core · config · DI · auth · pydantic schemas"]
+    FB_r --> FB_s --> FB_q
+  end
+  Database["🗄️ <b>Database</b> — Supabase Postgres<br/>supabase/schemas *.sql · access_rules (RLS)<br/>python_data enums · openapi.json contract<br/>tables: member · gym · rank/reward · membership/billing · class · video_*"]
+
+  %% ---------- EXTERNAL ----------
+  Stripe["Stripe"]
+  LiteLLM["OpenAI / LiteLLM"]
+  Gemini["Gemini"]
+  Apify["Apify"]
+  GoogleFonts["Google Fonts"]
+  Recraft["Recraft"]
+  CDN["S3 + CloudFront CDN<br/>cdn.combatden.net"]
+
+  %% ---------- CROSS-SYSTEM (root siblings only) ----------
+  MobileApp -->|"GET /apps/{id}/styles"| TS_api
+  MobileApp -->|"GET /gyms · /videos"| VS_api
+  CRM -->|"live theme preview"| TS_api
+  CRM -->|"member feed (read-only)"| VS_api
+  CRM -->|"authd API"| FastApiBackend
+  CRM -->|"Supabase Auth (login)"| Database
+  LandingPage -->|"links to themes.combatden.net"| CRM
+  LandingPage -.->|"build-time screenshots"| MobileApp
+  LandingPage -.->|"build-time feed assets"| VS_api
+  TS_create -.->|"output.yaml"| TS_api
+  VS_create -.->|"design_id + celebration img"| TS_create
+  TS_create --> GoogleFonts
+  TS_create --> Recraft
+  TS_create --> LiteLLM
+  TS_create -->|"uploads images / icons"| CDN
+  VS_create --> Apify
+  VS_create --> LiteLLM
+  VS_create --> Gemini
+  VS_create -->|"write video_* tables"| Database
+  VS_api -->|"read video_* tables"| Database
+  FastApiBackend -->|"read/write · Supabase Auth"| Database
+  FastApiBackend -->|"webhooks + payments"| Stripe
+
+  classDef client fill:#e3f0ff,stroke:#2f6fb0,color:#0b2942;
+  classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
+  class MobileApp,CRM,LandingPage client;
+  class Stripe,LiteLLM,Gemini,Apify,GoogleFonts,Recraft,CDN ext;
+  style TS_create fill:#dff0e6,stroke:#2f8f53;
+  style TS_api fill:#eafff2,stroke:#2f8f53;
+  style VS_create fill:#dff0e6,stroke:#2f8f53;
+  style VS_api fill:#eafff2,stroke:#2f8f53;
+  style TS_scripts fill:#fdf6d8,stroke:#caab2f;
+  style FastApiBackend fill:#e6f7ec,stroke:#2f8f53,stroke-dasharray:4 3;
+  style Database fill:#fff2e0,stroke:#c9781f;
+  style MobileApp fill:#eaf2ff,stroke:#2f6fb0;
+  style CRM fill:#eaf2ff,stroke:#2f6fb0;
+  style LandingPage fill:#eaf2ff,stroke:#2f6fb0;

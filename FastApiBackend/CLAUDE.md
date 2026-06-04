@@ -12,6 +12,15 @@ When working through a skill (or a reference doc / `SKILL.md` it loads) you real
 
 This file is a living document — exactly like a skill, it must track reality. Whenever the code genuinely diverges from what this CLAUDE.md says (a new domain, a renamed module, an added dependency, a rule the code has outgrown on purpose, an architecture change), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
 
+## README — keep it current
+
+Two living documents describe this system, both kept in sync with the code (exactly like this file):
+
+- **`README.md`** — a **simple** overview chart (CRM → FastApiBackend → Supabase + Stripe) plus the domain list and the load-bearing conventions.
+- **`architecture.mermaid`** — the **full** internal graph, mirroring the real DI wiring in `core/dependencies.py`. Everything lives in **one `FastApiBackend` box** with **flat internals** (routes + every service, including the cross-cutting **`MembershipPaymentSyncService`** whose fan-in stays visible) and exactly **one nested group, `Payments`** (the Stripe core). `CRM`, `Supabase`, and `Stripe` sit **outside** the box; the box's external arrows are drawn at the box level — one arrow to **`Supabase`** (our DB), one to **`Stripe`** — so there's no `db_pool` hub and no hairball of per-service arrows.
+
+Whenever the API surface or architecture changes — **a route or service added / removed / renamed**, a new domain/router, a changed DI dependency, a new external dependency, an auth/data-access change, or the CRM↔backend wiring status — **update both `README.md` and `architecture.mermaid` in the same change** so neither drifts. Author/edit the charts with the `mermaid-creation` skill and follow its rules (top-down `TB`, sibling-only edges, fixed palette, **no `~~~`** — Mermaid-9-safe — render + `check_siblings.py` validation).
+
 ## Workflow
 
 **Always Ask Clarifying Questions**
@@ -30,6 +39,10 @@ This file is a living document — exactly like a skill, it must track reality. 
   - Docstrings that say "since X doesn't actually Y, we do Z instead" — if you catch yourself writing that comment, file the bug instead
 - When a test discovers a production bug, the correct workflow is: (1) reproduce, (2) **write the test against the correct behavior so it fails loudly**, (3) fix production, (4) watch the test turn green. Not: (1) reproduce, (2) reshape the test until it passes.
 - Regression guards for *already-fixed* bugs are fine and encouraged — the distinction is that the production code is correct now and the test locks it in. A test shaped around a *live* bug is not a regression guard, it is camouflage.
+
+**Don't test retired or non-existent routes**
+- When a route is removed or renamed, **delete its tests** — never keep a test that asserts the old path now returns 404/405. A "this route is gone" assertion has no behavioral value, silently rots as the router grows (a future unrelated route on that path flips it green or red for the wrong reason), and just adds noise. The same goes for asserting that a route which never existed is absent.
+- Test the routes that **exist** and their real behavior (status codes, payloads, auth). Coverage of the API surface comes from `Database/openapi.json` + the live router, not from negative existence checks.
 
 ## General Principles
 
@@ -92,9 +105,14 @@ This file is a living document — exactly like a skill, it must track reality. 
 - **Prefer flat functions with an orchestrator over deep nesting** (situational)
   - Write small, focused functions that each do one thing
   - Use an orchestrator function to call them in sequence
-  - Good: `orchestrate()` calls `_validate()`, `_transform()`, `_persist()` sequentially
+  - Good: `orchestrate()` calls `_validate()`, `_transform()`, `_persist()` sequentially — **but inside a service class these are private methods (`self._validate()`), not module-level functions** (see the next rule)
   - Bad: `orchestrate()` contains all logic in deeply nested blocks
   - Use judgment — simple logic doesn't need to be split into 5 tiny functions
+- **No loose module-level functions in a service file** — a file built around a service class must keep its helpers *inside* that class as private methods, never as bare `def`s hanging above or below the class.
+  - When you "extract a helper" (above) inside a service, extract it as a **private method** (`self._foo(...)`), not a module-level `def`. A `@staticmethod` is fine when the helper uses no instance state.
+  - If a helper genuinely doesn't belong on the class, pull it into its **own dedicated class/module** — never leave a standalone function floating next to a class.
+  - Good: `MembersBillingDetailService._build_rank(self, ...)`. Bad: a bare `def _build_rank(...)` sitting below the class in the same file.
+  - **Exception:** standalone, class-less *concern modules* (e.g. `formatters.py`, pure mappers like `payments_stripe_mappers.py` / `gyms_status_mapping.py`, `queries.py`) are function modules by design and stay as free functions — this rule is about service files built around a class.
 - **Keep files small and focused** — don't put everything in one giant file
   - Split logically distinct concerns into separate modules (e.g., formatters, query builders, mappers)
   - A file with 5+ responsibilities is too big — break it up
@@ -176,6 +194,15 @@ src/
 - Easy to scale and maintain
 - Teams can work independently
 - Promotes separation of concerns
+
+**Service-Layer Organization**
+- When a service grows past one file, its pieces live in a **subfolder** under `service/` (e.g. `members/service/management/`, `member_memberships/service/payment_sync/`).
+- The orchestrator `*_service.py` **lives inside that subfolder, grouped with the code it orchestrates** — never floating one level above it.
+  - Good: `members/service/management/members_management_service.py` (sits with `members_management_create.py`, `_update.py`, …).
+  - Bad: `members/service/members_management_service.py` floating above a sibling `management/` folder.
+- A genuinely standalone service with no implementation subfolder stays as a single file at the `service/` top level — that's fine (e.g. `member_memberships/service/linked_member_discount_service.py`).
+- **Don't add a nesting level for a single group.** If a folder would only ever hold one related set, keep those files flat in `service/` instead of burying them (e.g. webhook handlers live directly in `stripe_webhooks/service/`, not in a `handlers/` subdir).
+- No bare module-level helper functions in a service file — fold them into the service class as private methods (see *Code Complexity & Nesting → No loose module-level functions in a service file*).
 
 ## FastAPI Patterns
 
@@ -269,15 +296,19 @@ src/
 
 Tables whose "status" is a function of multiple date columns expose
 that derivation through a Postgres view rather than repeating the
-`CASE` expression in every query. Example: `members_with_status`
-(in `Database/supabase/schemas/members.sql`) wraps the `members`
-table and adds `status` (`trial` / `active` / `inactive`) and
-`last_class_days_ago`. All read-paths (`list_members.sql`,
-`counts_members.sql`, `member_detail.sql`) SELECT from the view.
-Writes go directly to the underlying table.
+`CASE` expression in every query. Example: `member_memberships_status`
+(in `Database/supabase/schemas/member_memberships.sql`) wraps
+`member_memberships` and derives `status`
+(`active` / `cancelled` / `ended` / `frozen`) from `cancel_date`,
+`end_date`, and the account's freeze window on `members`. The member
+read-paths (`src/members/sql/crm_views/*.sql`, `member_details/*.sql`)
+SELECT from this view; writes go directly to the underlying table.
+
+Member-level status is membership-derived (from `member_memberships_status`),
+NOT stored on `members` — there is no `member_status` column or table.
 
 When you add a similar derived field, prefer extending an existing
-`*_with_status` view or adding a new view — never duplicate the
+`*_status` view or adding a new view — never duplicate the
 derivation across SQL files.
 
 ## Security

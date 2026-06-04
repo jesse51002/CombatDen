@@ -21,7 +21,7 @@ squash:
 	npx supabase migration squash
 
 stop:
-	npx supabase stop --project-id GoApi
+	npx supabase stop --project-id Gymworld
 
 seed:
 	python python_data/main.py
@@ -29,5 +29,5 @@ seed:
 # Fetch OpenAPI spec from local backend and format it with 2-space indentation
 update-openapi:
 	@echo "Fetching OpenAPI spec from http://localhost:8000/openapi.json..."
-	@curl -s http://localhost:8000/openapi.json | python3 -m json.tool --indent 2 > openapi.json
+	@curl -s http://localhost:8000/openapi.json | NO_COLOR=1 PYTHON_COLORS=0 python3 -m json.tool --indent 2 > openapi.json
 	@echo "✓ OpenAPI spec updated and formatted in openapi.json"

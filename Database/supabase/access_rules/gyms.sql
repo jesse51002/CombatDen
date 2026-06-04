@@ -10,15 +10,15 @@ CREATE POLICY "Gym staff can view own gym"
     FOR SELECT
     USING (is_gym_admin_or_owner(gyms.gym_id));
 
--- Owners and admins can update their gym (no Stripe state to protect anymore)
+-- Owners and admins can update their gym (Stripe Connect state is service_role-only — see REVOKE below)
 CREATE POLICY "Gym staff can update own gym"
     ON gyms
     FOR UPDATE
     USING (is_gym_admin_or_owner(gyms.gym_id))
     WITH CHECK (is_gym_admin_or_owner(gyms.gym_id));
 
--- Identity columns stay immutable
-REVOKE UPDATE (gym_id) ON TABLE gyms FROM authenticated;
+-- Identity columns stay immutable; Stripe Connect columns are written by service_role only
+REVOKE UPDATE (gym_id, stripe_account_id, stripe_onboarding_status) ON TABLE gyms FROM authenticated;
 
 -- ========================
 -- gym_employees

@@ -1,0 +1,104 @@
+flowchart TB
+  CRM["🖥️ CRM (caller) · WIP"]
+  subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing API (WIP)"]
+    direction TB
+    r_mem["<b>members</b> · /api/v1/members · 14 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link<br/>DELETE /{member_id}/link<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/preview<br/>POST /{member_id}/unlink/preview<br/>GET /{member_id}/invoices"]
+    r_gym["<b>gyms</b> · /api/v1/gyms · 5 routes<br/>POST /<br/>GET /<br/>GET /{gym_id}/onboarding<br/>POST /{gym_id}/onboarding/link<br/>PUT /{gym_id}"]
+    r_cls["<b>classes</b> · /api/v1/classes · 2 routes<br/>POST /checkin<br/>GET /streak"]
+    r_rank["<b>ranks</b> · /api/v1/ranks · 10 routes<br/>GET /<br/>POST /<br/>POST /from-preset<br/>GET /presets<br/>GET /presets/grouped<br/>GET /enabled<br/>PUT /enabled<br/>GET /{rank_id}<br/>PUT /{rank_id}<br/>DELETE /{rank_id}"]
+    r_rew["<b>rewards</b> · /api/v1/rewards · 7 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem<br/>GET /redemptions"]
+    r_disc["<b>discounts</b> · /api/v1/discounts · 4 routes<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /"]
+    r_mm["<b>member_memberships</b> · /api/v1/member_memberships · 12 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price<br/>POST /preview<br/>POST /cancel/preview<br/>POST /price/preview<br/>PUT /discounts<br/>POST /discounts/preview<br/>POST /mark-paid-cash<br/>POST /charge-card"]
+    r_plan["<b>membership_plans</b> · /api/v1/membership_plans · 8 routes<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /<br/>GET /{plan_id}<br/>POST /price<br/>POST /migrate<br/>POST /migrate-all"]
+    r_hook["<b>stripe_webhooks</b> · /api/v1/stripe · 1 route<br/>POST /webhooks"]
+    checkin_service["ClassesCheckinService"]
+    crm_members_list_service["CrmMembersListService"]
+    crm_total_counts_service["CrmTotalCountsService"]
+    discounts_service["DiscountsService"]
+    gym_stripe_service["GymStripeService"]
+    gyms_service["GymsService"]
+    gyms_stripe_connect_service["GymsStripeConnectService"]
+    linked_member_discount_service["LinkedMemberDiscountService"]
+    member_memberships_service["MemberMembershipsService"]
+    members_billing_detail_service["MembersBillingDetailService"]
+    members_management_service["MembersManagementService"]
+    membership_payment_sync_service["MembershipPaymentSyncService"]
+    membership_plans_service["MembershipPlansService"]
+    ranks_service["RanksService"]
+    rewards_redemption_service["RewardsRedemptionService"]
+    rewards_service["RewardsService"]
+    streak_service["ClassesStreakService"]
+    stripe_webhooks_service["StripeWebhooksService"]
+    subgraph Payments["💳 Payments — Stripe core (router-less)"]
+      direction TB
+      p_client["PaymentsStripeClient"]
+      p_price["PaymentsStripePriceService"]
+      p_disc["PaymentsStripeDiscountService"]
+      p_members["PaymentsStripeMembersService"]
+      p_membership["PaymentsStripeMembershipService"]
+      p_payment["PaymentsStripePaymentService"]
+      p_sub["PaymentsStripeSubscriptionService"]
+      p_price --> p_client
+      p_disc --> p_client
+      p_members --> p_client
+      p_membership --> p_client
+      p_membership --> p_price
+      p_payment --> p_client
+      p_payment --> p_members
+      p_payment --> p_price
+      p_sub --> p_client
+      p_sub --> p_members
+      p_sub --> p_price
+      p_sub --> p_disc
+    end
+    r_mem --> crm_members_list_service
+    r_mem --> crm_total_counts_service
+    r_mem --> members_billing_detail_service
+    r_mem --> members_management_service
+    r_gym --> gyms_service
+    r_cls --> checkin_service
+    r_cls --> streak_service
+    r_rank --> ranks_service
+    r_rew --> rewards_redemption_service
+    r_rew --> rewards_service
+    r_disc --> discounts_service
+    r_mm --> member_memberships_service
+    r_plan --> membership_plans_service
+    r_hook --> stripe_webhooks_service
+    members_billing_detail_service --> streak_service
+    members_management_service --> Payments
+    members_management_service --> membership_payment_sync_service
+    gyms_service --> gyms_stripe_connect_service
+    gyms_stripe_connect_service --> Payments
+    discounts_service --> gym_stripe_service
+    discounts_service --> Payments
+    discounts_service --> membership_payment_sync_service
+    member_memberships_service --> membership_payment_sync_service
+    member_memberships_service --> Payments
+    member_memberships_service --> gym_stripe_service
+    membership_plans_service --> gym_stripe_service
+    membership_plans_service --> Payments
+    membership_plans_service --> membership_payment_sync_service
+    membership_payment_sync_service --> Payments
+    membership_payment_sync_service --> gym_stripe_service
+    membership_payment_sync_service --> linked_member_discount_service
+  end
+  Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)"]
+  Stripe["Stripe — payments · Connect · webhooks"]
+  CRM -->|"authenticated REST · Supabase JWT · WIP"| FastApiBackend
+  FastApiBackend -->|"read/write · JWT auth"| Supabase
+  FastApiBackend -->|"via Payments core"| Stripe
+  Stripe -.->|"webhooks → /api/v1/stripe/webhooks"| FastApiBackend
+  classDef client fill:#eaf2ff,stroke:#2f6fb0,color:#0b2942;
+  classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
+  classDef route fill:#eef2ff,stroke:#5b6bb0,color:#222;
+  classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
+  classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
+  class CRM client;
+  class Supabase,Stripe ext;
+  class r_mem,r_gym,r_cls,r_rank,r_rew,r_disc,r_mm,r_plan,r_hook route;
+  class checkin_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,linked_member_discount_service,member_memberships_service,members_billing_detail_service,members_management_service,membership_plans_service,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service svc;
+  class membership_payment_sync_service hub;
+  style CRM stroke-dasharray:4 3;
+  style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;
+  style Payments fill:#eafaf0,stroke:#2f8f53;

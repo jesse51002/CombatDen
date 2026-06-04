@@ -1,0 +1,33 @@
+-- Enable Row Level Security
+ALTER TABLE member_membership_applied_discounts_unfiltered ENABLE ROW LEVEL SECURITY;
+
+-- Policy: the owning member can read their own applied discounts; gym staff can
+-- read applied discounts for their gym.
+CREATE POLICY "Users and gym staff can view applied membership discounts"
+    ON member_membership_applied_discounts_unfiltered
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM members m
+            WHERE m.member_id = member_membership_applied_discounts_unfiltered.member_id
+            AND m.user_id = auth.uid()
+        )
+        OR is_gym_admin_or_owner(member_membership_applied_discounts_unfiltered.gym_id)
+    );
+
+-- Restrictive policy: authenticated users cannot see snapshots before the sync
+-- has written back the Stripe coupon (half-synced rows stay hidden).
+CREATE POLICY "hide_incomplete_stripe_records"
+    ON member_membership_applied_discounts_unfiltered
+    AS RESTRICTIVE
+    FOR SELECT
+    TO authenticated
+    USING (stripe_coupon_id IS NOT NULL);
+
+-- Column-level permissions: no INSERT/UPDATE for authenticated. Apply (INSERT)
+-- and remove (DELETE) and the system writebacks (UPDATE) all go through
+-- service_role only (Stripe-gated rule).
+REVOKE INSERT, UPDATE ON TABLE member_membership_applied_discounts_unfiltered FROM authenticated;
+
+-- View-level permissions: block writes through the filtered view.
+REVOKE INSERT, UPDATE ON member_membership_applied_discounts FROM authenticated;

@@ -1,4 +1,10 @@
-"""Gyms domain service: create gym + owner employee, get gym, update gym."""
+"""Orchestrator service for the gyms domain.
+
+Handles:
+    * create_gym   — DB-first insert + Stripe Connect Express account
+    * list_gyms_for_user / update_gym — basic CRUD
+    * get_onboarding_status / get_fresh_onboarding_link — Stripe status
+"""
 
 import logging
 from uuid import UUID
@@ -10,10 +16,20 @@ from src.gyms import SQL_DIR
 from src.gyms.schema.gyms_schema import (
     GymCreateRequest,
     GymCreateResponse,
-    GymEmployeeResponse,
+    GymOnboardingLinkResponse,
+    GymOnboardingStatusResponse,
     GymResponse,
     GymUpdateData,
+    GymWithRoleResponse,
 )
+from src.gyms.service.gyms_create_service import GymsCreateService
+from src.gyms.service.gyms_onboarding_service import GymsOnboardingService
+from src.gyms.service.gyms_status_mapping import (
+    GYM_STATUS_COMPLETE,
+    GYM_STATUS_NOT_STARTED,
+    GYM_STATUS_PENDING,
+)
+from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectService
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -22,84 +38,137 @@ logger = logging.getLogger(__name__)
 
 
 class GymsService:
-    """Create / get / update gyms.
+    """Orchestrates all gym routes.
+
+    ``stripe_connect_service`` is optional. When ``None`` (no Stripe
+    configured), ``create_gym`` falls through to the legacy
+    non-Stripe path and the onboarding endpoints raise ValueError.
+    The integrator injects a ``GymsStripeConnectService`` instance
+    via ``DependencyInjector.gyms_stripe_connect_service``.
 
     Args:
         db_pool: Injected database connection pool.
+        stripe_connect_service: Injected Stripe Connect wrapper.
     """
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        stripe_connect_service: GymsStripeConnectService | None = None,
+    ) -> None:
         self._db_pool = db_pool
+        self._create_service: GymsCreateService | None = None
+        self._onboarding_service: GymsOnboardingService | None = None
+
+        if stripe_connect_service is not None:
+            self._create_service = GymsCreateService(
+                db_pool=db_pool,
+                stripe_connect_service=stripe_connect_service,
+            )
+            self._onboarding_service = GymsOnboardingService(
+                db_pool=db_pool,
+                stripe_connect_service=stripe_connect_service,
+            )
+
+    # ── Create ─────────────────────────────────────────────────
 
     async def create_gym(
         self,
         request: GymCreateRequest,
         user_id: UUID,
+        user_email: str | None = None,
     ) -> GymCreateResponse:
-        """Create a gym and the calling user's owner gym_employees row.
+        """Create a gym and begin Stripe Express onboarding.
 
-        Both inserts happen in a single transaction so a partial
-        create cannot leave a gym without an owner.
+        A user may own multiple gyms, so this no longer pre-checks
+        for an existing gym. When a ``GymsStripeConnectService`` is
+        wired (normal path) it delegates to ``GymsCreateService`` for
+        the DB-first insert + Stripe account + AccountLink flow.
+
+        Raises:
+            ValueError: If Stripe is wired but ``user_email`` is None.
         """
-        async with self._db_pool.session() as session:
-            gym_row = (
-                (
-                    await session.execute(
-                        text(load_sql(SQL_DIR / "insert_gym.sql")),
-                        {
-                            "gym_name": request.gym_name,
-                            "gym_description": request.gym_description,
-                            "timezone": request.timezone,
-                        },
-                    )
-                )
-                .mappings()
-                .fetchone()
+        if self._create_service is not None:
+            if not user_email:
+                raise ValueError("user_email is required for Stripe onboarding")
+
+            return await self._create_service.create_gym(
+                request=request,
+                user_id=user_id,
+                user_email=user_email,
             )
 
-            owner_row = (
-                (
-                    await session.execute(
-                        text(load_sql(SQL_DIR / "insert_owner_employee.sql")),
-                        {
-                            "gym_id": gym_row["gym_id"],
-                            "user_id": str(user_id),
-                            "first_name": request.owner_first_name,
-                            "last_name": request.owner_last_name,
-                            "phone": request.owner_phone,
-                            "email": request.owner_email,
-                        },
-                    )
-                )
-                .mappings()
-                .fetchone()
-            )
+        # Legacy (no Stripe) path — kept for local dev / tests.
+        return await self._create_gym_no_stripe(request, user_id)
 
-            await session.commit()
-
-        return GymCreateResponse(
-            gym=GymResponse(**gym_row),
-            owner=GymEmployeeResponse(**owner_row),
+    async def _create_gym_no_stripe(
+        self,
+        request: GymCreateRequest,
+        user_id: UUID,
+    ) -> GymCreateResponse:
+        """Non-Stripe fallback for local dev / tests without Stripe creds."""
+        raise NotImplementedError(
+            "Stripe Connect is required. Inject GymsStripeConnectService into GymsService.",
         )
 
-    async def get_gym_for_user(self, user_id: UUID) -> GymResponse:
-        """Return the caller's gym (looked up via gym_employees)."""
+    # ── Onboarding status ──────────────────────────────────────
+
+    async def get_onboarding_status(
+        self,
+        gym_id: UUID,
+    ) -> GymOnboardingStatusResponse:
+        """Fetch + refresh a gym's onboarding status.
+
+        The caller's ownership of ``gym_id`` is verified at the
+        router layer before this runs.
+
+        Raises:
+            ValueError: If Stripe is not configured.
+        """
+        if self._onboarding_service is None:
+            raise ValueError("Stripe Connect is not configured")
+        return await self._onboarding_service.refresh(gym_id)
+
+    async def get_fresh_onboarding_link(
+        self,
+        gym_id: UUID,
+    ) -> GymOnboardingLinkResponse:
+        """Mint a new AccountLink without re-reading the account.
+
+        The caller's ownership of ``gym_id`` is verified at the
+        router layer before this runs.
+
+        Raises:
+            ValueError: If Stripe is not configured.
+        """
+        if self._onboarding_service is None:
+            raise ValueError("Stripe Connect is not configured")
+        return await self._onboarding_service.new_link(gym_id)
+
+    # ── Basic CRUD ─────────────────────────────────────────────
+
+    async def list_gyms_for_user(
+        self,
+        user_id: UUID,
+    ) -> list[GymWithRoleResponse]:
+        """Return every gym the caller may administer (owner/admin).
+
+        Each gym is annotated with the caller's ``employee_type`` for
+        it. Returns an empty list when the user administers no gyms.
+        """
         async with self._db_pool.session() as session:
-            row = (
+            rows = (
                 (
                     await session.execute(
-                        text(load_sql(SQL_DIR / "get_gym_for_user.sql")),
+                        text(load_sql(SQL_DIR / "gyms_list_for_user.sql")),
                         {"user_id": str(user_id)},
                     )
                 )
                 .mappings()
-                .fetchone()
+                .fetchall()
             )
 
-        if not row:
-            raise ValueError("No gym found for this user")
-
-        return GymResponse(**row)
+        return [GymWithRoleResponse(**row) for row in rows]
 
     async def update_gym(
         self,
@@ -127,3 +196,13 @@ class GymsService:
             raise ValueError("Gym not found")
 
         return GymResponse(**row)
+
+
+# Re-export status constants so the router can reference them
+# without reaching across service modules.
+__all__ = [
+    "GYM_STATUS_COMPLETE",
+    "GYM_STATUS_NOT_STARTED",
+    "GYM_STATUS_PENDING",
+    "GymsService",
+]

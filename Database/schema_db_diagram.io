@@ -1,7 +1,11 @@
 // dbdiagram.io markup — paste into https://dbdiagram.io/d to visualize.
-// Reflects the post-payment-pivot schema: no Stripe, no memberships,
-// no invoices/charges/discounts. Class scheduling is embedded in
-// gym_classes; exceptions split into instance vs range; class_history
+// Includes the full CRM billing layer: membership_plans, membership_plan_prices,
+// gym_discounts, member_memberships, member_invoices, member_invoice_line_items,
+// member_invoice_applied_discounts, member_charges, stripe_webhook_events. Member
+// identity + billing live together on the unified `members` table (billing columns
+// are service-role-written, NULL for engagement-only members); `member_billing_profile`
+// is a filtered view of it (stripe_customer_id IS NOT NULL). Class scheduling is
+// embedded in gym_classes; exceptions split into instance vs range; class_history
 // records past occurrences and member_attendance points at them.
 
 Table auth_users {
@@ -16,6 +20,8 @@ Table gyms {
   gym_description varchar
   timezone text [not null, default: 'America/Chicago']
   is_rank_enabled boolean [not null, default: true]
+  stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']
+  stripe_onboarding_status text [not null, default: 'not_started', note: 'CHECK: not_started | pending | complete']
 }
 
 Table gym_employees {
@@ -83,37 +89,32 @@ Table members {
   email varchar
   points_balance integer [not null, default: 0]
   current_rank_id uuid [note: 'nullable, FK to gym_ranks (composite with gym_id)']
+  // --- merged billing/contact/Stripe (service_role-written; NULL for engagement-only members) ---
+  photo_url varchar
+  phone varchar
+  address varchar
+  emergency_contact_name varchar
+  emergency_contact_phone varchar
+  emergency_contact_email varchar
+  freeze_start_date date [note: 'nullable; must pair with freeze_end_date']
+  freeze_end_date date [note: 'nullable']
+  account_linked_to_id uuid [note: 'nullable; self-FK (account_linked_to_id, gym_id) -> members(member_id, gym_id)']
+  linked_discount_id uuid [note: 'nullable; FK to gym_discounts_unfiltered; must be type=linked']
+  stripe_customer_id varchar [note: 'immutable once set (trigger); member_billing_profile view filters WHERE NOT NULL']
+  stripe_sub_id_month varchar
+  stripe_payment_method_id varchar
+  payment_type varchar
+  card_brand varchar
+  card_last_four varchar(4)
+  card_exp_month integer
+  card_exp_year integer
+  total_monthly_recurring_price integer [not null, default: 0, note: 'CHECK >= 0']
 
   indexes {
     (user_id, gym_id) [unique, note: 'partial WHERE user_id IS NOT NULL']
     (member_id, gym_id) [unique]
+    stripe_customer_id [unique]
   }
-}
-
-Table member_status {
-  status_id uuid [primary key, default: `uuid_generate_v4()`]
-  member_id uuid [not null]
-  gym_id uuid [not null]
-  status_type varchar [not null, note: 'enum: trial, full, disabled']
-  start_date date [not null]
-  end_date date [note: 'nullable = ongoing (current trial / current full / current disabled)']
-  created_at timestamptz [not null, default: `now()`]
-
-  // gist EXCLUDE (member_id =, daterange(start, end, []) &&) prevents overlap
-  // No stored "inactive" — derived from absence of a covering row.
-}
-
-Table member_active {
-  active_id uuid [primary key, default: `uuid_generate_v4()`]
-  member_id uuid [not null]
-  gym_id uuid [not null]
-  active_type varchar [not null, note: 'enum: active, inactive']
-  start_date date [not null]
-  end_date date [note: 'nullable = ongoing']
-  created_at timestamptz [not null, default: `now()`]
-
-  // Same shape as member_status. Class-engagement axis, distinct from
-  // membership-tier axis. Surfaced in members_with_status as `active` bool.
 }
 
 Table gym_classes {
@@ -258,14 +259,10 @@ Ref: gym_employees.gym_id > gyms.gym_id
 Ref: members.user_id > auth_users.id
 Ref: members.gym_id > gyms.gym_id
 Ref: members.current_rank_id > gym_ranks.rank_id
+Ref: members.account_linked_to_id > members.member_id
+Ref: members.linked_discount_id > gym_discounts_unfiltered.discount_id
 
 Ref: gym_ranks.gym_id > gyms.gym_id
-
-Ref: member_status.member_id > members.member_id
-Ref: member_status.gym_id > gyms.gym_id
-
-Ref: member_active.member_id > members.member_id
-Ref: member_active.gym_id > gyms.gym_id
 
 Ref: gym_classes.gym_id > gyms.gym_id
 Ref: gym_classes.sun_instructor_id > gym_employees.employee_id
@@ -302,6 +299,206 @@ Ref: member_activities.member_id > members.member_id
 Ref: member_activities.gym_id > gyms.gym_id
 
 Ref: gym_history.gym_id > gyms.gym_id
+
+// ============================================================
+// CRM billing layer
+// _unfiltered base tables exist in DB; the filtered views (stripe_*_id IS NOT
+// NULL) are exposed to the app. Diagram shows the underlying table shapes.
+// ============================================================
+
+Table membership_plans_unfiltered {
+  plan_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null]
+  plan_name varchar [not null]
+  plan_type varchar [not null, note: 'CHECK: trial | recurring | one_time']
+  class_count integer [note: 'nullable; required for class-count plans']
+  duration_amount integer [note: 'nullable; must pair with duration_unit']
+  duration_unit varchar [note: 'nullable; CHECK: week | month | year']
+  is_public boolean [not null, default: true]
+  is_deleted boolean [not null, default: false]
+  stripe_product_id varchar [note: 'set by backend; view filters WHERE NOT NULL']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (plan_id, gym_id) [unique]
+  }
+}
+
+Table membership_plan_prices_unfiltered {
+  price_id uuid [primary key, default: `uuid_generate_v4()`]
+  plan_id uuid [not null]
+  gym_id uuid [not null]
+  stripe_price_id varchar [note: 'set by backend; view filters WHERE NOT NULL']
+  price integer [not null, note: 'CHECK >= 0']
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (price_id, plan_id) [unique]
+    plan_id [unique, note: 'partial WHERE is_active = TRUE (max one active price per plan)']
+  }
+}
+
+Table gym_discounts_unfiltered {
+  discount_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null]
+  discount_name varchar [not null]
+  discount_type varchar [not null, note: 'CHECK: preset | custom | linked']
+  percentage_off float [note: 'nullable; exactly one of percentage_off/dollar_off set']
+  dollar_off integer [note: 'nullable']
+  membership_plan_id uuid [note: 'nullable; required for linked discounts']
+  linked_discount_num integer [note: 'nullable; sequential per (gym_id, membership_plan_id)']
+  duration varchar [not null, note: 'CHECK: once | repeating | forever']
+  duration_in_months integer [note: 'nullable; required when duration = repeating']
+  is_deleted boolean [not null, default: false]
+  stripe_coupon_id varchar [note: 'set by backend; view filters WHERE NOT NULL']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (discount_id, gym_id) [unique]
+    (gym_id, membership_plan_id, linked_discount_num) [unique]
+  }
+}
+
+// member_billing_profile was merged into the unified `members` table above;
+// `member_billing_profile` is now a filtered view (stripe_customer_id IS NOT NULL).
+
+Table member_memberships_unfiltered {
+  item_id uuid [primary key, default: `uuid_generate_v4()`]
+  member_id uuid [not null]
+  gym_id uuid [not null]
+  plan_id uuid [not null, note: 'immutable (trigger)']
+  price_id uuid [not null]
+  start_date date [not null]
+  end_date date [note: 'nullable; forbidden for recurring plans']
+  cancel_date date [note: 'nullable; immutable once set']
+  last_paid_date date
+  next_due_date date
+  discount_ids jsonb [note: 'JSONB array of discount UUIDs; trigger validates gym match']
+  stripe_item_id varchar [note: 'immutable once set; view filters WHERE NOT NULL']
+  prorate boolean [not null, default: true]
+  total_price integer [not null, note: 'CHECK >= 0']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (item_id, member_id) [unique]
+    (item_id, gym_id) [unique]
+  }
+}
+
+Table member_invoices {
+  invoice_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null]
+  member_id uuid [not null]
+  status varchar [not null, default: 'open', note: 'enum: open | paid']
+  total_amount integer [not null, note: 'CHECK >= 0']
+  currency char(3) [not null, default: 'usd']
+  stripe_invoice_id varchar [unique, note: 'nullable']
+  stripe_payment_intent_id varchar [unique, note: 'nullable']
+  invoice_time timestamptz [not null, default: `now()`]
+  stripe_event_payload jsonb
+
+  indexes {
+    (invoice_id, gym_id) [unique]
+    (member_id, gym_id, invoice_time)
+    (gym_id, invoice_time)
+  }
+}
+
+Table member_invoice_line_items {
+  line_item_id varchar [primary key, note: 'Stripe line item id (il_xxx)']
+  invoice_id uuid [not null]
+  gym_id uuid [not null]
+  item_type varchar [not null, note: 'enum: membership | custom']
+  name varchar [not null]
+  amount integer [not null, note: 'CHECK >= 0']
+  stripe_product_id varchar
+  item_id uuid [note: 'nullable; required when item_type = membership']
+
+  indexes {
+    invoice_id
+    item_id [note: 'partial WHERE item_id IS NOT NULL']
+  }
+}
+
+Table member_invoice_applied_discounts {
+  applied_discount_id uuid [primary key, default: `uuid_generate_v4()`]
+  invoice_id uuid [not null]
+  gym_id uuid [not null]
+  discount_id uuid [not null]
+  amount_off integer [not null, note: 'snapshot at invoice time; CHECK >= 0']
+  stripe_coupon_id varchar
+
+  indexes {
+    invoice_id
+  }
+}
+
+Table member_charges {
+  charge_id uuid [primary key, default: `uuid_generate_v4()`]
+  invoice_id uuid [not null]
+  gym_id uuid [not null]
+  member_id uuid [not null]
+  kind varchar [not null, note: 'enum: payment | refund']
+  status varchar [not null, note: 'enum: pending | succeeded | failed']
+  amount integer [not null, note: 'signed: payment >= 0, refund <= 0']
+  currency char(3) [not null, default: 'usd']
+  payment_method_type varchar
+  stripe_charge_id varchar [unique, note: 'nullable']
+  stripe_refund_id varchar [unique, note: 'nullable']
+  refunds_charge_id uuid [note: 'nullable; self-FK to member_charges(charge_id)']
+  charge_time timestamptz [not null, default: `now()`]
+  stripe_event_payload jsonb
+
+  indexes {
+    invoice_id
+    (member_id, gym_id, charge_time)
+    (gym_id, charge_time)
+  }
+}
+
+Table stripe_webhook_events {
+  event_id varchar [primary key, note: 'Stripe event id']
+  gym_id uuid [not null]
+  event_type varchar [not null]
+  processed_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (gym_id, processed_at)
+  }
+}
+
+// Billing layer refs
+Ref: membership_plans_unfiltered.gym_id > gyms.gym_id
+Ref: membership_plan_prices_unfiltered.plan_id > membership_plans_unfiltered.plan_id
+Ref: membership_plan_prices_unfiltered.gym_id > gyms.gym_id
+Ref: gym_discounts_unfiltered.gym_id > gyms.gym_id
+Ref: gym_discounts_unfiltered.membership_plan_id > membership_plans_unfiltered.plan_id
+
+// member_billing_profile_unfiltered FKs merged into `members` (see members refs above).
+
+Ref: member_memberships_unfiltered.member_id > members.member_id
+Ref: member_memberships_unfiltered.gym_id > gyms.gym_id
+Ref: member_memberships_unfiltered.plan_id > membership_plans_unfiltered.plan_id
+Ref: member_memberships_unfiltered.price_id > membership_plan_prices_unfiltered.price_id
+
+Ref: member_invoices.member_id > members.member_id
+Ref: member_invoices.gym_id > gyms.gym_id
+
+Ref: member_invoice_line_items.invoice_id > member_invoices.invoice_id
+Ref: member_invoice_line_items.gym_id > gyms.gym_id
+Ref: member_invoice_line_items.item_id > member_memberships_unfiltered.item_id
+
+Ref: member_invoice_applied_discounts.invoice_id > member_invoices.invoice_id
+Ref: member_invoice_applied_discounts.gym_id > gyms.gym_id
+Ref: member_invoice_applied_discounts.discount_id > gym_discounts_unfiltered.discount_id
+
+Ref: member_charges.invoice_id > member_invoices.invoice_id
+Ref: member_charges.gym_id > gyms.gym_id
+Ref: member_charges.member_id > members.member_id
+Ref: member_charges.refunds_charge_id > member_charges.charge_id
+
+Ref: stripe_webhook_events.gym_id > gyms.gym_id
 
 // ============================================================
 // VideoService demo content (video_* tables). The gym here is a gym-TYPE

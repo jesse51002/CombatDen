@@ -12,8 +12,8 @@ and exposes brand-overridable resolvers (`ThemeColor`, `ThemeImage`,
 ships no screens and no bundled assets of its own.
 
 The **showcase** preview screens (Home/Booking/Stats/Rewards/etc.) used to live
-here (`lib/showcase/`) but were **moved into `../AppManagement`**
-(`AppManagement/lib/showcase/`), since the admin app's live theme preview is
+here (`lib/showcase/`) but were **moved into `../CRM`**
+(`CRM/lib/showcase/`), since the admin app's live theme preview is
 their only consumer. They still depend on this package's resolvers/runtime —
 that's the allowed direction (an app importing the shared package), and it keeps
 this package app-agnostic (see *Hard rules*).
@@ -22,7 +22,7 @@ It was extracted from `../MobileApp/lib/customization/` so two systems can share
 it:
 - **`../MobileApp`** — the member app; its real screens consume the resolvers,
   and `lib/core/design_constants.dart` is driven by them.
-- **`../AppManagement`** — the admin app; its live theme preview owns the
+- **`../CRM`** — the admin app; its live theme preview owns the
   showcase screens (`lib/showcase/`) and switches themes via `selectDesign`,
   resolving branding through this package's runtime.
 
@@ -38,24 +38,24 @@ This file is a living document — exactly like a skill, it must track reality. 
 ## Hard rules
 
 - **App-agnostic by construction.** This package must NEVER import from
-  `package:mobile_app/...`, `package:app_management/...`, or any app. The only
+  `package:mobile_app/...`, `package:crm/...`, or any app. The only
   app-specific inputs are injected through `ThemeRuntime.initialize`
   (`appId`, `designId`, the six `expected*` slot lists). If you need an app
   constant, add it to `EngineTokens` (engine-internal defaults) or take it as a
   parameter — never reach into a consuming app.
-  - Enforce: `grep -rn 'package:mobile_app\|package:app_management' lib` must be
+  - Enforce: `grep -rn 'package:mobile_app\|package:crm' lib` must be
     empty.
 - **Brand values resolve LIVE.** Colours/fonts/images/text/icons come
   from the loaded customization via the resolvers; the only hardcoded values are
   the const CombatDen fallbacks (in `EngineTokens`) used when nothing is loaded.
   Resolvers never throw. (`ShowcaseTokens`, the showcase's member-app-look
-  fallbacks, moved to AppManagement with the showcase.)
-- **Web-safe.** Both consumers build for Flutter web (AppManagement is web).
+  fallbacks, moved to CRM with the showcase.)
+- **Web-safe.** Both consumers build for Flutter web (CRM is web).
   No `dart:io`, no `File`, no `Platform.*`. Verify with a consumer's
   `flutter build web`.
 - **No bundled assets.** This package ships no `assets/` of its own — the
-  showcase's bundled fallback images moved to AppManagement
-  (`AppManagement/assets/showcase/`) with the showcase code. Brand images
+  showcase's bundled fallback images moved to CRM
+  (`CRM/assets/showcase/`) with the showcase code. Brand images
   resolve live via `ThemeImage`; the consuming app owns any bundled fallbacks.
 
 ## Style
@@ -73,4 +73,4 @@ small focused widgets (<150 lines/file), package imports
 - `flutter pub get`
 - `flutter analyze` — must be clean.
 - Standalone web compile is proven via a consumer's `flutter build web`
-  (AppManagement). A package isn't directly runnable.
+  (CRM). A package isn't directly runnable.

@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "MemberApp"
+project_id = "Gymworld"
 
 [api]
 enabled = true
@@ -59,10 +59,12 @@ schema_paths = [
     "./schemas/gyms.sql",
     "./schemas/rank_presets.sql",
     "./schemas/gym_ranks.sql",
+    # Membership plans / prices / discounts load before members because the
+    # unified members table FKs gym_discounts (linked_discount_id).
+    "./schemas/membership_plans.sql",
+    "./schemas/membership_plan_prices.sql",
+    "./schemas/gym_discounts.sql",
     "./schemas/members.sql",
-    "./schemas/member_status.sql",
-    "./schemas/member_active.sql",
-    "./schemas/members_with_status.sql",
     "./schemas/gym_classes.sql",
     "./schemas/class_instance_exceptions.sql",
     "./schemas/class_range_exceptions.sql",
@@ -80,9 +82,23 @@ schema_paths = [
     "./schemas/video.sql",
     "./schemas/video_gym_feed.sql",
     "./schemas/video_cost_log.sql",
+    # CRM billing subsystem (restored) — ordered by FK dependency so each
+    # table's references already exist when it loads. membership_plans /
+    # membership_plan_prices / gym_discounts moved above members; billing
+    # profile merged into the unified members table.
+    "./schemas/member_memberships.sql",
+    # Applied-discount snapshots FK member_memberships + gym_discounts + members,
+    # so load after all three.
+    "./schemas/member_membership_applied_discounts.sql",
+    "./schemas/member_invoices.sql",
+    "./schemas/member_invoice_line_items.sql",
+    "./schemas/member_invoice_applied_discounts.sql",
+    "./schemas/member_charges.sql",
+    "./schemas/stripe_webhook_events.sql",
     "./schemas/*.sql",
     "./access_rules/*.sql"
 ]
+
 
 [db.seed]
 # If enabled, seeds the database after migrations during a db reset.
@@ -413,3 +429,11 @@ s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
+
+# [experimental.pgdelta]
+# When enabled, pg-delta becomes the active engine for supported schema flows.
+# enabled = false
+# Directory under `supabase/` where declarative files are written.
+# declarative_schema_path = "./declarative"
+# JSON string passed through to pg-delta SQL formatting.
+# format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"

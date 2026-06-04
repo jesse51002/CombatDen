@@ -10,11 +10,6 @@ from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 
-def _current_week_monday() -> date:
-    today = datetime.now(UTC).date()
-    return today - timedelta(days=today.weekday())
-
-
 class ClassesStreakService:
     """Counts consecutive weeks with at least one class attendance.
 
@@ -43,9 +38,8 @@ class ClassesStreakService:
         week_starts: set[date] = {row[0] for row in rows}
         return self._count_streak(week_starts)
 
-    @staticmethod
-    def _count_streak(week_starts: set[date]) -> int:
-        current_monday = _current_week_monday()
+    def _count_streak(self, week_starts: set[date]) -> int:
+        current_monday = self._current_week_monday()
         previous_monday = current_monday - timedelta(weeks=1)
 
         if current_monday in week_starts:
@@ -60,3 +54,7 @@ class ClassesStreakService:
             streak += 1
             cursor -= timedelta(weeks=1)
         return streak
+
+    def _current_week_monday(self) -> date:
+        today = datetime.now(UTC).date()
+        return today - timedelta(days=today.weekday())

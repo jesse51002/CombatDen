@@ -3,31 +3,173 @@
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-from tests.conftest import make_member_list_row, make_member_row
+from src.main import app
+from src.members.schema.members_billing_schema import (
+    BillingPersonalInfo,
+    BillingRetention,
+    MemberBillingDetailResponse,
+    MembersBillingProfileResponse,
+)
+from src.members.schema.members_crm_members_list_schema import (
+    AllViewRow,
+    CrmMembersListResponse,
+    MembersListFilters,
+    MembersListTotalCounts,
+    MembersListView,
+)
+from tests.conftest import make_member_row
 
 
-def test_create_member_returns_201(client, db_pool_mock, auth_headers, fake_gym_id):
-    """POST /api/v1/members/ inserts a row and returns the response shape."""
+def test_create_member_returns_201(client, auth_headers, fake_gym_id):
+    """POST /api/v1/members/ provisions a Stripe customer and returns the profile."""
     member_id = str(uuid4())
-    db_pool_mock.execute_with_retry = AsyncMock(
-        return_value=make_member_row(member_id=member_id, gym_id=fake_gym_id),
+    mgmt = MagicMock()
+    mgmt.create_member = AsyncMock(
+        return_value=MembersBillingProfileResponse(
+            member_id=member_id,
+            gym_id=fake_gym_id,
+            first_name="Ada",
+            last_name="Lovelace",
+            email="ada@example.com",
+            stripe_customer_id="cus_test123",
+        ),
     )
+    app.container.members_management_service.override(mgmt)
+    try:
+        response = client.post(
+            "/api/v1/members/",
+            json={
+                "gym_id": fake_gym_id,
+                "first_name": "Ada",
+                "last_name": "Lovelace",
+                "email": "ada@example.com",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        app.container.members_management_service.reset_override()
 
+    assert response.status_code == 201
+    body = response.json()
+    assert body["member_id"] == member_id
+    # Every member is created with a Stripe customer.
+    assert body["stripe_customer_id"] == "cus_test123"
+    mgmt.create_member.assert_awaited_once()
+
+
+def test_create_member_persists_contact_fields(client, auth_headers, fake_gym_id):
+    """POST accepts the full contact profile, passes it to the service, echoes it."""
+    member_id = str(uuid4())
+    mgmt = MagicMock()
+    mgmt.create_member = AsyncMock(
+        return_value=MembersBillingProfileResponse(
+            member_id=member_id,
+            gym_id=fake_gym_id,
+            first_name="Ada",
+            last_name="Lovelace",
+            email="ada@example.com",
+            phone="+1-555-0100",
+            address="1 Tatami Way",
+            emergency_contact_name="Grace Hopper",
+            emergency_contact_phone="+1-555-0199",
+            emergency_contact_email="grace@example.com",
+            stripe_customer_id="cus_test123",
+        ),
+    )
+    app.container.members_management_service.override(mgmt)
+    try:
+        response = client.post(
+            "/api/v1/members/",
+            json={
+                "gym_id": fake_gym_id,
+                "first_name": "Ada",
+                "last_name": "Lovelace",
+                "email": "ada@example.com",
+                "phone": "+1-555-0100",
+                "address": "1 Tatami Way",
+                "emergency_contact_name": "Grace Hopper",
+                "emergency_contact_phone": "+1-555-0199",
+                "emergency_contact_email": "grace@example.com",
+                "photo_url": "https://cdn.example.com/ada.png",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        app.container.members_management_service.reset_override()
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["phone"] == "+1-555-0100"
+    assert body["address"] == "1 Tatami Way"
+    assert body["emergency_contact_name"] == "Grace Hopper"
+    assert body["emergency_contact_phone"] == "+1-555-0199"
+    assert body["emergency_contact_email"] == "grace@example.com"
+
+    # The router must pass the full contact profile (incl. photo_url) through to
+    # the create service, not drop any field.
+    passed_request = mgmt.create_member.call_args.args[0]
+    assert passed_request.phone == "+1-555-0100"
+    assert passed_request.emergency_contact_email == "grace@example.com"
+    assert passed_request.photo_url == "https://cdn.example.com/ada.png"
+
+
+def test_create_member_rejects_malformed_emergency_email(client, auth_headers, fake_gym_id):
+    """emergency_contact_email is validated as an email (422 on garbage)."""
     response = client.post(
         "/api/v1/members/",
         json={
             "gym_id": fake_gym_id,
             "first_name": "Ada",
             "last_name": "Lovelace",
-            "email": "ada@example.com",
+            "emergency_contact_email": "not-an-email",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+def test_update_member_accepts_contact_fields(
+    client, db_pool_mock, auth_headers, fake_member_id, fake_gym_id
+):
+    """PUT accepts contact fields, binds them, and echoes them back."""
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value=make_member_row(
+            member_id=fake_member_id,
+            gym_id=fake_gym_id,
+            phone="+1-555-0123",
+            emergency_contact_email="kin@example.com",
+        ),
+    )
+
+    response = client.put(
+        f"/api/v1/members/{fake_member_id}",
+        json={
+            "data": {
+                "phone": "+1-555-0123",
+                "emergency_contact_email": "kin@example.com",
+            }
         },
         headers=auth_headers,
     )
 
-    assert response.status_code == 201
+    assert response.status_code == 200
     body = response.json()
-    assert body["member_id"] == member_id
-    assert body["points_balance"] == 100
+    assert body["phone"] == "+1-555-0123"
+    assert body["emergency_contact_email"] == "kin@example.com"
+
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert bound_params["phone"] == "+1-555-0123"
+    assert bound_params["emergency_contact_email"] == "kin@example.com"
+
+
+def test_update_member_rejects_malformed_emergency_email(client, auth_headers, fake_member_id):
+    """PUT validates emergency_contact_email too (422 on garbage)."""
+    response = client.put(
+        f"/api/v1/members/{fake_member_id}",
+        json={"data": {"emergency_contact_email": "nope"}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
 
 
 def test_update_member_400_when_empty_data(client, auth_headers, fake_member_id):
@@ -40,202 +182,194 @@ def test_update_member_400_when_empty_data(client, auth_headers, fake_member_id)
     assert response.status_code == 400
 
 
-def test_list_members_returns_paginated_response(client, db_pool_mock, auth_headers, fake_gym_id):
-    """POST /api/v1/members/list returns items + total."""
+def test_list_members_returns_paginated_response(client, auth_headers, fake_gym_id):
+    """POST /api/v1/members/list returns view + filters + data."""
     member_id = str(uuid4())
-    list_row = make_member_list_row(member_id=member_id, rank_id=None)
-    count_row = {"total": 1}
-
-    list_result = MagicMock()
-    list_result.mappings.return_value.all.return_value = [list_row]
-    count_result = MagicMock()
-    count_result.mappings.return_value.fetchone.return_value = count_row
-
-    session = db_pool_mock.session.return_value
-    session.execute = AsyncMock(side_effect=[list_result, count_result])
-
-    response = client.post(
-        "/api/v1/members/list",
-        json={"gym_id": fake_gym_id, "requested_view": "active"},
-        headers=auth_headers,
+    mock_response = CrmMembersListResponse(
+        view=MembersListView.all,
+        filters=MembersListFilters(),
+        data=[
+            AllViewRow(
+                member_id=member_id,
+                name="Ada Lovelace",
+                email="ada@example.com",
+                membership_status="active",
+                membership_text="Active",
+                days_since_last_class=3,
+            )
+        ],
     )
+
+    mock_service = MagicMock()
+    mock_service.get_crm_members_list = AsyncMock(return_value=mock_response)
+
+    container = client.app.container
+    container.crm_members_list_service.override(mock_service)
+    try:
+        response = client.post(
+            "/api/v1/members/list",
+            json={
+                "gym_id": fake_gym_id,
+                "prev_view": "all",
+                "requested_view": "all",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        container.crm_members_list_service.reset_override()
 
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] == 1
-    assert body["items"][0]["member_id"] == member_id
-    assert body["items"][0]["status"] == "active"
-    assert body["items"][0]["current_rank"] is None
+    assert body["view"] == "all"
+    assert len(body["data"]) == 1
+    assert body["data"][0]["member_id"] == member_id
+    assert body["data"][0]["membership_status"] == "active"
 
 
-def test_list_members_hydrates_nested_rank(
-    client, db_pool_mock, auth_headers, fake_gym_id, fake_rank_id
-):
-    """A member with a current_rank_id is returned with a nested
-    current_rank object built from the joined gym_ranks columns."""
+def test_list_members_hydrates_nested_rank(client, auth_headers, fake_gym_id, fake_rank_id):
+    """POST /api/v1/members/list passes through the service response unchanged."""
     member_id = str(uuid4())
-    list_row = make_member_list_row(
-        member_id=member_id,
-        rank_id=fake_rank_id,
-        main_name="Blue",
-        sub_name="2 stripes",
-        color="#1F6FEB",
-        main_rank_num_order=1,
-        sub_rank_num_order=2,
+    mock_response = CrmMembersListResponse(
+        view=MembersListView.all,
+        filters=MembersListFilters(),
+        data=[
+            AllViewRow(
+                member_id=member_id,
+                name="Blue Belt",
+                email=None,
+                membership_status="active",
+                membership_text="Active",
+            )
+        ],
     )
-    count_row = {"total": 1}
 
-    list_result = MagicMock()
-    list_result.mappings.return_value.all.return_value = [list_row]
-    count_result = MagicMock()
-    count_result.mappings.return_value.fetchone.return_value = count_row
+    mock_service = MagicMock()
+    mock_service.get_crm_members_list = AsyncMock(return_value=mock_response)
 
-    session = db_pool_mock.session.return_value
-    session.execute = AsyncMock(side_effect=[list_result, count_result])
-
-    response = client.post(
-        "/api/v1/members/list",
-        json={"gym_id": fake_gym_id},
-        headers=auth_headers,
-    )
+    container = client.app.container
+    container.crm_members_list_service.override(mock_service)
+    try:
+        response = client.post(
+            "/api/v1/members/list",
+            json={
+                "gym_id": fake_gym_id,
+                "prev_view": "all",
+                "requested_view": "all",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        container.crm_members_list_service.reset_override()
 
     assert response.status_code == 200
     body = response.json()
-    rank = body["items"][0]["current_rank"]
-    assert rank is not None
-    assert rank["rank_id"] == fake_rank_id
-    assert rank["main_name"] == "Blue"
-    assert rank["sub_name"] == "2 stripes"
-    assert rank["color"] == "#1F6FEB"
-    assert rank["main_rank_num_order"] == 1
-    assert rank["sub_rank_num_order"] == 2
+    assert body["data"][0]["member_id"] == member_id
 
 
-def test_total_counts_returns_per_status(client, db_pool_mock, auth_headers, fake_gym_id):
+def test_total_counts_returns_per_status(client, auth_headers, fake_gym_id):
     """GET /api/v1/members/counts returns counts for each status."""
-    counts_row = {
-        "all_count": 10,
-        "trial_count": 2,
-        "active_count": 6,
-        "inactive_count": 2,
-    }
+    mock_response = MembersListTotalCounts(active=6, trial=2, frozen=1, overdue=1)
 
-    result = MagicMock()
-    result.mappings.return_value.fetchone.return_value = counts_row
+    mock_service = MagicMock()
+    mock_service.get_total_counts = AsyncMock(return_value=mock_response)
 
-    session = db_pool_mock.session.return_value
-    session.execute = AsyncMock(return_value=result)
+    container = client.app.container
+    container.crm_total_counts_service.override(mock_service)
+    try:
+        response = client.get(
+            f"/api/v1/members/counts?gym_id={fake_gym_id}",
+            headers=auth_headers,
+        )
+    finally:
+        container.crm_total_counts_service.reset_override()
 
-    response = client.get(
-        f"/api/v1/members/counts?gym_id={fake_gym_id}",
-        headers=auth_headers,
-    )
     assert response.status_code == 200
     body = response.json()
-    assert body == {"all": 10, "trial": 2, "active": 6, "inactive": 2}
+    assert body == {"active": 6, "trial": 2, "frozen": 1, "overdue": 1}
 
 
 def test_member_detail_includes_streak_and_redemptions(
-    client, db_pool_mock, auth_headers, fake_member_id, fake_gym_id
+    client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """GET /api/v1/members/{member_id} composes detail + redemptions + streak."""
-    detail_row = {
-        "member_id": fake_member_id,
-        "gym_id": fake_gym_id,
-        "first_name": "Ada",
-        "last_name": "Lovelace",
-        "email": "ada@example.com",
-        "points_balance": 100,
-        "last_class": None,
-        "trial_start_date": None,
-        "trial_end_date": None,
-        "fully_active_start_date": None,
-        "inactive_start_date": None,
-        "created_at": "2026-04-01T00:00:00Z",
-        "status": "inactive",
-        "last_class_days_ago": None,
-        "rank_rank_id": None,
-        "rank_main_name": None,
-        "rank_sub_name": None,
-        "rank_color": None,
-        "rank_image_url": None,
-        "rank_main_rank_num_order": None,
-        "rank_sub_rank_num_order": None,
-    }
-
-    detail_result = MagicMock()
-    detail_result.mappings.return_value.fetchone.return_value = detail_row
-    redemption_result = MagicMock()
-    redemption_result.mappings.return_value.all.return_value = []
-    streak_result = MagicMock()
-    streak_result.all.return_value = []
-
-    session = db_pool_mock.session.return_value
-    session.execute = AsyncMock(
-        side_effect=[detail_result, redemption_result, streak_result],
+    """GET /api/v1/members/{member_id} returns full billing detail."""
+    mock_response = MemberBillingDetailResponse(
+        member_id=fake_member_id,
+        gym_id=fake_gym_id,
+        first_name="Ada",
+        last_name="Lovelace",
+        membership_overview="Active",
+        total_monthly_recurring_price=0,
+        total_membership_count=0,
+        personal_info=BillingPersonalInfo(),
+        linked_accounts=[],
+        memberships=[],
+        retention=BillingRetention(
+            class_streak_weeks=0,
+            points_balance=100,
+            videos_watched=0,
+        ),
+        recently_redeemed_rewards=[],
+        payment_history=[],
     )
 
-    response = client.get(
-        f"/api/v1/members/{fake_member_id}",
-        headers=auth_headers,
-    )
+    mock_service = MagicMock()
+    mock_service.get_member_billing_detail = AsyncMock(return_value=mock_response)
+
+    container = client.app.container
+    container.members_billing_detail_service.override(mock_service)
+    try:
+        response = client.get(
+            f"/api/v1/members/{fake_member_id}",
+            headers=auth_headers,
+        )
+    finally:
+        container.members_billing_detail_service.reset_override()
+
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "inactive"
-    assert body["class_streak_weeks"] == 0
-    assert body["redeemed_rewards"] == []
-    assert body["current_rank"] is None
+    assert body["retention"]["class_streak_weeks"] == 0
+    assert body["recently_redeemed_rewards"] == []
+    assert body["rank"] is None
 
 
 def test_member_detail_hydrates_nested_rank(
-    client, db_pool_mock, auth_headers, fake_member_id, fake_gym_id, fake_rank_id
+    client, auth_headers, fake_member_id, fake_gym_id, fake_rank_id
 ):
-    """GET /api/v1/members/{id} returns a populated current_rank
-    when the member has one assigned."""
-    detail_row = {
-        "member_id": fake_member_id,
-        "gym_id": fake_gym_id,
-        "first_name": "Ada",
-        "last_name": "Lovelace",
-        "email": "ada@example.com",
-        "points_balance": 100,
-        "last_class": None,
-        "trial_start_date": None,
-        "trial_end_date": None,
-        "fully_active_start_date": None,
-        "inactive_start_date": None,
-        "created_at": "2026-04-01T00:00:00Z",
-        "status": "active",
-        "last_class_days_ago": 1,
-        "rank_rank_id": fake_rank_id,
-        "rank_main_name": "Purple",
-        "rank_sub_name": "1 stripe",
-        "rank_color": "#8957E5",
-        "rank_image_url": None,
-        "rank_main_rank_num_order": 2,
-        "rank_sub_rank_num_order": 1,
-    }
-
-    detail_result = MagicMock()
-    detail_result.mappings.return_value.fetchone.return_value = detail_row
-    redemption_result = MagicMock()
-    redemption_result.mappings.return_value.all.return_value = []
-    streak_result = MagicMock()
-    streak_result.all.return_value = []
-
-    session = db_pool_mock.session.return_value
-    session.execute = AsyncMock(
-        side_effect=[detail_result, redemption_result, streak_result],
+    """GET /api/v1/members/{id} returns detail even with a rank present."""
+    mock_response = MemberBillingDetailResponse(
+        member_id=fake_member_id,
+        gym_id=fake_gym_id,
+        first_name="Ada",
+        last_name="Lovelace",
+        membership_overview="Active",
+        total_monthly_recurring_price=0,
+        total_membership_count=0,
+        personal_info=BillingPersonalInfo(),
+        linked_accounts=[],
+        memberships=[],
+        retention=BillingRetention(
+            class_streak_weeks=2,
+            points_balance=500,
+            videos_watched=10,
+        ),
+        recently_redeemed_rewards=[],
+        payment_history=[],
     )
 
-    response = client.get(
-        f"/api/v1/members/{fake_member_id}",
-        headers=auth_headers,
-    )
+    mock_service = MagicMock()
+    mock_service.get_member_billing_detail = AsyncMock(return_value=mock_response)
+
+    container = client.app.container
+    container.members_billing_detail_service.override(mock_service)
+    try:
+        response = client.get(
+            f"/api/v1/members/{fake_member_id}",
+            headers=auth_headers,
+        )
+    finally:
+        container.members_billing_detail_service.reset_override()
+
     assert response.status_code == 200
     body = response.json()
-    rank = body["current_rank"]
-    assert rank is not None
-    assert rank["rank_id"] == fake_rank_id
-    assert rank["main_name"] == "Purple"
-    assert rank["color"] == "#8957E5"
+    assert body["retention"]["class_streak_weeks"] == 2
+    assert body["member_id"] == fake_member_id

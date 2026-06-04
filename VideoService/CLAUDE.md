@@ -217,7 +217,8 @@ for the full runbook (ARNs, DNS, redeploy, pause/resume).
   `DATABASE_URL`** at runtime (App Runner service env); a raw `postgresql://`
   Supabase URL is accepted (normalised to asyncpg by `src/shared/database.py`).
 - `make docker-build` / `make ecr-push` build + push + trigger a redeploy;
-  `make pause` / `make resume` toggle the demo.
+  `make pause` / `make resume` stop / start the deployed App Runner service
+  (a cost toggle for the live instance).
 - The pipeline scripts stay local and pick their DB via **`ENV_FILE`** (default
   `.env`; `ENV_FILE=.env.prod` → prod). Prod helpers: `make sync-gyms-prod
   GYM_ID=all`, `make import-yaml-prod`. Keep prod secrets in `.env.prod`

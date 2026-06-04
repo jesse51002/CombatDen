@@ -7,6 +7,11 @@ CREATE TABLE gyms (
     timezone TEXT NOT NULL DEFAULT 'America/Chicago'
         CONSTRAINT gyms_timezone_valid CHECK (now() AT TIME ZONE timezone IS NOT NULL),
     is_rank_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Stripe Connect onboarding state (service_role-only writes; see access_rules/gyms.sql)
+    stripe_account_id TEXT UNIQUE,
+    stripe_onboarding_status TEXT NOT NULL DEFAULT 'not_started'
+        CONSTRAINT gyms_stripe_onboarding_status_valid
+        CHECK (stripe_onboarding_status IN ('not_started', 'pending', 'complete')),
     PRIMARY KEY (gym_id)
 );
 

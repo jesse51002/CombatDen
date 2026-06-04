@@ -25,13 +25,13 @@ class ThemeApiClient {
   /// Override at launch with `--dart-define=CUST_BASE_URL=<url>`.
   ///
   /// Default is `localhost`, used together with an adb reverse tunnel
-  /// (`adb reverse tcp:8000 tcp:8000`) so the device reaches the host's
+  /// (`adb reverse tcp:8001 tcp:8001`) so the device reaches the host's
   /// server over the USB cable — Wi‑Fi-independent (no LAN IP, no AP
   /// isolation). The tunnel must be re-set after unplugging/reboot.
-  /// Without adb reverse, pass `--dart-define=CUST_BASE_URL=http://<host-LAN-IP>:8000`.
+  /// Without adb reverse, pass `--dart-define=CUST_BASE_URL=http://<host-LAN-IP>:8001`.
   static const String _baseUrl = String.fromEnvironment(
     'CUST_BASE_URL',
-    defaultValue: 'http://localhost:8000',
+    defaultValue: 'http://localhost:8001',
   );
 
   ThemeApiClient({

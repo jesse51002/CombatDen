@@ -1,6 +1,7 @@
 import enum
 import logging
 import sys
+from typing import Final
 
 from pydantic_settings import BaseSettings
 
@@ -21,6 +22,16 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
 
+    # Stripe
+    stripe_secret_key: str
+    stripe_webhook_secret: str
+    stripe_connect_webhook_secret: str
+
+    # Stripe Connect Express onboarding
+    stripe_connect_refresh_url: str
+    stripe_connect_return_url: str
+    stripe_connect_express_country: str = "US"
+
     # Database (direct Postgres connection)
     database_url: str
     db_pool_size: int = 10
@@ -30,12 +41,24 @@ class Settings(BaseSettings):
     # App
     app_env: AppEnv = AppEnv.DEV
     app_debug: bool = False
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8080"]
+    cors_origins: list[str] = [
+        "http://localhost:8081",  # CRM admin (flutter web :8081)
+        "http://localhost:8082",  # CRM theme-browser target
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "https://app.combatden.net",
+        "https://themes.combatden.net",
+    ]
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     # Logging Configuration
     log_level: str = "DEBUG"
+
+
+# Billing cycle anchor constants
+MONTHLY_BILLING_ANCHOR_DAY: Final[int] = 1  # 1st of month
+WEEKLY_BILLING_ANCHOR_WEEKDAY: Final[int] = 6  # Sunday (Python weekday: Mon=0, Sun=6)
 
 
 settings = Settings()

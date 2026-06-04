@@ -11,6 +11,11 @@ When working through a skill (or a reference doc / `SKILL.md` it loads) you real
 
 Every CLAUDE.md in this repo is a living document — exactly like a skill, it must track reality. Whenever code genuinely diverges from what a CLAUDE.md says (a new live backend call, a renamed system, an added dependency, a rule the code has outgrown on purpose, an architecture change), **update that CLAUDE.md in the same change** so the doc and the code never drift apart. Never leave one stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
 
+## System map — keep README.md and architecture.mermaid current
+- The root `README.md` holds the **high-level** system graph (the systems and how they connect); `architecture.mermaid` holds the **full detailed** graph (every system's inner nodes, the ThemeService/VideoService API-vs-creation split, and the skills/scripts that operate each engine).
+- Both are living documents. Whenever the architecture changes — a new system, a new or removed cross-system dependency, a renamed service, a new external service, an API/creation change, a new skill or script on an engine — **update both the README high-level graph and `architecture.mermaid` in the same change** so neither drifts from reality.
+- Author/edit both graphs with the `mermaid-creation` skill and follow its rules (top-down `TB`, sibling-only edges, the fixed color palette, render + `check_siblings.py` validation). Don't hand-edit a graph in a way that breaks those rules.
+
 ## No inline prompts or SQL
 - Never inline an LLM/agent prompt in code. Every prompt lives in its own `.md` file and is read at use; code may hold the path, never the prompt text.
 - Never inline SQL in code. Every query lives in its own `.sql` file and is read at use.
