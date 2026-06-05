@@ -6,7 +6,6 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_discount_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant_banner.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant_step.dart';
@@ -25,7 +24,6 @@ class StartMembershipStepBody extends StatelessWidget {
   final MemberRepository repository;
   final StartMembershipParticipant participant;
   final MembershipPlanResponse? plan;
-  final Set<String> discountIds;
   final bool prorate;
   final bool paidWithCash;
   final MemberMembershipsStartRequest? request;
@@ -36,8 +34,6 @@ class StartMembershipStepBody extends StatelessWidget {
   final ValueChanged<StartMembershipParticipant>
       onParticipantSelected;
   final ValueChanged<MembershipPlanResponse> onPlanSelected;
-  final void Function(String id, bool selected)
-      onToggleDiscount;
   final ValueChanged<bool> onProrateChanged;
   final ValueChanged<bool> onPaidWithCashChanged;
 
@@ -48,7 +44,6 @@ class StartMembershipStepBody extends StatelessWidget {
     required this.repository,
     required this.participant,
     required this.plan,
-    required this.discountIds,
     required this.prorate,
     required this.paidWithCash,
     required this.request,
@@ -58,7 +53,6 @@ class StartMembershipStepBody extends StatelessWidget {
     required this.showParticipantStep,
     required this.onParticipantSelected,
     required this.onPlanSelected,
-    required this.onToggleDiscount,
     required this.onProrateChanged,
     required this.onPaidWithCashChanged,
   });
@@ -94,13 +88,6 @@ class StartMembershipStepBody extends StatelessWidget {
               warningPlanReasons: warningPlanReasons,
               participantHasActiveOneTime:
                   participantHasActiveOneTime,
-            ),
-          StartMembershipStep.discounts =>
-            StartMembershipDiscountStep(
-              repository: repository,
-              gymId: member.gymId,
-              selected: discountIds,
-              onToggle: onToggleDiscount,
             ),
           StartMembershipStep.review =>
             StartMembershipReviewStep(

@@ -15,12 +15,12 @@ read/write REST API over the shared Supabase Postgres, authenticated with Supaba
 ```mermaid
 flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
-  FB["⚙️ FastApiBackend — CRM / billing API<br/>9 domains · 62 routes<br/>members · gyms · classes · ranks · rewards<br/>discounts · member_memberships · membership_plans · stripe_webhooks"]
+  FB["⚙️ FastApiBackend — CRM / billing API<br/>10 domains · 71 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · member_memberships · membership_plans · stripe_webhooks"]
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)"]
   Stripe["Stripe — payments · Connect · webhooks"]
   CRM -->|"authenticated REST · WIP"| FB
   FB -->|"read/write · Supabase JWT"| Supabase
-  FB -->|"payments · Connect"| Stripe
+  FB -->|"payments · Connect · coupons computed at sync"| Stripe
   Stripe -.->|"webhooks"| FB
   classDef client fill:#eaf2ff,stroke:#2f6fb0,color:#0b2942;
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
@@ -36,9 +36,19 @@ The CRM calls this API; it reads/writes the shared **Supabase** Postgres (auth v
 talks to **Stripe** for payments, Connect onboarding, and inbound webhooks. Dashed = WIP / inbound.
 
 **For the full internal graph** — every route, the service classes, the grouped **Payments** Stripe
-core, and the cross-cutting **`MembershipPaymentSyncService`** (called by four domains) — see
+core, and the cross-cutting **`MembershipPaymentSyncService`** (called by three domains; computes each
+membership's discount coupons at sync from its frozen applied-discount snapshots) — see
 **[`architecture.mermaid`](architecture.mermaid)** (generated from the DI wiring; render it with the
 `mermaid-creation` skill).
+
+**For the payment-sync engine in depth** — the step-by-step orchestration flow of
+`update_payments_recurring` (re-derive desired state → freeze → compute + attach coupons → execute →
+write back), plus the `preview` / `bulk` / deferred-reconciler branches — see
+**[`payment_sync.mermaid`](payment_sync.mermaid)**. The sync steps are grouped in one box with
+**Supabase** + **Stripe** as outside actors and box-level edges (same convention as
+`architecture.mermaid`). Green = the engine's steps / entry points, orange = the external actors;
+solid = a live runtime call, dashed = future / shared-code. Deep engine knowledge lives in the
+`sync-guide` skill.
 
 ---
 
@@ -57,12 +67,13 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 | Domain | What it does |
 |---|---|
 | `members` | Member records + management + billing detail (profile, card, Stripe customer, invoices, linking) |
-| `classes` | Class check-in + attendance streaks |
+| `classes` | Gated class check-in (plan eligibility + capacity + auto-end) + attendance streaks + per-cycle class usage (feeds member billing detail) |
 | `gyms` | Gym records + Stripe **Connect** Express onboarding |
 | `ranks` | Rank tiers / point thresholds + presets |
 | `rewards` | Reward catalog + redemptions |
-| `discounts` | Discount codes (Stripe coupons) |
-| `member_memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price/discount changes, previews, cash/card charge |
+| `waivers` | Versioned waiver documents (plain gym config) + read-only e-sign signature tracking (per-waiver roster + per-member status) |
+| `discounts` | Coupon-free discount presets (plain gym config; coupons computed at sync, not on the preset) |
+| `member_memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount snapshots; coupons computed + written back at sync), previews, cash/card charge |
 | `membership_plans` | Plan + price templates (Stripe products / prices) + migration |
 | `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB |
 | `payments` *(no router)* | Stripe service core (client, payment, price, members, membership, subscription, discount) injected into the billing domains |

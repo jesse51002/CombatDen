@@ -18,6 +18,9 @@ from src.members.schema.members_crm_members_list_schema import (
 from src.members.service.crm_member_services.members_crm_base_service import (
     CrmBaseViewService,
 )
+from src.members.service.members_status_mapping import (
+    is_membership_overdue,
+)
 from src.shared.formatters import format_price
 from src.shared.sql_loader import load_sql
 
@@ -118,7 +121,7 @@ class CrmAllViewService(CrmBaseViewService):
         if status is None:
             return PRIORITY_LOWEST
 
-        if status != CrmMemberStatus.cancelled and next_due and next_due < today:
+        if is_membership_overdue(status, next_due, today):
             return 1
 
         if status == CrmMemberStatus.active and plan_type != PlanType.trial:
@@ -159,7 +162,7 @@ class CrmAllViewService(CrmBaseViewService):
         status = CrmMemberStatus(row["status"])
         next_due = row.get("next_due_date")
 
-        if status != CrmMemberStatus.cancelled and next_due and next_due < today:
+        if is_membership_overdue(status, next_due, today):
             status = CrmMemberStatus.overdue
         elif row.get("plan_type") == PlanType.trial:
             status = CrmMemberStatus.trial

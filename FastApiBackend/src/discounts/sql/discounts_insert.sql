@@ -1,26 +1,15 @@
+-- Insert a discount IDENTITY row (name + type). The percent/dollar + lifetime
+-- live on gym_discount_values; the create service inserts the first active
+-- version right after this, in the same transaction.
 INSERT INTO gym_discounts_unfiltered (
     gym_id,
     discount_name,
     discount_type,
-    percentage_off,
-    dollar_off,
-    membership_plan_id,
-    linked_discount_num,
-    duration,
-    duration_in_months,
-    is_deleted,
-    stripe_coupon_id
+    is_deleted
 ) VALUES (
     :gym_id,
     :discount_name,
     :discount_type,
-    :percentage_off,
-    :dollar_off,
-    :membership_plan_id,
-    :linked_discount_num,
-    :duration,
-    :duration_in_months,
-    false,
-    :stripe_coupon_id
+    false
 )
-RETURNING *
+RETURNING discount_id, gym_id, discount_name, discount_type, is_deleted, created_at

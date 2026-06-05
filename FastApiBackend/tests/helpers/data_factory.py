@@ -39,7 +39,7 @@ class TestPlan:
 @dataclass(frozen=True)
 class TestDiscount:
     discount_id: UUID
-    stripe_coupon_id: str
+    value_id: UUID
 
 
 # ── Payment method ──────────────────────────────────────────────
@@ -294,86 +294,76 @@ async def create_plan(
 
 async def create_discount(
     db_pool: DirectDatabasePool,
-    stripe_client: PaymentsStripeClient,
     gym_id: UUID,
-    connect_opts: stripe.RequestOptions,
     *,
     name: str = "Test Discount",
     percentage_off: float | None = 10,
     dollar_off: int | None = None,
-    duration: str = "forever",
-    duration_in_months: int | None = None,
+    discount_mode: str = "ongoing",
+    duration_amount: int | None = None,
+    duration_unit: str | None = None,
+    end_date: str | None = None,
 ) -> TestDiscount:
-    """Create a discount with Stripe coupon (DB-first).
+    """Create a coupon-free discount preset (identity + first active version).
 
-    1. INSERT discount (stripe_coupon_id = NULL)
-    2. Create Stripe coupon
-    3. UPDATE discount with stripe_coupon_id
+    Mirrors the production create path (``DiscountsCreate``): two inserts in one
+    transaction — the IDENTITY row (``gym_discounts``: name + type) and its first
+    ACTIVE value version (``gym_discount_values``: percent/dollar + lifetime).
+    No Stripe coupon is pre-baked — the sync computes each consolidated line's
+    coupon and writes the resolved id back onto the applied snapshot. The
+    lifetime spec is ``discount_mode`` (once/ongoing) plus either a duration span
+    (duration_amount + duration_unit) or an explicit end_date — never both;
+    ``discount_mode`` defaults to ``ongoing`` with no end (forever). Applied
+    snapshots reference the returned ``value_id``.
     """
     discount_type = "preset"
 
-    # Step 1: Insert pending discount row
-    insert_sql = """
+    identity_sql = """
         INSERT INTO gym_discounts_unfiltered (
-            gym_id, discount_name, discount_type,
-            percentage_off, dollar_off,
-            duration, duration_in_months, is_deleted
+            gym_id, discount_name, discount_type, is_deleted
         ) VALUES (
-            :gym_id, :discount_name, :discount_type,
-            :percentage_off, :dollar_off,
-            :duration, :duration_in_months, false
+            :gym_id, :discount_name, :discount_type, false
         )
         RETURNING discount_id
     """
+    value_sql = """
+        INSERT INTO gym_discount_values_unfiltered (
+            discount_id, gym_id,
+            percentage_off, dollar_off,
+            discount_mode, duration_amount, duration_unit, end_date,
+            is_active
+        ) VALUES (
+            :discount_id, :gym_id,
+            :percentage_off, :dollar_off,
+            :discount_mode, :duration_amount, :duration_unit, :end_date,
+            true
+        )
+        RETURNING value_id
+    """
     async with db_pool.session() as session:
-        result = await session.execute(
-            text(insert_sql),
+        identity = await session.execute(
+            text(identity_sql),
             {
                 "gym_id": str(gym_id),
                 "discount_name": name,
                 "discount_type": discount_type,
-                "percentage_off": percentage_off,
-                "dollar_off": dollar_off,
-                "duration": duration,
-                "duration_in_months": duration_in_months,
             },
         )
-        row = result.mappings().fetchone()
-        await session.commit()
-    discount_id = UUID(str(row["discount_id"]))
-
-    # Step 2: Create Stripe coupon
-    coupon_params: dict = {
-        "name": name,
-        "duration": duration,
-        "metadata": {"crm_pk": str(discount_id)},
-    }
-    if percentage_off is not None:
-        coupon_params["percent_off"] = percentage_off
-    if dollar_off is not None:
-        coupon_params["amount_off"] = dollar_off
-        coupon_params["currency"] = "usd"
-    if duration_in_months is not None:
-        coupon_params["duration_in_months"] = duration_in_months
-
-    coupon = await stripe_client.client.v1.coupons.create_async(
-        params=coupon_params,
-        options=connect_opts,
-    )
-
-    # Step 3: Update discount with stripe_coupon_id
-    async with db_pool.session() as session:
-        await session.execute(
-            text(
-                "UPDATE gym_discounts_unfiltered "
-                "SET stripe_coupon_id = :stripe_coupon_id "
-                "WHERE discount_id = :discount_id"
-            ),
-            {"stripe_coupon_id": coupon.id, "discount_id": str(discount_id)},
+        discount_id = UUID(str(identity.mappings().one()["discount_id"]))
+        value = await session.execute(
+            text(value_sql),
+            {
+                "discount_id": str(discount_id),
+                "gym_id": str(gym_id),
+                "percentage_off": percentage_off,
+                "dollar_off": dollar_off,
+                "discount_mode": discount_mode,
+                "duration_amount": duration_amount,
+                "duration_unit": duration_unit,
+                "end_date": end_date,
+            },
         )
+        value_id = UUID(str(value.mappings().one()["value_id"]))
         await session.commit()
 
-    return TestDiscount(
-        discount_id=discount_id,
-        stripe_coupon_id=coupon.id,
-    )
+    return TestDiscount(discount_id=discount_id, value_id=value_id)

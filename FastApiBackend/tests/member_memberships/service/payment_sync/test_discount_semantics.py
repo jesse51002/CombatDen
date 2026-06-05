@@ -30,7 +30,10 @@ from tests.helpers.data_factory import (
     create_payment_method,
     create_plan,
 )
-from tests.helpers.db_reads import get_profile_stripe_ids
+from tests.helpers.db_reads import (
+    get_active_membership_item_id,
+    get_profile_stripe_ids,
+)
 
 
 async def _fetch_total_price(db_pool, member_id: UUID, plan_id: UUID) -> int:
@@ -85,11 +88,10 @@ async def test_line_amount_vs_subtotal_with_discount(
     )
     discount = await create_discount(
         db_pool,
-        stripe_client,
         gym_id,
-        connect_opts,
         name="Sem 10% Off",
         percentage_off=10.0,
+        discount_mode="ongoing",
     )
 
     try:
@@ -99,7 +101,14 @@ async def test_line_amount_vs_subtotal_with_discount(
             plan_id=plan.plan_id,
             price_id=plan.price_id,
             idempotency_key=uuid4(),
-            discount_ids=[discount.discount_id],
+        )
+        item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
+        await memberships_service.apply_discounts(
+            item_id=item_id,
+            member_id=member.member_id,
+            add_preset_ids=[discount.discount_id],
+            remove_applied_ids=[],
+            idempotency_key=uuid4(),
         )
 
         profile = await get_profile_stripe_ids(

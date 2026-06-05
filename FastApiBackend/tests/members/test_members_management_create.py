@@ -10,7 +10,6 @@ from sqlalchemy import text
 
 from src.members.schema.members_schema import MemberCreateRequest
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import create_payment_method
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
     snapshot_billing_state,
@@ -23,6 +22,7 @@ async def test_create_member_without_card(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     resp = await management_service.create_member(
         MemberCreateRequest(
@@ -31,6 +31,7 @@ async def test_create_member_without_card(
             last_name="NoCard",
         ),
     )
+    created.track_customer(resp.stripe_customer_id)
 
     try:
         assert resp.member_id is not None
@@ -77,8 +78,9 @@ async def test_create_member_with_card(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
+    pm_id = await created.payment_method()
 
     resp = await management_service.create_member(
         MemberCreateRequest(
@@ -88,6 +90,7 @@ async def test_create_member_with_card(
             payment_method_id=pm_id,
         ),
     )
+    created.track_customer(resp.stripe_customer_id)
 
     try:
         assert resp.stripe_customer_id is not None

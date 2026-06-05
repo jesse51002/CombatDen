@@ -12,12 +12,6 @@ import pytest
 from sqlalchemy import text
 
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_discount,
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
     assert_immediate_prorated_invoice,
@@ -50,6 +44,7 @@ async def test_start_recurring_membership(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Starting a recurring membership with the default ``prorate=True``
     must cut an immediate prorated invoice and auto-charge it — not
@@ -58,15 +53,9 @@ async def test_start_recurring_membership(
     Regression guard for the "membership starts but nothing gets
     billed until next month" bug.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         before = await snapshot_billing_state(
@@ -137,20 +126,12 @@ async def test_start_one_time_membership(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
         gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         plan_type="one_time",
         plan_name="One-Time Test",
         price_cents=3000,
@@ -203,21 +184,13 @@ async def test_start_zero_dollar_one_time_membership(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Regression: $0 one-time plans must not crash on pay_async."""
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
         gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         plan_type="one_time",
         plan_name="Free Trial Test",
         price_cents=0,
@@ -268,21 +241,13 @@ async def test_start_zero_dollar_recurring_membership(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Regression: $0 recurring plans must start cleanly as free subscriptions."""
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
         gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         plan_type="recurring",
         plan_name="Free Recurring Test",
         price_cents=0,
@@ -356,15 +321,10 @@ async def test_start_validates_plan_price(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
 
     try:
         # Failed validation must not touch Stripe billing at all.
@@ -398,16 +358,11 @@ async def test_start_duplicate_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -450,6 +405,7 @@ async def test_start_two_different_recurring_plans(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """A member can hold multiple recurring memberships at the same
     gym as long as each is on a distinct plan. Regression guard for
@@ -457,28 +413,10 @@ async def test_start_two_different_recurring_plans(
     that used to block any second recurring start, even on a
     different plan.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan_a = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        plan_name="Recurring A",
-    )
-    plan_b = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        plan_name="Recurring B",
-    )
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan_a = await created.plan(gym_id, plan_name="Recurring A")
+    plan_b = await created.plan(gym_id, plan_name="Recurring B")
 
     try:
         await memberships_service.start(
@@ -499,8 +437,7 @@ async def test_start_two_different_recurring_plans(
         async with db_pool.session() as session:
             result = await session.execute(
                 text(
-                    "SELECT plan_id, stripe_item_id FROM member_memberships "
-                    "WHERE member_id = :id"
+                    "SELECT plan_id, stripe_item_id FROM member_memberships WHERE member_id = :id"
                 ),
                 {"id": str(member.member_id)},
             )
@@ -518,135 +455,22 @@ async def test_start_two_different_recurring_plans(
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_start_with_discount(
-    memberships_service,
-    db_pool,
-    gym_id,
-    stripe_client,
-    connect_opts,
-):
-    """``start_membership(discount_ids=[...])`` must attach the real
-    Stripe coupon to the new subscription item on its very first
-    sync — no follow-up settle call required.
-
-    Regression guard for two bugs:
-
-    1. The 502 "Coupon <uuid> not found" bug, where
-       ``aggregate_plan_discounts`` would pass CRM discount UUIDs
-       straight to Stripe if they weren't first resolved to real
-       coupon IDs.
-    2. The "first sync can't see its own row" bug (Bug 2 in
-       ``docs/mid_cycle_test_bugs_and_followups.md``), where the
-       pending row was invisible to the filtered view during its
-       own sync and the coupon only attached on a later no-op
-       sync. Production callers don't make that second sync, so
-       the test must not either.
-    """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
-    discount = await create_discount(db_pool, stripe_client, gym_id, connect_opts)
-
-    try:
-        before = await snapshot_billing_state(
-            stripe_client,
-            member.stripe_customer_id,
-            connect_opts,
-        )
-
-        await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
-            discount_ids=[discount.discount_id],
-        )
-
-        async with db_pool.session() as session:
-            mm_row = (
-                (
-                    await session.execute(
-                        text(
-                            "SELECT discount_ids FROM member_memberships "
-                            "WHERE member_id = :id AND plan_id = :plan_id"
-                        ),
-                        {"id": str(member.member_id), "plan_id": str(plan.plan_id)},
-                    )
-                )
-                .mappings()
-                .fetchone()
-            )
-
-        assert mm_row is not None
-        assert mm_row["discount_ids"] is not None
-
-        profile = await get_profile_stripe_ids(
-            db_pool,
-            member.member_id,
-            gym_id,
-        )
-        assert profile.stripe_sub_id_month is not None, (
-            "Member profile should have a Stripe subscription after start"
-        )
-
-        # Stripe must have received the real stripe_coupon_id on
-        # the discounted plan's subscription item — not the CRM
-        # UUID — on the first pass from ``start`` alone.
-        sub = await fetch_subscription(
-            stripe_client,
-            profile.stripe_sub_id_month,
-            connect_opts,
-            expand=(
-                "items.data.price",
-                "items.data.discounts.coupon",
-            ),
-        )
-        assert_subscription_item_price(sub, plan.stripe_price_id)
-        assert_item_discounts(sub, {discount.stripe_coupon_id})
-
-        # The discount must apply to the immediate prorated invoice
-        # — not just get set on the subscription for a future
-        # invoice that never fires.
-        await assert_immediate_prorated_invoice(
-            stripe_client,
-            before,
-            connect_opts,
-            subscription_id=sub.id,
-            min_amount=0,
-            max_amount=plan.price_cents,
-        )
-    finally:
-        await delete_member_data(db_pool, member.member_id)
-
-
 async def test_start_recurring_prorate_false_no_immediate_invoice(
     memberships_service,
     db_pool,
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """``prorate=False`` must NOT generate an invoice at start time —
     the subscription starts and waits for the next anchor-date
     billing cycle. The start→anchor window is effectively free to
     the member.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         before = await snapshot_billing_state(
@@ -695,6 +519,7 @@ async def test_start_recurring_cash_prorate_true_pays_out_of_band(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Cash + ``prorate=True`` must cut the immediate prorated
     invoice and mark it paid out of band (not auto-charge the
@@ -702,15 +527,9 @@ async def test_start_recurring_cash_prorate_true_pays_out_of_band(
     tag so the downstream ``invoice.paid`` webhook can record the
     payment method as cash.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         before = await snapshot_billing_state(
@@ -766,6 +585,7 @@ async def test_start_recurring_cash_prorate_false_no_invoice(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Cash + ``prorate=False`` must behave the same as card +
     ``prorate=False``: no immediate invoice, sub active, next bill
@@ -773,15 +593,9 @@ async def test_start_recurring_cash_prorate_false_no_invoice(
     not supposed to force an immediate charge when the caller said
     "don't prorate."
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         before = await snapshot_billing_state(

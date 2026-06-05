@@ -91,6 +91,32 @@ async def get_active_membership_item_id(
     return rows[0]["item_id"]
 
 
+async def get_applied_snapshots(
+    db_pool: DirectDatabasePool,
+    item_id: UUID,
+) -> list[dict]:
+    """Return the frozen applied-discount snapshot rows for a membership.
+
+    Reads the UNFILTERED base table (not the stripe-gated view) so a
+    just-applied snapshot is visible before the sync writes its coupon back.
+    Ordered by created_at for stable assertions.
+    """
+    sql = (
+        "SELECT ad.applied_discount_id, ad.item_id, ad.member_id, ad.gym_id, "
+        "ad.value_id, d.discount_id, d.discount_name, d.discount_type, "
+        "v.percentage_off, v.dollar_off, v.discount_mode, "
+        "ad.end_date, ad.stripe_coupon_id "
+        "FROM member_membership_applied_discounts_unfiltered ad "
+        "JOIN gym_discount_values_unfiltered v ON ad.value_id = v.value_id "
+        "JOIN gym_discounts_unfiltered d ON v.discount_id = d.discount_id "
+        "WHERE ad.item_id = :item_id "
+        "ORDER BY ad.created_at"
+    )
+    async with db_pool.session() as session:
+        result = await session.execute(text(sql), {"item_id": str(item_id)})
+        return [dict(r) for r in result.mappings().fetchall()]
+
+
 async def get_membership_stripe_price_id(
     db_pool: DirectDatabasePool,
     item_id: UUID,

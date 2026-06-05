@@ -26,4 +26,16 @@ MembershipPlanResponse _$MembershipPlanResponseFromJson(
       : MembershipPlanPriceResponse.fromJson(
           json['active_price'] as Map<String, dynamic>,
         ),
+  enrolledCount: (json['enrolled_count'] as num?)?.toInt() ?? 0,
+  waiverIds:
+      (json['waiver_ids'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      [],
+  linkedDiscountEnabled: json['linked_discount_enabled'] as bool? ?? false,
+  linkedDiscountPrices:
+      (json['linked_discount_prices'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList() ??
+      [],
 );

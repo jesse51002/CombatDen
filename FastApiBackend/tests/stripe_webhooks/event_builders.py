@@ -7,6 +7,7 @@ entirely — we're testing our dispatcher + SQL, not Stripe's API.
 
 import time
 import uuid
+from decimal import Decimal
 from typing import Any
 
 
@@ -44,6 +45,9 @@ def make_invoice_paid_event(
             "amount": amount_paid,
             "currency": currency,
             "period": {"start": now, "end": period_end},
+            # Stripe's ``Event.to_dict()`` yields ``Decimal`` here — the
+            # field that crashed the webhook before ``dump_stripe_payload``.
+            "pricing": {"unit_amount_decimal": Decimal(str(amount_paid))},
         }
         for i, si in enumerate(stripe_item_ids)
     ]
@@ -93,6 +97,9 @@ def make_invoice_payment_failed_event(
             "amount": amount_due,
             "currency": currency,
             "period": {"start": now, "end": now + 30 * 24 * 60 * 60},
+            # Stripe's ``Event.to_dict()`` yields ``Decimal`` here — the
+            # field that crashed the webhook before ``dump_stripe_payload``.
+            "pricing": {"unit_amount_decimal": Decimal(str(amount_due))},
         }
         for i, si in enumerate(stripe_item_ids)
     ]

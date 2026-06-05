@@ -1,5 +1,6 @@
 """Service for fetching full member billing detail data."""
 
+from datetime import date
 from uuid import UUID
 
 from schema.member_membership import MembershipDbStatus
@@ -7,6 +8,9 @@ from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
+from src.classes.service.classes_cycle_counts_service import (
+    ClassesCycleCountsService,
+)
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.members import SQL_DIR
 from src.members.schema.members_billing_schema import (
@@ -16,11 +20,20 @@ from src.members.schema.members_billing_schema import (
     BillingRetention,
     MemberBillingDetailResponse,
 )
+from src.members.schema.members_crm_members_list_schema import (
+    CrmMemberStatus,
+)
+from src.members.service.member_details.member_details_cycle_counts_bridge import (
+    MemberDetailsCycleCountsBridge,
+)
 from src.members.service.member_details.members_billing_grouper import (
     MembersBillingGrouper,
 )
 from src.members.service.member_details.members_billing_supplementary import (
     MembersBillingSupplementary,
+)
+from src.members.service.members_status_mapping import (
+    is_membership_overdue,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -37,17 +50,22 @@ class MembersBillingDetailService:
     Args:
         db_pool: Injected database connection pool.
         streak_service: Injected streak calculation service.
+        cycle_counts_service: Injected per-cycle class-usage service.
     """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
         streak_service: ClassesStreakService,
+        cycle_counts_service: ClassesCycleCountsService,
     ) -> None:
         self._db_pool = db_pool
         self._supplementary = MembersBillingSupplementary(db_pool)
         self._grouper = MembersBillingGrouper()
         self._streak_service = streak_service
+        self._cycle_counts_bridge = MemberDetailsCycleCountsBridge(
+            cycle_counts_service,
+        )
 
     async def get_member_billing_detail(
         self,
@@ -73,6 +91,7 @@ class MembersBillingDetailService:
         target_row = self._find_target_profile(rows, member_id)
         parent_row = self._find_parent_profile(rows, target_row)
         gym_id = target_row["gym_id"]
+        today = target_row["gym_today"]
 
         await self._supplementary.fetch_all(gym_id, member_id)
         streak_weeks = await self._streak_service.get_streak(member_id, gym_id)
@@ -80,10 +99,17 @@ class MembersBillingDetailService:
         family_ids = {row["member_id"] for row in rows}
         membership_rows = [r for r in rows if r["plan_id"] is not None]
 
+        usage_lookup = await self._cycle_counts_bridge.fetch_usage(
+            gym_id,
+            list(family_ids),
+        )
+
         all_grouped = self._grouper.group_by_plan(
             membership_rows,
             self._supplementary,
+            usage_lookup,
             member_id,
+            today,
         )
 
         linked_to_id = target_row["account_linked_to_id"]
@@ -92,9 +118,13 @@ class MembersBillingDetailService:
         else:
             grouped = all_grouped
 
-        has_trial, has_cancelled, has_frozen, paying_count = self._scan_membership_flags(
-            membership_rows
-        )
+        (
+            has_trial,
+            has_cancelled,
+            has_frozen,
+            has_overdue,
+            paying_count,
+        ) = self._scan_membership_flags(membership_rows, today)
         monthly_total = parent_row["total_monthly_recurring_price"] or 0
 
         overview, linked_to_account = self._grouper.build_membership_overview(
@@ -103,6 +133,7 @@ class MembersBillingDetailService:
             has_trial,
             has_cancelled,
             has_frozen,
+            has_overdue,
             paying_count,
             self._supplementary,
         )
@@ -124,6 +155,7 @@ class MembersBillingDetailService:
             linked_accounts=linked_accounts,
             streak_weeks=streak_weeks,
             total_monthly_recurring_price=(parent_row["total_monthly_recurring_price"]),
+            today=today,
         )
 
     async def _fetch_family_rows(
@@ -158,6 +190,7 @@ class MembersBillingDetailService:
         linked_accounts: list,
         streak_weeks: int,
         total_monthly_recurring_price: int,
+        today: date,
     ) -> MemberBillingDetailResponse:
         """Assemble the final MemberBillingDetailResponse."""
         return MemberBillingDetailResponse(
@@ -166,7 +199,11 @@ class MembersBillingDetailService:
             first_name=target_row["first_name"],
             last_name=target_row["last_name"],
             photo_url=target_row["photo_url"],
-            account_status=self._derive_account_status(membership_rows, member_id),
+            account_status=self._derive_account_status(
+                membership_rows,
+                member_id,
+                today,
+            ),
             membership_overview=overview,
             linked_to_account=linked_to_account,
             total_monthly_recurring_price=total_monthly_recurring_price,
@@ -238,24 +275,31 @@ class MembersBillingDetailService:
     def _scan_membership_flags(
         self,
         membership_rows: list,
-    ) -> tuple[bool, bool, bool, int]:
+        today: date,
+    ) -> tuple[bool, bool, bool, bool, int]:
         """Scan membership rows for status flags.
 
         Args:
             membership_rows: All membership rows in the family.
+            today: The gym's local current date, used to derive overdue.
 
         Returns:
-            Tuple of (has_trial, has_cancelled, has_frozen, paying_count).
-            paying_count only includes active recurring memberships.
+            Tuple of (has_trial, has_cancelled, has_frozen, has_overdue,
+            paying_count). paying_count only includes active recurring
+            memberships.
         """
         has_trial = False
         has_cancelled = False
         has_frozen = False
+        has_overdue = False
         paying_count = 0
 
         for row in membership_rows:
             row_status = row["membership_status"]
             plan_type = row["plan_type"]
+
+            if is_membership_overdue(row_status, row["next_due_date"], today):
+                has_overdue = True
 
             if row_status == MembershipDbStatus.frozen:
                 has_frozen = True
@@ -266,7 +310,7 @@ class MembersBillingDetailService:
             elif plan_type == PlanType.recurring and row_status == MembershipDbStatus.active:
                 paying_count += 1
 
-        return has_trial, has_cancelled, has_frozen, paying_count
+        return has_trial, has_cancelled, has_frozen, has_overdue, paying_count
 
     def _build_card_on_file(self, parent_row: dict) -> BillingCardOnFile | None:
         """Build the BillingCardOnFile for the paying account.
@@ -314,17 +358,29 @@ class MembersBillingDetailService:
         self,
         membership_rows: list,
         member_id: UUID,
+        today: date,
     ) -> str | None:
         """Derive the account status from the user's memberships.
+
+        Returns ``overdue`` when the user's first membership is past due
+        (matching the members-list derivation); otherwise the raw DB
+        status.
 
         Args:
             membership_rows: All membership rows in the family.
             member_id: The queried user's ID.
+            today: The gym's local current date, used to derive overdue.
 
         Returns:
             The status of the user's first membership, or None.
         """
         for row in membership_rows:
             if row["member_id"] == member_id:
+                if is_membership_overdue(
+                    row["membership_status"],
+                    row["next_due_date"],
+                    today,
+                ):
+                    return CrmMemberStatus.overdue
                 return row["membership_status"]
         return None

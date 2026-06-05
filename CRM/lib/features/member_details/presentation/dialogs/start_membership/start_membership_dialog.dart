@@ -22,12 +22,13 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 /// Multi-step flow for starting a new membership:
 /// 0. (linked accounts only) pick the participant,
 /// 1. pick a plan (its active price drives `price_id`),
-/// 2. optionally apply gym discounts,
-/// 3. review a live charge preview + toggle proration /
+/// 2. review a live charge preview + toggle proration /
 ///    cash, then confirm.
 ///
-/// Dispatches [StartMembershipRequested] with a fully
-/// populated [MemberMembershipsStartRequest].
+/// Memberships are created discount-free; discounts are
+/// applied afterward from the member's Manage Discounts
+/// dialog. Dispatches [StartMembershipRequested] with a
+/// fully populated [MemberMembershipsStartRequest].
 class StartMembershipDialog extends StatefulWidget {
   final MemberDetailResponse member;
 
@@ -62,7 +63,6 @@ class _StartMembershipDialogState
   late StartMembershipStep _step;
   late StartMembershipParticipant _participant;
   MembershipPlanResponse? _plan;
-  final Set<String> _discountIds = {};
   bool _prorate = true;
   bool _paidWithCash = false;
   final String _idempotencyKey = const Uuid().v4();
@@ -132,8 +132,6 @@ class _StartMembershipDialogState
       gymId: widget.member.gymId,
       planId: plan.planId,
       priceId: priceId,
-      discountIds:
-          _discountIds.isEmpty ? null : _discountIds.toList(),
       prorate: isRecurring ? _prorate : false,
       paidWithCash: _paidWithCash,
       idempotencyKey: _idempotencyKey,
@@ -146,8 +144,6 @@ class _StartMembershipDialogState
         StartMembershipStep.participant =>
           StartMembershipStep.plan,
         StartMembershipStep.plan =>
-          StartMembershipStep.discounts,
-        StartMembershipStep.discounts =>
           StartMembershipStep.review,
         StartMembershipStep.review =>
           StartMembershipStep.review,
@@ -161,10 +157,8 @@ class _StartMembershipDialogState
         StartMembershipStep.participant =>
           StartMembershipStep.participant,
         StartMembershipStep.plan => _firstStep,
-        StartMembershipStep.discounts =>
-          StartMembershipStep.plan,
         StartMembershipStep.review =>
-          StartMembershipStep.discounts,
+          StartMembershipStep.plan,
       };
     });
   }
@@ -194,7 +188,6 @@ class _StartMembershipDialogState
       StartMembershipStep.participant => true,
       StartMembershipStep.plan =>
         _plan?.activePrice != null && !selectedBlocked,
-      StartMembershipStep.discounts => true,
       StartMembershipStep.review =>
         _buildRequest() != null && !selectedBlocked,
     };
@@ -209,7 +202,6 @@ class _StartMembershipDialogState
         repository: _repository,
         participant: _participant,
         plan: _plan,
-        discountIds: _discountIds,
         prorate: _prorate,
         paidWithCash: _paidWithCash,
         request: _buildRequest(),
@@ -220,13 +212,6 @@ class _StartMembershipDialogState
         onParticipantSelected: (p) =>
             setState(() => _participant = p),
         onPlanSelected: (p) => setState(() => _plan = p),
-        onToggleDiscount: (id, selected) => setState(() {
-          if (selected) {
-            _discountIds.add(id);
-          } else {
-            _discountIds.remove(id);
-          }
-        }),
         onProrateChanged: (v) =>
             setState(() => _prorate = v),
         onPaidWithCashChanged: (v) =>

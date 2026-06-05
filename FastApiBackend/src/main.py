@@ -20,6 +20,7 @@ from src.membership_plans.membership_plans_router import (
 from src.ranks.ranks_router import ranks_router
 from src.rewards.rewards_router import rewards_router
 from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
+from src.waivers.waivers_router import waivers_router
 
 
 @asynccontextmanager
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
     application.include_router(members_router)
     application.include_router(ranks_router)
     application.include_router(rewards_router)
+    application.include_router(waivers_router)
 
     # === CRM billing routers (restored) ===
     # The payments package is a pure service core (no router); it is

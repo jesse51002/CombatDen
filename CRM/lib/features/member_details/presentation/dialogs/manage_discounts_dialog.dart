@@ -1,39 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
+import 'package:crm/features/member_details/data/models/discount_info.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
+import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
-import 'package:crm/features/member_details/data/models/stripe_coupon_duration.dart';
+import 'package:crm/features/member_details/presentation/dialogs/manage_discounts_body.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
-import 'package:crm/shared/widgets/discount_grid.dart';
 
-/// Manages the full discount set on a membership: loads the
-/// gym's discounts, pre-selects the ones already applied, and
-/// dispatches [UpdateDiscountsRequested] with the complete
-/// replacement set (the merged endpoint replaces, not
-/// appends).
+/// Adds discounts to a membership: lists the gym's regular
+/// presets to add, shows the snapshots already applied to
+/// this member's line (frozen, removed from their own row in
+///
+/// Applying is add-only here: dispatches
+/// [ApplyDiscountsRequested] with the newly-selected preset
+/// ids. Removal happens
+/// per-snapshot from the section's table (never a
+/// replace-set).
 class ManageDiscountsDialog extends StatefulWidget {
-  final String gymId;
+  final MemberDetailResponse member;
   final MembershipInfo membership;
   final String coveredMemberId;
 
   const ManageDiscountsDialog({
     super.key,
-    required this.gymId,
+    required this.member,
     required this.membership,
     required this.coveredMemberId,
   });
 
   static Future<void> show({
     required BuildContext context,
-    required String gymId,
+    required MemberDetailResponse member,
     required MembershipInfo membership,
     required String coveredMemberId,
   }) {
@@ -45,7 +49,7 @@ class ManageDiscountsDialog extends StatefulWidget {
       builder: (_) => BlocProvider.value(
         value: context.read<MemberDetailBloc>(),
         child: ManageDiscountsDialog(
-          gymId: gymId,
+          member: member,
           membership: membership,
           coveredMemberId: coveredMemberId,
         ),
@@ -63,37 +67,43 @@ class _ManageDiscountsDialogState
   final MemberRepository _repository =
       MemberRepository(apiClient: ApiClient());
 
-  late Future<List<DiscountResponse>> _future;
-  final Set<String> _selected = {};
-  bool _seeded = false;
+  late Future<List<DiscountResponse>> _presets;
+  final Set<String> _toAdd = {};
 
   @override
   void initState() {
     super.initState();
-    _selected.addAll(
-      widget.membership.discounts.map((d) => d.discountId),
-    );
-    _seeded = true;
-    _future = _repository.listGymDiscounts(widget.gymId);
+    _presets =
+        _repository.listGymDiscounts(widget.member.gymId);
   }
 
-  String? _durationLabel(DiscountResponse d) {
-    switch (d.duration) {
-      case StripeCouponDuration.once:
-        return 'Once';
-      case StripeCouponDuration.forever:
-        return 'Forever';
-      case StripeCouponDuration.repeating:
-        final months = d.durationInMonths;
-        return months == null
-            ? 'Repeating'
-            : 'For $months months';
-      case StripeCouponDuration.unknown:
-        return null;
-    }
+  /// Snapshots already applied to this member's line — shown
+  /// read-only so staff don't double-add. Resolved by item.
+  List<DiscountInfo> get _applied {
+    final itemId =
+        widget.membership.itemIdFor(widget.coveredMemberId);
+    if (itemId == null) return const [];
+    return widget.membership.discounts
+        .where((d) => d.itemId == itemId)
+        .toList();
   }
+
+  Set<String> get _appliedSourceIds => _applied
+      .map((d) => d.discountId)
+      .whereType<String>()
+      .toSet();
 
   void _submit() {
+    if (_toAdd.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _dispatch(presetIds: _toAdd.toList());
+  }
+
+  void _dispatch({
+    List<String> presetIds = const [],
+  }) {
     final itemId =
         widget.membership.itemIdFor(widget.coveredMemberId);
     if (itemId == null) {
@@ -101,10 +111,10 @@ class _ManageDiscountsDialogState
       return;
     }
     context.read<MemberDetailBloc>().add(
-          UpdateDiscountsRequested(
+          ApplyDiscountsRequested(
             itemId: itemId,
             memberId: widget.coveredMemberId,
-            discountIds: _selected.toList(),
+            addPresetIds: presetIds,
           ),
         );
     Navigator.of(context).pop();
@@ -115,7 +125,7 @@ class _ManageDiscountsDialogState
     return AppDialog(
       title: 'Manage discounts',
       body: FutureBuilder<List<DiscountResponse>>(
-        future: _future,
+        future: _presets,
         builder: (context, snapshot) {
           if (snapshot.connectionState !=
               ConnectionState.done) {
@@ -124,75 +134,30 @@ class _ManageDiscountsDialogState
               child: Center(child: AppSpinner()),
             );
           }
-          if (snapshot.hasError) {
-            return _ErrorText(
-              message:
-                  'Couldn’t load discounts. Please try again.',
-            );
-          }
-          final discounts = snapshot.data ?? const [];
-          if (discounts.isEmpty) {
-            return _ErrorText(
-              message:
-                  'This gym has no discounts set up yet.',
-            );
-          }
-          // Keep already-applied ids that may no longer be in
-          // the gym list selected so a save doesn't silently
-          // drop them.
-          final knownIds =
-              discounts.map((d) => d.discountId).toSet();
-          if (_seeded) {
-            _selected.removeWhere(
-              (id) => !knownIds.contains(id),
-            );
-            _seeded = false;
-          }
-          final options = discounts
-              .map(
-                (d) => DiscountOption(
-                  id: d.discountId,
-                  name: d.discountName,
-                  valueLabel: d.displayLabel,
-                  durationLabel: _durationLabel(d),
-                ),
-              )
-              .toList();
-          return DiscountGrid(
-            discounts: options,
-            selectedIds: _selected,
-            onToggle: (d) => setState(() {
-              if (_selected.contains(d.id)) {
-                _selected.remove(d.id);
+          return ManageDiscountsBody(
+            presets: snapshot.hasError
+                ? const []
+                : (snapshot.data ?? const []),
+            loadFailed: snapshot.hasError,
+            appliedSourceIds: _appliedSourceIds,
+            appliedDiscounts: _applied,
+            selectedToAdd: _toAdd,
+            onToggle: (id) => setState(() {
+              if (_toAdd.contains(id)) {
+                _toAdd.remove(id);
               } else {
-                _selected.add(d.id);
+                _toAdd.add(id);
               }
             }),
           );
         },
       ),
       actions: AppDialogActions(
-        primaryLabel: 'Save discounts',
+        primaryLabel: 'Apply discounts',
         primaryOnPressed: _submit,
         secondaryLabel: 'Cancel',
         secondaryOnPressed: () =>
             Navigator.of(context).pop(),
-      ),
-    );
-  }
-}
-
-class _ErrorText extends StatelessWidget {
-  final String message;
-
-  const _ErrorText({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      message,
-      style: DesignConstants.p.copyWith(
-        color: DesignConstants.text2nd,
       ),
     );
   }

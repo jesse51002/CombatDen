@@ -24,11 +24,6 @@ from sqlalchemy import text
 
 from src.membership_plans.membership_plans_schemas import MembershipPlanPriceRequest
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
     advance_to_next_cycle_and_fetch_invoice,
@@ -136,26 +131,21 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """prorate=False swaps the item and defers the new amount to
     the next cycle — no mid-cycle invoice is generated."""
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=5000,
         )
 
@@ -253,26 +243,21 @@ async def test_update_price_mid_cycle_with_prorate_true(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """prorate=True creates a prorated invoice mid-cycle, and the next
     cycle settles at the new full price with no residual proration."""
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=5000,
         )
         item_id = await _start_and_get_item_id(
@@ -382,26 +367,21 @@ async def test_update_price_to_cheaper_tier_mid_cycle(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Downgrade with prorate=False — no mid-cycle invoice, next
     cycle bills at the cheaper price."""
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=8000,
         )
         item_id = await _start_and_get_item_id(

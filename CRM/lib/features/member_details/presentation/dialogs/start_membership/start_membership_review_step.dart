@@ -6,9 +6,9 @@ import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_section.dart';
 
-/// Step 3 — toggle proration / cash-paid and review a live
-/// charge preview before confirming. The preview re-fetches
-/// whenever the request (plan, prorate, cash, discounts)
+/// Review step — toggle proration / cash-paid and review a
+/// live charge preview before confirming. The preview
+/// re-fetches whenever the request (plan, prorate, cash)
 /// changes.
 class StartMembershipReviewStep extends StatelessWidget {
   final MemberRepository repository;
@@ -76,8 +76,7 @@ class StartMembershipReviewStep extends StatelessWidget {
         if (req != null)
           InvoicePreviewSection(
             refreshKey: '${req.memberId}-${req.priceId}-'
-                '$prorate-$paidWithCash-'
-                '${(req.discountIds ?? const []).join(',')}',
+                '$prorate-$paidWithCash',
             loadPreview: () =>
                 repository.previewStartMembership(req),
           ),

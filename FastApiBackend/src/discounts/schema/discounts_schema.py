@@ -1,29 +1,66 @@
-"""Pydantic schemas for the discounts domain."""
+"""Pydantic schemas for the discounts domain.
+
+Presets are now plain, coupon-free gym config: regular-only (preset | custom),
+no Stripe coupon baked in. Each carries a lifetime spec — discount_mode
+(once | ongoing) PLUS, for an ongoing discount, an end set by EITHER a duration
+span (duration_amount + duration_unit) OR an explicit end_date, never both;
+neither = forever. Coupons are computed at sync-time and written back onto the
+applied-discount snapshot, never on the preset.
+"""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, field_validator, model_validator
-from schema.gym_discount import DiscountType
+from schema.gym_discount import (
+    DiscountDurationUnit,
+    DiscountMode,
+    DiscountType,
+)
 
 import src.shared.db_schema_path  # noqa: F401
-from src.payments.schema.payments_enums import StripeCouponDuration
+
+
+def _validate_lifetime(
+    *,
+    duration_amount: int | None,
+    duration_unit: DiscountDurationUnit | None,
+    end_date: date | None,
+) -> None:
+    """Enforce the lifetime spec: duration span XOR explicit end_date.
+
+    duration_amount and duration_unit travel together; the span and an
+    explicit end_date are mutually exclusive; neither set = forever.
+
+    Raises:
+        ValueError: If the lifetime fields are inconsistent.
+    """
+    has_amount = duration_amount is not None
+    has_unit = duration_unit is not None
+    if has_amount != has_unit:
+        raise ValueError(
+            "duration_amount and duration_unit must be set together",
+        )
+    if has_amount and end_date is not None:
+        raise ValueError(
+            "lifetime is a duration span OR an explicit end_date, never both",
+        )
 
 
 class DiscountCreateRequest(BaseModel):
-    """Create a new gym discount with a Stripe coupon."""
+    """Create a coupon-free, regular-only gym discount preset."""
 
     gym_id: UUID
     discount_name: str
     discount_type: DiscountType
     percentage_off: float | None = None
     dollar_off: int | None = None
-    membership_plan_id: UUID | None = None
-    linked_discount_num: int | None = None
-    duration: StripeCouponDuration
-    duration_in_months: int | None = None
+    discount_mode: DiscountMode
+    duration_amount: int | None = None
+    duration_unit: DiscountDurationUnit | None = None
+    end_date: date | None = None
 
     @field_validator("discount_name")
     @classmethod
@@ -46,23 +83,16 @@ class DiscountCreateRequest(BaseModel):
             raise ValueError("dollar_off must be > 0")
         return v
 
-    @field_validator("linked_discount_num")
+    @field_validator("duration_amount")
     @classmethod
-    def _check_linked_num(cls, v: int | None) -> int | None:
+    def _check_duration_amount(cls, v: int | None) -> int | None:
         if v is not None and v <= 0:
-            raise ValueError("linked_discount_num must be > 0")
-        return v
-
-    @field_validator("duration_in_months")
-    @classmethod
-    def _check_duration_in_months(cls, v: int | None) -> int | None:
-        if v is not None and v <= 0:
-            raise ValueError("duration_in_months must be > 0")
+            raise ValueError("duration_amount must be > 0")
         return v
 
     @model_validator(mode="after")
     def validate_fields(self) -> DiscountCreateRequest:
-        """Validate mutual exclusivity and conditional requirements."""
+        """Validate value exclusivity and the lifetime spec."""
         has_pct = self.percentage_off is not None
         has_amt = self.dollar_off is not None
         if has_pct == has_amt:
@@ -70,39 +100,24 @@ class DiscountCreateRequest(BaseModel):
                 "Exactly one of percentage_off or dollar_off must be set",
             )
 
-        is_linked = self.discount_type == DiscountType.linked
-        has_plan = self.membership_plan_id is not None
-        has_num = self.linked_discount_num is not None
-        if is_linked and (not has_plan or not has_num or not has_amt):
-            raise ValueError(
-                "Linked discounts require membership_plan_id, linked_discount_num, and dollar_off",
-            )
-        if not is_linked and (has_plan or has_num):
-            raise ValueError(
-                "membership_plan_id and linked_discount_num are only for linked discounts",
-            )
-
-        if self.duration == StripeCouponDuration.repeating:
-            if self.duration_in_months is None:
-                raise ValueError(
-                    "duration_in_months is required when duration is 'repeating'",
-                )
-        elif self.duration_in_months is not None:
-            raise ValueError(
-                "duration_in_months must be None when duration is not 'repeating'",
-            )
-
+        _validate_lifetime(
+            duration_amount=self.duration_amount,
+            duration_unit=self.duration_unit,
+            end_date=self.end_date,
+        )
         return self
 
 
 class DiscountUpdateData(BaseModel):
-    """Mutable discount fields. All optional — only send what changed."""
+    """Mutable preset fields. All optional — only send what changed."""
 
     discount_name: str | None = None
     percentage_off: float | None = None
     dollar_off: int | None = None
-    duration: StripeCouponDuration | None = None
-    duration_in_months: int | None = None
+    discount_mode: DiscountMode | None = None
+    duration_amount: int | None = None
+    duration_unit: DiscountDurationUnit | None = None
+    end_date: date | None = None
 
     @field_validator("discount_name")
     @classmethod
@@ -125,18 +140,19 @@ class DiscountUpdateData(BaseModel):
             raise ValueError("dollar_off must be > 0")
         return v
 
-    @field_validator("duration_in_months")
+    @field_validator("duration_amount")
     @classmethod
-    def _check_duration_in_months(cls, v: int | None) -> int | None:
+    def _check_duration_amount(cls, v: int | None) -> int | None:
         if v is not None and v <= 0:
-            raise ValueError("duration_in_months must be > 0")
+            raise ValueError("duration_amount must be > 0")
         return v
 
 
 class DiscountUpdateRequest(BaseModel):
-    """Update a non-linked gym discount.
+    """Update a regular discount preset (intent only).
 
-    Linked discounts cannot be updated via this endpoint.
+    Edits affect only future applications; existing snapshot rows on
+    member_membership_applied_discounts are never touched.
     """
 
     discount_id: UUID
@@ -145,17 +161,23 @@ class DiscountUpdateRequest(BaseModel):
 
 
 class DiscountResponse(BaseModel):
-    """Response after creating, updating, or fetching a discount."""
+    """Response after creating, updating, or fetching a discount.
+
+    Combines the identity (gym_discounts) with its ACTIVE value version
+    (gym_discount_values). `value_id` is the active version tag; the
+    percent/dollar + lifetime come from that version.
+    """
 
     discount_id: UUID
     gym_id: UUID
     discount_name: str
     discount_type: DiscountType
+    value_id: UUID
     percentage_off: float | None = None
     dollar_off: int | None = None
-    membership_plan_id: UUID | None = None
-    linked_discount_num: int | None = None
-    duration: StripeCouponDuration
-    duration_in_months: int | None = None
-    stripe_coupon_id: str | None = None
+    discount_mode: DiscountMode
+    duration_amount: int | None = None
+    duration_unit: DiscountDurationUnit | None = None
+    end_date: date | None = None
+    is_deleted: bool
     created_at: datetime

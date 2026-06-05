@@ -170,21 +170,31 @@ class MarkPaidCashRequested extends MemberDetailEvent {
   List<Object?> get props => [itemId, memberId];
 }
 
-/// Replaces the full discount set on a membership with
-/// [discountIds]. Use this for both add and remove flows.
-class UpdateDiscountsRequested extends MemberDetailEvent {
+/// Adds / removes applied-discount snapshots on a
+/// membership. Apply is an explicit add / remove of
+/// immutable snapshot rows, never a replace-set:
+/// [addPresetIds] are discounts to add by id (any type,
+/// including a `linked` family discount); [removeAppliedIds]
+/// are existing snapshot ids to delete.
+class ApplyDiscountsRequested extends MemberDetailEvent {
   final String itemId;
   final String memberId;
-  final List<String> discountIds;
-  const UpdateDiscountsRequested({
+  final List<String> addPresetIds;
+  final List<String> removeAppliedIds;
+  const ApplyDiscountsRequested({
     required this.itemId,
     required this.memberId,
-    required this.discountIds,
+    this.addPresetIds = const [],
+    this.removeAppliedIds = const [],
   });
 
   @override
-  List<Object?> get props =>
-      [itemId, memberId, discountIds];
+  List<Object?> get props => [
+        itemId,
+        memberId,
+        addPresetIds,
+        removeAppliedIds,
+      ];
 }
 
 // ----- Charges / refunds -----

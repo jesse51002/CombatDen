@@ -33,6 +33,7 @@ async def test_create_percentage_discount(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     resp = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
@@ -43,6 +44,7 @@ async def test_create_percentage_discount(
         ),
         stripe_account_id,
     )
+    created.track_coupon(resp.stripe_coupon_id)
 
     assert resp.stripe_coupon_id
     assert resp.name == "10% Off"
@@ -66,6 +68,7 @@ async def test_create_amount_discount(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     resp = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
@@ -77,6 +80,7 @@ async def test_create_amount_discount(
         ),
         stripe_account_id,
     )
+    created.track_coupon(resp.stripe_coupon_id)
 
     assert resp.amount_off == 500
     assert resp.percentage_off is None
@@ -98,8 +102,9 @@ async def test_update_discount_name(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
-    created = await discount_service.create_discount(
+    created_resp = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
             discount_name="Original Name",
             percentage_off=15.0,
@@ -108,10 +113,11 @@ async def test_update_discount_name(
         ),
         stripe_account_id,
     )
+    created.track_coupon(created_resp.stripe_coupon_id)
 
     resp = await discount_service.update_discount(
         PaymentsDiscountUpdateRequest(
-            stripe_coupon_id=created.stripe_coupon_id,
+            stripe_coupon_id=created_resp.stripe_coupon_id,
             discount_name="Updated Name",
             metadata=_coupon_metadata(),
         ),
@@ -123,7 +129,7 @@ async def test_update_discount_name(
 
     # Stripe allows updating the name in place on a coupon — verify.
     coupon = await stripe_client.client.v1.coupons.retrieve_async(
-        created.stripe_coupon_id,
+        created_resp.stripe_coupon_id,
         options=connect_opts,
     )
     assert coupon.name == "Updated Name"
@@ -135,8 +141,9 @@ async def test_delete_discount(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
-    created = await discount_service.create_discount(
+    created_resp = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
             discount_name="Delete Me",
             percentage_off=5.0,
@@ -145,10 +152,11 @@ async def test_delete_discount(
         ),
         stripe_account_id,
     )
+    created.track_coupon(created_resp.stripe_coupon_id)
 
     await discount_service.delete_discount(
         PaymentsDiscountDeleteRequest(
-            stripe_coupon_id=created.stripe_coupon_id,
+            stripe_coupon_id=created_resp.stripe_coupon_id,
         ),
         stripe_account_id,
     )
@@ -157,14 +165,14 @@ async def test_delete_discount(
     with pytest.raises(PaymentsResourceNotFoundError):
         opts = discount_service._client.connect_opts(stripe_account_id)
         await discount_service.retrieve_discount(
-            created.stripe_coupon_id,
+            created_resp.stripe_coupon_id,
             opts,
         )
 
     # Independent: raw Stripe client must also 404.
     with pytest.raises(stripe.InvalidRequestError):
         await stripe_client.client.v1.coupons.retrieve_async(
-            created.stripe_coupon_id,
+            created_resp.stripe_coupon_id,
             options=connect_opts,
         )
 

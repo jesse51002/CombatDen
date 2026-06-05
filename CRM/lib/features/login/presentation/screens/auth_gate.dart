@@ -104,12 +104,20 @@ class _AuthenticatedGateState
     super.dispose();
   }
 
+  /// Hard ceiling on the gym fetch so the full-screen auth spinner can
+  /// never hang indefinitely. Kept longer than the 401 interceptor's
+  /// refresh timeout so an expired session resolves to login (via the
+  /// sign-out escape hatch) before this fires; this only catches a
+  /// genuinely stuck call, surfacing the [_GymCheckError] retry instead.
+  static const Duration _gymFetchTimeout = Duration(seconds: 30);
+
   /// List the gyms the caller administers. When there's exactly one,
   /// activate it immediately so we land straight in the workspace;
   /// otherwise the build routes to the picker (2+) or the setup
   /// wizard (0).
   Future<List<GymWithRole>> _resolveGyms() async {
-    final gyms = await _gymRepository.getMyGyms();
+    final gyms =
+        await _gymRepository.getMyGyms().timeout(_gymFetchTimeout);
     if (gyms.length == 1) {
       _activate(gyms.first);
     }

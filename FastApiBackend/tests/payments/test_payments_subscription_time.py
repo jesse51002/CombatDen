@@ -29,7 +29,7 @@ from tests.helpers.stripe_clock import (
 def _subscription_metadata() -> StripeSubscriptionMetadata:
     return StripeSubscriptionMetadata(member_id=uuid4(), gym_id=uuid4())
 
-# ── Fixtures ──────────────────────────────────────────────────��─
+# ── Fixtures ─────────────────────────────────────────────────────
 
 CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 
@@ -59,12 +59,13 @@ async def clock_customer(stripe_client, connect_opts, test_clock):
 
 
 @pytest.fixture
-async def clock_price(stripe_client, connect_opts):
+async def clock_price(stripe_client, connect_opts, created):
     """Create a recurring monthly price for clock tests."""
     product = await stripe_client.client.v1.products.create_async(
         params={"name": "Clock Test Plan"},
         options=connect_opts,
     )
+    created.track_product(product.id)
     price = await stripe_client.client.v1.prices.create_async(
         params={
             "product": product.id,
@@ -74,6 +75,7 @@ async def clock_price(stripe_client, connect_opts):
         },
         options=connect_opts,
     )
+    created.track_price(price.id)
     return price.id
 
 
@@ -89,9 +91,10 @@ async def test_subscription_renewal_advances_period(
     test_clock,
     clock_customer,
     clock_price,
+    created,
 ):
     """Create a subscription, advance 1 month, verify the billing period moved."""
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=clock_customer,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=clock_price)],
@@ -101,7 +104,7 @@ async def test_subscription_renewal_advances_period(
         ),
         stripe_account_id,
     )
-    original_period_end = created.items[0].current_period_end
+    original_period_end = created_resp.items[0].current_period_end
 
     # Advance 35 days past creation to ensure renewal
     await advance_clock(
@@ -113,7 +116,7 @@ async def test_subscription_renewal_advances_period(
 
     # Re-fetch subscription from Stripe
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
 
@@ -131,9 +134,10 @@ async def test_cancel_at_period_end_completes(
     test_clock,
     clock_customer,
     clock_price,
+    created,
 ):
     """Set cancel_at_period_end, advance past period end, verify canceled."""
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=clock_customer,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=clock_price)],
@@ -146,7 +150,7 @@ async def test_cancel_at_period_end_completes(
 
     await subscription_service.cancel_subscription(
         PaymentsSubscriptionCancelRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             cancel_at_period_end=True,
             idempotency_key=str(uuid4()),
         ),
@@ -170,7 +174,7 @@ async def test_cancel_at_period_end_completes(
     )
 
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
 
@@ -194,11 +198,12 @@ async def test_freeze_resumes_at_date(
     test_clock,
     clock_customer,
     clock_price,
+    created,
 ):
     """Freeze with a resumes_at date, advance past it, verify collection resumes."""
     from datetime import date
 
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=clock_customer,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=clock_price)],
@@ -212,7 +217,7 @@ async def test_freeze_resumes_at_date(
     freeze_end = date(2026, 2, 15)
     resp = await subscription_service.freeze_subscription(
         PaymentsSubscriptionFreezeRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             freeze_end_date=freeze_end,
             idempotency_key=str(uuid4()),
         ),
@@ -266,7 +271,7 @@ async def test_freeze_resumes_at_date(
     )
 
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
 

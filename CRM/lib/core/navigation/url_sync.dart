@@ -27,6 +27,9 @@ import 'package:crm/core/navigation/app_routes.dart';
 const Set<String> kAddressableRoutes = {
   AppRoutes.home,
   AppRoutes.members,
+  AppRoutes.memberships,
+  AppRoutes.membershipsDiscounts,
+  AppRoutes.membershipsWaivers,
   AppRoutes.schedule,
   AppRoutes.growth,
   AppRoutes.employees,

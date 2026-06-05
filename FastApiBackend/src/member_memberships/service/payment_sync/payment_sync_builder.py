@@ -1,95 +1,42 @@
-"""Pure logic for building desired items and grouping by interval."""
+"""Pure logic for building desired items and grouping by interval.
+
+Discount handling moved out of this module. Discounts are now frozen snapshot
+rows on member_membership_applied_discounts; the sync-time coupon computation
+(read the subscription's current Stripe discounts, exclude past-end_date /
+consumed snapshots, aggregate per consolidated line, find-or-create the coupon,
+write stripe_coupon_id back) is owned by the payment_sync phase. This builder
+only shapes the desired subscription items and consolidates them by price; the
+items carry no discounts here — the coupon step attaches them after.
+"""
 
 import logging
 from collections import defaultdict
+from datetime import date
 from uuid import UUID
 
+from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit
 
 import src.shared.db_schema_path  # noqa: F401
 from src.member_memberships.schema.payment_sync_schema import (
     ActiveMembershipRow,
+    AppliedDiscountSnapshot,
     IntervalBucket,
     IntervalDesiredItem,
+    LineDiscountPlan,
+    LineDiscountValue,
     SyncItem,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionDesiredItem,
-    SubscriptionItemDiscount,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def aggregate_plan_discounts(
-    memberships: list[ActiveMembershipRow],
-    coupon_by_discount_id: dict[UUID, str],
-) -> dict[UUID, list[SubscriptionItemDiscount]]:
-    """Union discounts across members on the same plan, keyed by Stripe coupon.
-
-    Linked accounts sharing a plan get the union of all their
-    discounts applied to every item on that plan. CRM ``discount_id``
-    values are resolved to real Stripe coupon IDs via
-    ``coupon_by_discount_id``.
-
-    If a membership references a ``discount_id`` that is missing from
-    the lookup (discount was soft-deleted or its Stripe sync never
-    completed), a warning is logged and that discount is skipped.
-    The rest of the sync still proceeds — one stale discount should
-    not abort the whole subscription update.
-
-    Args:
-        memberships: Active recurring memberships for the family.
-        coupon_by_discount_id: CRM ``discount_id`` -> Stripe
-            ``stripe_coupon_id`` lookup, sourced from
-            ``PaymentSyncQueries.get_discount_details``.
-
-    Returns:
-        Mapping of ``plan_id`` -> list of ``SubscriptionItemDiscount``,
-        deduplicated on the Stripe coupon string.
-    """
-    plan_discount_ids: dict[UUID, set[UUID]] = defaultdict(set)
-    membership_context: dict[UUID, tuple[UUID, UUID]] = {}
-
-    for m in memberships:
-        for d in m.discount_ids:
-            plan_discount_ids[m.plan_id].add(d)
-            membership_context.setdefault(d, (m.plan_id, m.member_id))
-
-    plan_discounts: dict[UUID, list[SubscriptionItemDiscount]] = {}
-    for plan_id, discount_ids in plan_discount_ids.items():
-        seen_coupons: set[str] = set()
-        items: list[SubscriptionItemDiscount] = []
-        for discount_id in discount_ids:
-            coupon = coupon_by_discount_id.get(discount_id)
-            if coupon is None:
-                ctx_plan, ctx_user = membership_context.get(
-                    discount_id,
-                    (plan_id, None),
-                )
-                logger.warning(
-                    "Skipping unresolved discount_id %s on plan %s "
-                    "(member_id=%s): no stripe_coupon_id found. "
-                    "Discount is likely soft-deleted or never synced "
-                    "to Stripe.",
-                    discount_id,
-                    ctx_plan,
-                    ctx_user,
-                )
-                continue
-            if coupon in seen_coupons:
-                continue
-            seen_coupons.add(coupon)
-            items.append(SubscriptionItemDiscount(coupon=coupon))
-        plan_discounts[plan_id] = items
-
-    return plan_discounts
-
-
 def build_desired_items(
     memberships: list[ActiveMembershipRow],
     add_intervals: list[IntervalDesiredItem],
-    plan_discounts: dict[UUID, list[SubscriptionItemDiscount]],
 ) -> list[IntervalDesiredItem]:
     """Convert current memberships + adds into desired items.
 
@@ -100,11 +47,8 @@ def build_desired_items(
     where every member row shares the same price.
 
     Existing memberships get prorate=False (old items).
-    New add_ids keep whatever prorate the caller set.
-
-    Args:
-        plan_discounts: Pre-aggregated plan-level discounts
-            from aggregate_plan_discounts().
+    New add_ids keep whatever prorate the caller set. Items carry no
+    discounts here — the sync-time coupon step attaches them.
 
     Pure logic, no DB calls.
     """
@@ -114,7 +58,6 @@ def build_desired_items(
                 stripe_price_id=m.stripe_price_id,
                 stripe_item_id=m.stripe_item_id,
                 prorate=False,
-                discounts=plan_discounts.get(m.plan_id, []),
             ),
             duration_unit=m.duration_unit,
             price=m.price,
@@ -130,8 +73,8 @@ def consolidate_by_price(
 ) -> list[IntervalDesiredItem]:
     """Merge items sharing the same stripe_price_id.
 
-    Sums quantities, unions discounts, picks the stripe_item_id
-    from whichever item has one, and resolves prorate by priority:
+    Sums quantities, picks the stripe_item_id from whichever item has one,
+    and resolves prorate by priority:
       new_no_prorate > new_with_prorate > old
 
     Pure logic, no DB calls.
@@ -157,7 +100,6 @@ def _merge_group(group: list[IntervalDesiredItem]) -> IntervalDesiredItem:
     total_price = sum(e.price for e in group)
     stripe_item_id = group[0].item.stripe_item_id
     prorate = _resolve_prorate(group)
-    discounts = _union_discounts(group)
 
     return IntervalDesiredItem(
         item=PaymentsSubscriptionDesiredItem(
@@ -165,7 +107,6 @@ def _merge_group(group: list[IntervalDesiredItem]) -> IntervalDesiredItem:
             stripe_item_id=stripe_item_id,
             prorate=prorate,
             quantity=quantity,
-            discounts=discounts,
         ),
         duration_unit=group[0].duration_unit,
         price=total_price,
@@ -191,30 +132,13 @@ def _resolve_prorate(group: list[IntervalDesiredItem]) -> bool:
     return winner.item.prorate
 
 
-def _union_discounts(
-    group: list[IntervalDesiredItem],
-) -> list[SubscriptionItemDiscount]:
-    """Deduplicate discounts across all items in the group."""
-    seen: set[str] = set()
-    unique: list[SubscriptionItemDiscount] = []
-    for entry in group:
-        for d in entry.item.discounts:
-            if d.coupon not in seen:
-                seen.add(d.coupon)
-                unique.append(d)
-    return unique
-
-
 def map_add_ids_to_intervals(
     add_ids: list[SyncItem],
     interval_map: dict[str, tuple[DurationUnit, int]],
-    coupon_by_discount_id: dict[UUID, str],
 ) -> list[IntervalDesiredItem]:
     """Map add_ids to IntervalDesiredItems using the interval lookup.
 
-    Each new item arrives with its CRM ``discount_ids`` resolved
-    to Stripe coupon references on the very first sync — no
-    dependency on a filtered-view writeback race.
+    Items carry no discounts — the sync-time coupon step attaches them.
 
     Raises:
         ValueError: If a stripe_price_id is not found.
@@ -226,10 +150,6 @@ def map_add_ids_to_intervals(
                 f"Price not found: {item.stripe_price_id}",
             )
         duration_unit, price = interval_map[item.stripe_price_id]
-        discounts = _resolve_item_discounts(
-            item.discount_ids,
-            coupon_by_discount_id,
-        )
         resolved.append(
             IntervalDesiredItem(
                 item=PaymentsSubscriptionDesiredItem(
@@ -237,33 +157,11 @@ def map_add_ids_to_intervals(
                     stripe_item_id=item.stripe_item_id,
                     prorate=item.prorate,
                     quantity=item.quantity,
-                    discounts=discounts,
                 ),
                 duration_unit=duration_unit,
                 price=price,
             )
         )
-    return resolved
-
-
-def _resolve_item_discounts(
-    discount_ids: list[UUID],
-    coupon_by_discount_id: dict[UUID, str],
-) -> list[SubscriptionItemDiscount]:
-    """Resolve CRM discount UUIDs to Stripe coupon references.
-
-    Skips any discount_id missing from the lookup (soft-deleted
-    or never synced to Stripe) — one stale discount should not
-    abort the whole item.
-    """
-    seen: set[str] = set()
-    resolved: list[SubscriptionItemDiscount] = []
-    for discount_id in discount_ids:
-        coupon = coupon_by_discount_id.get(discount_id)
-        if coupon is None or coupon in seen:
-            continue
-        seen.add(coupon)
-        resolved.append(SubscriptionItemDiscount(coupon=coupon))
     return resolved
 
 
@@ -287,3 +185,148 @@ def build_subscription_bucket(
         existing_sub_id=existing_sub_id,
         total_price=sum(e.price for e in consolidated),
     )
+
+
+# ── Sync-Time Discount Aggregation ──────────────────────────────────
+
+
+def plan_line_discounts(
+    bucket: IntervalBucket,
+    snapshots: list[AppliedDiscountSnapshot],
+    current_coupon_ids: set[str],
+    today: date,
+) -> list[LineDiscountPlan]:
+    """Compute each consolidated line's per-mode discount plan.
+
+    For every bucket item that carries a stripe_item_id (an existing Stripe
+    line), gather the snapshots frozen onto memberships on that line, run the
+    end_date exclusion and the ``once``-consumption gate against the live
+    Stripe state, then aggregate the survivors per ``discount_mode``:
+    ``line_percent = (Σ per-unit percents) / quantity`` and ``line_amount =
+    Σ per-unit dollar_offs``. ``once`` and ``ongoing`` never mix into one
+    value. New lines (no stripe_item_id yet) are skipped — they get their
+    coupon on the next sync once Stripe has assigned an item id.
+
+    Pure logic, no DB or Stripe calls. The caller owns the Stripe coupon
+    find-or-create and the snapshot writebacks; this function only decides
+    what each line's value is and which snapshots fed / were consumed.
+    """
+    by_item: dict[str, list[AppliedDiscountSnapshot]] = defaultdict(list)
+    for snap in snapshots:
+        by_item[snap.stripe_item_id].append(snap)
+
+    plans: list[LineDiscountPlan] = []
+    for item in bucket.items:
+        if not item.stripe_item_id:
+            continue
+        line_snaps = by_item.get(item.stripe_item_id, [])
+        if not line_snaps:
+            continue
+        plans.append(
+            _plan_one_line(
+                stripe_item_id=item.stripe_item_id,
+                quantity=item.quantity,
+                snapshots=line_snaps,
+                current_coupon_ids=current_coupon_ids,
+                today=today,
+            )
+        )
+    return plans
+
+
+def _plan_one_line(
+    stripe_item_id: str,
+    quantity: int,
+    snapshots: list[AppliedDiscountSnapshot],
+    current_coupon_ids: set[str],
+    today: date,
+) -> LineDiscountPlan:
+    """Plan the discounts for a single consolidated line."""
+    contributing: list[AppliedDiscountSnapshot] = []
+    consumed_ids: list[UUID] = []
+
+    for snap in snapshots:
+        if _is_past_end_date(snap, today):
+            continue
+        if _is_consumed_once(snap, current_coupon_ids):
+            consumed_ids.append(snap.applied_discount_id)
+            continue
+        contributing.append(snap)
+
+    values = _aggregate_values(contributing, quantity)
+    return LineDiscountPlan(
+        stripe_item_id=stripe_item_id,
+        values=values,
+        consumed_ids=consumed_ids,
+    )
+
+
+def _is_past_end_date(
+    snapshot: AppliedDiscountSnapshot,
+    today: date,
+) -> bool:
+    """Whether a snapshot's resolved end_date has passed (exclusive)."""
+    return snapshot.end_date is not None and snapshot.end_date <= today
+
+
+def _is_consumed_once(
+    snapshot: AppliedDiscountSnapshot,
+    current_coupon_ids: set[str],
+) -> bool:
+    """Whether a pending ``once`` snapshot has been invoiced (consumed).
+
+    A ``once`` snapshot with a null end_date is consumed once its stored
+    stripe_coupon_id is no longer present on the live subscription (Stripe
+    already invoiced it). A snapshot with no coupon yet (just applied, never
+    synced) is still pending — it has not been attached, so absence does not
+    mean consumed.
+    """
+    if snapshot.discount_mode != DiscountMode.once:
+        return False
+    if snapshot.end_date is not None:
+        return False
+    if snapshot.stripe_coupon_id is None:
+        return False
+    return snapshot.stripe_coupon_id not in current_coupon_ids
+
+
+def _aggregate_values(
+    snapshots: list[AppliedDiscountSnapshot],
+    quantity: int,
+) -> list[LineDiscountValue]:
+    """Aggregate surviving snapshots into at most one value per mode.
+
+    Percents are summed per unit then divided by the line quantity; dollars
+    are summed. A mode contributes a value only when it has a non-zero percent
+    or dollar total. ``once`` and ``ongoing`` are kept separate, and each value
+    carries the ids of the same-mode snapshots that fed it (percent and dollar
+    contributors of a mode share the value's writeback set — the deterministic
+    coupon for that mode covers whichever value Stripe applies).
+    """
+    divisor = quantity if quantity > 0 else 1
+    values: list[LineDiscountValue] = []
+    for mode in (DiscountMode.once, DiscountMode.ongoing):
+        mode_snaps = [s for s in snapshots if s.discount_mode == mode]
+        if not mode_snaps:
+            continue
+        mode_ids = [s.applied_discount_id for s in mode_snaps]
+        percent_sum = sum(s.percentage_off or 0.0 for s in mode_snaps)
+        dollar_sum = sum(s.dollar_off or 0 for s in mode_snaps)
+
+        if percent_sum > 0:
+            values.append(
+                LineDiscountValue(
+                    discount_mode=mode,
+                    percentage_off=percent_sum / divisor,
+                    contributing_ids=mode_ids,
+                )
+            )
+        if dollar_sum > 0:
+            values.append(
+                LineDiscountValue(
+                    discount_mode=mode,
+                    dollar_off=dollar_sum,
+                    contributing_ids=mode_ids,
+                )
+            )
+    return values

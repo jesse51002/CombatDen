@@ -64,14 +64,21 @@ schema_paths = [
     "./schemas/membership_plans.sql",
     "./schemas/membership_plan_prices.sql",
     "./schemas/gym_discounts.sql",
+    # Versioned, immutable discount value rows (the gym_discount_values table)
+    # FK gym_discounts, so they load right after the identity table.
+    "./schemas/gym_discount_values.sql",
     "./schemas/members.sql",
     "./schemas/gym_classes.sql",
     "./schemas/class_instance_exceptions.sql",
     "./schemas/class_range_exceptions.sql",
     "./schemas/class_history.sql",
-    "./schemas/member_attendance.sql",
     "./schemas/gym_rewards.sql",
     "./schemas/member_reward_redemptions.sql",
+    # Waiver catalog + versioning + e-sign tracking. Plain gym config (FK gyms +
+    # members), ordered: waivers -> versions -> signatures (each FKs the prior).
+    "./schemas/gym_waivers.sql",
+    "./schemas/gym_waiver_versions.sql",
+    "./schemas/member_waiver_signatures.sql",
     "./schemas/member_activities.sql",
     "./schemas/gym_history.sql",
     # VideoService demo content (video_* tables) — ordered by FK dependency.
@@ -87,8 +94,11 @@ schema_paths = [
     # membership_plan_prices / gym_discounts moved above members; billing
     # profile merged into the unified members table.
     "./schemas/member_memberships.sql",
-    # Applied-discount snapshots FK member_memberships + gym_discounts + members,
-    # so load after all three.
+    # member_attendance attributes each check-in to a membership row (item_id)
+    # and plan, so it loads after member_memberships + membership_plans.
+    "./schemas/member_attendance.sql",
+    # Applied-discount snapshots FK member_memberships + gym_discount_values +
+    # members, so load after all three.
     "./schemas/member_membership_applied_discounts.sql",
     "./schemas/member_invoices.sql",
     "./schemas/member_invoice_line_items.sql",

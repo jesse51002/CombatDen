@@ -4,17 +4,17 @@ Endpoints under test:
     GET  /api/v1/discounts/?gym_id=<uuid>
 
 These tests are READ-ONLY against the live backend at http://localhost:8000.
-The gym_discounts view only surfaces rows where stripe_coupon_id IS NOT NULL,
-so the seeded gym (owner1) returns an empty list — this is the expected result
-(no Stripe-synced discounts in the local seed).  The tests therefore validate
-contract shape, auth guards, and query-parameter validation rather than
-exercising specific row data.
+Presets are now plain, coupon-free gym config (regular-only: preset | custom)
+with a lifetime spec (discount_mode + a duration span XOR an explicit end_date).
+The gym_discounts view is an unfiltered passthrough (no Stripe gate), so any
+seeded preset is surfaced. The tests validate contract shape, auth guards, and
+query-parameter validation rather than specific row data.
 
 Prerequisites:
 - ``uvicorn src.main:app --reload`` running on port 8000.
-- Local Supabase stack up on port 54321.
+- Local Supabase stack up on port 54321 (migrated to the new discount schema).
 - conftest.py provides ``api`` (authorised httpx.Client), ``auth_token``,
-  and ``gym_id`` (= 21636369-8b52-9b4a-97b7-50923ceb3ffd, the one seeded gym).
+  and ``gym_id`` (the one seeded gym).
 """
 
 from __future__ import annotations
@@ -28,11 +28,14 @@ ENDPOINT = "/api/v1/discounts/"
 # A UUID that exists in no gym — used to verify cross-gym guard.
 _OTHER_GYM_ID = "00000000-0000-0000-0000-000000000001"
 
-# DiscountType values from the OpenAPI contract.
-_VALID_DISCOUNT_TYPES = {"preset", "custom", "linked"}
+# DiscountType values surfaced by presets (regular-only; linked is snapshot-only).
+_VALID_DISCOUNT_TYPES = {"preset", "custom"}
 
-# StripeCouponDuration values from the OpenAPI contract.
-_VALID_DURATIONS = {"once", "repeating", "forever"}
+# DiscountMode values from the OpenAPI contract.
+_VALID_DISCOUNT_MODES = {"once", "ongoing"}
+
+# DiscountDurationUnit values from the OpenAPI contract.
+_VALID_DURATION_UNITS = {"day", "week", "month"}
 
 # Required fields from the DiscountResponse schema.
 _REQUIRED_FIELDS = {
@@ -40,7 +43,8 @@ _REQUIRED_FIELDS = {
     "gym_id",
     "discount_name",
     "discount_type",
-    "duration",
+    "discount_mode",
+    "is_deleted",
     "created_at",
 }
 
@@ -48,40 +52,26 @@ _REQUIRED_FIELDS = {
 def _assert_discount_response_shape(item: dict) -> None:
     """Assert that a single discount item matches the DiscountResponse schema.
 
-    Checks required fields, enum values, and optional-field types.
+    Checks required fields, enum values, the value-exclusivity rule, and the
+    lifetime spec (a duration span XOR an explicit end_date, never both).
     """
-    # Required fields present.
     for field in _REQUIRED_FIELDS:
         assert field in item, f"Required field '{field}' missing from item: {item}"
 
-    # Enum validity.
     assert item["discount_type"] in _VALID_DISCOUNT_TYPES, (
         f"discount_type '{item['discount_type']}' not in {_VALID_DISCOUNT_TYPES}"
     )
-    assert item["duration"] in _VALID_DURATIONS, (
-        f"duration '{item['duration']}' not in {_VALID_DURATIONS}"
+    assert item["discount_mode"] in _VALID_DISCOUNT_MODES, (
+        f"discount_mode '{item['discount_mode']}' not in {_VALID_DISCOUNT_MODES}"
     )
 
-    # Optional numeric fields: if present must be int/float, if absent must be null.
-    for field in ("dollar_off", "linked_discount_num", "duration_in_months"):
-        if item.get(field) is not None:
-            assert isinstance(item[field], int), (
-                f"'{field}' expected int, got {type(item[field])}: {item[field]}"
-            )
-
+    if item.get("dollar_off") is not None:
+        assert isinstance(item["dollar_off"], int), (
+            f"'dollar_off' expected int, got {type(item['dollar_off'])}"
+        )
     if item.get("percentage_off") is not None:
         assert isinstance(item["percentage_off"], (int, float)), (
             f"'percentage_off' expected number, got {type(item['percentage_off'])}"
-        )
-
-    # duration_in_months must be set iff duration == 'repeating'.
-    if item["duration"] == "repeating":
-        assert item.get("duration_in_months") is not None, (
-            "duration_in_months must be set when duration == 'repeating'"
-        )
-    else:
-        assert item.get("duration_in_months") is None, (
-            "duration_in_months must be None when duration != 'repeating'"
         )
 
     # Exactly one of percentage_off / dollar_off must be set.
@@ -91,6 +81,23 @@ def _assert_discount_response_shape(item: dict) -> None:
         "Exactly one of percentage_off or dollar_off must be non-null; "
         f"got percentage_off={item.get('percentage_off')}, "
         f"dollar_off={item.get('dollar_off')}"
+    )
+
+    # Lifetime: a duration span (amount + unit together) XOR an explicit
+    # end_date — never both; neither = forever.
+    has_amount = item.get("duration_amount") is not None
+    has_unit = item.get("duration_unit") is not None
+    assert has_amount == has_unit, (
+        "duration_amount and duration_unit must be set together; "
+        f"got duration_amount={item.get('duration_amount')}, "
+        f"duration_unit={item.get('duration_unit')}"
+    )
+    if has_unit:
+        assert item["duration_unit"] in _VALID_DURATION_UNITS, (
+            f"duration_unit '{item['duration_unit']}' not in {_VALID_DURATION_UNITS}"
+        )
+    assert not (has_amount and item.get("end_date") is not None), (
+        "lifetime is a duration span OR an explicit end_date, never both"
     )
 
 
@@ -110,31 +117,10 @@ def test_list_discounts_returns_list(api: httpx.Client, gym_id: str) -> None:
     response = api.get(ENDPOINT, params={"gym_id": gym_id})
     assert response.status_code == 200
     data = response.json()
-    assert isinstance(data, list), (
-        f"Expected JSON array, got {type(data).__name__}: {data}"
-    )
+    assert isinstance(data, list), f"Expected JSON array, got {type(data).__name__}: {data}"
 
 
-def test_list_discounts_empty_for_seeded_gym(
-    api: httpx.Client, gym_id: str
-) -> None:
-    """Seeded gym has no Stripe-synced preset discounts — list is empty.
-
-    The gym_discounts view filters WHERE stripe_coupon_id IS NOT NULL, so
-    any discount without a completed Stripe sync is hidden.  The local seed
-    creates no gym_discounts rows, so this must be [].
-    """
-    response = api.get(ENDPOINT, params={"gym_id": gym_id})
-    assert response.status_code == 200
-    data = response.json()
-    assert data == [], (
-        f"Expected empty list for seeded gym, got: {data}"
-    )
-
-
-def test_list_discounts_items_match_schema(
-    api: httpx.Client, gym_id: str
-) -> None:
+def test_list_discounts_items_match_schema(api: httpx.Client, gym_id: str) -> None:
     """Every item in the discounts list conforms to the DiscountResponse schema.
 
     If the list is empty this test is vacuously true — the shape test fires
@@ -148,9 +134,7 @@ def test_list_discounts_items_match_schema(
         _assert_discount_response_shape(item)
 
 
-def test_list_discounts_content_type_json(
-    api: httpx.Client, gym_id: str
-) -> None:
+def test_list_discounts_content_type_json(api: httpx.Client, gym_id: str) -> None:
     """GET /api/v1/discounts/ responds with Content-Type: application/json."""
     response = api.get(ENDPOINT, params={"gym_id": gym_id})
     assert response.status_code == 200
@@ -171,8 +155,7 @@ def test_list_discounts_requires_auth(gym_id: str) -> None:
         timeout=30.0,
     )
     assert response.status_code == 401, (
-        f"Expected 401 for unauthenticated request, got {response.status_code}: "
-        f"{response.text}"
+        f"Expected 401 for unauthenticated request, got {response.status_code}: {response.text}"
     )
 
 

@@ -15,8 +15,6 @@ Map<String, dynamic> _$MemberMembershipsStartRequestToJson(
   'gym_id': instance.gymId,
   'plan_id': instance.planId,
   'price_id': instance.priceId,
-  'discount_ids': ?instance.discountIds,
-  'include_linked_discount': instance.includeLinkedDiscount,
   'prorate': instance.prorate,
   'paid_with_cash': instance.paidWithCash,
   'idempotency_key': instance.idempotencyKey,

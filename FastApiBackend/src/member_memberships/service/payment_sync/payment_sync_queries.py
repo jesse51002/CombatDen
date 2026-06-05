@@ -1,7 +1,9 @@
 """Database queries for the membership payment sync flow."""
 
+from datetime import date
 from uuid import UUID
 
+from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit
 from sqlalchemy import text
 
@@ -9,13 +11,14 @@ import src.shared.db_schema_path  # noqa: F401
 from src.member_memberships import SQL_DIR
 from src.member_memberships.schema.payment_sync_schema import (
     ActiveMembershipRow,
-    LinkedDiscountInfo,
+    AppliedDiscountSnapshot,
     ParentProfile,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 SYNC_SQL_DIR = SQL_DIR / "payment_sync"
+APPLIED_SQL_DIR = SQL_DIR / "applied_discounts"
 
 
 class PaymentSyncQueries:
@@ -97,15 +100,99 @@ class PaymentSyncQueries:
     def _parse_membership_row(row: dict) -> ActiveMembershipRow:
         """Parse a raw DB row into an ActiveMembershipRow."""
         return ActiveMembershipRow(
+            item_id=UUID(str(row["item_id"])),
             member_id=UUID(str(row["member_id"])),
             plan_id=UUID(str(row["plan_id"])),
             price_id=UUID(str(row["price_id"])),
             stripe_price_id=row["stripe_price_id"],
             stripe_item_id=row["stripe_item_id"],
             duration_unit=DurationUnit(row["duration_unit"]),
-            discount_ids=[UUID(d) for d in (row["discount_ids"] or [])],
             price=row["price"],
         )
+
+    # ── Applied Discount Snapshots ──────────────────────────────
+
+    async def get_applied_discounts(
+        self,
+        family_ids: list[UUID],
+    ) -> list[AppliedDiscountSnapshot]:
+        """Read every applied-discount snapshot for a family's memberships.
+
+        Reads the unfiltered base table (service-role): half-synced rows
+        (no stripe_coupon_id yet) must still be seen by the sync that
+        resolves them.
+        """
+        if not family_ids:
+            return []
+
+        sql = load_sql(APPLIED_SQL_DIR / "get_applied_discounts_by_member.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"member_ids": [str(uid) for uid in family_ids]},
+            )
+            rows = result.mappings().fetchall()
+
+        return [self._parse_snapshot_row(r) for r in rows]
+
+    @staticmethod
+    def _parse_snapshot_row(row: dict) -> AppliedDiscountSnapshot:
+        """Parse a raw DB row into an AppliedDiscountSnapshot."""
+        return AppliedDiscountSnapshot(
+            applied_discount_id=UUID(str(row["applied_discount_id"])),
+            item_id=UUID(str(row["item_id"])),
+            member_id=UUID(str(row["member_id"])),
+            plan_id=UUID(str(row["plan_id"])),
+            stripe_item_id=row["stripe_item_id"],
+            discount_mode=DiscountMode(row["discount_mode"]),
+            percentage_off=row["percentage_off"],
+            dollar_off=row["dollar_off"],
+            end_date=row["end_date"],
+            stripe_coupon_id=row["stripe_coupon_id"],
+        )
+
+    async def set_snapshot_coupon_id(
+        self,
+        applied_discount_id: UUID,
+        stripe_coupon_id: str,
+    ) -> None:
+        """Write the sync-resolved coupon back onto one snapshot.
+
+        Service-role writeback to the unfiltered base table: for a ``once``
+        snapshot the stored coupon is the consumption-tracking handle; for an
+        ongoing snapshot it records the coupon the line is currently using.
+        """
+        sql = load_sql(APPLIED_SQL_DIR / "set_snapshot_coupon_id.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {
+                    "applied_discount_id": str(applied_discount_id),
+                    "stripe_coupon_id": stripe_coupon_id,
+                },
+            )
+            await session.commit()
+
+    async def stamp_snapshot_consumed(
+        self,
+        applied_discount_id: UUID,
+        end_date: date,
+    ) -> None:
+        """Stamp end_date on a ``once`` snapshot the sync found consumed.
+
+        Service-role writeback to the unfiltered base table. Only stamps a row
+        that does not already carry an end_date (idempotent on re-run).
+        """
+        sql = load_sql(APPLIED_SQL_DIR / "stamp_snapshot_end_date.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {
+                    "applied_discount_id": str(applied_discount_id),
+                    "end_date": end_date,
+                },
+            )
+            await session.commit()
 
     # ── Add IDs Interval Resolution ─────────────────────────────
 
@@ -136,45 +223,6 @@ class PaymentSyncQueries:
             )
             for r in rows
         }
-
-    # ── Linked Discounts ────────────────────────────────────────
-
-    async def get_linked_discount_ids(
-        self,
-        family_ids: list[UUID],
-    ) -> list[UUID]:
-        """Get linked_discount_ids from family member profiles."""
-        sql = load_sql(SYNC_SQL_DIR / "get_linked_discount_ids.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"member_ids": [str(uid) for uid in family_ids]},
-            )
-            rows = result.mappings().fetchall()
-
-        return [UUID(str(r["linked_discount_id"])) for r in rows]
-
-    async def get_discount_details(
-        self,
-        discount_ids: list[UUID],
-    ) -> list[LinkedDiscountInfo]:
-        """Fetch Stripe coupon info for discount IDs."""
-        sql = load_sql(SYNC_SQL_DIR / "get_discount_details.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"discount_ids": [str(d) for d in discount_ids]},
-            )
-            rows = result.mappings().fetchall()
-
-        return [
-            LinkedDiscountInfo(
-                discount_id=UUID(str(r["discount_id"])),
-                stripe_coupon_id=r["stripe_coupon_id"],
-                dollar_off=r["dollar_off"],
-            )
-            for r in rows
-        ]
 
     # ── Write Back ──────────────────────────────────────────────
 

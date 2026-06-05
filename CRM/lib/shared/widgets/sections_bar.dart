@@ -111,6 +111,12 @@ class SectionsBar extends StatelessWidget {
                     onTap: () => _go(context, AppRoutes.schedule),
                   ),
                   SidebarNavItem(
+                    icon: Symbols.sell_sharp,
+                    label: 'Memberships',
+                    isActive: activeRoute == AppRoutes.memberships,
+                    onTap: () => _go(context, AppRoutes.memberships),
+                  ),
+                  SidebarNavItem(
                     icon: Symbols.bolt_sharp,
                     label: 'Member\nApp',
                     isActive: activeRoute == AppRoutes.memberAppPreview,

@@ -42,6 +42,7 @@ BASE = "/api/v1/member_memberships"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _idempotency_key() -> str:
     """Fresh UUID string — prevents Stripe idempotency collisions."""
     return str(uuid4())
@@ -195,26 +196,21 @@ class TestUnauthenticated:
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "discount_ids": [],
+                "add_preset_ids": [_NULL_PLAN_ID],
                 "idempotency_key": _IKEY,
             },
         )
         assert r.status_code == 401, r.text
 
     def test_preview_discounts_no_auth(self, api):
-        """POST /discounts/preview without auth returns 401."""
+        """POST /discounts/preview (query params) without auth returns 401."""
         client = api.__class__(
             base_url=str(api.base_url),
             timeout=api.timeout,
         )
         r = client.post(
             f"{BASE}/discounts/preview",
-            json={
-                "item_id": _NULL_ITEM_ID,
-                "member_id": MEMBER_ID,
-                "discount_ids": [],
-                "idempotency_key": _IKEY,
-            },
+            params={"item_id": _NULL_ITEM_ID, "member_id": MEMBER_ID},
         )
         assert r.status_code == 401, r.text
 
@@ -288,21 +284,35 @@ class TestValidation:
         missing_fields = {err["loc"][-1] for err in detail if err["type"] == "missing"}
         assert "plan_id" in missing_fields
 
-    def test_discount_ids_duplicates_rejected(self, api):
-        """POST /discounts/preview rejects duplicate UUIDs in discount_ids."""
+    def test_apply_preset_ids_duplicates_rejected(self, api):
+        """PUT /discounts rejects duplicate UUIDs in add_preset_ids."""
         dup_id = str(uuid4())
-        r = api.post(
-            f"{BASE}/discounts/preview",
+        r = api.put(
+            f"{BASE}/discounts",
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "discount_ids": [dup_id, dup_id],
+                "add_preset_ids": [dup_id, dup_id],
                 "idempotency_key": _IKEY,
             },
         )
         assert r.status_code == 422, r.text
         detail_text = r.json()["detail"][0]["msg"]
         assert "duplicate" in detail_text.lower()
+
+    def test_apply_discounts_empty_request_rejected(self, api):
+        """PUT /discounts with no adds and no removes is a 422 (nothing to do)."""
+        r = api.put(
+            f"{BASE}/discounts",
+            json={
+                "item_id": _NULL_ITEM_ID,
+                "member_id": MEMBER_ID,
+                "add_preset_ids": [],
+                "remove_applied_ids": [],
+                "idempotency_key": _IKEY,
+            },
+        )
+        assert r.status_code == 422, r.text
 
     def test_charge_card_amount_must_be_positive(self, api):
         """POST /charge-card with amount_cents=0 returns 422."""
@@ -398,8 +408,7 @@ class TestNotFound:
         # 404: no billing profile; 400 also acceptable (no Stripe customer)
         assert r.status_code in (400, 404), r.text
         assert r.status_code != 500, (
-            "Unexpected 500 on freeze — likely a serialisation or SQL bug; "
-            f"detail: {r.json()}"
+            f"Unexpected 500 on freeze — likely a serialisation or SQL bug; detail: {r.json()}"
         )
 
     def test_unfreeze_no_billing_profile(self, api):
@@ -414,8 +423,7 @@ class TestNotFound:
         )
         assert r.status_code in (400, 404), r.text
         assert r.status_code != 500, (
-            "Unexpected 500 on unfreeze — likely a serialisation or SQL bug; "
-            f"detail: {r.json()}"
+            f"Unexpected 500 on unfreeze — likely a serialisation or SQL bug; detail: {r.json()}"
         )
 
     def test_start_nonexistent_plan(self, api):
@@ -447,14 +455,18 @@ class TestNotFound:
         assert r.status_code == 404, r.text
         assert "not found" in r.json()["detail"].lower()
 
-    def test_update_discounts_nonexistent_item(self, api):
-        """PUT /discounts with nonexistent item_id returns 404."""
+    def test_apply_discounts_nonexistent_item(self, api):
+        """PUT /discounts with nonexistent item_id returns 404.
+
+        A non-empty add list passes the schema's not-empty guard, so the
+        membership lookup runs and returns 404.
+        """
         r = api.put(
             f"{BASE}/discounts",
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "discount_ids": [],
+                "add_preset_ids": [_NULL_PLAN_ID],
                 "idempotency_key": _idempotency_key(),
             },
         )
@@ -508,8 +520,7 @@ class TestPreviewPaths:
             },
         )
         assert r.status_code in self.SAFE_STATUSES, (
-            f"Expected 400/404/502 for preview with invalid plan; "
-            f"got {r.status_code}: {r.json()}"
+            f"Expected 400/404/502 for preview with invalid plan; got {r.status_code}: {r.json()}"
         )
         assert r.status_code != 500, (
             f"500 on /preview — serialisation or unhandled exception bug: {r.json()}"
@@ -543,41 +554,26 @@ class TestPreviewPaths:
         assert "not found" in r.json()["detail"].lower()
 
     def test_preview_discounts_nonexistent_item(self, api):
-        """POST /discounts/preview with nonexistent item returns 404."""
+        """POST /discounts/preview (query params) with nonexistent item -> 404.
+
+        The preview reads the membership's CURRENT applied-discount snapshots;
+        it takes only item_id + member_id query params (no body). A missing
+        membership is a clean 404.
+        """
         r = api.post(
             f"{BASE}/discounts/preview",
-            json={
-                "item_id": _NULL_ITEM_ID,
-                "member_id": MEMBER_ID,
-                "discount_ids": [],
-                "idempotency_key": _idempotency_key(),
-            },
+            params={"item_id": _NULL_ITEM_ID, "member_id": MEMBER_ID},
         )
         assert r.status_code == 404, r.text
         assert "not found" in r.json()["detail"].lower()
 
-    def test_preview_discounts_empty_list_accepted(self, api):
-        """POST /discounts/preview with empty discount_ids list is valid payload.
-
-        An empty list means 'remove all discounts'. The 404 is from the
-        membership lookup — the schema accepts an empty list without error.
-        """
+    def test_preview_discounts_missing_member_id_rejected(self, api):
+        """POST /discounts/preview without member_id returns 422."""
         r = api.post(
             f"{BASE}/discounts/preview",
-            json={
-                "item_id": _NULL_ITEM_ID,
-                "member_id": MEMBER_ID,
-                "discount_ids": [],
-                "idempotency_key": _idempotency_key(),
-            },
+            params={"item_id": _NULL_ITEM_ID},
         )
-        # 404 is correct (no such membership); 422 would mean empty-list
-        # rejected by schema — that is a contract violation.
-        assert r.status_code != 422, (
-            "Empty discount_ids must not be rejected by schema validation; "
-            f"got 422: {r.json()}"
-        )
-        assert r.status_code != 500, f"Unexpected 500: {r.json()}"
+        assert r.status_code == 422, r.text
 
     def test_preview_start_response_is_none_or_object(self, api):
         """POST /preview that reaches Stripe-not-configured returns 502 not 500.
@@ -600,6 +596,5 @@ class TestPreviewPaths:
             },
         )
         assert r.status_code != 500, (
-            f"500 on /preview indicates an unhandled exception — "
-            f"expected 404/400/502: {r.json()}"
+            f"500 on /preview indicates an unhandled exception — expected 404/400/502: {r.json()}"
         )

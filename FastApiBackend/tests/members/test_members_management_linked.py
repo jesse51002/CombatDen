@@ -7,11 +7,6 @@ from sqlalchemy import text
 
 from src.members.schema.members_schema import MemberCreateRequest
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -59,20 +54,15 @@ async def test_link_happy_path(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    parent = await created.member(
         gym_id,
-        connect_opts,
         first_name="Parent",
         last_name="One",
     )
-    child = await create_member(
-        db_pool,
-        stripe_client,
+    child = await created.member(
         gym_id,
-        connect_opts,
         first_name="Child",
         last_name="One",
     )
@@ -108,22 +98,17 @@ async def test_link_clears_existing_card_fields(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """A child with an existing card should have card fields nulled on link."""
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    parent = await created.member(
         gym_id,
-        connect_opts,
         first_name="Parent",
         last_name="Card",
     )
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    child = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    child = await created.member(
         gym_id,
-        connect_opts,
         first_name="Child",
         last_name="Card",
         payment_method_id=pm_id,
@@ -157,13 +142,9 @@ async def test_link_self_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-    )
+    member = await created.member(gym_id)
 
     try:
         with pytest.raises(ValueError, match="themselves"):
@@ -181,23 +162,10 @@ async def test_link_already_linked_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="P",
-        last_name="A",
-    )
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="C",
-        last_name="A",
-    )
+    parent = await created.member(gym_id, first_name="P", last_name="A")
+    child = await created.member(gym_id, first_name="C", last_name="A")
 
     try:
         await management_service.link_account(
@@ -221,27 +189,18 @@ async def test_link_with_active_recurring_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """A member with active recurring memberships cannot be linked."""
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    parent = await created.member(gym_id, first_name="P", last_name="Recur")
+    pm_id = await created.payment_method()
+    child = await created.member(
         gym_id,
-        connect_opts,
-        first_name="P",
-        last_name="Recur",
-    )
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         first_name="C",
         last_name="Recur",
         payment_method_id=pm_id,
     )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -275,23 +234,10 @@ async def test_unlink_happy_path(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Parent",
-        last_name="Unlink",
-    )
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Child",
-        last_name="Unlink",
-    )
+    parent = await created.member(gym_id, first_name="Parent", last_name="Unlink")
+    child = await created.member(gym_id, first_name="Child", last_name="Unlink")
 
     try:
         await management_service.link_account(
@@ -321,13 +267,9 @@ async def test_unlink_not_linked_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-    )
+    member = await created.member(gym_id)
 
     try:
         with pytest.raises(ValueError, match="not linked"):
@@ -345,14 +287,12 @@ async def test_unlink_with_active_recurring_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """A linked child with active recurring memberships cannot be unlinked."""
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    parent = await created.member(
         gym_id,
-        connect_opts,
         first_name="P",
         last_name="UnlinkRecur",
         payment_method_id=pm_id,
@@ -366,7 +306,8 @@ async def test_unlink_with_active_recurring_raises(
         account_linked_to_id=parent.member_id,
     )
     child = await management_service.create_member(child_req)
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    created.track_customer(child.stripe_customer_id)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -400,31 +341,22 @@ async def test_link_unlink_issues_no_charges(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Link + unlink must not create new invoices or proration items on
     the parent's Stripe subscription. The parent has an active recurring
     plan; we snapshot the subscription around each operation and confirm
     its invoice identity is unchanged.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    parent = await created.member(
         gym_id,
-        connect_opts,
         first_name="P",
         last_name="NoCharge",
         payment_method_id=pm_id,
     )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="C",
-        last_name="NoCharge",
-    )
+    plan = await created.plan(gym_id)
+    child = await created.member(gym_id, first_name="C", last_name="NoCharge")
 
     try:
         # Parent starts their own recurring membership — this creates

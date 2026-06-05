@@ -91,12 +91,17 @@ def seed() -> None:
             ranks = bs_ranks.create_gym_ranks(client, gym_id, gym_type)
             print(f"  {len(ranks)} ranks")
 
-            # Plans + prices (real Stripe products + prices).
+            # Plans + prices (real Stripe products + prices); the first plan
+            # gets linked (family) discounts — the backend mints a real `linked`
+            # discount entry per entered tier amount and stores their ids on the
+            # plan (linked_discount_ids).
             print("Creating plans...")
-            plan_records = api_plans.create_all(api, client, gym_id, PLANS_PER_GYM)
+            plan_records = api_plans.create_all(
+                api, client, gym_id, PLANS_PER_GYM, linked_prices=[2000, 3000]
+            )
             print(f"  {len(plan_records)} plans")
 
-            # Discounts (regular-only presets; coupons computed at sync).
+            # Discounts (regular presets; coupons computed at sync).
             print("Creating discounts...")
             regular_discounts = api_discounts.create_regular(
                 api, client, gym_id, DISCOUNTS_PER_GYM
@@ -126,15 +131,37 @@ def seed() -> None:
                 history_rows = gen_memberships.create_history(client, gym_id, member_plans)
                 print(f"  {len(history_rows)} historical rows")
 
-            # Live memberships (real Stripe subscriptions).
+            # Live memberships for paying parents + solo members (real Stripe
+            # subscriptions).
             print("Starting live memberships via API...")
             current_records = api_memberships.create_current(api, client, gym_id, member_plans)
             print(f"  {len(current_records)} live memberships")
 
-            # Link children to parents (parents now have an active sub), then
-            # apply account freezes (can't start a membership while frozen).
+            # Link children to parents (parents now have an active sub).
             api_members.apply_links(api, member_plans)
+
+            # Now that children are linked, start each child's own membership —
+            # it rides the parent's subscription (linking required the child to
+            # have no active membership, so this must run AFTER apply_links).
+            child_records = api_memberships.create_current(
+                api, client, gym_id, member_plans, linked_children=True
+            )
+            current_records += child_records
+            print(f"  {len(child_records)} linked-child memberships")
+
+            # Apply account freezes (can't start a membership while frozen).
             api_members.apply_freezes(client, member_plans)
+
+            # Apply the plan's linked (family) discount to members on that plan
+            # so the seed exercises real linked discount snapshots end-to-end.
+            if plan_records and plan_records[0].linked_discount_ids:
+                n_linked = api_memberships.apply_linked(
+                    api,
+                    plan_records[0].linked_discount_ids,
+                    current_records,
+                    plan_records[0].plan_id,
+                )
+                print(f"  applied linked discount to {n_linked} member(s)")
 
             # A couple of overdue members via Stripe test clocks.
             if result.had_any_new:
@@ -144,6 +171,14 @@ def seed() -> None:
         # --- direct-DB engagement (no JWT needed), keyed on backend member_ids ---
         members = [members_generator.to_member_create(gym_id, p) for p in member_plans]
 
+        # Membership coverage for attendance attribution + invoice history:
+        # historical (inserted) rows plus synthetic rows for the live
+        # memberships (their item_ids are the real backend item_ids; the
+        # windows are plausible). Attendance is attributed to whichever
+        # membership covers each occurrence.
+        pseudo_current = gen_memberships.pseudo_rows_for_current(gym_id, current_records)
+        membership_rows = history_rows + pseudo_current
+
         print("Creating classes...")
         classes = bs_classes.create(client, gym_id, bundle.gym_name, bundle.all_employees)
 
@@ -152,7 +187,7 @@ def seed() -> None:
 
         print("Creating class history + attendance...")
         bs_classes.create_history_and_attendance(
-            client, gym_id, bundle.gym_name, classes, members
+            client, gym_id, bundle.gym_name, classes, members, membership_rows
         )
 
         print("Creating reward redemptions...")
@@ -165,10 +200,8 @@ def seed() -> None:
         # like the membership history above so re-runs don't duplicate.
         if result.had_any_new:
             print("Creating invoices and charges...")
-            pseudo_current = gen_memberships.pseudo_rows_for_current(gym_id, current_records)
-            all_membership_rows = history_rows + pseudo_current
             inv, li, ch = gen_invoices.generate(
-                gym_id, all_membership_rows, plan_records
+                gym_id, membership_rows, plan_records
             )
             if inv:
                 client.table("member_invoices").insert(

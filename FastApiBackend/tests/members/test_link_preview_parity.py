@@ -12,11 +12,6 @@ from uuid import uuid4
 import pytest
 
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.preview_parity import assert_preview_matches_invoice
 from tests.helpers.stripe_assertions import (
@@ -40,6 +35,7 @@ async def test_preview_link_matches_renewal(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Linking a child to a paying parent: the preview returned for
     the parent must equal the parent's next renewal invoice.
@@ -48,31 +44,22 @@ async def test_preview_link_matches_renewal(
     parent = None
     child = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        parent = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        parent = await created.member(
             gym_id,
-            connect_opts,
             first_name="P",
             last_name="LinkParity",
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        child = await create_member(
-            db_pool,
-            stripe_client,
+        child = await created.member(
             gym_id,
-            connect_opts,
             first_name="C",
             last_name="LinkParity",
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=5000,
         )
         await memberships_service.start(
@@ -130,6 +117,7 @@ async def test_preview_unlink_matches_renewal(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Unlinking a child from a paying parent: the preview must
     equal the parent's next renewal invoice after the unlink.
@@ -138,31 +126,22 @@ async def test_preview_unlink_matches_renewal(
     parent = None
     child = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        parent = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        parent = await created.member(
             gym_id,
-            connect_opts,
             first_name="P",
             last_name="UnlinkParity",
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        child = await create_member(
-            db_pool,
-            stripe_client,
+        child = await created.member(
             gym_id,
-            connect_opts,
             first_name="C",
             last_name="UnlinkParity",
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=5000,
         )
         await memberships_service.start(

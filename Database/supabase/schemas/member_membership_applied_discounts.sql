@@ -1,21 +1,24 @@
--- Immutable applied-discount snapshots. One row = one discount frozen onto one
--- membership (item_id / Stripe item) at apply-time. Applying a discount writes
--- a frozen snapshot row; editing or deleting the source preset never touches
--- existing rows (predictability — a member's billing changes only via an
--- explicit add/remove on that member's specific membership). To change a
--- discount the user removes the row (DELETE) and adds a different one (INSERT);
--- the user never edits a row. The sync (service_role) legitimately writes back
--- two outcome fields: stripe_coupon_id (the coupon it resolved for the line)
--- and end_date (stamped when a `once` discount is consumed). Everything else is
--- a snapshot of the preset's intent at the moment of application.
+-- Applied-discount snapshots, slimmed to the version model. One row = one
+-- discount frozen onto one membership (item_id / Stripe item) at apply-time,
+-- referencing the exact immutable gym_discount_values version (value_id) it was
+-- applied at. The discount's values are reached via
+-- value_id -> gym_discount_values -> gym_discounts; the value_id IS the
+-- provenance / version tag, so we can always prove which version a member is on.
+--
+-- Applying a discount writes a row (INSERT); removing it deletes the row
+-- (DELETE); the user never edits a row. The sync (service_role) legitimately
+-- writes back two outcome fields: stripe_coupon_id (the coupon it resolved for
+-- the consolidated line) and end_date (resolved from the version's lifetime at
+-- apply, and stamped when a `once` discount is consumed).
+--
+-- Any discount is applied this way, including a `linked` (family) discount — a
+-- linked applied row references the linked discount's value version like any
+-- other; the membership/family flow supplies the linked discount's id.
 --
 -- Stripe-gated table: stripe_coupon_id is written by the sync, so this follows
--- the unfiltered-base-table + filtered-view pattern. The view exposes only rows
--- whose stripe_coupon_id has been written back, so a just-applied discount
--- becomes visible to clients once the sync resolves and writes its coupon.
---
--- The discount_mode enum is declared in gym_discounts.sql (the earliest-loaded
--- file that consumes it — the preset also stores discount_mode).
+-- the unfiltered-base-table + filtered-view pattern — the view exposes only rows
+-- whose coupon has been written back, hiding a just-applied discount until the
+-- sync resolves its coupon.
 CREATE TABLE member_membership_applied_discounts_unfiltered (
     applied_discount_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     item_id UUID NOT NULL,
@@ -23,28 +26,14 @@ CREATE TABLE member_membership_applied_discounts_unfiltered (
     gym_id UUID NOT NULL
         CONSTRAINT fk_applied_membership_discount_gym REFERENCES gyms(gym_id),
 
-    discount_type VARCHAR NOT NULL
-        CHECK (discount_type IN ('preset', 'custom', 'linked')),
+    -- The immutable discount value version this snapshot is frozen to (the
+    -- version tag / provenance). Its row carries the percent/dollar, mode, and
+    -- lifetime; the parent gym_discounts carries name + type.
+    value_id UUID NOT NULL,
 
-    -- Provenance for regular (preset/custom) discounts: the gym_discounts
-    -- preset this snapshot was copied from (enables future auto-update). NULL
-    -- for linked discounts (no preset to read).
-    source_discount_id UUID,
-
-    -- Linked discounts carry the plan they derive from and the level/tier
-    -- instead of a source preset.
-    linked_discount_planid UUID,
-    linked_discount_num INTEGER CHECK (linked_discount_num > 0),
-
-    -- Snapshot of the preset's intent at apply-time.
-    discount_name VARCHAR NOT NULL CHECK (discount_name <> ''),
-    percentage_off FLOAT CHECK (percentage_off > 0 AND percentage_off <= 100),
-    dollar_off INTEGER CHECK (dollar_off > 0),
-    discount_mode discount_mode NOT NULL,
-
-    -- Resolved absolute end (from the preset's duration span or explicit
-    -- end_date, computed at apply); also stamped by the sync when a `once`
-    -- discount is consumed. NULL = no end (forever) / pending consumption.
+    -- Resolved absolute end for this application (from the version's duration
+    -- span or explicit end_date, computed at apply); also stamped by the sync
+    -- when a `once` discount is consumed. NULL = no end / pending consumption.
     end_date DATE,
 
     -- SYSTEM writeback: the coupon the sync resolved for this snapshot's
@@ -56,25 +45,6 @@ CREATE TABLE member_membership_applied_discounts_unfiltered (
 
     PRIMARY KEY (applied_discount_id),
 
-    -- Exactly one of percentage_off / dollar_off is set.
-    CONSTRAINT chk_applied_discount_value
-        CHECK (num_nonnulls(percentage_off, dollar_off) = 1),
-
-    -- Linked rows require the plan + level; regular rows require a source
-    -- preset. (Linked rows carry no source_discount_id; regular rows carry no
-    -- linked metadata.)
-    CONSTRAINT chk_applied_discount_provenance CHECK (
-        (discount_type = 'linked'
-            AND linked_discount_planid IS NOT NULL
-            AND linked_discount_num IS NOT NULL
-            AND source_discount_id IS NULL)
-        OR
-        (discount_type <> 'linked'
-            AND source_discount_id IS NOT NULL
-            AND linked_discount_planid IS NULL
-            AND linked_discount_num IS NULL)
-    ),
-
     -- The membership this discount is frozen onto must belong to the same gym.
     CONSTRAINT fk_applied_discount_membership_gym
         FOREIGN KEY (item_id, gym_id)
@@ -85,12 +55,11 @@ CREATE TABLE member_membership_applied_discounts_unfiltered (
         FOREIGN KEY (member_id, gym_id)
         REFERENCES members (member_id, gym_id),
 
-    -- Provenance FK to the source preset (composite with gym so we can't point
-    -- at a preset from another gym). NULL source_discount_id (linked rows)
-    -- skips enforcement under MATCH SIMPLE.
-    CONSTRAINT fk_applied_discount_source_gym
-        FOREIGN KEY (source_discount_id, gym_id)
-        REFERENCES gym_discounts_unfiltered (discount_id, gym_id)
+    -- The value version must belong to the same gym (so we can't point at a
+    -- version from another gym).
+    CONSTRAINT fk_applied_discount_value_gym
+        FOREIGN KEY (value_id, gym_id)
+        REFERENCES gym_discount_values_unfiltered (value_id, gym_id)
 );
 
 CREATE INDEX idx_member_membership_applied_discounts_item
@@ -98,6 +67,9 @@ CREATE INDEX idx_member_membership_applied_discounts_item
 
 CREATE INDEX idx_member_membership_applied_discounts_member
     ON member_membership_applied_discounts_unfiltered (member_id, gym_id);
+
+CREATE INDEX idx_member_membership_applied_discounts_value
+    ON member_membership_applied_discounts_unfiltered (value_id);
 
 -- View: only exposes snapshots whose Stripe coupon has been written back by the
 -- sync, so half-synced rows (a just-applied discount before the sync resolves

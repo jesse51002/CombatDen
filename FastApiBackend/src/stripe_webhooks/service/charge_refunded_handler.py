@@ -1,6 +1,5 @@
 """Handler for Stripe ``charge.refunded`` events."""
 
-import json
 import logging
 from typing import Any
 from uuid import UUID
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
+from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
 from src.stripe_webhooks.service.stripe_time import stripe_ts_to_datetime
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class ChargeRefundedHandler:
                 "stripe_refund_id": stripe_refund_id,
                 "refunds_charge_id": str(parent["charge_id"]),
                 "charge_time": stripe_ts_to_datetime(refund.get("created")),
-                "stripe_event_payload": json.dumps(charge),
+                "stripe_event_payload": dump_stripe_payload(charge),
             }
             await session.execute(text(insert_sql), params)
 

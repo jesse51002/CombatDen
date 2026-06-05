@@ -87,17 +87,26 @@ def create_current(
     client: Client,
     gym_id: uuid.UUID,
     members: list[MemberPlan],
+    *,
+    linked_children: bool = False,
 ) -> list[CurrentMembershipRecord]:
     """Start a live membership for every member that has a `current` plan.
 
-    Skips linked children (no card → can't subscribe; covered by the parent).
+    The default pass starts memberships for non-linked members (paying parents
+    + solo members). Call again with ``linked_children=True`` for the post-link
+    pass that starts each linked child's own membership — it rides the parent's
+    subscription, so the child must already be linked (the link endpoint
+    requires the child to have no active recurring membership).
+
     Returns one record per started (or already-existing) membership.
     """
     records: list[CurrentMembershipRecord] = []
 
     for member in members:
         current = member.current
-        if current is None or member.is_linked_child:
+        if current is None:
+            continue
+        if member.is_linked_child != linked_children:
             continue
         assert member.member_id is not None, "create_current called before members were created"
 
@@ -136,3 +145,42 @@ def create_current(
             )
 
     return records
+
+
+def apply_linked(
+    api: GymApiClient,
+    linked_ids: list[uuid.UUID],
+    current_records: list[CurrentMembershipRecord],
+    linked_plan_id: uuid.UUID,
+    limit: int = 2,
+) -> int:
+    """Apply the plan's linked (family) discount to members on that plan.
+
+    A linked discount is a real discount entry; applying one freezes an
+    immutable snapshot to its active value via the normal apply path
+    (``add_preset_ids``) and re-syncs Stripe — exactly like any discount. We
+    seed a few members on the linked plan with it so the CRM display and the
+    sync's per-line aggregation are exercised end-to-end. Add-only (the seed is
+    run against a fresh reset); returns the number applied.
+    """
+    if not linked_ids:
+        return 0
+    linked_id = str(linked_ids[0])
+    applied = 0
+    for record in current_records:
+        if applied >= limit:
+            break
+        if record.plan_id != linked_plan_id or record.member.member_id is None:
+            continue
+        api.put(
+            "/api/v1/member_memberships/discounts",
+            json={
+                "item_id": str(record.item_id),
+                "member_id": str(record.member.member_id),
+                "add_preset_ids": [linked_id],
+                "remove_applied_ids": [],
+                "idempotency_key": str(uuid.uuid4()),
+            },
+        )
+        applied += 1
+    return applied

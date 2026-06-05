@@ -27,6 +27,7 @@ async def test_create_customer_without_payment(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     resp = await members_service.create_customer(
         PaymentsCustomerCreateRequest(
@@ -36,6 +37,7 @@ async def test_create_customer_without_payment(
         ),
         stripe_account_id,
     )
+    created.track_customer(resp.stripe_customer_id)
 
     assert resp.stripe_customer_id.startswith("cus_")
     assert resp.name == "Jane Doe"
@@ -57,6 +59,7 @@ async def test_create_customer_with_payment_method(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     pm_id = await create_payment_method(stripe_client, connect_opts)
 
@@ -69,6 +72,7 @@ async def test_create_customer_with_payment_method(
         ),
         stripe_account_id,
     )
+    created.track_customer(resp.stripe_customer_id)
 
     assert resp.stripe_customer_id.startswith("cus_")
     assert resp.stripe_payment_method_id == pm_id
@@ -96,9 +100,10 @@ async def test_update_customer_swap_payment_method(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     pm1 = await create_payment_method(stripe_client, connect_opts)
-    created = await members_service.create_customer(
+    created_resp = await members_service.create_customer(
         PaymentsCustomerCreateRequest(
             name="Swap Card",
             payment_method_id=pm1,
@@ -106,11 +111,12 @@ async def test_update_customer_swap_payment_method(
         ),
         stripe_account_id,
     )
+    created.track_customer(created_resp.stripe_customer_id)
 
     pm2 = await create_payment_method(stripe_client, connect_opts)
     resp = await members_service.update_customer(
         PaymentsCustomerUpdateRequest(
-            stripe_customer_id=created.stripe_customer_id,
+            stripe_customer_id=created_resp.stripe_customer_id,
             name="Swap Card",
             payment_method_id=pm2,
             metadata=_customer_metadata(),
@@ -121,7 +127,7 @@ async def test_update_customer_swap_payment_method(
     assert resp.stripe_payment_method_id == pm2
 
     customer = await stripe_client.client.v1.customers.retrieve_async(
-        created.stripe_customer_id,
+        created_resp.stripe_customer_id,
         options=connect_opts,
     )
     default_pm = customer.invoice_settings.default_payment_method
@@ -134,9 +140,10 @@ async def test_unlink_customer_card(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     pm_id = await create_payment_method(stripe_client, connect_opts)
-    created = await members_service.create_customer(
+    created_resp = await members_service.create_customer(
         PaymentsCustomerCreateRequest(
             name="Unlink Card",
             payment_method_id=pm_id,
@@ -144,16 +151,17 @@ async def test_unlink_customer_card(
         ),
         stripe_account_id,
     )
+    created.track_customer(created_resp.stripe_customer_id)
 
     await members_service.unlink_customer_card(
-        created.stripe_customer_id,
+        created_resp.stripe_customer_id,
         stripe_account_id,
     )
 
     # Verify customer has no default PM
     opts = members_service._client.connect_opts(stripe_account_id)
     customer = await members_service.retrieve_customer(
-        created.stripe_customer_id,
+        created_resp.stripe_customer_id,
         opts,
     )
     default_pm = None
@@ -162,17 +170,23 @@ async def test_unlink_customer_card(
     assert default_pm is None or default_pm == ""
 
 
-async def test_list_invoices_empty(members_service, stripe_account_id, connect_opts):
-    created = await members_service.create_customer(
+async def test_list_invoices_empty(
+    members_service,
+    stripe_account_id,
+    connect_opts,
+    created,
+):
+    created_resp = await members_service.create_customer(
         PaymentsCustomerCreateRequest(
             name="No Invoices",
             metadata=_customer_metadata(),
         ),
         stripe_account_id,
     )
+    created.track_customer(created_resp.stripe_customer_id)
 
     invoices = await members_service.list_invoices(
-        created.stripe_customer_id,
+        created_resp.stripe_customer_id,
         stripe_account_id,
     )
 

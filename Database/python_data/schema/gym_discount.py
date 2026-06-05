@@ -1,8 +1,5 @@
-from datetime import date
 from enum import StrEnum
 from uuid import UUID
-
-from pydantic import model_validator
 
 from . import SeedModel
 
@@ -24,8 +21,8 @@ class DiscountType(StrEnum):
 class DiscountMode(StrEnum):
     """Discount lifetime mode. Mirrors the Postgres `discount_mode` enum.
 
-    Declared here because gym_discounts.sql (the preset) is the earliest-loaded
-    consumer; member_membership_applied_discount imports it from here.
+    Consumed by gym_discount_values (the versioned value rows). Kept here as the
+    stable import location (the backend imports it from schema.gym_discount).
     """
 
     once = "once"
@@ -46,42 +43,17 @@ class DiscountDurationUnit(StrEnum):
 
 
 class GymDiscountCreate(SeedModel):
-    """Regular-only, coupon-free discount preset.
+    """Discount IDENTITY (preset | custom | linked).
 
-    Lifetime spec: discount_mode (once | ongoing) plus, for ongoing, an end set
-    by EITHER a duration span (duration_amount + duration_unit) OR an explicit
-    end_date — never both; neither = forever. Coupons are computed at sync, not
-    stored on the preset, so there is no stripe_coupon_id here.
+    Coupon-free and value-free: a discount's percent/dollar + lifetime spec live
+    in versioned, immutable rows on gym_discount_values (see GymDiscountValueCreate).
+    Editing a value mints a new version there; this identity row (name, type)
+    stays stable. A `linked` discount is a real entry that a membership plan's
+    family tiers reference by id.
     """
 
     discount_id: UUID
     gym_id: UUID
     discount_name: str
     discount_type: DiscountType
-    percentage_off: float | None = None
-    dollar_off: int | None = None
-    discount_mode: DiscountMode
-    duration_amount: int | None = None
-    duration_unit: DiscountDurationUnit | None = None
-    end_date: date | None = None
     is_deleted: bool = False
-
-    @model_validator(mode="after")
-    def validate_discount_fields(self) -> "GymDiscountCreate":
-        if self.discount_type == DiscountType.linked:
-            raise ValueError("gym_discounts presets are regular-only (preset | custom)")
-
-        has_pct = self.percentage_off is not None
-        has_dollar = self.dollar_off is not None
-        if has_pct == has_dollar:
-            raise ValueError("Exactly one of percentage_off or dollar_off must be set")
-
-        has_amount = self.duration_amount is not None
-        has_unit = self.duration_unit is not None
-        if has_amount != has_unit:
-            raise ValueError("duration_amount and duration_unit must be set together")
-        if has_amount and self.end_date is not None:
-            raise ValueError(
-                "lifetime is a duration span OR an explicit end_date, never both"
-            )
-        return self

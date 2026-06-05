@@ -616,8 +616,10 @@ via Stripe **test clocks** and synthetic invoice/charge history written direct-D
 - **`NUM_GYMS = 1`:** `gyms.stripe_account_id` is UNIQUE (one Connect account per gym) and we have a
   single test connect account, so the seed provisions one gym with the full live-Stripe path. Bump
   only if you add a connect account per extra gym.
-- **Linked families:** a paying parent + children (children carry no membership; linked via
-  `PUT /members/{id}/link`, which assigns the linked-discount tier and clears child card/freeze).
+- **Linked families:** a paying parent + children, each child on its **own** membership (any
+  recurring plan, not necessarily the parent's) covered by the parent. Children are linked
+  first via `PUT /members/{id}/link` (which clears child card/freeze), then each child's
+  membership is started so the item rides the parent's subscription.
 - **Re-run safe:** `api_creation/upsert.py` looks up members/plans/discounts/memberships by stable
   keys (email, name) so re-runs don't re-create Stripe objects; direct-DB history/invoices are guarded
   on "any new member created" to avoid duplicate rows + membership-trigger violations.
@@ -632,6 +634,10 @@ table), `make reset`, start the backend (`make run`) + `stripe listen`, then `ma
 11 discounts (real coupons), 123 memberships (real subscription items), 278 invoices / 303 charges,
 engagement intact (208 class instances, 725 attendance, 500 activities, 38 redemptions).
 `member_memberships_status` spread: active 76 / ended 24 / cancelled 17 / frozen 6, plus 2 overdue.
+
+> [!note] The snapshot above predates the linked-child membership fix (children now each
+> carry their own membership, started after linking). A fresh `make seed` adds one membership
+> per linked child to the totals.
 
 Gotchas hit while validating:
 - **Overdue fix:** `pm_card_chargeDeclined` is rejected at *attach* time (not just on charge), so the

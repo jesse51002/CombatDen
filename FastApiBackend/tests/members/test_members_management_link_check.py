@@ -6,11 +6,6 @@ import pytest
 
 from src.members.schema.members_schema import MemberCreateRequest
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 
 # ── Happy path ──────────────────────────────────────────────────
 
@@ -21,23 +16,10 @@ async def test_check_happy_path(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Parent",
-        last_name="Check",
-    )
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Child",
-        last_name="Check",
-    )
+    parent = await created.member(gym_id, first_name="Parent", last_name="Check")
+    child = await created.member(gym_id, first_name="Child", last_name="Check")
 
     try:
         result = await management_service.check_link_account(
@@ -60,13 +42,9 @@ async def test_check_self_link_blocked(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-    )
+    member = await created.member(gym_id)
 
     try:
         result = await management_service.check_link_account(
@@ -85,31 +63,11 @@ async def test_check_already_linked_blocked(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent1 = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="P1",
-        last_name="AL",
-    )
-    parent2 = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="P2",
-        last_name="AL",
-    )
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="C",
-        last_name="AL",
-    )
+    parent1 = await created.member(gym_id, first_name="P1", last_name="AL")
+    parent2 = await created.member(gym_id, first_name="P2", last_name="AL")
+    child = await created.member(gym_id, first_name="C", last_name="AL")
 
     try:
         await management_service.link_account(
@@ -136,24 +94,11 @@ async def test_check_candidate_is_parent_blocked(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """A candidate that already has linked children cannot become a child."""
-    grandparent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="GP",
-        last_name="IsParent",
-    )
-    candidate = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Cand",
-        last_name="IsParent",
-    )
+    grandparent = await created.member(gym_id, first_name="GP", last_name="IsParent")
+    candidate = await created.member(gym_id, first_name="Cand", last_name="IsParent")
     # A child linked to `candidate` — making `candidate` a parent.
     child_req = MemberCreateRequest(
         gym_id=gym_id,
@@ -162,6 +107,7 @@ async def test_check_candidate_is_parent_blocked(
         account_linked_to_id=candidate.member_id,
     )
     kid = await management_service.create_member(child_req)
+    created.track_customer(kid.stripe_customer_id)
 
     try:
         result = await management_service.check_link_account(
@@ -182,32 +128,12 @@ async def test_check_parent_is_child_blocked(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """The selected payer cannot itself be linked to another account."""
-    top_parent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Top",
-        last_name="PC",
-    )
-    middle = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Mid",
-        last_name="PC",
-    )
-    candidate = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Cand",
-        last_name="PC",
-    )
+    top_parent = await created.member(gym_id, first_name="Top", last_name="PC")
+    middle = await created.member(gym_id, first_name="Mid", last_name="PC")
+    candidate = await created.member(gym_id, first_name="Cand", last_name="PC")
 
     try:
         # Make `middle` a child of `top_parent`.
@@ -235,26 +161,17 @@ async def test_check_active_recurring_blocked(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    parent = await created.member(gym_id, first_name="P", last_name="RecCheck")
+    pm_id = await created.payment_method()
+    child = await created.member(
         gym_id,
-        connect_opts,
-        first_name="P",
-        last_name="RecCheck",
-    )
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         first_name="C",
         last_name="RecCheck",
         payment_method_id=pm_id,
     )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -283,15 +200,9 @@ async def test_check_parent_not_found_blocked(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="C",
-        last_name="NoPayer",
-    )
+    child = await created.member(gym_id, first_name="C", last_name="NoPayer")
 
     try:
         result = await management_service.check_link_account(
@@ -310,15 +221,9 @@ async def test_check_candidate_not_found_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="P",
-        last_name="NoChild",
-    )
+    parent = await created.member(gym_id, first_name="P", last_name="NoChild")
 
     try:
         with pytest.raises(ValueError, match="not found"):

@@ -30,7 +30,9 @@ from tests.helpers.data_factory import create_payment_method
 # ── Helpers ─────────────────────────────────────────────────────
 
 
-async def _customer_with_card(members_service, stripe_client, stripe_account_id, connect_opts):
+async def _customer_with_card(
+    members_service, stripe_client, stripe_account_id, connect_opts, created
+):
     """Create a Stripe customer with a Visa card attached."""
     pm_id = await create_payment_method(stripe_client, connect_opts)
     resp = await members_service.create_customer(
@@ -44,10 +46,11 @@ async def _customer_with_card(members_service, stripe_client, stripe_account_id,
         ),
         stripe_account_id,
     )
+    created.track_customer(resp.stripe_customer_id)
     return resp.stripe_customer_id
 
 
-async def _one_time_price(membership_service, stripe_account_id, unit_amount: int = 2000):
+async def _one_time_price(membership_service, stripe_account_id, created, unit_amount: int = 2000):
     """Create a Stripe product with a one-time price."""
     resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -68,6 +71,9 @@ async def _one_time_price(membership_service, stripe_account_id, unit_amount: in
         ),
         stripe_account_id,
     )
+    created.track_product(resp.stripe_product_id)
+    for p in resp.prices:
+        created.track_price(p.stripe_price_id)
     return resp.prices[0].stripe_price_id
 
 
@@ -113,14 +119,16 @@ async def test_create_invoice_payment(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _customer_with_card(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _one_time_price(membership_service, stripe_account_id)
+    price_id = await _one_time_price(membership_service, stripe_account_id, created)
 
     resp = await payment_service.create_invoice_payment(
         PaymentsInvoicePaymentCreateRequest(
@@ -155,6 +163,7 @@ async def test_create_invoice_payment_zero_amount(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     """$0 invoices must not re-invoke pay_async after finalize."""
     customer_id = await _customer_with_card(
@@ -162,10 +171,12 @@ async def test_create_invoice_payment_zero_amount(
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
     price_id = await _one_time_price(
         membership_service,
         stripe_account_id,
+        created,
         unit_amount=0,
     )
 
@@ -203,14 +214,16 @@ async def test_preview_invoice_payment(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _customer_with_card(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _one_time_price(membership_service, stripe_account_id)
+    price_id = await _one_time_price(membership_service, stripe_account_id, created)
 
     resp = await payment_service.preview_invoice_payment(
         PaymentsInvoicePaymentPreviewRequest(
@@ -231,16 +244,19 @@ async def test_refund_full_payment(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _customer_with_card(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
     price_id = await _one_time_price(
         membership_service,
         stripe_account_id,
+        created,
         unit_amount=3000,
     )
     pi_id = await _paid_invoice_pi(
@@ -280,16 +296,19 @@ async def test_refund_partial_payment(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _customer_with_card(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
     price_id = await _one_time_price(
         membership_service,
         stripe_account_id,
+        created,
         unit_amount=5000,
     )
     pi_id = await _paid_invoice_pi(

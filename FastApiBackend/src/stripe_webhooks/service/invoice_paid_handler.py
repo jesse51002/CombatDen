@@ -1,6 +1,5 @@
 """Handler for Stripe ``invoice.paid`` events."""
 
-import json
 import logging
 from typing import Any
 from uuid import UUID
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
+from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
 from src.stripe_webhooks.service.stripe_time import (
     stripe_ts_to_date,
     stripe_ts_to_datetime,
@@ -164,7 +164,7 @@ class InvoicePaidHandler:
             "stripe_invoice_id": invoice["id"],
             "stripe_payment_intent_id": invoice.get("payment_intent"),
             "invoice_time": stripe_ts_to_datetime(paid_at_ts),
-            "stripe_event_payload": json.dumps(invoice),
+            "stripe_event_payload": dump_stripe_payload(invoice),
         }
         result = await session.execute(text(upsert_sql), params)
         row = result.mappings().fetchone()
@@ -259,7 +259,7 @@ class InvoicePaidHandler:
             "stripe_refund_id": None,
             "refunds_charge_id": None,
             "charge_time": stripe_ts_to_datetime(paid_at_ts),
-            "stripe_event_payload": json.dumps(invoice),
+            "stripe_event_payload": dump_stripe_payload(invoice),
         }
         await session.execute(text(insert_sql), params)
 

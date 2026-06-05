@@ -23,6 +23,20 @@ CREATE TABLE membership_plans_unfiltered (
     is_public BOOLEAN NOT NULL DEFAULT TRUE,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     stripe_product_id VARCHAR,
+    -- Waivers a member must sign for this plan: a jsonb array of waiver_id
+    -- strings (multi-select; no FK, mirroring gym_classes.allowed_plan_ids).
+    waiver_ids JSONB NOT NULL DEFAULT '[]'
+        CONSTRAINT chk_plan_waiver_ids_array
+        CHECK (jsonb_typeof(waiver_ids) = 'array'),
+    -- Per-plan linked (family-member) discount: a flag plus the discount ids
+    -- for the 2nd, 3rd, 4th, 5th+ linked member, in order (jsonb uuid array
+    -- of real `linked` discount entries in gym_discounts). The backend mints a
+    -- linked discount entry per entered tier amount and stores its id here;
+    -- reads resolve the ids back to amounts. Empty when disabled.
+    linked_discount_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    linked_discount_ids JSONB NOT NULL DEFAULT '[]'
+        CONSTRAINT chk_plan_linked_ids_array
+        CHECK (jsonb_typeof(linked_discount_ids) = 'array'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (plan_id),
     UNIQUE (plan_id, gym_id)

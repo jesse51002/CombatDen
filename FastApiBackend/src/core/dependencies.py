@@ -1,6 +1,9 @@
 from dependency_injector import containers, providers
 
 from src.classes.service.classes_checkin_service import ClassesCheckinService
+from src.classes.service.classes_cycle_counts_service import (
+    ClassesCycleCountsService,
+)
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.core.config import settings
 from src.discounts.service.discounts.discounts_service import DiscountsService
@@ -8,17 +11,11 @@ from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
 )
-from src.member_memberships.service.linked_member_discount_service import (
-    LinkedMemberDiscountService,
-)
 from src.member_memberships.service.memberships.member_memberships_service import (
     MemberMembershipsService,
 )
 from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
     MembershipPaymentSyncService,
-)
-from src.members.service.member_details.members_billing_detail_service import (
-    MembersBillingDetailService,
 )
 from src.members.service.crm_member_services.members_crm_members_list_service import (
     CrmMembersListService,
@@ -28,6 +25,9 @@ from src.members.service.crm_member_services.members_crm_total_counts_service im
 )
 from src.members.service.management.members_management_service import (
     MembersManagementService,
+)
+from src.members.service.member_details.members_billing_detail_service import (
+    MembersBillingDetailService,
 )
 from src.membership_plans.service.plans.membership_plans_service import (
     MembershipPlansService,
@@ -59,13 +59,13 @@ from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
-from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
 from src.stripe_webhooks.service.charge_refunded_handler import (
     ChargeRefundedHandler,
 )
+from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
 )
@@ -75,6 +75,7 @@ from src.stripe_webhooks.service.invoice_payment_failed_handler import (
 from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
 )
+from src.waivers.service.waivers.waivers_service import WaiversService
 
 
 class DependencyInjector(containers.DeclarativeContainer):
@@ -92,6 +93,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.members.members_router",
             "src.ranks.ranks_router",
             "src.rewards.rewards_router",
+            "src.waivers.waivers_router",
             # === CRM billing router modules (restored) ===
             "src.discounts.discounts_router",
             "src.member_memberships.member_memberships_router",
@@ -106,12 +108,24 @@ class DependencyInjector(containers.DeclarativeContainer):
     auth = providers.Singleton(Auth, supabase=supabase)
 
     streak_service = providers.Factory(ClassesStreakService, db_pool=db_pool)
-    checkin_service = providers.Factory(ClassesCheckinService, db_pool=db_pool)
+    cycle_counts_service = providers.Factory(
+        ClassesCycleCountsService,
+        db_pool=db_pool,
+    )
+    checkin_service = providers.Factory(
+        ClassesCheckinService,
+        db_pool=db_pool,
+        cycle_counts_service=cycle_counts_service,
+    )
 
     rewards_service = providers.Factory(RewardsService, db_pool=db_pool)
     rewards_redemption_service = providers.Factory(RewardsRedemptionService, db_pool=db_pool)
 
     ranks_service = providers.Factory(RanksService, db_pool=db_pool)
+
+    # Waivers: plain gym config (versioned documents + read-only e-sign
+    # tracking), no Stripe.
+    waivers_service = providers.Factory(WaiversService, db_pool=db_pool)
 
     # === CRM billing DI providers (restored) ===
     # Shared Stripe infrastructure (per-gym connected-account lookups).
@@ -153,17 +167,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         discount_service=payments_discount_service,
     )
 
-    # ── Payment sync + linked discounts ──────────────────────────
-    linked_member_discount_service = providers.Factory(
-        LinkedMemberDiscountService,
-        db_pool=db_pool,
-    )
+    # ── Payment sync ─────────────────────────────────────────────
+    # Linked-discount recalculation is gone — family discounts are frozen
+    # snapshot rows divided across the consolidated line at sync.
     membership_payment_sync_service = providers.Factory(
         MembershipPaymentSyncService,
         db_pool=db_pool,
         subscription_service=payments_subscription_service,
         gym_stripe_service=gym_stripe_service,
-        linked_discount_service=linked_member_discount_service,
+        stripe_client=stripe_client,
     )
 
     # ── Member memberships ───────────────────────────────────────
@@ -190,6 +202,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         MembersBillingDetailService,
         db_pool=db_pool,
         streak_service=streak_service,
+        cycle_counts_service=cycle_counts_service,
     )
     members_management_service = providers.Factory(
         MembersManagementService,
@@ -199,12 +212,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # ── Discounts ────────────────────────────────────────────────
+    # Presets are plain, coupon-free gym config: no Stripe, no payment sync.
     discounts_service = providers.Factory(
         DiscountsService,
         db_pool=db_pool,
-        gym_stripe_service=gym_stripe_service,
-        stripe_discount_service=payments_discount_service,
-        membership_payment_sync_service=membership_payment_sync_service,
     )
 
     # ── Membership plans ─────────────────────────────────────────
@@ -215,6 +226,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         stripe_membership_service=payments_membership_service,
         stripe_price_service=payments_price_service,
         membership_payment_sync_service=membership_payment_sync_service,
+        discounts_service=discounts_service,
     )
 
     # ── Gyms (Stripe Express onboarding) ─────────────────────────

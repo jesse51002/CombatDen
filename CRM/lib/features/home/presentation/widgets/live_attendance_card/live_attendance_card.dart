@@ -10,9 +10,9 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// Top section of the dashboard's left column: the live class roster
 /// (member avatar + name + checked-in pill) with a "Check In Member" /
-/// "View all" footer. Overdue Payments stacks directly below it (see
-/// `home_screen.dart`), so this card shrink-wraps to its content rather
-/// than filling the column.
+/// "View all" footer. It fills its (equal-flex) half of the column — the
+/// roster scrolls between a fixed header and a **pinned** footer so the
+/// action buttons stay visible.
 class LiveAttendanceCard extends StatelessWidget {
   final List<AttendanceEntry> entries;
 
@@ -35,7 +35,13 @@ class LiveAttendanceCard extends StatelessWidget {
           notArrived: notArrived,
           percent: percent,
         ),
-        _AttendanceTable(entries: entries),
+        // Roster scrolls in the space between the fixed header and the
+        // pinned footer below, so the action buttons stay visible.
+        Expanded(
+          child: SingleChildScrollView(
+            child: _AttendanceTable(entries: entries),
+          ),
+        ),
         _Footer(),
       ],
     );

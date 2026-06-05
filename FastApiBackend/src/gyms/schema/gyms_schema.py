@@ -19,7 +19,6 @@ class GymCreateRequest(BaseModel):
     owner_first_name: str = Field(min_length=1, max_length=255)
     owner_last_name: str = Field(min_length=1, max_length=255)
     owner_phone: str | None = None
-    owner_email: str | None = None
 
     @field_validator("gym_name", "owner_first_name", "owner_last_name")
     @classmethod

@@ -22,9 +22,10 @@ CREATE POLICY "Gym staff can insert discounts"
     TO authenticated
     WITH CHECK (is_gym_admin_or_owner(gym_discounts_unfiltered.gym_id));
 
--- Policy: Gym staff can edit their discount presets (name / value / lifetime)
--- and archive them (is_deleted). Edits affect only future applications;
--- existing applied snapshots are immutable and untouched.
+-- Policy: Gym staff can edit the discount identity (rename) and archive it
+-- (is_deleted). The discount's VALUES live on gym_discount_values — editing a
+-- value mints a new version there, never on this identity row. Edits affect
+-- only future applications; existing applied snapshots are immutable.
 CREATE POLICY "Gym staff can update discounts"
     ON gym_discounts_unfiltered
     FOR UPDATE
@@ -38,8 +39,9 @@ CREATE POLICY "Gym staff can delete discounts"
     FOR DELETE
     USING (is_gym_admin_or_owner(gym_discounts_unfiltered.gym_id));
 
--- Identity columns stay immutable.
-REVOKE UPDATE (discount_id, gym_id, created_at) ON TABLE gym_discounts_unfiltered FROM authenticated;
+-- Identity columns stay immutable (discount_type is set at creation; only
+-- discount_name is editable).
+REVOKE UPDATE (discount_id, gym_id, discount_type, created_at) ON TABLE gym_discounts_unfiltered FROM authenticated;
 
 -- View-level permissions: reads go through the passthrough view; writes go to
 -- the base table.

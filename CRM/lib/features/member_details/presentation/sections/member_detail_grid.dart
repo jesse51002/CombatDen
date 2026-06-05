@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
+import 'package:crm/features/member_details/presentation/sections/member_waivers_section.dart';
 import 'package:crm/features/member_details/presentation/sections/membership_carousel.dart';
 import 'package:crm/features/member_details/presentation/sections/personal_info_section.dart';
 import 'package:crm/features/member_details/presentation/sections/rank_section.dart';
@@ -89,6 +90,10 @@ class _LeftColumn extends StatelessWidget {
       children: [
         PersonalInfoSection(
           personalInfo: member.personalInfo,
+        ),
+        MemberWaiversSection(
+          memberId: member.memberId,
+          gymId: member.gymId,
         ),
         if (member.rank != null)
           RankSection(rank: member.rank!),

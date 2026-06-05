@@ -10,6 +10,9 @@ from uuid import UUID
 
 from fastapi import BackgroundTasks
 
+from src.discounts.service.discounts.discounts_service import (
+    DiscountsService,
+)
 from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
     MembershipPaymentSyncService,
 )
@@ -59,12 +62,14 @@ class MembershipPlansService:
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
         membership_payment_sync_service: MembershipPaymentSyncService,
+        discounts_service: DiscountsService,
     ) -> None:
         deps = (
             db_pool,
             gym_stripe_service,
             stripe_membership_service,
             stripe_price_service,
+            discounts_service,
         )
         self._create = MembershipPlansCreate(*deps)
         self._update = MembershipPlansUpdate(*deps)

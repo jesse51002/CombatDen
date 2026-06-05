@@ -1,16 +1,12 @@
-"""Create gym discounts (regular presets) via the backend.
+"""Create gym discounts (preset | custom) via the backend.
 
-Discounts are now regular-only (preset | custom) and coupon-free: linked
-(family) discounts dissolved into snapshot rows and coupons are computed at
-sync, not on the preset (see Database Phase 1 / FastApiBackend Phase 2). The
-preset carries a lifetime spec — discount_mode (once | ongoing) plus, for
-ongoing, an end set by EITHER a duration span (duration_amount + duration_unit
-∈ day/week/month) OR an explicit end_date — never both; neither = forever.
-
-NOTE (Phase 2 dependency): the backend `POST /api/v1/discounts/` request shape
-is reshaped in FastApiBackend Phase 2 to accept this new spec and stop creating
-a Stripe coupon. The payload built here matches the new schema; it goes live
-once that endpoint lands.
+The seed creates coupon-free discount presets: `POST /api/v1/discounts/` writes
+the identity row plus its active value version (coupons are computed at sync and
+written onto the applied snapshot, never on the preset). Each carries a lifetime
+spec — discount_mode (once | ongoing) plus, for ongoing, an end set by EITHER a
+duration span (duration_amount + duration_unit ∈ day/week/month) OR an explicit
+end_date — never both; neither = forever. The payload built here matches
+DiscountCreateRequest in FastApiBackend (verified against Database/openapi.json).
 """
 
 from __future__ import annotations

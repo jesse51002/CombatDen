@@ -138,8 +138,6 @@ class MemberMembershipsService:
         plan_id: UUID,
         price_id: UUID,
         idempotency_key: UUID,
-        discount_ids: list[UUID] | None = None,
-        include_linked_discount: bool = False,
         prorate: bool = True,
         paid_with_cash: bool = False,
     ) -> None:
@@ -150,8 +148,6 @@ class MemberMembershipsService:
             plan_id=plan_id,
             price_id=price_id,
             idempotency_key=idempotency_key,
-            discount_ids=discount_ids,
-            include_linked_discount=include_linked_discount,
             prorate=prorate,
             paid_with_cash=paid_with_cash,
         )
@@ -162,8 +158,6 @@ class MemberMembershipsService:
         gym_id: UUID,
         plan_id: UUID,
         price_id: UUID,
-        discount_ids: list[UUID] | None = None,
-        include_linked_discount: bool = False,
         prorate: bool = True,
         paid_with_cash: bool = False,
     ) -> PaymentsInvoicePreviewResponse | None:
@@ -173,8 +167,6 @@ class MemberMembershipsService:
             gym_id=gym_id,
             plan_id=plan_id,
             price_id=price_id,
-            discount_ids=discount_ids,
-            include_linked_discount=include_linked_discount,
             prorate=prorate,
             paid_with_cash=paid_with_cash,
         )
@@ -229,32 +221,32 @@ class MemberMembershipsService:
             prorate=prorate,
         )
 
-    # ── Update Discounts ───────────────────────────────────────
+    # ── Apply Discounts (add / remove snapshots) ───────────────
 
-    async def update_discounts(
+    async def apply_discounts(
         self,
         item_id: UUID,
         member_id: UUID,
-        discount_ids: list[UUID],
+        add_preset_ids: list[UUID],
+        remove_applied_ids: list[UUID],
         idempotency_key: UUID,
     ) -> None:
-        """Replace the discount set on an existing membership."""
-        await self._update_discounts.update_discounts(
+        """Add / remove discount snapshots on an existing membership."""
+        await self._update_discounts.apply_discounts(
             item_id=item_id,
             member_id=member_id,
-            discount_ids=discount_ids,
+            add_preset_ids=add_preset_ids,
+            remove_applied_ids=remove_applied_ids,
             idempotency_key=idempotency_key,
         )
 
-    async def preview_update_discounts(
+    async def preview_apply_discounts(
         self,
         item_id: UUID,
         member_id: UUID,
-        discount_ids: list[UUID],
     ) -> PaymentsInvoicePreviewResponse | None:
-        """Preview what replacing a membership's discounts would charge."""
-        return await self._update_discounts.preview_update_discounts(
+        """Preview the subscription with the membership's current snapshots."""
+        return await self._update_discounts.preview_apply_discounts(
             item_id=item_id,
             member_id=member_id,
-            discount_ids=discount_ids,
         )

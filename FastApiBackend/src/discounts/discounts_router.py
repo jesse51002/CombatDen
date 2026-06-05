@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -15,7 +15,6 @@ from src.discounts.schema.discounts_schema import (
     DiscountUpdateRequest,
 )
 from src.discounts.service.discounts.discounts_service import DiscountsService
-from src.payments.payments_exceptions import PaymentsStripeError
 from src.shared.auth import Auth, security
 
 logger = logging.getLogger(__name__)
@@ -79,14 +78,13 @@ async def list_discounts(
     "/",
     response_model=DiscountResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a discount",
-    description="Creates a gym discount with a corresponding Stripe coupon.",
+    summary="Create a discount preset",
+    description="Creates a coupon-free gym discount preset (plain config).",
     responses={
         201: {"description": "Discount created successfully"},
         400: {"description": "Invalid request data"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        502: {"description": "Stripe error"},
     },
 )
 @inject
@@ -96,16 +94,16 @@ async def create_discount(
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     discounts_service: DiscountsService = Depends(Provide[DependencyInjector.discounts_service]),
 ) -> DiscountResponse:
-    """Create a new gym discount.
+    """Create a new gym discount preset.
 
     Args:
-        request: Discount creation data.
+        request: Discount preset creation data.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         discounts_service: Injected discounts service.
 
     Raises:
-        HTTPException: 400/401/403/502/500 on respective errors.
+        HTTPException: 400/401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
@@ -115,11 +113,6 @@ async def create_discount(
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from None
-    except PaymentsStripeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from None
     except Exception:
@@ -138,48 +131,43 @@ async def create_discount(
     "/",
     response_model=DiscountResponse,
     status_code=status.HTTP_200_OK,
-    summary="Update a discount",
+    summary="Update a discount preset",
     description=(
-        "Updates a non-linked gym discount. If value fields changed, "
-        "creates a new Stripe coupon and syncs affected memberships."
+        "Edits a gym discount preset's intent and lifetime spec. Edits affect "
+        "only future applications; existing applied-discount snapshots are "
+        "untouched."
     ),
     responses={
         200: {"description": "Discount updated successfully"},
-        400: {"description": "Invalid request or linked discount"},
+        400: {"description": "Invalid request data"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Discount not found"},
-        502: {"description": "Stripe error"},
     },
 )
 @inject
 async def update_discount(
     request: DiscountUpdateRequest,
-    background_tasks: BackgroundTasks,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     discounts_service: DiscountsService = Depends(Provide[DependencyInjector.discounts_service]),
 ) -> DiscountResponse:
-    """Update an existing non-linked discount.
+    """Update an existing discount preset.
 
     Args:
         request: Discount update data.
-        background_tasks: FastAPI background tasks for membership sync.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         discounts_service: Injected discounts service.
 
     Raises:
-        HTTPException: 400/401/403/404/502/500 on respective errors.
+        HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
 
     try:
-        return await discounts_service.update_discount(
-            request,
-            background_tasks,
-        )
+        return await discounts_service.update_discount(request)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -190,11 +178,6 @@ async def update_discount(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -211,51 +194,44 @@ async def update_discount(
 @discounts_router.delete(
     "/",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a discount",
+    summary="Archive a discount preset",
     description=(
-        "Soft-deletes a non-linked discount, deletes the Stripe coupon, "
-        "removes it from all memberships, and syncs payments."
+        "Archives a discount preset (soft-delete). Existing applied-discount "
+        "snapshots keep their frozen copy, so member bills are unchanged."
     ),
     responses={
-        204: {"description": "Discount deleted successfully"},
-        400: {"description": "Linked discount or invalid request"},
+        204: {"description": "Discount archived successfully"},
+        400: {"description": "Invalid request"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Discount not found"},
-        502: {"description": "Stripe error"},
     },
 )
 @inject
 async def delete_discount(
     discount_id: UUID,
     gym_id: UUID,
-    background_tasks: BackgroundTasks,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     discounts_service: DiscountsService = Depends(Provide[DependencyInjector.discounts_service]),
 ) -> None:
-    """Soft-delete a non-linked discount.
+    """Archive a discount preset.
 
     Args:
-        discount_id: The discount to delete.
-        gym_id: The gym owning the discount.
-        background_tasks: FastAPI background tasks for membership sync.
+        discount_id: The discount to archive.
+        gym_id: The gym owning the discount (authorization scope).
         credentials: Bearer token credentials.
         auth: Injected auth service.
         discounts_service: Injected discounts service.
 
     Raises:
-        HTTPException: 400/401/403/404/502/500 on respective errors.
+        HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
 
     try:
-        await discounts_service.delete_discount(
-            discount_id,
-            gym_id,
-            background_tasks,
-        )
+        await discounts_service.delete_discount(discount_id)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -266,11 +242,6 @@ async def delete_discount(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
         ) from None
     except Exception:
         logger.error(

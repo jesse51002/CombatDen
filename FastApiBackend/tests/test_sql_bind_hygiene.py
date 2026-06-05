@@ -1,0 +1,46 @@
+"""Hermetic regression guard for the `:param::type` SQL bind footgun.
+
+A production bug shipped where ``membership_plans_insert.sql`` cast bind
+parameters with ``:waiver_ids::jsonb`` / ``:linked_discount_ids::jsonb``.
+SQLAlchemy's ``text()`` bind-parameter parser refuses to match a ``:name``
+that is immediately followed by a colon (the ``::`` of a Postgres cast), so
+those binds were passed through to asyncpg **literally** — producing
+``PostgresSyntaxError: syntax error at or near ":"`` and a 500 on
+``POST /api/v1/membership_plans/`` (which broke the seed at plan creation).
+
+The fix is to always cast a bound value with ``CAST(:param AS TYPE)`` instead
+of ``:param::type`` (a literal cast like ``'[]'::jsonb`` is fine — the hazard
+is only a *bind parameter* immediately followed by ``::``).
+
+This test is intentionally hermetic (no DB / Stripe / live backend) so it runs
+in the default unit pass and catches the regression even when the live
+integration tests are not run.
+"""
+
+import re
+from pathlib import Path
+
+# A bind param (``:name``) immediately followed by a Postgres cast (``::type``).
+# This is the pattern SQLAlchemy's text() parser will NOT bind. Literal casts
+# such as ``'[]'::jsonb`` do not match because they are not a ``:name`` bind.
+_BIND_THEN_CAST = re.compile(r":[A-Za-z_][A-Za-z0-9_]*::[A-Za-z_]")
+
+_SRC_DIR = Path(__file__).resolve().parent.parent / "src"
+
+
+def test_no_bind_param_immediately_followed_by_cast() -> None:
+    """No production .sql binds a param with `:param::type` (use CAST())."""
+    offenders: list[str] = []
+    for sql_file in _SRC_DIR.rglob("*.sql"):
+        text = sql_file.read_text(encoding="utf-8")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for match in _BIND_THEN_CAST.finditer(line):
+                rel = sql_file.relative_to(_SRC_DIR.parent)
+                offenders.append(f"{rel}:{lineno}: {match.group(0)}")
+
+    assert not offenders, (
+        "Bind parameter immediately followed by a `::` cast — SQLAlchemy "
+        "text() will not bind it (asyncpg raises 'syntax error at or near "
+        '":"'
+        "'). Use CAST(:param AS TYPE) instead:\n  " + "\n  ".join(offenders)
+    )

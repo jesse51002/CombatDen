@@ -11,9 +11,6 @@ Standalone module — no pytest imports, no fixture dependencies.
 from dataclasses import dataclass
 
 from src.discounts.service.discounts.discounts_service import DiscountsService
-from src.member_memberships.service.linked_member_discount_service import (
-    LinkedMemberDiscountService,
-)
 from src.member_memberships.service.memberships.member_memberships_service import (
     MemberMembershipsService,
 )
@@ -92,13 +89,16 @@ def build_payment_services(stripe_client: PaymentsStripeClient) -> PaymentServic
     )
 
 
-def build_member_management_service(
+def build_payment_sync_service(
     db_pool: DirectDatabasePool,
     stripe_client: PaymentsStripeClient,
-) -> MembersManagementService:
-    """Build the member management service.
+) -> MembershipPaymentSyncService:
+    """Build the membership payment-sync service.
 
-    Mirrors ``src/core/dependencies.py`` lines 174-178.
+    Mirrors ``src/core/dependencies.py`` (membership_payment_sync_service).
+    Linked-discount recalculation is gone — family discounts are frozen
+    snapshot rows divided across the consolidated line at sync, and the
+    sync-time coupon step uses ``stripe_client`` directly.
     """
     price_svc = PaymentsStripePriceService(stripe_client)
     members_svc = PaymentsStripeMembersService(stripe_client)
@@ -110,13 +110,24 @@ def build_member_management_service(
         discount_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
-    linked_discount_svc = LinkedMemberDiscountService(db_pool)
-    sync_svc = MembershipPaymentSyncService(
+    return MembershipPaymentSyncService(
         db_pool,
         subscription_svc,
         gym_stripe_svc,
-        linked_discount_svc,
+        stripe_client,
     )
+
+
+def build_member_management_service(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MembersManagementService:
+    """Build the member management service.
+
+    Mirrors ``src/core/dependencies.py`` (members_management_service).
+    """
+    members_svc = PaymentsStripeMembersService(stripe_client)
+    sync_svc = build_payment_sync_service(db_pool, stripe_client)
     return MembersManagementService(db_pool, members_svc, sync_svc)
 
 
@@ -126,30 +137,17 @@ def build_member_memberships_service(
 ) -> MemberMembershipsService:
     """Build the full memberships service chain.
 
-    Mirrors ``src/core/dependencies.py`` lines 153-173.
+    Mirrors ``src/core/dependencies.py`` (member_memberships_service).
     """
     price_svc = PaymentsStripePriceService(stripe_client)
     members_svc = PaymentsStripeMembersService(stripe_client)
-    discount_svc = PaymentsStripeDiscountService(stripe_client)
-    subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client,
-        members_svc,
-        price_svc,
-        discount_svc,
-    )
     payment_svc = PaymentsStripePaymentService(
         stripe_client,
         members_svc,
         price_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
-    linked_discount_svc = LinkedMemberDiscountService(db_pool)
-    sync_svc = MembershipPaymentSyncService(
-        db_pool,
-        subscription_svc,
-        gym_stripe_svc,
-        linked_discount_svc,
-    )
+    sync_svc = build_payment_sync_service(db_pool, stripe_client)
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -160,30 +158,14 @@ def build_member_memberships_service(
 
 def build_discounts_service(
     db_pool: DirectDatabasePool,
-    stripe_client: PaymentsStripeClient,
 ) -> DiscountsService:
     """Build the discounts service.
 
-    Mirrors ``src/core/dependencies.py`` lines 180-186.
+    Presets are plain, coupon-free gym config: no Stripe, no payment sync —
+    the service takes only ``db_pool``. Mirrors
+    ``src/core/dependencies.py`` (discounts_service).
     """
-    price_svc = PaymentsStripePriceService(stripe_client)
-    members_svc = PaymentsStripeMembersService(stripe_client)
-    discount_svc = PaymentsStripeDiscountService(stripe_client)
-    subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client,
-        members_svc,
-        price_svc,
-        discount_svc,
-    )
-    gym_stripe_svc = GymStripeService(db_pool)
-    linked_discount_svc = LinkedMemberDiscountService(db_pool)
-    sync_svc = MembershipPaymentSyncService(
-        db_pool,
-        subscription_svc,
-        gym_stripe_svc,
-        linked_discount_svc,
-    )
-    return DiscountsService(db_pool, gym_stripe_svc, discount_svc, sync_svc)
+    return DiscountsService(db_pool)
 
 
 def build_membership_plans_service(
@@ -192,26 +174,12 @@ def build_membership_plans_service(
 ) -> MembershipPlansService:
     """Build the membership plans service.
 
-    Mirrors ``src/core/dependencies.py`` lines 188-195.
+    Mirrors ``src/core/dependencies.py`` (membership_plans_service).
     """
     price_svc = PaymentsStripePriceService(stripe_client)
-    members_svc = PaymentsStripeMembersService(stripe_client)
-    discount_svc = PaymentsStripeDiscountService(stripe_client)
     membership_svc = PaymentsStripeMembershipService(stripe_client, price_svc)
-    subscription_svc = PaymentsStripeSubscriptionService(
-        stripe_client,
-        members_svc,
-        price_svc,
-        discount_svc,
-    )
     gym_stripe_svc = GymStripeService(db_pool)
-    linked_discount_svc = LinkedMemberDiscountService(db_pool)
-    sync_svc = MembershipPaymentSyncService(
-        db_pool,
-        subscription_svc,
-        gym_stripe_svc,
-        linked_discount_svc,
-    )
+    sync_svc = build_payment_sync_service(db_pool, stripe_client)
     return MembershipPlansService(
         db_pool,
         gym_stripe_svc,

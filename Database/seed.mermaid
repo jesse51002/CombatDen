@@ -1,0 +1,168 @@
+%% seed.mermaid — what `make seed` (Database/python_data/main.py) produces.
+%% A flat type graph: every distinct type/variant is its own node. The ARROW
+%% carries the local split (share of its parent); the NODE carries the global
+%% share. Figures are per gym (NUM_GYMS = 1). ×N = exact · ~ / % = approximate.
+%% Each entity is its OWN independent tree — there is no cross-entity backbone
+%% (entities only link internally, where a type is a real subdivision of that
+%% entity). Where an entity's facets CO-OCCUR (every item has all of them at
+%% once — e.g. a class has a recurrence AND a state AND a capacity), those
+%% dimensions are stacked vertically and each one's values reconverge into the
+%% next. Where the facets are mutually exclusive (an item is exactly one type),
+%% it's a simple fan. Dashed arrows are non-partition overlays / extras.
+%% Living doc — keep in sync with constants.py + python_data/ generators. See
+%% Database/CLAUDE.md.
+flowchart TB
+
+  %% ── Staff ×3 (one role each — simple split) ──
+  Staff["🧑‍🏫 Staff ×3"]
+  Staff -->|"⅓"| st_owner["owner ×1<br/>33% · has app login"]
+  Staff -->|"⅔"| st_staff["staff ×2<br/>67% · admin or trainer"]
+
+  %% ── Members ×100 — co-occurring dimensions stacked vertically. Every member
+  %% has ALL of these at once (household + lifecycle + freeze + access), so each
+  %% dimension's values reconverge into the next. family + non-family converge
+  %% into the shared membership lifecycle.
+  Members["👤 Members ×100"]
+  Members -->|"~50%"| m_fam["family<br/>paying root + 1–5 cardless kids"]
+  Members -->|"~50%"| m_non["non-family"]
+  m_fam --> m_life
+  m_non --> m_life
+
+  m_life["membership lifecycle"]
+  m_life -->|"8%"| m_never["never-started"]
+  m_life -->|"10%"| m_former["former (history only)"]
+  m_life -->|"25%"| m_trial["trial-only"]
+  m_life -->|"20%"| m_t2p["trial→paid"]
+  m_life -->|"22%"| m_active["active (~10% cancel at start)"]
+  m_life -->|"15%"| m_resign["re-signup"]
+  m_never --> m_frz
+  m_former --> m_frz
+  m_trial --> m_frz
+  m_t2p --> m_frz
+  m_active --> m_frz
+  m_resign --> m_frz
+
+  m_frz["freeze status (co-occurs)"]
+  m_frz -->|"~15%"| m_frozen["frozen"]
+  m_frz -->|"~85%"| m_unfrozen["not frozen"]
+  m_frozen --> m_acc
+  m_unfrozen --> m_acc
+
+  m_acc["app access (co-occurs)"]
+  m_acc -->|"5%"| m_app["app-login ×5"]
+  m_acc -->|"95%"| m_staff["staff-managed ×95"]
+
+  Members -.->|"+2 extra"| m_overdue["overdue ×2<br/>past_due, via Stripe test-clock"]
+
+  %% ── Ranks · presets ×35 (this gym = BJJ — simple split) ──
+  Ranks["🥋 Ranks · presets ×35"]
+  Ranks -->|"gym ladder"| r_bjj["BJJ ×25<br/>5 belts × 5 stripes"]
+  Ranks -.->|"preset only"| r_mma["MMA ×5 tiers"]
+  Ranks -.->|"preset only"| r_gen["generic ×5 tiers"]
+
+  %% ── Plans ×7 by plan_type (one type each — simple split) ──
+  Plans["🎟️ Membership plans ×7"]
+  Plans -->|"5/7"| p_rec["recurring ×5 · 71%<br/>Basic $49.99 · Premium $89.99<br/>Family $149.99 · Student $34.99 · Unlimited $129.99"]
+  Plans -->|"1/7"| p_once["one_time ×1 · 14%<br/>Drop-In $25 (3 cls / 1 wk)"]
+  Plans -->|"1/7"| p_trial["trial ×1 · 14%<br/>Free Trial $0 (5 cls / 2 wk)"]
+
+  %% ── Discounts ×4 — regular's facets (amount + duration + kind) co-occur, so
+  %% they're stacked and reconverge; linked is the other branch.
+  Discounts["🏷️ Discounts ×4"]
+  Discounts -->|"~50%"| d_linked["linked / family ×2<br/>$20 & $30 off, ongoing · used by Family plan"]
+  Discounts -->|"~50%"| d_reg["regular ×2"]
+
+  d_reg --> d_amt["amount (co-occurs)"]
+  d_amt -->|"50%"| d_pct["percent 5–25%"]
+  d_amt -->|"50%"| d_dollar["dollar $5–$50"]
+  d_pct --> d_dur
+  d_dollar --> d_dur
+
+  d_dur["duration (co-occurs)"]
+  d_dur -->|"50%"| d_once["once"]
+  d_dur -->|"50%"| d_ongoing["ongoing<br/>½ time-bounded · ½ forever"]
+  d_once --> d_kind
+  d_ongoing --> d_kind
+
+  d_kind["kind (co-occurs)"]
+  d_kind -->|"75%"| d_preset["preset"]
+  d_kind -->|"25%"| d_custom["custom"]
+
+  %% ── Memberships · grouped live vs closed (one status each) ──
+  Memberships["📄 Memberships · live ≈50 + closed ≈50–70"]
+  Memberships --> ms_live["live ≈50"]
+  Memberships --> ms_closed["closed ≈50–70"]
+  ms_live --> ms_active["active (recurring)"]
+  ms_live --> ms_trial["active trial"]
+  ms_live --> ms_cancel["cancelled at start ~10%"]
+  ms_closed --> ms_ended["ended (trial / drop-in)"]
+  ms_closed --> ms_former["former / re-signup history"]
+  Memberships -.->|"overlay"| ms_overdue["overdue ×2 (past_due)"]
+
+  %% ── Classes ×7 — recurrence + state + capacity co-occur (stacked, reconverge);
+  %% schedule exceptions are an overlay on top.
+  Classes["📅 Classes ×7"]
+  Classes -->|"80%"| c_weekly["weekly"]
+  Classes -->|"10%"| c_daily["daily"]
+  Classes -->|"10%"| c_monthly["monthly"]
+  c_weekly --> c_state
+  c_daily --> c_state
+  c_monthly --> c_state
+
+  c_state["state (co-occurs)"]
+  c_state -->|"85%"| c_active["active"]
+  c_state -->|"15%"| c_inactive["inactive"]
+  c_active --> c_cap
+  c_inactive --> c_cap
+
+  c_cap["capacity (co-occurs)"]
+  c_cap -->|"70%"| c_capped["capped 10–30"]
+  c_cap -->|"30%"| c_uncapped["uncapped"]
+  c_capped --> c_exc
+  c_uncapped --> c_exc
+
+  c_exc["schedule exceptions (overlay)"]
+  c_exc -.->|"~30%"| c_inst["instance<br/>cancelled / rescheduled"]
+  c_exc -.->|"~15%"| c_range["range<br/>cancelled / rescheduled"]
+
+  %% ── Class history + attendance (simple split) ──
+  Attendance["✅ Class history + attendance"]
+  Attendance -->|"per class"| a_hist["class_history<br/>≤30 occurrences (½ of inactive skipped)"]
+  Attendance -->|"95%"| a_yes["attended · covered members attend a 1–15 subset"]
+  Attendance -->|"5%"| a_no["never attended"]
+
+  %% ── Rewards ×4 + redemptions (two simple splits) ──
+  Rewards["🎁 Rewards ×4 (50–500 pts)"]
+  Rewards -->|"~80%"| rw_active["active"]
+  Rewards -->|"~20%"| rw_inactive["inactive"]
+  Rewards -->|"60%"| rd_none["members redeeming none"]
+  Rewards -->|"40%"| rd_some["members redeeming 1–2"]
+
+  %% ── Activities ×500 · 5/member, by type (one type each — simple split) ──
+  Activities["📝 Activities ×500 · 5/member"]
+  Activities -->|"~25%"| ac_attended["class_attended"]
+  Activities -->|"~25%"| ac_rank["rank_promoted"]
+  Activities -->|"~25%"| ac_reward["reward_redeemed"]
+  Activities -->|"~25%"| ac_checkin["check_in"]
+
+  %% ── Financials — every invoice's success charge carries a payment method
+  %% (co-occurs); failed-attempt + refund are overlays on top.
+  Financials["💵 Invoices + line items + charges<br/>1 invoice per billed cycle (recurring=spaced · trial/one_time=1)"]
+  Financials -->|"every invoice"| f_ok["charge succeeded"]
+  f_ok --> f_method["payment method (co-occurs)"]
+  f_method -->|"~50%"| f_card["card"]
+  f_method -->|"~50%"| f_bank["bank"]
+  Financials -.->|"~5%"| f_fail["failed attempt first"]
+  Financials -.->|"~3%"| f_refund["refunded later"]
+
+  %% ── gym_history ×30 (simple) ──
+  History["📈 gym_history ×30"]
+  History -->|"daily"| h_day["active vs inactive rollup · 30 days"]
+
+  %% ── styling: hub = entity · dim = co-occurring dimension · leaf = a type ──
+  classDef hub  fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
+  classDef dim  fill:#ffe6cc,stroke:#d98a3a,color:#4a2c08;
+  classDef leaf fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
+  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History hub;
+  class m_life,m_frz,m_acc,d_reg,d_amt,d_dur,d_kind,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
+  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_linked,d_pct,d_dollar,d_once,d_ongoing,d_preset,d_custom,ms_active,ms_trial,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;

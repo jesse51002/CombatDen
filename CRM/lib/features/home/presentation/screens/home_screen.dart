@@ -17,9 +17,10 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// Composition (top to bottom):
 ///   1. "Dashboard" page title
 ///   2. Total Members hero card (semicircular arc + active/inactive)
-///   3. Two-column row: left = Live Attendance + Overdue Payments
-///      stacked (Overdue is the one live, bloc-backed surface here;
-///      the rest is mock); right = Upcoming Classes.
+///   3. Two-column row (capped at one viewport height): left = Live
+///      Attendance over Overdue Payments, each an equal-height half that
+///      scrolls on its own (Overdue is the one live, bloc-backed surface
+///      here; the rest is mock); right = Upcoming Classes.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -49,10 +50,15 @@ class _DashboardColumns extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Equal-height: IntrinsicHeight + stretch resolves the otherwise-
-    // infinite vertical constraint from the page scroll view, so both
-    // columns size to the taller column's height.
-    return IntrinsicHeight(
+    // Cap the columns block at one viewport height (the top portion —
+    // page title + hero — sits above and is not capped). The right column
+    // already self-caps at the viewport; the left column splits that
+    // height between Live Attendance and Overdue (see below).
+    // `stretch` makes both columns + the divider fill that height.
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingBig,
@@ -68,20 +74,30 @@ class _DashboardColumns extends StatelessWidget {
   }
 }
 
-/// Left dashboard column: Live Attendance stacked above Overdue Payments,
-/// separated by a hairline.
+/// Left dashboard column: Live Attendance and Overdue Payments split the
+/// column's (capped) height equally — each is an [Expanded] half that
+/// scrolls inside its own [SingleChildScrollView] — separated by a hairline.
 class _AttendanceAndOverdue extends StatelessWidget {
   const _AttendanceAndOverdue();
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
-      children: [
-        LiveAttendanceCard(entries: kMockLiveAttendance),
-        const Hairline(),
-        const OverduePaymentsSection(),
+      children: const [
+        // Live Attendance manages its own internal scroll so its footer
+        // buttons stay pinned (see LiveAttendanceCard); Overdue has no
+        // pinned chrome, so the whole section scrolls.
+        Expanded(
+          child: LiveAttendanceCard(entries: kMockLiveAttendance),
+        ),
+        Hairline(),
+        Expanded(
+          child: SingleChildScrollView(
+            child: OverduePaymentsSection(),
+          ),
+        ),
       ],
     );
   }

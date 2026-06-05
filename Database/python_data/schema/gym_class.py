@@ -20,6 +20,8 @@ class GymClassCreate(SeedModel):
     gym_id: UUID
     class_name: str
     class_description: str | None = None
+    # JSONB array of plan_id strings allowed to attend; None = all plans.
+    allowed_plan_ids: list[UUID] | None = None
     max_capacity: int | None = None
     image_url: str | None = None
     points_worth: int = 50
@@ -85,9 +87,15 @@ class ClassHistoryCreate(SeedModel):
 
 
 class MemberAttendanceCreate(SeedModel):
-    """A member's attendance at a specific class instance (class_history row)."""
+    """A member's attendance at a specific class instance (class_history row).
+
+    Attributed to the membership row (item_id) + plan that covered the
+    check-in, mirroring the gated check-in flow.
+    """
 
     log_id: UUID
     member_id: UUID
     gym_id: UUID
     class_history_id: UUID
+    plan_id: UUID
+    item_id: UUID

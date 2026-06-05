@@ -198,28 +198,6 @@ class MembersBillingSupplementary:
             )
         return redeemed
 
-    def get_discounts(
-        self,
-        discount_ids_json: list | None,
-    ) -> list[BillingDiscountInfo]:
-        """Resolve discount IDs from JSONB to BillingDiscountInfo list.
-
-        Args:
-            discount_ids_json: Raw JSONB value (list of UUID strings or None).
-
-        Returns:
-            List of matching BillingDiscountInfo objects.
-        """
-        if not discount_ids_json:
-            return []
-        discounts = []
-        for raw_id in discount_ids_json:
-            uid = UUID(str(raw_id))
-            discount = self._discounts.get(uid)
-            if discount:
-                discounts.append(discount)
-        return discounts
-
     def get_family_profiles(
         self,
         family_ids: set[UUID],

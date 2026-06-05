@@ -25,12 +25,6 @@ from sqlalchemy import text
 
 from src.membership_plans.membership_plans_schemas import MembershipPlanPriceRequest
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_discount,
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
     get_profile_stripe_ids,
@@ -84,23 +78,18 @@ async def test_preview_start_one_time_matches_invoice(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """One-time charge: preview totals must equal the invoice the
     real ``start`` cuts via ``_charge_one_time``.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(
         gym_id,
-        connect_opts,
         payment_method_id=pm_id,
     )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
+    plan = await created.plan(
         gym_id,
-        connect_opts,
         plan_type="one_time",
         plan_name="Parity One-Time",
         price_cents=4500,
@@ -149,24 +138,19 @@ async def test_preview_start_recurring_matches_first_invoice(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Recurring start: preview totals must equal the first-cycle
     invoice Stripe cuts when the subscription is created. No test
     clock — the first invoice is generated immediately on start.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(
         gym_id,
-        connect_opts,
         payment_method_id=pm_id,
     )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
+    plan = await created.plan(
         gym_id,
-        connect_opts,
         price_cents=5000,
     )
 
@@ -221,6 +205,7 @@ async def test_preview_update_price_prorate_true_matches_invoice(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """prorate=True swap: preview totals must equal the immediate
     proration invoice Stripe cuts at edit time.
@@ -228,20 +213,14 @@ async def test_preview_update_price_prorate_true_matches_invoice(
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=5000,
         )
         await memberships_service.start(
@@ -315,6 +294,7 @@ async def test_preview_update_price_prorate_false_matches_renewal(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """prorate=False swap: preview totals must equal the next renewal
     invoice (no mid-cycle invoice is cut).
@@ -322,20 +302,14 @@ async def test_preview_update_price_prorate_false_matches_renewal(
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=5000,
         )
         await memberships_service.start(
@@ -410,6 +384,7 @@ async def test_preview_cancel_partial_matches_renewal(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Cancel one of two recurring memberships: preview totals must
     equal the renewal invoice that bills only the surviving item.
@@ -420,28 +395,19 @@ async def test_preview_cancel_partial_matches_renewal(
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan_a = await create_plan(
-            db_pool,
-            stripe_client,
+        plan_a = await created.plan(
             gym_id,
-            connect_opts,
             plan_name="Parity Plan A",
             price_cents=5000,
         )
-        plan_b = await create_plan(
-            db_pool,
-            stripe_client,
+        plan_b = await created.plan(
             gym_id,
-            connect_opts,
             plan_name="Parity Plan B",
             price_cents=3000,
         )
@@ -511,46 +477,41 @@ async def test_preview_cancel_partial_matches_renewal(
 
 
 @pytest.mark.timeout(180)
-async def test_preview_update_discounts_matches_renewal(
+async def test_preview_applied_discounts_matches_renewal(
     memberships_service,
     db_pool,
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    """Discount swap: preview totals must equal the renewal invoice.
+    """Applied-discount preview totals must equal the renewal invoice.
 
-    This is the **highest-drift-risk pair** — preview computes with
-    an in-memory discount override while the real path writes
-    discount_ids to CRM first then re-syncs. If this test fails, file
-    a production bug; do not loosen the assertion.
+    The apply path writes the frozen snapshot first and re-syncs (the sync
+    attaches the resolved coupon onto the live subscription). The preview then
+    reads the membership's CURRENT snapshot state, so a Stripe upcoming-invoice
+    read already reflects the attached coupon. Preview-vs-renewal drift here
+    means the preview and real billing paths read different inputs — surface as
+    a production bug per CLAUDE.md, do not loosen the assertion.
     """
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=5000,
         )
-        discount = await create_discount(
-            db_pool,
-            stripe_client,
+        discount = await created.discount(
             gym_id,
-            connect_opts,
             name="Parity 15% Off",
             percentage_off=15.0,
+            discount_mode="ongoing",
         )
 
         await memberships_service.start(
@@ -571,19 +532,21 @@ async def test_preview_update_discounts_matches_renewal(
             gym_id,
         )
 
-        preview = await memberships_service.preview_update_discounts(
+        # Apply first (writes the snapshot + syncs the coupon onto the sub),
+        # then preview the membership's current discounted state.
+        await memberships_service.apply_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            discount_ids=[discount.discount_id],
-        )
-        assert preview is not None
-
-        await memberships_service.update_discounts(
-            item_id=item_id,
-            member_id=member.member_id,
-            discount_ids=[discount.discount_id],
+            add_preset_ids=[discount.discount_id],
+            remove_applied_ids=[],
             idempotency_key=uuid4(),
         )
+
+        preview = await memberships_service.preview_apply_discounts(
+            item_id=item_id,
+            member_id=member.member_id,
+        )
+        assert preview is not None
 
         before = await snapshot_billing_state(
             stripe_client,

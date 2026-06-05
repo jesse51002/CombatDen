@@ -15,6 +15,17 @@ class AppRoutes {
   static const String schedule = '/schedule';
   static const String scheduleAddClass = '/schedule/class/new';
   static const String scheduleEditClass = '/schedule/class/edit';
+  // The Memberships screen's three tabs are each addressable.
+  static const String memberships = '/memberships';
+  static const String membershipsDiscounts = '/memberships/discounts';
+  static const String membershipsWaivers = '/memberships/waivers';
+  // Create / edit a membership plan. Reads the plan (or null for
+  // create) off route arguments, so it is not deep-linkable.
+  static const String membershipDetails = '/memberships/detail';
+  // Per-waiver signature roster — reads the tapped waiver off
+  // route arguments, so it is not deep-linkable.
+  static const String membershipsWaiverRoster =
+      '/memberships/waivers/roster';
   static const String qrCodes = '/qr-codes';
   static const String growth = '/growth';
   static const String employees = '/employees';

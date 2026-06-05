@@ -3,7 +3,10 @@
 from datetime import date
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from schema.gym_discount import DiscountType
+
+import src.shared.db_schema_path  # noqa: F401
 
 
 class MemberMembershipsCancelResponse(BaseModel):
@@ -30,14 +33,17 @@ class MemberMembershipsUnfreezeRequest(BaseModel):
 
 
 class MemberMembershipsStartRequest(BaseModel):
-    """Start a new membership for a member."""
+    """Start a new membership for a member.
+
+    Memberships are created discount-free — discounts are applied as
+    immutable snapshots afterward via the apply path (PUT /discounts), not
+    threaded in at creation.
+    """
 
     member_id: UUID
     gym_id: UUID
     plan_id: UUID
     price_id: UUID
-    discount_ids: list[UUID] | None = None
-    include_linked_discount: bool = False
     prorate: bool = True
     paid_with_cash: bool = False
     idempotency_key: UUID
@@ -84,21 +90,57 @@ class MemberMembershipsUpdatePriceRequest(BaseModel):
     idempotency_key: UUID
 
 
-class MemberMembershipsUpdateDiscountsRequest(BaseModel):
-    """Replace the discount set on an existing membership.
+class MemberMembershipsApplyDiscountsRequest(BaseModel):
+    """Add / remove discount snapshots on an existing membership.
 
-    ``discount_ids`` is the full desired list — an empty list
-    detaches every discount currently on the membership.
+    Apply is an explicit add / remove of immutable snapshot rows — never a
+    replace-set. ``add_preset_ids`` references live discounts whose ACTIVE value
+    version is frozen onto a snapshot (any discount, including a ``linked``
+    family discount). ``remove_applied_ids`` deletes existing snapshots by their
+    ``applied_discount_id``. Editing a discount is removing one row and adding
+    another — a snapshot is never updated.
     """
 
     item_id: UUID
     member_id: UUID
-    discount_ids: list[UUID]
+    add_preset_ids: list[UUID] = Field(default_factory=list)
+    remove_applied_ids: list[UUID] = Field(default_factory=list)
     idempotency_key: UUID
 
-    @field_validator("discount_ids")
+    @field_validator("add_preset_ids", "remove_applied_ids")
     @classmethod
     def _reject_duplicates(cls, value: list[UUID]) -> list[UUID]:
         if len(value) != len(set(value)):
-            raise ValueError("discount_ids must not contain duplicates")
+            raise ValueError("id lists must not contain duplicates")
         return value
+
+    @model_validator(mode="after")
+    def _reject_empty(self) -> MemberMembershipsApplyDiscountsRequest:
+        if not (self.add_preset_ids or self.remove_applied_ids):
+            raise ValueError(
+                "apply request must add or remove at least one discount",
+            )
+        return self
+
+
+class MemberMembershipsAppliedDiscount(BaseModel):
+    """A single applied-discount snapshot returned to the client.
+
+    Joins the snapshot to its frozen value version (``value_id``) and owning
+    discount (``discount_id`` + name/type) so the CRM can show the discount and
+    the exact version it is pinned to.
+    """
+
+    applied_discount_id: UUID
+    item_id: UUID
+    member_id: UUID
+    gym_id: UUID
+    value_id: UUID
+    discount_id: UUID
+    discount_name: str
+    discount_type: DiscountType
+    percentage_off: float | None = None
+    dollar_off: int | None = None
+    discount_mode: str
+    end_date: date | None = None
+    stripe_coupon_id: str | None = None

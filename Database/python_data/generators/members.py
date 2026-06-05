@@ -10,9 +10,10 @@ columns. This generator assigns every member:
     so the CRM status views populate with a realistic spread (active, trial,
     cancelled, ended, frozen) — overdue members are seeded separately via the
     Stripe test-clock path.
-  - optional linked-account family membership (a paying parent + children
-    covered under it; children carry no membership of their own and are
-    linked to the parent via the backend link endpoint).
+  - optional linked-account family membership (a paying parent + children,
+    each child on its own membership covered by the parent; children are
+    linked to the parent first, then their membership is started so it rides
+    the parent's subscription).
 
 Member status is NOT stored on members — it derives from
 member_memberships_status (billing) and the freeze window on the account.
@@ -84,8 +85,8 @@ class MemberPlan:
     photo_url: str | None = None
     auth_user_id: uuid.UUID | None = None
     # Linked-account family: a child references its parent's handle; the
-    # parent's real member_id (and the assigned linked discount) are resolved
-    # after creation by the backend link endpoint.
+    # parent's real member_id is resolved after creation by the backend link
+    # endpoint, then the child's own membership is started under the parent.
     linked_primary_handle: str | None = None
     # Account-level freeze window (parents/singles only — never children).
     account_freeze_start: date | None = None
@@ -267,9 +268,11 @@ def _form_linked_families(
     as "linkable", then repeatedly pull one off as a paying parent (root) and
     give it 1-MAX_LINKED_CHILDREN_PER_PARENT children. Roots get a forced
     recurring membership — the backend link endpoint requires the parent to have
-    an active recurring subscription. Children carry no membership of their own;
-    they reference the root via linked_primary_handle and are linked (cardless)
-    after creation. (Linked-discount presets are gone — a family discount is now
+    an active recurring subscription. Each child also gets its own recurring
+    membership (on any plan, not necessarily the parent's); the child references
+    the root via linked_primary_handle and is linked (cardless) after creation,
+    and its membership is started afterward so the item rides the parent's
+    subscription. (Linked-discount presets are gone — a family discount is now
     an explicit snapshot applied via the Phase 2 apply path, not auto-assigned
     here.)
 
@@ -293,6 +296,10 @@ def _form_linked_families(
         for _ in range(num_children):
             child = linkable.pop()
             members[child].linked_primary_handle = members[root].local_handle
+            # Each child carries its own membership (any recurring plan — not
+            # necessarily the parent's). Started AFTER the child is linked so
+            # the item rides the parent's subscription.
+            members[child].current = CurrentMembership(plan=random.choice(recurring))
             family_idx.add(child)
 
     return family_idx

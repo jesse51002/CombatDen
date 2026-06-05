@@ -40,11 +40,9 @@ logger = logging.getLogger(__name__)
 class GymsService:
     """Orchestrates all gym routes.
 
-    ``stripe_connect_service`` is optional. When ``None`` (no Stripe
-    configured), ``create_gym`` falls through to the legacy
-    non-Stripe path and the onboarding endpoints raise ValueError.
-    The integrator injects a ``GymsStripeConnectService`` instance
-    via ``DependencyInjector.gyms_stripe_connect_service``.
+    A ``GymsStripeConnectService`` is always injected (via
+    ``DependencyInjector.gyms_stripe_connect_service``); every gym is
+    created with a Stripe Connect Express account.
 
     Args:
         db_pool: Injected database connection pool.
@@ -54,21 +52,17 @@ class GymsService:
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        stripe_connect_service: GymsStripeConnectService | None = None,
+        stripe_connect_service: GymsStripeConnectService,
     ) -> None:
         self._db_pool = db_pool
-        self._create_service: GymsCreateService | None = None
-        self._onboarding_service: GymsOnboardingService | None = None
-
-        if stripe_connect_service is not None:
-            self._create_service = GymsCreateService(
-                db_pool=db_pool,
-                stripe_connect_service=stripe_connect_service,
-            )
-            self._onboarding_service = GymsOnboardingService(
-                db_pool=db_pool,
-                stripe_connect_service=stripe_connect_service,
-            )
+        self._create_service = GymsCreateService(
+            db_pool=db_pool,
+            stripe_connect_service=stripe_connect_service,
+        )
+        self._onboarding_service = GymsOnboardingService(
+            db_pool=db_pool,
+            stripe_connect_service=stripe_connect_service,
+        )
 
     # ── Create ─────────────────────────────────────────────────
 
@@ -76,39 +70,24 @@ class GymsService:
         self,
         request: GymCreateRequest,
         user_id: UUID,
-        user_email: str | None = None,
+        user_email: str,
     ) -> GymCreateResponse:
         """Create a gym and begin Stripe Express onboarding.
 
-        A user may own multiple gyms, so this no longer pre-checks
-        for an existing gym. When a ``GymsStripeConnectService`` is
-        wired (normal path) it delegates to ``GymsCreateService`` for
-        the DB-first insert + Stripe account + AccountLink flow.
+        A user may own multiple gyms, so this does not pre-check for
+        an existing gym. Delegates to ``GymsCreateService`` for the
+        DB-first insert + Stripe account + AccountLink flow.
 
         Raises:
-            ValueError: If Stripe is wired but ``user_email`` is None.
+            ValueError: If ``user_email`` is empty.
         """
-        if self._create_service is not None:
-            if not user_email:
-                raise ValueError("user_email is required for Stripe onboarding")
+        if not user_email:
+            raise ValueError("user_email is required for Stripe onboarding")
 
-            return await self._create_service.create_gym(
-                request=request,
-                user_id=user_id,
-                user_email=user_email,
-            )
-
-        # Legacy (no Stripe) path — kept for local dev / tests.
-        return await self._create_gym_no_stripe(request, user_id)
-
-    async def _create_gym_no_stripe(
-        self,
-        request: GymCreateRequest,
-        user_id: UUID,
-    ) -> GymCreateResponse:
-        """Non-Stripe fallback for local dev / tests without Stripe creds."""
-        raise NotImplementedError(
-            "Stripe Connect is required. Inject GymsStripeConnectService into GymsService.",
+        return await self._create_service.create_gym(
+            request=request,
+            user_id=user_id,
+            user_email=user_email,
         )
 
     # ── Onboarding status ──────────────────────────────────────
@@ -121,12 +100,7 @@ class GymsService:
 
         The caller's ownership of ``gym_id`` is verified at the
         router layer before this runs.
-
-        Raises:
-            ValueError: If Stripe is not configured.
         """
-        if self._onboarding_service is None:
-            raise ValueError("Stripe Connect is not configured")
         return await self._onboarding_service.refresh(gym_id)
 
     async def get_fresh_onboarding_link(
@@ -137,12 +111,7 @@ class GymsService:
 
         The caller's ownership of ``gym_id`` is verified at the
         router layer before this runs.
-
-        Raises:
-            ValueError: If Stripe is not configured.
         """
-        if self._onboarding_service is None:
-            raise ValueError("Stripe Connect is not configured")
         return await self._onboarding_service.new_link(gym_id)
 
     # ── Basic CRUD ─────────────────────────────────────────────

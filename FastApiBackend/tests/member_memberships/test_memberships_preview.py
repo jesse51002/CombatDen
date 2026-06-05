@@ -20,11 +20,6 @@ from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
@@ -91,16 +86,11 @@ async def test_preview_start_recurring(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         before = await snapshot_billing_state(
@@ -148,20 +138,12 @@ async def test_preview_start_one_time(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
         gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         plan_type="one_time",
         plan_name="Preview One-Time Plan",
         price_cents=3000,
@@ -204,15 +186,10 @@ async def test_preview_start_validates_plan_price(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
 
     try:
         before = await snapshot_billing_state(
@@ -245,16 +222,11 @@ async def test_preview_start_duplicate_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -301,16 +273,11 @@ async def test_preview_cancel_active(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         item_id = await _start_and_get_item_id(
@@ -381,16 +348,11 @@ async def test_preview_cancel_already_cancelled_returns_none(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         item_id = await _start_and_get_item_id(
@@ -438,16 +400,11 @@ async def test_preview_update_price(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         item_id = await _start_and_get_item_id(

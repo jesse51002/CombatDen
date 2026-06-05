@@ -162,12 +162,13 @@ job is a `scripts/` module + `make` target:
 1. **Make/edit a gym** (`make gym-check GYM_ID=<id|all>`) — author/update
    `gyms/<gym_id>.yaml` and validate it round-trips the `Gym` schema (YAML-only).
 2. **Sync gyms → SQL** (`make sync-gyms GYM_ID=<id|all>`) — upsert the authored
-   gym files into `video_gym` + its query/class/reward child tables. Idempotent;
-   never touches the curated feed.
-3. **Cutover import** (`make import-yaml`) — one-time: load the existing
-   `videos/` pool + each gym's good/rejected feeds + `cost_log.yaml` into SQL
-   (no re-scrape). Re-runnable; `--skip-cost-log` avoids duplicate ledger rows.
-4. **Scrape + classify** (`make scrape`) and **Scan** (`make scan`) — fetch +
+   gym files into `video_gym` + its query/class/reward child tables, then load
+   the existing `videos/` pool + each gym's good/rejected feeds into SQL (pool
+   upserts, feeds rewrite per gym — no re-scrape). Fully idempotent. It runs the
+   import with `--skip-cost-log`, so the append-only `cost_log.yaml` is **not**
+   imported here (re-running would duplicate ledger rows); load it once by hand
+   with `poetry run python -m scripts.import_yaml.run` if you need the history.
+3. **Scrape + classify** (`make scrape`) and **Scan** (`make scan`) — fetch +
    tag the pool, and run the per-gym keep/drop scan. ⚠️ **Not yet migrated to
    SQL**: these still target the removed YAML write methods and are pending the
    scrape/scan → SQL rewrite; their tests are skipped until then.
@@ -220,8 +221,8 @@ for the full runbook (ARNs, DNS, redeploy, pause/resume).
   `make pause` / `make resume` stop / start the deployed App Runner service
   (a cost toggle for the live instance).
 - The pipeline scripts stay local and pick their DB via **`ENV_FILE`** (default
-  `.env`; `ENV_FILE=.env.prod` → prod). Prod helpers: `make sync-gyms-prod
-  GYM_ID=all`, `make import-yaml-prod`. Keep prod secrets in `.env.prod`
+  `.env`; `ENV_FILE=.env.prod` → prod). Prod helper: `make sync-gyms-prod
+  GYM_ID=all` (sync + pool/feed import against prod). Keep prod secrets in `.env.prod`
   (gitignored). **Never `supabase db pull` while local schema is ahead of prod** —
   it generates destructive migrations that drop the new tables.
 - Only the **read path** is containerized; scrape / scan / sync / import stay local.

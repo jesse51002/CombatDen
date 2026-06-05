@@ -21,7 +21,7 @@ from src.payments.schema.payments_price_schema import (
 # ── Helpers ─────────────────────────────────────────────────────
 
 
-async def _create_product(membership_service, stripe_account_id):
+async def _create_product(membership_service, stripe_account_id, created):
     """Create a bare Stripe product for price tests."""
     resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -39,6 +39,9 @@ async def _create_product(membership_service, stripe_account_id):
         ),
         stripe_account_id,
     )
+    created.track_product(resp.stripe_product_id)
+    for p in resp.prices:
+        created.track_price(p.stripe_price_id)
     return resp.stripe_product_id
 
 
@@ -51,8 +54,9 @@ async def test_create_recurring_price(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
-    product_id = await _create_product(membership_service, stripe_account_id)
+    product_id = await _create_product(membership_service, stripe_account_id, created)
 
     resp = await price_service.create_price(
         PaymentsPriceCreateRequest(
@@ -64,6 +68,7 @@ async def test_create_recurring_price(
         ),
         stripe_account_id,
     )
+    created.track_price(resp.stripe_price_id)
 
     assert resp.stripe_price_id.startswith("price_")
     assert resp.stripe_product_id == product_id
@@ -90,8 +95,9 @@ async def test_create_one_time_price(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
-    product_id = await _create_product(membership_service, stripe_account_id)
+    product_id = await _create_product(membership_service, stripe_account_id, created)
 
     resp = await price_service.create_price(
         PaymentsPriceCreateRequest(
@@ -103,6 +109,7 @@ async def test_create_one_time_price(
         ),
         stripe_account_id,
     )
+    created.track_price(resp.stripe_price_id)
 
     assert resp.unit_amount == 7500
     assert resp.active is True
@@ -122,9 +129,10 @@ async def test_deactivate_price(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
-    product_id = await _create_product(membership_service, stripe_account_id)
-    created = await price_service.create_price(
+    product_id = await _create_product(membership_service, stripe_account_id, created)
+    created_resp = await price_service.create_price(
         PaymentsPriceCreateRequest(
             stripe_product_id=product_id,
             unit_amount=3000,
@@ -134,20 +142,21 @@ async def test_deactivate_price(
         ),
         stripe_account_id,
     )
+    created.track_price(created_resp.stripe_price_id)
 
     resp = await price_service.deactivate_price(
         PaymentsPriceDeactivateRequest(
-            stripe_price_id=created.stripe_price_id,
+            stripe_price_id=created_resp.stripe_price_id,
         ),
         stripe_account_id,
     )
 
     assert resp.active is False
-    assert resp.stripe_price_id == created.stripe_price_id
+    assert resp.stripe_price_id == created_resp.stripe_price_id
 
     # Independent verification: Stripe must agree the price is inactive.
     price = await stripe_client.client.v1.prices.retrieve_async(
-        created.stripe_price_id,
+        created_resp.stripe_price_id,
         options=connect_opts,
     )
     assert price.active is False
@@ -159,9 +168,10 @@ async def test_activate_price(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
-    product_id = await _create_product(membership_service, stripe_account_id)
-    created = await price_service.create_price(
+    product_id = await _create_product(membership_service, stripe_account_id, created)
+    created_resp = await price_service.create_price(
         PaymentsPriceCreateRequest(
             stripe_product_id=product_id,
             unit_amount=4000,
@@ -171,22 +181,24 @@ async def test_activate_price(
         ),
         stripe_account_id,
     )
+    created.track_price(created_resp.stripe_price_id)
+
     await price_service.deactivate_price(
         PaymentsPriceDeactivateRequest(
-            stripe_price_id=created.stripe_price_id,
+            stripe_price_id=created_resp.stripe_price_id,
         ),
         stripe_account_id,
     )
 
     resp = await price_service.activate_price(
-        created.stripe_price_id,
+        created_resp.stripe_price_id,
         stripe_account_id,
     )
 
     assert resp.active is True
 
     price = await stripe_client.client.v1.prices.retrieve_async(
-        created.stripe_price_id,
+        created_resp.stripe_price_id,
         options=connect_opts,
     )
     assert price.active is True
@@ -196,9 +208,10 @@ async def test_get_price(
     price_service,
     membership_service,
     stripe_account_id,
+    created,
 ):
-    product_id = await _create_product(membership_service, stripe_account_id)
-    created = await price_service.create_price(
+    product_id = await _create_product(membership_service, stripe_account_id, created)
+    created_resp = await price_service.create_price(
         PaymentsPriceCreateRequest(
             stripe_product_id=product_id,
             unit_amount=5500,
@@ -208,13 +221,14 @@ async def test_get_price(
         ),
         stripe_account_id,
     )
+    created.track_price(created_resp.stripe_price_id)
 
     resp = await price_service.get_price(
-        created.stripe_price_id,
+        created_resp.stripe_price_id,
         stripe_account_id,
     )
 
-    assert resp.stripe_price_id == created.stripe_price_id
+    assert resp.stripe_price_id == created_resp.stripe_price_id
     assert resp.unit_amount == 5500
 
 
@@ -229,9 +243,10 @@ async def test_validate_price_active_reactivates_archived(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
-    product_id = await _create_product(membership_service, stripe_account_id)
-    created = await price_service.create_price(
+    product_id = await _create_product(membership_service, stripe_account_id, created)
+    created_resp = await price_service.create_price(
         PaymentsPriceCreateRequest(
             stripe_product_id=product_id,
             unit_amount=6000,
@@ -241,15 +256,17 @@ async def test_validate_price_active_reactivates_archived(
         ),
         stripe_account_id,
     )
+    created.track_price(created_resp.stripe_price_id)
+
     await price_service.deactivate_price(
         PaymentsPriceDeactivateRequest(
-            stripe_price_id=created.stripe_price_id,
+            stripe_price_id=created_resp.stripe_price_id,
         ),
         stripe_account_id,
     )
 
     resp = await price_service.validate_price_active(
-        created.stripe_price_id,
+        created_resp.stripe_price_id,
         stripe_account_id,
     )
 
@@ -257,7 +274,7 @@ async def test_validate_price_active_reactivates_archived(
 
     # Both price and its parent product must be active on Stripe.
     price = await stripe_client.client.v1.prices.retrieve_async(
-        created.stripe_price_id,
+        created_resp.stripe_price_id,
         options=connect_opts,
     )
     assert price.active is True

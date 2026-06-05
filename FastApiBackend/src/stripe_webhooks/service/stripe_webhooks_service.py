@@ -10,13 +10,13 @@ from sqlalchemy import text
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
-from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
 from src.stripe_webhooks.service.charge_refunded_handler import (
     ChargeRefundedHandler,
 )
+from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
 )

@@ -14,6 +14,12 @@ class CustomTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
 
+  /// Max lines for the field. Defaults to 1; pass a larger
+  /// value (with [minLines]) for a multi-line text area.
+  /// Ignored when [isPassword] is true.
+  final int maxLines;
+  final int? minLines;
+
   const CustomTextField({
     super.key,
     required this.controller,
@@ -24,6 +30,8 @@ class CustomTextField extends StatefulWidget {
     this.validator,
     this.keyboardType,
     this.inputFormatters,
+    this.maxLines = 1,
+    this.minLines,
   });
 
   @override
@@ -50,6 +58,8 @@ class _CustomTextFieldState extends State<CustomTextField> {
           validator: widget.validator,
           keyboardType: widget.keyboardType,
           inputFormatters: widget.inputFormatters,
+          maxLines: widget.isPassword ? 1 : widget.maxLines,
+          minLines: widget.isPassword ? 1 : widget.minLines,
           style: DesignConstants.p.copyWith(color: DesignConstants.text),
           decoration: InputDecoration(
             hintText: widget.hintText,

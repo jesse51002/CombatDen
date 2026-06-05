@@ -20,11 +20,6 @@ from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -59,24 +54,11 @@ async def test_preview_link_bare_parent_returns_none(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Parent with no recurring sub has no invoice to preview."""
-    parent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Parent",
-        last_name="Bare",
-    )
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="Child",
-        last_name="Bare",
-    )
+    parent = await created.member(gym_id, first_name="Parent", last_name="Bare")
+    child = await created.member(gym_id, first_name="Child", last_name="Bare")
 
     try:
         preview = await management_service.preview_link_account(
@@ -100,29 +82,20 @@ async def test_preview_link_with_paying_parent_no_mutation(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Preview on a linking op where the parent has an active recurring
     sub must return a preview AND leave CRM + Stripe untouched.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    parent = await created.member(
         gym_id,
-        connect_opts,
         first_name="P",
         last_name="Pay",
         payment_method_id=pm_id,
     )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="C",
-        last_name="Pay",
-    )
+    plan = await created.plan(gym_id)
+    child = await created.member(gym_id, first_name="C", last_name="Pay")
 
     try:
         # Parent starts a recurring plan so there's a subscription the
@@ -187,8 +160,9 @@ async def test_preview_link_self_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    member = await create_member(db_pool, stripe_client, gym_id, connect_opts)
+    member = await created.member(gym_id)
 
     try:
         with pytest.raises(ValueError, match="themselves"):
@@ -206,23 +180,10 @@ async def test_preview_link_already_linked_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="P",
-        last_name="Already",
-    )
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="C",
-        last_name="Already",
-    )
+    parent = await created.member(gym_id, first_name="P", last_name="Already")
+    child = await created.member(gym_id, first_name="C", last_name="Already")
 
     try:
         await management_service.link_account(
@@ -246,26 +207,17 @@ async def test_preview_link_with_active_recurring_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    parent = await created.member(gym_id, first_name="P", last_name="PreviewRecur")
+    pm_id = await created.payment_method()
+    child = await created.member(
         gym_id,
-        connect_opts,
-        first_name="P",
-        last_name="PreviewRecur",
-    )
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         first_name="C",
         last_name="PreviewRecur",
         payment_method_id=pm_id,
     )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -295,23 +247,10 @@ async def test_preview_unlink_bare_parent_returns_none(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    parent = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="P",
-        last_name="UnlinkBare",
-    )
-    child = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        first_name="C",
-        last_name="UnlinkBare",
-    )
+    parent = await created.member(gym_id, first_name="P", last_name="UnlinkBare")
+    child = await created.member(gym_id, first_name="C", last_name="UnlinkBare")
 
     try:
         await management_service.link_account(
@@ -342,8 +281,9 @@ async def test_preview_unlink_not_linked_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    member = await create_member(db_pool, stripe_client, gym_id, connect_opts)
+    member = await created.member(gym_id)
 
     try:
         with pytest.raises(ValueError, match="not linked"):

@@ -1,10 +1,13 @@
 """Mid-cycle add-discount tests using Stripe Test Clocks.
 
-Exercises the first-class ``PUT /member_memberships/discounts``
-endpoint (surfaced here via ``memberships_service.update_discounts``).
-Each test replaces the discount set on an active recurring
-membership and asserts both the immediate subscription state and
-the next renewal invoice.
+Exercises the snapshot apply path (``PUT /member_memberships/discounts`` ->
+``memberships_service.apply_discounts``). Applying a regular discount INSERTs a
+frozen snapshot row and re-syncs; the sync computes the consolidated line's
+coupon, attaches it, and writes the resolved stripe_coupon_id back. Editing or
+deleting the source preset never touches these rows.
+
+Requires a migrated local DB (the applied-discount snapshot table + the
+gym_discounts lifetime columns) and the shared Stripe test account.
 """
 
 from datetime import datetime, timedelta
@@ -13,19 +16,13 @@ from uuid import uuid4
 import pytest
 
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_discount,
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
+    get_applied_snapshots,
     get_profile_stripe_ids,
 )
 from tests.helpers.stripe_assertions import (
     advance_to_next_cycle_and_fetch_invoice,
-    assert_item_discounts,
     assert_no_unexpected_charges,
     fetch_subscription,
     snapshot_billing_state,
@@ -37,6 +34,7 @@ from tests.helpers.stripe_clock import (
 
 CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 NEXT_CYCLE = CLOCK_START + timedelta(days=35)
+CYCLE_AFTER_NEXT = CLOCK_START + timedelta(days=70)
 
 
 async def _start_membership(memberships_service, member, gym_id, plan):
@@ -50,102 +48,90 @@ async def _start_membership(memberships_service, member, gym_id, plan):
     )
 
 
-def _find_item_index_by_price(sub, stripe_price_id: str) -> int:
-    for idx, item in enumerate(sub.items.data):
-        if item.price.id == stripe_price_id:
-            return idx
-    raise AssertionError(
-        f"No item on subscription {sub.id} uses price {stripe_price_id}; "
-        f"items={[i.price.id for i in sub.items.data]}"
-    )
+def _line_coupon_ids(sub, stripe_price_id: str) -> set[str]:
+    """Coupon ids on the subscription item using ``stripe_price_id``."""
+    for item in sub.items.data:
+        if item.price.id != stripe_price_id:
+            continue
+        found: set[str] = set()
+        for disc in getattr(item, "discounts", None) or []:
+            coupon = getattr(disc, "coupon", disc)
+            cid = getattr(coupon, "id", coupon)
+            if isinstance(cid, str):
+                found.add(cid)
+        return found
+    raise AssertionError(f"No item on {sub.id} uses price {stripe_price_id}")
 
 
 # ── Tests ───────────────────────────────────────────────────────
 
 
 @pytest.mark.timeout(180)
-async def test_add_discount_to_active_sub_next_invoice_discounted(
+async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
     memberships_service,
     db_pool,
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    """Attaching a percent-off discount mid-cycle propagates the
-    coupon onto the Stripe subscription item and reduces the next
-    cycle's invoice total. No new invoice is generated at edit time.
+    """Applying an ongoing percent discount INSERTs a snapshot, the sync
+    computes + attaches the coupon and writes its id back, and the next
+    cycle bills the discounted amount. No invoice is cut at edit time.
     """
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(
             gym_id,
-            connect_opts,
             price_cents=5000,
         )
-        discount = await create_discount(
-            db_pool,
-            stripe_client,
+        discount = await created.discount(
             gym_id,
-            connect_opts,
             name="Mid-cycle 10% Off",
             percentage_off=10.0,
+            discount_mode="ongoing",
         )
 
         await _start_membership(memberships_service, member, gym_id, plan)
-        profile = await get_profile_stripe_ids(
-            db_pool,
-            member.member_id,
-            gym_id,
-        )
+        profile = await get_profile_stripe_ids(db_pool, member.member_id, gym_id)
         assert profile.stripe_sub_id_month is not None
-        item_id = await get_active_membership_item_id(
-            db_pool,
-            member.member_id,
-            gym_id,
-        )
+        item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
 
         before = await snapshot_billing_state(
-            stripe_client,
-            profile.stripe_customer_id,
-            connect_opts,
+            stripe_client, profile.stripe_customer_id, connect_opts
         )
 
-        await memberships_service.update_discounts(
+        await memberships_service.apply_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            discount_ids=[discount.discount_id],
+            add_preset_ids=[discount.discount_id],
+            remove_applied_ids=[],
             idempotency_key=uuid4(),
         )
 
-        # Stripe side: coupon is on the correct subscription item and
-        # the edit itself did not charge the customer.
-        sub = await fetch_subscription(
-            stripe_client,
-            profile.stripe_sub_id_month,
-            connect_opts,
-        )
-        idx = _find_item_index_by_price(sub, plan.stripe_price_id)
-        assert_item_discounts(sub, {discount.stripe_coupon_id}, index=idx)
-        await assert_no_unexpected_charges(
-            stripe_client,
-            before,
-            connect_opts,
-        )
+        # A frozen snapshot was written, copying the preset intent + provenance.
+        snaps = await get_applied_snapshots(db_pool, item_id)
+        assert len(snaps) == 1
+        snap = snaps[0]
+        assert snap["discount_type"] == "preset"
+        assert snap["discount_id"] == discount.discount_id
+        assert snap["percentage_off"] == 10.0
+        assert snap["discount_mode"] == "ongoing"
+        # The sync resolved + wrote back the coupon id (the contract).
+        assert snap["stripe_coupon_id"] is not None
 
-        # Next cycle: invoice total should reflect the percent-off
-        # coupon applied against the full plan price.
+        # The resolved coupon is on the right line; no charge at edit time.
+        sub = await fetch_subscription(stripe_client, profile.stripe_sub_id_month, connect_opts)
+        assert snap["stripe_coupon_id"] in _line_coupon_ids(sub, plan.stripe_price_id)
+        await assert_no_unexpected_charges(stripe_client, before, connect_opts)
+
         invoice = await advance_to_next_cycle_and_fetch_invoice(
             stripe_client,
             clock_id,
@@ -156,8 +142,7 @@ async def test_add_discount_to_active_sub_next_invoice_discounted(
         )
         expected = int(round(5000 * 0.9))
         assert invoice.amount_due == expected, (
-            f"Next-cycle invoice {invoice.id} should bill the discounted "
-            f"amount {expected}, got {invoice.amount_due}"
+            f"Next-cycle invoice {invoice.id} should bill {expected}, got {invoice.amount_due}"
         )
     finally:
         if member is not None:
@@ -166,153 +151,138 @@ async def test_add_discount_to_active_sub_next_invoice_discounted(
 
 
 @pytest.mark.timeout(240)
-async def test_add_percentage_discount_then_amount_discount(
+async def test_once_discount_lands_once_then_consumed(
     memberships_service,
     db_pool,
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    """Attach a percent discount, then stack a flat-dollar discount
-    on top. Both coupons end up on the Stripe subscription item and
-    the next invoice reflects both reductions.
+    """A ``once`` discount bills exactly the next invoice, then is consumed:
+    its end_date is stamped and it never re-applies on the following cycle.
     """
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
-        member = await create_member(
-            db_pool,
-            stripe_client,
+        pm_id = await created.payment_method()
+        member = await created.member(
             gym_id,
-            connect_opts,
             payment_method_id=pm_id,
             test_clock_id=clock_id,
         )
-        plan = await create_plan(
-            db_pool,
-            stripe_client,
+        plan = await created.plan(gym_id, price_cents=5000)
+        discount = await created.discount(
             gym_id,
-            connect_opts,
-            price_cents=10000,
-        )
-        pct_discount = await create_discount(
-            db_pool,
-            stripe_client,
-            gym_id,
-            connect_opts,
-            name="Stacked 20% Off",
-            percentage_off=20.0,
-        )
-        flat_discount = await create_discount(
-            db_pool,
-            stripe_client,
-            gym_id,
-            connect_opts,
-            name="Stacked $5 Off",
+            name="One-time $10 Off",
             percentage_off=None,
-            dollar_off=500,
+            dollar_off=1000,
+            discount_mode="once",
         )
 
         await _start_membership(memberships_service, member, gym_id, plan)
-        profile = await get_profile_stripe_ids(
-            db_pool,
-            member.member_id,
-            gym_id,
-        )
-        item_id = await get_active_membership_item_id(
-            db_pool,
-            member.member_id,
-            gym_id,
+        profile = await get_profile_stripe_ids(db_pool, member.member_id, gym_id)
+        item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
+        before = await snapshot_billing_state(
+            stripe_client, profile.stripe_customer_id, connect_opts
         )
 
-        # Step 1 — attach percent coupon.
-        before_step1 = await snapshot_billing_state(
-            stripe_client,
-            profile.stripe_customer_id,
-            connect_opts,
-        )
-        await memberships_service.update_discounts(
+        await memberships_service.apply_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            discount_ids=[pct_discount.discount_id],
+            add_preset_ids=[discount.discount_id],
+            remove_applied_ids=[],
             idempotency_key=uuid4(),
         )
-        await assert_no_unexpected_charges(
-            stripe_client,
-            before_step1,
-            connect_opts,
-        )
 
-        sub = await fetch_subscription(
-            stripe_client,
-            profile.stripe_sub_id_month,
-            connect_opts,
-        )
-        idx = _find_item_index_by_price(sub, plan.stripe_price_id)
-        assert_item_discounts(sub, {pct_discount.stripe_coupon_id}, index=idx)
+        snaps = await get_applied_snapshots(db_pool, item_id)
+        assert len(snaps) == 1
+        assert snaps[0]["discount_mode"] == "once"
+        # Pending once: coupon resolved + written back, end_date still null.
+        assert snaps[0]["stripe_coupon_id"] is not None
+        assert snaps[0]["end_date"] is None
 
-        # Step 2 — stack the flat-dollar coupon alongside it.
-        before_step2 = await snapshot_billing_state(
-            stripe_client,
-            profile.stripe_customer_id,
-            connect_opts,
-        )
-        await memberships_service.update_discounts(
-            item_id=item_id,
-            member_id=member.member_id,
-            discount_ids=[pct_discount.discount_id, flat_discount.discount_id],
-            idempotency_key=uuid4(),
-        )
-        await assert_no_unexpected_charges(
-            stripe_client,
-            before_step2,
-            connect_opts,
-        )
-
-        sub = await fetch_subscription(
-            stripe_client,
-            profile.stripe_sub_id_month,
-            connect_opts,
-        )
-        idx = _find_item_index_by_price(sub, plan.stripe_price_id)
-        assert_item_discounts(
-            sub,
-            {pct_discount.stripe_coupon_id, flat_discount.stripe_coupon_id},
-            index=idx,
-        )
-
-        # Next cycle: both coupons must have been applied. Stripe's
-        # stacking order between a percent-off coupon and a flat
-        # dollar-off coupon is not stable — we've observed both
-        # orderings on the same sandbox run-to-run:
-        #
-        #   percent first → (10000 * 0.8) - 500       = 7500
-        #   flat first    → (10000 - 500) * 0.8       = 7600
-        #
-        # Either is acceptable for billing; what matters is that
-        # BOTH coupons were applied. Assert the amount lands on one
-        # of the two valid totals, and separately pin down that the
-        # invoice's ``total_discount_amounts`` has exactly two lines.
+        # Next cycle bills with the once discount applied.
         invoice = await advance_to_next_cycle_and_fetch_invoice(
             stripe_client,
             clock_id,
             NEXT_CYCLE,
             profile.stripe_sub_id_month,
-            before_step2,
+            before,
             connect_opts,
         )
-        percent_first = int(round(10000 * 0.8)) - 500
-        flat_first = int(round((10000 - 500) * 0.8))
-        assert invoice.amount_due in {percent_first, flat_first}, (
-            f"Stacked discounts should bill {percent_first} or "
-            f"{flat_first} on renewal, got {invoice.amount_due} on "
-            f"{invoice.id}"
+        assert invoice.amount_due == 4000, (
+            f"Once discount should bill 4000 on the next invoice, got {invoice.amount_due}"
         )
-        discount_lines = invoice.total_discount_amounts or []
-        assert len(discount_lines) == 2, (
-            f"Renewal invoice {invoice.id} should show two discount "
-            f"lines (percent + flat), got {len(discount_lines)}"
+
+        # The cycle AFTER the once is consumed re-syncs: the coupon is gone
+        # from the live sub, the snapshot's end_date is stamped, and the
+        # following invoice bills full price.
+        before2 = await snapshot_billing_state(
+            stripe_client, profile.stripe_customer_id, connect_opts
+        )
+        invoice2 = await advance_to_next_cycle_and_fetch_invoice(
+            stripe_client,
+            clock_id,
+            CYCLE_AFTER_NEXT,
+            profile.stripe_sub_id_month,
+            before2,
+            connect_opts,
+        )
+        assert invoice2.amount_due == 5000, (
+            f"Consumed once discount must not re-apply; expected full 5000, "
+            f"got {invoice2.amount_due}"
+        )
+        snaps_after = await get_applied_snapshots(db_pool, item_id)
+        assert snaps_after[0]["end_date"] is not None, (
+            "Consumed once snapshot should have its end_date stamped"
+        )
+    finally:
+        if member is not None:
+            await delete_member_data(db_pool, member.member_id)
+        await delete_test_clock(stripe_client, clock_id, connect_opts)
+
+
+@pytest.mark.timeout(180)
+async def test_apply_is_idempotent_no_duplicate_snapshot(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """Applying the same preset twice leaves a single frozen snapshot.
+
+    A snapshot already present and still desired is left frozen (never
+    re-resolved, never duplicated).
+    """
+    clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
+    member = None
+    try:
+        pm_id = await created.payment_method()
+        member = await created.member(
+            gym_id,
+            payment_method_id=pm_id,
+            test_clock_id=clock_id,
+        )
+        plan = await created.plan(gym_id, price_cents=5000)
+        discount = await created.discount(gym_id, name="Idem 10% Off", percentage_off=10.0)
+        await _start_membership(memberships_service, member, gym_id, plan)
+        item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
+
+        for _ in range(2):
+            await memberships_service.apply_discounts(
+                item_id=item_id,
+                member_id=member.member_id,
+                add_preset_ids=[discount.discount_id],
+                remove_applied_ids=[],
+                idempotency_key=uuid4(),
+            )
+
+        snaps = await get_applied_snapshots(db_pool, item_id)
+        assert len(snaps) == 1, (
+            f"Re-applying a preset must not duplicate the snapshot, got {len(snaps)}"
         )
     finally:
         if member is not None:

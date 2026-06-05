@@ -5,7 +5,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_freez
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
-import 'package:crm/features/member_details/data/models/member_memberships_update_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_apply_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_check_response.dart';
@@ -401,11 +401,14 @@ class MemberRepository {
         .toList();
   }
 
-  /// `PUT /api/v1/member_memberships/discounts` —
-  /// replaces the full discount set on an existing
-  /// membership.
-  Future<void> updateMembershipDiscounts(
-    MemberMembershipsUpdateDiscountsRequest req,
+  /// `PUT /api/v1/member_memberships/discounts` — adds /
+  /// removes immutable applied-discount snapshots on an
+  /// existing membership. Applying is an explicit add /
+  /// remove, never a replace-set: [req] names the regular
+  /// presets and linked discounts to add and the snapshot
+  /// ids to remove. Re-syncs the subscription.
+  Future<void> applyMembershipDiscounts(
+    MemberMembershipsApplyDiscountsRequest req,
   ) async {
     await _apiClient.put(
       '/api/v1/member_memberships/discounts',
@@ -413,14 +416,18 @@ class MemberRepository {
     );
   }
 
-  /// `POST /api/v1/member_memberships/discounts/preview`.
+  /// `POST /api/v1/member_memberships/discounts/preview` —
+  /// previews the subscription for the membership's CURRENT
+  /// applied-discount snapshots (item-id keyed query params,
+  /// no body; apply itself mutates the snapshot rows first).
   Future<PaymentsInvoicePreviewResponse?>
-      previewUpdateMembershipDiscounts(
-    MemberMembershipsUpdateDiscountsRequest req,
-  ) async {
+      previewMembershipDiscounts({
+    required String itemId,
+    required String memberId,
+  }) async {
     final response = await _apiClient.post(
-      '/api/v1/member_memberships/discounts/preview',
-      data: req.toJson(),
+      '/api/v1/member_memberships/discounts/preview'
+      '?item_id=$itemId&member_id=$memberId',
     );
     if (response.data == null) return null;
     return PaymentsInvoicePreviewResponse.fromJson(

@@ -12,11 +12,6 @@ import pytest
 from sqlalchemy import text
 
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
@@ -31,16 +26,11 @@ async def test_freeze_account(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -104,16 +94,11 @@ async def test_freeze_updates_end_date(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -188,16 +173,11 @@ async def test_unfreeze_account(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(
@@ -264,16 +244,11 @@ async def test_freeze_zero_months_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(db_pool, stripe_client, gym_id, connect_opts)
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
 
     try:
         await memberships_service.start(

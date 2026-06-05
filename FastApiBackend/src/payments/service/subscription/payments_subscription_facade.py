@@ -41,6 +41,9 @@ from src.payments.service.subscription.payments_subscription_item import (
 from src.payments.service.subscription.payments_subscription_migration import (
     PaymentsSubscriptionMigration,
 )
+from src.payments.service.subscription.payments_subscription_retrieve import (
+    PaymentsSubscriptionRetrieve,
+)
 from src.payments.service.subscription.payments_subscription_upcoming import (
     PaymentsSubscriptionUpcoming,
 )
@@ -78,6 +81,7 @@ class PaymentsStripeSubscriptionService:
         self._migration = PaymentsSubscriptionMigration(*deps)
         self._item = PaymentsSubscriptionItem(*deps)
         self._upcoming = PaymentsSubscriptionUpcoming(*deps)
+        self._retrieve = PaymentsSubscriptionRetrieve(*deps)
 
     # ── Create ────────────────────────────────────────────────────
 
@@ -150,6 +154,19 @@ class PaymentsStripeSubscriptionService:
     ) -> UpcomingInvoiceResponse:
         """Fetch the next invoice preview for an existing subscription."""
         return await self._upcoming.fetch_upcoming(
+            stripe_subscription_id,
+            stripe_account_id,
+        )
+
+    # ── Retrieve ─────────────────────────────────────────────────
+
+    async def get_subscription(
+        self,
+        stripe_subscription_id: str,
+        stripe_account_id: str,
+    ) -> PaymentsSubscriptionResponse:
+        """Retrieve a subscription's current items and discounts."""
+        return await self._retrieve.get_subscription(
             stripe_subscription_id,
             stripe_account_id,
         )

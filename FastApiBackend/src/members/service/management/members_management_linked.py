@@ -206,9 +206,8 @@ class MembersManagementLinked(MembersManagementBase):
     ) -> MembersBillingProfileResponse:
         """Unlink a member from their paying parent account.
 
-        Clears both ``account_linked_to_id`` and ``linked_discount_id``
-        on the child, then re-syncs the old parent so linked-discount
-        assignments are recalculated.
+        Clears ``account_linked_to_id`` on the child, then re-syncs the old
+        parent so the consolidated subscription reflects the smaller family.
 
         Args:
             member_id: The child profile to unlink.

@@ -32,7 +32,6 @@ def test_create_gym_returns_201_with_onboarding_url(client, auth_headers):
                 "gym_name": "Aztec MMA",
                 "owner_first_name": "Jesse",
                 "owner_last_name": "Musa",
-                "owner_email": "jesse@example.com",
             },
             headers=auth_headers,
         )

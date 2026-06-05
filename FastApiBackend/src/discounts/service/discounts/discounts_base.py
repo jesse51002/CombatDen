@@ -1,9 +1,13 @@
-"""Shared dependencies and helpers for discount operations."""
+"""Shared dependencies and helpers for discount preset operations.
+
+Presets are plain gym config now (coupon-free), so this base holds only the
+DB pool — no Stripe service. Coupons are computed at sync-time and live on the
+applied-discount snapshot, not the preset.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import text
@@ -12,39 +16,29 @@ from src.discounts import SQL_DIR
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
-if TYPE_CHECKING:
-    from src.payments.service.payments_stripe_discount_service import (
-        PaymentsStripeDiscountService,
-    )
-    from src.shared.gym_stripe_service import GymStripeService
-
 logger = logging.getLogger(__name__)
 
 
 class DiscountsBase:
-    """Base class for discount sub-services.
+    """Base class for discount preset sub-services.
 
-    Holds shared dependencies and reusable query methods
-    used across create, update, and delete operations.
+    Holds the shared DB pool and reusable query methods used across
+    create, update, delete, and list operations.
     """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        gym_stripe_service: GymStripeService,
-        stripe_discount_service: PaymentsStripeDiscountService,
     ) -> None:
         self._db_pool = db_pool
-        self._gym_stripe = gym_stripe_service
-        self._stripe_discounts = stripe_discount_service
 
     # ── Shared Queries ─────────────────────────────────────────
 
     async def _get_discount(self, discount_id: UUID) -> dict:
-        """Fetch a non-deleted discount row.
+        """Fetch a non-deleted preset row.
 
         Raises:
-            ValueError: If the discount is not found.
+            ValueError: If the preset is not found.
         """
         sql = load_sql(SQL_DIR / "discounts_get_by_id.sql")
         async with self._db_pool.session() as session:

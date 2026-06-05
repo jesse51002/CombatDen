@@ -22,7 +22,6 @@ class StartMembershipStepIndicator extends StatelessWidget {
       if (showParticipantStep)
         StartMembershipStep.participant,
       StartMembershipStep.plan,
-      StartMembershipStep.discounts,
       StartMembershipStep.review,
     ];
     final index = visibleSteps.indexOf(step);
@@ -68,8 +67,6 @@ class StartMembershipStepIndicator extends StatelessWidget {
         return 'Person';
       case StartMembershipStep.plan:
         return 'Plan';
-      case StartMembershipStep.discounts:
-        return 'Discounts';
       case StartMembershipStep.review:
         return 'Review';
     }

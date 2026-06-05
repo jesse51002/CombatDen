@@ -1,6 +1,5 @@
 """Handler for Stripe ``invoice.payment_failed`` events."""
 
-import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -11,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
+from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
 from src.stripe_webhooks.service.stripe_time import stripe_ts_to_datetime
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
     SubscriptionItemPendingError,
@@ -116,7 +116,7 @@ class InvoicePaymentFailedHandler:
             "stripe_invoice_id": invoice["id"],
             "stripe_payment_intent_id": invoice.get("payment_intent"),
             "invoice_time": stripe_ts_to_datetime(created_ts),
-            "stripe_event_payload": json.dumps(invoice),
+            "stripe_event_payload": dump_stripe_payload(invoice),
         }
         result = await session.execute(text(upsert_sql), params)
         row = result.mappings().fetchone()
@@ -150,7 +150,7 @@ class InvoicePaymentFailedHandler:
             "stripe_refund_id": None,
             "refunds_charge_id": None,
             "charge_time": datetime.now(tz=UTC),
-            "stripe_event_payload": json.dumps(invoice),
+            "stripe_event_payload": dump_stripe_payload(invoice),
         }
         await session.execute(text(insert_sql), params)
 

@@ -8,8 +8,14 @@ from uuid import UUID
 from pydantic import BaseModel
 from schema.member_charge import ChargeKind, ChargeStatus
 from schema.member_invoice_line_item import LineItemType
-from schema.member_membership import MembershipDbStatus
 from schema.membership_plan import PlanType
+
+from src.member_memberships.schema.member_memberships_schema import (
+    MemberMembershipsAppliedDiscount,
+)
+from src.members.schema.members_crm_members_list_schema import (
+    CrmMemberStatus,
+)
 
 # ── Management Request / Response ────────────────────────────────
 
@@ -92,14 +98,20 @@ class BillingLinkedAccount(BaseModel):
 class BillingPayingForMember(BillingLinkedAccount):
     """A member on a plan with their class usage for the current cycle."""
 
-    status: MembershipDbStatus
+    status: CrmMemberStatus
     class_count: int | None = None
     classes_used: int = 0
     classes_remaining: int | None = None
 
 
 class BillingDiscountInfo(BaseModel):
-    """An active discount applied to a membership."""
+    """A discount applied to a past invoice (payment-history line).
+
+    Used by ``BillingPaymentRecord.applied_discounts`` to name the
+    discounts on a historical charge. Currently-applied membership
+    discounts use the snapshot model ``MemberMembershipsAppliedDiscount``
+    on ``BillingMembershipInfo.discounts``.
+    """
 
     discount_id: UUID
     discount_name: str
@@ -124,7 +136,7 @@ class BillingMembershipInfo(BaseModel):
     plan_id: UUID
     plan_name: str
     plan_type: PlanType | None = None
-    status: MembershipDbStatus
+    status: CrmMemberStatus
     base_cost: int
     duration_amount: int
     duration_unit: str
@@ -135,7 +147,7 @@ class BillingMembershipInfo(BaseModel):
     freeze_start_date: date | None = None
     freeze_end_date: date | None = None
     paying_for: list[BillingPayingForMember] = []
-    discounts: list[BillingDiscountInfo] = []
+    discounts: list[MemberMembershipsAppliedDiscount] = []
     members: dict[UUID, BillingMembershipMemberInfo] = {}
 
 

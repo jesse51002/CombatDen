@@ -154,17 +154,16 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
             member_id=member_id,
             plan_id=row["plan_id"],
         )
-        # Preserve the existing row's discounts across the price
-        # swap. The service-layer cancel filter drops this row out
-        # of ``memberships`` before ``aggregate_plan_discounts``
-        # runs, so the only way for its coupons to reach Stripe is
-        # to thread them explicitly through the add_item.
+        # Discounts no longer thread through the sync items. The applied
+        # snapshots stay frozen on this membership's item_id (unchanged by a
+        # price swap — only price_id/total_price change), so the sync-time
+        # coupon step re-attaches them to the consolidated line from the
+        # snapshot table.
         add_item = SyncItem(
             stripe_price_id=active_price["stripe_price_id"],
             member_id=member_id,
             plan_id=row["plan_id"],
             prorate=prorate,
-            discount_ids=list(row["discount_ids"] or []),
         )
         return cancel_item, add_item
 

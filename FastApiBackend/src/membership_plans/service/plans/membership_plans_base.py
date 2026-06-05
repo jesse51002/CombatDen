@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from schema.gym_discount import DiscountMode, DiscountType
 from sqlalchemy import text
 
+import src.shared.db_schema_path  # noqa: F401
+from src.discounts.schema.discounts_schema import DiscountCreateRequest
+from src.discounts.service.discounts.discounts_service import DiscountsService
 from src.membership_plans import SQL_DIR
 from src.membership_plans.membership_plans_schemas import (
     MembershipPlanPriceResponse,
@@ -41,13 +46,42 @@ class MembershipPlansBase:
         gym_stripe_service: GymStripeService,
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
+        discounts_service: DiscountsService,
     ) -> None:
         self._db_pool = db_pool
         self._gym_stripe = gym_stripe_service
         self._stripe_memberships = stripe_membership_service
         self._stripe_prices = stripe_price_service
+        self._discounts = discounts_service
 
     # ── Shared Queries ─────────────────────────────────────────
+
+    async def _mint_linked_discounts(
+        self,
+        gym_id: UUID,
+        prices: list[int],
+    ) -> list[str]:
+        """Mint a real ``linked`` discount entry per entered tier amount via the
+        discounts service; return the discount ids in tier order.
+
+        The plan stores these in ``linked_discount_ids``; reads resolve them
+        back to amounts. Reuses the discounts service (identity + first active
+        value); editing the amount later mints a new active version there, so
+        the stored id stays stable. Shared by create and update.
+        """
+        ids: list[str] = []
+        for tier, amount in enumerate(prices, start=2):
+            discount = await self._discounts.create_discount(
+                DiscountCreateRequest(
+                    gym_id=gym_id,
+                    discount_name=f"Family member {tier}",
+                    discount_type=DiscountType.linked,
+                    dollar_off=amount,
+                    discount_mode=DiscountMode.ongoing,
+                ),
+            )
+            ids.append(str(discount.discount_id))
+        return ids
 
     async def _get_plan(self, plan_id: UUID, gym_id: UUID) -> dict:
         """Fetch a non-deleted plan row (with active price columns).
@@ -100,6 +134,19 @@ class MembershipPlansBase:
         )
 
     @staticmethod
+    def _json_list(value: object) -> list:
+        """Parse a jsonb column into a list, tolerating str or list.
+
+        asyncpg may hand a jsonb column back as a JSON string or as an
+        already-parsed list depending on codec setup; handle both.
+        """
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return json.loads(value)
+        return list(value)  # type: ignore[arg-type]
+
+    @staticmethod
     def _build_plan_response(
         plan_row: dict,
         active_price: MembershipPlanPriceResponse | None = None,
@@ -117,4 +164,13 @@ class MembershipPlansBase:
             stripe_product_id=plan_row["stripe_product_id"],
             created_at=plan_row["created_at"],
             active_price=active_price,
+            enrolled_count=plan_row.get("enrolled_count", 0),
+            waiver_ids=MembershipPlansBase._json_list(plan_row.get("waiver_ids")),
+            linked_discount_enabled=plan_row.get("linked_discount_enabled", False),
+            linked_discount_ids=MembershipPlansBase._json_list(
+                plan_row.get("linked_discount_ids"),
+            ),
+            linked_discount_prices=MembershipPlansBase._json_list(
+                plan_row.get("linked_discount_prices"),
+            ),
         )

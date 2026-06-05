@@ -73,13 +73,12 @@ def find_discount(
     gym_id: uuid.UUID,
     discount_name: str,
 ) -> DiscountRecord | None:
-    """Look up a gym_discount by (gym_id, discount_name)."""
+    """Look up a gym_discount identity by (gym_id, discount_name), joined to its
+    active value version. The percent/dollar + lifetime live on
+    gym_discount_values now (the identity table is name + type only)."""
     resp = (
         client.table("gym_discounts_unfiltered")
-        .select(
-            "discount_id,discount_name,discount_type,percentage_off,dollar_off,"
-            "discount_mode,duration_amount,duration_unit,end_date"
-        )
+        .select("discount_id,discount_name,discount_type")
         .eq("gym_id", str(gym_id))
         .eq("discount_name", discount_name)
         .limit(1)
@@ -88,16 +87,28 @@ def find_discount(
     if not resp.data:
         return None
     row = resp.data[0]
+    value = (
+        client.table("gym_discount_values_unfiltered")
+        .select(
+            "percentage_off,dollar_off,discount_mode,duration_amount,"
+            "duration_unit,end_date"
+        )
+        .eq("discount_id", row["discount_id"])
+        .eq("is_active", True)
+        .limit(1)
+        .execute()
+    )
+    v = value.data[0] if value.data else {}
     return DiscountRecord(
         discount_id=uuid.UUID(row["discount_id"]),
         discount_name=row["discount_name"],
         discount_type=row["discount_type"],
-        percentage_off=row.get("percentage_off"),
-        dollar_off=row.get("dollar_off"),
-        discount_mode=row["discount_mode"],
-        duration_amount=row.get("duration_amount"),
-        duration_unit=row.get("duration_unit"),
-        end_date=row.get("end_date"),
+        percentage_off=v.get("percentage_off"),
+        dollar_off=v.get("dollar_off"),
+        discount_mode=v.get("discount_mode"),
+        duration_amount=v.get("duration_amount"),
+        duration_unit=v.get("duration_unit"),
+        end_date=v.get("end_date"),
     )
 
 

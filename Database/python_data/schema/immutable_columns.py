@@ -95,6 +95,8 @@ MEMBER_ATTENDANCE: frozenset[str] = frozenset(
         "member_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
         "class_history_id",  # identity FK
+        "plan_id",  # billing attribution, set once at check-in
+        "item_id",  # membership row that covered the check-in
     }
 )
 
@@ -129,6 +131,48 @@ MEMBER_REWARD_REDEMPTIONS: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "reward_id",  # identity FK
         "redeemed_at",  # auto-generated timestamp
+    }
+)
+
+GYM_WAIVERS: frozenset[str] = frozenset(
+    {
+        "waiver_id",  # PK, auto-generated UUID
+        "gym_id",  # identity FK, per-gym resource
+        "created_at",  # auto-generated timestamp
+        "current_version_id",  # set by the publish-version flow, not a raw edit
+        # name + is_deleted + updated_at are the writable update surface.
+    }
+)
+
+GYM_WAIVER_VERSIONS: frozenset[str] = frozenset(
+    {
+        # Immutable in full — versions are append-only (publish = INSERT row),
+        # never updated by a client.
+        "version_id",  # PK, auto-generated UUID
+        "waiver_id",  # identity FK
+        "gym_id",  # identity FK, per-gym resource
+        "version_number",  # set by the publish flow
+        "body",  # the immutable signed text
+        "content_hash",  # backend-computed sha256 of body
+        "created_at",  # auto-generated timestamp
+    }
+)
+
+MEMBER_WAIVER_SIGNATURES: frozenset[str] = frozenset(
+    {
+        # Append-only legal audit record — every column user-immutable.
+        "signature_id",  # PK, auto-generated UUID
+        "gym_id",  # identity FK, per-gym resource
+        "member_id",  # identity FK
+        "waiver_id",  # identity FK
+        "waiver_version_id",  # the exact version signed
+        "signed_at",  # auto-generated timestamp
+        "signer_name",  # captured at sign time
+        "signature_type",  # captured at sign time
+        "consent_acknowledged",  # captured at sign time
+        "ip_address",  # audit trail, captured at sign time
+        "user_agent",  # audit trail, captured at sign time
+        "content_hash",  # frozen copy of the signed version's hash
     }
 )
 
@@ -181,10 +225,29 @@ GYM_DISCOUNTS: frozenset[str] = frozenset(
         "discount_type",  # set at creation (preset | custom)
         "is_deleted",  # managed by the archive (delete) endpoint only
         "created_at",  # auto-generated timestamp
-        # Linked columns + the old Stripe duration/coupon columns are gone:
-        # linked discounts dissolved (now a snapshot marker), coupons computed
-        # at sync (not on the preset), lifetime is discount_mode + a
-        # duration span / explicit end_date (all user-set on the preset).
+        # gym_discounts is identity-only: name (editable) + type
+        # (preset | custom | linked). The percent/dollar + lifetime live on the
+        # versioned gym_discount_values rows. A `linked` discount is a real entry
+        # a membership plan's family tiers reference by id.
+    }
+)
+
+GYM_DISCOUNT_VALUES: frozenset[str] = frozenset(
+    {
+        # Versioned, immutable value rows: every column is immutable except
+        # is_active (flipped to deactivate the prior version when a new one is
+        # inserted). Editing a value = a NEW version, never an UPDATE of these.
+        "value_id",  # PK, auto-generated UUID
+        "discount_id",  # identity FK to the owning discount
+        "gym_id",  # identity FK, per-gym resource
+        "percentage_off",  # immutable value
+        "dollar_off",  # immutable value
+        "discount_mode",  # immutable lifetime mode
+        "duration_amount",  # immutable lifetime spec
+        "duration_unit",  # immutable lifetime spec
+        "end_date",  # immutable lifetime spec
+        "created_at",  # auto-generated timestamp
+        # is_active is intentionally NOT listed — the one mutable column.
     }
 )
 
@@ -211,14 +274,7 @@ MEMBER_MEMBERSHIP_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
         "item_id",  # identity FK, the membership / Stripe item
         "member_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
-        "discount_type",  # snapshot at apply
-        "source_discount_id",  # provenance snapshot at apply
-        "linked_discount_planid",  # linked provenance snapshot at apply
-        "linked_discount_num",  # linked level snapshot at apply
-        "discount_name",  # snapshot at apply
-        "percentage_off",  # snapshot intent at apply
-        "dollar_off",  # snapshot intent at apply
-        "discount_mode",  # snapshot at apply
+        "value_id",  # identity FK, the frozen discount value version
         "end_date",  # sync writeback (resolved / consumption-stamped)
         "stripe_coupon_id",  # sync writeback (resolved coupon / once handle)
         "created_at",  # auto-generated timestamp

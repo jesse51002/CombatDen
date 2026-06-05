@@ -21,11 +21,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import text
 
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.db_reads import get_profile_stripe_ids
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -96,6 +91,7 @@ async def test_family_same_plan_both_rows_sum_to_plan_total(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Parent + linked child on the same plan → both rows carry the
     combined plan total (sum of both members' line contribution).
@@ -104,29 +100,20 @@ async def test_family_same_plan_both_rows_sum_to_plan_total(
     and the upcoming invoice line total is 2 × price. Both
     member_memberships rows should end up with that same summed value.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    parent = await created.member(
         gym_id,
-        connect_opts,
         first_name="FamSame",
         last_name="Parent",
         payment_method_id=pm_id,
     )
-    child = await create_member(
-        db_pool,
-        stripe_client,
+    child = await created.member(
         gym_id,
-        connect_opts,
         first_name="FamSame",
         last_name="Child",
     )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
+    plan = await created.plan(
         gym_id,
-        connect_opts,
         plan_name="Fam Same Plan",
         price_cents=5000,
     )
@@ -209,42 +196,31 @@ async def test_family_different_plans_per_row_totals(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Parent on plan A, linked child on plan B → each row holds its
     own plan's line total; the parent's row is not bumped by the
     child's plan total and vice versa.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    parent = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    parent = await created.member(
         gym_id,
-        connect_opts,
         first_name="FamDiff",
         last_name="Parent",
         payment_method_id=pm_id,
     )
-    child = await create_member(
-        db_pool,
-        stripe_client,
+    child = await created.member(
         gym_id,
-        connect_opts,
         first_name="FamDiff",
         last_name="Child",
     )
-    plan_a = await create_plan(
-        db_pool,
-        stripe_client,
+    plan_a = await created.plan(
         gym_id,
-        connect_opts,
         plan_name="Plan A",
         price_cents=5000,
     )
-    plan_b = await create_plan(
-        db_pool,
-        stripe_client,
+    plan_b = await created.plan(
         gym_id,
-        connect_opts,
         plan_name="Plan B",
         price_cents=3000,
     )
@@ -304,35 +280,27 @@ async def test_cross_family_isolation(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Two unrelated families on the same plan. A mutation inside
     family A's subscription must never write to family B's rows.
     """
-    pm_a = await create_payment_method(stripe_client, connect_opts)
-    family_a = await create_member(
-        db_pool,
-        stripe_client,
+    pm_a = await created.payment_method()
+    family_a = await created.member(
         gym_id,
-        connect_opts,
         first_name="FamA",
         last_name="Parent",
         payment_method_id=pm_a,
     )
-    pm_b = await create_payment_method(stripe_client, connect_opts)
-    family_b = await create_member(
-        db_pool,
-        stripe_client,
+    pm_b = await created.payment_method()
+    family_b = await created.member(
         gym_id,
-        connect_opts,
         first_name="FamB",
         last_name="Parent",
         payment_method_id=pm_b,
     )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
+    plan = await created.plan(
         gym_id,
-        connect_opts,
         plan_name="Shared Plan",
         price_cents=5000,
     )
@@ -408,26 +376,21 @@ async def test_full_cancel_zeroes_parent_monthly_total(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """When the parent's only membership is cancelled, the Stripe
     subscription goes away and the writeback must zero the profile
     monthly total (the stripe_sub_id=None code path).
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(
         gym_id,
-        connect_opts,
         first_name="SoloCancel",
         last_name="Member",
         payment_method_id=pm_id,
     )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
+    plan = await created.plan(
         gym_id,
-        connect_opts,
         plan_name="Solo Plan",
         price_cents=4500,
     )

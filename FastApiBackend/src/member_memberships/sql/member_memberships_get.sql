@@ -10,7 +10,6 @@ SELECT
     mm.price_id,
     mpp.stripe_price_id,
     mm.stripe_item_id,
-    mm.discount_ids,
     mpp.price,
     g.timezone
 FROM member_memberships mm

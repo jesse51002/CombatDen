@@ -28,6 +28,25 @@ class MembershipPlanResponse extends Equatable {
   final DateTime createdAt;
   final MembershipPlanPriceResponse? activePrice;
 
+  /// Count of active memberships on this plan. Populated by
+  /// the list endpoint; defaults to 0 when absent (e.g. the
+  /// single-plan get, or an older backend).
+  @JsonKey(defaultValue: 0)
+  final int enrolledCount;
+
+  /// Waiver ids a member must sign for this plan (multi-select).
+  @JsonKey(defaultValue: <String>[])
+  final List<String> waiverIds;
+
+  /// Per-plan linked (family) member discount config.
+  @JsonKey(defaultValue: false)
+  final bool linkedDiscountEnabled;
+
+  /// Price (minor units) each linked member pays, ordered
+  /// 2nd, 3rd, 4th, 5th+.
+  @JsonKey(defaultValue: <int>[])
+  final List<int> linkedDiscountPrices;
+
   const MembershipPlanResponse({
     required this.planId,
     required this.gymId,
@@ -40,6 +59,10 @@ class MembershipPlanResponse extends Equatable {
     this.stripeProductId,
     required this.createdAt,
     this.activePrice,
+    this.enrolledCount = 0,
+    this.waiverIds = const [],
+    this.linkedDiscountEnabled = false,
+    this.linkedDiscountPrices = const [],
   });
 
   factory MembershipPlanResponse.fromJson(
@@ -65,5 +88,9 @@ class MembershipPlanResponse extends Equatable {
         stripeProductId,
         createdAt,
         activePrice,
+        enrolledCount,
+        waiverIds,
+        linkedDiscountEnabled,
+        linkedDiscountPrices,
       ];
 }

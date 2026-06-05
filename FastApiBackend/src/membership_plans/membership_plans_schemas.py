@@ -36,6 +36,18 @@ def _validate_price(v: int) -> int:
     return v
 
 
+def _validate_linked_prices(v: list[int] | None) -> list[int] | None:
+    """Linked-tier amounts (cents) must all be >= 0.
+
+    The CRM enters a dollar amount per family tier; the backend mints a real
+    ``linked`` discount entry per amount on write and stores the ids in
+    ``membership_plans.linked_discount_ids``.
+    """
+    if v is not None and any(p < 0 for p in v):
+        raise ValueError("linked_discount_prices must all be >= 0")
+    return v
+
+
 # ── Create ───────────────────────────────────────────────────
 
 
@@ -50,6 +62,9 @@ class MembershipPlanCreateRequest(BaseModel):
     duration_unit: DurationUnit | None = None
     is_public: bool = True
     price: int
+    waiver_ids: list[UUID] = []
+    linked_discount_enabled: bool = False
+    linked_discount_prices: list[int] = []
 
     _v_plan_name = field_validator("plan_name")(_validate_plan_name)
     _v_class_count = field_validator("class_count")(_validate_class_count)
@@ -57,6 +72,9 @@ class MembershipPlanCreateRequest(BaseModel):
         _validate_duration_amount,
     )
     _v_price = field_validator("price")(_validate_price)
+    _v_linked_prices = field_validator("linked_discount_prices")(
+        _validate_linked_prices,
+    )
 
     @model_validator(mode="after")
     def validate_plan_constraints(self) -> MembershipPlanCreateRequest:
@@ -82,11 +100,17 @@ class MembershipPlanUpdateData(BaseModel):
     duration_amount: int | None = None
     duration_unit: DurationUnit | None = None
     is_public: bool | None = None
+    waiver_ids: list[UUID] | None = None
+    linked_discount_enabled: bool | None = None
+    linked_discount_prices: list[int] | None = None
 
     _v_plan_name = field_validator("plan_name")(_validate_plan_name)
     _v_class_count = field_validator("class_count")(_validate_class_count)
     _v_duration_amount = field_validator("duration_amount")(
         _validate_duration_amount,
+    )
+    _v_linked_prices = field_validator("linked_discount_prices")(
+        _validate_linked_prices,
     )
 
 
@@ -158,6 +182,18 @@ class MembershipPlanResponse(BaseModel):
     stripe_product_id: str | None = None
     created_at: datetime
     active_price: MembershipPlanPriceResponse | None = None
+    # Count of active memberships on this plan. Populated by the list endpoint;
+    # the single-plan get defaults it to 0 (its SQL omits the subquery).
+    enrolled_count: int = 0
+    # Waivers a member must sign for this plan (waiver_id strings).
+    waiver_ids: list[UUID] = []
+    # Per-plan linked (family) member discount config. The column stores
+    # `linked_discount_ids` (real `linked` discount entries the backend mints
+    # from the entered amounts); `linked_discount_prices` is the resolved cents
+    # per tier (2nd..5th+) so the CRM can display/edit the amounts.
+    linked_discount_enabled: bool = False
+    linked_discount_ids: list[UUID] = []
+    linked_discount_prices: list[int] = []
 
 
 # ── Constraint helpers ───────────────────────────────────────

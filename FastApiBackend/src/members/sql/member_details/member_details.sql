@@ -42,7 +42,28 @@ SELECT
     mbp.card_exp_month,
     mbp.card_exp_year,
     ms.plan_id,
-    ms.discount_ids,
+    COALESCE(
+        (SELECT jsonb_agg(jsonb_build_object(
+            'applied_discount_id', ad.applied_discount_id,
+            'item_id', ad.item_id,
+            'member_id', ad.member_id,
+            'gym_id', ad.gym_id,
+            'value_id', ad.value_id,
+            'discount_id', d.discount_id,
+            'discount_name', d.discount_name,
+            'discount_type', d.discount_type,
+            'percentage_off', v.percentage_off,
+            'dollar_off', v.dollar_off,
+            'discount_mode', v.discount_mode,
+            'end_date', ad.end_date
+         ) ORDER BY ad.created_at)
+         FROM member_membership_applied_discounts ad
+         JOIN gym_discount_values v ON v.value_id = ad.value_id
+         JOIN gym_discounts d ON d.discount_id = v.discount_id
+         WHERE ad.item_id = ms.item_id
+           AND (ad.end_date IS NULL OR ad.end_date >= CURRENT_DATE)),
+        '[]'::jsonb
+    ) AS applied_discounts,
     ms.item_id,
     ms.status       AS membership_status,
     ms.start_date   AS membership_start_date,
@@ -64,7 +85,8 @@ SELECT
     gr.sub_name             AS rank_sub_name,
     gr.image_url            AS rank_image_url,
     gr.color                AS rank_color,
-    gr.classes_till_rankup  AS rank_classes_till_rankup
+    gr.classes_till_rankup  AS rank_classes_till_rankup,
+    (now() AT TIME ZONE g.timezone)::date AS gym_today
 FROM member_billing_profile mbp
 JOIN members m ON m.member_id = mbp.member_id
 LEFT JOIN latest_memberships ms

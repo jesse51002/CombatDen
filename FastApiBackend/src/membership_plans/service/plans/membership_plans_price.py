@@ -11,6 +11,7 @@ from schema.membership_plan import DurationUnit, PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
+from src.discounts.service.discounts.discounts_service import DiscountsService
 from src.membership_plans import SQL_DIR
 from src.membership_plans.membership_plans_schemas import (
     MembershipPlanPriceRequest,
@@ -56,6 +57,7 @@ class MembershipPlansPrice(MembershipPlansBase):
         gym_stripe_service: GymStripeService,
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
+        discounts_service: DiscountsService,
         membership_payment_sync_service: MembershipPaymentSyncService,
     ) -> None:
         super().__init__(
@@ -63,6 +65,7 @@ class MembershipPlansPrice(MembershipPlansBase):
             gym_stripe_service,
             stripe_membership_service,
             stripe_price_service,
+            discounts_service,
         )
         self._payment_sync = membership_payment_sync_service
 

@@ -8,7 +8,7 @@ import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
-import 'package:crm/features/member_details/data/models/member_memberships_update_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_apply_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 
@@ -39,7 +39,7 @@ class MemberDetailBloc
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
     on<MarkPaidCashRequested>(_onMarkPaidCash);
 
-    on<UpdateDiscountsRequested>(_onUpdateDiscounts);
+    on<ApplyDiscountsRequested>(_onApplyDiscounts);
 
     on<ChargeCardRequested>(_onChargeCard);
     on<RefundChargeRequested>(_onRefundCharge);
@@ -366,20 +366,21 @@ class MemberDetailBloc
     );
   }
 
-  Future<void> _onUpdateDiscounts(
-    UpdateDiscountsRequested event,
+  Future<void> _onApplyDiscounts(
+    ApplyDiscountsRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
     await _runMutation(
-      actionLabel: 'Update discounts',
+      actionLabel: 'Apply discounts',
       emit: emit,
-      action: () => _repository.updateMembershipDiscounts(
-        MemberMembershipsUpdateDiscountsRequest(
+      action: () => _repository.applyMembershipDiscounts(
+        MemberMembershipsApplyDiscountsRequest(
           itemId: event.itemId,
           memberId: event.memberId,
-          discountIds: event.discountIds,
+          addPresetIds: event.addPresetIds,
+          removeAppliedIds: event.removeAppliedIds,
           idempotencyKey: const Uuid().v4(),
         ),
       ),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -39,6 +40,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# jsonb columns are bound as JSON text + cast to jsonb in the SET clause.
+_JSONB_COLUMNS = frozenset({"waiver_ids", "linked_discount_ids"})
+
 
 class MembershipPlansUpdate(MembershipPlansBase):
     """Update a membership plan in CRM and Stripe."""
@@ -66,6 +70,14 @@ class MembershipPlansUpdate(MembershipPlansBase):
         existing = await self._get_plan(request.plan_id, request.gym_id)
 
         changes = self._collect_changes(request.data)
+        # The CRM edits linked discounts as per-tier amounts; mint real
+        # `linked` discount entries and store their ids (the actual column).
+        if "linked_discount_prices" in changes:
+            prices = changes.pop("linked_discount_prices")
+            changes["linked_discount_ids"] = await self._mint_linked_discounts(
+                request.gym_id,
+                prices,  # type: ignore[arg-type]
+            )
         if not changes:
             return self._build_plan_response(
                 existing,
@@ -93,7 +105,10 @@ class MembershipPlansUpdate(MembershipPlansBase):
             )
 
         # ── CRM update ───────────────────────────────────────
-        set_clause = ", ".join(f"{col} = :{col}" for col in changes)
+        set_clause = ", ".join(
+            f"{col} = :{col}::jsonb" if col in _JSONB_COLUMNS else f"{col} = :{col}"
+            for col in changes
+        )
         update_sql = load_sql(
             SQL_DIR / "membership_plans_update.sql",
             {"set_clause": set_clause},
@@ -104,7 +119,7 @@ class MembershipPlansUpdate(MembershipPlansBase):
             "gym_id": str(request.gym_id),
         }
         for col, val in changes.items():
-            params[col] = val.value if hasattr(val, "value") else val
+            params[col] = self._bind_value(col, val)
 
         async with self._db_pool.session() as session:
             result = await session.execute(text(update_sql), params)
@@ -200,6 +215,19 @@ class MembershipPlansUpdate(MembershipPlansBase):
             if value is not None:
                 changes[field] = value
         return changes
+
+    @staticmethod
+    def _bind_value(col: str, val: object) -> object:
+        """Map a change value to its SQL bind value.
+
+        jsonb columns are bound as JSON text (the SET clause casts them);
+        enums bind their `.value`; everything else binds as-is.
+        """
+        if col == "waiver_ids":
+            return json.dumps([str(u) for u in val])  # type: ignore[union-attr]
+        if col == "linked_discount_ids":
+            return json.dumps(list(val))  # type: ignore[arg-type]
+        return val.value if hasattr(val, "value") else val
 
     @staticmethod
     def _validate_merged_state(merged: dict) -> None:

@@ -25,11 +25,6 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import (
-    create_member,
-    create_payment_method,
-    create_plan,
-)
 from tests.helpers.stripe_assertions import snapshot_billing_state
 
 
@@ -39,21 +34,13 @@ async def test_start_one_time_with_cash(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """One-time membership started with cash must not charge the card."""
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
         gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         plan_type="one_time",
         plan_name="One-Time Cash Test",
         price_cents=3000,
@@ -109,23 +96,15 @@ async def test_start_recurring_with_cash(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Recurring membership started with cash must activate without
     charging the card.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
         gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         plan_type="recurring",
         plan_name="Recurring Cash Test",
         price_cents=5000,
@@ -205,6 +184,7 @@ async def test_mark_paid_cash_pays_open_invoice(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """``mark_paid_cash`` rescues a recurring sub with an open invoice.
 
@@ -215,19 +195,10 @@ async def test_mark_paid_cash_pays_open_invoice(
     do not reliably simulate charge failures on Connect
     subscriptions.
     """
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
         gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
-    plan = await create_plan(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
         plan_type="recurring",
         plan_name="Mark Paid Cash Test",
         price_cents=5000,

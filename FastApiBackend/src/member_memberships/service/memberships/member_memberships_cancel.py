@@ -55,7 +55,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
-        # ── Stripe sync (includes linked discount recalc) ──
+        # ── Stripe sync ──
         cancel_item = SyncItem(
             stripe_price_id=row["stripe_price_id"],
             stripe_item_id=row["stripe_item_id"],

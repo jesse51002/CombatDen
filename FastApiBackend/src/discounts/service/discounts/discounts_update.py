@@ -1,98 +1,72 @@
-"""Update a non-linked gym discount."""
+"""Update a regular discount.
+
+A discount has a stable IDENTITY (gym_discounts: name + type) and a chain of
+immutable VALUE versions (gym_discount_values). Editing splits accordingly:
+
+* renaming updates the identity row in place;
+* changing any value/lifetime field mints a NEW active version (deactivating the
+  prior one) — value rows are a permanent paper trail.
+
+Either way, edits affect only future applications — existing applied-discount
+snapshots reference the old version and are frozen. There is no Stripe coupon to
+swap (coupons are computed at sync) and no membership cascade.
+"""
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import TYPE_CHECKING
-from uuid import UUID
 
-from fastapi import BackgroundTasks
-from schema.gym_discount import DiscountType
 from schema.immutable_columns import GYM_DISCOUNTS
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.discounts import SQL_DIR
 from src.discounts.schema.discounts_schema import (
     DiscountResponse,
     DiscountUpdateData,
     DiscountUpdateRequest,
+    _validate_lifetime,
 )
 from src.discounts.service.discounts.discounts_base import DiscountsBase
-from src.payments.schema.metadata.stripe_coupon_metadata import (
-    StripeCouponMetadata,
-)
-from src.payments.schema.payments_discount_schema import (
-    PaymentsDiscountCreateRequest,
-    PaymentsDiscountDeleteRequest,
-)
-from src.payments.schema.payments_enums import StripeCouponDuration
 from src.shared.column_guard import validate_mutable_columns
-from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
-
-if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-        MembershipPaymentSyncService,
-    )
-    from src.payments.service.payments_stripe_discount_service import (
-        PaymentsStripeDiscountService,
-    )
-    from src.shared.gym_stripe_service import GymStripeService
 
 logger = logging.getLogger(__name__)
 
-VALUE_FIELDS = frozenset(
+# Value/lifetime fields — changing any of these mints a new version, rather than
+# editing the identity row.
+VALUE_FIELDS: frozenset[str] = frozenset(
     {
         "percentage_off",
         "dollar_off",
-        "duration",
-        "duration_in_months",
+        "discount_mode",
+        "duration_amount",
+        "duration_unit",
+        "end_date",
     }
 )
 
 
 class DiscountsUpdate(DiscountsBase):
-    """Update a non-linked discount in CRM and Stripe."""
-
-    def __init__(
-        self,
-        db_pool: DirectDatabasePool,
-        gym_stripe_service: GymStripeService,
-        stripe_discount_service: PaymentsStripeDiscountService,
-        membership_payment_sync_service: MembershipPaymentSyncService,
-    ) -> None:
-        super().__init__(db_pool, gym_stripe_service, stripe_discount_service)
-        self._payment_sync = membership_payment_sync_service
+    """Edit a discount's identity (rename) and/or mint a new value version."""
 
     async def update_discount(
         self,
         request: DiscountUpdateRequest,
-        background_tasks: BackgroundTasks,
     ) -> DiscountResponse:
-        """Update a non-linked discount in the CRM database and Stripe.
-
-        Only provided (non-None) fields are updated. If value fields
-        changed, creates a new Stripe coupon and deletes the old one.
-        Queues membership payment sync as a background task.
+        """Apply a partial update; only provided fields change.
 
         Args:
             request: Discount update data (partial).
-            background_tasks: FastAPI background tasks.
 
         Returns:
-            The updated discount.
+            The updated discount (identity + active value version).
 
         Raises:
-            ValueError: If discount not found, is linked, no
-                fields provided, or merged state is invalid.
+            ValueError: If the discount is not found or the merged value
+                state is invalid.
         """
         existing = await self._get_discount(request.discount_id)
-
-        if existing["discount_type"] == DiscountType.linked:
-            raise ValueError(
-                "Cannot update linked discounts via this endpoint",
-            )
 
         changes = self._collect_changes(request.data)
         if not changes:
@@ -100,84 +74,36 @@ class DiscountsUpdate(DiscountsBase):
 
         validate_mutable_columns(GYM_DISCOUNTS, set(changes.keys()))
 
-        merged = {**existing, **changes}
-        self._validate_merged_state(merged)
-
-        values_changed = bool(changes.keys() & VALUE_FIELDS)
-
-        stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-            request.gym_id,
-        )
-
-        stripe_resp = await self._stripe_discounts.create_discount(
-            PaymentsDiscountCreateRequest(
-                discount_name=merged["discount_name"],
-                percentage_off=merged["percentage_off"],
-                amount_off=merged["dollar_off"],
-                currency="usd",
-                duration=StripeCouponDuration(merged["duration"]),
-                duration_in_months=merged["duration_in_months"],
-                metadata=StripeCouponMetadata(
-                    crm_discount_id=request.discount_id,
-                    gym_id=request.gym_id,
-                ),
-            ),
-            stripe_account_id,
-        )
-        changes["stripe_coupon_id"] = stripe_resp.stripe_coupon_id
-
-        if existing["stripe_coupon_id"]:
-            try:
-                await self._stripe_discounts.delete_discount(
-                    PaymentsDiscountDeleteRequest(
-                        stripe_coupon_id=existing["stripe_coupon_id"],
-                    ),
-                    stripe_account_id,
-                )
-            except Exception:
-                logger.warning(
-                    "Failed to delete old Stripe coupon %s (orphaned in Stripe)",
-                    existing["stripe_coupon_id"],
-                    exc_info=True,
-                )
-
-        update_sql = load_sql(SQL_DIR / "discounts_update.sql")
-        params = {
-            "discount_id": str(request.discount_id),
-            "discount_name": merged["discount_name"],
-            "percentage_off": merged["percentage_off"],
-            "dollar_off": merged["dollar_off"],
-            "duration": str(merged["duration"]),
-            "duration_in_months": merged["duration_in_months"],
-            "stripe_coupon_id": stripe_resp.stripe_coupon_id,
-        }
-
+        result = dict(existing)
         async with self._db_pool.session() as session:
-            result = await session.execute(text(update_sql), params)
-            row = result.mappings().fetchone()
-            if not row:
-                raise ValueError(
-                    f"Discount {request.discount_id} not found",
+            if "discount_name" in changes:
+                result.update(
+                    await self._update_identity(
+                        session,
+                        request.discount_id,
+                        str(changes["discount_name"]),
+                    )
+                )
+            value_changes = {k: v for k, v in changes.items() if k in VALUE_FIELDS}
+            if value_changes:
+                result.update(
+                    await self._new_version(
+                        session,
+                        request.discount_id,
+                        str(existing["gym_id"]),
+                        existing,
+                        value_changes,
+                    )
                 )
             await session.commit()
 
-        if values_changed:
-            affected = await self._get_affected_member_ids(
-                request.discount_id,
-            )
-            if affected:
-                background_tasks.add_task(
-                    self._payment_sync.bulk_payment_sync,
-                    affected,
-                )
-
-        return DiscountResponse(**row)
+        return DiscountResponse(**result)
 
     # ── Private ────────────────────────────────────────────────
 
     @staticmethod
     def _collect_changes(data: DiscountUpdateData) -> dict[str, object]:
-        """Extract non-None mutable fields from the update data."""
+        """Extract non-None fields from the update data."""
         changes: dict[str, object] = {}
         for field in DiscountUpdateData.model_fields:
             value = getattr(data, field)
@@ -186,11 +112,63 @@ class DiscountsUpdate(DiscountsBase):
         return changes
 
     @staticmethod
+    async def _update_identity(
+        session: AsyncSession,
+        discount_id: object,
+        discount_name: str,
+    ) -> dict:
+        """Rename the discount identity row."""
+        sql = load_sql(SQL_DIR / "discounts_update.sql")
+        result = await session.execute(
+            text(sql),
+            {"discount_id": str(discount_id), "discount_name": discount_name},
+        )
+        row = result.mappings().fetchone()
+        if not row:
+            raise ValueError(f"Discount {discount_id} not found")
+        return dict(row)
+
+    async def _new_version(
+        self,
+        session: AsyncSession,
+        discount_id: object,
+        gym_id: str,
+        existing: dict,
+        value_changes: dict[str, object],
+    ) -> dict:
+        """Deactivate the active value version and insert a new one."""
+        merged = {field: existing.get(field) for field in VALUE_FIELDS}
+        merged.update(value_changes)
+        self._validate_merged_state(merged)
+
+        deactivate_sql = load_sql(SQL_DIR / "discount_values_deactivate.sql")
+        await session.execute(
+            text(deactivate_sql),
+            {"discount_id": str(discount_id)},
+        )
+
+        insert_sql = load_sql(SQL_DIR / "discount_values_insert.sql")
+        params = {
+            "discount_id": str(discount_id),
+            "gym_id": gym_id,
+            "percentage_off": merged["percentage_off"],
+            "dollar_off": merged["dollar_off"],
+            "discount_mode": str(merged["discount_mode"]),
+            "duration_amount": merged["duration_amount"],
+            "duration_unit": (
+                str(merged["duration_unit"]) if merged["duration_unit"] is not None else None
+            ),
+            "end_date": merged["end_date"],
+        }
+        result = await session.execute(text(insert_sql), params)
+        return dict(result.mappings().one())
+
+    @staticmethod
     def _validate_merged_state(merged: dict) -> None:
-        """Validate the merged discount state after applying changes.
+        """Validate the merged value state after applying changes.
 
         Raises:
-            ValueError: If the merged state violates constraints.
+            ValueError: If the merged value violates constraints.
         """
         has_pct = merged.get("percentage_off") is not None
         has_amt = merged.get("dollar_off") is not None
@@ -199,30 +177,8 @@ class DiscountsUpdate(DiscountsBase):
                 "Exactly one of percentage_off or dollar_off must be set",
             )
 
-        duration = merged.get("duration")
-        if duration == StripeCouponDuration.repeating.value:
-            if merged.get("duration_in_months") is None:
-                raise ValueError(
-                    "duration_in_months is required when duration is 'repeating'",
-                )
-        elif merged.get("duration_in_months") is not None:
-            raise ValueError(
-                "duration_in_months must be None when duration is not 'repeating'",
-            )
-
-    async def _get_affected_member_ids(
-        self,
-        discount_id: UUID,
-    ) -> list[UUID]:
-        """Find all member_ids whose memberships use this discount."""
-        sql = load_sql(SQL_DIR / "discounts_get_affected_memberships.sql")
-        discount_id_json = json.dumps([str(discount_id)])
-
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"discount_id_json": discount_id_json},
-            )
-            rows = result.mappings().fetchall()
-
-        return [UUID(str(r["member_id"])) for r in rows]
+        _validate_lifetime(
+            duration_amount=merged.get("duration_amount"),
+            duration_unit=merged.get("duration_unit"),
+            end_date=merged.get("end_date"),
+        )

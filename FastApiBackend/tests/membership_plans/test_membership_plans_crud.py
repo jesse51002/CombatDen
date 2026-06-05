@@ -31,11 +31,19 @@ async def _fetch_price(stripe_client, price_id, connect_opts):
     )
 
 
+def _track_plan(created, resp):
+    """Register a created plan + its Stripe product/price for teardown."""
+    created.track_plan_db(resp.plan_id)
+    created.track_product(resp.stripe_product_id)
+    created.track_price(resp.active_price.stripe_price_id)
+
+
 async def test_create_recurring_plan(
     plans_service,
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     resp = await plans_service.create_plan(
         MembershipPlanCreateRequest(
@@ -47,6 +55,7 @@ async def test_create_recurring_plan(
             price=5000,
         ),
     )
+    _track_plan(created, resp)
 
     assert resp.plan_id is not None
     assert resp.plan_name == "Monthly Recurring"
@@ -83,6 +92,7 @@ async def test_create_one_time_plan(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     resp = await plans_service.create_plan(
         MembershipPlanCreateRequest(
@@ -94,6 +104,7 @@ async def test_create_one_time_plan(
             price=2000,
         ),
     )
+    _track_plan(created, resp)
 
     assert resp.plan_type == PlanType.one_time
     assert resp.active_price.price == 2000
@@ -116,8 +127,9 @@ async def test_update_plan_name(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    created = await plans_service.create_plan(
+    created_resp = await plans_service.create_plan(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Before Update",
@@ -127,10 +139,11 @@ async def test_update_plan_name(
             price=4000,
         ),
     )
+    _track_plan(created, created_resp)
 
     resp = await plans_service.update_plan(
         MembershipPlanUpdateRequest(
-            plan_id=created.plan_id,
+            plan_id=created_resp.plan_id,
             gym_id=gym_id,
             data=MembershipPlanUpdateData(plan_name="After Update"),
         ),
@@ -141,7 +154,7 @@ async def test_update_plan_name(
     # Stripe product name must be in sync with the CRM plan name.
     product = await _fetch_product(
         stripe_client,
-        created.stripe_product_id,
+        created_resp.stripe_product_id,
         connect_opts,
     )
     assert product.name == "After Update", (
@@ -155,8 +168,9 @@ async def test_delete_plan(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    created = await plans_service.create_plan(
+    created_resp = await plans_service.create_plan(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Delete Me",
@@ -166,30 +180,31 @@ async def test_delete_plan(
             price=3000,
         ),
     )
+    _track_plan(created, created_resp)
 
     await plans_service.delete_plan(
-        created.plan_id,
+        created_resp.plan_id,
         gym_id,
     )
 
     # Plan should not appear in the list anymore
     plans = await plans_service.list_plans(gym_id)
     plan_ids = {p.plan_id for p in plans}
-    assert created.plan_id not in plan_ids
+    assert created_resp.plan_id not in plan_ids
 
     # Stripe side: deleting a plan soft-archives the underlying
     # product (Stripe does not allow hard-deleting products that
     # have ever been used on a subscription).
     product = await _fetch_product(
         stripe_client,
-        created.stripe_product_id,
+        created_resp.stripe_product_id,
         connect_opts,
     )
     assert product.active is False, f"Stripe product {product.id} still active after plan delete"
 
 
-async def test_list_plans(plans_service, gym_id):
-    await plans_service.create_plan(
+async def test_list_plans(plans_service, gym_id, created):
+    plan_a = await plans_service.create_plan(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="List Test A",
@@ -199,7 +214,8 @@ async def test_list_plans(plans_service, gym_id):
             price=1000,
         ),
     )
-    await plans_service.create_plan(
+    _track_plan(created, plan_a)
+    plan_b = await plans_service.create_plan(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="List Test B",
@@ -209,6 +225,7 @@ async def test_list_plans(plans_service, gym_id):
             price=2000,
         ),
     )
+    _track_plan(created, plan_b)
 
     plans = await plans_service.list_plans(gym_id)
     names = {p.plan_name for p in plans}
@@ -222,8 +239,9 @@ async def test_set_price(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    created = await plans_service.create_plan(
+    created_resp = await plans_service.create_plan(
         MembershipPlanCreateRequest(
             gym_id=gym_id,
             plan_name="Price Change",
@@ -233,16 +251,19 @@ async def test_set_price(
             price=5000,
         ),
     )
-    old_price_id = created.active_price.price_id
-    old_stripe_price_id = created.active_price.stripe_price_id
+    _track_plan(created, created_resp)
+    old_price_id = created_resp.active_price.price_id
+    old_stripe_price_id = created_resp.active_price.stripe_price_id
 
     resp = await plans_service.set_price(
         MembershipPlanPriceRequest(
-            plan_id=created.plan_id,
+            plan_id=created_resp.plan_id,
             gym_id=gym_id,
             price=7500,
         ),
     )
+    # set_price mints a new active Stripe price; archive it on teardown too.
+    created.track_price(resp.stripe_price_id)
 
     assert resp.price == 7500
     assert resp.is_active is True

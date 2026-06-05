@@ -26,9 +26,6 @@ from src.members.schema.members_schema import (
     MemberResponse,
     MemberUpdateRequest,
 )
-from src.members.service.member_details.members_billing_detail_service import (
-    MembersBillingDetailService,
-)
 from src.members.service.crm_member_services.members_crm_members_list_service import (
     CrmMembersListService,
 )
@@ -37,6 +34,9 @@ from src.members.service.crm_member_services.members_crm_total_counts_service im
 )
 from src.members.service.management.members_management_service import (
     MembersManagementService,
+)
+from src.members.service.member_details.members_billing_detail_service import (
+    MembersBillingDetailService,
 )
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (
@@ -541,10 +541,9 @@ async def link_member_account(
     summary="Unlink member from a parent account",
     description=(
         "Unlinks a member from their paying parent account. "
-        "Clears account_linked_to_id and linked_discount_id on the child, "
-        "then re-syncs the old parent's subscription so linked-discount "
-        "assignments are recalculated for the remaining children. "
-        "The child must have zero active recurring memberships. "
+        "Clears account_linked_to_id on the child, then re-syncs the old "
+        "parent's subscription so the consolidated line reflects the smaller "
+        "family. The child must have zero active recurring memberships. "
         "No proration or mid-cycle charges are issued."
     ),
     responses={

@@ -27,7 +27,6 @@ from src.member_memberships.schema.member_memberships_schema import (
     MemberMembershipsChargeCardRequest,
 )
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import create_member, create_payment_method
 from tests.helpers.stripe_assertions import snapshot_billing_state
 
 
@@ -45,16 +44,11 @@ async def test_charge_card_creates_paid_invoice(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Card charge creates and pays exactly one invoice."""
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
 
     try:
         before = await snapshot_billing_state(
@@ -98,16 +92,11 @@ async def test_charge_card_with_cash_marks_invoice_paid_out_of_band(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """``paid_cash=True`` pays the invoice out of band (no card charge)."""
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
 
     try:
         before = await snapshot_billing_state(
@@ -156,16 +145,11 @@ async def test_charge_card_is_idempotent_on_repeat(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """Two calls with the same idempotency_key produce one invoice."""
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
 
     try:
         before = await snapshot_billing_state(
@@ -209,16 +193,11 @@ async def test_charge_card_gym_mismatch_raises(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """A gym_id that does not match the member's profile must raise."""
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    member = await create_member(
-        db_pool,
-        stripe_client,
-        gym_id,
-        connect_opts,
-        payment_method_id=pm_id,
-    )
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
 
     try:
         before = await snapshot_billing_state(

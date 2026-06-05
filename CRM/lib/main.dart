@@ -20,6 +20,11 @@ import 'package:crm/features/login/presentation/screens/auth_gate.dart';
 import 'package:crm/features/members/presentation/screens/member_app_screen.dart';
 import 'package:crm/features/members/presentation/screens/members_screen.dart';
 import 'package:crm/features/members/presentation/screens/specific_member_screen.dart';
+import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/memberships/data/models/waiver_response.dart';
+import 'package:crm/features/memberships/presentation/screens/membership_details_screen.dart';
+import 'package:crm/features/memberships/presentation/screens/memberships_screen.dart';
+import 'package:crm/features/memberships/presentation/screens/waiver_roster_screen.dart';
 import 'package:crm/features/qr_codes/presentation/screens/qr_codes_screen.dart';
 import 'package:crm/features/schedule/data/mock_schedule.dart';
 import 'package:crm/features/schedule/presentation/screens/class_form_screen.dart';
@@ -136,6 +141,45 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
         settings.arguments as ScheduleClass? ?? kSampleClass;
     return MaterialPageRoute<dynamic>(
       builder: (_) => ClassFormScreen(existing: existing),
+      settings: settings,
+    );
+  }
+  // The Memberships screen's three tabs are each addressable by URL,
+  // mapped to the tab the screen opens on.
+  const membershipsTabIndex = {
+    AppRoutes.memberships: 0,
+    AppRoutes.membershipsDiscounts: 1,
+    AppRoutes.membershipsWaivers: 2,
+  };
+  final membershipsTab = membershipsTabIndex[path];
+  if (membershipsTab != null) {
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => MembershipsScreen(initialTab: membershipsTab),
+      settings: settings,
+    );
+  }
+  // Create / edit a membership plan carries the plan (or null
+  // for create) as a route argument.
+  if (path == AppRoutes.membershipDetails) {
+    final plan = settings.arguments as MembershipPlanResponse?;
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => MembershipDetailsScreen(plan: plan),
+      settings: settings,
+    );
+  }
+  // The waiver roster carries its waiver as a route argument
+  // (not deep-linkable); a direct nav with no argument falls
+  // back to the Memberships screen.
+  if (path == AppRoutes.membershipsWaiverRoster) {
+    final waiver = settings.arguments as WaiverResponse?;
+    if (waiver == null) {
+      return MaterialPageRoute<dynamic>(
+        builder: (_) => const MembershipsScreen(),
+        settings: settings,
+      );
+    }
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => WaiverRosterScreen(waiver: waiver),
       settings: settings,
     );
   }

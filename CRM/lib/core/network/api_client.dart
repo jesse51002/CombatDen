@@ -130,6 +130,15 @@ class ApiClient {
 /// to every outgoing request and retries on 401 after
 /// refreshing the session.
 class _AuthInterceptor extends Interceptor {
+  /// Upper bound on the 401 session refresh. gotrue treats a
+  /// network/host-unreachable refresh failure as *retryable* and
+  /// keeps retrying with backoff without emitting any event, so an
+  /// unbounded `refreshSession()` can hang the request forever (and
+  /// with it any boot-time gym fetch — the auth gate then spins
+  /// indefinitely instead of redirecting to login). Capping it turns
+  /// a stalled refresh into a clean sign-out via [onUnauthorized].
+  static const Duration _refreshTimeout = Duration(seconds: 10);
+
   @override
   void onRequest(
     RequestOptions options,
@@ -162,7 +171,8 @@ class _AuthInterceptor extends Interceptor {
     try {
       final response = await SupabaseConfig
           .client.auth
-          .refreshSession();
+          .refreshSession()
+          .timeout(_refreshTimeout);
       final newToken =
           response.session?.accessToken;
 

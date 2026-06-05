@@ -1,185 +1,340 @@
-"""Integration tests for DiscountsService.
+"""Integration tests for DiscountsService — coupon-free preset CRUD.
 
-Every CRUD path also retrieves the Stripe coupon and asserts the
-final state matches. This is the contract: if the service reports
-success, the coupon on Stripe must be in the expected shape.
+Presets are now plain gym config split across two tables: the IDENTITY
+(``gym_discounts``: name + type) and its versioned, immutable VALUE rows
+(``gym_discount_values``: percent/dollar + lifetime). Create/update/delete never
+touch Stripe (coupons are computed at sync and written back onto the applied
+snapshot). Editing a value mints a NEW active version; archiving (is_deleted =
+true) or editing a preset never reaches across to a member's frozen snapshot
+(which is pinned to a specific ``value_id``).
+
+Requires a migrated local DB (gym_discounts identity + gym_discount_values +
+the applied-discount snapshot table). No Stripe account is needed.
 """
 
+from datetime import date
+from uuid import uuid4
+
 import pytest
-import stripe
-from schema.gym_discount import DiscountType
+from schema.gym_discount import (
+    DiscountDurationUnit,
+    DiscountMode,
+    DiscountType,
+)
 from sqlalchemy import text
-from starlette.background import BackgroundTasks
 
 from src.discounts.schema.discounts_schema import (
     DiscountCreateRequest,
     DiscountUpdateData,
     DiscountUpdateRequest,
 )
-from src.payments.schema.payments_enums import StripeCouponDuration
 
 
-async def _fetch_coupon(stripe_client, coupon_id, connect_opts):
-    return await stripe_client.client.v1.coupons.retrieve_async(
-        coupon_id,
-        options=connect_opts,
-    )
+async def _row(db_pool, discount_id):
+    """Identity row joined to its current ACTIVE value version."""
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT d.discount_name, v.percentage_off, v.dollar_off, "
+                "v.discount_mode, v.duration_amount, v.duration_unit, "
+                "v.end_date, d.is_deleted "
+                "FROM gym_discounts_unfiltered d "
+                "JOIN gym_discount_values_unfiltered v "
+                "  ON v.discount_id = d.discount_id AND v.is_active = true "
+                "WHERE d.discount_id = :id"
+            ),
+            {"id": str(discount_id)},
+        )
+        return result.mappings().fetchone()
 
 
-async def test_create_percentage_discount(
-    discounts_service,
-    gym_id,
-    stripe_client,
-    connect_opts,
-):
+async def test_create_percentage_discount(discounts_service, db_pool, gym_id, created):
+    """A percent preset is inserted as plain intent, no Stripe coupon."""
     resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
             discount_name="20% Off",
             discount_type=DiscountType.preset,
             percentage_off=20.0,
-            duration=StripeCouponDuration.forever,
+            discount_mode=DiscountMode.ongoing,
         ),
     )
+    created.track_discount(resp.discount_id)
 
     assert resp.discount_id is not None
     assert resp.discount_name == "20% Off"
     assert resp.percentage_off == 20.0
     assert resp.dollar_off is None
-    assert resp.stripe_coupon_id is not None
+    assert resp.discount_mode == DiscountMode.ongoing
+    assert resp.is_deleted is False
 
-    # Stripe side: coupon must exist with the expected percent_off.
-    coupon = await _fetch_coupon(
-        stripe_client,
-        resp.stripe_coupon_id,
-        connect_opts,
-    )
-    assert coupon.valid is True
-    assert coupon.percent_off == 20.0
-    assert coupon.amount_off is None
-    assert coupon.duration == StripeCouponDuration.forever.value
+    row = await _row(db_pool, resp.discount_id)
+    assert row["percentage_off"] == 20.0
+    assert row["discount_mode"] == "ongoing"
 
 
-async def test_create_dollar_discount(
-    discounts_service,
-    gym_id,
-    stripe_client,
-    connect_opts,
-):
+async def test_create_dollar_once_discount(discounts_service, gym_id, created):
+    """A once dollar preset stores discount_mode=once and no end_date."""
     resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
             discount_name="$10 Off",
             discount_type=DiscountType.preset,
             dollar_off=1000,
-            duration=StripeCouponDuration.once,
+            discount_mode=DiscountMode.once,
         ),
     )
+    created.track_discount(resp.discount_id)
 
     assert resp.dollar_off == 1000
     assert resp.percentage_off is None
+    assert resp.discount_mode == DiscountMode.once
+    assert resp.end_date is None
+    assert resp.duration_amount is None
 
-    coupon = await _fetch_coupon(
-        stripe_client,
-        resp.stripe_coupon_id,
-        connect_opts,
+
+async def test_create_ongoing_with_duration_span(discounts_service, gym_id, created):
+    """An ongoing preset with a duration span stores the span, no end_date."""
+    resp = await discounts_service.create_discount(
+        DiscountCreateRequest(
+            gym_id=gym_id,
+            discount_name="3-month 15% Off",
+            discount_type=DiscountType.preset,
+            percentage_off=15.0,
+            discount_mode=DiscountMode.ongoing,
+            duration_amount=3,
+            duration_unit=DiscountDurationUnit.month,
+        ),
     )
-    assert coupon.valid is True
-    assert coupon.amount_off == 1000
-    assert coupon.percent_off is None
-    assert coupon.duration == StripeCouponDuration.once.value
+    created.track_discount(resp.discount_id)
+
+    assert resp.duration_amount == 3
+    assert resp.duration_unit == DiscountDurationUnit.month
+    assert resp.end_date is None
 
 
-async def test_update_discount_name(
-    discounts_service,
-    gym_id,
-    stripe_client,
-    connect_opts,
-):
-    created = await discounts_service.create_discount(
+async def test_create_rejects_span_and_end_date_together(discounts_service, gym_id):
+    """The lifetime is a span XOR an explicit end_date — never both."""
+    with pytest.raises(ValueError, match="never both"):
+        DiscountCreateRequest(
+            gym_id=gym_id,
+            discount_name="Bad Lifetime",
+            discount_type=DiscountType.preset,
+            percentage_off=10.0,
+            discount_mode=DiscountMode.ongoing,
+            duration_amount=2,
+            duration_unit=DiscountDurationUnit.month,
+            end_date=date(2027, 1, 1),
+        )
+
+
+async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym_id, created):
+    """Update renames the identity and mints a new active value version.
+
+    The previous version's ``is_active`` flips, so ``_row`` (which joins the
+    active version) reflects the new value while older applied snapshots stay
+    pinned to their original ``value_id``.
+    """
+    created_resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
             discount_name="Old Name",
             discount_type=DiscountType.preset,
             percentage_off=15.0,
-            duration=StripeCouponDuration.forever,
+            discount_mode=DiscountMode.ongoing,
         ),
     )
+    created.track_discount(created_resp.discount_id)
 
     resp = await discounts_service.update_discount(
         DiscountUpdateRequest(
-            discount_id=created.discount_id,
+            discount_id=created_resp.discount_id,
             gym_id=gym_id,
-            data=DiscountUpdateData(discount_name="New Name"),
+            data=DiscountUpdateData(
+                discount_name="New Name",
+                percentage_off=25.0,
+            ),
         ),
-        background_tasks=BackgroundTasks(),
     )
 
+    assert resp.discount_id == created_resp.discount_id
     assert resp.discount_name == "New Name"
+    assert resp.percentage_off == 25.0
 
-    # Stripe side: the service creates a fresh coupon on every update
-    # (Stripe coupons are mostly immutable), so the stripe_coupon_id
-    # on the response should differ from the original and the old
-    # coupon should have been deleted.
-    assert resp.stripe_coupon_id != created.stripe_coupon_id, (
-        "update_discount should have swapped in a fresh Stripe coupon"
-    )
-    new_coupon = await _fetch_coupon(
-        stripe_client,
-        resp.stripe_coupon_id,
-        connect_opts,
-    )
-    assert new_coupon.name == "New Name", (
-        f"Stripe coupon {new_coupon.id} name={new_coupon.name!r} not updated"
-    )
-    assert new_coupon.valid is True
-
-    with pytest.raises(stripe.InvalidRequestError):
-        await _fetch_coupon(
-            stripe_client,
-            created.stripe_coupon_id,
-            connect_opts,
-        )
+    row = await _row(db_pool, created_resp.discount_id)
+    assert row["discount_name"] == "New Name"
+    assert row["percentage_off"] == 25.0
 
 
-async def test_delete_discount(
-    discounts_service,
-    db_pool,
-    gym_id,
-    stripe_client,
-    connect_opts,
-):
-    created = await discounts_service.create_discount(
+async def test_delete_discount_archives(discounts_service, db_pool, gym_id, created):
+    """Delete is a soft archive (is_deleted = true); no Stripe call."""
+    created_resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
-            discount_name="Delete Me",
+            discount_name="Archive Me",
             discount_type=DiscountType.preset,
             percentage_off=5.0,
-            duration=StripeCouponDuration.forever,
+            discount_mode=DiscountMode.ongoing,
         ),
     )
+    created.track_discount(created_resp.discount_id)
 
-    await discounts_service.delete_discount(
-        created.discount_id,
-        gym_id,
-        background_tasks=BackgroundTasks(),
-    )
+    await discounts_service.delete_discount(created_resp.discount_id)
 
-    # CRM side: row is soft-deleted (is_deleted = true).
     async with db_pool.session() as session:
         result = await session.execute(
             text("SELECT is_deleted FROM gym_discounts_unfiltered WHERE discount_id = :id"),
-            {"id": str(created.discount_id)},
+            {"id": str(created_resp.discount_id)},
         )
         row = result.mappings().fetchone()
-
     assert row["is_deleted"] is True
 
-    # Stripe side: coupon must be gone. Stripe ``coupons.retrieve`` on
-    # a deleted coupon raises InvalidRequestError (404).
-    with pytest.raises(stripe.InvalidRequestError):
-        await _fetch_coupon(
-            stripe_client,
-            created.stripe_coupon_id,
-            connect_opts,
+
+async def test_archive_leaves_applied_snapshots_untouched(
+    discounts_service, db_pool, gym_id, created
+):
+    """Archiving a preset does NOT delete a member's frozen snapshot.
+
+    Predictability: editing/deleting a preset never reaches across to an
+    existing member's applied-discount snapshot — the holder keeps it. We
+    stand up a membership + a regular snapshot pinned to the preset's active
+    value version, then archive the preset and assert the snapshot is intact.
+    """
+    created_resp = await discounts_service.create_discount(
+        DiscountCreateRequest(
+            gym_id=gym_id,
+            discount_name="Held Discount",
+            discount_type=DiscountType.preset,
+            percentage_off=10.0,
+            discount_mode=DiscountMode.ongoing,
+        ),
+    )
+    created.track_discount(created_resp.discount_id)
+
+    member_id = None
+    try:
+        member_id, item_id, plan_id = await _seed_membership_with_snapshot(
+            db_pool,
+            gym_id,
+            value_id=created_resp.value_id,
         )
+        created.track_plan_db(plan_id)
+
+        await discounts_service.delete_discount(created_resp.discount_id)
+
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT count(*) AS n "
+                    "FROM member_membership_applied_discounts_unfiltered "
+                    "WHERE item_id = :item_id AND value_id = :value_id"
+                ),
+                {
+                    "item_id": str(item_id),
+                    "value_id": str(created_resp.value_id),
+                },
+            )
+            n = result.mappings().fetchone()["n"]
+        assert n == 1, "Archiving the preset must not remove the holder's snapshot"
+    finally:
+        if member_id is not None:
+            await _delete_seeded_membership(db_pool, member_id)
+
+
+# ── Local seed helpers (DB-only; no Stripe needed) ───────────────────
+
+
+async def _seed_membership_with_snapshot(db_pool, gym_id, value_id):
+    """Insert a member + membership + one applied-discount snapshot.
+
+    The snapshot is pinned to ``value_id`` (the discount's active version) —
+    the provenance/version tag in the new model. Returns (member, item, plan).
+    """
+    async with db_pool.session() as session:
+        member_row = await session.execute(
+            text(
+                "INSERT INTO members (gym_id, first_name, last_name) "
+                "VALUES (:gym_id, 'Snap', 'Holder') RETURNING member_id"
+            ),
+            {"gym_id": str(gym_id)},
+        )
+        member_id = member_row.mappings().fetchone()["member_id"]
+
+        plan_row = await session.execute(
+            text(
+                "INSERT INTO membership_plans_unfiltered "
+                "(gym_id, plan_name, plan_type, duration_amount, duration_unit, "
+                " is_public, stripe_product_id) "
+                "VALUES (:gym_id, 'Snap Plan', 'recurring', 1, 'month', true, "
+                " :sp) RETURNING plan_id"
+            ),
+            {"gym_id": str(gym_id), "sp": f"prod_{uuid4().hex[:16]}"},
+        )
+        plan_id = plan_row.mappings().fetchone()["plan_id"]
+
+        price_row = await session.execute(
+            text(
+                "INSERT INTO membership_plan_prices_unfiltered "
+                "(plan_id, gym_id, stripe_price_id, price, is_active) "
+                "VALUES (:plan_id, :gym_id, :pr, 5000, true) RETURNING price_id"
+            ),
+            {
+                "plan_id": str(plan_id),
+                "gym_id": str(gym_id),
+                "pr": f"price_{uuid4().hex[:16]}",
+            },
+        )
+        price_id = price_row.mappings().fetchone()["price_id"]
+
+        mem_row = await session.execute(
+            text(
+                "INSERT INTO member_memberships_unfiltered "
+                "(member_id, gym_id, plan_id, price_id, start_date, "
+                " total_price, stripe_item_id) "
+                "VALUES (:member_id, :gym_id, :plan_id, :price_id, "
+                " CURRENT_DATE, 5000, :si) RETURNING item_id"
+            ),
+            {
+                "member_id": str(member_id),
+                "gym_id": str(gym_id),
+                "plan_id": str(plan_id),
+                "price_id": str(price_id),
+                "si": f"si_{uuid4().hex[:16]}",
+            },
+        )
+        item_id = mem_row.mappings().fetchone()["item_id"]
+
+        await session.execute(
+            text(
+                "INSERT INTO member_membership_applied_discounts_unfiltered "
+                "(item_id, member_id, gym_id, value_id) "
+                "VALUES (:item_id, :member_id, :gym_id, :value_id)"
+            ),
+            {
+                "item_id": str(item_id),
+                "member_id": str(member_id),
+                "gym_id": str(gym_id),
+                "value_id": str(value_id),
+            },
+        )
+        await session.commit()
+    return member_id, item_id, plan_id
+
+
+async def _delete_seeded_membership(db_pool, member_id):
+    async with db_pool.session() as session:
+        await session.execute(
+            text(
+                "DELETE FROM member_membership_applied_discounts_unfiltered WHERE member_id = :id"
+            ),
+            {"id": str(member_id)},
+        )
+        await session.execute(
+            text("DELETE FROM member_memberships_unfiltered WHERE member_id = :id"),
+            {"id": str(member_id)},
+        )
+        await session.execute(
+            text("DELETE FROM members WHERE member_id = :id"),
+            {"id": str(member_id)},
+        )
+        await session.commit()

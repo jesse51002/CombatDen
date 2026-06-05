@@ -13,7 +13,6 @@ from src.members.schema.members_schema import (
     MemberUpdateData,
 )
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.data_factory import create_payment_method
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
     snapshot_billing_state,
@@ -38,24 +37,26 @@ async def test_update_personal_info(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    created = await management_service.create_member(
+    member = await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Original",
             last_name="Name",
         ),
     )
+    created.track_customer(member.stripe_customer_id)
 
     try:
         before = await snapshot_billing_state(
             stripe_client,
-            created.stripe_customer_id,
+            member.stripe_customer_id,
             connect_opts,
         )
 
         resp = await management_service.update_member(
-            created.member_id,
+            member.member_id,
             MemberUpdateData(
                 first_name="Updated",
                 email="updated@test.com",
@@ -72,10 +73,10 @@ async def test_update_personal_info(
         # touches ``member_billing_profile``. We still verify the customer
         # is reachable and that the edit did not generate any charges.
         customer = await stripe_client.client.v1.customers.retrieve_async(
-            created.stripe_customer_id,
+            member.stripe_customer_id,
             options=connect_opts,
         )
-        assert customer.id == created.stripe_customer_id
+        assert customer.id == member.stripe_customer_id
         # Profile edit must never bill.
         await assert_no_unexpected_charges(
             stripe_client,
@@ -83,7 +84,7 @@ async def test_update_personal_info(
             connect_opts,
         )
     finally:
-        await delete_member_data(db_pool, created.member_id)
+        await delete_member_data(db_pool, member.member_id)
 
 
 async def test_update_card_existing_customer(
@@ -92,9 +93,10 @@ async def test_update_card_existing_customer(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm1 = await create_payment_method(stripe_client, connect_opts)
-    created = await management_service.create_member(
+    pm1 = await created.payment_method()
+    created_member = await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Card",
@@ -102,17 +104,18 @@ async def test_update_card_existing_customer(
             payment_method_id=pm1,
         ),
     )
+    created.track_customer(created_member.stripe_customer_id)
 
     try:
-        pm2 = await create_payment_method(stripe_client, connect_opts)
+        pm2 = await created.payment_method()
         before = await snapshot_billing_state(
             stripe_client,
-            created.stripe_customer_id,
+            created_member.stripe_customer_id,
             connect_opts,
         )
 
         resp = await management_service.update_card(
-            created.member_id,
+            created_member.member_id,
             MembersBillingUpdateCardRequest(
                 payment_method_id=pm2,
             ),
@@ -123,11 +126,12 @@ async def test_update_card_existing_customer(
 
         # Stripe side: the customer's default payment method is now pm2.
         customer = await stripe_client.client.v1.customers.retrieve_async(
-            created.stripe_customer_id,
+            created_member.stripe_customer_id,
             options=connect_opts,
         )
         assert _default_pm_id(customer) == pm2, (
-            f"Customer {created.stripe_customer_id} default_payment_method not updated to {pm2}"
+            f"Customer {created_member.stripe_customer_id} "
+            f"default_payment_method not updated to {pm2}"
         )
         await assert_no_unexpected_charges(
             stripe_client,
@@ -135,7 +139,7 @@ async def test_update_card_existing_customer(
             connect_opts,
         )
     finally:
-        await delete_member_data(db_pool, created.member_id)
+        await delete_member_data(db_pool, created_member.member_id)
 
 
 async def test_update_card_on_cardless_customer(
@@ -144,6 +148,7 @@ async def test_update_card_on_cardless_customer(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
     """A cardless member (customer exists, no card) gets a card on update_card.
 
@@ -151,24 +156,25 @@ async def test_update_card_on_cardless_customer(
     ever attaches the payment method to the existing customer.
     """
     # Member is created with a Stripe customer but no card.
-    created = await management_service.create_member(
+    created_member = await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="NoCustomer",
             last_name="NeedsOne",
         ),
     )
+    created.track_customer(created_member.stripe_customer_id)
 
     try:
-        pm_id = await create_payment_method(stripe_client, connect_opts)
+        pm_id = await created.payment_method()
         before = await snapshot_billing_state(
             stripe_client,
-            created.stripe_customer_id,
+            created_member.stripe_customer_id,
             connect_opts,
         )
 
         resp = await management_service.update_card(
-            created.member_id,
+            created_member.member_id,
             MembersBillingUpdateCardRequest(
                 payment_method_id=pm_id,
             ),
@@ -178,7 +184,7 @@ async def test_update_card_on_cardless_customer(
         assert resp.card_brand == "visa"
 
         customer = await stripe_client.client.v1.customers.retrieve_async(
-            created.stripe_customer_id,
+            created_member.stripe_customer_id,
             options=connect_opts,
         )
         assert _default_pm_id(customer) == pm_id
@@ -188,7 +194,7 @@ async def test_update_card_on_cardless_customer(
             connect_opts,
         )
     finally:
-        await delete_member_data(db_pool, created.member_id)
+        await delete_member_data(db_pool, created_member.member_id)
 
 
 async def test_unlink_payment(
@@ -197,9 +203,10 @@ async def test_unlink_payment(
     gym_id,
     stripe_client,
     connect_opts,
+    created,
 ):
-    pm_id = await create_payment_method(stripe_client, connect_opts)
-    created = await management_service.create_member(
+    pm_id = await created.payment_method()
+    created_member = await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Unlink",
@@ -207,16 +214,17 @@ async def test_unlink_payment(
             payment_method_id=pm_id,
         ),
     )
+    created.track_customer(created_member.stripe_customer_id)
 
     try:
         before = await snapshot_billing_state(
             stripe_client,
-            created.stripe_customer_id,
+            created_member.stripe_customer_id,
             connect_opts,
         )
 
         resp = await management_service.unlink_payment(
-            created.member_id,
+            created_member.member_id,
         )
 
         assert resp.stripe_payment_method_id is None
@@ -228,11 +236,11 @@ async def test_unlink_payment(
         # Stripe side: customer still exists but has no default
         # payment method, and nothing was billed.
         customer = await stripe_client.client.v1.customers.retrieve_async(
-            created.stripe_customer_id,
+            created_member.stripe_customer_id,
             options=connect_opts,
         )
         assert _default_pm_id(customer) is None, (
-            f"Customer {created.stripe_customer_id} still has a default "
+            f"Customer {created_member.stripe_customer_id} still has a default "
             f"payment method after unlink"
         )
         await assert_no_unexpected_charges(
@@ -241,4 +249,4 @@ async def test_unlink_payment(
             connect_opts,
         )
     finally:
-        await delete_member_data(db_pool, created.member_id)
+        await delete_member_data(db_pool, created_member.member_id)

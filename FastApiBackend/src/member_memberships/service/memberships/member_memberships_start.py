@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import date
 from typing import TYPE_CHECKING
@@ -71,8 +70,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
         plan_id: UUID,
         price_id: UUID,
         idempotency_key: UUID,
-        discount_ids: list[UUID] | None = None,
-        include_linked_discount: bool = False,
         prorate: bool = True,
         paid_with_cash: bool = False,
     ) -> None:
@@ -83,16 +80,14 @@ class MemberMembershipsStart(MemberMembershipsBase):
         inserts the CRM row, syncs to Stripe, then sets the
         stripe_item_id on the CRM row. Memberships always begin
         on the day this method is called — future start dates
-        are not supported.
+        are not supported. The membership is created discount-free;
+        discounts are applied afterward via the apply path.
 
         Args:
             member_id: The member.
             gym_id: The gym.
             plan_id: The membership plan.
             price_id: The price tier.
-            discount_ids: Optional gym discount UUIDs.
-            include_linked_discount: Whether this member qualifies
-                for linked (family) account-level discounts.
             prorate: Whether to prorate the first charge.
             paid_with_cash: If True, the first invoice is marked
                 paid out of band in Stripe instead of charging the
@@ -139,7 +134,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
             end_date=end_date,
             last_paid_date=start_date,
             next_due_date=None,
-            discount_ids=discount_ids,
             stripe_item_id=None,
             prorate=prorate,
             total_price=plan_price["price"],
@@ -155,9 +149,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     stripe_price_id=plan_price["stripe_price_id"],
                     member_id=member_id,
                     plan_id=plan_id,
-                    has_linked_discount=include_linked_discount,
                     prorate=prorate,
-                    discount_ids=discount_ids or [],
                 )
                 response = await self._payment_sync.update_payments_recurring(
                     member_id,
@@ -228,8 +220,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
         gym_id: UUID,
         plan_id: UUID,
         price_id: UUID,
-        discount_ids: list[UUID] | None = None,
-        include_linked_discount: bool = False,
         prorate: bool = True,
         paid_with_cash: bool = False,
     ) -> PaymentsInvoicePreviewResponse | None:
@@ -270,9 +260,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 stripe_price_id=plan_price["stripe_price_id"],
                 member_id=member_id,
                 plan_id=plan_id,
-                has_linked_discount=include_linked_discount,
                 prorate=prorate,
-                discount_ids=discount_ids or [],
             )
             return await self._payment_sync.preview_update_payments_recurring(
                 member_id,
@@ -357,12 +345,15 @@ class MemberMembershipsStart(MemberMembershipsBase):
         end_date: date | None,
         last_paid_date: date | None,
         next_due_date: date | None,
-        discount_ids: list[UUID] | None,
         stripe_item_id: str | None,
         prorate: bool,
         total_price: int,
     ) -> UUID:
-        """Insert a new membership row. Returns the generated item_id."""
+        """Insert a new membership row. Returns the generated item_id.
+
+        Memberships are created discount-free — discounts are applied as
+        snapshots afterward via the apply path.
+        """
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
             "member_id": str(member_id),
@@ -373,11 +364,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
             "end_date": end_date,
             "last_paid_date": last_paid_date,
             "next_due_date": next_due_date,
-            "discount_ids": json.dumps(
-                [str(d) for d in discount_ids],
-            )
-            if discount_ids
-            else None,
             "stripe_item_id": stripe_item_id,
             "prorate": prorate,
             "total_price": total_price,

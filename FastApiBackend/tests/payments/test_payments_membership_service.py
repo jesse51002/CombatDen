@@ -27,6 +27,7 @@ async def test_create_membership_with_default_price(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -44,6 +45,9 @@ async def test_create_membership_with_default_price(
         ),
         stripe_account_id,
     )
+    created.track_product(resp.stripe_product_id)
+    for p in resp.prices:
+        created.track_price(p.stripe_price_id)
 
     assert resp.stripe_product_id.startswith("prod_")
     assert resp.active is True
@@ -69,6 +73,7 @@ async def test_create_membership_with_default_price(
 async def test_create_membership_multiple_prices(
     membership_service,
     stripe_account_id,
+    created,
 ):
     resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
@@ -92,6 +97,9 @@ async def test_create_membership_multiple_prices(
         ),
         stripe_account_id,
     )
+    created.track_product(resp.stripe_product_id)
+    for p in resp.prices:
+        created.track_price(p.stripe_price_id)
 
     assert len(resp.prices) == 2
     amounts = {p.unit_amount for p in resp.prices}
@@ -101,8 +109,9 @@ async def test_create_membership_multiple_prices(
 async def test_update_membership_add_price(
     membership_service,
     stripe_account_id,
+    created,
 ):
-    created = await membership_service.create_membership(
+    created_resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
             plan_name="Upgradeable",
             prices=[
@@ -118,14 +127,17 @@ async def test_update_membership_add_price(
         ),
         stripe_account_id,
     )
+    created.track_product(created_resp.stripe_product_id)
+    for p in created_resp.prices:
+        created.track_price(p.stripe_price_id)
 
     resp = await membership_service.update_membership(
         PaymentsMembershipUpdateRequest(
-            stripe_product_id=created.stripe_product_id,
+            stripe_product_id=created_resp.stripe_product_id,
             plan_name="Upgradeable",
             prices=[
                 PaymentsMembershipPriceItem(
-                    stripe_price_id=created.prices[0].stripe_price_id,
+                    stripe_price_id=created_resp.prices[0].stripe_price_id,
                     is_default=True,
                 ),
                 PaymentsMembershipPriceItem(
@@ -139,6 +151,11 @@ async def test_update_membership_add_price(
         ),
         stripe_account_id,
     )
+    # Track any newly created prices from the update
+    existing_price_ids = {p.stripe_price_id for p in created_resp.prices}
+    for p in resp.prices:
+        if p.stripe_price_id not in existing_price_ids:
+            created.track_price(p.stripe_price_id)
 
     assert len(resp.prices) == 2
     active_prices = [p for p in resp.prices if p.active]
@@ -148,8 +165,9 @@ async def test_update_membership_add_price(
 async def test_update_membership_deactivate_omitted_prices(
     membership_service,
     stripe_account_id,
+    created,
 ):
-    created = await membership_service.create_membership(
+    created_resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
             plan_name="Two Tier",
             prices=[
@@ -171,11 +189,15 @@ async def test_update_membership_deactivate_omitted_prices(
         ),
         stripe_account_id,
     )
-    keep_price = created.prices[0]
+    created.track_product(created_resp.stripe_product_id)
+    for p in created_resp.prices:
+        created.track_price(p.stripe_price_id)
+
+    keep_price = created_resp.prices[0]
 
     resp = await membership_service.update_membership(
         PaymentsMembershipUpdateRequest(
-            stripe_product_id=created.stripe_product_id,
+            stripe_product_id=created_resp.stripe_product_id,
             plan_name="Two Tier",
             prices=[
                 PaymentsMembershipPriceItem(
@@ -200,8 +222,9 @@ async def test_deactivate_membership(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
-    created = await membership_service.create_membership(
+    created_resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
             plan_name="Deactivate Me",
             prices=[
@@ -217,10 +240,13 @@ async def test_deactivate_membership(
         ),
         stripe_account_id,
     )
+    created.track_product(created_resp.stripe_product_id)
+    for p in created_resp.prices:
+        created.track_price(p.stripe_price_id)
 
     resp = await membership_service.deactivate_membership(
         PaymentsMembershipDeactivateRequest(
-            stripe_product_id=created.stripe_product_id,
+            stripe_product_id=created_resp.stripe_product_id,
         ),
         stripe_account_id,
     )
@@ -228,7 +254,7 @@ async def test_deactivate_membership(
     assert resp.active is False
 
     product = await stripe_client.client.v1.products.retrieve_async(
-        created.stripe_product_id,
+        created_resp.stripe_product_id,
         options=connect_opts,
     )
     assert product.active is False

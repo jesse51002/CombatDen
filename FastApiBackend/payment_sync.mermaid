@@ -1,0 +1,54 @@
+flowchart TB
+  %% Payment-sync engine — orchestration flow of MembershipPaymentSyncService.
+  %% Source of truth: src/member_memberships/service/payment_sync/ (sync-guide skill).
+  %% Shape B: the sync steps live in one box; Supabase + Stripe are external actors
+  %% OUTSIDE it, with the external edges drawn at the box level (same convention as
+  %% architecture.mermaid). Which step touches which system is named in the step text.
+  %% Green = engine steps / entry points. Orange = external actors. Solid = live runtime
+  %% call / control-flow sequence. Dashed = future or shared-code annotation.
+
+  triggers["🔔 Triggers — lifecycle callers<br/>start · cancel · freeze / unfreeze<br/>price swap · apply / remove discounts · link<br/>plan reprice fan-out"]
+
+  subgraph engine["⚙️ MembershipPaymentSyncService — the sync engine"]
+    direction TB
+    entry["update_payments_recurring(member, add_ids, cancel_ids, key, freeze)<br/>the real sync — re-derive desired state, converge Stripe"]
+    s1["1 · validate freeze params<br/>freeze XOR membership change · not freeze+unfreeze together"]
+    s2["2 · build sync params — pure read (no writes)<br/>resolve_parent (follow account_linked_to_id once)<br/>gym Stripe account · family ids · active recurring<br/>cancel filter on (member_id, plan_id) — never price alone<br/>applied-discount snapshots → consolidate_by_price → IntervalBucket"]
+    s3["3 · freeze / unfreeze first<br/>pause_collection before any item change (billing order matters)"]
+    s4["4 · compute + attach coupons<br/>read live coupon ids (_current_coupon_ids)<br/>plan_line_discounts per consolidated line:<br/>drop snapshots past end_date · once-consumed gate<br/>aggregate per mode — percent summed then / quantity, dollar summed<br/>find-or-create deterministic coupon (pct_BPS_MODE / amt_CENTS_MODE)"]
+    s5["5 · execute_sync<br/>create | update | cancel the monthly subscription<br/>proration = always_invoice if any item prorates, else none<br/>idempotency keys: sub_create / sub_update / sub_cancel"]
+    s6["6 · write subscription id back<br/>update_profile_sub_ids → parent members row (None if cancelled)"]
+    s7["7 · price writeback — never raises<br/>read upcoming invoice → post-discount line totals<br/>fan per-plan totals across family rows + parent monthly total"]
+    ret["return PaymentsSubscriptionResponse<br/>(None when bucket is empty → subscription cancelled)"]
+
+    preview["preview_update_payments_recurring — dry run<br/>same build params as step 2, then preview_execute_sync<br/>NO coupons · NO writeback · nothing in CRM or Stripe changes"]
+    bulk["bulk_payment_sync<br/>loop members · fresh uuid4 key each · empty add/cancel<br/>swallow per-member errors and continue"]
+    reconciler["⏳ deferred scheduled reconciler — NOT built<br/>sweep idle members on a clock<br/>mid-cycle end_date enforcement + once finalization<br/>Stripe → CRM outcome absorption (dunning cancels)"]
+
+    entry --> s1
+    s1 --> s2
+    s2 --> s3
+    s3 --> s4
+    s4 --> s5
+    s5 --> s6
+    s6 --> s7
+    s7 --> ret
+    bulk --> entry
+    preview -.->|"reuses build params (step 2)"| s2
+    reconciler -.->|"seeds the sweep (future)"| bulk
+  end
+
+  supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_parent · get_family_ids · get_active_recurring<br/>get_applied_discounts_by_member<br/>set_snapshot_coupon_id · stamp_snapshot_end_date<br/>update_profile_sub_ids · sync_prices_by_plan · sync_profile_monthly_total"]
+  stripe["💳 Stripe — gym Connect account<br/>get_subscription (read live discounts)<br/>create / update / cancel subscription · pause_collection<br/>coupons (find-or-create) · upcoming invoice"]
+
+  triggers -->|"mutations → update / preview · plan reprice → bulk"| engine
+  engine -->|"read/write: parent · family · memberships · snapshots · coupon_id · sub id · price totals"| supabase
+  engine -->|"live discounts · find-or-create coupons · create / update / cancel sub · pause_collection · upcoming invoice"| stripe
+
+  classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
+  classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
+  classDef future fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f,stroke-dasharray:5 4;
+  class triggers,entry,s1,s2,s3,s4,s5,s6,s7,ret,preview,bulk svc;
+  class supabase,stripe ext;
+  class reconciler future;
+  style engine fill:#f4f9f6,stroke:#2f8f53;

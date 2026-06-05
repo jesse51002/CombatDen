@@ -1,11 +1,11 @@
 SELECT
+    mm.item_id,
     mm.member_id,
     mm.plan_id,
     mm.price_id,
     mpp.stripe_price_id,
     mm.stripe_item_id,
     mp.duration_unit,
-    mm.discount_ids,
     mpp.price
 FROM member_memberships mm
 JOIN membership_plans mp

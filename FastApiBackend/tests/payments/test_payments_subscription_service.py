@@ -57,7 +57,9 @@ def _subscription_metadata() -> StripeSubscriptionMetadata:
 # ── Helpers ─────────────────────────────────────────────────────
 
 
-async def _setup_customer(members_service, stripe_client, stripe_account_id, connect_opts):
+async def _setup_customer(
+    members_service, stripe_client, stripe_account_id, connect_opts, created
+):
     pm_id = await create_payment_method(stripe_client, connect_opts)
     resp = await members_service.create_customer(
         PaymentsCustomerCreateRequest(
@@ -67,10 +69,11 @@ async def _setup_customer(members_service, stripe_client, stripe_account_id, con
         ),
         stripe_account_id,
     )
+    created.track_customer(resp.stripe_customer_id)
     return resp.stripe_customer_id
 
 
-async def _setup_price(membership_service, stripe_account_id):
+async def _setup_price(membership_service, stripe_account_id, created):
     resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
             plan_name="Sub Plan",
@@ -87,6 +90,9 @@ async def _setup_price(membership_service, stripe_account_id):
         ),
         stripe_account_id,
     )
+    created.track_product(resp.stripe_product_id)
+    for p in resp.prices:
+        created.track_price(p.stripe_price_id)
     return resp.prices[0].stripe_price_id
 
 
@@ -100,14 +106,16 @@ async def test_create_subscription_single_item(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _setup_price(membership_service, stripe_account_id)
+    price_id = await _setup_price(membership_service, stripe_account_id, created)
 
     resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
@@ -142,14 +150,16 @@ async def test_create_subscription_with_discount(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _setup_price(membership_service, stripe_account_id)
+    price_id = await _setup_price(membership_service, stripe_account_id, created)
 
     coupon = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
@@ -160,6 +170,7 @@ async def test_create_subscription_with_discount(
         ),
         stripe_account_id,
     )
+    created.track_coupon(coupon.stripe_coupon_id)
 
     resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
@@ -205,17 +216,19 @@ async def test_update_subscription_add_item(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price1 = await _setup_price(membership_service, stripe_account_id)
-    price2 = await _setup_price(membership_service, stripe_account_id)
+    price1 = await _setup_price(membership_service, stripe_account_id, created)
+    price2 = await _setup_price(membership_service, stripe_account_id, created)
 
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price1)],
@@ -228,12 +241,12 @@ async def test_update_subscription_add_item(
 
     resp = await subscription_service.update_subscription(
         PaymentsSubscriptionUpdateRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             stripe_customer_id=customer_id,
             items=[
                 PaymentsSubscriptionDesiredItem(
                     stripe_price_id=price1,
-                    stripe_item_id=created.items[0].stripe_subscription_item_id,
+                    stripe_item_id=created_resp.items[0].stripe_subscription_item_id,
                 ),
                 PaymentsSubscriptionDesiredItem(stripe_price_id=price2),
             ],
@@ -247,7 +260,7 @@ async def test_update_subscription_add_item(
     assert len(resp.items) == 2
 
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
     assert len(sub["items"].data) == 2
@@ -260,17 +273,19 @@ async def test_update_subscription_remove_item(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price1 = await _setup_price(membership_service, stripe_account_id)
-    price2 = await _setup_price(membership_service, stripe_account_id)
+    price1 = await _setup_price(membership_service, stripe_account_id, created)
+    price2 = await _setup_price(membership_service, stripe_account_id, created)
 
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
             items=[
@@ -283,12 +298,12 @@ async def test_update_subscription_remove_item(
         ),
         stripe_account_id,
     )
-    assert len(created.items) == 2
+    assert len(created_resp.items) == 2
 
-    keep_item = created.items[0]
+    keep_item = created_resp.items[0]
     resp = await subscription_service.update_subscription(
         PaymentsSubscriptionUpdateRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             stripe_customer_id=customer_id,
             items=[
                 PaymentsSubscriptionDesiredItem(
@@ -307,7 +322,7 @@ async def test_update_subscription_remove_item(
     assert resp.items[0].stripe_price_id == keep_item.stripe_price_id
 
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
     assert len(sub["items"].data) == 1
@@ -321,16 +336,18 @@ async def test_cancel_subscription_immediately(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _setup_price(membership_service, stripe_account_id)
+    price_id = await _setup_price(membership_service, stripe_account_id, created)
 
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
@@ -343,7 +360,7 @@ async def test_cancel_subscription_immediately(
 
     resp = await subscription_service.cancel_subscription(
         PaymentsSubscriptionCancelRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             cancel_at_period_end=False,
             idempotency_key=str(uuid4()),
         ),
@@ -353,7 +370,7 @@ async def test_cancel_subscription_immediately(
     assert resp.status == "canceled"
 
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
     assert sub.status == "canceled"
@@ -366,16 +383,18 @@ async def test_cancel_at_period_end(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _setup_price(membership_service, stripe_account_id)
+    price_id = await _setup_price(membership_service, stripe_account_id, created)
 
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
@@ -388,7 +407,7 @@ async def test_cancel_at_period_end(
 
     resp = await subscription_service.cancel_subscription(
         PaymentsSubscriptionCancelRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             cancel_at_period_end=True,
             idempotency_key=str(uuid4()),
         ),
@@ -399,7 +418,7 @@ async def test_cancel_at_period_end(
     assert resp.cancel_at_period_end is True
 
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
     assert sub.status == "active"
@@ -413,16 +432,18 @@ async def test_freeze_subscription(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _setup_price(membership_service, stripe_account_id)
+    price_id = await _setup_price(membership_service, stripe_account_id, created)
 
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
@@ -435,17 +456,17 @@ async def test_freeze_subscription(
 
     resp = await subscription_service.freeze_subscription(
         PaymentsSubscriptionFreezeRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             idempotency_key=str(uuid4()),
         ),
         stripe_account_id,
     )
 
-    assert resp.stripe_subscription_id == created.stripe_subscription_id
+    assert resp.stripe_subscription_id == created_resp.stripe_subscription_id
     assert resp.pause_collection_behavior is not None
 
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
     assert sub.pause_collection is not None
@@ -458,16 +479,18 @@ async def test_unfreeze_subscription(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _setup_price(membership_service, stripe_account_id)
+    price_id = await _setup_price(membership_service, stripe_account_id, created)
 
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
@@ -479,7 +502,7 @@ async def test_unfreeze_subscription(
     )
     await subscription_service.freeze_subscription(
         PaymentsSubscriptionFreezeRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             idempotency_key=str(uuid4()),
         ),
         stripe_account_id,
@@ -487,7 +510,7 @@ async def test_unfreeze_subscription(
 
     resp = await subscription_service.unfreeze_subscription(
         PaymentsSubscriptionUnfreezeRequest(
-            stripe_subscription_id=created.stripe_subscription_id,
+            stripe_subscription_id=created_resp.stripe_subscription_id,
             idempotency_key=str(uuid4()),
         ),
         stripe_account_id,
@@ -496,7 +519,7 @@ async def test_unfreeze_subscription(
     assert resp.status == "active"
 
     sub = await stripe_client.client.v1.subscriptions.retrieve_async(
-        created.stripe_subscription_id,
+        created_resp.stripe_subscription_id,
         options=connect_opts,
     )
     assert sub.status == "active"
@@ -510,14 +533,16 @@ async def test_preview_create_subscription(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _setup_price(membership_service, stripe_account_id)
+    price_id = await _setup_price(membership_service, stripe_account_id, created)
 
     # prorate=False so the preview reflects a plain full-cycle
     # invoice at the anchor date (no partial-period proration).
@@ -551,16 +576,18 @@ async def test_get_subscription_item(
     stripe_client,
     stripe_account_id,
     connect_opts,
+    created,
 ):
     customer_id = await _setup_customer(
         members_service,
         stripe_client,
         stripe_account_id,
         connect_opts,
+        created,
     )
-    price_id = await _setup_price(membership_service, stripe_account_id)
+    price_id = await _setup_price(membership_service, stripe_account_id, created)
 
-    created = await subscription_service.create_subscription(
+    created_resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
             items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
@@ -570,7 +597,7 @@ async def test_get_subscription_item(
         ),
         stripe_account_id,
     )
-    item_id = created.items[0].stripe_subscription_item_id
+    item_id = created_resp.items[0].stripe_subscription_item_id
 
     resp = await subscription_service.get_subscription_item(
         item_id,
