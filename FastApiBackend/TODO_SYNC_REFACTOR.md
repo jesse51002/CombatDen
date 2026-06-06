@@ -183,12 +183,24 @@ The **read toggle** is wired: `build_sync_params(..., preview=True)` → the rea
    build reads it because `preview=True`) → **DELETE the preview row** afterward (in a `finally`).
    Preview-*removing*: stamp an existing row `preview_remove`, preview, then revert to its prior
    status. Same for **applied-discount** preview rows (the discount read toggles too).
-2. **Scoping is the load-bearing correctness problem (do NOT skip).** A `preview_*` row that leaks
-   (e.g. a preview crashes before cleanup) must NEVER be promoted by a real sync. Today the real
-   read *excludes* `preview_*` (good — it can't bill), but a leaked `preview_add` row lingers as
-   clutter and a second concurrent preview on the same member could collide. Decide the scoping:
-   a session/preview id on the row, and/or a guaranteed cleanup (`finally` + a sweep). This ties
-   to the **concurrency lock (§2.3)** — a preview must not race a real sync on the same parent.
+2. **🔴 Scoping — CONFIRMED HARD BLOCKER on the concurrency lock (§2.3 / #25).** Staging
+   `preview_remove` on a REAL (`applied`, billing) membership is **unsafe without the per-parent
+   lock**. Trace: to preview a cancel/price-change you stamp the `applied` row → `preview_remove`.
+   The preview read excludes it (correct). But `_EXCLUDED_REAL` ALSO excludes `preview_remove`, so a
+   **concurrent real sync** on that family during the preview window (another admin action, a
+   `bulk_payment_sync`, a webhook-triggered sync) treats the membership as removed and **drops its
+   live Stripe line → mis-bills the member.** So `preview_remove` (cancel, update_price, discount
+   removal) REQUIRES the lock to guarantee no real sync runs during the preview window.
+   - `preview_add` (start preview) is *safe-ish*: a concurrent real sync excludes it → ignores the
+     not-yet-real row → no mis-bill. Only risk is a leaked row (mitigate with `finally` cleanup + a
+     sweep). So start-preview-via-staging can land before the lock; the remove-side cannot.
+   - **Link/unlink previews need NO staging** — the child has zero recurring memberships (asserted),
+     so linking/unlinking moves no membership rows and the parent's bill is unchanged; previewing the
+     parent's current state is already correct.
+   - **Recommendation:** do the **concurrency lock (§2.3) FIRST** (it's the natural next step after
+     the caller rewiring AND it unblocks safe preview staging), then land preview staging. Until
+     then the cancel/update_price/start/discount previews show the family's CURRENT state (each
+     carries a `NOTE:` in code).
 3. **#19 — split the preview response into "due now" vs "recurring".** Today
    `PaymentsInvoicePreviewResponse` returns ONE invoice. Restructure to:
    - `due_now`: `{amount, currency, lines[]}` where each line carries a **kind** (`base` /
