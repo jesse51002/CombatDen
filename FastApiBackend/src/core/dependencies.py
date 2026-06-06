@@ -183,8 +183,9 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # ── Payment sync ─────────────────────────────────────────────
-    # Shared parent/billing-account resolver (used by the sync, the freeze
-    # service, and — to be migrated — every other resolve_parent caller).
+    # Shared parent/billing-account resolver, injected wherever parent
+    # resolution is needed: the sync, the freeze service, and the lifecycle /
+    # validation callers (start, freeze, charge_card, mark_paid_cash).
     billing_parent_resolver = providers.Factory(
         BillingParentResolver,
         db_pool=db_pool,

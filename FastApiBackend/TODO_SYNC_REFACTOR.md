@@ -19,10 +19,11 @@
   `worktree-membership-refactor-step1` (pushed to origin — the work is safe there). All edits
   happen here, isolated from the main checkout. **Commit + push at each milestone.**
 - **The engine:** `FastApiBackend/src/member_memberships/service/payment_sync/`.
-- **Living docs (engine source of truth):** `.claude/skills/sync-guide/SKILL.md` (CURRENT — kept
-  up to date this session) and `.claude/skills/payments-guide/SKILL.md` (CURRENT). **STALE:**
-  `.claude/skills/discounts-guide/SKILL.md` (still says "snapshot") and
-  `FastApiBackend/payment_sync.mermaid` (never updated this session) — see §2.5.
+- **Living docs (engine source of truth), all CURRENT:** `.claude/skills/sync-guide/SKILL.md`,
+  `.claude/skills/payments-guide/SKILL.md`, `.claude/skills/discounts-guide/SKILL.md` (renamed
+  snapshot → applied discount), `.claude/skills/memberships-guide/SKILL.md`,
+  `FastApiBackend/payment_sync.mermaid` + `FastApiBackend/architecture.mermaid` + `README.md`
+  (all rebuilt to the refactored engine).
 - **The audit that started this:** `MANUAL_REVIEW.md` (repo root). Items #12–#25 drive this
   refactor; the top of that file has a status table. Mapping at the bottom of this doc (§9).
 
@@ -97,7 +98,7 @@ proration_behavior="none") -> None`** (real path):
 6. **writeback** — `PaymentSyncWriteback.write(params, sub_result)` persists EVERYTHING (see
    below). Returns **`None`** — callers read the DB.
 
-**`preview_update_payments_recurring(member_id, proration_behavior="none")`**: resolve → `build_sync_params(parent, account, preview=True)` → `preview_execute_sync`. **No writeback / settle / freeze.** It DOES find-or-create coupons (idempotent, gym-wide), so the preview total reflects discounts.
+**`preview_update_payments_recurring(member_id, proration_behavior="none")`**: resolve → **settle once-discounts** (same as the real path) → `build_sync_params(parent, account, preview=True)` → `preview_execute_sync`. **Skips only the freeze re-apply + the convergence writeback** — it DOES settle (stamps consumed `once` end_dates, a settled fact) and DOES find-or-create coupons (idempotent, gym-wide), so the preview total reflects discounts.
 
 **Done this session (do NOT redo):**
 - **Part E** — discounts ride the membership: `AppliedDiscount` rides `ActiveMembershipRow.discounts`; one-call read (`get_active_memberships`); group-by-price → `PaymentSyncDiscounts.resolve` → `ResolvedDiscounts`; `SyncParams.snapshots` gone; payments-side `subscription_discounts` removed; the word "snapshot" dropped from the engine.
@@ -270,10 +271,12 @@ Tests run against a **real shared local Supabase + a real shared Stripe test Con
 rollback) — every test cleans up exactly what it creates via the `created` fixture (see
 `FastApiBackend/CLAUDE.md`). **Never reshape a test to pass against a broken path** — fix the
 engine/caller.
-- `tests/helpers/service_factory.py` builds `PaymentSyncService` with the **OLD constructor** — the
-  current one is `(db_pool, subscription_service, parent_resolver, freeze, once_discounts,
-  builder)`. This breaks `test_price_writeback.py` + `test_discount_semantics.py` at setup. Fix the
-  factory first.
+- ✅ **`tests/helpers/service_factory.py` is fixed** — `build_payment_sync_service` now builds the
+  full chain (BillingParentResolver, PaymentSyncFreeze, PaymentSyncOnceDiscounts, PaymentSyncDiscounts
+  → PaymentSyncBuilder) and calls the current `PaymentSyncService(db_pool, subscription_service,
+  parent_resolver, freeze, once_discounts, builder)`; `build_member_memberships_service` passes the
+  new `parent_resolver` + `freeze_service`. Verified by constructing every `build_*` (no TypeError).
+  The actual **test files below still need writing/restabilizing.**
 - `tests/member_memberships/service/payment_sync/test_payment_sync_builder.py` — heavily stale
   (references removed `plan_line_discounts` / `LineDiscountPlan` / `AppliedDiscountSnapshot`).
   Rewrite against the current builder/discount math.
@@ -283,14 +286,16 @@ engine/caller.
   the gym-local date conversion (Tokyo off-by-one).
 - Delete tests for removed paths (don't keep "this route is gone" assertions).
 
-### 2.5 🟡 Update the remaining living docs (in the same change that stabilizes the engine)
-- **`discounts-guide` skill** — still uses **"snapshot"** as a defined term; the engine renamed it
-  to **"applied discount"**. Rename throughout (and reconcile the percent×quantity framing with the
-  current per-membership-sequential math). (`sync-guide` + `payments-guide` are already current.)
-- **`FastApiBackend/payment_sync.mermaid`** — the orchestration-flow diagram was **NOT** touched
-  this session and is very stale (no writeback node, old `_attach_computed_coupons`/freeze flow,
-  no `-> None`). Re-author with the `mermaid-creation` skill (top-down `TB`, sibling-only edges,
-  fixed palette, render + `check_siblings.py` + Mermaid-9 parse). Keep it in sync per `sync-guide`.
+### 2.5 ✅ DONE — living docs updated
+- **`discounts-guide` skill** — renamed snapshot → applied discount; reconciled to the current
+  per-membership-sequential math + build-time resolution + the stripe_sync_status view gate.
+- **`payment_sync.mermaid`** — rebuilt to the current flow (preview/real branch, `build_sync_params`
+  + `PaymentSyncDiscounts` + writeback subgraphs, reconciler outside, `-> None`).
+- **`architecture.mermaid` + `README.md`** — `MembershipPaymentSyncService` → `PaymentSyncService`,
+  `BillingParentResolver` hub added, DI wiring + "snapshot" wording fixed.
+- **`memberships-guide`** — caller table + immutability/view notes + the `migrating` semantics.
+- All mermaids validated (`check_siblings` 0 violations, render, no `LR`/`~~~`/bare `%%`,
+  Mermaid-9 parse). (`sync-guide` + `payments-guide` kept current throughout.)
 
 ### 2.6 Minor cleanups
 - ✅ **`ActiveMembershipRow.price` orphan removed** — dropped the field, the `price=row["price"]`
@@ -302,9 +307,8 @@ engine/caller.
   dollar value **disjoint** id lists (each discount is percent XOR dollar), so a dollar-`once`'s
   presence handle is its own dollar coupon, not the percent coupon. (Resolves the old §3 once-handle
   fragility — no value changes, only which ids each value writes back to.)
-- 🔜 **`SyncItem` / `SyncItem.prorate`** — **NOT vestigial yet**: still imported by
-  `member_memberships_cancel.py` + `member_memberships_update_price.py` (the old-path callers). Remove
-  `SyncItem` **as part of the §2.1 caller rewiring** — those two stop importing it there.
+- ✅ **`SyncItem` removed** — the §2.1 caller rewiring dropped its last importers (cancel +
+  update_price); the class is deleted from `payment_sync_schema.py`.
 - ❓ **`gyms_stripe_connect_service.py` calls Stripe directly** (Connect-account onboarding) — the one
   other direct-Stripe caller outside `src/payments/`. Different domain (no payments-layer service);
   decide whether to route it through a service too. (Unchanged — flagged for the user.)
@@ -314,9 +318,21 @@ engine/caller.
   in `access_rules/member_membership_applied_discounts.sql` still gates `USING (stripe_coupon_id IS
   NOT NULL)`. They mostly agree but can diverge (a `deleted` row has a coupon → passes RLS, hidden by
   view). Reconciling the RLS to the sync-status gate is a **schema/RLS change → needs a migration**;
-  left for the user to decide (is coupon-presence RLS intentional belt-and-suspenders?). The stale
-  comment in `set_applied_discount_coupon_id.sql` (says the *view* gates on coupon presence) rides on
-  this decision.
+  left for the user to decide (is coupon-presence RLS intentional belt-and-suspenders?). (The stale
+  comment in `set_applied_discount_coupon_id.sql` is now corrected to describe the `stripe_sync_status`
+  gate; only the RLS-policy reconciliation itself remains a decision.)
+
+### 2.7 🔜 Webhook-driven once-discount sync refresh (keep the DB in sync sooner)
+When Stripe invoices a subscription, a consumed `once` discount's coupon drops off the live sub —
+exactly what the once-settle detects. Today that's only picked up on the **next lifecycle caller** or
+(eventually) the daily reconciler. **Add to the `invoice.paid` webhook**
+(`src/stripe_webhooks/service/invoice_paid_handler.py`): after it persists the invoice/charge rows,
+resolve the paying parent and call `update_payments_recurring` (or at minimum
+`PaymentSyncOnceDiscounts.sync_once_discounts`) for that family — so a consumed `once`'s `end_date` is
+stamped **promptly**, keeping the DB in sync with Stripe far faster than waiting for the next caller
+or up to a day for the reconciler. Mint a fresh idempotency key (like `bulk_payment_sync`); it is
+idempotent. **Must take the same per-parent lock as §2.3** (a webhook-driven sync must not race a
+caller's sync on the same family).
 
 ---
 

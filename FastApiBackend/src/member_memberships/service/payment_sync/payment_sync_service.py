@@ -145,19 +145,22 @@ class PaymentSyncService:
         member_id: UUID,
         proration_behavior: Literal["none", "always_invoice"] = "none",
     ) -> PaymentsInvoicePreviewResponse | None:
-        """Preview what a recurring sync would charge, with no writes.
+        """Preview what a recurring sync would charge.
 
-        Runs the exact same DB-derived resolution + discount
-        resolution + subscription-bucket building as
-        ``update_payments_recurring``, then calls Stripe's invoice
-        preview endpoint instead of mutating the subscription. No
-        CRM rows are written and no subscription is created, updated,
-        or cancelled — but the discount coupons ARE resolved
-        (idempotent, gym-wide find-or-create), so the preview total
-        reflects discounts.
+        Runs the same DB-derived resolution + discount resolution +
+        subscription-bucket building as ``update_payments_recurring``
+        (the discount coupons ARE resolved — idempotent, gym-wide
+        find-or-create — so the preview total reflects discounts), then
+        calls Stripe's invoice preview endpoint instead of mutating the
+        subscription. No subscription is created, updated, or cancelled.
 
-        Freeze/unfreeze and the once-discount settle are intentionally
-        skipped here — they write or pause, which a dry run must not do.
+        The once-discount settle DOES run here, same as the real path:
+        stamping a consumed ``once``'s ``end_date`` is a settled fact
+        (Stripe already invoiced it), not a hypothetical, so the preview
+        must reflect it dropping off. What a dry run skips is the
+        **freeze re-apply** (it pauses billing) and the **convergence
+        writeback** (line ids / sync status / sub id / price totals) —
+        none of the sync's own desired-state results are persisted.
 
         Returns:
             An invoice preview, or ``None`` if the resulting bucket

@@ -102,7 +102,7 @@ parent resolution inject the shared `BillingParentResolver` directly — not via
 | method | what it does | callers |
 | --- | --- | --- |
 | `update_payments_recurring(member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none") -> None` | the real sync: resolve → maintenance freeze re-apply → settle once → build (re-derive bucket **and resolve coupons**) → execute → **`PaymentSyncWriteback`** persists the full sync-owned state (§3). Returns **None** — callers read the DB (the `applied` status) | every membership mutation |
-| `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: same DB-derived build **incl. discount resolution** (so the preview reflects discounts), then a Stripe invoice *preview*, **no writes** (§9) | the CRM "what will this charge?" preview |
+| `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: resolve → **settle once-discounts** (same as real) → same DB-derived build **incl. discount resolution** (so the preview reflects discounts) → Stripe invoice *preview*. Skips the freeze re-apply + the convergence writeback (§9) | the CRM "what will this charge?" preview |
 | `bulk_payment_sync(member_ids)` | loop members, fresh `uuid4()` idempotency key each, call `update_payments_recurring` | reprice fan-out; the future reconciler (§10) |
 
 **There are no imperative `add_ids` / `cancel_ids` inputs.** The desired state is
@@ -435,7 +435,7 @@ the price-grouped memberships (from the builder, §5) and returns a
    rows — so the `once` presence handle the next pre-sync settle reads stays
    exact. The **real** path writes these links back via
    `set_applied_discount_coupon_id` (→ `set_applied_discount_coupon_id.sql`,
-   service-role, unfiltered base table); preview writes nothing.
+   service-role, unfiltered base table); preview skips this link writeback.
 
 The builder attaches `coupons_by_price` onto the bucket items; the orchestrator
 writes `links` back after `execute_sync`. `resolve` does **no DB writes** (so
@@ -609,7 +609,7 @@ this folder; the membership lifecycle callers use it to write back a new line's
 
 ---
 
-## 9. Preview = discount-aware, but no writes (a true dry run)
+## 9. Preview = discount-aware + settles, but no convergence writeback
 
 `preview_update_payments_recurring(member_id, proration_behavior="none")` resolves
 the parent + gym account (`BillingParentResolver.resolve`) and runs the **exact
@@ -619,16 +619,17 @@ inputs) as the real path, then calls `PaymentSyncStripe.preview_execute_sync` �
 Stripe's invoice **preview**, never a mutation.
 
 - **Discounts ARE resolved.** The shared build runs `PaymentSyncDiscounts.resolve`,
-  which find-or-creates the deterministic coupons (idempotent, gym-wide — safe
-  with no DB writes) and attaches them to the bucket, **so the preview total
-  reflects discounts**. The real-vs-preview boundary is now "writes", not
-  "discounts".
-- **No DB writeback, no settle, no freeze.** A dry run skips the pre-sync
-  once-discount settle, the coupon-link writeback, the sub-id write, and the price
-  writeback — nothing in the CRM changes and no subscription is created / updated /
-  cancelled. (Caveat: skipping the settle means a consumed-but-unstamped `once` is
-  still counted, so the preview can slightly *over*-state the discount until the
-  next real sync stamps it.)
+  which find-or-creates the deterministic coupons (idempotent, gym-wide) and
+  attaches them to the bucket, **so the preview total reflects discounts**.
+- **The once-settle DOES run; the convergence writeback + freeze do NOT.** Preview
+  runs the same `PaymentSyncOnceDiscounts.sync_once_discounts` as the real path — it
+  stamps a consumed `once`'s `end_date`, a settled fact (Stripe already invoiced it),
+  not a hypothetical, so the preview reflects it dropping off. What a dry run skips is
+  the **freeze re-apply** (it pauses billing) and the **convergence writeback** (the
+  per-row line id / sync status, the coupon-link writeback, the sub-id write, and the
+  price writeback) — none of the sync's *desired-state* results are persisted and no
+  subscription is created / updated / cancelled. So the real-vs-preview boundary is
+  the **convergence writeback + freeze**, not the settle or the discounts.
 
 `preview_execute_sync` mirrors `execute_sync`'s dispatch (`preview_update_…` for an
 existing sub, `preview_create_…` for a new one), threads the explicit
