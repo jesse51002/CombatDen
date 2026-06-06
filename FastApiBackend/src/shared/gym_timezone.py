@@ -1,7 +1,16 @@
-"""Utility for computing the current date in a gym's timezone."""
+"""Utilities for a gym's timezone — date math + the shared timezone lookup."""
 
 from datetime import UTC, date, datetime
+from pathlib import Path
+from uuid import UUID
 from zoneinfo import ZoneInfo
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.shared.sql_loader import load_sql
+
+_SQL_DIR = Path(__file__).parent / "sql"
 
 
 def gym_today(tz_name: str) -> date:
@@ -32,3 +41,15 @@ def stripe_ts_to_gym_date(ts: int, tz_name: str) -> date:
         The calendar date of that instant in the given timezone.
     """
     return datetime.fromtimestamp(ts, UTC).astimezone(ZoneInfo(tz_name)).date()
+
+
+async def get_gym_timezone(session: AsyncSession, gym_id: UUID) -> str:
+    """Fetch a gym's IANA timezone within the caller's transaction.
+
+    The shared lookup so any service can read a gym's timezone (e.g. to convert
+    Stripe period timestamps to gym-local dates) without redefining the query.
+    Reads the gyms table (service-role).
+    """
+    sql = load_sql(_SQL_DIR / "gym_timezone_by_id.sql")
+    result = await session.execute(text(sql), {"gym_id": str(gym_id)})
+    return result.scalar_one()

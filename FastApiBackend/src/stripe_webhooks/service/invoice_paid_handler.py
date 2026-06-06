@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.gym_timezone import stripe_ts_to_gym_date
+from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
@@ -180,7 +180,7 @@ class InvoicePaidHandler:
     ) -> None:
         membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
         update_sql = load_sql(SQL_DIR / "member_memberships_update_payment_dates.sql")
-        gym_timezone = await self._gym_timezone(session, gym_id)
+        gym_timezone = await get_gym_timezone(session, gym_id)
         paid_at_ts = invoice.get("status_transitions", {}).get("paid_at") or invoice.get("created")
         last_paid_date = (
             stripe_ts_to_gym_date(paid_at_ts, gym_timezone)
@@ -225,16 +225,6 @@ class InvoicePaidHandler:
                     "next_due_date": next_due_date,
                 },
             )
-
-    async def _gym_timezone(
-        self,
-        session: AsyncSession,
-        gym_id: UUID,
-    ) -> str:
-        """Fetch the gym's IANA timezone for gym-local date conversion."""
-        sql = load_sql(SQL_DIR / "gym_timezone_by_id.sql")
-        result = await session.execute(text(sql), {"gym_id": str(gym_id)})
-        return result.scalar_one()
 
     async def _insert_payment_charge(
         self,
