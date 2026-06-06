@@ -7,8 +7,10 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from schema.member_membership import StripeSyncStatus
 from sqlalchemy import text
 
+import src.shared.db_schema_path  # noqa: F401
 from src.member_memberships import SQL_DIR
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionResponse,
@@ -67,6 +69,28 @@ class MemberMembershipsBase:
         if not row:
             raise ValueError(f"Membership not found: item_id={item_id}, member_id={member_id}")
         return dict(row)
+
+    async def _get_sync_status(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+    ) -> StripeSyncStatus | None:
+        """Read a membership's Stripe-sync status from the unfiltered base.
+
+        DB-first callers use this to VERIFY a sync landed: a pending add flips
+        ``not_added`` -> ``applied`` and a cancel flips ``applied`` ->
+        ``deleted``. Reads the unfiltered base (the filtered view hides those
+        states). Returns ``None`` if the row no longer exists.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_sync_status.sql")
+        params = {
+            "item_id": str(item_id),
+            "member_id": str(member_id),
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            row = result.fetchone()
+        return StripeSyncStatus(row[0]) if row else None
 
     # ── Static Helpers ─────────────────────────────────────────
 

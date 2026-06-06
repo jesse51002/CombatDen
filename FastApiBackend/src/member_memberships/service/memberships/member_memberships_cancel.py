@@ -1,15 +1,15 @@
-"""Cancel a member's recurring membership."""
+"""Cancel a member's recurring membership (DB-first, verified)."""
 
 import logging
 from datetime import date
 from uuid import UUID
 
+from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.member_memberships import SQL_DIR
-from src.member_memberships.schema.payment_sync_schema import SyncItem
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
@@ -17,6 +17,7 @@ from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
+from src.shared.db_first_helpers import sync_or_revert
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
@@ -32,10 +33,14 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         member_id: UUID,
         idempotency_key: UUID,
     ) -> date:
-        """Cancel a specific active recurring membership.
+        """Cancel a specific active recurring membership (DB-first).
 
-        Syncs the cancellation to Stripe first (including linked
-        discount recalculation), then updates the CRM database.
+        Writes ``cancel_date`` to the DB FIRST, then runs the param-less sync,
+        which re-derives the desired state (the cancelled row is excluded by the
+        read), removes the line from Stripe, and stamps the row ``deleted``. The
+        cancel is then **verified**: if the sync did not confirm on Stripe (the
+        row was not stamped ``deleted``), the ``cancel_date`` is reverted so the
+        DB stays in sync with Stripe.
 
         If the membership is already cancelled, this is a no-op.
 
@@ -44,9 +49,14 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             member_id: The member.
             idempotency_key: Caller-supplied key scoped to this cancel.
 
+        Returns:
+            The resolved ``cancel_date``.
+
         Raises:
             ValueError: If the membership is not found, has already
                 ended, or is non-recurring.
+            SyncNotConfirmedError: If the cancel could not be confirmed on
+                Stripe (the DB change has been reverted).
         """
         row = await self._get_membership(item_id, member_id)
 
@@ -55,31 +65,48 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
-        # ── Stripe sync ──
-        cancel_item = SyncItem(
-            stripe_price_id=row["stripe_price_id"],
-            stripe_item_id=row["stripe_item_id"],
-            member_id=member_id,
-            plan_id=row["plan_id"],
-        )
-        try:
-            await self._payment_sync.update_payments_recurring(
-                member_id,
-                add_ids=[],
-                cancel_ids=[cancel_item],
-                idempotency_key=idempotency_key,
-            )
-        except PaymentsResourceNotFoundError:
-            logger.warning(
-                "Stripe resource not found during cancel "
-                "(proceeding with CRM cancel): "
-                "item_id=%s, member_id=%s",
-                item_id,
-                member_id,
-            )
+        # A membership that never reached Stripe (no line id) has nothing to
+        # confirm there — skip the deleted-verify but still revert on error.
+        had_stripe_line = row["stripe_item_id"] is not None
 
-        # ── CRM cancel ────────────────────────────────────
-        return await self._crm_cancel(item_id, member_id, gym_today(row["timezone"]))
+        # ── DB-first: record the cancel, THEN converge Stripe ──
+        cancel_date = await self._crm_cancel(
+            item_id,
+            member_id,
+            gym_today(row["timezone"]),
+        )
+
+        async def _sync() -> None:
+            try:
+                await self._payment_sync.update_payments_recurring(
+                    member_id,
+                    idempotency_key=idempotency_key,
+                    proration_behavior="none",
+                )
+            except PaymentsResourceNotFoundError:
+                # Stripe no longer has the line — the cancel is already true on
+                # Stripe's side. Record it deleted and keep the cancel (the
+                # verify below then passes; no revert).
+                logger.warning(
+                    "Stripe resource not found during cancel (line already "
+                    "gone); marking deleted: item_id=%s, member_id=%s",
+                    item_id,
+                    member_id,
+                )
+                await self._mark_deleted(item_id)
+
+        async def _verify() -> bool:
+            status = await self._get_sync_status(item_id, member_id)
+            return status == StripeSyncStatus.deleted
+
+        await sync_or_revert(
+            sync_fn=_sync,
+            revert_fn=lambda: self._uncancel(item_id, member_id),
+            entity_name="member_membership",
+            crm_pk=str(item_id),
+            verify_fn=_verify if had_stripe_line else None,
+        )
+        return cancel_date
 
     async def preview_cancel(
         self,
@@ -91,9 +118,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         Runs every validation ``cancel`` runs (membership lookup,
         already-cancelled short-circuit, recurring-plan guard) and
         then calls the Stripe invoice preview. Returns ``None`` if
-        the membership is already cancelled or if cancellation
-        would drop the subscription to zero items (pure
-        cancellations have no upcoming invoice).
+        the membership is already cancelled.
 
         Raises:
             ValueError: Same conditions as ``cancel``.
@@ -105,16 +130,14 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
-        cancel_item = SyncItem(
-            stripe_price_id=row["stripe_price_id"],
-            stripe_item_id=row["stripe_item_id"],
-            member_id=member_id,
-            plan_id=row["plan_id"],
-        )
+        # NOTE: a true cancel preview must reflect the membership being REMOVED,
+        # which needs preview-staging (stamp the row preview_remove, preview,
+        # revert) — that lands with the caller-side preview_* staging work. Until
+        # then this previews the family's CURRENT recurring state. Tracked; not
+        # the real cancel preview yet.
         return await self._payment_sync.preview_update_payments_recurring(
             member_id,
-            add_ids=[],
-            cancel_ids=[cancel_item],
+            proration_behavior="none",
         )
 
     # ── Private ────────────────────────────────────────────────
@@ -150,7 +173,8 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         """Mark membership as cancelled in the CRM database.
 
         Returns the resolved ``cancel_date`` (the date through which
-        the membership remains active).
+        the membership remains active). Only writes ``cancel_date`` — the
+        ``stripe_item_id`` is left intact as the historical invoice-line record.
         """
         cancel_sql = load_sql(SQL_DIR / "member_memberships_cancel.sql")
         params = {
@@ -163,3 +187,31 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             cancel_date = result.scalar_one()
             await session.commit()
         return cancel_date
+
+    async def _uncancel(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+    ) -> None:
+        """Revert a cancel: clear ``cancel_date`` when the sync did not confirm.
+
+        Restores the membership to active so the DB matches Stripe (which still
+        carries the line). Leaves ``stripe_item_id`` intact.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_uncancel.sql")
+        params = {
+            "item_id": str(item_id),
+            "member_id": str(member_id),
+        }
+        async with self._db_pool.session() as session:
+            await session.execute(text(sql), params)
+            await session.commit()
+
+    async def _mark_deleted(self, item_id: UUID) -> None:
+        """Stamp a membership ``deleted`` (its Stripe line is already gone)."""
+        sql = load_sql(
+            SQL_DIR / "payment_sync" / "mark_membership_deleted.sql",
+        )
+        async with self._db_pool.session() as session:
+            await session.execute(text(sql), {"item_ids": [str(item_id)]})
+            await session.commit()

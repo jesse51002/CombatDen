@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
+from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
 
@@ -29,7 +30,7 @@ from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentPreviewRequest,
 )
 from src.shared.database import DirectDatabasePool
-from src.shared.db_first_helpers import cleanup_pending_row
+from src.shared.db_first_helpers import cleanup_pending_row, sync_or_revert
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
@@ -148,8 +149,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
         # charges a single invoice and returns its id to stamp below.
         stripe_item_id: str | None = None
 
-        try:
-            if is_recurring:
+        if is_recurring:
+            # Recurring is DB-first + verified: the sync adds the pending row to
+            # Stripe and writes its line id / next_due_date / 'applied' status
+            # back. If the sync fails or the row is not stamped 'applied', the
+            # pending row is deleted so the DB stays in sync with Stripe.
+            async def _sync_recurring() -> None:
                 await self._payment_sync.update_payments_recurring(
                     member_id,
                     idempotency_key=idempotency_key,
@@ -158,7 +163,20 @@ class MemberMembershipsStart(MemberMembershipsBase):
                         "always_invoice" if prorate else "none"
                     ),
                 )
-            else:
+
+            async def _verify_added() -> bool:
+                status = await self._get_sync_status(item_id, member_id)
+                return status == StripeSyncStatus.applied
+
+            await sync_or_revert(
+                sync_fn=_sync_recurring,
+                revert_fn=lambda: self._delete_pending(str(item_id)),
+                entity_name="member_membership",
+                crm_pk=str(item_id),
+                verify_fn=_verify_added,
+            )
+        else:
+            try:
                 stripe_item_id = await self._charge_one_time(
                     stripe_customer_id=parent.stripe_customer_id,
                     stripe_price_id=plan_price["stripe_price_id"],
@@ -168,13 +186,13 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     idempotency_key=idempotency_key,
                     paid_with_cash=paid_with_cash,
                 )
-        except Exception:
-            await cleanup_pending_row(
-                delete_fn=lambda: self._delete_pending(str(item_id)),
-                entity_name="member_membership",
-                crm_pk=str(item_id),
-            )
-            raise
+            except Exception:
+                await cleanup_pending_row(
+                    delete_fn=lambda: self._delete_pending(str(item_id)),
+                    entity_name="member_membership",
+                    crm_pk=str(item_id),
+                )
+                raise
 
         # ── Step 3: Set stripe_item_id ────────────────────────
         if stripe_item_id:
