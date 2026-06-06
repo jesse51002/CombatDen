@@ -4,5 +4,6 @@
 -- unfiltered base table so a still-pending coupon is recorded before the view
 -- (stripe_coupon_id IS NOT NULL) starts exposing the row to clients.
 UPDATE member_membership_applied_discounts_unfiltered
-SET stripe_coupon_id = :stripe_coupon_id
+SET stripe_coupon_id = :stripe_coupon_id,
+    stripe_sync_status = 'applied'
 WHERE applied_discount_id = :applied_discount_id

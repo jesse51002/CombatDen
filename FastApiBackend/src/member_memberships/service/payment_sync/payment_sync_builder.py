@@ -91,6 +91,7 @@ class PaymentSyncBuilder:
             parent=parent,
             stripe_account_id=stripe_account_id,
             coupon_links=resolved.links,
+            memberships=memberships,
         )
 
     @staticmethod
@@ -125,10 +126,17 @@ class PaymentSyncBuilder:
         items: list[PaymentsSubscriptionDesiredItem] = []
         for price_id, memberships in groups.items():
             first = memberships[0]
+            # Use the existing line's id if any row on this price already has
+            # one (UPDATE that line); a price group that is entirely new
+            # (all pending, stripe_item_id NULL) gets None → Stripe CREATE.
+            stripe_item_id = next(
+                (m.stripe_item_id for m in memberships if m.stripe_item_id),
+                None,
+            )
             items.append(
                 PaymentsSubscriptionDesiredItem(
                     stripe_price_id=first.stripe_price_id,
-                    stripe_item_id=first.stripe_item_id,
+                    stripe_item_id=stripe_item_id,
                     quantity=len(memberships),
                     discounts=coupons_by_price.get(price_id, []),
                 )

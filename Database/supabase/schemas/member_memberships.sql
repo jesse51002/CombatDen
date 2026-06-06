@@ -236,12 +236,18 @@ CREATE TRIGGER trg_recurring_chronological_start_date
     BEFORE INSERT ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION check_recurring_chronological_start_date();
 
--- View: only exposes memberships with a completed Stripe item sync
+-- View: only exposes memberships with a completed Stripe item sync, and never
+-- preview-staged rows (preview_add / preview_remove are dry-run staging that the
+-- end user must never see).
 CREATE VIEW member_memberships
 WITH (security_invoker = true)
 AS
 SELECT * FROM member_memberships_unfiltered
-WHERE stripe_item_id IS NOT NULL;
+WHERE stripe_item_id IS NOT NULL
+  AND (
+      stripe_sync_status IS NULL
+      OR stripe_sync_status NOT IN ('preview_add', 'preview_remove')
+  );
 
 ALTER VIEW member_memberships SET (security_invoker = true);
 

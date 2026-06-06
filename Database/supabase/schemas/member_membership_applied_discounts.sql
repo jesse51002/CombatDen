@@ -85,7 +85,11 @@ CREATE VIEW member_membership_applied_discounts
 WITH (security_invoker = true)
 AS
 SELECT * FROM member_membership_applied_discounts_unfiltered
-WHERE stripe_coupon_id IS NOT NULL;
+WHERE stripe_coupon_id IS NOT NULL
+  AND (
+      stripe_sync_status IS NULL
+      OR stripe_sync_status NOT IN ('preview_add', 'preview_remove')
+  );
 
 -- Safety net: CLI migration diffing can strip security_invoker from CREATE VIEW
 ALTER VIEW member_membership_applied_discounts SET (security_invoker = true);

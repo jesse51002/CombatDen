@@ -16,26 +16,19 @@ from src.member_memberships.service.payment_sync.payment_sync_freeze import (
 from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
     PaymentSyncOnceDiscounts,
 )
-from src.member_memberships.service.payment_sync.payment_sync_queries import (
-    PaymentSyncQueries,
-)
 from src.member_memberships.service.payment_sync.payment_sync_stripe import (
     PaymentSyncStripe,
 )
-from src.member_memberships.service.payment_sync.price_writeback import (
-    PriceWriteback,
+from src.member_memberships.service.payment_sync.payment_sync_writeback import (
+    PaymentSyncWriteback,
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
-from src.payments.schema.payments_members_schema import (
-    PaymentsSubscriptionResponse,
-)
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 
@@ -65,13 +58,12 @@ class PaymentSyncService:
         once_discounts: PaymentSyncOnceDiscounts,
         builder: PaymentSyncBuilder,
     ) -> None:
-        self._queries = PaymentSyncQueries(db_pool)
         self._parent = parent_resolver
         self._freeze = freeze
         self._once_discounts = once_discounts
         self._builder = builder
         self._stripe = PaymentSyncStripe(subscription_service)
-        self._price_writeback = PriceWriteback(
+        self._writeback = PaymentSyncWriteback(
             db_pool=db_pool,
             subscription_service=subscription_service,
         )
@@ -82,7 +74,7 @@ class PaymentSyncService:
         idempotency_key: UUID,
         pay_first_invoice_out_of_band: bool = False,
         proration_behavior: Literal["none", "always_invoice"] = "none",
-    ) -> PaymentsSubscriptionResponse | None:
+    ) -> None:
         """Sync a member's recurring memberships with Stripe.
 
         Re-derives the full desired subscription state from the DB — the active
@@ -101,8 +93,10 @@ class PaymentSyncService:
             member_id: Any family member's profile ID.
 
         Returns:
-            The resulting subscription response, or None if
-            the subscription was cancelled (no items remaining).
+            None. The sync writes everything it owns back to the DB (line ids,
+            next_due_date, sync status, coupon links, sub id, price totals);
+            callers read the DB (the ``applied`` status) to confirm it landed.
+            Use ``preview_update_payments_recurring`` for the invoice figures.
         """
         parent, stripe_account_id = await self._parent.resolve(member_id)
 
@@ -141,31 +135,10 @@ class PaymentSyncService:
             proration_behavior=proration_behavior,
         )
 
-        # ── Write back the resolved coupon links (real path) ──
-        # The coupons were attached during the build; persist each
-        # applied_discount_id → coupon_id (the `once` consumption handle).
-        for applied_discount_id, coupon_id in params.coupon_links.items():
-            await self._queries.set_applied_discount_coupon_id(
-                applied_discount_id,
-                coupon_id,
-            )
-
-        # ── Write back subscription ID ─────────────────────
-        new_sub_id = sub_result.stripe_subscription_id if sub_result else None
-        await self._queries.update_profile_sub_id(
-            parent.member_id,
-            new_sub_id,
-        )
-
-        # ── Mirror post-discount totals back onto CRM ──────
-        await self._price_writeback.sync_prices_from_stripe(
-            parent_member_id=parent.member_id,
-            gym_id=parent.gym_id,
-            stripe_sub_id=new_sub_id,
-            stripe_account_id=stripe_account_id,
-        )
-
-        return sub_result
+        # ── Persist the full sync-owned state (real path only) ──
+        # Per-membership line id / next_due_date / 'applied' status, coupon
+        # links, 'deleted' stamping, sub id, and post-discount price totals.
+        await self._writeback.write(params, sub_result)
 
     async def preview_update_payments_recurring(
         self,
@@ -244,14 +217,3 @@ class PaymentSyncService:
                     member_id,
                     exc_info=True,
                 )
-
-    async def resolve_parent(self, member_id: UUID) -> ParentProfile:
-        """Expose parent resolution for upstream validation.
-
-        Args:
-            member_id: Any family member's profile ID.
-
-        Returns:
-            The paying parent's profile.
-        """
-        return await self._parent.resolve_parent(member_id)

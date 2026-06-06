@@ -33,7 +33,7 @@ class AppliedDiscount(BaseModel):
     item_id: UUID
     member_id: UUID
     plan_id: UUID
-    stripe_item_id: str
+    stripe_item_id: str | None = None
     discount_mode: DiscountMode
     percentage_off: float | None = None
     dollar_off: int | None = None
@@ -55,7 +55,7 @@ class ActiveMembershipRow(BaseModel):
     plan_id: UUID
     price_id: UUID
     stripe_price_id: str
-    stripe_item_id: str
+    stripe_item_id: str | None = None
     duration_unit: DurationUnit
     price: int
     discounts: list[AppliedDiscount] = []
@@ -163,3 +163,4 @@ class SyncParams(BaseModel):
     parent: ParentProfile
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
+    memberships: list[ActiveMembershipRow] = []

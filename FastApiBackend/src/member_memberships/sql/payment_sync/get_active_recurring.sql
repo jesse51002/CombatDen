@@ -1,3 +1,12 @@
+-- Read the family's desired-active recurring memberships for the sync. Reads the
+-- UNFILTERED base table (service-role) so a just-inserted PENDING row
+-- (stripe_item_id IS NULL, sync-status NULL) is visible — the sync must see it to
+-- add it to Stripe and stamp it. The client-facing view still hides incomplete /
+-- preview rows; this is the engine's read.
+--
+-- Desired-active = not cancelled and not in a non-billing sync status. NULL
+-- status = pending add; 'applied' = live; 'migrating' = mid-migration — all bill.
+-- 'deleted' / 'preview_*' do not.
 SELECT
     mm.item_id,
     mm.member_id,
@@ -7,7 +16,7 @@ SELECT
     mm.stripe_item_id,
     mp.duration_unit,
     mpp.price
-FROM member_memberships mm
+FROM member_memberships_unfiltered mm
 JOIN membership_plans mp
     ON mm.plan_id = mp.plan_id AND mm.gym_id = mp.gym_id
 JOIN membership_plan_prices mpp
@@ -15,3 +24,7 @@ JOIN membership_plan_prices mpp
 WHERE mm.member_id = ANY(:member_ids)
   AND mp.plan_type = 'recurring'
   AND mm.cancel_date IS NULL
+  AND (
+      mm.stripe_sync_status IS NULL
+      OR mm.stripe_sync_status NOT IN ('deleted', 'preview_add', 'preview_remove')
+  )

@@ -170,11 +170,12 @@ class PaymentSyncQueries:
         applied_discount_id: UUID,
         stripe_coupon_id: str,
     ) -> None:
-        """Write the sync-resolved coupon back onto one applied discount.
+        """Write the sync-resolved coupon + 'applied' status onto one discount.
 
-        Service-role writeback to the unfiltered base table: for a ``once``
-        discount the stored coupon is the consumption-tracking handle; for an
-        ongoing discount it records the coupon the line is currently using.
+        Service-role writeback to the unfiltered base table: stamps the coupon
+        (for a ``once`` discount the consumption-tracking handle; for an ongoing
+        discount the coupon the line is currently using) and marks the row
+        ``stripe_sync_status = 'applied'`` — synced and live on Stripe.
         """
         sql = load_sql(APPLIED_SQL_DIR / "set_applied_discount_coupon_id.sql")
         async with self._db_pool.session() as session:
@@ -231,5 +232,76 @@ class PaymentSyncQueries:
                     "member_id": str(member_id),
                     "stripe_sub_id_month": stripe_sub_id_month,
                 },
+            )
+            await session.commit()
+
+    async def apply_membership_sync(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        stripe_item_id: str,
+        next_due_date: date | None,
+    ) -> None:
+        """Stamp the sync result onto one membership row (real path).
+
+        Writes the live Stripe line id, the next_due_date, and
+        ``stripe_sync_status = 'applied'`` — confirming the row is live on
+        Stripe. The line id is NULL→value on first sync (the immutable trigger
+        allows that one transition; echoing the same value is a no-op).
+        """
+        sql = load_sql(SYNC_SQL_DIR / "apply_membership_sync.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {
+                    "item_id": str(item_id),
+                    "member_id": str(member_id),
+                    "stripe_item_id": stripe_item_id,
+                    "next_due_date": next_due_date,
+                },
+            )
+            await session.commit()
+
+    async def get_cancelled_recurring(
+        self,
+        family_ids: list[UUID],
+    ) -> dict[UUID, str]:
+        """Read cancelled recurring rows still carrying a Stripe line id.
+
+        Returns ``item_id → stripe_item_id`` for cancelled rows not yet marked
+        ``deleted`` — the writeback diffs these against the live subscription to
+        confirm removal and stamp ``deleted``.
+        """
+        if not family_ids:
+            return {}
+
+        sql = load_sql(SYNC_SQL_DIR / "get_cancelled_recurring.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"member_ids": [str(uid) for uid in family_ids]},
+            )
+            rows = result.mappings().fetchall()
+
+        return {UUID(str(r["item_id"])): r["stripe_item_id"] for r in rows}
+
+    async def mark_memberships_deleted(
+        self,
+        item_ids: list[UUID],
+    ) -> None:
+        """Stamp ``stripe_sync_status = 'deleted'`` on the given rows.
+
+        The cancelled rows the writeback confirmed are gone from the live
+        subscription — recorded so a cancelled row is never mistaken for one
+        still billing.
+        """
+        if not item_ids:
+            return
+
+        sql = load_sql(SYNC_SQL_DIR / "mark_membership_deleted.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {"item_ids": [str(i) for i in item_ids]},
             )
             await session.commit()

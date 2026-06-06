@@ -25,7 +25,7 @@ SELECT
 FROM member_membership_applied_discounts_unfiltered ad
 JOIN gym_discount_values_unfiltered v
     ON ad.value_id = v.value_id
-JOIN member_memberships mm
+JOIN member_memberships_unfiltered mm
     ON ad.item_id = mm.item_id AND ad.gym_id = mm.gym_id
 WHERE ad.member_id = ANY(:member_ids)
   AND (ad.end_date IS NULL OR ad.end_date > :today)
