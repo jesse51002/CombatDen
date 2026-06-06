@@ -184,12 +184,21 @@ price migration** (`update_price` moves the line). **User owes the trigger migra
 The **read toggle** is wired: `build_sync_params(..., preview=True)` → the reads include
 `preview_add` and exclude `preview_remove` (real path excludes both). What's LEFT:
 
-1. **The caller must STAGE preview rows, then CLEAN them up.** A preview reflects a *hypothetical*
-   change that isn't in the DB yet. So to preview e.g. *adding* a membership: insert a membership
-   row with `stripe_sync_status='preview_add'` → run `preview_update_payments_recurring` (the
-   build reads it because `preview=True`) → **DELETE the preview row** afterward (in a `finally`).
-   Preview-*removing*: stamp an existing row `preview_remove`, preview, then revert to its prior
-   status. Same for **applied-discount** preview rows (the discount read toggles too).
+1. **Caller-side staging — ✅ DONE for the membership previews** (via the `staged_preview` helper in
+   `src/shared/db_first_helpers.py`: stage → preview → cleanup in `finally`):
+   - **start preview** → inserts a `preview_add` row (`_crm_insert(sync_status=...)` +
+     `member_memberships_insert.sql` now parameterizes the status), previews, deletes it.
+   - **cancel preview** → stamps the row `preview_remove` (`_set_sync_status` +
+     `set_membership_sync_status.sql`), previews, restores `applied`.
+   - **update_price preview** → temporarily flips the row to the new price, previews, restores the
+     old price (status stays `applied`).
+   - **link/unlink previews** → no staging (the child has no recurring memberships, so the parent's
+     bill is unchanged — current-state preview is already correct).
+   - **🔜 discount preview** (`preview_apply_discounts`) — STILL current-state. To preview a
+     *proposed* discount change it needs (a) a signature change to accept `add_preset_ids` /
+     `remove_applied_ids`, and (b) staging `preview_add` / `preview_remove` applied-discount rows
+     (the discount read toggles on the same `:excluded_statuses`). Not done — it still previews the
+     membership's CURRENT discounts (its docstring says so). Follow-up.
 2. **🔴 Scoping — CONFIRMED HARD BLOCKER on the concurrency lock (§2.3 / #25).** Staging
    `preview_remove` on a REAL (`applied`, billing) membership is **unsafe without the per-parent
    lock**. Trace: to preview a cancel/price-change you stamp the `applied` row → `preview_remove`.

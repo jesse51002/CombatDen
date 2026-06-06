@@ -122,3 +122,31 @@ async def _safe_revert(
             crm_pk,
             exc_info=True,
         )
+
+
+async def staged_preview[T](
+    stage_fn: Callable[[], Coroutine[Any, Any, Any]],
+    cleanup_fn: Callable[[], Coroutine[Any, Any, Any]],
+    preview_fn: Callable[[], Coroutine[Any, Any, T]],
+) -> T:
+    """Run a read-only preview against a TEMPORARILY-staged hypothetical state.
+
+    A preview reflects a change that is not committed to the DB. So the caller
+    stages the hypothetical (stamp a membership ``preview_remove``, flip a row's
+    price, insert a ``preview_add`` row, …), runs the read-only preview while the
+    staged state is in the DB, then **always cleans the staged state up**
+    (``finally``). The preview build reads the staged rows because it runs with
+    ``preview=True``; the real path excludes ``preview_*`` so it can never bill a
+    staged add.
+
+    ⚠️ **Not race-safe on its own.** A real sync on the same paying-parent family
+    during the preview window can act on a staged ``preview_remove`` / flipped row
+    (e.g. drop a live Stripe line) — this MUST be wrapped in the per-parent
+    concurrency lock (#25) once it lands. Until then the cleanup (``finally``)
+    bounds the window but does not close the race.
+    """
+    await stage_fn()
+    try:
+        return await preview_fn()
+    finally:
+        await cleanup_fn()

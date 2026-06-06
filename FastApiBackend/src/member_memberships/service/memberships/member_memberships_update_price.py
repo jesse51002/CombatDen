@@ -14,7 +14,7 @@ from src.member_memberships.service.memberships.member_memberships_base import (
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
-from src.shared.db_first_helpers import sync_or_revert
+from src.shared.db_first_helpers import staged_preview, sync_or_revert
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
@@ -132,15 +132,45 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         row = await self._get_membership(item_id, member_id)
         self._validate_update_price(row, item_id, member_id)
 
-        # NOTE: a true price-change preview must reflect the membership ON the
-        # new price, which needs preview-staging (write the new price_id on a
-        # preview row, preview, revert) — that lands with the caller-side
-        # preview_* staging work. Until then this previews the family's CURRENT
-        # recurring state. Tracked; not the real price preview yet.
+        active_price = await self._get_active_price_for_plan(
+            row["gym_id"],
+            row["plan_id"],
+        )
         proration_behavior = "always_invoice" if prorate else "none"
-        return await self._payment_sync.preview_update_payments_recurring(
-            member_id,
-            proration_behavior=proration_behavior,
+
+        if row["price_id"] == active_price["price_id"]:
+            # Already on the active price — nothing to stage; preview as-is.
+            return await self._payment_sync.preview_update_payments_recurring(
+                member_id,
+                proration_behavior=proration_behavior,
+            )
+
+        old_price_id = row["price_id"]
+        old_total_price = row["price"]
+
+        # Temporarily flip the row to the new price so the preview build groups it
+        # under the new line, then restore. Status stays 'applied' (dry-run, no
+        # real migration). Window bounded by `finally`; the per-parent lock (#25)
+        # closes the race vs a concurrent real sync (TODO).
+        return await staged_preview(
+            stage_fn=lambda: self._crm_update_price(
+                item_id,
+                member_id,
+                active_price["price_id"],
+                active_price["price"],
+                StripeSyncStatus.applied,
+            ),
+            cleanup_fn=lambda: self._crm_update_price(
+                item_id,
+                member_id,
+                old_price_id,
+                old_total_price,
+                StripeSyncStatus.applied,
+            ),
+            preview_fn=lambda: self._payment_sync.preview_update_payments_recurring(
+                member_id,
+                proration_behavior=proration_behavior,
+            ),
         )
 
     # ── Private ────────────────────────────────────────────────

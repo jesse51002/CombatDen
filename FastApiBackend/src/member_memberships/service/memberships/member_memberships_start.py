@@ -30,7 +30,11 @@ from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentPreviewRequest,
 )
 from src.shared.database import DirectDatabasePool
-from src.shared.db_first_helpers import cleanup_pending_row, sync_or_revert
+from src.shared.db_first_helpers import (
+    cleanup_pending_row,
+    staged_preview,
+    sync_or_revert,
+)
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
@@ -257,14 +261,43 @@ class MemberMembershipsStart(MemberMembershipsBase):
         is_recurring = plan_type == PlanType.recurring
 
         if is_recurring:
-            # NOTE: a recurring START preview can only reflect the new membership
-            # once preview-staging lands (#13 Part B / #19) — the row isn't in the
-            # DB yet, so this currently previews the family's CURRENT recurring
-            # state. Tracked; not the real start preview until staging exists.
-            return await self._payment_sync.preview_update_payments_recurring(
-                member_id,
-                proration_behavior=(
-                    "always_invoice" if prorate else "none"
+            # Stage a 'preview_add' membership row so the preview reflects the new
+            # membership, then delete it (finally). The real path excludes
+            # preview_add (can never bill it); the preview build (preview=True)
+            # includes it. Race vs a concurrent real sync is bounded by the
+            # cleanup; the per-parent lock (#25) closes it (TODO).
+            start_date = gym_today(parent.timezone)
+            staged: list[UUID] = []
+
+            async def _stage() -> None:
+                item_id = await self._crm_insert(
+                    member_id=member_id,
+                    gym_id=gym_id,
+                    plan_id=plan_id,
+                    price_id=price_id,
+                    start_date=start_date,
+                    end_date=None,
+                    last_paid_date=start_date,
+                    next_due_date=None,
+                    stripe_item_id=None,
+                    prorate=prorate,
+                    total_price=plan_price["price"],
+                    sync_status=StripeSyncStatus.preview_add,
+                )
+                staged.append(item_id)
+
+            async def _cleanup() -> None:
+                if staged:
+                    await self._delete_pending(str(staged[0]))
+
+            return await staged_preview(
+                stage_fn=_stage,
+                cleanup_fn=_cleanup,
+                preview_fn=lambda: self._payment_sync.preview_update_payments_recurring(
+                    member_id,
+                    proration_behavior=(
+                        "always_invoice" if prorate else "none"
+                    ),
                 ),
             )
 
@@ -348,11 +381,14 @@ class MemberMembershipsStart(MemberMembershipsBase):
         stripe_item_id: str | None,
         prorate: bool,
         total_price: int,
+        sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
     ) -> UUID:
         """Insert a new membership row. Returns the generated item_id.
 
-        Memberships are created discount-free — discounts are applied as
-        snapshots afterward via the apply path.
+        ``sync_status`` defaults to ``not_added`` (the real start's pending row);
+        the start preview inserts ``preview_add`` so the dry-run sees it but the
+        real path never bills it. Memberships are created discount-free —
+        discounts are applied afterward via the apply path.
         """
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
@@ -367,6 +403,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
             "stripe_item_id": stripe_item_id,
             "prorate": prorate,
             "total_price": total_price,
+            "sync_status": sync_status.value,
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)

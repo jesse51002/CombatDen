@@ -17,7 +17,7 @@ from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
-from src.shared.db_first_helpers import sync_or_revert
+from src.shared.db_first_helpers import staged_preview, sync_or_revert
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
@@ -130,14 +130,21 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
-        # NOTE: a true cancel preview must reflect the membership being REMOVED,
-        # which needs preview-staging (stamp the row preview_remove, preview,
-        # revert) — that lands with the caller-side preview_* staging work. Until
-        # then this previews the family's CURRENT recurring state. Tracked; not
-        # the real cancel preview yet.
-        return await self._payment_sync.preview_update_payments_recurring(
-            member_id,
-            proration_behavior="none",
+        # Stage the membership 'preview_remove' so the preview build drops it
+        # (preview=True excludes preview_remove), then restore 'applied'. The
+        # window is bounded by `finally`; the per-parent lock (#25) closes the
+        # race vs a concurrent real sync (TODO).
+        return await staged_preview(
+            stage_fn=lambda: self._set_sync_status(
+                item_id, member_id, StripeSyncStatus.preview_remove
+            ),
+            cleanup_fn=lambda: self._set_sync_status(
+                item_id, member_id, StripeSyncStatus.applied
+            ),
+            preview_fn=lambda: self._payment_sync.preview_update_payments_recurring(
+                member_id,
+                proration_behavior="none",
+            ),
         )
 
     # ── Private ────────────────────────────────────────────────

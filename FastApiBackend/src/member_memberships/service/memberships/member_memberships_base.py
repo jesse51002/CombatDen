@@ -92,6 +92,27 @@ class MemberMembershipsBase:
             row = result.fetchone()
         return StripeSyncStatus(row[0]) if row else None
 
+    async def _set_sync_status(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        status: StripeSyncStatus,
+    ) -> None:
+        """Stamp a membership's ``stripe_sync_status`` (e.g. preview staging).
+
+        Used by the preview dry-run to stage ``preview_remove`` then restore the
+        prior status. Touches only ``stripe_sync_status``.
+        """
+        sql = load_sql(SQL_DIR / "set_membership_sync_status.sql")
+        params = {
+            "item_id": str(item_id),
+            "member_id": str(member_id),
+            "sync_status": status.value,
+        }
+        async with self._db_pool.session() as session:
+            await session.execute(text(sql), params)
+            await session.commit()
+
     # ── Static Helpers ─────────────────────────────────────────
 
     @staticmethod
