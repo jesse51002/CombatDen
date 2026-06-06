@@ -13,14 +13,14 @@ below (#13–#23). Snapshot of where each stands — full handoff in
 | Item | Status |
 | --- | --- |
 | #13 Part A — remove subscription-level discounts | ✅ DONE (payment_sync + payments side) |
-| #13 Part B — preview shows discounts | ✅ DONE (preview resolves coupons); `preview_*` staging statuses ❌ not wired |
+| #13 Part B — preview shows discounts | ✅ DONE (preview resolves coupons); **`preview_*` staging now wired** for start/cancel/update_price previews (`staged_preview` helper) — discount preview still current-state (needs a signature change, flagged) |
 | #13 Part C — per-discount coupons | ❌ **REJECTED** — kept the 4-bucket sum model (Stripe stacks sequentially, so we sum ourselves; per-membership-sequential percent math verified) |
 | #14 — split explicit freeze into its own service | ✅ DONE (`PaymentSyncFreeze`) |
 | #15 — `_SyncParams` → schema | ✅ DONE (`SyncParams`) |
 | #16 — DB-first + `stripe_sync_status` enum | ✅ DONE — sync reads the unfiltered base (pending rows visible) + stamps `applied`/`deleted`; **ALL lifecycle callers rewired DB-first with verify-and-revert** (`sync_or_revert`); cancel/update_price stage `migrating` so the immutability triggers permit the revert/line-move |
 | #17 — full writeback | ✅ DONE — `PaymentSyncWriteback` (per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on removed rows, sub id, prices) |
 | #18 — discounts ride the membership/item (drop the parallel list) | ✅ DONE ("Part E") |
-| #19 — preview due-now vs recurring split | 🟡 read TOGGLE done (`build_sync_params(..., preview)`; reads bind `:excluded_statuses`); caller-side `preview_*` staging + cleanup + the response split still TODO |
+| #19 — preview due-now vs recurring split | 🟡 read toggle + **caller-side `preview_*` staging + cleanup DONE** (start/cancel/update_price); the due-now/recurring **response split** is deferred (new feature — awaiting review per the user) |
 | #20 — extract once-consumption/end_date settle | ✅ DONE (`PaymentSyncOnceDiscounts`) |
 | #21 — `update_payments_recurring -> None` | ✅ DONE — returns None; the start caller reads the DB (`applied` status), no return extraction |
 | #22 — explicit `proration_behavior` | ✅ DONE (incl. create-path `item.prorate` removal) |
