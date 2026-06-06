@@ -233,6 +233,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_service=payment_sync_service,
         payment_service=payments_payment_service,
         gym_stripe_service=gym_stripe_service,
+        parent_resolver=billing_parent_resolver,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────

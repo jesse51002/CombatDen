@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
+    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
 
 
@@ -62,6 +63,7 @@ class MemberMembershipsService:
         payment_sync_service: PaymentSyncService,
         payment_service: PaymentsStripePaymentService,
         gym_stripe_service: GymStripeService,
+        parent_resolver: BillingParentResolver,
     ) -> None:
         deps = (
             db_pool,
@@ -73,6 +75,7 @@ class MemberMembershipsService:
         self._start = MemberMembershipsStart(
             *deps,
             payment_service=payment_service,
+            parent_resolver=parent_resolver,
         )
         self._update_price = MemberMembershipsUpdatePrice(*deps)
         self._update_discounts = MemberMembershipsUpdateDiscounts(*deps)
