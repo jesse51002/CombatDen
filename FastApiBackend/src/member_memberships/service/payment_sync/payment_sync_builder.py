@@ -55,8 +55,13 @@ class PaymentSyncBuilder:
         self,
         parent: ParentProfile,
         stripe_account_id: str,
+        preview: bool = False,
     ) -> SyncParams:
         """Read the DB, resolve discounts, and assemble the desired bucket.
+
+        ``preview`` is threaded into the read so a dry run sees the staged
+        ``preview_add`` rows (and drops ``preview_remove``) while the real path
+        sees neither — the only difference between the two builds.
 
         Derives the desired subscription state entirely from the DB — the active
         recurring memberships, each carrying its applied discounts (cancelled
@@ -76,6 +81,7 @@ class PaymentSyncBuilder:
         memberships = await self._queries.get_active_memberships(
             family_ids,
             today,
+            preview,
         )
         groups = self._group_by_price(memberships)
 

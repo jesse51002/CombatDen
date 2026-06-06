@@ -5,6 +5,7 @@ from datetime import date
 from uuid import UUID
 
 from schema.gym_discount import DiscountMode
+from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import DurationUnit
 from sqlalchemy import text
 
@@ -21,6 +22,25 @@ from src.shared.sql_loader import load_sql
 
 SYNC_SQL_DIR = SQL_DIR / "payment_sync"
 APPLIED_SQL_DIR = SQL_DIR / "applied_discounts"
+
+# Sync statuses a billing read never includes. The REAL path drops every
+# `preview_*` (staging); the PREVIEW path keeps `preview_add` (the staged
+# additions it's previewing) but still drops `preview_remove`. `deleted` is
+# never billed by either.
+_EXCLUDED_REAL = [
+    StripeSyncStatus.deleted.value,
+    StripeSyncStatus.preview_add.value,
+    StripeSyncStatus.preview_remove.value,
+]
+_EXCLUDED_PREVIEW = [
+    StripeSyncStatus.deleted.value,
+    StripeSyncStatus.preview_remove.value,
+]
+
+
+def _excluded_statuses(preview: bool) -> list[str]:
+    """The sync-status values the read must exclude (real vs preview)."""
+    return _EXCLUDED_PREVIEW if preview else _EXCLUDED_REAL
 
 
 class PaymentSyncQueries:
@@ -55,13 +75,18 @@ class PaymentSyncQueries:
         self,
         family_ids: list[UUID],
         today: date,
+        preview: bool = False,
     ) -> list[ActiveMembershipRow]:
-        """Get the family's active recurring memberships, each with discounts.
+        """Get the family's desired recurring memberships, each with discounts.
 
-        One call: reads the active recurring memberships, then their **active**
+        One call: reads the desired recurring memberships, then their **active**
         applied discounts (the read excludes any past its end_date as of
         ``today`` — the gym-timezone date), and attaches each membership's
         discounts onto its row (the discount rides the membership).
+
+        ``preview`` selects which rows the build sees: the **real** path drops
+        every ``preview_*`` staged row; the **preview** path keeps ``preview_add``
+        (so the dry-run reflects staged additions) and drops ``preview_remove``.
         """
         if not family_ids:
             return []
@@ -70,12 +95,19 @@ class PaymentSyncQueries:
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
-                {"member_ids": [str(uid) for uid in family_ids]},
+                {
+                    "member_ids": [str(uid) for uid in family_ids],
+                    "excluded_statuses": _excluded_statuses(preview),
+                },
             )
             rows = result.mappings().fetchall()
 
         memberships = [self._parse_membership_row(r) for r in rows]
-        discounts_by_item = await self._get_discounts_by_item(family_ids, today)
+        discounts_by_item = await self._get_discounts_by_item(
+            family_ids,
+            today,
+            preview,
+        )
         for membership in memberships:
             membership.discounts = discounts_by_item.get(membership.item_id, [])
         return memberships
@@ -100,14 +132,16 @@ class PaymentSyncQueries:
         self,
         family_ids: list[UUID],
         today: date,
+        preview: bool = False,
     ) -> dict[UUID, list[AppliedDiscount]]:
         """Read the family's active applied discounts, grouped by membership.
 
         Keyed by ``item_id``. The query excludes any discount past its end_date
         as of ``today`` (the gym-timezone date) — the engine's date-lifetime
-        cutoff lives in the SQL, not in code. Reads the unfiltered base table
-        (service-role): half-synced rows (no stripe_coupon_id yet) must still be
-        seen by the sync that resolves them.
+        cutoff lives in the SQL, not in code — and the ``preview_*`` staging rows
+        per the ``preview`` flag (real drops both; preview keeps ``preview_add``).
+        Reads the unfiltered base table (service-role): half-synced rows (no
+        stripe_coupon_id yet) must still be seen by the sync that resolves them.
         """
         sql = load_sql(APPLIED_SQL_DIR / "get_applied_discounts_by_member.sql")
         async with self._db_pool.session() as session:
@@ -116,6 +150,7 @@ class PaymentSyncQueries:
                 {
                     "member_ids": [str(uid) for uid in family_ids],
                     "today": today,
+                    "excluded_statuses": _excluded_statuses(preview),
                 },
             )
             rows = result.mappings().fetchall()

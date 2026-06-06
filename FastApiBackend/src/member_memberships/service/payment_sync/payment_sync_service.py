@@ -178,6 +178,7 @@ class PaymentSyncService:
         params = await self._builder.build_sync_params(
             parent,
             stripe_account_id,
+            preview=True,
         )
         return await self._stripe.preview_execute_sync(
             params.bucket,
