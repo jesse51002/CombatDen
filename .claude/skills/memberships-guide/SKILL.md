@@ -345,8 +345,9 @@ validation and returns a Stripe invoice preview without writing rows.
 - **Append-only memberships.** Re-enrolling is a new row, never a user-facing
   un-cancel; the chronological/overlap/no-active triggers keep the recurring
   history clean. (The only thing that clears `cancel_date` is the cancel's own
-  *failure rollback* while the row is `migrating` — an internal compensating
-  action, not a re-enroll path.)
+  *failure rollback*, permitted while the membership has not yet been removed from
+  Stripe (status is not `deleted`) — an internal compensating action, not a
+  re-enroll path.)
 
 ---
 
