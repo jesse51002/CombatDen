@@ -73,22 +73,6 @@ class OnceDiscount(BaseModel):
     stripe_coupon_id: str
 
 
-class SyncItem(BaseModel):
-    """Enriched item for update_payments_recurring.
-
-    Carries the Stripe fields needed to reconcile the subscription. Discounts
-    are no longer threaded through here — they ride the membership row and are
-    computed per consolidated line at sync.
-    """
-
-    stripe_price_id: str
-    stripe_item_id: str | None = None
-    member_id: UUID
-    plan_id: UUID
-    quantity: int = 1
-    prorate: bool = True
-
-
 class IntervalBucket(BaseModel):
     """All items for one billing interval (discounts ride the items)."""
 

@@ -40,6 +40,9 @@ from src.payments.schema.payments_invoice_schema import (
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
+    from src.member_memberships.service.payment_sync.payment_sync_freeze import (
+        PaymentSyncFreeze,
+    )
     from src.member_memberships.service.payment_sync.payment_sync_service import (
         PaymentSyncService,
     )
@@ -64,6 +67,7 @@ class MemberMembershipsService:
         payment_service: PaymentsStripePaymentService,
         gym_stripe_service: GymStripeService,
         parent_resolver: BillingParentResolver,
+        freeze_service: PaymentSyncFreeze,
     ) -> None:
         deps = (
             db_pool,
@@ -71,7 +75,11 @@ class MemberMembershipsService:
             gym_stripe_service,
         )
         self._cancel = MemberMembershipsCancel(*deps)
-        self._freeze = MemberMembershipsFreeze(*deps)
+        self._freeze = MemberMembershipsFreeze(
+            *deps,
+            parent_resolver=parent_resolver,
+            freeze_service=freeze_service,
+        )
         self._start = MemberMembershipsStart(
             *deps,
             payment_service=payment_service,
@@ -82,10 +90,12 @@ class MemberMembershipsService:
         self._mark_paid_cash = MemberMembershipsMarkPaidCash(
             *deps,
             payment_service=payment_service,
+            parent_resolver=parent_resolver,
         )
         self._charge_card = MemberMembershipsChargeCard(
             *deps,
             payment_service=payment_service,
+            parent_resolver=parent_resolver,
         )
 
     # ── Cancel ─────────────────────────────────────────────────

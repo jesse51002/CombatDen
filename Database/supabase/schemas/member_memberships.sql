@@ -77,11 +77,17 @@ CREATE TRIGGER trg_prevent_plan_id_overwrite
     BEFORE UPDATE OF plan_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_plan_id_overwrite();
 
--- Trigger: cancel_date is immutable once set
+-- Trigger: cancel_date is immutable once set — EXCEPT while the row is
+-- mid-migration. A DB-first caller stages stripe_sync_status = 'migrating' before
+-- its Stripe sync, so a sync that does not confirm can revert (clear) cancel_date
+-- and the DB stays in sync with Stripe. Once the writeback stamps a terminal
+-- status (applied / deleted) the column is immutable again.
 CREATE OR REPLACE FUNCTION prevent_cancel_date_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF OLD.cancel_date IS NOT NULL AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date THEN
+    IF OLD.cancel_date IS NOT NULL
+       AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date
+       AND OLD.stripe_sync_status <> 'migrating' THEN
         RAISE EXCEPTION 'cancel_date cannot be changed once set'
             USING CONSTRAINT = 'cancel_date_immutable';
     END IF;
@@ -93,11 +99,17 @@ CREATE TRIGGER trg_prevent_cancel_date_overwrite
     BEFORE UPDATE OF cancel_date ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_cancel_date_overwrite();
 
--- Trigger: stripe_item_id is immutable
+-- Trigger: stripe_item_id is immutable once set — EXCEPT while the row is
+-- mid-migration. A price migration moves the membership's line to the new price's
+-- Stripe item; the caller stages stripe_sync_status = 'migrating' first, so the
+-- writeback may re-stamp the line id (and a failed migration can revert). Once the
+-- writeback stamps a terminal status (applied) the line id is immutable again.
 CREATE OR REPLACE FUNCTION prevent_stripe_item_id_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF OLD.stripe_item_id IS NOT NULL AND NEW.stripe_item_id IS DISTINCT FROM OLD.stripe_item_id THEN
+    IF OLD.stripe_item_id IS NOT NULL
+       AND NEW.stripe_item_id IS DISTINCT FROM OLD.stripe_item_id
+       AND OLD.stripe_sync_status <> 'migrating' THEN
         RAISE EXCEPTION 'stripe_item_id cannot be changed once set'
             USING CONSTRAINT = 'stripe_item_id_immutable';
     END IF;

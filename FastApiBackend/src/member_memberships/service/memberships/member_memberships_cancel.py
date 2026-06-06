@@ -33,14 +33,17 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         member_id: UUID,
         idempotency_key: UUID,
     ) -> date:
-        """Cancel a specific active recurring membership (DB-first).
+        """Cancel a specific active recurring membership (DB-first, verified).
 
-        Writes ``cancel_date`` to the DB FIRST, then runs the param-less sync,
-        which re-derives the desired state (the cancelled row is excluded by the
-        read), removes the line from Stripe, and stamps the row ``deleted``. The
-        cancel is then **verified**: if the sync did not confirm on Stripe (the
-        row was not stamped ``deleted``), the ``cancel_date`` is reverted so the
-        DB stays in sync with Stripe.
+        Writes ``cancel_date`` + stages ``stripe_sync_status = 'migrating'`` FIRST,
+        then runs the param-less sync, which re-derives the desired state (the
+        cancelled row is excluded by the read), removes the line from Stripe, and
+        stamps the row ``deleted``. The cancel is then **verified**: if the sync
+        did not confirm on Stripe (the row was not stamped ``deleted``), the
+        cancel is reverted — ``cancel_date`` is cleared and the row reset to
+        ``applied`` (the ``migrating`` state is what permits clearing the
+        otherwise-immutable ``cancel_date``). ``stripe_item_id`` is left intact
+        (historical invoice-line record).
 
         If the membership is already cancelled, this is a no-op.
 
@@ -65,11 +68,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
-        # A membership that never reached Stripe (no line id) has nothing to
-        # confirm there — skip the deleted-verify but still revert on error.
-        had_stripe_line = row["stripe_item_id"] is not None
-
-        # ── DB-first: record the cancel, THEN converge Stripe ──
+        # ── DB-first: set cancel_date + stage 'migrating', THEN converge Stripe ──
         cancel_date = await self._crm_cancel(
             item_id,
             member_id,
@@ -85,8 +84,8 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 )
             except PaymentsResourceNotFoundError:
                 # Stripe no longer has the line — the cancel is already true on
-                # Stripe's side. Record it deleted and keep the cancel (the
-                # verify below then passes; no revert).
+                # Stripe's side. Record it deleted so the verify passes; the
+                # cancel stands.
                 logger.warning(
                     "Stripe resource not found during cancel (line already "
                     "gone); marking deleted: item_id=%s, member_id=%s",
@@ -104,7 +103,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             revert_fn=lambda: self._uncancel(item_id, member_id),
             entity_name="member_membership",
             crm_pk=str(item_id),
-            verify_fn=_verify if had_stripe_line else None,
+            verify_fn=_verify,
         )
         return cancel_date
 
@@ -170,11 +169,12 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         member_id: UUID,
         today: date,
     ) -> date:
-        """Mark membership as cancelled in the CRM database.
+        """Set ``cancel_date`` + stage ``migrating`` in the CRM database.
 
-        Returns the resolved ``cancel_date`` (the date through which
-        the membership remains active). Only writes ``cancel_date`` — the
-        ``stripe_item_id`` is left intact as the historical invoice-line record.
+        Returns the resolved ``cancel_date`` (the date through which the
+        membership remains active). Only writes ``cancel_date`` +
+        ``stripe_sync_status`` — ``stripe_item_id`` is left intact as the
+        historical invoice-line record.
         """
         cancel_sql = load_sql(SQL_DIR / "member_memberships_cancel.sql")
         params = {
@@ -193,10 +193,10 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         item_id: UUID,
         member_id: UUID,
     ) -> None:
-        """Revert a cancel: clear ``cancel_date`` when the sync did not confirm.
+        """Revert a cancel whose sync did not confirm.
 
-        Restores the membership to active so the DB matches Stripe (which still
-        carries the line). Leaves ``stripe_item_id`` intact.
+        Clears ``cancel_date`` and resets the row to ``applied`` (permitted only
+        while the row is ``migrating``). Leaves ``stripe_item_id`` intact.
         """
         sql = load_sql(SQL_DIR / "member_memberships_uncancel.sql")
         params = {

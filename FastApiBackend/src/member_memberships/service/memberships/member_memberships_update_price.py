@@ -1,18 +1,20 @@
-"""Upgrade a membership to its plan's currently active price."""
+"""Upgrade a membership to its plan's currently active price (DB-first)."""
 
 import logging
 from uuid import UUID
 
+from schema.member_membership import StripeSyncStatus
 from sqlalchemy import text
 
+import src.shared.db_schema_path  # noqa: F401
 from src.member_memberships import SQL_DIR
-from src.member_memberships.schema.payment_sync_schema import SyncItem
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
+from src.shared.db_first_helpers import sync_or_revert
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
@@ -29,23 +31,29 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         idempotency_key: UUID,
         prorate: bool = False,
     ) -> None:
-        """Upgrade a membership to its plan's active price.
+        """Upgrade a membership to its plan's active price (DB-first).
 
-        The caller does not choose the target price — the
-        service always targets the one ``membership_plan_prices``
-        row with ``is_active = true`` for the plan. If the
-        membership is already on that price the CRM row is left
-        alone, but Stripe is still re-synced defensively.
+        The caller does not choose the target price — the service always targets
+        the one ``membership_plan_prices`` row with ``is_active = true`` for the
+        plan. If the membership is already on that price the CRM row is left
+        alone and Stripe is re-synced defensively. Otherwise the new ``price_id``
+        is written to the DB FIRST, then the param-less sync migrates the Stripe
+        line; the migration is **verified** (the row's ``stripe_item_id`` must
+        move to the new price's line) and the ``price_id`` is reverted if the
+        sync did not confirm, so the DB stays in sync with Stripe.
 
         Args:
             item_id: The membership item.
             member_id: The member.
             idempotency_key: Stripe idempotency key.
-            prorate: Whether to prorate the change.
+            prorate: Whether to prorate the change (``always_invoice`` vs
+                ``none``).
 
         Raises:
             ValueError: If membership not found, cancelled, ended,
                 or no active price exists for the plan.
+            SyncNotConfirmedError: If the migration could not be confirmed on
+                Stripe (the DB change has been reverted).
         """
         row = await self._get_membership(item_id, member_id)
         self._validate_update_price(row, item_id, member_id)
@@ -55,24 +63,56 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
             row["plan_id"],
         )
 
-        already_active = row["price_id"] == active_price["price_id"]
+        proration_behavior = "always_invoice" if prorate else "none"
 
-        await self._sync_to_active_price(
-            row=row,
-            member_id=member_id,
-            active_price=active_price,
-            prorate=prorate,
-            idempotency_key=idempotency_key,
-        )
-
-        if already_active:
+        if row["price_id"] == active_price["price_id"]:
+            # Already on the active price — no DB change to make. Re-sync
+            # defensively (idempotent); nothing to verify or revert.
+            await self._payment_sync.update_payments_recurring(
+                member_id,
+                idempotency_key=idempotency_key,
+                proration_behavior=proration_behavior,
+            )
             return
 
+        old_price_id = row["price_id"]
+        old_total_price = row["price"]
+
+        # ── DB-first: write new price + stage 'migrating', THEN converge Stripe ──
+        # 'migrating' lets the writeback move the (otherwise immutable)
+        # stripe_item_id to the new price's line, and lets a failed migration
+        # revert. The writeback stamps the row back to 'applied' on success.
         await self._crm_update_price(
             item_id=item_id,
             member_id=member_id,
             new_price_id=active_price["price_id"],
             total_price=active_price["price"],
+            sync_status=StripeSyncStatus.migrating,
+        )
+
+        async def _verify() -> bool:
+            # Success = the writeback stamped the row back to 'applied'
+            # (migrating -> applied); still 'migrating' means the sync did not
+            # confirm the line move.
+            status = await self._get_sync_status(item_id, member_id)
+            return status == StripeSyncStatus.applied
+
+        await sync_or_revert(
+            sync_fn=lambda: self._payment_sync.update_payments_recurring(
+                member_id,
+                idempotency_key=idempotency_key,
+                proration_behavior=proration_behavior,
+            ),
+            revert_fn=lambda: self._crm_update_price(
+                item_id=item_id,
+                member_id=member_id,
+                new_price_id=old_price_id,
+                total_price=old_total_price,
+                sync_status=StripeSyncStatus.applied,
+            ),
+            entity_name="member_membership",
+            crm_pk=str(item_id),
+            verify_fn=_verify,
         )
 
     async def preview_update_price(
@@ -83,9 +123,8 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
     ) -> PaymentsInvoicePreviewResponse | None:
         """Preview upgrading a membership to the plan's active price.
 
-        Runs every validation ``update_price`` runs and returns
-        the Stripe invoice preview for the swap — or a zero-delta
-        preview when the membership is already on the active price.
+        Runs every validation ``update_price`` runs and returns the Stripe
+        invoice preview.
 
         Raises:
             ValueError: Same conditions as ``update_price``.
@@ -93,79 +132,18 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         row = await self._get_membership(item_id, member_id)
         self._validate_update_price(row, item_id, member_id)
 
-        active_price = await self._get_active_price_for_plan(
-            row["gym_id"],
-            row["plan_id"],
-        )
-
-        cancel_item, add_item = self._build_sync_items(
-            row=row,
-            member_id=member_id,
-            active_price=active_price,
-            prorate=prorate,
-        )
+        # NOTE: a true price-change preview must reflect the membership ON the
+        # new price, which needs preview-staging (write the new price_id on a
+        # preview row, preview, revert) — that lands with the caller-side
+        # preview_* staging work. Until then this previews the family's CURRENT
+        # recurring state. Tracked; not the real price preview yet.
+        proration_behavior = "always_invoice" if prorate else "none"
         return await self._payment_sync.preview_update_payments_recurring(
             member_id,
-            add_ids=[add_item],
-            cancel_ids=[cancel_item],
+            proration_behavior=proration_behavior,
         )
 
     # ── Private ────────────────────────────────────────────────
-
-    async def _sync_to_active_price(
-        self,
-        row: dict,
-        member_id: UUID,
-        active_price: dict,
-        prorate: bool,
-        idempotency_key: UUID,
-    ) -> None:
-        """Run the Stripe re-sync for the active price."""
-        cancel_item, add_item = self._build_sync_items(
-            row=row,
-            member_id=member_id,
-            active_price=active_price,
-            prorate=prorate,
-        )
-        await self._payment_sync.update_payments_recurring(
-            member_id,
-            add_ids=[add_item],
-            cancel_ids=[cancel_item],
-            idempotency_key=idempotency_key,
-        )
-
-    @staticmethod
-    def _build_sync_items(
-        row: dict,
-        member_id: UUID,
-        active_price: dict,
-        prorate: bool,
-    ) -> tuple[SyncItem, SyncItem]:
-        """Build (cancel_item, add_item) for the payment sync call."""
-        if not row["stripe_price_id"]:
-            raise ValueError(
-                f"Membership missing stripe_price_id for item_id={row.get('item_id')}"
-            )
-        if not row["stripe_item_id"]:
-            raise ValueError(f"Membership missing stripe_item_id for item_id={row.get('item_id')}")
-        cancel_item = SyncItem(
-            stripe_price_id=row["stripe_price_id"],
-            stripe_item_id=row["stripe_item_id"],
-            member_id=member_id,
-            plan_id=row["plan_id"],
-        )
-        # Discounts no longer thread through the sync items. The applied
-        # snapshots stay frozen on this membership's item_id (unchanged by a
-        # price swap — only price_id/total_price change), so the sync-time
-        # coupon step re-attaches them to the consolidated line from the
-        # snapshot table.
-        add_item = SyncItem(
-            stripe_price_id=active_price["stripe_price_id"],
-            member_id=member_id,
-            plan_id=row["plan_id"],
-            prorate=prorate,
-        )
-        return cancel_item, add_item
 
     @staticmethod
     def _validate_update_price(
@@ -214,14 +192,20 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         member_id: UUID,
         new_price_id: UUID,
         total_price: int,
+        sync_status: StripeSyncStatus,
     ) -> None:
-        """Update price_id and total_price on a membership."""
+        """Update price_id + total_price + staged sync status on a membership.
+
+        Used both for the forward migration (stage ``migrating``) and the revert
+        (restore the old price + ``applied``). Leaves ``stripe_item_id`` intact.
+        """
         sql = load_sql(SQL_DIR / "member_memberships_update_price.sql")
         params = {
             "item_id": str(item_id),
             "member_id": str(member_id),
             "new_price_id": str(new_price_id),
             "total_price": total_price,
+            "sync_status": sync_status.value,
         }
         async with self._db_pool.session() as session:
             await session.execute(text(sql), params)

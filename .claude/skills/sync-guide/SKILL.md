@@ -135,23 +135,70 @@ The first callers live in `src/member_memberships/service/memberships/`;
 action writes the freeze window to the DB, then calls the standalone
 **`PaymentSyncFreeze`** service directly (§8); the main sync only does a
 *maintenance re-apply* of the parent's already-resolved freeze window (step 2 of
-§3). The freeze caller (`member_memberships_freeze.py`) is one of the lifecycle
-callers **not yet rewired** to this pattern (see below).
+§3). The freeze caller (`member_memberships_freeze.py`) injects
+`BillingParentResolver` + `PaymentSyncFreeze`, writes the freeze window first,
+re-resolves the parent (so it carries the window), then converges Stripe.
 
 Plus **plan reprice**: `membership_plans/service/plans/membership_plans_price.py`
 fans out via `bulk_payment_sync` — the one *deliberate* bulk price migration that
 survives (the two discount cascades were removed; see `PaymentRefactor.md` §6).
 
-> **Deferred — the lifecycle callers are not yet rewired (currently broken).**
-> Step 1 of the refactor changed `update_payments_recurring`'s signature
-> (DB-derived, no `add_ids`/`cancel_ids`) and moved freeze into `PaymentSyncFreeze`,
-> but the lifecycle callers in `src/member_memberships/service/memberships/` and
-> `src/members/service/management/` **still pass `add_ids=…` / `cancel_ids=…`**
-> and still drive freeze through the sync — so those call sites do not match the
-> new engine and are broken until rewired to the DB-first / `PaymentSyncFreeze`
-> pattern. `SyncItem` (still in `payment_sync_schema.py`) survives only because
-> those callers import it; the engine itself no longer uses it. This is the next
-> step, not done here.
+### The caller contract: DB-first, then verified, then revert-on-failure
+
+Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
+`src/shared/db_first_helpers.py` encapsulates it:
+
+1. **Write the desired state to the DB first** — insert the pending membership
+   (`not_added`), set `cancel_date`, write the new `price_id`, write the freeze
+   window, or set `account_linked_to_id`.
+2. **Call the param-less sync** (`update_payments_recurring`, or
+   `PaymentSyncFreeze.sync_freeze_state` for freeze) — it re-derives the desired
+   state from that DB write and converges Stripe, then writes back
+   `stripe_sync_status`.
+3. **Verify the writeback landed, and revert the DB write if it did not** — so the
+   DB never drifts out of sync with Stripe.
+   `sync_or_revert(sync_fn, revert_fn, *, entity_name, crm_pk, verify_fn=None)`
+   runs the sync; on exception it reverts and re-raises; if `verify_fn` returns
+   `False` it reverts and raises `SyncNotConfirmedError`. The verify reads the
+   `stripe_sync_status` the writeback stamps (via `_get_sync_status` on
+   `MemberMembershipsBase`, reading the **unfiltered** base — the view hides
+   `not_added` / `deleted`):
+
+   | caller | DB write | verify | revert |
+   | --- | --- | --- | --- |
+   | start (recurring) | insert pending row (`not_added`) | row flips `not_added → applied` | delete the pending row |
+   | cancel | set `cancel_date` + stage `migrating` | row flips `migrating → deleted` | clear `cancel_date`, reset `applied` |
+   | update_price | write new `price_id` + stage `migrating` | row flips `migrating → applied` | restore old `price_id`/`total_price`, reset `applied` |
+   | freeze / unfreeze | write / clear the freeze window | — (no membership-row status) | restore / re-clear the freeze window |
+   | link / unlink | set / clear `account_linked_to_id` | — (child has no recurring) | unlink / re-link |
+
+   Callers whose DB change does not map to a single membership-row status
+   transition (freeze, link) pass `verify_fn=None` and get the achievable
+   guarantee: **revert-on-exception**.
+
+**The `migrating` status unlocks the revert past the immutability triggers.**
+`cancel_date` and `stripe_item_id` are immutable once set (`trg_prevent_cancel_date_overwrite`
+/ `trg_prevent_stripe_item_id_overwrite`) — **except while the row's
+`stripe_sync_status = 'migrating'`**. So cancel and update_price stage `migrating`
+as part of their DB-first write: that lets the writeback move the immutable
+`stripe_item_id` to the new line (price migration), and lets the revert clear
+`cancel_date` / restore the price when the sync does not confirm. The writeback
+stamps a terminal status (`applied` / `deleted`), after which the columns are
+immutable again. (This is the engine half of the rule the `migrating` enum value
+exists for — keep it in sync with the schema triggers if either changes.)
+
+> **Known residual:** if Stripe converged but the writeback failed to stamp the
+> column (rare — it is the last step), the revert undoes the DB change while Stripe
+> holds it. The idempotent re-sync / reconciler (§10) reconciles that on the next
+> run — the DB stays in sync with Stripe "as much as possible" without a full saga.
+> **`stripe_item_id` is never nulled on a delete/cancel** — it is the historical
+> invoice-line record (a `deleted` row keeps its line id so you can trace which
+> Stripe item / invoice it billed).
+
+The `#23` callers that only *validate* the parent (`member_memberships_charge_card.py`,
+`member_memberships_mark_paid_cash.py`) inject `BillingParentResolver` and call
+`resolve_parent` directly; they run no sync, so no verify/revert. `SyncItem` is
+**gone** — the engine and every caller derive from the DB.
 
 ---
 
@@ -480,9 +527,9 @@ as the subscription-lifecycle dispatcher, not a freeze handler.
   else **create**. The `proration_behavior` is an **explicit param** threaded from
   `update_payments_recurring` (`"none"` / `"always_invoice"`, default `"none"`) —
   passed straight to both the create and update Stripe requests. It is **no longer
-  inferred** from a per-item `prorate` (that inference, and `_resolve_prorate`, are
-  gone; `SyncItem.prorate` is a vestigial lifecycle-caller field the engine
-  ignores). Every subscription carries `StripeSubscriptionMetadata(member_id,
+  inferred** from a per-item `prorate` (that inference, `_resolve_prorate`, and the
+  whole `SyncItem` model are gone — the caller chooses `proration_behavior`
+  explicitly). Every subscription carries `StripeSubscriptionMetadata(member_id,
   gym_id)`. `pay_first_invoice_out_of_band` only applies on **create**, and the
   out-of-band first-invoice path triggers only when `proration_behavior ==
   "always_invoice"`.
@@ -692,8 +739,7 @@ guard so an hourly sweep isn't pointless Stripe writes.
   (`PaymentSyncStripe` — `execute_sync`, `preview_execute_sync`, `_sync_bucket`).
 - **Price writeback:** `price_writeback.py` (`PriceWriteback.sync_prices_from_stripe`).
 - **Intermediate models:** `member_memberships/schema/payment_sync_schema.py`
-  (`ActiveMembershipRow` (now carries `discounts`), `AppliedDiscount`,
-  `OnceDiscount`, `SyncItem` (lifecycle-caller leftover — unused by the engine),
+  (`ActiveMembershipRow` (carries `discounts`), `AppliedDiscount`, `OnceDiscount`,
   `IntervalBucket`, `LineDiscountValue` (bounds + percent-XOR-dollar validators),
   `ResolvedDiscounts`, `SyncParams`). `ParentProfile` now lives in
   `src/shared/billing_parent.py`.

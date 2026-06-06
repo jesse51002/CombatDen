@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
+    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
         payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
+        parent_resolver: BillingParentResolver,
     ) -> None:
         super().__init__(
             db_pool,
@@ -54,6 +56,7 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
             gym_stripe_service,
         )
         self._payment_service = payment_service
+        self._parent_resolver = parent_resolver
 
     async def charge_card(
         self,
@@ -75,7 +78,7 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
                 the requested gym.
             PaymentsStripeError: If Stripe returns an error.
         """
-        parent = await self._payment_sync.resolve_parent(request.member_id)
+        parent = await self._parent_resolver.resolve_parent(request.member_id)
         if parent.gym_id != request.gym_id:
             raise ValueError(
                 f"Member {request.member_id} is not in gym {request.gym_id}",

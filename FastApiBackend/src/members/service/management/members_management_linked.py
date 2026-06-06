@@ -19,6 +19,7 @@ from src.members.service.management.members_management_base import (
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
 )
+from src.shared.db_first_helpers import sync_or_revert
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
@@ -64,11 +65,14 @@ class MembersManagementLinked(MembersManagementBase):
         Validates the child is not already linked and has no active recurring
         memberships, then sets ``account_linked_to_id`` and NULLs all
         stripe/card/freeze fields (required by the ``linked_account_no_stripe``
-        DB check). Finally, re-syncs the parent's subscription so
-        linked-discount assignments are recalculated.
+        DB check). Finally, re-syncs the parent's subscription so linked-discount
+        tiers are recalculated for the new family size.
 
-        Sync is called with empty ``add_ids``/``cancel_ids`` — no Stripe items
-        are added or cancelled, so no proration or mid-cycle charges are issued.
+        DB-first: the link is written FIRST, then the parent sync converges
+        Stripe. If that sync fails the link is reverted (the child is unlinked)
+        so the family size in the DB matches Stripe. The child has no recurring
+        memberships (asserted), so there is no membership-row status to verify —
+        the guarantee here is revert-on-failure.
 
         Args:
             member_id: The child profile to link.
@@ -93,25 +97,17 @@ class MembersManagementLinked(MembersManagementBase):
 
         await self._assert_no_active_recurring(member_id)
 
-        link_sql = load_sql(_MANAGEMENT_SQL / "members_management_link.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(link_sql),
-                {
-                    "member_id": str(member_id),
-                    "parent_member_id": str(parent_member_id),
-                },
-            )
-            row = result.mappings().fetchone()
-            if not row:
-                raise ValueError(f"Member {member_id} not found")
-            await session.commit()
+        # ── DB-first: write the link, THEN converge the parent's Stripe sub ──
+        await self._write_link(member_id, parent_member_id)
 
-        await self._sync.update_payments_recurring(
-            parent_member_id,
-            add_ids=[],
-            cancel_ids=[],
-            idempotency_key=uuid4(),
+        await sync_or_revert(
+            sync_fn=lambda: self._sync.update_payments_recurring(
+                parent_member_id,
+                idempotency_key=uuid4(),
+            ),
+            revert_fn=lambda: self._write_unlink(member_id),
+            entity_name="member_link",
+            crm_pk=str(member_id),
         )
 
         return await self._get_member(member_id)
@@ -209,6 +205,10 @@ class MembersManagementLinked(MembersManagementBase):
         Clears ``account_linked_to_id`` on the child, then re-syncs the old
         parent so the consolidated subscription reflects the smaller family.
 
+        DB-first: the unlink is written FIRST, then the old parent's sync
+        converges Stripe. If that sync fails the unlink is reverted (the child is
+        re-linked to the old parent) so the family size in the DB matches Stripe.
+
         Args:
             member_id: The child profile to unlink.
 
@@ -226,22 +226,17 @@ class MembersManagementLinked(MembersManagementBase):
 
         await self._assert_no_active_recurring(member_id)
 
-        unlink_sql = load_sql(_MANAGEMENT_SQL / "members_management_unlink.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(unlink_sql),
-                {"member_id": str(member_id)},
-            )
-            row = result.mappings().fetchone()
-            if not row:
-                raise ValueError(f"Member {member_id} not found")
-            await session.commit()
+        # ── DB-first: write the unlink, THEN converge the old parent's sub ──
+        await self._write_unlink(member_id)
 
-        await self._sync.update_payments_recurring(
-            old_parent_id,
-            add_ids=[],
-            cancel_ids=[],
-            idempotency_key=uuid4(),
+        await sync_or_revert(
+            sync_fn=lambda: self._sync.update_payments_recurring(
+                old_parent_id,
+                idempotency_key=uuid4(),
+            ),
+            revert_fn=lambda: self._write_link(member_id, old_parent_id),
+            entity_name="member_link",
+            crm_pk=str(member_id),
         )
 
         return await self._get_member(member_id)
@@ -279,8 +274,6 @@ class MembersManagementLinked(MembersManagementBase):
 
         return await self._sync.preview_update_payments_recurring(
             parent_member_id,
-            add_ids=[],
-            cancel_ids=[],
         )
 
     async def preview_unlink_account(
@@ -309,11 +302,57 @@ class MembersManagementLinked(MembersManagementBase):
 
         return await self._sync.preview_update_payments_recurring(
             old_parent_id,
-            add_ids=[],
-            cancel_ids=[],
         )
 
     # ── Private ────────────────────────────────────────────────
+
+    async def _write_link(
+        self,
+        member_id: UUID,
+        parent_member_id: UUID,
+    ) -> None:
+        """Set ``account_linked_to_id`` on the child (also NULLs its stripe/card
+        fields, per the ``linked_account_no_stripe`` DB check).
+
+        Used both as the forward link write and to REVERT an unlink (re-link to
+        the old parent — the child's card fields were already NULL while linked,
+        so re-running the NULLing is a no-op there).
+        """
+        sql = load_sql(_MANAGEMENT_SQL / "members_management_link.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "member_id": str(member_id),
+                    "parent_member_id": str(parent_member_id),
+                },
+            )
+            row = result.mappings().fetchone()
+            if not row:
+                raise ValueError(f"Member {member_id} not found")
+            await session.commit()
+
+    async def _write_unlink(
+        self,
+        member_id: UUID,
+    ) -> None:
+        """Clear ``account_linked_to_id`` on the child.
+
+        Used both as the forward unlink write and to REVERT a link whose parent
+        sync failed. NOTE: a link NULLs the child's stripe/card fields and this
+        revert only restores the relationship, not those fields — a linked child
+        carries no card by design, so the child simply re-adds one if needed.
+        """
+        sql = load_sql(_MANAGEMENT_SQL / "members_management_unlink.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"member_id": str(member_id)},
+            )
+            row = result.mappings().fetchone()
+            if not row:
+                raise ValueError(f"Member {member_id} not found")
+            await session.commit()
 
     async def _assert_no_active_recurring(
         self,

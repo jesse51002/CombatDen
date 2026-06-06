@@ -90,8 +90,6 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
         await self._payment_sync.update_payments_recurring(
             member_id,
-            add_ids=[],
-            cancel_ids=[],
             idempotency_key=idempotency_key,
         )
 
@@ -116,8 +114,6 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
         return await self._payment_sync.preview_update_payments_recurring(
             member_id,
-            add_ids=[],
-            cancel_ids=[],
         )
 
     # ── Private ────────────────────────────────────────────────
