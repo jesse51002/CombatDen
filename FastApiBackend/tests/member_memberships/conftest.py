@@ -18,7 +18,7 @@ def memberships_service(db_pool, stripe_client):
 
 @pytest.fixture(scope="module")
 def payment_sync_service(db_pool, stripe_client):
-    """Expose MembershipPaymentSyncService for tests that need to
+    """Expose PaymentSyncService for tests that need to
     trigger a standalone resync after state has already been set up.
 
     Linked-discount recalculation is gone — the sync now reads frozen

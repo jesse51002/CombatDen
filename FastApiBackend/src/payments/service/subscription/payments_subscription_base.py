@@ -178,18 +178,6 @@ class PaymentsSubscriptionBase:
 
         return items
 
-    @staticmethod
-    def _build_subscription_discounts(
-        discounts: list[SubscriptionItemDiscount],
-    ) -> list[dict[str, str]] | str:
-        """Build subscription-level discount params.
-
-        Returns a list of coupon dicts, or empty string to clear.
-        """
-        if discounts:
-            return [{"coupon": d.coupon} for d in discounts]
-        return ""
-
     # ── Item Consolidation ────────────────────────────────────────
 
     @staticmethod
@@ -307,7 +295,6 @@ class PaymentsSubscriptionBase:
         all_coupon_ids: list[str] = []
         for item in request.items:
             all_coupon_ids.extend(d.coupon for d in item.discounts)
-        all_coupon_ids.extend(d.coupon for d in request.subscription_discounts)
         if all_coupon_ids:
             await self._validate_coupon_ids(all_coupon_ids, read_opts)
 

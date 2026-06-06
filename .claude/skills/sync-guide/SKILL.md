@@ -5,27 +5,38 @@ description: >-
   the code in src/member_memberships/service/payment_sync/ that re-derives the
   full desired Stripe subscription state from the CRM on every membership
   mutation and converges Stripe onto it (reconciliation toward desired state).
-  Covers MembershipPaymentSyncService (update_payments_recurring,
-  preview_update_payments_recurring, bulk_payment_sync), the read path
-  (resolve_parent / family ids / active recurring / applied-discount snapshots
-  in payment_sync_queries.py), the builder (build_desired_items,
-  consolidate_by_price, build_subscription_bucket, plan_line_discounts in
-  payment_sync_builder.py), the read-before-write _current_coupon_ids gate,
-  coupon resolution orchestration (PaymentSyncCoupons + set_snapshot_coupon_id /
-  stamp_snapshot_end_date writebacks), execute_sync (create/update/cancel +
-  freeze) in payment_sync_stripe.py, and the post-discount price writeback
-  (price_writeback.py). Load this whenever you touch the sync orchestration,
-  the parent/family resolution, the per-line discount planner, the once
-  consumption gate, the deterministic coupon find-or-create, the price
-  writeback, the preview dry-run, or the deferred scheduled reconciler.
-  Trigger on "payment sync", "update_payments_recurring", "re-derive desired
-  state", "converge Stripe", "consolidate by price", "resolve_parent", "family
-  ids", "plan_line_discounts", "current coupon ids", "read before write",
+  Covers PaymentSyncService (update_payments_recurring,
+  preview_update_payments_recurring, bulk_payment_sync), the shared
+  BillingParentResolver, the builder service PaymentSyncBuilder (build_sync_params
+  — read memberships-with-discounts, group by price, assemble the bucket), the
+  read path (family ids / active recurring memberships each carrying their
+  applied discounts in payment_sync_queries.py), the discount service
+  PaymentSyncDiscounts (the per-membership-sequential discount math + the
+  deterministic coupon find-or-create with validate-or-replace), the standalone
+  PaymentSyncFreeze (pause_collection from the DB freeze window), the pre-sync
+  PaymentSyncOnceDiscounts settle (once-consumption finalize + the
+  read-before-write live-coupon read), the coupon-link / once-consumption
+  writebacks (set_applied_discount_coupon_id / mark_once_consumed), execute_sync
+  (create/update/cancel, explicit proration_behavior) in payment_sync_stripe.py,
+  and the post-discount price writeback (price_writeback.py). Load this whenever
+  you touch the sync orchestration, the parent/family resolution, the builder,
+  the discount math, the once-consumption settle, the deterministic coupon
+  find-or-create, the price writeback, the preview dry-run, or the deferred
+  scheduled reconciler. Trigger on "payment sync",
+  "update_payments_recurring", "re-derive desired state", "converge Stripe",
+  "group by price", "resolve_parent", "family ids", "discounts ride the
+  membership", "aggregate_line_values", "once discounts", "read before write",
   "execute_sync", "price writeback", "preview sync", "bulk sync", "reconciler",
   "why did this re-sync", or any change to the payment_sync engine.
 ---
 
 # Payment Sync — the re-derive-and-converge engine
+
+> ⚠️ **Critical billing infrastructure — human in the loop.** This engine
+> controls how real members are billed. **Never edit it in a big sweep.** Every
+> change is proposed, reviewed, and approved **one piece at a time** before the
+> next — propose → wait → write, for each part as you go. Do not batch connected
+> edits and present them together. A mistake here mis-bills real customers.
 
 This is the deep domain knowledge for CombatDen's **payment sync engine**: the
 code that, on every membership mutation, throws away whatever Stripe currently
@@ -39,15 +50,19 @@ is a living document — see the bottom).
 This skill owns the **orchestration / mechanics** in
 `src/member_memberships/service/payment_sync/`. It does **not** own:
 
-- **What discounts mean** — the three-table identity / versioned-value / snapshot
-  model, the once-vs-ongoing lifetime spec, the `end_date` semantics, and the
-  rationale for the percent×quantity fix are owned by `discounts-guide` (its
-  §4–§5 is the seam). This skill describes how the engine *consumes* snapshots,
-  not what they mean.
+- **What discounts mean** — the three-table identity / versioned-value /
+  applied-discount model, the once-vs-ongoing lifetime spec, the `end_date`
+  semantics, and the rationale for the percent×quantity fix are owned by
+  `discounts-guide` (its §4–§5 is the seam). This skill describes how the engine
+  *consumes* applied discounts, not what they mean.
 - **The low-level Stripe subscription/coupon primitives** (`get_subscription`,
-  create / update / cancel subscription, coupon retrieve/create, upcoming-invoice
-  preview) → `payments-guide`. The engine *calls* them; it does not redocument
-  their internals.
+  create / update / cancel subscription, coupon find/create/delete,
+  upcoming-invoice preview) → `payments-guide`. The engine *calls* them; it does
+  not redocument their internals. **Hard rule: nothing under `payment_sync/` ever
+  touches the Stripe SDK directly** — coupon I/O is delegated to
+  `PaymentsStripeDiscountService`, subscription/invoice I/O to the subscription
+  service. A direct `stripe.*` / `.v1.*` call anywhere in the engine is a bug
+  (the anti-pattern `PaymentSyncCoupons` used to have).
 - **The membership lifecycle callers** (start / cancel / freeze / price-change /
   discount-change / link) → `memberships-guide`. They *trigger* the engine.
 
@@ -55,7 +70,7 @@ This skill owns the **orchestration / mechanics** in
 
 ## 1. What the engine is — re-derive, converge, self-heal
 
-`MembershipPaymentSyncService` is a **declarative reconciler** (the same pattern
+`PaymentSyncService` is a **declarative reconciler** (the same pattern
 as Kubernetes controllers / Terraform): on every membership mutation it does not
 apply a targeted delta to Stripe — it **rebuilds the entire desired
 subscription** from the CRM and converges Stripe onto it. Any transient drift
@@ -80,37 +95,63 @@ Three properties fall out of "re-derive from scratch every time":
 
 ## 2. Triggers + entry points
 
-`MembershipPaymentSyncService` exposes exactly three public entry points (plus
-`resolve_parent` for upstream validation):
+`PaymentSyncService` exposes exactly three public entry points (plus
+`resolve_parent`, which now just delegates to `BillingParentResolver` for
+upstream validation):
 
 | method | what it does | callers |
 | --- | --- | --- |
-| `update_payments_recurring` | the real sync: re-derive → freeze/unfreeze → attach coupons → execute → write sub id + prices back | every membership mutation |
-| `preview_update_payments_recurring` | the dry run: same read/build, then a Stripe invoice *preview*, **no writes** (§9) | the CRM "what will this charge?" preview |
-| `bulk_payment_sync` | loop members, fresh `uuid4()` idempotency key each, call `update_payments_recurring` with empty add/cancel | reprice fan-out; the future reconciler (§10) |
+| `update_payments_recurring(member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none")` | the real sync: resolve → maintenance freeze re-apply → settle once → build (re-derive bucket **and resolve coupons**) → execute → write coupon links + sub id + prices back (§3) | every membership mutation |
+| `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: same DB-derived build **incl. discount resolution** (so the preview reflects discounts), then a Stripe invoice *preview*, **no writes** (§9) | the CRM "what will this charge?" preview |
+| `bulk_payment_sync(member_ids)` | loop members, fresh `uuid4()` idempotency key each, call `update_payments_recurring` | reprice fan-out; the future reconciler (§10) |
+
+**There are no imperative `add_ids` / `cancel_ids` inputs.** The desired state is
+derived purely from the DB on every call — `update_payments_recurring` takes only
+a `member_id` (any family member), an idempotency key, the out-of-band-first-
+invoice flag, and an explicit `proration_behavior` (`"none"` / `"always_invoice"`,
+default `"none"` — proration is a first-class param now, no longer inferred from a
+per-item `prorate`). What to bill is whatever the DB says is active *right now*,
+never a caller-supplied delta. (This is the load-bearing shape: a caller writes
+its mutation to the DB **first**, then calls the sync, which reads that DB and
+converges Stripe to it.)
 
 **What triggers a real sync** — each lifecycle caller (owned by
-`memberships-guide`) calls `update_payments_recurring`:
+`memberships-guide`) writes its change to the DB then calls
+`update_payments_recurring`:
 
 | caller | trigger |
 | --- | --- |
 | `member_memberships_start.py` | new membership |
 | `member_memberships_cancel.py` | cancel a membership |
-| `member_memberships_freeze.py` | freeze / unfreeze (uses `freeze_end_date` / `unfreeze`) |
 | `member_memberships_update_price.py` | mid-cycle price swap |
 | `member_memberships_update_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
 | `members_management_linked.py` | link / unlink a family account |
 
-The first five callers live in `src/member_memberships/service/memberships/`; the
-last, `members_management_linked.py`, lives in `src/members/service/management/`
+The first callers live in `src/member_memberships/service/memberships/`;
+`members_management_linked.py` lives in `src/members/service/management/`
 (linking is a member-management action, not a membership-lifecycle one).
+
+**Freeze / unfreeze no longer flows through the main sync.** The explicit freeze
+action writes the freeze window to the DB, then calls the standalone
+**`PaymentSyncFreeze`** service directly (§8); the main sync only does a
+*maintenance re-apply* of the parent's already-resolved freeze window (step 2 of
+§3). The freeze caller (`member_memberships_freeze.py`) is one of the lifecycle
+callers **not yet rewired** to this pattern (see below).
 
 Plus **plan reprice**: `membership_plans/service/plans/membership_plans_price.py`
 fans out via `bulk_payment_sync` — the one *deliberate* bulk price migration that
 survives (the two discount cascades were removed; see `PaymentRefactor.md` §6).
 
-`add_ids` / `cancel_ids` are `SyncItem` lists; the empty/empty call is a pure
-re-derive (used by `bulk_payment_sync` and freeze-only flows).
+> **Deferred — the lifecycle callers are not yet rewired (currently broken).**
+> Step 1 of the refactor changed `update_payments_recurring`'s signature
+> (DB-derived, no `add_ids`/`cancel_ids`) and moved freeze into `PaymentSyncFreeze`,
+> but the lifecycle callers in `src/member_memberships/service/memberships/` and
+> `src/members/service/management/` **still pass `add_ids=…` / `cancel_ids=…`**
+> and still drive freeze through the sync — so those call sites do not match the
+> new engine and are broken until rewired to the DB-first / `PaymentSyncFreeze`
+> pattern. `SyncItem` (still in `payment_sync_schema.py`) survives only because
+> those callers import it; the engine itself no longer uses it. This is the next
+> step, not done here.
 
 ---
 
@@ -119,192 +160,263 @@ re-derive (used by `bulk_payment_sync` and freeze-only flows).
 The real path runs these steps in order. Read the method for the exact code; the
 sequence is:
 
-1. **Validate freeze params** (`_validate_freeze_params`): a freeze/unfreeze
-   action **cannot** be combined with membership changes, and freeze+unfreeze
-   together is rejected — billing order on Stripe matters, so these are separate
-   operations.
-2. **Build sync params** (`_build_sync_params`, §4) — the pure read path that
-   resolves the parent, family, active memberships, applied-discount snapshots,
-   and the desired `IntervalBucket`. No writes.
-3. **Freeze / unfreeze first** (`PaymentSyncStripe.sync_freeze_state`) — applies
-   `pause_collection` before any item change, because the billing order matters.
-4. **Compute + attach this cycle's coupons** (`_attach_computed_coupons`, §6–§7) —
-   read the live subscription's current discounts, plan each consolidated line,
-   find-or-create the deterministic coupon, attach it to the bucket item, and
-   write each resolved `stripe_coupon_id` (and any `once` consumption) back onto
-   the contributing snapshots.
+1. **Resolve parent + gym Stripe account** (`BillingParentResolver.resolve`, §4) —
+   one call returns `(ParentProfile, stripe_account_id)`: follow
+   `account_linked_to_id` once to the paying parent, then look up the gym's
+   Connect account. Everything below operates on this resolved parent.
+2. **Maintenance freeze re-apply** (`PaymentSyncFreeze.sync_freeze_state` with the
+   resolved parent, §8) — converge `pause_collection` to the parent's DB freeze
+   window (`parent.is_frozen`) **before any item change**, so a membership change
+   on a frozen account keeps the pause in the correct billing order. This is a
+   *re-apply*, not the freeze action itself — the explicit freeze/unfreeze wrote
+   the DB and called `PaymentSyncFreeze` directly.
+3. **Finalize once discounts** (`PaymentSyncOnceDiscounts.sync_once_discounts`,
+   §6) — a **pre-sync DB settle**: detect any `once` discount Stripe has already
+   invoiced and stamp its `end_date`, so the build below reads an
+   already-settled DB and the **applied-discount read excludes** the consumed
+   ones by their stamped `end_date` (no live-Stripe read in the convergence).
+4. **Build the desired bucket + resolve coupons**
+   (`PaymentSyncBuilder.build_sync_params`, §4–§5) — read family ids + active
+   memberships (each carrying its applied discounts), **group by `price_id`**,
+   hand the groups to `PaymentSyncDiscounts` (the math + find-or-create, §7) which
+   returns a `ResolvedDiscounts` (per-price coupons + the `applied_discount_id →
+   coupon_id` links), and assemble the `IntervalBucket` with the coupons attached
+   to each line. Returns `SyncParams` (bucket + parent + account + `coupon_links`).
+   **DB-derived, no add/cancel inputs, no DB writes** (find-or-create is an
+   idempotent gym-wide Stripe op).
 5. **Execute the sync** (`PaymentSyncStripe.execute_sync`, §8) — create / update /
-   cancel the monthly subscription to match the bucket.
-6. **Write the subscription id back** (`update_profile_sub_id` →
-   `update_profile_sub_ids.sql`) — the new sub id (or `None` if cancelled) onto
-   the parent's `members` row.
-7. **Mirror post-discount totals back** (`PriceWriteback.sync_prices_from_stripe`,
-   §8) — read the upcoming invoice and fan the post-discount line totals across
-   the family's membership rows + the parent's monthly total.
+   cancel the monthly subscription to match the bucket, with the explicit
+   `proration_behavior`.
+6. **Write back** — persist each resolved coupon link
+   (`set_applied_discount_coupon_id` for every `applied_discount_id → coupon_id`
+   in `params.coupon_links`), then `update_profile_sub_id`
+   (→ `update_profile_sub_ids.sql`) writes the new sub id (or `None` if cancelled)
+   onto the parent's `members` row, then `PriceWriteback.sync_prices_from_stripe`
+   (§8) reads the upcoming invoice and fans the post-discount line totals across
+   the family's membership rows + the parent's monthly total. *(These writebacks
+   are still an interim inline sequence in the orchestrator — the unified
+   `PaymentSyncWriteback` that also stamps `stripe_sync_status` is the next step,
+   not done here.)*
 
 Returns the `PaymentsSubscriptionResponse`, or `None` if the sync cancelled the
-subscription (empty bucket).
+subscription (empty bucket). *(Returning a value is itself deferred — the
+DB-first design intends the sync to be fire-and-forget; for now it still returns
+the response for the callers that read it.)*
 
 ---
 
 ## 4. The read path — parent / family / memberships / snapshots
 
-`_build_sync_params` is the **pure read half** (no CRM or Stripe writes) shared by
-the real and preview paths. It runs four reads via `PaymentSyncQueries`, resolves
-the gym Stripe account, applies the cancel filter, then builds the bucket:
+### Parent resolution is a shared service (`BillingParentResolver`)
+
+The paying-parent + gym-account lookup lives in **`BillingParentResolver`**
+(`src/shared/billing_parent_resolver.py`), a DI-registered shared service — the
+one place that lookup lives, so every billing-touching service depends on it
+rather than re-running the query. The `ParentProfile` model lives in
+`src/shared/billing_parent.py` and `resolve_parent.sql` in `src/shared/sql/`.
+
+| method | returns | what it does |
+| --- | --- | --- |
+| `resolve_parent(member_id)` | `ParentProfile` | follow `account_linked_to_id` **once** (single-level hierarchy) to the paying parent; raise if no profile or no `stripe_customer_id` (`resolve_parent.sql`) |
+| `resolve(member_id)` | `(ParentProfile, stripe_account_id)` | `resolve_parent` **then** `GymStripeService.get_stripe_account_id(gym_id)` — the one call the sync's step 1 makes |
+
+`PaymentSyncService` injects this resolver as `_parent`; its own public
+`resolve_parent` (kept for upstream validation callers) just delegates to it.
+(`PaymentSyncQueries.resolve_parent` no longer exists.)
+
+`resolve_parent.sql` reads **`member_billing_profile`** (a `security_invoker` view
+over `members` exposing the billing columns incl. `account_linked_to_id`) and
+self-joins it via `COALESCE(account_linked_to_id, member_id)` so a parent resolves
+to itself and a child resolves up one level.
+
+### `PaymentSyncBuilder.build_sync_params` — the pure read + build half
+
+`build_sync_params(parent, stripe_account_id)` lives on the **`PaymentSyncBuilder`**
+sub-service (`payment_sync_builder.py`) — the **pure desired-state derivation** (no
+CRM or Stripe writes) shared by the real and preview paths. The parent + gym
+account are **resolved upstream and passed in** — the builder does not resolve
+them. It reads via `PaymentSyncQueries`, groups by price, delegates discount
+resolution, and assembles the bucket:
 
 | step | how | SQL |
 | --- | --- | --- |
-| **resolve parent** | follow `account_linked_to_id` **once** (single-level hierarchy) to the paying parent; raise if no profile or no `stripe_customer_id` | `resolve_parent.sql` |
-| **gym Stripe account** | `GymStripeService.get_stripe_account_id(gym_id)` | (payments-guide) |
 | **family ids** | parent + every child whose `account_linked_to_id = parent` in that gym | `get_family_ids.sql` |
-| **active recurring memberships** | `plan_type = 'recurring' AND cancel_date IS NULL`, joined to plan + price for `duration_unit`, `stripe_price_id`, `price` | `get_active_recurring.sql` |
-| **applied-discount snapshots** | every snapshot on the family's memberships, joined to its value version (percent/dollar/mode) + plan (`plan_id`, `stripe_item_id`) | `get_applied_discounts_by_member.sql` |
+| **active memberships, each with its discounts** | `get_active_memberships(family_ids, today)` makes **one call**: `plan_type = 'recurring' AND cancel_date IS NULL` on `member_memberships` (rows are `stripe_item_id IS NOT NULL`), joined to plan + price; then reads the family's **active** applied discounts and **attaches each membership's discounts onto its `ActiveMembershipRow.discounts`** (the discount rides the membership). | `get_active_recurring.sql` + `get_applied_discounts_by_member.sql` |
 
-`resolve_parent.sql` and `get_family_ids.sql` read **`member_billing_profile`** (a
-`security_invoker` view over `members` exposing the billing columns incl.
-`account_linked_to_id`); `resolve_parent` self-joins it via
-`COALESCE(account_linked_to_id, member_id)` so a parent resolves to itself and a
-child resolves up one level. The snapshot read joins the **unfiltered** base
-tables (`member_membership_applied_discounts_unfiltered`,
-`gym_discount_values_unfiltered`) at service-role — half-synced rows with no
-`stripe_coupon_id` yet must still be visible to the sync that resolves them
-(the filtered client view hides those).
+`get_family_ids.sql` reads the same `member_billing_profile` view. The
+applied-discount read joins the **unfiltered** base tables
+(`member_membership_applied_discounts_unfiltered`, `gym_discount_values_unfiltered`)
+at service-role — half-synced rows with no `stripe_coupon_id` yet must still be
+visible to the sync that resolves them (the filtered client view hides those). It
+also binds `:today` (the gym-timezone date) and keeps only discounts with
+`end_date IS NULL OR end_date > today` — **the date-lifetime cutoff lives in the
+query, not in code**: an ongoing discount past its end date, or a consumed `once`
+(whose `end_date` the pre-sync settle stamped), is simply absent from the read, so
+the math downstream sees only active discounts.
 
-### The cancel filter — full identity, not price
+The builder then **groups the memberships by `price_id`** into
+`dict[price_id, list[ActiveMembershipRow]]` (`_group_by_price`), hands that to
+`PaymentSyncDiscounts.resolve` (§7 — returns a `ResolvedDiscounts`), and
+**assembles the bucket** (`_build_bucket`): one desired item per price group,
+quantity = number of memberships on the line, discounts = that price's resolved
+coupons. There is no separate flat "snapshots" list threaded alongside the
+bucket — discounts ride the membership rows and the coupons ride the bucket items.
 
-After reading active memberships, the engine removes `cancel_ids` by the
-**`(member_id, plan_id)`** key, **not** by `stripe_price_id`:
+### Desired state is the DB — no cancel filter, no add resolution
 
-```python
-cancel_keys = {(item.member_id, item.plan_id) for item in cancel_ids}
-memberships = [m for m in memberships if (m.member_id, m.plan_id) not in cancel_keys]
-```
-
-On a shared family plan every row shares the same price, so price-only filtering
-would drop **every sibling** when one child cancels. This is a load-bearing
-correctness rule.
-
-New `add_ids` are resolved to `(duration_unit, price)` via `get_price_intervals.sql`
-(`_resolve_add_intervals` → `map_add_ids_to_intervals`); existing rows already
-carry their interval/price from the membership read.
+The desired memberships are **exactly the active rows the read returns** — there
+is nothing to filter or resolve. `get_active_recurring.sql` already excludes
+cancelled rows (`cancel_date IS NULL`), so what we want to bill is whatever is
+active in the DB *right now*. Because a cancel caller writes `cancel_date` to the
+DB **before** calling the sync, the cancelled membership is simply absent from
+this read — there is no in-memory cancel filter to key on `(member_id, plan_id)`,
+and no `add_ids` to map to intervals (a new membership row already carries its own
+interval/price). The thing we deliberately **don't** want here is an imperative
+delta layered on top of the DB read: the DB is the single source of desired
+state, full stop.
 
 ---
 
-## 5. The builder — consolidation + the per-line discount planner
+## 5. The builder service (`PaymentSyncBuilder`) — group by price + assemble the bucket
 
-`payment_sync_builder.py` is pure logic (no DB / Stripe). Three shaping
-functions plus the planner:
+`payment_sync_builder.py` is the **`PaymentSyncBuilder`** sub-service (DI:
+`db_pool` + `PaymentSyncDiscounts`). Its public `build_sync_params` (§4) does the
+read + orchestration; the rest is two pure private helpers — no loose module
+functions:
 
-- **`build_desired_items(memberships, add_intervals)`** — current memberships
-  become `IntervalDesiredItem`s with `prorate=False` (existing items never
-  prorate); adds keep the caller's prorate. Cancellations must already be
-  filtered upstream (§4).
-- **`consolidate_by_price(items)`** — group by `stripe_price_id`, **sum
-  quantities**, sum prices, take the `stripe_item_id` from whichever member of
-  the group has one, and resolve `prorate` by priority
-  (`new_no_prorate > new_with_prorate > old`, via `_resolve_prorate`). This is
-  the consolidation that produces a single quantity-N line per price — the reason
-  the percent÷quantity fix exists.
-- **`build_subscription_bucket(desired, existing_sub_id)`** — consolidate, then
-  wrap into one `IntervalBucket` (all recurring plans are monthly, enforced by
-  the DB `recurring_must_be_monthly` constraint, so there is exactly one bucket).
+- **`_group_by_price(memberships)`** — group the active `ActiveMembershipRow`s
+  into `dict[price_id, list[ActiveMembershipRow]]`. All recurring plans are
+  monthly (DB `recurring_must_be_monthly` constraint), so the price is the only
+  consolidation axis: each `price_id` is one subscription line whose quantity is
+  the number of memberships on it. Grouping happens **on the membership rows**
+  (each carrying its own discounts), *before* desired items exist — so the
+  discount service sees the raw per-member discounts of each consolidated line.
+- **`_build_bucket(groups, coupons_by_price, existing_sub_id)`** — one
+  `PaymentsSubscriptionDesiredItem` per price group: `stripe_price_id` +
+  `stripe_item_id` from the group's first row, `quantity = len(group)`,
+  `discounts =` that price's resolved coupons
+  (`coupons_by_price.get(price_id, [])`). Wrap into one monthly `IntervalBucket`.
 
-### The per-line discount planner (`plan_line_discounts`)
-
-This is where the engine turns frozen snapshots into per-line effective values.
-For every bucket item **that already carries a `stripe_item_id`** (an existing
-Stripe line — a brand-new line with no item id yet is **skipped**, §11), it
-gathers the snapshots frozen onto that line (`by_item[snap.stripe_item_id]`) and
-runs `_plan_one_line`:
-
-1. **`end_date` exclusion** (`_is_past_end_date`): drop any snapshot whose
-   resolved `end_date` is `<= today` (inclusive cutoff). This is how the engine
-   enforces arbitrary end dates Stripe can't express.
-2. **`once`-consumption gate** (`_is_consumed_once`, §6): a `once` snapshot with a
-   null `end_date`, a non-null stored `stripe_coupon_id`, and that coupon **no
-   longer present** on the live subscription is **consumed** → its id goes into
-   `consumed_ids` (the caller stamps its `end_date`) and it is dropped from this
-   cycle. A `once` snapshot with no coupon yet is still **pending**.
-3. **Per-mode aggregation** (`_aggregate_values`): the survivors are grouped by
-   `discount_mode` so **`once` and `ongoing` never mix** into one value. Per mode:
-   `line_percent = (Σ per-unit percents) ÷ quantity` and `line_amount = Σ
-   per-unit dollar_offs`. A mode emits a percent value and/or a dollar value only
-   when its sum is non-zero. Each value carries the `applied_discount_id`s of the
-   same-mode snapshots that fed it (`contributing_ids`) — its writeback set.
-
-The output is a `LineDiscountPlan` per line (`values` + `consumed_ids`). **The
-planner does no Stripe or DB calls** — it only decides each line's value and
-which snapshots fed / were consumed; the service owns the coupon find-or-create
-and the writebacks.
+Between those two, `build_sync_params` calls `PaymentSyncDiscounts.resolve(groups,
+account, today)` — **all** the discount math + coupon find-or-create lives there
+(§7), not in the builder. The builder only groups and assembles.
 
 > **The percent÷quantity split is the consumer side of the
 > `discounts-guide` percent×quantity fix.** *Why* a 10%-off-1-of-2 must become
-> 5%-on-the-quantity-2-line is owned by `discounts-guide` §4. This engine just
-> divides by the consolidated quantity.
+> 5%-on-the-quantity-2-line is owned by `discounts-guide` §4. The engine applies
+> it in `PaymentSyncDiscounts._aggregate_line_values` (§7), averaging the
+> per-membership effective fractions across the consolidated quantity.
 
 ---
 
-## 6. Read-before-write — `_current_coupon_ids` and why
+## 6. The pre-sync once-discount settle (`PaymentSyncOnceDiscounts`)
 
-Before computing anything, `_attach_computed_coupons` reads the **live
-subscription's current discounts** via `_current_coupon_ids`:
+`once`-consumption finalization is a **standalone DI service**,
+`PaymentSyncOnceDiscounts` (`payment_sync_once_discounts.py`), that runs as a
+**pre-sync phase** (step 3 of §3) — before the bucket is built. Its job: settle
+the DB so the convergence reads a DB already in the state it should be in and
+the planner needs no live-Stripe read. It also *is* the scheduled reconciler's
+once-finalization duty, which is why it stands alone for reuse (§10).
 
-```python
-sub = await self._subscriptions.get_subscription(existing_sub_id, stripe_account_id)
-coupon_ids = set(sub.discounts)            # subscription-level coupon ids
-for item in sub.items:
-    coupon_ids.update(item.discounts)       # plus every item-level coupon id
-```
+`sync_once_discounts(parent, stripe_account_id)` does:
 
-The live coupon set is the **union of `sub.discounts` + every
-`item.discounts`** (both are `list[str]` of coupon ids on
-`PaymentsSubscriptionResponse`). When there is **no** existing sub it returns the
-empty set (a brand-new sub has no prior discounts, so every `once` snapshot is
-still pending).
+1. **Query the candidates** — `get_unconsumed_once_discounts(family_ids)` (SQL
+   `get_unconsumed_once_discounts.sql`) returns the family's `once` discounts that
+   are **unconsumed** (`end_date IS NULL`) **and attached** (`stripe_coupon_id IS
+   NOT NULL`), joined to the value version for the mode → a list of
+   `OnceDiscount(applied_discount_id, stripe_coupon_id)`. A `once` with no coupon
+   yet is excluded (never attached ⇒ can't be consumed). No candidates → no-op.
+2. **Read the live coupon set** — `_current_coupon_ids` (moved here from the
+   service) reads the live subscription and unions `sub.discounts` + every
+   `item.discounts` (both `list[str]` of coupon ids on
+   `PaymentsSubscriptionResponse`). Empty when there is no existing sub — a
+   brand-new sub has invoiced nothing, so every `once` is still pending.
+3. **Set math to find consumed coupons** — `{d.stripe_coupon_id for d in
+   once_discounts} - current_coupon_ids`: a candidate coupon **missing** from the
+   live set means Stripe already invoiced it (a `once` coupon vanishes after its
+   one use) ⇒ consumed. No consumed coupons → no-op.
+4. **Map consumed coupons back to ids** — `[d.applied_discount_id for d in
+   once_discounts if d.stripe_coupon_id in consumed_coupons]`. A coupon can be
+   shared by several same-value `once` discounts, so one consumed coupon can stamp
+   several rows.
+5. **Batch-stamp** — `mark_once_consumed(applied_discount_ids, today)` stamps
+   every consumed row's `end_date` in **one** statement (`mark_once_consumed.sql`,
+   `WHERE applied_discount_id = ANY(:applied_discount_ids) AND end_date IS NULL` —
+   idempotent on re-run).
 
-**Why this read is the genuinely new path:** the old sync only ever *pushed*
-desired state built from the CRM — it never read Stripe's actual subscription.
-Reading first buys two things:
-
-- **`once`-consumption truth.** "Has Stripe already invoiced this `once`
-  coupon?" can only be answered by Stripe (Stripe owns outcomes). A stored coupon
-  still **present** ⇒ pending; **absent** ⇒ consumed. Without the read, the
-  engine can't tell a consumed `once` from a pending one.
-- **Drift safety.** Reconciling against the *actual* live coupon set, not a CRM
-  guess, is what lets the converge step be correct after a missed webhook or
-  partial prior run.
-
-This is the read half `PaymentRefactor.md` §4 calls out as the gap the old
-push-only `execute_sync` left open; the discount engine fills it for the coupon
-computation. (The lifecycle/status-absorption half — Stripe-cancelled-by-dunning
-— is still future work in the reconciler.)
+**Why the live read exists at all:** "has Stripe already invoiced this `once`
+coupon?" can only be answered by Stripe (Stripe owns outcomes). Doing it as a
+pre-sync settle — set math over the whole candidate set, one batch write — is the
+thing we want, rather than the per-row predicate the convergence used to run
+inline: the convergence stays a pure date-driven function and the once-truth is
+established once, up front. This is the read half `PaymentRefactor.md` §4 calls
+out as the gap the old push-only `execute_sync` left open. (The
+lifecycle/status-absorption half — Stripe-cancelled-by-dunning — is still future
+work in the reconciler, §10.)
 
 ---
 
-## 7. Coupon resolution orchestration + writebacks
+## 7. The discount service (`PaymentSyncDiscounts`) — math + coupons + links
 
-`_apply_line_plan` turns each `LineDiscountPlan` into real Stripe coupons + DB
-writebacks. For one line:
+`PaymentSyncDiscounts` (`payment_sync_discounts.py`) owns **all** the discount
+math and the coupon resolution. `resolve(groups, stripe_account_id, today)` takes
+the price-grouped memberships (from the builder, §5) and returns a
+**`ResolvedDiscounts`** (`coupons_by_price` + `links`). For each price line:
 
-1. **Stamp consumption** — for every `consumed_id` the planner found, call
-   `stamp_snapshot_consumed` → `stamp_snapshot_end_date.sql` (service-role,
-   writes the unfiltered base table, idempotent: only stamps a row whose
-   `end_date IS NULL`). Recording the consumption date short-circuits all future
-   presence checks — the `end_date` exclusion drops the snapshot forever after,
-   so the engine **stops querying Stripe** for it.
-2. **Find-or-create one coupon per surviving per-mode value** —
-   `PaymentSyncCoupons.find_or_create(value, stripe_account_id)`.
-3. **Write each value's coupon back onto its own contributing snapshots** —
-   `set_snapshot_coupon_id` → `set_snapshot_coupon_id.sql` (service-role,
-   unfiltered base table) for every `applied_discount_id` in
-   `value.contributing_ids`. The writeback is **per-value**: a `once` value's
-   coupon lands on the `once` rows, an `ongoing` value's on the `ongoing` rows,
-   so the `once` presence handle stays exact.
-4. **Attach to the line** — if the bucket item exists, set
-   `item.discounts = [SubscriptionItemDiscount(coupon=cid) …]`.
+1. **Aggregate the line's values** (`_aggregate_line_values`, the math below) → at
+   most one `once` value and one `ongoing` value, each a percent **or** a dollar.
+2. **Order dollar before percent**, then **find-or-create one coupon per value**
+   (`PaymentSyncCoupons.find_or_create`) on the gym's Connect account. The ordered
+   coupons become `coupons_by_price[price_id]` —
+   `[SubscriptionItemDiscount(coupon=cid) …]` — and Stripe applies them in attach
+   order (dollar→percent).
+3. **Record the links** — every `applied_discount_id` in the value's
+   `contributing_ids` maps to that value's coupon in `links`. Per-value: a `once`
+   value's coupon lands on the `once` rows, an `ongoing` value's on the `ongoing`
+   rows — so the `once` presence handle the next pre-sync settle reads stays
+   exact. The **real** path writes these links back via
+   `set_applied_discount_coupon_id` (→ `set_applied_discount_coupon_id.sql`,
+   service-role, unfiltered base table); preview writes nothing.
 
-### `PaymentSyncCoupons` — deterministic ids, no registry table
+The builder attaches `coupons_by_price` onto the bucket items; the orchestrator
+writes `links` back after `execute_sync`. `resolve` does **no DB writes** (so
+preview is discount-aware safely) and **no live-Stripe read** — consumption was
+already settled upstream (§6) and dropped here by `end_date`.
+
+### The discount math (`_aggregate_line_values`)
+
+The discounts reaching the math are **already date-filtered by the read** (§4):
+the applied-discount query excludes any whose `end_date <= today` (the
+gym-timezone today) — that is how the engine enforces the arbitrary end dates
+Stripe can't express **and** how a consumed `once` (the pre-sync settle, §6,
+stamped its `end_date`) drops out. So the math is **pure aggregation, no date
+logic** (`_is_past_end_date` no longer exists — the filter lives in SQL). For one
+consolidated line (a price group of memberships), per discount mode (`once` /
+`ongoing`, kept separate — different Stripe durations):
+
+1. **Per-membership-sequential percent, averaged across the line.** Within one
+   membership, percents compound **multiplicatively**: `eff = 1 − Π(1 − pⱼ/100)`
+   (30% then 20% → 0.44, not 0.50). The per-membership effective fractions are
+   **summed across the line** then divided by the line quantity:
+   `line_percent = (Σ effᵢ / qty) × 100`. A membership with no discount contributes
+   0, so a partly-discounted line averages correctly.
+2. **Dollars summed.** A mode's fixed-dollar offs are summed across the line's
+   memberships (a fixed-dollar coupon applies to the whole quantity-N line).
+
+Dollar vs percent are **never** combined into one value — they become separate
+coupons (Stripe sequences them dollar→percent via attach order); the math is only
+the percentage-level compounding/averaging + the dollar sum. Each value carries the
+`applied_discount_id`s of the same-mode discounts that fed it (`contributing_ids`)
+— its writeback set. **No DB or Stripe calls** in the math.
+
+### `PaymentSyncCoupons` — deterministic ids, validate-or-replace, no registry table
+
+`PaymentSyncCoupons` owns only the **id scheme + validate-or-replace policy**. It
+**never touches the Stripe SDK** — every coupon find / create / delete is
+delegated to **`PaymentsStripeDiscountService`** (the single payments-layer owner
+of Stripe coupon I/O). This is a hard rule for the whole engine: *no service under
+`payment_sync/` calls the Stripe SDK directly* — coupon I/O goes through the
+discount service, subscription/invoice I/O through the subscription service (§1).
 
 Coupons are **computed at sync, never pre-baked**. Each line value maps to one
 Stripe coupon by a **deterministic id** that is a pure function of the value:
@@ -314,25 +426,48 @@ Stripe coupon by a **deterministic id** that is a pure function of the value:
 | percent | `pct_<bps>_<mode>` where `bps = round(percentage_off * 100)` (basis points) |
 | dollar | `amt_<cents>_<mode>` where `cents = int(dollar_off or 0)` |
 
-`<mode>` is the `DiscountMode` value (`once` / `ongoing`). Because the id is a
-pure function, `find_or_create` is **idempotent**: it retrieves by id first, and
-on create passes the id so a concurrent/repeat create **collides** on Stripe's
-side; the `stripe.InvalidRequestError` is caught and treated as "already
-exists." One coupon per distinct value+mode is **reused across every member** on
-the gym's Connect account — **no coupon registry table** is needed.
+`<mode>` is the `DiscountMode` value (`once` / `ongoing`). **We set this id
+ourselves** — Stripe lets you supply your own coupon `id` on create (an arbitrary
+string up to 200 chars; if you omit it Stripe generates a random one). It is
+**not a UUID** and not Stripe-generated: it *is* the value signature, mirrored
+into `name` too. Because the id is a pure function of the value, **the same value
+always resolves to the same coupon** — that is what makes find-or-create
+**idempotent**: `find_or_create` calls `PaymentsStripeDiscountService.find_discount`
+(retrieve-by-id, returns `None` if absent) first; `create_discount` passes the
+deterministic id and is **itself idempotent** — a concurrent create of the same
+value collides on Stripe's side and the service catches it and returns the
+existing coupon. One coupon per distinct value+mode is **reused across every
+member** on the gym's Connect account — **no coupon registry table** is needed.
+
+**Validate-or-replace (the id alone is not trusted).** A coupon's value is
+**immutable** on Stripe, and the id only *names* the intended value — the coupon
+object under that id could have drifted (hand-edited in the dashboard, or written
+by older math). So when `find_discount` returns an existing coupon,
+`find_or_create` **validates** its stored `percentage_off` / `amount_off` **and**
+`duration` against the value (`_matches_value`): a match is reused; a mismatch is
+**deleted** (`PaymentsStripeDiscountService.delete_discount`) and recreated with
+the correct value under the same id. This self-heals a corrupted coupon gym-wide —
+every member on that value picks up the corrected coupon on their next sync.
+(Deleting a coupon does not retroactively strip it from subscriptions that already
+applied it; those correct themselves on their own next sync, when the recreated
+coupon is re-attached.)
 
 Mode → Stripe duration (`_MODE_TO_STRIPE_DURATION`): `once` → Stripe **`once`**
 coupon; `ongoing` → Stripe **`forever`** coupon. Stripe has no native arbitrary
 end date, so an ongoing coupon is always `forever` on Stripe and the `end_date`
-cutoff is enforced by **us** dropping the snapshot (the §5 exclusion). Percent
-coupons round to 2 decimals (Stripe's `percent_off` limit); dollar coupons set
-`amount_off` (integer cents) + `currency = "usd"`.
+cutoff is enforced by **the read** — the applied-discount query (§4) excludes a
+discount once its `end_date` passes. Percent coupons round to 2 decimals (Stripe's
+`percent_off` limit); dollar coupons set `amount_off` (integer cents) +
+`currency = "usd"`. No `crm_discount_id` / metadata back-reference: a value-coupon
+is shared across every discount at that value, made on the spot (the old
+one-coupon-per-`gym_discounts`-row metadata was removed).
 
 > **Discount *semantics* live in `discounts-guide`.** The meaning of `once` vs
 > `ongoing`, the lifetime spec (duration-span XOR explicit `end_date`), and the
-> snapshot model are owned there. This section documents only how the engine
-> *resolves* a snapshot into a coupon and writes the result back. The low-level
-> Stripe coupon retrieve/create calls themselves are `payments-guide`.
+> applied-discount model are owned there. This section documents only how the
+> engine *resolves* an applied discount into a coupon and writes the result back.
+> The low-level Stripe coupon create/find/delete primitives live in
+> `PaymentsStripeDiscountService` (`payments-guide`).
 
 ---
 
@@ -340,33 +475,56 @@ coupons round to 2 decimals (Stripe's `percent_off` limit); dollar coupons set
 
 ### `execute_sync` (`payment_sync_stripe.py`)
 
+`PaymentSyncStripe` is now **create / update / cancel only** — the freeze ops moved
+out to `PaymentSyncFreeze` (below), so its class and module docstrings describe it
+as the subscription-lifecycle dispatcher, not a freeze handler.
 `PaymentSyncStripe.execute_sync` dispatches off the bucket:
 
 - **bucket has items** → `_sync_bucket`: **update** if `existing_sub_id` is set,
-  else **create**. The `proration_behavior` is `"always_invoice"` if **any**
-  bucket item requests `prorate` (a mid-cycle swap cuts the prorated delta as an
-  immediate invoice), else `"none"`. Existing items always carry `prorate=False`,
-  so this only fires when a caller opted into proration on a new/replacement item.
-  Every subscription carries `StripeSubscriptionMetadata(member_id, gym_id)`.
-  `pay_first_invoice_out_of_band` only applies on **create**.
+  else **create**. The `proration_behavior` is an **explicit param** threaded from
+  `update_payments_recurring` (`"none"` / `"always_invoice"`, default `"none"`) —
+  passed straight to both the create and update Stripe requests. It is **no longer
+  inferred** from a per-item `prorate` (that inference, and `_resolve_prorate`, are
+  gone; `SyncItem.prorate` is a vestigial lifecycle-caller field the engine
+  ignores). Every subscription carries `StripeSubscriptionMetadata(member_id,
+  gym_id)`. `pay_first_invoice_out_of_band` only applies on **create**, and the
+  out-of-band first-invoice path triggers only when `proration_behavior ==
+  "always_invoice"`.
 - **empty bucket + existing sub** → **cancel** the subscription.
 - **empty bucket + no sub** → `None` (nothing to do).
 
 Sub-operation **idempotency keys are suffixed** off the base key:
-`:sub_create`, `:sub_update`, `:sub_cancel`, and `:freeze` / `:unfreeze` on the
-freeze path. The create/update/cancel calls themselves are `payments-guide`
-primitives.
+`:sub_create`, `:sub_update`, `:sub_cancel`. The `:freeze` / `:unfreeze` suffixes
+now live in `PaymentSyncFreeze`, off the same base key. The create/update/cancel
+calls themselves are `payments-guide` primitives.
 
-### Freeze (`sync_freeze_state`)
+### Freeze — the standalone `PaymentSyncFreeze` service
 
-Freeze is `pause_collection`. Precedence: an explicit `freeze_end_date` freezes;
-an explicit `unfreeze` resumes; otherwise it falls back to the parent profile's
-intrinsic `is_frozen` (the freeze-window property on `ParentProfile`). No-op when
-there's no `stripe_sub_id`. It is **idempotent** (re-freezing updates the resume
-date; unfreezing a non-paused sub is a Stripe no-op) and it lets
-`PaymentsResourceNotFoundError` **propagate** — a missing sub during freeze means
-the CRM expects billing but Stripe has none, an out-of-sync state that must
-surface.
+Freeze is `pause_collection`, and it is now its own DI service,
+**`PaymentSyncFreeze`** (`payment_sync_freeze.py`) — extracted out of
+`PaymentSyncStripe`. It is **DB-first and minimal**:
+`sync_freeze_state(parent, stripe_account_id, *, idempotency_key) -> bool`
+converges Stripe purely from **`parent.is_frozen`** (the DB freeze window on
+`ParentProfile`): frozen in the DB → pause collection (with the parent's
+`freeze_end_date` as the resume date), otherwise → resume. There are **no
+explicit `freeze_end_date` / `unfreeze` flags** and **no DB writes** here — the
+freeze-date DB write happens *elsewhere*, in the freeze/unfreeze request handler,
+before this service is called. (`_validate_freeze_params` is gone — there is no
+freeze-vs-membership-change conflict to validate because freeze no longer rides on
+the membership sync.)
+
+Two callers:
+
+- **The explicit freeze/unfreeze request** writes the freeze window to the DB,
+  then calls `sync_freeze_state` **directly** with the resolved parent.
+- **The main sync** calls it for a **maintenance re-apply** (step 2 of §3) with the
+  parent it already resolved — no extra read — so a membership change on a frozen
+  account keeps `pause_collection` in the correct billing order.
+
+No-op (returns the DB state) when there's no `stripe_sub_id`. **Idempotent**
+(re-freezing updates the resume date; unfreezing a non-paused sub is a Stripe
+no-op) and it lets `PaymentsResourceNotFoundError` **propagate** — a missing sub
+when the CRM expects billing is an out-of-sync state that must surface.
 
 ### Price writeback (`price_writeback.py`)
 
@@ -393,26 +551,34 @@ this folder; the membership lifecycle callers use it to write back a new line's
 
 ---
 
-## 9. Preview = no coupons, no writeback (a true dry run)
+## 9. Preview = discount-aware, but no writes (a true dry run)
 
-`preview_update_payments_recurring` runs the **exact same** `_build_sync_params`
-(resolve, family, snapshots, bucket) as the real path, then calls
-`PaymentSyncStripe.preview_execute_sync` — Stripe's invoice **preview**, never a
-mutation. Critically it **skips two real-path steps**:
+`preview_update_payments_recurring(member_id, proration_behavior="none")` resolves
+the parent + gym account (`BillingParentResolver.resolve`) and runs the **exact
+same** `PaymentSyncBuilder.build_sync_params` (family, memberships-with-discounts,
+group by price, discount resolution, bucket — all DB-derived, no add/cancel
+inputs) as the real path, then calls `PaymentSyncStripe.preview_execute_sync` —
+Stripe's invoice **preview**, never a mutation.
 
-- **No `_attach_computed_coupons`.** A dry run must not find-or-create Stripe
-  coupons or write `stripe_coupon_id` back, so the preview reflects the
-  **pre-discount-resolution** bill. (This is the same boundary `discounts-guide`
-  §4 records from the discount side.)
-- **No DB writeback** — no sub-id write, no price writeback, no consumption
-  stamping. Nothing in the CRM or Stripe changes.
+- **Discounts ARE resolved.** The shared build runs `PaymentSyncDiscounts.resolve`,
+  which find-or-creates the deterministic coupons (idempotent, gym-wide — safe
+  with no DB writes) and attaches them to the bucket, **so the preview total
+  reflects discounts**. The real-vs-preview boundary is now "writes", not
+  "discounts".
+- **No DB writeback, no settle, no freeze.** A dry run skips the pre-sync
+  once-discount settle, the coupon-link writeback, the sub-id write, and the price
+  writeback — nothing in the CRM changes and no subscription is created / updated /
+  cancelled. (Caveat: skipping the settle means a consumed-but-unstamped `once` is
+  still counted, so the preview can slightly *over*-state the discount until the
+  next real sync stamps it.)
 
 `preview_execute_sync` mirrors `execute_sync`'s dispatch (`preview_update_…` for an
-existing sub, `preview_create_…` for a new one) and returns `None` for a pure
-cancellation or no-op — there's no upcoming invoice to preview. Freeze/unfreeze is
-intentionally unsupported in preview (a `pause_collection` change produces no
-invoice). The idempotency key is a throwaway `uuid4()` (preview writes nothing,
-so the key is unused downstream — it only satisfies the shared request schema).
+existing sub, `preview_create_…` for a new one), threads the explicit
+`proration_behavior`, and returns `None` for a pure cancellation or no-op — there's
+no upcoming invoice to preview. Freeze/unfreeze is intentionally unsupported in
+preview (a `pause_collection` change produces no invoice). The idempotency key is a
+throwaway `uuid4()` (preview writes nothing, so the key is unused downstream — it
+only satisfies the shared request schema).
 
 ---
 
@@ -434,7 +600,11 @@ backstop (`PaymentRefactor.md` §4):
    it "pending" until the next manual touch.
 
 `bulk_payment_sync` is already the seed — a scheduled job is just a third trigger
-for it. The genuinely **new** work is the **Stripe→CRM outcome-absorption** half:
+for it — **and step 1 already built the two pieces the reconciler's once-and-
+resolve duties reuse**: `PaymentSyncOnceDiscounts` is the once-finalization duty
+factored out so the sweep can call it directly (its docstring names this), and
+`BillingParentResolver` is the shared resolution it leans on. The genuinely
+**new** work that remains is the **Stripe→CRM outcome-absorption** half:
 `execute_sync` only pushes CRM-derived state, so a naive sweep won't detect a
 Stripe-dunning cancellation (it would just error and leave the CRM stuck on
 "active"). The reconciler needs the conflict-resolution rule from
@@ -446,27 +616,34 @@ guard so an hourly sweep isn't pointless Stripe writes.
 
 ## 11. Engine gotchas
 
-- **A brand-new line with no `stripe_item_id` is skipped by the discount
-  planner.** `plan_line_discounts` only processes bucket items that already carry
-  a `stripe_item_id`; a just-added line gets no coupon **this** sync and picks one
-  up on the **next** sync once Stripe has assigned its item id. The lifecycle
-  caller writes the item id back (`update_stripe_item_id.sql`) so the follow-up
-  sync sees it.
+- **A brand-new membership with no `stripe_item_id` isn't seen yet — but not
+  because of the discount math.** The aggregation no longer keys on
+  `stripe_item_id` (it groups memberships by `price_id` and reads discounts off
+  the rows), so a line's coupons are computed whether or not Stripe has assigned
+  an item id. The remaining limitation is the **read filter**: `member_memberships`
+  (the view `get_active_recurring.sql` reads) filters `stripe_item_id IS NOT NULL`,
+  so a just-inserted pending row is invisible to the sync until its item id is
+  written back (`update_stripe_item_id.sql`). The DB-first caller rewiring (the
+  deferred `stripe_sync_status` / #16 work) is what makes pending rows visible.
 - **Idempotency keys are suffixed per sub-operation** (`:sub_create`,
-  `:sub_update`, `:sub_cancel`, `:freeze`, `:unfreeze`) off one base key, so the
-  several Stripe calls in one sync don't collide. `bulk_payment_sync` mints a
-  fresh `uuid4()` per member (each member's sync is independent).
-- **The family cancel filter keys on `(member_id, plan_id)`, never price alone**
-  (§4) — price-only would nuke every sibling on a shared family plan.
+  `:sub_update`, `:sub_cancel` in `PaymentSyncStripe`; `:freeze` / `:unfreeze` in
+  `PaymentSyncFreeze`) off one base key, so the several Stripe calls in one sync
+  don't collide. `bulk_payment_sync` mints a fresh `uuid4()` per member (each
+  member's sync is independent).
+- **Desired state is the DB read, never a delta** (§4) — there is no cancel
+  filter and no add list; a cancel caller writes `cancel_date` first, so the row
+  is simply absent from `get_active_recurring.sql`. Don't reach for a
+  `(member_id, plan_id)` filter that no longer exists.
 - **Coupon swap when consolidated quantity changes.** Adding/removing a family
   member shifts the `÷ quantity` split, producing a different effective percent →
   a different deterministic coupon id → the line **swaps** to the new coupon. A
   pending `once` re-divides correctly on swap; an absolute `end_date` is invariant
   under swaps (the swap changes the coupon's value, never its end — the
   swap-invariance rationale is owned by `discounts-guide`).
-- **`_current_coupon_ids` returns empty for a brand-new sub** — so the
-  consumption gate treats every `once` snapshot as pending on first sync (correct:
-  nothing's been invoiced yet).
+- **`PaymentSyncOnceDiscounts._current_coupon_ids` returns empty for a brand-new
+  sub** — so the pre-sync settle (§6) treats every `once` snapshot as pending on
+  first sync (correct: nothing's been invoiced yet). This live-coupon read lives
+  in the once-discount service now, not in the convergence.
 - **`bulk_payment_sync` swallows per-member errors** —
   `PaymentsResourceNotFoundError` and any `Exception` are logged at ERROR and the
   loop continues, so one member's broken Stripe state doesn't abort the batch.
@@ -478,35 +655,56 @@ guard so an hourly sweep isn't pointless Stripe writes.
 ## Key files (where the engine actually lives)
 
 - **Orchestrator:**
-  `FastApiBackend/src/member_memberships/service/payment_sync/membership_payment_sync_service.py`
-  (`MembershipPaymentSyncService` — `update_payments_recurring`,
-  `preview_update_payments_recurring`, `bulk_payment_sync`,
-  `_attach_computed_coupons`, `_current_coupon_ids`, `_apply_line_plan`,
-  `_build_sync_params`).
-- **Builder + planner (pure):** `payment_sync_builder.py` (`build_desired_items`,
-  `consolidate_by_price`, `build_subscription_bucket`, `map_add_ids_to_intervals`,
-  `plan_line_discounts` → `_plan_one_line` / `_aggregate_values` /
-  `_is_past_end_date` / `_is_consumed_once`).
+  `FastApiBackend/src/member_memberships/service/payment_sync/payment_sync_service.py`
+  (`PaymentSyncService` — `update_payments_recurring`,
+  `preview_update_payments_recurring`, `bulk_payment_sync`, the delegating
+  `resolve_parent`; injects `_parent` / `_freeze` / `_once_discounts` / `_builder`,
+  builds `_queries` / `_stripe` / `_price_writeback`).
+- **Shared parent resolver:** `src/shared/billing_parent_resolver.py`
+  (`BillingParentResolver` — `resolve_parent`, `resolve`) + the `ParentProfile`
+  model in `src/shared/billing_parent.py`. DI-registered; used by the sync, the
+  freeze service, the once-discount service, and (to be migrated) every other
+  resolve_parent caller.
+- **Freeze service:** `payment_sync_freeze.py` (`PaymentSyncFreeze.sync_freeze_state`
+  → `_freeze` / `_unfreeze`) — DB-first, converges `pause_collection` to
+  `parent.is_frozen`.
+- **Once-discount settle:** `payment_sync_once_discounts.py`
+  (`PaymentSyncOnceDiscounts.sync_once_discounts` → `_current_coupon_ids`) — the
+  pre-sync once-consumption finalize + the live-coupon read.
+- **Builder service:** `payment_sync_builder.py` (`PaymentSyncBuilder` —
+  `build_sync_params` → `_group_by_price` / `_build_bucket`; reads the DB, groups
+  by price, delegates to the discount service, assembles the bucket).
+- **Discount service:** `payment_sync_discounts.py` (`PaymentSyncDiscounts` —
+  `resolve` → `_aggregate_line_values`; owns the discount math + coupon
+  find-or-create, returns `ResolvedDiscounts`; the date-lifetime filter lives in
+  the read, not here).
 - **Read/write queries:** `payment_sync_queries.py` (`PaymentSyncQueries` —
-  `resolve_parent`, `get_family_ids`, `get_active_memberships`,
-  `get_applied_discounts`, `get_price_intervals`, `set_snapshot_coupon_id`,
-  `stamp_snapshot_consumed`, `update_profile_sub_id`).
-- **Coupons:** `payment_sync_coupons.py` (`PaymentSyncCoupons` — `coupon_id`,
-  `find_or_create`, `_retrieve`, `_build_create_params`).
-- **Stripe dispatch + freeze:** `payment_sync_stripe.py` (`PaymentSyncStripe` —
-  `execute_sync`, `preview_execute_sync`, `sync_freeze_state`, `_sync_bucket`).
+  `get_family_ids`, `get_active_memberships` (+ private `_get_discounts_by_item`),
+  `get_unconsumed_once_discounts`, `set_applied_discount_coupon_id`,
+  `mark_once_consumed`, `update_profile_sub_id`).
+- **Coupons (policy only):** `payment_sync_coupons.py` (`PaymentSyncCoupons` —
+  `coupon_id`, `find_or_create`, `_matches_value`, `_delete`,
+  `_build_create_request`; the deterministic-id + validate-or-replace policy,
+  delegating all Stripe coupon I/O to `PaymentsStripeDiscountService` — no Stripe
+  SDK import).
+- **Stripe dispatch (create/update/cancel):** `payment_sync_stripe.py`
+  (`PaymentSyncStripe` — `execute_sync`, `preview_execute_sync`, `_sync_bucket`).
 - **Price writeback:** `price_writeback.py` (`PriceWriteback.sync_prices_from_stripe`).
 - **Intermediate models:** `member_memberships/schema/payment_sync_schema.py`
-  (`ParentProfile`, `ActiveMembershipRow`, `AppliedDiscountSnapshot`, `SyncItem`,
-  `IntervalDesiredItem`, `IntervalBucket`, `LineDiscountValue`, `LineDiscountPlan`).
-- **SQL (`member_memberships/sql/payment_sync/`):** `resolve_parent.sql`,
-  `get_family_ids.sql`, `get_active_recurring.sql`, `get_price_intervals.sql`,
-  `sync_prices_by_plan.sql`, `sync_profile_monthly_total.sql`,
-  `update_profile_sub_ids.sql`, `update_stripe_item_id.sql`. **SQL
-  (`…/sql/applied_discounts/`):** the snapshot read
-  `get_applied_discounts_by_member.sql`, the writebacks `set_snapshot_coupon_id.sql`
-  and `stamp_snapshot_end_date.sql` (the apply/remove snapshot SQL in this folder
-  is owned by `discounts-guide`).
+  (`ActiveMembershipRow` (now carries `discounts`), `AppliedDiscount`,
+  `OnceDiscount`, `SyncItem` (lifecycle-caller leftover — unused by the engine),
+  `IntervalBucket`, `LineDiscountValue` (bounds + percent-XOR-dollar validators),
+  `ResolvedDiscounts`, `SyncParams`). `ParentProfile` now lives in
+  `src/shared/billing_parent.py`.
+- **SQL (`src/shared/sql/`):** `resolve_parent.sql`. **SQL
+  (`member_memberships/sql/payment_sync/`):** `get_family_ids.sql`,
+  `get_active_recurring.sql`, `sync_prices_by_plan.sql`,
+  `sync_profile_monthly_total.sql`, `update_profile_sub_ids.sql`,
+  `update_stripe_item_id.sql`. **SQL (`…/sql/applied_discounts/`):** the
+  applied-discount read `get_applied_discounts_by_member.sql`, the once-candidate
+  read `get_unconsumed_once_discounts.sql`, and the writebacks
+  `set_applied_discount_coupon_id.sql` + `mark_once_consumed.sql` (the
+  apply/remove SQL in this folder is owned by `discounts-guide`).
 - **Stripe primitive it leans on for the read:**
   `payments/service/subscription/payments_subscription_retrieve.py`
   (`get_subscription` — documented as a `payments-guide` primitive; returns

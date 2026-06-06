@@ -9,7 +9,7 @@ description: >-
   `PaymentsStripeClient.connect_opts` / `connect_opts_readonly` account scoping +
   idempotency keys), the typed metadata models that pin each Stripe resource to a
   CRM row, the service primitives (members / membership-product / price / payment /
-  low-level coupon CRUD) and the subscription sub-services
+  low-level coupon find/create/delete I/O) and the subscription sub-services
   (`PaymentsStripeSubscriptionService` facade + create/update/cancel/freeze/
   migration/upcoming/retrieve/item delegates + `get_subscription` read primitive +
   `_map_subscription` / `_consolidate_items` / `_build_reconcile_items` base
@@ -113,7 +113,6 @@ an inbound event can be correlated back to CRM rows. All models subclass
 | `StripeCustomerMetadata` | customer create/update | `member_id`, `gym_id` |
 | `StripeProductMetadata` | membership product create/update | `plan_id`, `gym_id` |
 | `StripePriceMetadata` | price create | `crm_price_id`, `plan_id`, `gym_id` |
-| `StripeCouponMetadata` | coupon create/update | `crm_discount_id`, `gym_id` |
 | `StripeSubscriptionMetadata` | sub create/update/freeze/migration | `member_id`, `gym_id`, `crm_paid_with_cash` (default `False`) |
 | `StripeMembershipOneTimeMetadata` | one-time membership invoice | `member_id`, `gym_id`, `plan_id`, `crm_one_time_payment=True`, `type="membership_one_time"`, `crm_paid_with_cash` |
 | `StripeAdHocInvoiceMetadata` | ad-hoc charge-card invoice | `member_id`, `gym_id`, `crm_one_time_payment=True`, `crm_paid_with_cash` |
@@ -180,14 +179,20 @@ one-time charges, all money-moving (per-step idempotency keys
   metadata to generated invoices, so the webhook recovers `member_id` via
   sub-item lookup; only the cash flag rides on the invoice itself.)
 
-**`PaymentsStripeDiscountService`** (`payments_stripe_discount_service.py`) —
-**low-level Stripe Coupon CRUD only**: `create_discount`, `update_discount` (name
-+ metadata only), `delete_discount`, `retrieve_discount`. This is a dumb wrapper.
-The **deterministic find-or-create** of a coupon from a value signature
-(`pct_<bps>_<mode>` / `amt_<cents>_<mode>`) at sync time is **not here** — it is
-`PaymentSyncCoupons`, owned by `sync-guide` (cross-reference: it consumes
-`get_subscription` from §4). The `StripeCouponDuration` enum (`once` /
-`repeating` / `forever`) lives in `schema/payments_enums.py`.
+**`PaymentsStripeDiscountService`** (`payments_stripe_discount_service.py`) — the
+**single owner of low-level Stripe Coupon I/O**: `find_discount(coupon_id,
+account)` (retrieve-or-`None`, the non-raising lookup), `create_discount` (creates
+under a **caller-supplied deterministic `coupon_id`**; idempotent — a create race
+on the same id returns the existing coupon), `delete_discount`, and
+`retrieve_discount` (raises; used by the subscription coupon-validation path).
+Coupons carry **no CRM back-reference metadata** — a value-coupon is shared across
+every discount at that value (the old `crm_discount_id` / `StripeCouponMetadata`
+was removed). The **deterministic id scheme + validate-or-replace policy** (the
+value signature `pct_<bps>_<mode>` / `amt_<cents>_<mode>`) lives in
+`PaymentSyncCoupons` (`sync-guide`), which **delegates all coupon I/O here** — no
+service outside this payments layer touches the Stripe SDK. The
+`StripeCouponDuration` enum (`once` / `repeating` / `forever`) lives in
+`schema/payments_enums.py`.
 
 **`payments_stripe_mappers.py`** — a class-less concern module (free functions by
 design): `map_invoice_preview`, `map_upcoming_invoice`, and the line-item helpers
@@ -244,7 +249,6 @@ exposes the read.
   current Stripe items by `stripe_item_id`; an unmatched id raises
   `PaymentsResourceNotFoundError` (`subscription_item`, "Stripe may be out of
   sync"); current items not referenced are emitted as `{"id": …, "deleted": True}`.
-- `_build_subscription_discounts` — sub-level discount params (`""` clears).
 - `_retrieve_subscription` — raises `PaymentsResourceNotFoundError` if missing
   **or `status == "canceled"`**.
 - `_validate_subscription_request` / `_validate_coupon_ids` — pre-validate all
@@ -479,11 +483,13 @@ are called by the sync engine and the membership/members/plans services
   `payments/schema/payments_enums.py` (`StripeCouponDuration`,
   `StripeResourceType`).
 - **Metadata models:** `payments/schema/metadata/` (`stripe_metadata_base.py` +
-  the seven per-resource models).
+  the six per-resource models; `StripeCouponMetadata` was removed — value-coupons
+  carry no CRM back-reference).
 - **Non-subscription services:** `payments/service/payments_stripe_members_service.py`,
   `payments_stripe_membership_service.py`, `payments_stripe_price_service.py`,
   `payments_stripe_payment_service.py`, `payments_stripe_discount_service.py`
-  (low-level coupon CRUD only), `payments_stripe_mappers.py`.
+  (the single owner of low-level coupon find/create/delete — sync delegates here),
+  `payments_stripe_mappers.py`.
 - **Subscription sub-services:** `payments/service/subscription/`
   (`payments_subscription_facade.py` = `PaymentsStripeSubscriptionService`,
   `payments_subscription_base.py`, and the create/update/cancel/freeze/migration/

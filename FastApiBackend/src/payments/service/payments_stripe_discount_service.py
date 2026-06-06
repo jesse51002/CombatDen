@@ -2,25 +2,29 @@ import logging
 
 import stripe
 from stripe.params._coupon_create_params import CouponCreateParams
-from stripe.params._coupon_update_params import CouponUpdateParams
 
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_discount_schema import (
     PaymentsDiscountCreateRequest,
     PaymentsDiscountDeleteRequest,
     PaymentsDiscountResponse,
-    PaymentsDiscountUpdateRequest,
 )
-from src.payments.schema.payments_enums import StripeCouponDuration, StripeResourceType
+from src.payments.schema.payments_enums import (
+    StripeCouponDuration,
+    StripeResourceType,
+)
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 
 logger = logging.getLogger(__name__)
 
 
 class PaymentsStripeDiscountService:
-    """Stripe Coupon CRUD operations.
+    """Stripe Coupon I/O — the single place coupon create/find/delete happens.
 
-    All methods accept ``stripe_account_id`` for Stripe Connect.
+    All methods accept ``stripe_account_id`` for Stripe Connect. No service
+    outside the payments layer should touch the Stripe SDK for coupons; the
+    payment-sync engine's value-derived coupons (``PaymentSyncCoupons``) go
+    through here.
     """
 
     def __init__(self, stripe_client: PaymentsStripeClient) -> None:
@@ -70,47 +74,65 @@ class PaymentsStripeDiscountService:
             )
         return coupon
 
+    async def find_discount(
+        self,
+        coupon_id: str,
+        stripe_account_id: str,
+    ) -> PaymentsDiscountResponse | None:
+        """Retrieve a coupon by id, or ``None`` if it is absent / deleted.
+
+        The non-raising, account-based counterpart to ``retrieve_discount`` —
+        what a find-or-create caller needs to decide reuse-vs-create.
+        """
+        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        try:
+            coupon = await self._stripe.v1.coupons.retrieve_async(
+                coupon_id,
+                options=read_opts,
+            )
+        except stripe.InvalidRequestError:
+            return None
+        if getattr(coupon, "deleted", False):
+            return None
+        return self._map_coupon(coupon)
+
     async def create_discount(
         self,
         request: PaymentsDiscountCreateRequest,
         stripe_account_id: str,
     ) -> PaymentsDiscountResponse:
-        """Create a Stripe Coupon."""
-        opts = self._client.connect_opts(stripe_account_id)
+        """Create a Stripe Coupon under the caller-supplied id.
 
-        coupon = await self._stripe.v1.coupons.create_async(
-            params=CouponCreateParams(
-                name=request.discount_name,
-                duration=request.duration.value,
-                percent_off=request.percentage_off,
-                amount_off=request.amount_off,
-                currency=request.currency,
-                duration_in_months=request.duration_in_months,
-                metadata=request.metadata.to_stripe_metadata(),
-            ),
-            options=opts,
-        )
-        return self._map_coupon(coupon)
-
-    async def update_discount(
-        self,
-        request: PaymentsDiscountUpdateRequest,
-        stripe_account_id: str,
-    ) -> PaymentsDiscountResponse:
-        """Update a Stripe Coupon (name and metadata only)."""
-        read_opts = self._client.connect_opts_readonly(stripe_account_id)
+        Idempotent on the deterministic id: a create race (the id was taken by a
+        concurrent create of the same value) is caught and the existing coupon is
+        returned, so find-or-create stays safe under concurrency.
+        """
         write_opts = self._client.connect_opts(stripe_account_id)
-
-        await self.retrieve_discount(request.stripe_coupon_id, read_opts)
-
-        coupon = await self._stripe.v1.coupons.update_async(
-            request.stripe_coupon_id,
-            params=CouponUpdateParams(
-                name=request.discount_name,
-                metadata=request.metadata.to_stripe_metadata(),
-            ),
-            options=write_opts,
+        params = CouponCreateParams(
+            id=request.coupon_id,
+            name=request.discount_name,
+            duration=request.duration.value,
         )
+        if request.duration_in_months is not None:
+            params["duration_in_months"] = request.duration_in_months
+        if request.percentage_off is not None:
+            params["percent_off"] = request.percentage_off
+        else:
+            params["amount_off"] = int(request.amount_off or 0)
+            params["currency"] = request.currency
+
+        try:
+            coupon = await self._stripe.v1.coupons.create_async(
+                params=params,
+                options=write_opts,
+            )
+        except stripe.InvalidRequestError:
+            # Lost a create race (id already taken) — return the existing coupon.
+            read_opts = self._client.connect_opts_readonly(stripe_account_id)
+            coupon = await self._stripe.v1.coupons.retrieve_async(
+                request.coupon_id,
+                options=read_opts,
+            )
         return self._map_coupon(coupon)
 
     async def delete_discount(

@@ -27,8 +27,8 @@ from src.payments.schema.payments_payment_schema import (
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-        MembershipPaymentSyncService,
+    from src.member_memberships.service.payment_sync.payment_sync_service import (
+        PaymentSyncService,
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
@@ -44,7 +44,7 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        payment_sync_service: MembershipPaymentSyncService,
+        payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
     ) -> None:

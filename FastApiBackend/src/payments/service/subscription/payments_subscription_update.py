@@ -56,9 +56,6 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
             items=items,
             proration_behavior=request.proration_behavior,
         )
-        update_params["discounts"] = self._build_subscription_discounts(
-            request.subscription_discounts,
-        )
         update_params["metadata"] = request.metadata.to_stripe_metadata()
 
         return update_params, sub, opts

@@ -1,8 +1,14 @@
--- Read every applied-discount snapshot for a family's memberships, joined to its
+-- Read the ACTIVE applied discounts for a family's memberships, joined to its
 -- value version (for the percent/dollar + mode) and the membership's plan (so
--- the sync can group snapshots per consolidated line). Reads the unfiltered base
+-- the sync can group discounts per consolidated line). Reads the unfiltered base
 -- tables (service-role): half-synced rows (no stripe_coupon_id yet) must still
 -- be seen by the sync that resolves them.
+--
+-- Date-lifetime filter (:today is the gym-timezone "today"): a discount is active
+-- only while end_date IS NULL (forever / no cutoff) or end_date > today. This is
+-- how the engine enforces an arbitrary end date Stripe can't express, and how a
+-- consumed `once` (whose end_date the pre-sync settle stamped to today) drops out
+-- — both by the same inclusive cutoff (end_date <= today => expired).
 SELECT
     ad.applied_discount_id,
     ad.item_id,
@@ -22,3 +28,4 @@ JOIN gym_discount_values_unfiltered v
 JOIN member_memberships mm
     ON ad.item_id = mm.item_id AND ad.gym_id = mm.gym_id
 WHERE ad.member_id = ANY(:member_ids)
+  AND (ad.end_date IS NULL OR ad.end_date > :today)

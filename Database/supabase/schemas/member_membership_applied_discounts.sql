@@ -41,6 +41,13 @@ CREATE TABLE member_membership_applied_discounts_unfiltered (
     -- handle (present on the subscription = pending, absent = consumed).
     stripe_coupon_id VARCHAR,
 
+    -- Stripe-sync confirmation (service_role writeback). The `stripe_sync_status`
+    -- enum is declared in member_memberships.sql (the earliest-loaded consumer).
+    -- NULL = pending: the row is asking the sync to add it; the sync stamps
+    -- `applied` once Stripe confirms (and `deleted` on removal). `preview_*`
+    -- reserved for preview-staging.
+    stripe_sync_status stripe_sync_status,
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     PRIMARY KEY (applied_discount_id),

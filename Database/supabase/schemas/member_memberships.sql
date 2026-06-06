@@ -1,3 +1,20 @@
+-- Stripe-sync status: the sync's confirmation of whether a row's intended state
+-- has landed on Stripe. This is the Stripe-convergence axis, kept ORTHOGONAL to
+-- the lifecycle member_memberships_status view (active/cancelled/ended/frozen).
+-- Shared by member_memberships and member_membership_applied_discounts; declared
+-- here because member_memberships is the earliest-loaded table that uses it.
+-- `applied`/`deleted` are stamped by the sync (the writeback) once Stripe
+-- confirms; `preview_add`/`preview_remove` are reserved for preview-staging.
+-- `migrating` (memberships only) marks that a migration was requested but has
+-- not completed yet.
+CREATE TYPE stripe_sync_status AS ENUM (
+    'applied',
+    'deleted',
+    'preview_add',
+    'preview_remove',
+    'migrating'
+);
+
 -- Memberships are append-only: once created, a membership can only be
 -- cancelled (cancel_date set), never modified back to active. To start
 -- a new membership the client must INSERT a new row with a different
@@ -16,6 +33,12 @@ CREATE TABLE member_memberships_unfiltered (
     stripe_item_id VARCHAR,
     prorate BOOLEAN NOT NULL DEFAULT true,
     total_price INTEGER NOT NULL CHECK (total_price >= 0),
+
+    -- Stripe-sync confirmation (service_role writeback). NULL = pending: the row
+    -- is asking the sync to add it to Stripe; the sync stamps `applied` once
+    -- Stripe confirms (and `deleted` when it removes the row). Orthogonal to the
+    -- lifecycle status derived by the member_memberships_status view.
+    stripe_sync_status stripe_sync_status,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (item_id),

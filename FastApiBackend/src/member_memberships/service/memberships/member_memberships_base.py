@@ -17,8 +17,8 @@ from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-        MembershipPaymentSyncService,
+    from src.member_memberships.service.payment_sync.payment_sync_service import (
+        PaymentSyncService,
     )
     from src.shared.gym_stripe_service import GymStripeService
 
@@ -36,7 +36,7 @@ class MemberMembershipsBase:
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        payment_sync_service: MembershipPaymentSyncService,
+        payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
     ) -> None:
         self._db_pool = db_pool

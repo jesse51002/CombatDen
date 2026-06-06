@@ -16,6 +16,26 @@ class MembershipDbStatus(StrEnum):
     ended = "ended"
 
 
+class StripeSyncStatus(StrEnum):
+    """The sync's confirmation of whether a row landed on Stripe.
+
+    Mirrors the Postgres `stripe_sync_status` enum (a nullable column). The
+    Stripe-convergence axis, orthogonal to the lifecycle MembershipDbStatus:
+    NULL = pending (the row is asking the sync to add it); the sync (writeback)
+    stamps `applied` once Stripe confirms and `deleted` on removal;
+    `preview_add`/`preview_remove` are reserved for preview-staging;
+    `migrating` (memberships only) marks a migration requested but not yet
+    completed. Shared by member_memberships and
+    member_membership_applied_discounts.
+    """
+
+    applied = "applied"
+    deleted = "deleted"
+    preview_add = "preview_add"
+    preview_remove = "preview_remove"
+    migrating = "migrating"
+
+
 class MemberMembershipCreate(SeedModel):
     item_id: UUID
     member_id: UUID
@@ -31,6 +51,7 @@ class MemberMembershipCreate(SeedModel):
     total_price: int
 
     stripe_item_id: str | None = None
+    stripe_sync_status: StripeSyncStatus | None = None
 
     def to_insert_dict(self) -> dict:
         data = super().to_insert_dict()

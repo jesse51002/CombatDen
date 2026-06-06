@@ -37,8 +37,8 @@ from src.payments.schema.payments_invoice_schema import (
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-        MembershipPaymentSyncService,
+    from src.member_memberships.service.payment_sync.payment_sync_service import (
+        PaymentSyncService,
     )
     from src.payments.service.payments_stripe_members_service import (
         PaymentsStripeMembersService,
@@ -58,7 +58,7 @@ class MembersManagementService:
         self,
         db_pool: DirectDatabasePool,
         payments_members_service: PaymentsStripeMembersService,
-        payment_sync_service: MembershipPaymentSyncService,
+        payment_sync_service: PaymentSyncService,
     ) -> None:
         deps = (db_pool, payments_members_service)
         self._create = MembersManagementCreate(*deps)

@@ -63,7 +63,6 @@ class PaymentsSubscriptionDesiredItem(BaseModel):
 
     stripe_price_id: str
     stripe_item_id: str | None = None
-    prorate: bool = True
     quantity: int = 1
     discounts: list[SubscriptionItemDiscount] = []
 
@@ -80,9 +79,9 @@ class PaymentsSubscriptionCreateRequest(BaseModel):
 
     stripe_customer_id: str
     items: list[PaymentsSubscriptionDesiredItem]
-    subscription_discounts: list[SubscriptionItemDiscount] = []
     metadata: StripeSubscriptionMetadata
     pay_first_invoice_out_of_band: bool = False
+    proration_behavior: Literal["none", "always_invoice"] = "none"
     idempotency_key: str
     gym_timezone: str
 

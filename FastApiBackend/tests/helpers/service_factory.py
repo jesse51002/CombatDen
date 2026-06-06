@@ -14,8 +14,8 @@ from src.discounts.service.discounts.discounts_service import DiscountsService
 from src.member_memberships.service.memberships.member_memberships_service import (
     MemberMembershipsService,
 )
-from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-    MembershipPaymentSyncService,
+from src.member_memberships.service.payment_sync.payment_sync_service import (
+    PaymentSyncService,
 )
 from src.members.service.management.members_management_service import (
     MembersManagementService,
@@ -92,10 +92,10 @@ def build_payment_services(stripe_client: PaymentsStripeClient) -> PaymentServic
 def build_payment_sync_service(
     db_pool: DirectDatabasePool,
     stripe_client: PaymentsStripeClient,
-) -> MembershipPaymentSyncService:
+) -> PaymentSyncService:
     """Build the membership payment-sync service.
 
-    Mirrors ``src/core/dependencies.py`` (membership_payment_sync_service).
+    Mirrors ``src/core/dependencies.py`` (payment_sync_service).
     Linked-discount recalculation is gone — family discounts are frozen
     snapshot rows divided across the consolidated line at sync, and the
     sync-time coupon step uses ``stripe_client`` directly.
@@ -110,7 +110,7 @@ def build_payment_sync_service(
         discount_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
-    return MembershipPaymentSyncService(
+    return PaymentSyncService(
         db_pool,
         subscription_svc,
         gym_stripe_svc,

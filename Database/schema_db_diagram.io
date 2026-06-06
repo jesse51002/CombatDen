@@ -455,6 +455,7 @@ Table member_memberships_unfiltered {
   stripe_item_id varchar [note: 'immutable once set; view filters WHERE NOT NULL']
   prorate boolean [not null, default: true]
   total_price integer [not null, note: 'CHECK >= 0']
+  stripe_sync_status stripe_sync_status [note: 'nullable; NULL = pending (sync adds); sync stamps applied/deleted; orthogonal to lifecycle status view']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -477,6 +478,7 @@ Table member_membership_applied_discounts_unfiltered {
   value_id uuid [not null, note: 'FK (value_id, gym_id) -> gym_discount_values_unfiltered; the version tag']
   end_date date [note: 'nullable; resolved absolute end / once-consumption stamp (sync)']
   stripe_coupon_id varchar [note: 'nullable; SYSTEM writeback; view filters WHERE NOT NULL']
+  stripe_sync_status stripe_sync_status [note: 'nullable; NULL = pending; sync stamps applied/deleted']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {

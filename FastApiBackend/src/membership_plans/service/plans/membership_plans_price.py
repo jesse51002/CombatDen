@@ -34,8 +34,8 @@ from src.shared.db_first_helpers import cleanup_pending_row
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-        MembershipPaymentSyncService,
+    from src.member_memberships.service.payment_sync.payment_sync_service import (
+        PaymentSyncService,
     )
     from src.payments.service.payments_stripe_membership_service import (
         PaymentsStripeMembershipService,
@@ -58,7 +58,7 @@ class MembershipPlansPrice(MembershipPlansBase):
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
         discounts_service: DiscountsService,
-        membership_payment_sync_service: MembershipPaymentSyncService,
+        payment_sync_service: PaymentSyncService,
     ) -> None:
         super().__init__(
             db_pool,
@@ -67,7 +67,7 @@ class MembershipPlansPrice(MembershipPlansBase):
             stripe_price_service,
             discounts_service,
         )
-        self._payment_sync = membership_payment_sync_service
+        self._payment_sync = payment_sync_service
 
     # ── Set Price ──────────────────────────────────────────────
 

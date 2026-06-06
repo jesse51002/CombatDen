@@ -19,6 +19,23 @@ Whenever the API surface or architecture changes — **a route or service added 
 
 One deep-dive diagram sits beside these: **`payment_sync.mermaid`** — the step-by-step orchestration flow of the payment-sync engine (`update_payments_recurring`), referenced from `README.md`. Its keep-in-sync owner is the **`sync-guide`** skill (update the diagram in the same change as the engine, per that skill); it follows the same `mermaid-creation` rules and validation.
 
+## ⚠️ Payment sync + member_memberships — critical billing infrastructure, human in the loop
+
+`src/member_memberships/` — and especially the payment-sync engine in
+`src/member_memberships/service/payment_sync/` — is **the most critical code in
+this backend: it decides how real members are billed.** A mistake here mis-bills
+real customers, so it is edited under a stricter rule than the rest of the repo:
+
+- **One approved piece at a time. Never a big sweep.** Propose the change, wait
+  for explicit approval, then write — for **each** part, as you go. Do **not**
+  build out multiple parts and present them together; do not "just build
+  everything."
+- This overrides any instinct to batch related edits. Even when several changes
+  are obviously connected, land and get each one reviewed on its own.
+- The deep domain knowledge for the engine lives in the **`sync-guide`** skill
+  (a living document) — read it before touching the engine, and update it in the
+  same change when the engine changes.
+
 ## Workflow
 
 **Always Ask Clarifying Questions**

@@ -13,8 +13,8 @@ from fastapi import BackgroundTasks
 from src.discounts.service.discounts.discounts_service import (
     DiscountsService,
 )
-from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-    MembershipPaymentSyncService,
+from src.member_memberships.service.payment_sync.payment_sync_service import (
+    PaymentSyncService,
 )
 from src.membership_plans.membership_plans_schemas import (
     MembershipPlanCreateRequest,
@@ -61,7 +61,7 @@ class MembershipPlansService:
         gym_stripe_service: GymStripeService,
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
-        membership_payment_sync_service: MembershipPaymentSyncService,
+        payment_sync_service: PaymentSyncService,
         discounts_service: DiscountsService,
     ) -> None:
         deps = (
@@ -77,7 +77,7 @@ class MembershipPlansService:
         self._read = MembershipPlansRead(*deps)
         self._price = MembershipPlansPrice(
             *deps,
-            membership_payment_sync_service=membership_payment_sync_service,
+            payment_sync_service=payment_sync_service,
         )
 
     # ── Create ─────────────────────────────────────────────────

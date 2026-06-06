@@ -4,6 +4,38 @@ Running log of the request-by-request audit. Each entry is one request/item as i
 
 ---
 
+## ⚙️ Membership-refactor worktree — payment-sync items, current status
+
+The `membership-refactor-step1` worktree implemented a large chunk of the payment-sync items
+below (#13–#23). Snapshot of where each stands — full handoff in
+`FastApiBackend/TODO_SYNC_REFACTOR.md`:
+
+| Item | Status |
+| --- | --- |
+| #13 Part A — remove subscription-level discounts | ✅ DONE (payment_sync + payments side) |
+| #13 Part B — preview shows discounts | ✅ DONE (preview resolves coupons); `preview_*` staging statuses ❌ not wired |
+| #13 Part C — per-discount coupons | ❌ **REJECTED** — kept the 4-bucket sum model (Stripe stacks sequentially, so we sum ourselves; per-membership-sequential percent math verified) |
+| #14 — split explicit freeze into its own service | ✅ DONE (`PaymentSyncFreeze`) |
+| #15 — `_SyncParams` → schema | ✅ DONE (`SyncParams`) |
+| #16 — DB-first + `stripe_sync_status` enum | 🟡 schema column DONE; caller rewiring + status stamping ❌ not done |
+| #17 — full writeback | ❌ not done (Part D — unified `PaymentSyncWriteback`) |
+| #18 — discounts ride the membership/item (drop the parallel list) | ✅ DONE ("Part E") |
+| #19 — preview due-now vs recurring split | ❌ not done |
+| #20 — extract once-consumption/end_date settle | ✅ DONE (`PaymentSyncOnceDiscounts`) |
+| #21 — `update_payments_recurring -> None` | ❌ not done |
+| #22 — explicit `proration_behavior` | ✅ DONE (incl. create-path `item.prorate` removal) |
+| #23 — shared `BillingParentResolver` | 🟡 resolver DONE; caller migration deferred |
+| #24 (NEW) — coupon I/O via `PaymentsStripeDiscountService` | ✅ DONE |
+| #25 (NEW) — concurrency / global member lock | ❌ to design |
+
+Also done this session (not original audit items): the verified per-membership-sequential discount
+math; `ResolvedDiscounts` model (no tuple); `LineDiscountValue` bounds + XOR validators; the
+date-lifetime filter moved into SQL (`:today`); dead `IntervalBucket.total_price` removed;
+`sync-guide` + `payments-guide` brought current. **The engine is non-functional at the caller layer**
+until #16 (caller rewiring) lands.
+
+---
+
 ## 1. `POST /api/v1/gyms/` — gym create asks for `owner_email` but ignores it
 
 **Status:** ✅ Fixed — removed `owner_email` from `GymCreateRequest`, dropped it from the router test body, and surgically removed it from the OpenAPI dump (it was optional / not in `required`, so the edit matches a fresh regen). Recommend running `make update-openapi` (Database/) against a live backend at next opportunity to confirm. All 6 gyms router tests pass.
@@ -209,7 +241,7 @@ Service then: `if request.identity` → rename; `if request.values` → mint new
 
 ## 13. Discounts in the sync: kill subscription-level discounts + make item discounts a desired-state input
 
-**Status:** 🟦 Part A clear removal (multi-file) · Part B feature needing a design pass
+**Status:** ✅ Part A DONE (sub-level discounts removed, both sides) · Part C **REJECTED** (kept the 4-bucket sum model — Stripe stacks sequentially, so we sum ourselves) · Part B preview-aware DONE (preview resolves coupons), `preview_*` staging statuses not wired. See the status block at the top.
 
 This is one redesign of *where discounts live in the sync*, in two parts.
 
@@ -278,7 +310,7 @@ The live-coupon read is `status = applied` only (excludes `preview_*` and `delet
 
 ## 14. Split the explicit freeze/unfreeze into a dedicated sync-service method
 
-**Status:** 🟢 Chosen direction (per user) — logged for fix phase
+**Status:** ✅ DONE — extracted to the standalone `PaymentSyncFreeze` service (DB-first `sync_freeze_state`, no DB writes); the explicit freeze action no longer routes through `update_payments_recurring`, which keeps only the maintenance re-apply.
 
 **Finding:** The explicit freeze/unfreeze action is threaded through `MembershipPaymentSyncService.update_payments_recurring` via `freeze_end_date` / `unfreeze` params, gated by `_validate_freeze_params` which rejects combining a freeze with membership changes (and freeze+unfreeze together). So `member_memberships_freeze.py` calls `update_payments_recurring(member_id, add_ids=[], cancel_ids=[], freeze_end_date=…)` and runs the **entire** sync (build bucket → `sync_freeze_state` → `_attach_computed_coupons` → `execute_sync` → price writeback) just to apply a `pause_collection`.
 
@@ -312,7 +344,7 @@ The live-coupon read is `status = applied` only (excludes `preview_*` and `delet
 
 ## 16. Generalize the sync-status enum to `member_memberships` + go fully DB-first (drop imperative `add_ids`/`cancel_ids`)
 
-**Status:** 🟦 Chosen direction (per user) — design pass before building (extends #13's status model)
+**Status:** 🟡 PARTIAL — the `stripe_sync_status` enum + nullable column landed on both tables (schema). The caller rewiring (drop `add_ids`/`cancel_ids`, write DB-first) **and** the sync stamping `applied`/`deleted` are NOT done — this is the big remaining *functional* work (the engine is non-functional at the caller layer until it lands).
 
 **The unified flow (user):** The same sync-status state machine from #13 (discounts) applies to **recurring memberships** too. The DB is the desired state; the sync converges Stripe and **stamps the status as confirmation**:
 - **Cancel:** the membership service sets `cancel_date`; the sync reads, sees the row is no longer in the desired state, removes it from Stripe, and stamps `deleted`. No imperative `cancel_ids` passed in.
@@ -359,7 +391,7 @@ The live-coupon read is `status = applied` only (excludes `preview_*` and `delet
 
 ## 18. Applied-discount snapshots are a separate parallel list re-joined by `stripe_item_id` — attach them to the desired item
 
-**Status:** 🟦 Chosen direction (per user) — part of the #13 discount-in-sync rework
+**Status:** ✅ DONE ("Part E") — `AppliedDiscount` rides `ActiveMembershipRow.discounts`; `get_active_memberships(family_ids, today)` reads memberships + their active discounts in one call (end_date filter is in SQL); the builder groups by `price_id` and `PaymentSyncDiscounts.resolve` returns a `ResolvedDiscounts`; `SyncParams.snapshots` is gone. (The "new line skipped" gotcha is now a read-filter limitation, not a join-key one.)
 
 **Finding:** In `_build_sync_params`, `snapshots = self._queries.get_applied_discounts(family_ids)` is read as a **separate list** and returned on `SyncParams` alongside the bucket. `build_desired_items` builds `IntervalDesiredItem`s that **carry no discounts** (by design today), `consolidate_by_price` merges items with no discount awareness, and `plan_line_discounts` re-associates snapshots to bucket items via `by_item[snap.stripe_item_id]`. The snapshot and the desired item are the **same grain** (one per membership pre-consolidation), so keeping them separate only to re-join by `stripe_item_id` later is artificial.
 
@@ -401,7 +433,7 @@ Net: discounts ride the membership from the read all the way to the line — no 
 
 ## 20. Extract `once`-consumption + `end_date` settling into a separate pre-sync component (sync shouldn't edit the DB mid-flow)
 
-**Status:** 🟦 Chosen direction (per user) — sync-engine separation of concerns (parallels #14)
+**Status:** ✅ DONE — extracted to the `PaymentSyncOnceDiscounts` pre-sync settle: it stamps a consumed `once`'s `end_date` before the build reads, so the sync reads an already-settled DB and converges with no mid-flow DB edits. (The `end_date` exclusion itself now lives in the read SQL, not in code.)
 
 **Finding:** The discount-lifecycle logic — `once`-consumption detection and `end_date` enforcement — is nested deep inside the sync: `_attach_computed_coupons` → `plan_line_discounts` / `_plan_one_line` (`_is_consumed_once`, `_is_past_end_date`) and `_apply_line_plan` (`stamp_snapshot_consumed`, which **writes the DB mid-convergence**). So `update_payments_recurring` mutates snapshots partway through just to determine the desired discount state.
 
@@ -435,7 +467,7 @@ Net: discounts ride the membership from the read all the way to the line — no 
 
 ## 22. Proration behavior must be passed explicitly to the sync, not inferred from DB `prorate` flags
 
-**Status:** 🟦 Chosen direction (per user) — default `none`
+**Status:** ✅ DONE — explicit `proration_behavior: Literal["none","always_invoice"] = "none"` on `update_payments_recurring` / `execute_sync` / `_sync_bucket` / preview, threaded into both the create and update Stripe requests; the `any(item.prorate …)` inference is removed. This also fixed a latent crash: the create path referenced `item.prorate` on a model that no longer has the field.
 
 **Finding:** `execute_sync` infers proration from the items: `proration_behavior = "always_invoice" if any(item.prorate for item in bucket.items) else "none"` (`payment_sync_stripe.py`). `item.prorate` comes from the DB (`member_memberships.prorate` → `SyncItem.prorate` → bucket item), so the sync is **guessing** how to bill a change from stored state.
 
@@ -451,5 +483,71 @@ Net: discounts ride the membership from the read all the way to the line — no 
 **Open detail:** does `member_memberships.prorate` / `SyncItem.prorate` become vestigial once proration is an explicit action param? If the per-row flag no longer drives behavior, decide whether to keep it as a record of how a membership was started or drop it.
 
 **Files:** `FastApiBackend/src/member_memberships/service/payment_sync/payment_sync_stripe.py` (`execute_sync` + `preview_execute_sync`), `membership_payment_sync_service.py` (param), the callers (`member_memberships_start.py`, `member_memberships_update_price.py`, …), the request schemas, `Database/openapi.json`, tests. Ties to #16, #19, #21.
+
+## 23. Shared `BillingParentResolver` — migrate every `resolve_parent` caller onto it (deferred)
+
+**Status:** 🟦 Plumbing landed (refactor step 1) — the mass caller migration is deferred (per user)
+
+**What landed:** Parent/billing-account resolution became a real shared service, `BillingParentResolver` (`FastApiBackend/src/shared/billing_parent_resolver.py`), registered in DI (`core/dependencies.py` → `billing_parent_resolver`). It owns the parent lookup (`resolve_parent`) and the parent+gym-Stripe-account combo (`resolve`). The `ParentProfile` model moved to `src/shared/billing_parent.py` and `resolve_parent.sql` to `src/shared/sql/`; `PaymentSyncQueries.resolve_parent` was deleted (moved here). The payment sync injects this resolver; the standalone `PaymentSyncFreeze` takes an already-resolved `ParentProfile` (so the freeze request resolves once via this resolver, then calls freeze).
+
+**Deferred (the mass change — do NOT bundle into step 1):** every other `resolve_parent` caller still routes through `MembershipPaymentSyncService.resolve_parent` (a thin delegate) instead of injecting `BillingParentResolver` directly:
+- `member_memberships_start.py` (×2), `member_memberships_charge_card.py`, `member_memberships_mark_paid_cash.py`, `member_memberships_freeze.py` (×2).
+- These should inject `BillingParentResolver` and call it, then the public `MembershipPaymentSyncService.resolve_parent` delegate can be removed.
+
+**Also worth folding in later:** `get_family_ids` (family resolution) still lives in `PaymentSyncQueries` and takes a `ParentProfile` — it's the natural companion to parent resolution and could move onto/beside the shared resolver. And the engine imports `ParentProfile` from `src.shared.billing_parent` directly now; `payment_sync_schema.py` imports it only for `SyncParams.parent`.
+
+**Files:** `FastApiBackend/src/shared/billing_parent.py`, `billing_parent_resolver.py`, `src/shared/sql/resolve_parent.sql`, `src/core/dependencies.py`, the `resolve_parent` callers listed above.
+
+## 24. Coupon I/O delegated to `PaymentsStripeDiscountService` (sync stops calling Stripe directly)
+
+**Status:** ✅ DONE (membership-refactor worktree)
+
+**What landed:** `PaymentSyncCoupons` no longer imports the Stripe SDK — it keeps only the
+deterministic-id scheme (`pct_<bps>_<mode>` / `amt_<cents>_<mode>`) + the validate-or-replace policy
+and **delegates all coupon find/create/delete to `PaymentsStripeDiscountService`**. That service was
+reshaped into the single owner of Stripe coupon I/O: `find_discount(coupon_id, account)`
+(retrieve-or-`None`), `create_discount` (under a **caller-supplied `coupon_id`**; idempotent on a
+create race — returns the existing coupon), `delete_discount`, and `retrieve_discount` (kept for the
+subscription coupon-validation path). The dead `update_discount` was removed, and the old
+one-coupon-per-`gym_discounts`-row metadata (`crm_discount_id` / `StripeCouponMetadata`) was
+**deleted** — value-coupons are shared across every discount at a value, made on the spot.
+`sync-guide` §1/§7 now carry the hard rule: nothing under `payment_sync/` touches the Stripe SDK
+directly. **Audit note:** the only other direct-Stripe caller outside `src/payments/` is
+`gyms_stripe_connect_service.py` (Connect-account onboarding — a distinct domain with no
+payments-layer service); flagged, not yet routed.
+
+**Files:** `src/member_memberships/service/payment_sync/payment_sync_coupons.py`,
+`payment_sync_discounts.py`, `src/payments/service/payments_stripe_discount_service.py`,
+`src/payments/schema/payments_discount_schema.py`,
+`src/payments/schema/metadata/stripe_coupon_metadata.py` (deleted), `src/core/dependencies.py`,
+`.claude/skills/sync-guide` + `payments-guide`.
+
+## 25. NEW — concurrency / global member lock (prevent concurrent edits/sync on the same family)
+
+**Status:** 🟦 To design
+
+**Requirement (user):** While one admin is editing/syncing a member, no one else may run a
+conflicting edit/sync on the **same paying-parent family**. Today there is **zero** concurrency
+guard — two concurrent `update_payments_recurring` on the same family both read, both call Stripe,
+and both write back last-write-wins (the sync is a multi-transaction cascade with Stripe calls in the
+middle). On billing-critical code this can mis-bill or desync Stripe↔CRM.
+
+**Postgres/Supabase support — YES** (Supabase *is* Postgres): `SELECT … FOR UPDATE` (row lock, but
+only lives for one transaction — insufficient across the multi-transaction sync, and it would pin a
+pooled connection across Stripe HTTP I/O), or **advisory locks** (`pg_advisory_lock` /
+`pg_advisory_xact_lock` / `pg_try_advisory_lock(key)`) — a named lock on `hashtext(parent_member_id)`.
+The latter is the right tool. **Recommended:** a per-parent advisory lock keyed on the resolved
+paying-parent `member_id` (NOT one global lock for the whole gym), acquired at the start of the
+mutate+sync operation, `pg_try_advisory_lock` → **409 fail-fast** if held, released in `finally`.
+Optional UI layer: a `member_locks(member_id, locked_by, locked_at, expires_at)` table with a TTL for
+the "Bob is editing, you see read-only" experience. Natural to land with the #16 caller rewiring. Full
+design in `FastApiBackend/TODO_SYNC_REFACTOR.md` §11.
+
+**Decisions for the design pass:** (a) backend operation serialization vs (b) UI edit-session lock vs
+both; fail-fast 409 vs block-with-timeout; where the lock attaches (a shared decorator/context manager
+around the lifecycle callers + the sync entry points).
+
+**Files:** `src/shared/database.py` (or a new lock helper), the lifecycle callers + the sync entry
+points, and `Database/supabase/schemas/` only if the UI `member_locks` table is chosen.
 
 <!-- Entries appended below as we go. -->

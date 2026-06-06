@@ -1,21 +1,24 @@
 from pydantic import BaseModel, model_validator
 
-from src.payments.schema.metadata.stripe_coupon_metadata import (
-    StripeCouponMetadata,
-)
 from src.payments.schema.payments_enums import StripeCouponDuration
 
 
 class PaymentsDiscountCreateRequest(BaseModel):
-    """Create a Stripe Coupon."""
+    """Create a Stripe Coupon with a caller-supplied deterministic id.
 
+    The sync's value-derived coupons set their own id (``pct_<bps>_<mode>`` /
+    ``amt_<cents>_<mode>``) so find-or-create is idempotent. There is no CRM
+    back-reference metadata — these coupons are shared across every discount at a
+    given value, computed on the spot at sync.
+    """
+
+    coupon_id: str
     discount_name: str
     percentage_off: float | None = None
     amount_off: int | None = None
     currency: str = "usd"
     duration: StripeCouponDuration
     duration_in_months: int | None = None
-    metadata: StripeCouponMetadata
 
     @model_validator(mode="after")
     def exactly_one_discount_value(self) -> PaymentsDiscountCreateRequest:
@@ -29,14 +32,6 @@ class PaymentsDiscountCreateRequest(BaseModel):
         return self
 
 
-class PaymentsDiscountUpdateRequest(BaseModel):
-    """Update a Stripe Coupon (name and metadata only)."""
-
-    stripe_coupon_id: str
-    discount_name: str
-    metadata: StripeCouponMetadata
-
-
 class PaymentsDiscountDeleteRequest(BaseModel):
     """Delete a Stripe Coupon."""
 
@@ -44,7 +39,7 @@ class PaymentsDiscountDeleteRequest(BaseModel):
 
 
 class PaymentsDiscountResponse(BaseModel):
-    """Response after creating/updating a Stripe Coupon."""
+    """Response after creating/retrieving a Stripe Coupon."""
 
     stripe_coupon_id: str
     name: str
