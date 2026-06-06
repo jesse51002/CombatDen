@@ -190,8 +190,8 @@ under a **caller-supplied deterministic `coupon_id`**; idempotent — a create r
 on the same id returns the existing coupon), `delete_discount`, and
 `retrieve_discount` (raises; used by the subscription coupon-validation path).
 Coupons carry **no CRM back-reference metadata** — a value-coupon is shared across
-every discount at that value (the old `crm_discount_id` / `StripeCouponMetadata`
-was removed). The **deterministic id scheme + validate-or-replace policy** (the
+every discount at that value, so there is nothing to back-reference. The
+**deterministic id scheme + validate-or-replace policy** (the
 value signature `pct_<bps>_<mode>` / `amt_<cents>_<mode>`) lives in
 `PaymentSyncCoupons` (`sync-guide`), which **delegates all coupon I/O here** — no
 service outside this payments layer touches the Stripe SDK. The
@@ -484,8 +484,9 @@ are called by the sync engine and the membership/members/plans services
   `payments/schema/payments_enums.py` (`StripeCouponDuration`,
   `StripeResourceType`).
 - **Metadata models:** `payments/schema/metadata/` (`stripe_metadata_base.py` +
-  the six per-resource models; `StripeCouponMetadata` was removed — value-coupons
-  carry no CRM back-reference).
+  the six per-resource models). Coupons have no metadata model — a value-coupon
+  is shared across every discount at that value, so it carries no CRM
+  back-reference.
 - **Non-subscription services:** `payments/service/payments_stripe_members_service.py`,
   `payments_stripe_membership_service.py`, `payments_stripe_price_service.py`,
   `payments_stripe_payment_service.py`, `payments_stripe_discount_service.py`

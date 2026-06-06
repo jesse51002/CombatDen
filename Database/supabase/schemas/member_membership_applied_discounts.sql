@@ -45,8 +45,13 @@ CREATE TABLE member_membership_applied_discounts_unfiltered (
     -- enum is declared in member_memberships.sql (the earliest-loaded consumer).
     -- 'not_added' (default) = pending: the row is asking the sync to resolve its
     -- coupon; the sync stamps `applied` once it does. `preview_*` reserved for
-    -- preview-staging.
-    stripe_sync_status stripe_sync_status NOT NULL DEFAULT 'not_added',
+    -- preview-staging. The enum is shared with member_memberships, but `migrating`
+    -- is a membership-only state (a subscription item being re-pointed to a new
+    -- price) — it never applies to an applied-discount row, so the CHECK rules it
+    -- out even though the shared enum technically allows the value.
+    stripe_sync_status stripe_sync_status NOT NULL DEFAULT 'not_added'
+        CONSTRAINT applied_discount_sync_status_not_migrating
+        CHECK (stripe_sync_status <> 'migrating'),
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 

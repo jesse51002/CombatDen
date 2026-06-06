@@ -35,11 +35,11 @@ CREATE TABLE member_memberships_unfiltered (
     prorate BOOLEAN NOT NULL DEFAULT true,
     total_price INTEGER NOT NULL CHECK (total_price >= 0),
 
-    -- Stripe-sync confirmation (service_role writeback). NULL = pending: the row
-    -- 'not_added' (default) = pending: the row is asking the sync to add it to
-    -- Stripe; the sync stamps `applied` once Stripe confirms (and `deleted` when
-    -- it removes the row). Orthogonal to the lifecycle status derived by the
-    -- member_memberships_status view.
+    -- Stripe-sync confirmation (service_role writeback). 'not_added' (default)
+    -- = pending: the row is asking the sync to add it to Stripe; the sync stamps
+    -- `applied` once Stripe confirms (and `deleted` when it removes the row).
+    -- Orthogonal to the lifecycle status derived by the member_memberships_status
+    -- view.
     stripe_sync_status stripe_sync_status NOT NULL DEFAULT 'not_added',
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

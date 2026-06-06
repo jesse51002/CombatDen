@@ -15,7 +15,7 @@
 
 ## 0. Orientation — where everything is
 
-- **Worktree:** `/.../codebase/.claude/worktrees/membership-refactor-step1`, branch
+- **Worktree:** this work lives in a git worktree under `.claude/worktrees/`, branch
   `worktree-membership-refactor-step1` (pushed to origin — the work is safe there). All edits
   happen here, isolated from the main checkout. **Commit + push at each milestone.**
 - **The engine:** `FastApiBackend/src/member_memberships/service/payment_sync/`.
@@ -27,12 +27,13 @@
   refactor; the top of that file has a status table. Mapping at the bottom of this doc (§9).
 
 ### How to verify (do this after EVERY change)
-The worktree has **no `.venv`**. Use the MAIN checkout's venv. From `FastApiBackend/`:
+The worktree has **no `.venv`**. Use your MAIN (non-worktree) checkout's venv. From `FastApiBackend/`:
 ```bash
 python -m py_compile <files>
 python -m ruff check <files>          # ruff 0.15; `--fix` auto-removes unused imports
 # DI build / import smoke test (needs deps + settings):
-MAIN=/var/home/jm/Documents/CombatDen/codebase/FastApiBackend
+# Point MAIN at YOUR primary (non-worktree) checkout's FastApiBackend — the one with a built .venv:
+MAIN=/path/to/your/main-checkout/FastApiBackend
 "$MAIN/.venv/bin/python" -c "
 import os; from dotenv import dotenv_values
 os.environ.update({k:v for k,v in dotenv_values('$MAIN/.env').items() if v is not None})

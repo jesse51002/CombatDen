@@ -95,9 +95,9 @@ Three properties fall out of "re-derive from scratch every time":
 
 ## 2. Triggers + entry points
 
-`PaymentSyncService` exposes exactly three public entry points (the
-`resolve_parent` delegate is gone — callers that need parent resolution inject the
-shared `BillingParentResolver` directly, e.g. `member_memberships_start`):
+`PaymentSyncService` exposes exactly three public entry points (callers that need
+parent resolution inject the shared `BillingParentResolver` directly — not via
+`PaymentSyncService` — e.g. `member_memberships_start`):
 
 | method | what it does | callers |
 | --- | --- | --- |
@@ -212,8 +212,9 @@ two columns differ on purpose:
 
 The `#23` callers that only *validate* the parent (`member_memberships_charge_card.py`,
 `member_memberships_mark_paid_cash.py`) inject `BillingParentResolver` and call
-`resolve_parent` directly; they run no sync, so no verify/revert. `SyncItem` is
-**gone** — the engine and every caller derive from the DB.
+`resolve_parent` directly; they run no sync, so no verify/revert. The engine and
+every caller derive desired state **purely from the DB** — there are no imperative
+item lists threaded through any call.
 
 ---
 
@@ -517,8 +518,8 @@ cutoff is enforced by **the read** — the applied-discount query (§4) excludes
 discount once its `end_date` passes. Percent coupons round to 2 decimals (Stripe's
 `percent_off` limit); dollar coupons set `amount_off` (integer cents) +
 `currency = "usd"`. No `crm_discount_id` / metadata back-reference: a value-coupon
-is shared across every discount at that value, made on the spot (the old
-one-coupon-per-`gym_discounts`-row metadata was removed).
+is shared across every discount at that value, made on the spot — so there is
+nothing to back-reference.
 
 > **Discount *semantics* live in `discounts-guide`.** The meaning of `once` vs
 > `ongoing`, the lifetime spec (duration-span XOR explicit `end_date`), and the
@@ -541,10 +542,9 @@ as the subscription-lifecycle dispatcher, not a freeze handler.
 - **bucket has items** → `_sync_bucket`: **update** if `existing_sub_id` is set,
   else **create**. The `proration_behavior` is an **explicit param** threaded from
   `update_payments_recurring` (`"none"` / `"always_invoice"`, default `"none"`) —
-  passed straight to both the create and update Stripe requests. It is **no longer
-  inferred** from a per-item `prorate` (that inference, `_resolve_prorate`, and the
-  whole `SyncItem` model are gone — the caller chooses `proration_behavior`
-  explicitly). Every subscription carries `StripeSubscriptionMetadata(member_id,
+  passed straight to both the create and update Stripe requests — the caller
+  chooses `proration_behavior` **explicitly**, never inferred from a per-item
+  flag. Every subscription carries `StripeSubscriptionMetadata(member_id,
   gym_id)`. `pay_first_invoice_out_of_band` only applies on **create**, and the
   out-of-band first-invoice path triggers only when `proration_behavior ==
   "always_invoice"`.
@@ -567,9 +567,9 @@ converges Stripe purely from **`parent.is_frozen`** (the DB freeze window on
 `freeze_end_date` as the resume date), otherwise → resume. There are **no
 explicit `freeze_end_date` / `unfreeze` flags** and **no DB writes** here — the
 freeze-date DB write happens *elsewhere*, in the freeze/unfreeze request handler,
-before this service is called. (`_validate_freeze_params` is gone — there is no
-freeze-vs-membership-change conflict to validate because freeze no longer rides on
-the membership sync.)
+before this service is called. Freeze is a standalone subscription-level pause,
+independent of the membership sync, so there is no freeze-vs-membership-change
+conflict to validate.
 
 Two callers:
 
