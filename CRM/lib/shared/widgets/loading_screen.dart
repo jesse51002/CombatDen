@@ -12,9 +12,9 @@ class LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: DesignConstants.backgroundColor,
-      body: Center(child: AppSpinner()),
+      body: const Center(child: AppSpinner()),
     );
   }
 }

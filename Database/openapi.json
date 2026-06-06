@@ -407,6 +407,74 @@
         }
       }
     },
+    "/api/v1/gyms/{gym_id}/employees/me/theme": {
+      "put": {
+        "tags": [
+          "gyms"
+        ],
+        "summary": "Save the caller's CRM theme preference for a gym",
+        "description": "Persists the calling employee's admin-app appearance choice (system / light / dark) on their ``gym_employees`` row for this gym. Rehydrated at login from ``GET /api/v1/gyms/``.",
+        "operationId": "update_my_theme_api_v1_gyms__gym_id__employees_me_theme_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "gym_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeThemeUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Theme saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeThemeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not an employee of this gym"
+          },
+          "404": {
+            "description": "Employee not found for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/members/": {
       "post": {
         "tags": [
@@ -3970,6 +4038,78 @@
         }
       }
     },
+    "/api/v1/membership_plans/{plan_id}/prices": {
+      "get": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "List a plan's price versions",
+        "description": "Lists every price version of a plan (active first) with the number of members still on each \u2014 so the CRM can show older prices that still have members to migrate forward.",
+        "operationId": "list_plan_prices_api_v1_membership_plans__plan_id__prices_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prices fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MembershipPlanPriceWithCount"
+                  },
+                  "title": "Response List Plan Prices Api V1 Membership Plans  Plan Id  Prices Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Plan not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/membership_plans/price": {
       "post": {
         "tags": [
@@ -4037,8 +4177,8 @@
         "tags": [
           "membership_plans"
         ],
-        "summary": "Migrate specific members",
-        "description": "Re-syncs payment state for the specified members on a plan. Runs as a background task.",
+        "summary": "Migrate specific members (not implemented)",
+        "description": "Member migration is not implemented yet.",
         "operationId": "migrate_members_api_v1_membership_plans_migrate_post",
         "requestBody": {
           "content": {
@@ -4051,25 +4191,19 @@
           "required": true
         },
         "responses": {
-          "202": {
-            "description": "Migration queued",
+          "501": {
+            "description": "Member migration is not implemented yet",
             "content": {
               "application/json": {
                 "schema": {}
               }
             }
           },
-          "400": {
-            "description": "Invalid request"
-          },
           "401": {
             "description": "Not authenticated"
           },
           "403": {
             "description": "Not authorized for this gym"
-          },
-          "404": {
-            "description": "Plan not found"
           },
           "422": {
             "description": "Validation Error",
@@ -4094,8 +4228,8 @@
         "tags": [
           "membership_plans"
         ],
-        "summary": "Migrate all members on a plan",
-        "description": "Re-syncs payment state for ALL active members on a plan. Runs as a background task.",
+        "summary": "Migrate all members on a plan (not implemented)",
+        "description": "Member migration is not implemented yet.",
         "operationId": "migrate_all_members_api_v1_membership_plans_migrate_all_post",
         "requestBody": {
           "content": {
@@ -4108,25 +4242,19 @@
           "required": true
         },
         "responses": {
-          "202": {
-            "description": "Migration queued",
+          "501": {
+            "description": "Member migration is not implemented yet",
             "content": {
               "application/json": {
                 "schema": {}
               }
             }
           },
-          "400": {
-            "description": "Invalid request"
-          },
           "401": {
             "description": "Not authenticated"
           },
           "403": {
             "description": "Not authorized for this gym"
-          },
-          "404": {
-            "description": "Plan not found"
           },
           "422": {
             "description": "Validation Error",
@@ -5058,6 +5186,30 @@
           "is_eligible": {
             "type": "boolean",
             "title": "Is Eligible"
+          },
+          "renew_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renew Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
           }
         },
         "type": "object",
@@ -5067,10 +5219,12 @@
           "class_count",
           "classes_used",
           "classes_remaining",
-          "is_eligible"
+          "is_eligible",
+          "renew_date",
+          "end_date"
         ],
         "title": "CheckinMembershipBreakdown",
-        "description": "Usage breakdown for one of the member's active memberships.\n\nAttributes:\n    plan_id: The membership plan.\n    plan_type: Trial, one_time, or recurring.\n    class_count: Max classes allowed (None = unlimited).\n    classes_used: Classes used this cycle (post-checkin for the\n        charged plan).\n    classes_remaining: Classes left (None = unlimited).\n    is_eligible: Whether this plan covers the checked-in class."
+        "description": "Usage breakdown for one of the member's active memberships.\n\nAttributes:\n    plan_id: The membership plan.\n    plan_type: Trial, one_time, or recurring.\n    class_count: Max classes allowed (None = unlimited).\n    classes_used: Classes used this cycle (post-checkin for the\n        charged plan).\n    classes_remaining: Classes left (None = unlimited).\n    is_eligible: Whether this plan covers the checked-in class.\n    renew_date: Next renewal / due date (recurring plans; None\n        otherwise).\n    end_date: Membership expiry date (trial / one_time plans; None\n        otherwise)."
       },
       "CheckinRequest": {
         "properties": {
@@ -5519,7 +5673,7 @@
         "title": "DiscountType",
         "description": "Discount type.\n\nPresets (gym_discounts) are regular-only: preset | custom. `linked` is a\nsnapshot-only marker that lives on member_membership_applied_discounts (a\nfamily discount has no preset entity), so it stays in this shared enum but\nis rejected by GymDiscountCreate below."
       },
-      "DiscountUpdateData": {
+      "DiscountUpdateIdentity": {
         "properties": {
           "discount_name": {
             "anyOf": [
@@ -5531,7 +5685,55 @@
               }
             ],
             "title": "Discount Name"
+          }
+        },
+        "type": "object",
+        "title": "DiscountUpdateIdentity",
+        "description": "Identity change \u2192 rename the gym_discounts row in place.\n\nThe discount's IDENTITY (gym_discounts) holds only the editable name;\neverything else is a versioned value (see DiscountUpdateValues)."
+      },
+      "DiscountUpdateRequest": {
+        "properties": {
+          "discount_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Discount Id"
           },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscountUpdateIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "values": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscountUpdateValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "discount_id",
+          "gym_id"
+        ],
+        "title": "DiscountUpdateRequest",
+        "description": "Update a regular discount preset (intent only).\n\nThe request shape encodes the destination: `identity` renames the\ngym_discounts row in place; `values` mints a new gym_discount_values\nversion. At least one must be present. Edits affect only future\napplications; existing snapshot rows on\nmember_membership_applied_discounts are never touched."
+      },
+      "DiscountUpdateValues": {
+        "properties": {
           "percentage_off": {
             "anyOf": [
               {
@@ -5599,33 +5801,8 @@
           }
         },
         "type": "object",
-        "title": "DiscountUpdateData",
-        "description": "Mutable preset fields. All optional \u2014 only send what changed."
-      },
-      "DiscountUpdateRequest": {
-        "properties": {
-          "discount_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Discount Id"
-          },
-          "gym_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Gym Id"
-          },
-          "data": {
-            "$ref": "#/components/schemas/DiscountUpdateData"
-          }
-        },
-        "type": "object",
-        "required": [
-          "discount_id",
-          "gym_id",
-          "data"
-        ],
-        "title": "DiscountUpdateRequest",
-        "description": "Update a regular discount preset (intent only).\n\nEdits affect only future applications; existing snapshot rows on\nmember_membership_applied_discounts are never touched."
+        "title": "DiscountUpdateValues",
+        "description": "Value/lifetime change \u2192 mint a new gym_discount_values version.\n\nEvery field here lands on a fresh, immutable value version (the prior\nactive one is deactivated). The model's shape is the partition: anything\non this sub-model routes to a new version, never to the identity row."
       },
       "DurationUnit": {
         "type": "string",
@@ -5636,6 +5813,51 @@
         ],
         "title": "DurationUnit",
         "description": "Billing cycle duration unit."
+      },
+      "EmployeeThemeResponse": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "theme_preference": {
+            "$ref": "#/components/schemas/ThemeMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "theme_preference"
+        ],
+        "title": "EmployeeThemeResponse",
+        "description": "The caller's saved theme for a gym (echoed back on update)."
+      },
+      "EmployeeThemeUpdateData": {
+        "properties": {
+          "theme_preference": {
+            "$ref": "#/components/schemas/ThemeMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "theme_preference"
+        ],
+        "title": "EmployeeThemeUpdateData",
+        "description": "Mutable field for PUT .../employees/me/theme.\n\nPer project convention, update requests separate identity (the\nURL ``gym_id`` + the caller's JWT) from a nested ``data`` model.\nTheme is the only settable field here."
+      },
+      "EmployeeThemeUpdateRequest": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EmployeeThemeUpdateData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "EmployeeThemeUpdateRequest",
+        "description": "Body for PUT /api/v1/gyms/{gym_id}/employees/me/theme."
       },
       "EmployeeType": {
         "type": "string",
@@ -5851,13 +6073,7 @@
             "title": "Gym Id"
           },
           "stripe_onboarding_status": {
-            "type": "string",
-            "enum": [
-              "not_started",
-              "pending",
-              "complete"
-            ],
-            "title": "Stripe Onboarding Status"
+            "$ref": "#/components/schemas/StripeOnboardingStatus"
           },
           "onboarding_url": {
             "anyOf": [
@@ -6053,6 +6269,9 @@
           },
           "employee_type": {
             "$ref": "#/components/schemas/EmployeeType"
+          },
+          "theme_preference": {
+            "$ref": "#/components/schemas/ThemeMode"
           }
         },
         "type": "object",
@@ -6061,10 +6280,11 @@
           "gym_name",
           "gym_description",
           "timezone",
-          "employee_type"
+          "employee_type",
+          "theme_preference"
         ],
         "title": "GymWithRoleResponse",
-        "description": "A gym the caller administers, annotated with their role.\n\nReturned by ``GET /api/v1/gyms/`` \u2014 the list of gyms the\nauthenticated user owns or admins (``employee_type`` is the\ncaller's role for that gym)."
+        "description": "A gym the caller administers, annotated with their role.\n\nReturned by ``GET /api/v1/gyms/`` \u2014 the list of gyms the\nauthenticated user owns or admins (``employee_type`` is the\ncaller's role for that gym). ``theme_preference`` is the caller's\nown CRM appearance choice for that gym, so the admin app can\nhydrate the theme at login."
       },
       "HTTPValidationError": {
         "properties": {
@@ -6086,6 +6306,35 @@
           "custom"
         ],
         "title": "LineItemType"
+      },
+      "LinkedDiscountValue": {
+        "properties": {
+          "percentage_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage Off"
+          },
+          "dollar_off": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dollar Off"
+          }
+        },
+        "type": "object",
+        "title": "LinkedDiscountValue",
+        "description": "One family tier's discount \u2014 a real discount value ($ off or % off).\n\nExactly one of ``percentage_off`` / ``dollar_off`` is set, mirroring a\nregular discount (`gym_discount_values`). The backend mints a real\n``linked`` discount entry per tier on write and stores the ids in\n``membership_plans.linked_discount_ids``; reads resolve them back here."
       },
       "MainRankPresetGroup": {
         "properties": {
@@ -7523,12 +7772,12 @@
             "title": "Linked Discount Enabled",
             "default": false
           },
-          "linked_discount_prices": {
+          "linked_discount_values": {
             "items": {
-              "type": "integer"
+              "$ref": "#/components/schemas/LinkedDiscountValue"
             },
             "type": "array",
-            "title": "Linked Discount Prices",
+            "title": "Linked Discount Values",
             "default": []
           }
         },
@@ -7667,6 +7916,59 @@
         "title": "MembershipPlanPriceResponse",
         "description": "Price details for a membership plan."
       },
+      "MembershipPlanPriceWithCount": {
+        "properties": {
+          "price_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Price Id"
+          },
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "stripe_price_id": {
+            "type": "string",
+            "title": "Stripe Price Id"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_id",
+          "plan_id",
+          "gym_id",
+          "stripe_price_id",
+          "price",
+          "is_active",
+          "created_at",
+          "member_count"
+        ],
+        "title": "MembershipPlanPriceWithCount",
+        "description": "A plan price version plus how many members are still on it.\n\nDrives the edit-mode price list: the active price plus any older\nversion that still has members (``member_count > 0``) the gym can\nmigrate onto the current price."
+      },
       "MembershipPlanResponse": {
         "properties": {
           "plan_id": {
@@ -7776,12 +8078,12 @@
             "title": "Linked Discount Ids",
             "default": []
           },
-          "linked_discount_prices": {
+          "linked_discount_values": {
             "items": {
-              "type": "integer"
+              "$ref": "#/components/schemas/LinkedDiscountValue"
             },
             "type": "array",
-            "title": "Linked Discount Prices",
+            "title": "Linked Discount Values",
             "default": []
           }
         },
@@ -7809,16 +8111,6 @@
               }
             ],
             "title": "Plan Name"
-          },
-          "plan_type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PlanType"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "class_count": {
             "anyOf": [
@@ -7889,11 +8181,11 @@
             ],
             "title": "Linked Discount Enabled"
           },
-          "linked_discount_prices": {
+          "linked_discount_values": {
             "anyOf": [
               {
                 "items": {
-                  "type": "integer"
+                  "$ref": "#/components/schemas/LinkedDiscountValue"
                 },
                 "type": "array"
               },
@@ -7901,12 +8193,12 @@
                 "type": "null"
               }
             ],
-            "title": "Linked Discount Prices"
+            "title": "Linked Discount Values"
           }
         },
         "type": "object",
         "title": "MembershipPlanUpdateData",
-        "description": "Mutable plan fields. All optional \u2014 only send what changed."
+        "description": "Mutable plan fields. All optional \u2014 only send what changed.\n\n``plan_type`` is intentionally absent: a plan's billing model is fixed at\ncreation (immutable \u2014 see ``MEMBERSHIP_PLANS`` in ``immutable_columns.py``\nand the ``trg_prevent_plan_type_overwrite`` DB trigger)."
       },
       "MembershipPlanUpdateRequest": {
         "properties": {
@@ -8938,6 +9230,17 @@
         "title": "StreakResponse",
         "description": "Response for GET /api/v1/classes/streak."
       },
+      "StripeOnboardingStatus": {
+        "type": "string",
+        "enum": [
+          "not_started",
+          "pending",
+          "complete",
+          "disabled"
+        ],
+        "title": "StripeOnboardingStatus",
+        "description": "Mirrors the Postgres `stripe_onboarding_status` enum in gyms.sql."
+      },
       "StripeWebhookAck": {
         "properties": {
           "received": {
@@ -9003,6 +9306,16 @@
         ],
         "title": "SubRankPreset",
         "description": "Leaf node \u2014 one sub-rank within a main-rank group."
+      },
+      "ThemeMode": {
+        "type": "string",
+        "enum": [
+          "system",
+          "light",
+          "dark"
+        ],
+        "title": "ThemeMode",
+        "description": "CRM admin-app appearance preference. 'system' follows the OS."
       },
       "TrialViewRow": {
         "properties": {

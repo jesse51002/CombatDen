@@ -13,7 +13,9 @@ from src.classes.schema.classes_schema import (
     CheckinResponse,
     StreakResponse,
 )
-from src.classes.service.classes_checkin_service import ClassesCheckinService
+from src.classes.service.checkin.classes_checkin_service import (
+    ClassesCheckinService,
+)
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security

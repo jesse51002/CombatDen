@@ -166,3 +166,40 @@ def make_charge_refunded_event(
         "created": now,
         "data": {"object": charge},
     }
+
+
+def make_account_updated_event(
+    *,
+    stripe_account_id: str,
+    details_submitted: bool = True,
+    charges_enabled: bool = True,
+    payouts_enabled: bool = True,
+    disabled_reason: str | None = None,
+    currently_due: list[str] | None = None,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """Build an ``account.updated`` event payload.
+
+    The connected account being updated is ``stripe_account_id`` (both
+    the event's ``account`` and ``data.object.id``). The capability
+    flags + ``requirements`` drive the canonical status mapping.
+    """
+    now = int(time.time())
+    account = {
+        "id": stripe_account_id,
+        "object": "account",
+        "details_submitted": details_submitted,
+        "charges_enabled": charges_enabled,
+        "payouts_enabled": payouts_enabled,
+        "requirements": {
+            "disabled_reason": disabled_reason,
+            "currently_due": currently_due or [],
+        },
+    }
+    return {
+        "id": event_id or _evt_id("evt_test_account"),
+        "type": "account.updated",
+        "account": stripe_account_id,
+        "created": now,
+        "data": {"object": account},
+    }

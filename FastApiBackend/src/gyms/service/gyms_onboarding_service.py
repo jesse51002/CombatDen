@@ -3,6 +3,7 @@
 import logging
 from uuid import UUID
 
+from schema.gym import StripeOnboardingStatus
 from sqlalchemy import text
 
 from src.gyms import SQL_DIR
@@ -10,10 +11,7 @@ from src.gyms.schema.gyms_schema import (
     GymOnboardingLinkResponse,
     GymOnboardingStatusResponse,
 )
-from src.gyms.service.gyms_status_mapping import (
-    GYM_STATUS_PENDING,
-    map_account_to_snapshot,
-)
+from src.gyms.service.gyms_status_mapping import map_account_to_snapshot
 from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectService
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.shared.database import DirectDatabasePool
@@ -94,7 +92,7 @@ class GymsOnboardingService:
 
         onboarding_url: str | None = None
         expires_at = None
-        if snapshot.status == GYM_STATUS_PENDING:
+        if snapshot.status == StripeOnboardingStatus.pending:
             onboarding_url, expires_at = await self._stripe_connect.create_account_link(
                 stripe_account_id,
             )
@@ -133,7 +131,7 @@ class GymsOnboardingService:
             raise ValueError(
                 "Gym has no Stripe account — recreate via POST /api/v1/gyms/",
             )
-        if current_status != GYM_STATUS_PENDING:
+        if current_status != StripeOnboardingStatus.pending:
             raise ValueError(
                 f"Cannot mint onboarding link: gym status is '{current_status}'",
             )

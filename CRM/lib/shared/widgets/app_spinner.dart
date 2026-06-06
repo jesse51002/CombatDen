@@ -13,7 +13,7 @@ class AppSpinner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    return SizedBox(
       height: DesignConstants.iconSizeLarge,
       width: DesignConstants.iconSizeLarge,
       child: CircularProgressIndicator(

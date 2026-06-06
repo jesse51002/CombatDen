@@ -22,14 +22,17 @@ class AppRoutes {
   // Create / edit a membership plan. Reads the plan (or null for
   // create) off route arguments, so it is not deep-linkable.
   static const String membershipDetails = '/memberships/detail';
-  // Per-waiver signature roster — reads the tapped waiver off
-  // route arguments, so it is not deep-linkable.
-  static const String membershipsWaiverRoster =
-      '/memberships/waivers/roster';
-  static const String qrCodes = '/qr-codes';
+  // Create / edit a waiver (rich-text editor + versions + signed-members
+  // tab). Reads the waiver (or null for create) off route arguments, so it
+  // is not deep-linkable.
+  static const String membershipsWaiverEditor =
+      '/memberships/waivers/editor';
   static const String growth = '/growth';
   static const String employees = '/employees';
   static const String employeeDetail = '/employees/detail';
+  // Settings hosts the appearance (theme) control and the printable
+  // sign-up / check-in QR codes.
+  static const String settings = '/settings';
 
   AppRoutes._();
 }

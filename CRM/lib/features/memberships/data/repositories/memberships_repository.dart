@@ -6,7 +6,9 @@ import 'package:crm/features/memberships/data/models/discount_create_request.dar
 import 'package:crm/features/memberships/data/models/discount_update_request.dart';
 import 'package:crm/features/memberships/data/models/member_waiver_status.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_create_request.dart';
+import 'package:crm/features/memberships/data/models/membership_plan_migrate_all_request.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_price_request.dart';
+import 'package:crm/features/memberships/data/models/membership_plan_price_with_count.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_update_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_create_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
@@ -83,6 +85,37 @@ class MembershipsRepository {
     );
     return MembershipPlanPriceResponse.fromJson(
       response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `GET /api/v1/membership_plans/{plan_id}/prices?gym_id=…` — every
+  /// price version of a plan (active first) with its member count.
+  Future<List<MembershipPlanPriceWithCount>> listPlanPrices(
+    String planId,
+    String gymId,
+  ) async {
+    final response = await _apiClient.get(
+      '/api/v1/membership_plans/$planId/prices',
+      queryParameters: {'gym_id': gymId},
+    );
+    return (response.data as List<dynamic>)
+        .map((e) =>
+            MembershipPlanPriceWithCount.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// `POST /api/v1/membership_plans/migrate-all` — queues a background
+  /// sync moving every member on an older price onto the current price.
+  Future<void> migrateAllToCurrentPrice(
+    String planId,
+    String gymId,
+  ) async {
+    await _apiClient.post(
+      '/api/v1/membership_plans/migrate-all',
+      data: MembershipPlanMigrateAllRequest(
+        planId: planId,
+        gymId: gymId,
+      ).toJson(),
     );
   }
 

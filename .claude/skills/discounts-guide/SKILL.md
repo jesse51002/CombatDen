@@ -130,15 +130,19 @@ exactly like a regular discount.
 
 A **membership plan references its family discounts by id**:
 `membership_plans.linked_discount_ids` stores a discount **id per family tier**
-(2nd, 3rd, 4th, 5th+ linked member, in order) pointing at real linked discount
-entries. The linked-discount **amount is entered on the membership creation/edit
-screen**, owned by the membership/plan UI — the CRM sends per-tier *amounts*
-(`linked_discount_prices`), and the **backend mints a real `linked` discount
-entry per amount on plan create/update** (reusing `DiscountsService`) and stores
-their ids in `linked_discount_ids`. Plan **reads resolve the ids back to amounts**
-(a subquery on `gym_discount_values`) so the CRM can display/edit them without
-ever seeing the linked discounts in the regular preset list. Editing an amount
-mints a new active version on the same discount, so the stored id stays stable.
+(2nd, 3rd, 4th, 5th linked member, in order — capped at 5 members) pointing at
+real linked discount entries. The linked-discount **value is entered on the
+membership creation/edit screen**, owned by the membership/plan UI — exactly
+like a regular discount, each tier is a **$ off or % off value** (not a
+"member price"). The CRM sends per-tier `linked_discount_values` (each a
+`{percentage_off | dollar_off}`, exactly one set), and the **backend mints a real
+`linked` discount entry per value on plan create/update** (reusing
+`DiscountsService`) and stores their ids in `linked_discount_ids`. Plan **reads
+resolve the ids back to values** (a subquery on `gym_discount_values` building a
+`{percentage_off, dollar_off}` object per tier) so the CRM can display/edit them
+without ever seeing the linked discounts in the regular preset list. Editing a
+value mints a new active version on the same discount, so the stored id stays
+stable.
 
 **Applying** a linked discount is the same as any discount: the membership/family
 flow passes its id to `add_preset_ids`, which pins an applied-discount row to the

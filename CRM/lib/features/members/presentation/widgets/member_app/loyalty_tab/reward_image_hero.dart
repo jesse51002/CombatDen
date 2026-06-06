@@ -34,7 +34,7 @@ class RewardImageHero extends StatelessWidget {
               imageUrl!,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) =>
-                  const ColoredBox(color: DesignConstants.backgroundColor),
+                  ColoredBox(color: DesignConstants.backgroundColor),
             )
           else
             Image.asset(imageAsset ?? '', fit: BoxFit.cover),

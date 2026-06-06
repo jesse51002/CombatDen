@@ -9,11 +9,13 @@ Handles:
 import logging
 from uuid import UUID
 
+from schema.gym_employee import ThemeMode
 from schema.immutable_columns import GYMS as GYMS_IMMUTABLE
 from sqlalchemy import text
 
 from src.gyms import SQL_DIR
 from src.gyms.schema.gyms_schema import (
+    EmployeeThemeResponse,
     GymCreateRequest,
     GymCreateResponse,
     GymOnboardingLinkResponse,
@@ -24,11 +26,6 @@ from src.gyms.schema.gyms_schema import (
 )
 from src.gyms.service.gyms_create_service import GymsCreateService
 from src.gyms.service.gyms_onboarding_service import GymsOnboardingService
-from src.gyms.service.gyms_status_mapping import (
-    GYM_STATUS_COMPLETE,
-    GYM_STATUS_NOT_STARTED,
-    GYM_STATUS_PENDING,
-)
 from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectService
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
@@ -166,12 +163,27 @@ class GymsService:
 
         return GymResponse(**row)
 
+    async def update_employee_theme(
+        self,
+        gym_id: UUID,
+        user_id: UUID,
+        theme_preference: ThemeMode,
+    ) -> EmployeeThemeResponse:
+        """Save the caller's CRM theme preference for one gym.
 
-# Re-export status constants so the router can reference them
-# without reaching across service modules.
-__all__ = [
-    "GYM_STATUS_COMPLETE",
-    "GYM_STATUS_NOT_STARTED",
-    "GYM_STATUS_PENDING",
-    "GymsService",
-]
+        The caller's employment at ``gym_id`` is verified at the
+        router layer; the WHERE clause scopes the write to the
+        caller's own ``gym_employees`` row.
+        """
+        sql = load_sql(SQL_DIR / "update_employee_theme.sql")
+        params = {
+            "theme_preference": theme_preference.value,
+            "user_id": str(user_id),
+            "gym_id": str(gym_id),
+        }
+        row = await self._db_pool.execute_with_retry(sql, params)
+
+        if not row:
+            raise ValueError("Employee not found for this gym")
+
+        return EmployeeThemeResponse(**row)

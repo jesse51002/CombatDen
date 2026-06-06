@@ -22,7 +22,7 @@ Table gyms {
   timezone text [not null, default: 'America/Chicago']
   is_rank_enabled boolean [not null, default: true]
   stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']
-  stripe_onboarding_status text [not null, default: 'not_started', note: 'CHECK: not_started | pending | complete']
+  stripe_onboarding_status stripe_onboarding_status [not null, default: 'not_started', note: 'enum: not_started | pending | complete | disabled']
 }
 
 Table gym_employees {
@@ -36,6 +36,7 @@ Table gym_employees {
   email varchar
   employee_pic_url varchar
   employee_public_description varchar
+  theme_preference varchar [not null, default: 'system', note: 'enum: system, light, dark']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {

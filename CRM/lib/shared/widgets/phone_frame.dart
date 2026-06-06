@@ -46,11 +46,11 @@ class PhoneFrame extends StatelessWidget {
               // Device body (frame).
               Container(
                 decoration: BoxDecoration(
-                  color: DesignConstants.text,
+                  color: DesignConstants.deviceBody,
                   borderRadius: BorderRadius.circular(_kBodyRadius),
                   boxShadow: [
                     BoxShadow(
-                      color: DesignConstants.text.withValues(alpha: 0.25),
+                      color: DesignConstants.deviceShadow,
                       blurRadius: 32,
                       spreadRadius: 2,
                       offset: const Offset(0, 12),
@@ -87,7 +87,7 @@ class PhoneFrame extends StatelessWidget {
                     width: _kIslandW,
                     height: _kIslandH,
                     decoration: BoxDecoration(
-                      color: DesignConstants.text,
+                      color: DesignConstants.deviceBody,
                       borderRadius: BorderRadius.circular(_kIslandH / 2),
                     ),
                   ),

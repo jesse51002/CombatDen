@@ -23,6 +23,13 @@ class MembershipCarousel extends StatelessWidget {
   final ValueChanged<String>? onLinkedAccountTap;
   final List<PaymentRecord> payments;
 
+  /// When true (wide grid, where the card is stretched to the
+  /// taller column's height), the actions row pins to the
+  /// card's bottom edge and the slack collects above it. Must
+  /// stay false in the stacked layout, where height is
+  /// unbounded and a [Spacer] would have no constraints.
+  final bool expand;
+
   const MembershipCarousel({
     super.key,
     required this.member,
@@ -30,6 +37,7 @@ class MembershipCarousel extends StatelessWidget {
     required this.onPageChanged,
     this.onLinkedAccountTap,
     this.payments = const [],
+    this.expand = false,
   });
 
   List<MembershipInfo> get _memberships =>
@@ -121,6 +129,7 @@ class MembershipCarousel extends StatelessWidget {
             coveredMemberId: coveredId,
           ),
           PaymentHistorySection(payments: payments),
+          if (expand) const Spacer(),
           MembershipActionsRow(
             member: member,
             currentMembership: membership,

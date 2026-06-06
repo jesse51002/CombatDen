@@ -18,7 +18,7 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-_KNOWN_STATUSES = {"not_started", "pending", "complete"}
+_KNOWN_STATUSES = {"not_started", "pending", "complete", "disabled"}
 _ADMIN_ROLES = {"owner", "admin"}
 
 

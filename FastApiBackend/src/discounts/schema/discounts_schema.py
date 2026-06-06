@@ -108,16 +108,14 @@ class DiscountCreateRequest(BaseModel):
         return self
 
 
-class DiscountUpdateData(BaseModel):
-    """Mutable preset fields. All optional — only send what changed."""
+class DiscountUpdateIdentity(BaseModel):
+    """Identity change → rename the gym_discounts row in place.
+
+    The discount's IDENTITY (gym_discounts) holds only the editable name;
+    everything else is a versioned value (see DiscountUpdateValues).
+    """
 
     discount_name: str | None = None
-    percentage_off: float | None = None
-    dollar_off: int | None = None
-    discount_mode: DiscountMode | None = None
-    duration_amount: int | None = None
-    duration_unit: DiscountDurationUnit | None = None
-    end_date: date | None = None
 
     @field_validator("discount_name")
     @classmethod
@@ -125,6 +123,22 @@ class DiscountUpdateData(BaseModel):
         if v is not None and not v.strip():
             raise ValueError("discount_name cannot be empty")
         return v
+
+
+class DiscountUpdateValues(BaseModel):
+    """Value/lifetime change → mint a new gym_discount_values version.
+
+    Every field here lands on a fresh, immutable value version (the prior
+    active one is deactivated). The model's shape is the partition: anything
+    on this sub-model routes to a new version, never to the identity row.
+    """
+
+    percentage_off: float | None = None
+    dollar_off: int | None = None
+    discount_mode: DiscountMode | None = None
+    duration_amount: int | None = None
+    duration_unit: DiscountDurationUnit | None = None
+    end_date: date | None = None
 
     @field_validator("percentage_off")
     @classmethod
@@ -151,13 +165,26 @@ class DiscountUpdateData(BaseModel):
 class DiscountUpdateRequest(BaseModel):
     """Update a regular discount preset (intent only).
 
-    Edits affect only future applications; existing snapshot rows on
+    The request shape encodes the destination: `identity` renames the
+    gym_discounts row in place; `values` mints a new gym_discount_values
+    version. At least one must be present. Edits affect only future
+    applications; existing snapshot rows on
     member_membership_applied_discounts are never touched.
     """
 
     discount_id: UUID
     gym_id: UUID
-    data: DiscountUpdateData
+    identity: DiscountUpdateIdentity | None = None
+    values: DiscountUpdateValues | None = None
+
+    @model_validator(mode="after")
+    def _require_identity_or_values(self) -> DiscountUpdateRequest:
+        """At least one destination must carry a change."""
+        if self.identity is None and self.values is None:
+            raise ValueError(
+                "at least one of identity or values must be provided",
+            )
+        return self
 
 
 class DiscountResponse(BaseModel):

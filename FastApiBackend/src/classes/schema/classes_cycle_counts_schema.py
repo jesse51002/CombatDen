@@ -1,5 +1,6 @@
 """Schemas for the cycle-based class-count endpoint."""
 
+from datetime import date
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -28,6 +29,10 @@ class MembershipUsage(BaseModel):
         class_count: Max classes allowed (None = unlimited).
         classes_used: Classes attended this cycle.
         classes_remaining: Classes left (None = unlimited).
+        renew_date: Next renewal / due date (recurring plans; None
+            otherwise).
+        end_date: Membership expiry date (trial / one_time plans; None
+            otherwise).
     """
 
     plan_id: UUID
@@ -36,6 +41,8 @@ class MembershipUsage(BaseModel):
     class_count: int | None
     classes_used: int
     classes_remaining: int | None
+    renew_date: date | None
+    end_date: date | None
 
 
 class UserCycleCounts(BaseModel):

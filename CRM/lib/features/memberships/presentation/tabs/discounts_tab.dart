@@ -72,6 +72,7 @@ class _DiscountsTable extends StatelessWidget {
         rows: [
           for (final discount in state.discounts)
             AppDataTableRow(
+              onTap: () => _openDialog(context, discount: discount),
               cells: [
                 Text(discount.discountName, style: DesignConstants.p),
                 Align(

@@ -3,11 +3,11 @@
 import logging
 from uuid import UUID
 
+from schema.gym import StripeOnboardingStatus
 from sqlalchemy import text
 
 from src.gyms import SQL_DIR
 from src.gyms.schema.gyms_schema import GymCreateRequest, GymCreateResponse
-from src.gyms.service.gyms_status_mapping import GYM_STATUS_PENDING
 from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectService
 from src.payments.payments_exceptions import (
     PaymentsStripeError,
@@ -103,7 +103,7 @@ class GymsCreateService:
         return GymCreateResponse(
             gym_id=gym_id,
             stripe_account_id=stripe_account_id,
-            stripe_onboarding_status=GYM_STATUS_PENDING,
+            stripe_onboarding_status=StripeOnboardingStatus.pending,
             onboarding_url=url,
             onboarding_url_expires_at=expires_at,
         )

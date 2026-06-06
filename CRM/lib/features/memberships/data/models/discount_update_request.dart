@@ -5,15 +5,31 @@ import 'package:crm/features/member_details/data/models/discount_mode.dart';
 
 part 'discount_update_request.g.dart';
 
-/// Mutable preset fields for `PUT /api/v1/discounts/`. Only
-/// non-null fields are sent. [dollarOff] is in minor units.
+/// Identity changes for `PUT /api/v1/discounts/` — renames the
+/// gym_discounts row in place. Only non-null fields are sent.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   includeIfNull: false,
   createFactory: false,
 )
-class DiscountUpdateData {
+class DiscountUpdateIdentity {
   final String? discountName;
+
+  const DiscountUpdateIdentity({this.discountName});
+
+  Map<String, dynamic> toJson() =>
+      _$DiscountUpdateIdentityToJson(this);
+}
+
+/// Value/lifetime changes for `PUT /api/v1/discounts/` — mints a new
+/// gym_discount_values version. Only non-null fields are sent.
+/// [dollarOff] is in minor units.
+@JsonSerializable(
+  fieldRename: FieldRename.snake,
+  includeIfNull: false,
+  createFactory: false,
+)
+class DiscountUpdateValues {
   final double? percentageOff;
   final int? dollarOff;
   final DiscountMode? discountMode;
@@ -22,8 +38,7 @@ class DiscountUpdateData {
   @JsonKey(toJson: _dateToJson)
   final DateTime? endDate;
 
-  const DiscountUpdateData({
-    this.discountName,
+  const DiscountUpdateValues({
     this.percentageOff,
     this.dollarOff,
     this.discountMode,
@@ -36,25 +51,29 @@ class DiscountUpdateData {
       d?.toIso8601String().split('T').first;
 
   Map<String, dynamic> toJson() =>
-      _$DiscountUpdateDataToJson(this);
+      _$DiscountUpdateValuesToJson(this);
 }
 
-/// Body for `PUT /api/v1/discounts/` — identity fields plus a
-/// nested [data] of changes.
+/// Body for `PUT /api/v1/discounts/` — identity keys plus the
+/// destination sub-objects: [identity] (rename) and [values] (new
+/// version). At least one must be present.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   explicitToJson: true,
+  includeIfNull: false,
   createFactory: false,
 )
 class DiscountUpdateRequest {
   final String discountId;
   final String gymId;
-  final DiscountUpdateData data;
+  final DiscountUpdateIdentity? identity;
+  final DiscountUpdateValues? values;
 
   const DiscountUpdateRequest({
     required this.discountId,
     required this.gymId,
-    required this.data,
+    this.identity,
+    this.values,
   });
 
   Map<String, dynamic> toJson() =>

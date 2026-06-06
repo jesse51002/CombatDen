@@ -11,7 +11,7 @@
           "classes"
         ],
         "summary": "Check a member into a class instance",
-        "description": "Inserts a row in ``member_attendance`` and bumps the member's ``last_class`` to the class_history occurred_at. Idempotent \u2014 a second call for the same (member_id, class_history_id) returns the existing log_id with ``already_checked_in = True``.",
+        "description": "Selects the best eligible membership plan with remaining capacity (trial -> one_time -> recurring), logs the attendance against it, bumps ``last_class``, and auto-ends trial / punch-card memberships once depleted. Returns the membership breakdown. If no plan covers the class with capacity, the check-in is rejected: ``log_id`` is null and no attendance is written. Idempotent \u2014 a repeat for the same (member_id, class_history_id) returns the existing log_id with ``already_checked_in = True`` and consumes no capacity.",
         "operationId": "checkin_api_v1_classes_checkin_post",
         "requestBody": {
           "content": {
@@ -25,7 +25,7 @@
         },
         "responses": {
           "200": {
-            "description": "Check-in recorded",
+            "description": "Check-in result returned (recorded or rejected)",
             "content": {
               "application/json": {
                 "schema": {
@@ -124,6 +124,38 @@
       }
     },
     "/api/v1/gyms/": {
+      "get": {
+        "tags": [
+          "gyms"
+        ],
+        "summary": "List the gyms the caller may administer",
+        "description": "Returns every gym the authenticated user owns or admins, each annotated with the caller's role (``employee_type``). Trainers are excluded. Returns an empty list when the user administers no gyms.",
+        "operationId": "list_my_gyms_api_v1_gyms__get",
+        "responses": {
+          "200": {
+            "description": "Gyms retrieved (possibly empty)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GymWithRoleResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List My Gyms Api V1 Gyms  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
       "post": {
         "tags": [
           "gyms"
@@ -158,9 +190,6 @@
           "401": {
             "description": "Not authenticated"
           },
-          "409": {
-            "description": "User already owns a gym"
-          },
           "502": {
             "description": "Stripe error"
           },
@@ -182,47 +211,31 @@
         ]
       }
     },
-    "/api/v1/gyms/me": {
+    "/api/v1/gyms/{gym_id}/onboarding": {
       "get": {
         "tags": [
           "gyms"
         ],
-        "summary": "Get the caller's gym",
-        "description": "Returns the gym the caller is an employee of.",
-        "operationId": "get_my_gym_api_v1_gyms_me_get",
-        "responses": {
-          "200": {
-            "description": "Gym retrieved",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GymResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Not authenticated"
-          },
-          "404": {
-            "description": "No gym found for this user"
-          }
-        },
+        "summary": "Refresh a gym's Stripe onboarding status (owner only)",
+        "description": "Retrieves the gym's connected account from Stripe, maps it to a ``pending``/``complete`` status, and writes back to the DB. If the resulting status is still ``pending``, a fresh AccountLink is minted and returned so the client can re-open the hosted flow. The caller must be the gym's owner.",
+        "operationId": "get_onboarding_status_api_v1_gyms__gym_id__onboarding_get",
         "security": [
           {
             "HTTPBearer": []
           }
-        ]
-      }
-    },
-    "/api/v1/gyms/me/onboarding": {
-      "get": {
-        "tags": [
-          "gyms"
         ],
-        "summary": "Refresh the caller's Stripe onboarding status",
-        "description": "Looks up the caller's in-progress gym via ``gym_employees``, retrieves the connected account from Stripe, maps it to a ``pending``/``complete`` status, and writes back to the DB. If the resulting status is still ``pending``, a fresh AccountLink is minted and returned so the client can re-open the hosted flow.",
-        "operationId": "get_onboarding_status_api_v1_gyms_me_onboarding_get",
+        "parameters": [
+          {
+            "name": "gym_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Status refreshed",
@@ -237,28 +250,53 @@
           "401": {
             "description": "Not authenticated"
           },
+          "403": {
+            "description": "Not the owner of this gym"
+          },
           "404": {
-            "description": "No gym owned by this user, or Stripe account missing"
+            "description": "Gym not found, or Stripe account missing"
           },
           "502": {
             "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
-    "/api/v1/gyms/me/onboarding/link": {
+    "/api/v1/gyms/{gym_id}/onboarding/link": {
       "post": {
         "tags": [
           "gyms"
         ],
-        "summary": "Mint a fresh Stripe onboarding link for the caller's gym",
-        "description": "Cheap path for the Flutter app to get a new hosted URL when the previous one expired. Only valid while the gym is in the ``pending`` state.",
-        "operationId": "new_onboarding_link_api_v1_gyms_me_onboarding_link_post",
+        "summary": "Mint a fresh Stripe onboarding link for a gym (owner only)",
+        "description": "Cheap path for the Flutter app to get a new hosted URL when the previous one expired. Only valid while the gym is in the ``pending`` state. The caller must be the gym's owner.",
+        "operationId": "new_onboarding_link_api_v1_gyms__gym_id__onboarding_link_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "gym_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "New onboarding link minted",
@@ -273,21 +311,29 @@
           "401": {
             "description": "Not authenticated"
           },
+          "403": {
+            "description": "Not the owner of this gym"
+          },
           "404": {
-            "description": "No gym owned by this user"
+            "description": "Gym not found or has no Stripe account"
           },
           "409": {
             "description": "Gym is not in a pending state"
           },
           "502": {
             "description": "Stripe error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/gyms/{gym_id}": {
@@ -361,13 +407,81 @@
         }
       }
     },
+    "/api/v1/gyms/{gym_id}/employees/me/theme": {
+      "put": {
+        "tags": [
+          "gyms"
+        ],
+        "summary": "Save the caller's CRM theme preference for a gym",
+        "description": "Persists the calling employee's admin-app appearance choice (system / light / dark) on their ``gym_employees`` row for this gym. Rehydrated at login from ``GET /api/v1/gyms/``.",
+        "operationId": "update_my_theme_api_v1_gyms__gym_id__employees_me_theme_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "gym_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeThemeUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Theme saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeThemeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not an employee of this gym"
+          },
+          "404": {
+            "description": "Employee not found for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/members/": {
       "post": {
         "tags": [
           "members"
         ],
-        "summary": "Create a member",
-        "description": "Create a member shell. Gym staff only.",
+        "summary": "Create a member (provisions a Stripe customer)",
+        "description": "Create a member and provision its Stripe customer. Gym staff only.\n\nEvery member is created with a Stripe customer. The gym must have a\nStripe Connect account; otherwise the request is rejected (400) and no\nmember row is written.",
         "operationId": "create_member_api_v1_members__post",
         "requestBody": {
           "content": {
@@ -381,17 +495,17 @@
         },
         "responses": {
           "201": {
-            "description": "Member created",
+            "description": "Member created with a Stripe customer",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemberResponse"
+                  "$ref": "#/components/schemas/MembersBillingProfileResponse"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid request, or gym has no Stripe account"
           },
           "401": {
             "description": "Not authenticated"
@@ -923,7 +1037,7 @@
           "members"
         ],
         "summary": "Unlink member from a parent account",
-        "description": "Unlinks a member from their paying parent account. Clears account_linked_to_id and linked_discount_id on the child, then re-syncs the old parent's subscription so linked-discount assignments are recalculated for the remaining children. The child must have zero active recurring memberships. No proration or mid-cycle charges are issued.",
+        "description": "Unlinks a member from their paying parent account. Clears account_linked_to_id on the child, then re-syncs the old parent's subscription so the consolidated line reflects the smaller family. The child must have zero active recurring memberships. No proration or mid-cycle charges are issued.",
         "operationId": "unlink_member_account_api_v1_members__member_id__link_delete",
         "security": [
           {
@@ -1944,62 +2058,6 @@
       }
     },
     "/api/v1/rewards/{reward_id}": {
-      "get": {
-        "tags": [
-          "rewards"
-        ],
-        "summary": "Get a reward by ID",
-        "description": "Get a single reward by ID.",
-        "operationId": "get_reward_api_v1_rewards__reward_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "reward_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Reward Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Reward retrieved",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RewardResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Not authenticated"
-          },
-          "403": {
-            "description": "Not authorized for this gym"
-          },
-          "404": {
-            "description": "Reward not found"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
       "put": {
         "tags": [
           "rewards"
@@ -2249,6 +2307,513 @@
         }
       }
     },
+    "/api/v1/waivers/": {
+      "get": {
+        "tags": [
+          "waivers"
+        ],
+        "summary": "List waivers for a gym",
+        "description": "Lists non-deleted waivers for the gym, each with its current version number and the count of members who signed the current version.",
+        "operationId": "list_waivers_api_v1_waivers__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Waivers listed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WaiverResponse"
+                  },
+                  "title": "Response List Waivers Api V1 Waivers  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "waivers"
+        ],
+        "summary": "Create a waiver",
+        "description": "Creates a waiver and publishes its first version.",
+        "operationId": "create_waiver_api_v1_waivers__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaiverCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Waiver created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaiverResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "waivers"
+        ],
+        "summary": "Update a waiver",
+        "description": "Renames a waiver and/or publishes a new version of its text. Editing the body publishes a new immutable version; an unchanged body is a no-op. Members must re-sign a newly published version.",
+        "operationId": "update_waiver_api_v1_waivers__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaiverUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Waiver updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaiverResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Waiver not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "waivers"
+        ],
+        "summary": "Archive a waiver",
+        "description": "Archives a waiver (soft-delete). Its versions and signatures are retained for the legal record.",
+        "operationId": "delete_waiver_api_v1_waivers__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "waiver_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Waiver Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Waiver archived successfully"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Waiver not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/waivers/signatures/by-member/{member_id}": {
+      "get": {
+        "tags": [
+          "waivers"
+        ],
+        "summary": "List a member's waiver status",
+        "description": "Lists every non-deleted gym waiver with this member's latest sign status for each (for the member-detail Waivers section).",
+        "operationId": "list_member_waiver_status_api_v1_waivers_signatures_by_member__member_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Member Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Member waiver status listed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberWaiverStatusRow"
+                  },
+                  "title": "Response List Member Waiver Status Api V1 Waivers Signatures By Member  Member Id  Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/waivers/{waiver_id}/versions": {
+      "get": {
+        "tags": [
+          "waivers"
+        ],
+        "summary": "List a waiver's versions",
+        "description": "Lists a waiver's immutable version history, newest first, each with the count of members who signed that exact version.",
+        "operationId": "list_waiver_versions_api_v1_waivers__waiver_id__versions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "waiver_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Waiver Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versions listed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WaiverVersionResponse"
+                  },
+                  "title": "Response List Waiver Versions Api V1 Waivers  Waiver Id  Versions Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/waivers/{waiver_id}/signatures": {
+      "get": {
+        "tags": [
+          "waivers"
+        ],
+        "summary": "List a waiver's signature roster",
+        "description": "Lists every gym member and their latest sign status for this waiver \u2014 signed?, which version, when, and whether it is the current version.",
+        "operationId": "list_waiver_signatories_api_v1_waivers__waiver_id__signatures_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "waiver_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Waiver Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Roster listed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WaiverSignatoryRow"
+                  },
+                  "title": "Response List Waiver Signatories Api V1 Waivers  Waiver Id  Signatures Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/waivers/{waiver_id}": {
+      "get": {
+        "tags": [
+          "waivers"
+        ],
+        "summary": "Get a waiver",
+        "description": "Fetches a single waiver with its current version body.",
+        "operationId": "get_waiver_api_v1_waivers__waiver_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "waiver_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Waiver Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Waiver fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaiverResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Waiver not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/discounts/": {
       "get": {
         "tags": [
@@ -2311,8 +2876,8 @@
         "tags": [
           "discounts"
         ],
-        "summary": "Create a discount",
-        "description": "Creates a gym discount with a corresponding Stripe coupon.",
+        "summary": "Create a discount preset",
+        "description": "Creates a coupon-free gym discount preset (plain config).",
         "operationId": "create_discount_api_v1_discounts__post",
         "security": [
           {
@@ -2349,9 +2914,6 @@
           "403": {
             "description": "Not authorized for this gym"
           },
-          "502": {
-            "description": "Stripe error"
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2368,8 +2930,8 @@
         "tags": [
           "discounts"
         ],
-        "summary": "Update a discount",
-        "description": "Updates a non-linked gym discount. If value fields changed, creates a new Stripe coupon and syncs affected memberships.",
+        "summary": "Update a discount preset",
+        "description": "Edits a gym discount preset's intent and lifetime spec. Edits affect only future applications; existing applied-discount snapshots are untouched.",
         "operationId": "update_discount_api_v1_discounts__put",
         "security": [
           {
@@ -2398,7 +2960,7 @@
             }
           },
           "400": {
-            "description": "Invalid request or linked discount"
+            "description": "Invalid request data"
           },
           "401": {
             "description": "Not authenticated"
@@ -2408,9 +2970,6 @@
           },
           "404": {
             "description": "Discount not found"
-          },
-          "502": {
-            "description": "Stripe error"
           },
           "422": {
             "description": "Validation Error",
@@ -2428,8 +2987,8 @@
         "tags": [
           "discounts"
         ],
-        "summary": "Delete a discount",
-        "description": "Soft-deletes a non-linked discount, deletes the Stripe coupon, removes it from all memberships, and syncs payments.",
+        "summary": "Archive a discount preset",
+        "description": "Archives a discount preset (soft-delete). Existing applied-discount snapshots keep their frozen copy, so member bills are unchanged.",
         "operationId": "delete_discount_api_v1_discounts__delete",
         "security": [
           {
@@ -2460,10 +3019,10 @@
         ],
         "responses": {
           "204": {
-            "description": "Discount deleted successfully"
+            "description": "Discount archived successfully"
           },
           "400": {
-            "description": "Linked discount or invalid request"
+            "description": "Invalid request"
           },
           "401": {
             "description": "Not authenticated"
@@ -2473,9 +3032,6 @@
           },
           "404": {
             "description": "Discount not found"
-          },
-          "502": {
-            "description": "Stripe error"
           },
           "422": {
             "description": "Validation Error",
@@ -2952,14 +3508,14 @@
         "tags": [
           "member_memberships"
         ],
-        "summary": "Replace a membership's discount set",
-        "description": "Replaces the discount_ids array on an existing membership with the supplied list. Empty list detaches every discount. Re-syncs the Stripe subscription \u2014 no mid-cycle invoice is cut.",
-        "operationId": "update_membership_discounts_api_v1_member_memberships_discounts_put",
+        "summary": "Add / remove a membership's discount snapshots",
+        "description": "Applies discounts as immutable snapshots on an existing membership: adds a frozen snapshot per regular preset and per entered linked discount, and removes named snapshots. A preset already applied is left frozen. A linked discount requires a same-plan family sibling. Re-syncs the Stripe subscription \u2014 no mid-cycle invoice is cut.",
+        "operationId": "apply_membership_discounts_api_v1_member_memberships_discounts_put",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MemberMembershipsUpdateDiscountsRequest"
+                "$ref": "#/components/schemas/MemberMembershipsApplyDiscountsRequest"
               }
             }
           },
@@ -2967,7 +3523,7 @@
         },
         "responses": {
           "204": {
-            "description": "Discounts updated successfully"
+            "description": "Discounts applied successfully"
           },
           "401": {
             "description": "Not authenticated"
@@ -2998,19 +3554,36 @@
         "tags": [
           "member_memberships"
         ],
-        "summary": "Preview replacing a membership's discount set",
-        "description": "Dry-run of the update-discounts endpoint: runs every validation and returns the Stripe invoice preview for the proposed discount set without writing to the CRM or mutating the Stripe subscription.",
-        "operationId": "preview_update_membership_discounts_api_v1_member_memberships_discounts_preview_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MemberMembershipsUpdateDiscountsRequest"
-              }
+        "summary": "Preview a membership's discounted subscription",
+        "description": "Runs the membership validation and returns the Stripe invoice preview for the membership's current applied discount snapshots, without mutating the subscription.",
+        "operationId": "preview_membership_discounts_api_v1_member_memberships_discounts_preview_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Item Id"
             }
           },
-          "required": true
-        },
+          {
+            "name": "member_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Member Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Preview retrieved successfully",
@@ -3025,7 +3598,7 @@
                       "type": "null"
                     }
                   ],
-                  "title": "Response Preview Update Membership Discounts Api V1 Member Memberships Discounts Preview Post"
+                  "title": "Response Preview Membership Discounts Api V1 Member Memberships Discounts Preview Post"
                 }
               }
             }
@@ -3046,12 +3619,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/member_memberships/mark-paid-cash": {
@@ -3470,6 +4038,78 @@
         }
       }
     },
+    "/api/v1/membership_plans/{plan_id}/prices": {
+      "get": {
+        "tags": [
+          "membership_plans"
+        ],
+        "summary": "List a plan's price versions",
+        "description": "Lists every price version of a plan (active first) with the number of members still on each \u2014 so the CRM can show older prices that still have members to migrate forward.",
+        "operationId": "list_plan_prices_api_v1_membership_plans__plan_id__prices_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "gym_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Gym Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prices fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MembershipPlanPriceWithCount"
+                  },
+                  "title": "Response List Plan Prices Api V1 Membership Plans  Plan Id  Prices Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "Not authorized for this gym"
+          },
+          "404": {
+            "description": "Plan not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/membership_plans/price": {
       "post": {
         "tags": [
@@ -3537,8 +4177,8 @@
         "tags": [
           "membership_plans"
         ],
-        "summary": "Migrate specific members",
-        "description": "Re-syncs payment state for the specified members on a plan. Runs as a background task.",
+        "summary": "Migrate specific members (not implemented)",
+        "description": "Member migration is not implemented yet.",
         "operationId": "migrate_members_api_v1_membership_plans_migrate_post",
         "requestBody": {
           "content": {
@@ -3551,25 +4191,19 @@
           "required": true
         },
         "responses": {
-          "202": {
-            "description": "Migration queued",
+          "501": {
+            "description": "Member migration is not implemented yet",
             "content": {
               "application/json": {
                 "schema": {}
               }
             }
           },
-          "400": {
-            "description": "Invalid request"
-          },
           "401": {
             "description": "Not authenticated"
           },
           "403": {
             "description": "Not authorized for this gym"
-          },
-          "404": {
-            "description": "Plan not found"
           },
           "422": {
             "description": "Validation Error",
@@ -3594,8 +4228,8 @@
         "tags": [
           "membership_plans"
         ],
-        "summary": "Migrate all members on a plan",
-        "description": "Re-syncs payment state for ALL active members on a plan. Runs as a background task.",
+        "summary": "Migrate all members on a plan (not implemented)",
+        "description": "Member migration is not implemented yet.",
         "operationId": "migrate_all_members_api_v1_membership_plans_migrate_all_post",
         "requestBody": {
           "content": {
@@ -3608,25 +4242,19 @@
           "required": true
         },
         "responses": {
-          "202": {
-            "description": "Migration queued",
+          "501": {
+            "description": "Member migration is not implemented yet",
             "content": {
               "application/json": {
                 "schema": {}
               }
             }
           },
-          "400": {
-            "description": "Invalid request"
-          },
           "401": {
             "description": "Not authenticated"
           },
           "403": {
             "description": "Not authorized for this gym"
-          },
-          "404": {
-            "description": "Plan not found"
           },
           "422": {
             "description": "Validation Error",
@@ -3875,7 +4503,7 @@
           "discount_type"
         ],
         "title": "BillingDiscountInfo",
-        "description": "An active discount applied to a membership."
+        "description": "A discount applied to a past invoice (payment-history line).\n\nUsed by ``BillingPaymentRecord.applied_discounts`` to name the\ndiscounts on a historical charge. Currently-applied membership\ndiscounts use the snapshot model ``MemberMembershipsAppliedDiscount``\non ``BillingMembershipInfo.discounts``."
       },
       "BillingLineItemRecord": {
         "properties": {
@@ -3986,7 +4614,7 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/MembershipDbStatus"
+            "$ref": "#/components/schemas/CrmMemberStatus"
           },
           "base_cost": {
             "type": "integer",
@@ -4067,7 +4695,7 @@
           },
           "discounts": {
             "items": {
-              "$ref": "#/components/schemas/BillingDiscountInfo"
+              "$ref": "#/components/schemas/MemberMembershipsAppliedDiscount"
             },
             "type": "array",
             "title": "Discounts",
@@ -4170,7 +4798,7 @@
             "title": "Photo Url"
           },
           "status": {
-            "$ref": "#/components/schemas/MembershipDbStatus"
+            "$ref": "#/components/schemas/CrmMemberStatus"
           },
           "class_count": {
             "anyOf": [
@@ -4519,6 +5147,85 @@
         ],
         "title": "ChargeStatus"
       },
+      "CheckinMembershipBreakdown": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "plan_type": {
+            "$ref": "#/components/schemas/PlanType"
+          },
+          "class_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Count"
+          },
+          "classes_used": {
+            "type": "integer",
+            "title": "Classes Used"
+          },
+          "classes_remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classes Remaining"
+          },
+          "is_eligible": {
+            "type": "boolean",
+            "title": "Is Eligible"
+          },
+          "renew_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renew Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "plan_type",
+          "class_count",
+          "classes_used",
+          "classes_remaining",
+          "is_eligible",
+          "renew_date",
+          "end_date"
+        ],
+        "title": "CheckinMembershipBreakdown",
+        "description": "Usage breakdown for one of the member's active memberships.\n\nAttributes:\n    plan_id: The membership plan.\n    plan_type: Trial, one_time, or recurring.\n    class_count: Max classes allowed (None = unlimited).\n    classes_used: Classes used this cycle (post-checkin for the\n        charged plan).\n    classes_remaining: Classes left (None = unlimited).\n    is_eligible: Whether this plan covers the checked-in class.\n    renew_date: Next renewal / due date (recurring plans; None\n        otherwise).\n    end_date: Membership expiry date (trial / one_time plans; None\n        otherwise)."
+      },
       "CheckinRequest": {
         "properties": {
           "member_id": {
@@ -4549,8 +5256,15 @@
       "CheckinResponse": {
         "properties": {
           "log_id": {
-            "type": "string",
-            "format": "uuid",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Log Id"
           },
           "member_id": {
@@ -4566,6 +5280,38 @@
           "already_checked_in": {
             "type": "boolean",
             "title": "Already Checked In"
+          },
+          "chosen_plan_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chosen Plan Id"
+          },
+          "chosen_item_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chosen Item Id"
+          },
+          "memberships": {
+            "items": {
+              "$ref": "#/components/schemas/CheckinMembershipBreakdown"
+            },
+            "type": "array",
+            "title": "Memberships",
+            "default": []
           }
         },
         "type": "object",
@@ -4576,7 +5322,7 @@
           "already_checked_in"
         ],
         "title": "CheckinResponse",
-        "description": "Response for POST /api/v1/classes/checkin."
+        "description": "Response for POST /api/v1/classes/checkin.\n\nThe check-in is gated: a covering active membership with remaining\ncapacity must exist or the check-in is rejected (``log_id`` /\n``chosen_plan_id`` / ``chosen_item_id`` are ``None`` and no\nattendance row is written). The ``memberships`` breakdown explains\nthe decision either way.\n\nAttributes:\n    log_id: The attendance row. None when the check-in was rejected.\n    member_id: The member who checked in.\n    class_history_id: The class instance attended.\n    already_checked_in: True when an attendance row already existed\n        for this (member, class instance) \u2014 the check-in was\n        idempotent and no capacity was consumed.\n    chosen_plan_id: The plan charged. None when rejected.\n    chosen_item_id: The membership row charged. None when rejected.\n    memberships: Breakdown of the member's active memberships."
       },
       "CrmMemberStatus": {
         "type": "string",
@@ -4745,42 +5491,41 @@
             ],
             "title": "Dollar Off"
           },
-          "membership_plan_id": {
+          "discount_mode": {
+            "$ref": "#/components/schemas/DiscountMode"
+          },
+          "duration_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Amount"
+          },
+          "duration_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscountDurationUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "end_date": {
             "anyOf": [
               {
                 "type": "string",
-                "format": "uuid"
+                "format": "date"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Membership Plan Id"
-          },
-          "linked_discount_num": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Linked Discount Num"
-          },
-          "duration": {
-            "$ref": "#/components/schemas/StripeCouponDuration"
-          },
-          "duration_in_months": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Duration In Months"
+            "title": "End Date"
           }
         },
         "type": "object",
@@ -4788,10 +5533,29 @@
           "gym_id",
           "discount_name",
           "discount_type",
-          "duration"
+          "discount_mode"
         ],
         "title": "DiscountCreateRequest",
-        "description": "Create a new gym discount with a Stripe coupon."
+        "description": "Create a coupon-free, regular-only gym discount preset."
+      },
+      "DiscountDurationUnit": {
+        "type": "string",
+        "enum": [
+          "day",
+          "week",
+          "month"
+        ],
+        "title": "DiscountDurationUnit",
+        "description": "Duration span unit for an ongoing discount's lifetime.\n\nMirrors the Postgres `discount_duration_unit` enum. Distinct from\nmembership_plans' duration_unit (week/month/year) \u2014 discounts use\nday/week/month."
+      },
+      "DiscountMode": {
+        "type": "string",
+        "enum": [
+          "once",
+          "ongoing"
+        ],
+        "title": "DiscountMode",
+        "description": "Discount lifetime mode. Mirrors the Postgres `discount_mode` enum.\n\nConsumed by gym_discount_values (the versioned value rows). Kept here as the\nstable import location (the backend imports it from schema.gym_discount)."
       },
       "DiscountResponse": {
         "properties": {
@@ -4812,6 +5576,11 @@
           "discount_type": {
             "$ref": "#/components/schemas/DiscountType"
           },
+          "value_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Value Id"
+          },
           "percentage_off": {
             "anyOf": [
               {
@@ -4834,53 +5603,45 @@
             ],
             "title": "Dollar Off"
           },
-          "membership_plan_id": {
+          "discount_mode": {
+            "$ref": "#/components/schemas/DiscountMode"
+          },
+          "duration_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Amount"
+          },
+          "duration_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscountDurationUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "end_date": {
             "anyOf": [
               {
                 "type": "string",
-                "format": "uuid"
+                "format": "date"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Membership Plan Id"
+            "title": "End Date"
           },
-          "linked_discount_num": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Linked Discount Num"
-          },
-          "duration": {
-            "$ref": "#/components/schemas/StripeCouponDuration"
-          },
-          "duration_in_months": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Duration In Months"
-          },
-          "stripe_coupon_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stripe Coupon Id"
+          "is_deleted": {
+            "type": "boolean",
+            "title": "Is Deleted"
           },
           "created_at": {
             "type": "string",
@@ -4894,11 +5655,13 @@
           "gym_id",
           "discount_name",
           "discount_type",
-          "duration",
+          "value_id",
+          "discount_mode",
+          "is_deleted",
           "created_at"
         ],
         "title": "DiscountResponse",
-        "description": "Response after creating, updating, or fetching a discount."
+        "description": "Response after creating, updating, or fetching a discount.\n\nCombines the identity (gym_discounts) with its ACTIVE value version\n(gym_discount_values). `value_id` is the active version tag; the\npercent/dollar + lifetime come from that version."
       },
       "DiscountType": {
         "type": "string",
@@ -4908,9 +5671,9 @@
           "linked"
         ],
         "title": "DiscountType",
-        "description": "Gym discount type."
+        "description": "Discount type.\n\nPresets (gym_discounts) are regular-only: preset | custom. `linked` is a\nsnapshot-only marker that lives on member_membership_applied_discounts (a\nfamily discount has no preset entity), so it stays in this shared enum but\nis rejected by GymDiscountCreate below."
       },
-      "DiscountUpdateData": {
+      "DiscountUpdateIdentity": {
         "properties": {
           "discount_name": {
             "anyOf": [
@@ -4922,7 +5685,55 @@
               }
             ],
             "title": "Discount Name"
+          }
+        },
+        "type": "object",
+        "title": "DiscountUpdateIdentity",
+        "description": "Identity change \u2192 rename the gym_discounts row in place.\n\nThe discount's IDENTITY (gym_discounts) holds only the editable name;\neverything else is a versioned value (see DiscountUpdateValues)."
+      },
+      "DiscountUpdateRequest": {
+        "properties": {
+          "discount_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Discount Id"
           },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscountUpdateIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "values": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscountUpdateValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "discount_id",
+          "gym_id"
+        ],
+        "title": "DiscountUpdateRequest",
+        "description": "Update a regular discount preset (intent only).\n\nThe request shape encodes the destination: `identity` renames the\ngym_discounts row in place; `values` mints a new gym_discount_values\nversion. At least one must be present. Edits affect only future\napplications; existing snapshot rows on\nmember_membership_applied_discounts are never touched."
+      },
+      "DiscountUpdateValues": {
+        "properties": {
           "percentage_off": {
             "anyOf": [
               {
@@ -4945,17 +5756,17 @@
             ],
             "title": "Dollar Off"
           },
-          "duration": {
+          "discount_mode": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/StripeCouponDuration"
+                "$ref": "#/components/schemas/DiscountMode"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "duration_in_months": {
+          "duration_amount": {
             "anyOf": [
               {
                 "type": "integer"
@@ -4964,37 +5775,34 @@
                 "type": "null"
               }
             ],
-            "title": "Duration In Months"
+            "title": "Duration Amount"
+          },
+          "duration_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DiscountDurationUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
           }
         },
         "type": "object",
-        "title": "DiscountUpdateData",
-        "description": "Mutable discount fields. All optional \u2014 only send what changed."
-      },
-      "DiscountUpdateRequest": {
-        "properties": {
-          "discount_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Discount Id"
-          },
-          "gym_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Gym Id"
-          },
-          "data": {
-            "$ref": "#/components/schemas/DiscountUpdateData"
-          }
-        },
-        "type": "object",
-        "required": [
-          "discount_id",
-          "gym_id",
-          "data"
-        ],
-        "title": "DiscountUpdateRequest",
-        "description": "Update a non-linked gym discount.\n\nLinked discounts cannot be updated via this endpoint."
+        "title": "DiscountUpdateValues",
+        "description": "Value/lifetime change \u2192 mint a new gym_discount_values version.\n\nEvery field here lands on a fresh, immutable value version (the prior\nactive one is deactivated). The model's shape is the partition: anything\non this sub-model routes to a new version, never to the identity row."
       },
       "DurationUnit": {
         "type": "string",
@@ -5005,6 +5813,61 @@
         ],
         "title": "DurationUnit",
         "description": "Billing cycle duration unit."
+      },
+      "EmployeeThemeResponse": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "theme_preference": {
+            "$ref": "#/components/schemas/ThemeMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "theme_preference"
+        ],
+        "title": "EmployeeThemeResponse",
+        "description": "The caller's saved theme for a gym (echoed back on update)."
+      },
+      "EmployeeThemeUpdateData": {
+        "properties": {
+          "theme_preference": {
+            "$ref": "#/components/schemas/ThemeMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "theme_preference"
+        ],
+        "title": "EmployeeThemeUpdateData",
+        "description": "Mutable field for PUT .../employees/me/theme.\n\nPer project convention, update requests separate identity (the\nURL ``gym_id`` + the caller's JWT) from a nested ``data`` model.\nTheme is the only settable field here."
+      },
+      "EmployeeThemeUpdateRequest": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EmployeeThemeUpdateData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "EmployeeThemeUpdateRequest",
+        "description": "Body for PUT /api/v1/gyms/{gym_id}/employees/me/theme."
+      },
+      "EmployeeType": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "admin",
+          "trainer"
+        ],
+        "title": "EmployeeType",
+        "description": "Gym employee role type."
       },
       "FromPresetRequest": {
         "properties": {
@@ -5128,17 +5991,6 @@
               }
             ],
             "title": "Owner Phone"
-          },
-          "owner_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Email"
           }
         },
         "type": "object",
@@ -5211,7 +6063,7 @@
           "onboarding_url_expires_at"
         ],
         "title": "GymOnboardingLinkResponse",
-        "description": "Response for POST /api/v1/gyms/me/onboarding/link."
+        "description": "Response for POST /api/v1/gyms/{gym_id}/onboarding/link."
       },
       "GymOnboardingStatusResponse": {
         "properties": {
@@ -5221,13 +6073,7 @@
             "title": "Gym Id"
           },
           "stripe_onboarding_status": {
-            "type": "string",
-            "enum": [
-              "not_started",
-              "pending",
-              "complete"
-            ],
-            "title": "Stripe Onboarding Status"
+            "$ref": "#/components/schemas/StripeOnboardingStatus"
           },
           "onboarding_url": {
             "anyOf": [
@@ -5293,7 +6139,7 @@
           "payouts_enabled"
         ],
         "title": "GymOnboardingStatusResponse",
-        "description": "Response for GET /api/v1/gyms/me/onboarding."
+        "description": "Response for GET /api/v1/gyms/{gym_id}/onboarding."
       },
       "GymResponse": {
         "properties": {
@@ -5395,6 +6241,51 @@
         "title": "GymUpdateRequest",
         "description": "Body for PUT /api/v1/gyms/{gym_id}."
       },
+      "GymWithRoleResponse": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "gym_name": {
+            "type": "string",
+            "title": "Gym Name"
+          },
+          "gym_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gym Description"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "employee_type": {
+            "$ref": "#/components/schemas/EmployeeType"
+          },
+          "theme_preference": {
+            "$ref": "#/components/schemas/ThemeMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "gym_name",
+          "gym_description",
+          "timezone",
+          "employee_type",
+          "theme_preference"
+        ],
+        "title": "GymWithRoleResponse",
+        "description": "A gym the caller administers, annotated with their role.\n\nReturned by ``GET /api/v1/gyms/`` \u2014 the list of gyms the\nauthenticated user owns or admins (``employee_type`` is the\ncaller's role for that gym). ``theme_preference`` is the caller's\nown CRM appearance choice for that gym, so the admin app can\nhydrate the theme at login."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5415,6 +6306,35 @@
           "custom"
         ],
         "title": "LineItemType"
+      },
+      "LinkedDiscountValue": {
+        "properties": {
+          "percentage_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage Off"
+          },
+          "dollar_off": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dollar Off"
+          }
+        },
+        "type": "object",
+        "title": "LinkedDiscountValue",
+        "description": "One family tier's discount \u2014 a real discount value ($ off or % off).\n\nExactly one of ``percentage_off`` / ``dollar_off`` is set, mirroring a\nregular discount (`gym_discount_values`). The backend mints a real\n``linked`` discount entry per tier on write and stores the ids in\n``membership_plans.linked_discount_ids``; reads resolve them back here."
       },
       "MainRankPresetGroup": {
         "properties": {
@@ -5635,6 +6555,84 @@
               }
             ],
             "title": "Current Rank Id"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "emergency_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Name"
+          },
+          "emergency_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Phone"
+          },
+          "emergency_contact_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Email"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "payment_method_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method Id"
           }
         },
         "type": "object",
@@ -5645,6 +6643,153 @@
         ],
         "title": "MemberCreateRequest",
         "description": "Body for POST /api/v1/members/."
+      },
+      "MemberMembershipsAppliedDiscount": {
+        "properties": {
+          "applied_discount_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Applied Discount Id"
+          },
+          "item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Item Id"
+          },
+          "member_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Member Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "value_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Value Id"
+          },
+          "discount_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Discount Id"
+          },
+          "discount_name": {
+            "type": "string",
+            "title": "Discount Name"
+          },
+          "discount_type": {
+            "$ref": "#/components/schemas/DiscountType"
+          },
+          "percentage_off": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage Off"
+          },
+          "dollar_off": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dollar Off"
+          },
+          "discount_mode": {
+            "type": "string",
+            "title": "Discount Mode"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "stripe_coupon_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Coupon Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "applied_discount_id",
+          "item_id",
+          "member_id",
+          "gym_id",
+          "value_id",
+          "discount_id",
+          "discount_name",
+          "discount_type",
+          "discount_mode"
+        ],
+        "title": "MemberMembershipsAppliedDiscount",
+        "description": "A single applied-discount snapshot returned to the client.\n\nJoins the snapshot to its frozen value version (``value_id``) and owning\ndiscount (``discount_id`` + name/type) so the CRM can show the discount and\nthe exact version it is pinned to."
+      },
+      "MemberMembershipsApplyDiscountsRequest": {
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Item Id"
+          },
+          "member_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Member Id"
+          },
+          "add_preset_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Add Preset Ids"
+          },
+          "remove_applied_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Remove Applied Ids"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Idempotency Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id",
+          "member_id",
+          "idempotency_key"
+        ],
+        "title": "MemberMembershipsApplyDiscountsRequest",
+        "description": "Add / remove discount snapshots on an existing membership.\n\nApply is an explicit add / remove of immutable snapshot rows \u2014 never a\nreplace-set. ``add_preset_ids`` references live discounts whose ACTIVE value\nversion is frozen onto a snapshot (any discount, including a ``linked``\nfamily discount). ``remove_applied_ids`` deletes existing snapshots by their\n``applied_discount_id``. Editing a discount is removing one row and adding\nanother \u2014 a snapshot is never updated."
       },
       "MemberMembershipsCancelResponse": {
         "properties": {
@@ -5787,26 +6932,6 @@
             "format": "uuid",
             "title": "Price Id"
           },
-          "discount_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Discount Ids"
-          },
-          "include_linked_discount": {
-            "type": "boolean",
-            "title": "Include Linked Discount",
-            "default": false
-          },
           "prorate": {
             "type": "boolean",
             "title": "Prorate",
@@ -5832,7 +6957,7 @@
           "idempotency_key"
         ],
         "title": "MemberMembershipsStartRequest",
-        "description": "Start a new membership for a member."
+        "description": "Start a new membership for a member.\n\nMemberships are created discount-free \u2014 discounts are applied as\nimmutable snapshots afterward via the apply path (PUT /discounts), not\nthreaded in at creation."
       },
       "MemberMembershipsUnfreezeRequest": {
         "properties": {
@@ -5860,42 +6985,6 @@
         ],
         "title": "MemberMembershipsUnfreezeRequest",
         "description": "Unfreeze a member's account (account-level)."
-      },
-      "MemberMembershipsUpdateDiscountsRequest": {
-        "properties": {
-          "item_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Item Id"
-          },
-          "member_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Member Id"
-          },
-          "discount_ids": {
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "type": "array",
-            "title": "Discount Ids"
-          },
-          "idempotency_key": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Idempotency Key"
-          }
-        },
-        "type": "object",
-        "required": [
-          "item_id",
-          "member_id",
-          "discount_ids",
-          "idempotency_key"
-        ],
-        "title": "MemberMembershipsUpdateDiscountsRequest",
-        "description": "Replace the discount set on an existing membership.\n\n``discount_ids`` is the full desired list \u2014 an empty list\ndetaches every discount currently on the membership."
       },
       "MemberMembershipsUpdatePriceRequest": {
         "properties": {
@@ -6004,6 +7093,72 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "emergency_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Name"
+          },
+          "emergency_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Phone"
+          },
+          "emergency_contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Email"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
           }
         },
         "type": "object",
@@ -6069,6 +7224,73 @@
               }
             ],
             "title": "Current Rank Id"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "emergency_contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Name"
+          },
+          "emergency_contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Phone"
+          },
+          "emergency_contact_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Contact Email"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
           }
         },
         "type": "object",
@@ -6087,6 +7309,94 @@
         ],
         "title": "MemberUpdateRequest",
         "description": "Body for PUT /api/v1/members/{member_id}."
+      },
+      "MemberWaiverStatusRow": {
+        "properties": {
+          "waiver_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Waiver Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "current_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Id"
+          },
+          "current_version_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Number"
+          },
+          "signed": {
+            "type": "boolean",
+            "title": "Signed"
+          },
+          "signed_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Version Id"
+          },
+          "signed_version_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Version Number"
+          },
+          "signed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed At"
+          },
+          "signed_current_version": {
+            "type": "boolean",
+            "title": "Signed Current Version",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "waiver_id",
+          "name",
+          "signed"
+        ],
+        "title": "MemberWaiverStatusRow",
+        "description": "One row of a member's waiver status: a gym waiver + this member's latest\nsign status for it (for the member-detail Waivers section)."
       },
       "MembersBillingLinkCheckResponse": {
         "properties": {
@@ -6393,17 +7703,6 @@
         "title": "MembersListView",
         "description": "Available views for the members list screen."
       },
-      "MembershipDbStatus": {
-        "type": "string",
-        "enum": [
-          "active",
-          "frozen",
-          "cancelled",
-          "ended"
-        ],
-        "title": "MembershipDbStatus",
-        "description": "Raw membership status as derived by the DB view."
-      },
       "MembershipPlanCreateRequest": {
         "properties": {
           "gym_id": {
@@ -6458,6 +7757,28 @@
           "price": {
             "type": "integer",
             "title": "Price"
+          },
+          "waiver_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Waiver Ids",
+            "default": []
+          },
+          "linked_discount_enabled": {
+            "type": "boolean",
+            "title": "Linked Discount Enabled",
+            "default": false
+          },
+          "linked_discount_values": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedDiscountValue"
+            },
+            "type": "array",
+            "title": "Linked Discount Values",
+            "default": []
           }
         },
         "type": "object",
@@ -6595,6 +7916,59 @@
         "title": "MembershipPlanPriceResponse",
         "description": "Price details for a membership plan."
       },
+      "MembershipPlanPriceWithCount": {
+        "properties": {
+          "price_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Price Id"
+          },
+          "plan_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Plan Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "stripe_price_id": {
+            "type": "string",
+            "title": "Stripe Price Id"
+          },
+          "price": {
+            "type": "integer",
+            "title": "Price"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_id",
+          "plan_id",
+          "gym_id",
+          "stripe_price_id",
+          "price",
+          "is_active",
+          "created_at",
+          "member_count"
+        ],
+        "title": "MembershipPlanPriceWithCount",
+        "description": "A plan price version plus how many members are still on it.\n\nDrives the edit-mode price list: the active price plus any older\nversion that still has members (``member_count > 0``) the gym can\nmigrate onto the current price."
+      },
       "MembershipPlanResponse": {
         "properties": {
           "plan_id": {
@@ -6675,6 +8049,42 @@
                 "type": "null"
               }
             ]
+          },
+          "enrolled_count": {
+            "type": "integer",
+            "title": "Enrolled Count",
+            "default": 0
+          },
+          "waiver_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Waiver Ids",
+            "default": []
+          },
+          "linked_discount_enabled": {
+            "type": "boolean",
+            "title": "Linked Discount Enabled",
+            "default": false
+          },
+          "linked_discount_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Linked Discount Ids",
+            "default": []
+          },
+          "linked_discount_values": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedDiscountValue"
+            },
+            "type": "array",
+            "title": "Linked Discount Values",
+            "default": []
           }
         },
         "type": "object",
@@ -6701,16 +8111,6 @@
               }
             ],
             "title": "Plan Name"
-          },
-          "plan_type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PlanType"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "class_count": {
             "anyOf": [
@@ -6754,11 +8154,51 @@
               }
             ],
             "title": "Is Public"
+          },
+          "waiver_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiver Ids"
+          },
+          "linked_discount_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Discount Enabled"
+          },
+          "linked_discount_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LinkedDiscountValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Discount Values"
           }
         },
         "type": "object",
         "title": "MembershipPlanUpdateData",
-        "description": "Mutable plan fields. All optional \u2014 only send what changed."
+        "description": "Mutable plan fields. All optional \u2014 only send what changed.\n\n``plan_type`` is intentionally absent: a plan's billing model is fixed at\ncreation (immutable \u2014 see ``MEMBERSHIP_PLANS`` in ``immutable_columns.py``\nand the ``trg_prevent_plan_type_overwrite`` DB trigger)."
       },
       "MembershipPlanUpdateRequest": {
         "properties": {
@@ -7790,15 +9230,16 @@
         "title": "StreakResponse",
         "description": "Response for GET /api/v1/classes/streak."
       },
-      "StripeCouponDuration": {
+      "StripeOnboardingStatus": {
         "type": "string",
         "enum": [
-          "once",
-          "repeating",
-          "forever"
+          "not_started",
+          "pending",
+          "complete",
+          "disabled"
         ],
-        "title": "StripeCouponDuration",
-        "description": "Stripe coupon duration type."
+        "title": "StripeOnboardingStatus",
+        "description": "Mirrors the Postgres `stripe_onboarding_status` enum in gyms.sql."
       },
       "StripeWebhookAck": {
         "properties": {
@@ -7865,6 +9306,16 @@
         ],
         "title": "SubRankPreset",
         "description": "Leaf node \u2014 one sub-rank within a main-rank group."
+      },
+      "ThemeMode": {
+        "type": "string",
+        "enum": [
+          "system",
+          "light",
+          "dark"
+        ],
+        "title": "ThemeMode",
+        "description": "CRM admin-app appearance preference. 'system' follows the OS."
       },
       "TrialViewRow": {
         "properties": {
@@ -7957,6 +9408,289 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WaiverCreateRequest": {
+        "properties": {
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gym_id",
+          "name",
+          "body"
+        ],
+        "title": "WaiverCreateRequest",
+        "description": "Create a waiver. Creating it also publishes version 1 from `body`."
+      },
+      "WaiverResponse": {
+        "properties": {
+          "waiver_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Waiver Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "current_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Id"
+          },
+          "current_version_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Number"
+          },
+          "current_version_signed_count": {
+            "type": "integer",
+            "title": "Current Version Signed Count",
+            "default": 0
+          },
+          "is_deleted": {
+            "type": "boolean",
+            "title": "Is Deleted"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "current_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WaiverVersionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "waiver_id",
+          "gym_id",
+          "name",
+          "is_deleted",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "WaiverResponse",
+        "description": "A waiver catalog entry. `current_version` is populated by the single-get;\nthe list endpoint leaves it None (no body) and fills the summary counts."
+      },
+      "WaiverSignatoryRow": {
+        "properties": {
+          "member_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Member Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "type": "string",
+            "title": "Last Name"
+          },
+          "signed": {
+            "type": "boolean",
+            "title": "Signed"
+          },
+          "signed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed At"
+          },
+          "waiver_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiver Version Id"
+          },
+          "version_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Number"
+          },
+          "signed_current_version": {
+            "type": "boolean",
+            "title": "Signed Current Version",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "member_id",
+          "first_name",
+          "last_name",
+          "signed"
+        ],
+        "title": "WaiverSignatoryRow",
+        "description": "One row of a per-waiver signature roster: a member + their latest sign\nstatus for that waiver."
+      },
+      "WaiverUpdateData": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "title": "WaiverUpdateData",
+        "description": "Mutable waiver fields. All optional \u2014 only send what changed.\n\nSupplying `body` publishes a NEW version (the existing versions are\nimmutable); supplying `name` renames the catalog row in place."
+      },
+      "WaiverUpdateRequest": {
+        "properties": {
+          "waiver_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Waiver Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WaiverUpdateData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "waiver_id",
+          "gym_id",
+          "data"
+        ],
+        "title": "WaiverUpdateRequest",
+        "description": "Rename a waiver and/or publish a new version of its text."
+      },
+      "WaiverVersionResponse": {
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          },
+          "waiver_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Waiver Id"
+          },
+          "gym_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Gym Id"
+          },
+          "version_number": {
+            "type": "integer",
+            "title": "Version Number"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "signature_count": {
+            "type": "integer",
+            "title": "Signature Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id",
+          "waiver_id",
+          "gym_id",
+          "version_number",
+          "body",
+          "content_hash",
+          "created_at"
+        ],
+        "title": "WaiverVersionResponse",
+        "description": "An immutable published version of a waiver's text."
       }
     },
     "securitySchemes": {

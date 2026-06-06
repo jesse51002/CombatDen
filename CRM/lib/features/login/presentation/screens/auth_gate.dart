@@ -7,6 +7,7 @@ import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/navigation/url_sync.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/gym_setup/data/models/gym_with_role.dart';
 import 'package:crm/features/gym_setup/data/repositories/gym_repository.dart';
 import 'package:crm/features/gym_setup/presentation/screens/gym_setup_screen.dart';
@@ -101,6 +102,10 @@ class _AuthenticatedGateState
     // counterpart to _activate, so the next session re-resolves gyms instead
     // of reusing the stale gym (the build skips the picker while gymId != null).
     selectedGym.reset();
+    // Drop the signed-out employee's theme so a shared machine's login screen
+    // doesn't keep the prior user's appearance; the next sign-in re-hydrates
+    // from that employee's gym_employees row in [_activate].
+    themeController.setMode(ThemeMode.system);
     super.dispose();
   }
 
@@ -140,6 +145,9 @@ class _AuthenticatedGateState
   /// defaults until a Theme-tab pick (seeding a design here is unsafe —
   /// `ThemeRuntime` isn't initialized yet).
   void _activate(GymWithRole gym) {
+    // Hydrate the saved CRM appearance for this gym before the workspace paints
+    // (the app root rebuilds MaterialApp off [themeController]).
+    themeController.hydrate(gym.themePreference);
     selectedGym.setActiveGym(
       gymId: gym.gymId,
       displayName: gym.gymName,

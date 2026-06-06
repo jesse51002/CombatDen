@@ -1,5 +1,6 @@
 """Pydantic models for the classes domain."""
 
+from datetime import date
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -25,6 +26,10 @@ class CheckinMembershipBreakdown(BaseModel):
             charged plan).
         classes_remaining: Classes left (None = unlimited).
         is_eligible: Whether this plan covers the checked-in class.
+        renew_date: Next renewal / due date (recurring plans; None
+            otherwise).
+        end_date: Membership expiry date (trial / one_time plans; None
+            otherwise).
     """
 
     plan_id: UUID
@@ -33,6 +38,8 @@ class CheckinMembershipBreakdown(BaseModel):
     classes_used: int
     classes_remaining: int | None
     is_eligible: bool
+    renew_date: date | None
+    end_date: date | None
 
 
 class CheckinResponse(BaseModel):

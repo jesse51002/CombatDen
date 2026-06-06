@@ -96,7 +96,7 @@ class _GymCard extends StatelessWidget {
       color: DesignConstants.card,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(DesignConstants.radiusCard),
-        side: const BorderSide(color: DesignConstants.line),
+        side: BorderSide(color: DesignConstants.line),
       ),
       child: InkWell(
         onTap: onTap,

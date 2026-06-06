@@ -44,6 +44,7 @@ class MemberDetailGrid extends StatelessWidget {
           onPageChanged: onPageChanged,
           onLinkedAccountTap: onLinkedAccountTap,
           payments: member.paymentHistory,
+          expand: wide,
         );
         if (!wide) {
           return Column(

@@ -1,6 +1,7 @@
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/duration_unit.dart';
+import 'package:crm/features/member_details/data/models/linked_discount_value.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 
 part 'membership_plan_create_request.g.dart';
@@ -10,6 +11,7 @@ part 'membership_plan_create_request.g.dart';
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createFactory: false,
+  explicitToJson: true,
 )
 class MembershipPlanCreateRequest {
   final String gymId;
@@ -22,7 +24,7 @@ class MembershipPlanCreateRequest {
   final int price;
   final List<String> waiverIds;
   final bool linkedDiscountEnabled;
-  final List<int> linkedDiscountPrices;
+  final List<LinkedDiscountValue> linkedDiscountValues;
 
   const MembershipPlanCreateRequest({
     required this.gymId,
@@ -35,7 +37,7 @@ class MembershipPlanCreateRequest {
     required this.price,
     this.waiverIds = const [],
     this.linkedDiscountEnabled = false,
-    this.linkedDiscountPrices = const [],
+    this.linkedDiscountValues = const [],
   });
 
   Map<String, dynamic> toJson() =>

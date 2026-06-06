@@ -57,11 +57,11 @@ class MembershipPlansCreate(MembershipPlansBase):
         )
 
         # ── Step 1: DB insert (NULL stripe IDs) ──────────────────
-        # Mint a real `linked` discount entry per entered tier amount; the plan
-        # references them by id (linked_discount_ids).
+        # Mint a real `linked` discount entry per entered tier value ($/% off);
+        # the plan references them by id (linked_discount_ids).
         linked_ids = await self._mint_linked_discounts(
             request.gym_id,
-            request.linked_discount_prices,
+            request.linked_discount_values,
         )
         plan_row = await self._insert_plan(request, linked_ids)
         plan_id = str(plan_row["plan_id"])
@@ -143,9 +143,9 @@ class MembershipPlansCreate(MembershipPlansBase):
             ) from exc
 
         # The stripe-update RETURNING row carries linked_discount_ids (the
-        # minted entries) but not the resolved amounts; surface the entered
-        # prices so the create response matches the read shape.
-        plan_row["linked_discount_prices"] = request.linked_discount_prices
+        # minted entries) but not the resolved values; surface the entered
+        # values so the create response matches the read shape.
+        plan_row["linked_discount_values"] = request.linked_discount_values
         return self._build_plan_response(
             plan_row,
             active_price=self._build_price_response(price_row),

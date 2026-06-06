@@ -3,9 +3,11 @@
 The gated check-in flow runs many DB queries plus the cycle-counts service, so
 these router tests override the ``checkin_service`` provider with a double and
 assert the router's wiring (auth -> service -> response serialization). The
-gating *logic* is unit-tested directly in ``test_classes_checkin_service.py``.
+gating *logic* is unit-tested directly in
+``classes/service/checkin/test_classes_checkin_plan_selector.py``.
 """
 
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -51,6 +53,8 @@ def test_checkin_records_when_a_plan_covers_the_class(
                 classes_used=4,
                 classes_remaining=None,
                 is_eligible=True,
+                renew_date=date(2026, 7, 1),
+                end_date=None,
             )
         ],
     )

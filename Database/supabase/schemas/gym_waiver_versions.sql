@@ -1,9 +1,12 @@
--- Immutable, append-only versions of a waiver's text.
+-- Versions of a waiver's text — conditionally immutable.
 --
--- Editing a waiver's body PUBLISHES a new version row (version_number bumped);
--- existing rows are never updated or deleted (REVOKE UPDATE, DELETE in the
--- access rules) so a signature bound to an old version always reproduces the
--- exact wording the member agreed to. content_hash is a sha256 of the body
+-- Editing a body while the current version has 0 signatures updates that row
+-- IN PLACE (the backend, at service_role). Once a member has signed a version
+-- it is frozen: a further edit PUBLISHES a new version row (version_number
+-- bumped) and re-points current_version_id. Clients can never write version
+-- rows (REVOKE UPDATE, DELETE in the access rules), and a signed version is
+-- never mutated or deleted, so a signature bound to a version always reproduces
+-- the exact wording the member agreed to. content_hash is a sha256 of the body
 -- computed by the backend at publish time; member_waiver_signatures copies it so
 -- the signed text is provable even if hashing/normalization rules change later.
 CREATE TABLE gym_waiver_versions (

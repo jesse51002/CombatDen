@@ -10,14 +10,15 @@ Map<String, dynamic> _$MembershipPlanUpdateDataToJson(
   MembershipPlanUpdateData instance,
 ) => <String, dynamic>{
   'plan_name': ?instance.planName,
-  'plan_type': ?instance.planType,
   'class_count': ?instance.classCount,
   'duration_amount': ?instance.durationAmount,
-  'duration_unit': ?instance.durationUnit,
+  'duration_unit': ?instance.durationUnit?.toJson(),
   'is_public': ?instance.isPublic,
   'waiver_ids': ?instance.waiverIds,
   'linked_discount_enabled': ?instance.linkedDiscountEnabled,
-  'linked_discount_prices': ?instance.linkedDiscountPrices,
+  'linked_discount_values': ?instance.linkedDiscountValues
+      ?.map((e) => e.toJson())
+      .toList(),
 };
 
 Map<String, dynamic> _$MembershipPlanUpdateRequestToJson(

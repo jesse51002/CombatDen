@@ -59,7 +59,9 @@ dependencies:
   uuid: ^4.5.3
   get_it: ^9.2.0
   stream_transform: ^2.1.1
-
+  flutter_quill: ^11.5.1
+  markdown_quill: ^4.3.0
+  markdown: ^7.3.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

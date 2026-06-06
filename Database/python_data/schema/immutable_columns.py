@@ -22,6 +22,8 @@ GYM_EMPLOYEES: frozenset[str] = frozenset(
         "employee_id",  # PK, auto-generated UUID
         "gym_id",  # identity FK, per-gym resource
         "created_at",  # auto-generated timestamp
+        # theme_preference is intentionally NOT listed — it is the employee's own
+        # client-editable CRM appearance setting (PUT /employees/me/theme).
     }
 )
 
@@ -146,8 +148,9 @@ GYM_WAIVERS: frozenset[str] = frozenset(
 
 GYM_WAIVER_VERSIONS: frozenset[str] = frozenset(
     {
-        # Immutable in full — versions are append-only (publish = INSERT row),
-        # never updated by a client.
+        # Client-immutable in full — clients never write version rows directly.
+        # (The backend, at service_role, edits an UNSIGNED current version in
+        # place; once a version is signed it is frozen and edits mint a new one.)
         "version_id",  # PK, auto-generated UUID
         "waiver_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
@@ -202,6 +205,10 @@ MEMBERSHIP_PLANS: frozenset[str] = frozenset(
         "plan_id",  # PK, auto-generated UUID
         "gym_id",  # identity FK, per-gym resource
         "created_at",  # auto-generated timestamp
+        # The plan's billing model is fixed at creation — changing it would
+        # break how existing members on the plan are billed (DB-enforced by
+        # the trg_prevent_plan_type_overwrite trigger).
+        "plan_type",
         # Stripe columns — always set by backend
         "stripe_product_id",
     }
