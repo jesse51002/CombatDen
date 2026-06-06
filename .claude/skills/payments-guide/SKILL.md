@@ -79,7 +79,7 @@ stripe_account_id, stripe_onboarding_status)` in `access_rules/gyms.sql`):
 | column | meaning |
 | --- | --- |
 | `stripe_account_id` | `TEXT UNIQUE` — the connected account id (`acct_…`); NULL until onboarded |
-| `stripe_onboarding_status` | `TEXT NOT NULL DEFAULT 'not_started'`, CHECK ∈ `not_started` / `pending` / `complete` |
+| `stripe_onboarding_status` | Postgres enum `stripe_onboarding_status` `NOT NULL DEFAULT 'not_started'` ∈ `not_started` / `pending` / `complete` / `disabled` (mirrored by the `StripeOnboardingStatus` `StrEnum` in `Database/python_data/schema/gym.py`) |
 
 **Everything is connected-account scoped.** There are no platform-level Stripe
 resources — every customer, product, price, coupon, subscription, and invoice
@@ -351,19 +351,16 @@ writes:
 - **`gyms.stripe_onboarding_status`** (`gyms_set_onboarding_status.sql`; does not
   touch `stripe_account_id`).
 
-It projects the Stripe Account into a status: `requirements.disabled_reason` set
-→ `disabled`; `details_submitted && charges_enabled && payouts_enabled` →
-`complete`; else `pending`.
-
-> **Gotcha — the `disabled` status mismatch (tracked, fix decision open).** The
-> handler maps `requirements.disabled_reason` → `'disabled'`, but the
-> `gyms.stripe_onboarding_status` CHECK (`gyms.sql`) only allows `not_started` /
-> `pending` / `complete`. So when Stripe disables a connected account this UPDATE
-> violates the constraint and the `account.updated` event keeps failing/retrying.
-> It is a known live bug whose fix is still undecided (add a 4th `disabled` state
-> vs. map `disabled → pending`) — tracked in `MANUAL_REVIEW.md` #6, which also
-> gates items #4/#5/#7. Don't treat `disabled` as a persisted status until #6
-> lands.
+It delegates to the single canonical mapper `map_account_to_snapshot`
+(`gyms/service/gyms_status_mapping.py`) — the same one the gyms status-refresh
+endpoint uses, returning a Pydantic `GymStripeAccountSnapshot`
+(`gyms/schema/gyms_schema.py`). Precedence: `requirements.disabled_reason` set →
+`disabled`; `details_submitted && charges_enabled && payouts_enabled` →
+`complete`; else `pending`. `disabled` is a real value of the
+`stripe_onboarding_status` enum, so it persists to the column; the CRM gym-setup
+flow renders a dedicated disabled step from it. The mapper normalizes a
+`stripe.Account` to a plain dict via `.to_dict()` at the boundary, so the webhook
+(dict payload) and the refresh path (SDK object) share one code path.
 
 ---
 

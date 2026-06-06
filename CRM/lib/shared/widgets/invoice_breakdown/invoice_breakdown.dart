@@ -87,7 +87,7 @@ class InvoiceBreakdown extends StatelessWidget {
             currency: data.currency,
             muted: true,
           ),
-        const Divider(
+        Divider(
           color: DesignConstants.divider,
           height: 1,
         ),

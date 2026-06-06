@@ -5,7 +5,8 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
-from schema.gym_employee import EmployeeType
+from schema.gym import StripeOnboardingStatus
+from schema.gym_employee import EmployeeType, ThemeMode
 
 import src.shared.db_schema_path  # noqa: F401
 
@@ -61,10 +62,37 @@ class GymWithRoleResponse(GymResponse):
 
     Returned by ``GET /api/v1/gyms/`` — the list of gyms the
     authenticated user owns or admins (``employee_type`` is the
-    caller's role for that gym).
+    caller's role for that gym). ``theme_preference`` is the caller's
+    own CRM appearance choice for that gym, so the admin app can
+    hydrate the theme at login.
     """
 
     employee_type: EmployeeType
+    theme_preference: ThemeMode
+
+
+class EmployeeThemeUpdateData(BaseModel):
+    """Mutable field for PUT .../employees/me/theme.
+
+    Per project convention, update requests separate identity (the
+    URL ``gym_id`` + the caller's JWT) from a nested ``data`` model.
+    Theme is the only settable field here.
+    """
+
+    theme_preference: ThemeMode
+
+
+class EmployeeThemeUpdateRequest(BaseModel):
+    """Body for PUT /api/v1/gyms/{gym_id}/employees/me/theme."""
+
+    data: EmployeeThemeUpdateData
+
+
+class EmployeeThemeResponse(BaseModel):
+    """The caller's saved theme for a gym (echoed back on update)."""
+
+    gym_id: UUID
+    theme_preference: ThemeMode
 
 
 class GymEmployeeResponse(BaseModel):
@@ -92,16 +120,32 @@ class GymCreateResponse(BaseModel):
 
     gym_id: UUID
     stripe_account_id: str
-    stripe_onboarding_status: Literal["pending"]
+    stripe_onboarding_status: Literal[StripeOnboardingStatus.pending]
     onboarding_url: str
     onboarding_url_expires_at: datetime
+
+
+class GymStripeAccountSnapshot(BaseModel):
+    """Flat projection of the Stripe Account fields we care about.
+
+    The shared output of the canonical mapper in
+    ``gyms_status_mapping.py`` — fed both by the status-refresh
+    endpoint and the ``account.updated`` webhook.
+    """
+
+    status: StripeOnboardingStatus
+    details_submitted: bool
+    charges_enabled: bool
+    payouts_enabled: bool
+    disabled_reason: str | None = None
+    requirements_currently_due: list[str] = []
 
 
 class GymOnboardingStatusResponse(BaseModel):
     """Response for GET /api/v1/gyms/{gym_id}/onboarding."""
 
     gym_id: UUID
-    stripe_onboarding_status: Literal["not_started", "pending", "complete"]
+    stripe_onboarding_status: StripeOnboardingStatus
     onboarding_url: str | None = None
     onboarding_url_expires_at: datetime | None = None
     details_submitted: bool

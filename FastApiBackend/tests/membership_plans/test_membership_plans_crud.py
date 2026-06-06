@@ -7,9 +7,12 @@ members, they only configure what gets billed when a membership
 starts.
 """
 
+from uuid import uuid4
+
 from schema.membership_plan import DurationUnit, PlanType
 
 from src.membership_plans.membership_plans_schemas import (
+    LinkedDiscountValue,
     MembershipPlanCreateRequest,
     MembershipPlanPriceRequest,
     MembershipPlanUpdateData,
@@ -122,6 +125,48 @@ async def test_create_one_time_plan(
     )
 
 
+async def test_create_plan_with_linked_discount_values(
+    plans_service,
+    gym_id,
+    created,
+):
+    """Linked (family) tiers are real $ off / % off discount values that
+    round-trip through create and read (not the old dollar 'member price')."""
+    resp = await plans_service.create_plan(
+        MembershipPlanCreateRequest(
+            gym_id=gym_id,
+            plan_name="Family Unlimited",
+            plan_type=PlanType.recurring,
+            duration_amount=1,
+            duration_unit=DurationUnit.month,
+            price=10000,
+            linked_discount_enabled=True,
+            linked_discount_values=[
+                LinkedDiscountValue(percentage_off=20),
+                LinkedDiscountValue(dollar_off=1500),
+            ],
+        ),
+    )
+    _track_plan(created, resp)
+    for did in resp.linked_discount_ids:
+        created.track_discount(did)
+
+    # Create response echoes the entered values (percent vs dollar preserved).
+    assert resp.linked_discount_enabled is True
+    assert len(resp.linked_discount_values) == 2
+    assert resp.linked_discount_values[0].percentage_off == 20
+    assert resp.linked_discount_values[0].dollar_off is None
+    assert resp.linked_discount_values[1].dollar_off == 1500
+    assert resp.linked_discount_values[1].percentage_off is None
+
+    # The read path resolves the minted linked discounts back to the same
+    # per-tier values, in tier order.
+    fetched = await plans_service.get_plan(resp.plan_id, gym_id)
+    assert len(fetched.linked_discount_values) == 2
+    assert fetched.linked_discount_values[0].percentage_off == 20
+    assert fetched.linked_discount_values[1].dollar_off == 1500
+
+
 async def test_update_plan_name(
     plans_service,
     gym_id,
@@ -161,6 +206,50 @@ async def test_update_plan_name(
         f"Stripe product {product.id} name={product.name!r} not updated"
     )
     assert product.active is True
+
+
+async def test_update_plan_with_waiver_ids(
+    plans_service,
+    gym_id,
+    created,
+):
+    """Updating a plan whose changes include a jsonb column must not 500.
+
+    Regression for the dynamic SET-clause builder emitting
+    ``waiver_ids = :waiver_ids::jsonb`` — asyncpg cannot bind a param
+    immediately followed by ``::``, so Postgres raised
+    ``syntax error at or near ":"``. The builder must use
+    ``CAST(:waiver_ids AS JSONB)`` (see CLAUDE.md → SQL Files). The plain
+    name-only update never exercised this branch, which is how the bug shipped.
+    """
+    created_resp = await plans_service.create_plan(
+        MembershipPlanCreateRequest(
+            gym_id=gym_id,
+            plan_name="Waiver Update",
+            plan_type=PlanType.recurring,
+            duration_amount=1,
+            duration_unit=DurationUnit.month,
+            price=4500,
+        ),
+    )
+    _track_plan(created, created_resp)
+
+    waiver_id = uuid4()  # jsonb array element; no FK, any uuid is valid
+    resp = await plans_service.update_plan(
+        MembershipPlanUpdateRequest(
+            plan_id=created_resp.plan_id,
+            gym_id=gym_id,
+            data=MembershipPlanUpdateData(
+                plan_name="Waiver Update",
+                duration_amount=1,
+                duration_unit=DurationUnit.month,
+                waiver_ids=[waiver_id],
+            ),
+        ),
+    )
+
+    # The jsonb column round-trips through the CAST(...) SET clause.
+    assert resp.waiver_ids == [waiver_id]
 
 
 async def test_delete_plan(
@@ -291,3 +380,39 @@ async def test_set_price(
     assert old_price.active is False, (
         f"Old Stripe price {old_price.id} should be archived after set_price"
     )
+
+
+async def test_list_prices(plans_service, gym_id, created):
+    """list_prices returns every version, active first, with member counts."""
+    created_resp = await plans_service.create_plan(
+        MembershipPlanCreateRequest(
+            gym_id=gym_id,
+            plan_name="Versioned Price",
+            plan_type=PlanType.recurring,
+            duration_amount=1,
+            duration_unit=DurationUnit.month,
+            price=6000,
+        ),
+    )
+    _track_plan(created, created_resp)
+    old_price_id = created_resp.active_price.price_id
+
+    new_price = await plans_service.set_price(
+        MembershipPlanPriceRequest(
+            plan_id=created_resp.plan_id,
+            gym_id=gym_id,
+            price=8000,
+        ),
+    )
+    created.track_price(new_price.stripe_price_id)
+
+    prices = await plans_service.list_prices(created_resp.plan_id, gym_id)
+
+    # Both versions present; active (new) first.
+    assert len(prices) == 2
+    assert prices[0].is_active is True
+    assert prices[0].price == 8000
+    assert prices[1].is_active is False
+    assert prices[1].price_id == old_price_id
+    # No memberships were started, so every version has 0 members.
+    assert all(p.member_count == 0 for p in prices)

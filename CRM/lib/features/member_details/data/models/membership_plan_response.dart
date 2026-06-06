@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/duration_unit.dart';
+import 'package:crm/features/member_details/data/models/linked_discount_value.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_price_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 
@@ -42,10 +43,10 @@ class MembershipPlanResponse extends Equatable {
   @JsonKey(defaultValue: false)
   final bool linkedDiscountEnabled;
 
-  /// Price (minor units) each linked member pays, ordered
-  /// 2nd, 3rd, 4th, 5th+.
-  @JsonKey(defaultValue: <int>[])
-  final List<int> linkedDiscountPrices;
+  /// The discount ($ off / % off) each additional family member gets,
+  /// ordered 2nd, 3rd, 4th, 5th.
+  @JsonKey(defaultValue: <LinkedDiscountValue>[])
+  final List<LinkedDiscountValue> linkedDiscountValues;
 
   const MembershipPlanResponse({
     required this.planId,
@@ -62,7 +63,7 @@ class MembershipPlanResponse extends Equatable {
     this.enrolledCount = 0,
     this.waiverIds = const [],
     this.linkedDiscountEnabled = false,
-    this.linkedDiscountPrices = const [],
+    this.linkedDiscountValues = const [],
   });
 
   factory MembershipPlanResponse.fromJson(
@@ -91,6 +92,6 @@ class MembershipPlanResponse extends Equatable {
         enrolledCount,
         waiverIds,
         linkedDiscountEnabled,
-        linkedDiscountPrices,
+        linkedDiscountValues,
       ];
 }

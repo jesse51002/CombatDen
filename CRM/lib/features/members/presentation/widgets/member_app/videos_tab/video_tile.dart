@@ -118,7 +118,7 @@ class _Thumbnail extends StatelessWidget {
           // A rejected tile takes the corner marker (solid red) so it's clear
           // at a glance; otherwise show the optional content pill.
           if (rejected)
-            const Positioned(
+            Positioned(
               top: DesignConstants.spacingMedium,
               left: DesignConstants.spacingMedium,
               child: _Pill(
@@ -140,9 +140,9 @@ class _Thumbnail extends StatelessWidget {
 
 class _Pill extends StatelessWidget {
   final String label;
-  final Color color;
+  final Color? color;
 
-  const _Pill({required this.label, this.color = DesignConstants.primaryColor});
+  const _Pill({required this.label, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -152,13 +152,13 @@ class _Pill extends StatelessWidget {
         vertical: DesignConstants.spacingTiny,
       ),
       decoration: BoxDecoration(
-        color: color,
+        color: color ?? DesignConstants.primaryColor,
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       ),
       child: Text(
         label,
         style: DesignConstants.pSmallBold.copyWith(
-          color: DesignConstants.backgroundColor,
+          color: DesignConstants.onAccent,
         ),
       ),
     );

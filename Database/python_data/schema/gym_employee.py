@@ -12,6 +12,14 @@ class EmployeeType(StrEnum):
     trainer = "trainer"
 
 
+class ThemeMode(StrEnum):
+    """CRM admin-app appearance preference. 'system' follows the OS."""
+
+    system = "system"
+    light = "light"
+    dark = "dark"
+
+
 class GymEmployeeCreate(SeedModel):
     employee_id: UUID
     user_id: UUID | None = None
@@ -23,3 +31,4 @@ class GymEmployeeCreate(SeedModel):
     email: str | None = None
     employee_pic_url: str | None = None
     employee_public_description: str | None = None
+    theme_preference: ThemeMode = ThemeMode.system

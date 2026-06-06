@@ -8,6 +8,7 @@ SELECT
     ms.gym_id,
     ms.last_paid_date,
     ms.next_due_date,
+    ms.end_date,
     ms.status,
     mp.plan_type,
     mp.class_count,

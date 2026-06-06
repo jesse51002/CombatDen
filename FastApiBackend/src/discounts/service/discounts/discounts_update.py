@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 
+from pydantic import BaseModel
 from schema.immutable_columns import GYM_DISCOUNTS
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,8 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.discounts import SQL_DIR
 from src.discounts.schema.discounts_schema import (
     DiscountResponse,
-    DiscountUpdateData,
     DiscountUpdateRequest,
+    DiscountUpdateValues,
     _validate_lifetime,
 )
 from src.discounts.service.discounts.discounts_base import DiscountsBase
@@ -32,19 +33,6 @@ from src.shared.column_guard import validate_mutable_columns
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
-
-# Value/lifetime fields — changing any of these mints a new version, rather than
-# editing the identity row.
-VALUE_FIELDS: frozenset[str] = frozenset(
-    {
-        "percentage_off",
-        "dollar_off",
-        "discount_mode",
-        "duration_amount",
-        "duration_unit",
-        "end_date",
-    }
-)
 
 
 class DiscountsUpdate(DiscountsBase):
@@ -54,10 +42,13 @@ class DiscountsUpdate(DiscountsBase):
         self,
         request: DiscountUpdateRequest,
     ) -> DiscountResponse:
-        """Apply a partial update; only provided fields change.
+        """Apply a partial update; the request shape picks the destination.
+
+        `identity` renames the gym_discounts row in place; `values` mints a
+        new active gym_discount_values version. Either may be omitted.
 
         Args:
-            request: Discount update data (partial).
+            request: Discount update request (identity and/or values).
 
         Returns:
             The updated discount (identity + active value version).
@@ -68,23 +59,27 @@ class DiscountsUpdate(DiscountsBase):
         """
         existing = await self._get_discount(request.discount_id)
 
-        changes = self._collect_changes(request.data)
-        if not changes:
+        identity_changes = self._collect_changes(request.identity) if request.identity else {}
+        value_changes = self._collect_changes(request.values) if request.values else {}
+        if not identity_changes and not value_changes:
             return DiscountResponse(**existing)
 
-        validate_mutable_columns(GYM_DISCOUNTS, set(changes.keys()))
+        # The identity UPDATE is built dynamically from the changed columns,
+        # so the guard does real work here (the value path is a static
+        # full-column version INSERT and needs no guard).
+        if identity_changes:
+            validate_mutable_columns(GYM_DISCOUNTS, set(identity_changes))
 
         result = dict(existing)
         async with self._db_pool.session() as session:
-            if "discount_name" in changes:
+            if identity_changes:
                 result.update(
                     await self._update_identity(
                         session,
                         request.discount_id,
-                        str(changes["discount_name"]),
+                        identity_changes,
                     )
                 )
-            value_changes = {k: v for k, v in changes.items() if k in VALUE_FIELDS}
             if value_changes:
                 result.update(
                     await self._new_version(
@@ -102,27 +97,37 @@ class DiscountsUpdate(DiscountsBase):
     # ── Private ────────────────────────────────────────────────
 
     @staticmethod
-    def _collect_changes(data: DiscountUpdateData) -> dict[str, object]:
-        """Extract non-None fields from the update data."""
-        changes: dict[str, object] = {}
-        for field in DiscountUpdateData.model_fields:
-            value = getattr(data, field)
-            if value is not None:
-                changes[field] = value
-        return changes
+    def _collect_changes(model: BaseModel) -> dict[str, object]:
+        """Extract the non-None fields of an update sub-model.
+
+        Shared by `identity` and `values`: the sub-model's own field set is
+        the source of truth, so adding a future editable column is just a
+        model field — no change here.
+        """
+        return {
+            field: value
+            for field in type(model).model_fields
+            if (value := getattr(model, field)) is not None
+        }
 
     @staticmethod
     async def _update_identity(
         session: AsyncSession,
         discount_id: object,
-        discount_name: str,
+        identity_changes: dict[str, object],
     ) -> dict:
-        """Rename the discount identity row."""
-        sql = load_sql(SQL_DIR / "discounts_update.sql")
-        result = await session.execute(
-            text(sql),
-            {"discount_id": str(discount_id), "discount_name": discount_name},
+        """Update the discount identity row (dynamic SET from changes).
+
+        Column names come only from DiscountUpdateIdentity's fields (already
+        guarded against GYM_DISCOUNTS), never raw client strings.
+        """
+        set_clause = ", ".join(f"{col} = :{col}" for col in identity_changes)
+        sql = load_sql(
+            SQL_DIR / "discounts_update.sql",
+            {"set_clause": set_clause},
         )
+        params = {**identity_changes, "discount_id": str(discount_id)}
+        result = await session.execute(text(sql), params)
         row = result.mappings().fetchone()
         if not row:
             raise ValueError(f"Discount {discount_id} not found")
@@ -137,7 +142,7 @@ class DiscountsUpdate(DiscountsBase):
         value_changes: dict[str, object],
     ) -> dict:
         """Deactivate the active value version and insert a new one."""
-        merged = {field: existing.get(field) for field in VALUE_FIELDS}
+        merged = {field: existing.get(field) for field in DiscountUpdateValues.model_fields}
         merged.update(value_changes)
         self._validate_merged_state(merged)
 

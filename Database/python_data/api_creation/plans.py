@@ -82,7 +82,11 @@ def create_all(
         }
         if idx == 0 and linked_prices:
             payload["linked_discount_enabled"] = True
-            payload["linked_discount_prices"] = linked_prices
+            # Each tier is now a real discount value ($ off / % off); the seed's
+            # dollar amounts map to dollar_off.
+            payload["linked_discount_values"] = [
+                {"dollar_off": p} for p in linked_prices
+            ]
         if "duration_amount" in tmpl:
             payload["duration_amount"] = tmpl["duration_amount"]
             payload["duration_unit"] = tmpl["duration_unit"]

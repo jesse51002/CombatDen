@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from src.membership_plans import SQL_DIR
 from src.membership_plans.membership_plans_schemas import (
+    MembershipPlanPriceWithCount,
     MembershipPlanResponse,
 )
 from src.membership_plans.service.plans.membership_plans_base import (
@@ -72,3 +73,50 @@ class MembershipPlansRead(MembershipPlansBase):
             plan_row,
             active_price=self._extract_active_price(plan_row),
         )
+
+    async def list_prices(
+        self,
+        plan_id: UUID,
+        gym_id: UUID,
+    ) -> list[MembershipPlanPriceWithCount]:
+        """List every price version of a plan with its member count.
+
+        Returns the active price plus all older versions, each with the
+        number of members still pinned to it (the same active-membership
+        set the migrate path moves). The CRM shows the active price plus
+        any older version with ``member_count > 0`` so members on a stale
+        price can be migrated forward.
+
+        Args:
+            plan_id: The plan whose prices to list.
+            gym_id: The gym owning the plan.
+
+        Returns:
+            Price versions ordered active-first, then newest-first.
+
+        Raises:
+            ValueError: If the plan is not found.
+        """
+        await self._get_plan(plan_id, gym_id)
+
+        sql = load_sql(SQL_DIR / "membership_plans_list_prices.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"plan_id": str(plan_id), "gym_id": str(gym_id)},
+            )
+            rows = result.mappings().fetchall()
+
+        return [
+            MembershipPlanPriceWithCount(
+                price_id=row["price_id"],
+                plan_id=row["plan_id"],
+                gym_id=row["gym_id"],
+                stripe_price_id=row["stripe_price_id"],
+                price=row["price"],
+                is_active=row["is_active"],
+                created_at=row["created_at"],
+                member_count=row["member_count"],
+            )
+            for row in rows
+        ]

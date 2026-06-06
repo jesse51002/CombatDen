@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/theme_browser/presentation/theme_browser_app.dart';
 
 /// Standalone entry point for the **public theme browser** deployment.
@@ -11,4 +12,11 @@ import 'package:crm/features/theme_browser/presentation/theme_browser_app.dart';
 ///
 /// Run with `make run-themes`, build with `make build-themes`, deploy with
 /// `make deploy-themes` (themes.combatden.net). See AppManagement/CLAUDE.md.
-void main() => runApp(const ThemeBrowserApp());
+void main() {
+  // The theme browser is a light-only marketing surface (it matches the landing
+  // page and never shows the admin Settings control). Pin the shared
+  // [themeController] to light so every `DesignConstants` token resolves light
+  // here regardless of the visitor's OS dark-mode setting.
+  themeController.setMode(ThemeMode.light);
+  runApp(const ThemeBrowserApp());
+}

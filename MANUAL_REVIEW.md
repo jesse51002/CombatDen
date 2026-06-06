@@ -36,7 +36,7 @@ It's leftover test/dev scaffolding living in the prod code path. A gym always ha
 
 ## 4. `GymStripeAccountSnapshot` — should be Pydantic + live in schema, and is duplicated
 
-**Status:** 🟡 Needs decision — deferred (entangled with the bug in #6)
+**Status:** ✅ Fixed — `GymStripeAccountSnapshot` is now a Pydantic model in `gyms/schema/gyms_schema.py`; the webhook's private `_GymStripeAccountSnapshot` + `_map_account_to_snapshot` are deleted and `AccountUpdatedHandler` imports the one canonical `map_account_to_snapshot`. Landed together with #5/#6/#7 (decision: `disabled` is a real status). Imports clean, ruff clean, 6 gyms router tests pass.
 
 **Finding:** `GymStripeAccountSnapshot` is a `@dataclass(frozen=True)` in `gyms_status_mapping.py:20`. Per project conventions it should be a Pydantic model and live in a schema file (e.g. `gyms_schema.py`), not in a service module. It's also **duplicated**: `account_updated_handler.py:33` defines a near-identical `_GymStripeAccountSnapshot` with its own `_map_account_to_snapshot`, even though `gyms_status_mapping.py` exists explicitly to be the single shared mapper ("Keeping this in one place prevents drift between paths"). The two have already drifted (see #6).
 
@@ -46,7 +46,7 @@ It's leftover test/dev scaffolding living in the prod code path. A gym always ha
 
 ## 5. Gym onboarding status constants should be an enum
 
-**Status:** 🟡 Needs decision — deferred
+**Status:** ✅ Fixed — added the canonical `StripeOnboardingStatus` `StrEnum` in `Database/python_data/schema/gym.py` and a real Postgres `CREATE TYPE stripe_onboarding_status AS ENUM (...)` in `gyms.sql` (column converted from `TEXT`+CHECK to the enum; dbdiagram updated). Backend imports the enum (`from schema.gym import StripeOnboardingStatus`) instead of the bare `GYM_STATUS_*` constants, which are deleted everywhere. **Decisions resolved (user):** (a) real Postgres enum, not TEXT+CHECK; (b) enum includes `disabled` (per #6). User runs the migration + `make update-openapi`.
 
 **Finding:** `GYM_STATUS_NOT_STARTED/PENDING/COMPLETE` are bare module-level string constants (`gyms_status_mapping.py:15-17`), and the webhook redefines its own `GYM_STATUS_PENDING/COMPLETE/DISABLED` (`account_updated_handler.py:28-30`). Both repo conventions say this should be an enum: FastApiBackend ("ALWAYS use enums instead of raw strings … reuse enums from the Database package") and Database ("Always use real Postgres enums … mirror every Postgres enum with a `StrEnum` in `python_data/schema`").
 
@@ -58,7 +58,7 @@ It's leftover test/dev scaffolding living in the prod code path. A gym always ha
 
 ## 7. `_get(obj, key, default)` helper — confusing, but load-bearing as written (don't naively replace with `.get()`)
 
-**Status:** 🟡 Cleanup — fold into the #4 consolidation
+**Status:** ✅ Fixed — the canonical `map_account_to_snapshot` now normalizes the Stripe object to a plain dict at the boundary (`account if isinstance(account, dict) else account.to_dict()`) and uses plain `dict.get()`; both copies of `_get` are deleted. Verified end-to-end against a dict (webhook) input and a `.to_dict()` (SDK object) input — both yield the right status.
 
 **Finding:** `gyms_status_mapping.py:74` and `account_updated_handler.py:119` both define `_get(obj, key, default)` doing "attribute-or-key lookup so we work on objects and dicts alike." It reads oddly, but it exists for a real reason: the two callers feed **different input types**, and in stripe 15.2.0 they support *mutually exclusive* access:
 - Status-refresh path passes a `stripe.Account` object (`retrieve_account`, `gyms_stripe_connect_service.py:131`). Verified: in stripe 15.2.0 `stripe.Account` is **not** a dict and has **no `.get()`** (`acct.get(...)` → `AttributeError`); only attribute access works.
@@ -72,7 +72,7 @@ So `_get` bridges both. **Naively replacing it with `.get()` would crash the sta
 
 ## 6. 🔴 BUG — `account.updated` webhook writes `"disabled"`, which violates the DB CHECK constraint
 
-**Status:** 🔴 Live bug — needs decision on intended behavior
+**Status:** ✅ Fixed (option 2 — `disabled` is a real 4th status, per user). Added `disabled` to the Postgres enum + the `StrEnum` + the canonical mapper + `GymOnboardingStatusResponse`; the webhook now writes a legal value. This aligns the DB with what was already built downstream: the webhook, the CRM `GymOnboardingStatus` enum, and the CRM `gym_setup_bloc`'s dedicated `GymSetupDisabledStep` all already expected `disabled` — only the DB constraint, mapper, and response `Literal` had never supported it. Regression guard added: `tests/stripe_webhooks/test_account_updated.py` asserts a disabled account now persists `'disabled'` (the write that previously raised a CHECK violation), plus the complete/pending branches. `tests/integration/test_gyms_integration.py` `_KNOWN_STATUSES` now includes `disabled`. CRM unchanged.
 
 **Finding:** `AccountUpdatedHandler._map_account_to_snapshot` (`account_updated_handler.py:103-108`) maps an account with `requirements.disabled_reason` set to `status="disabled"` and writes it to `gyms.stripe_onboarding_status` via `gyms_set_onboarding_status.sql`. But the column's CHECK constraint (`gyms.sql:14`) only allows `'not_started','pending','complete'`. The handler is **wired and live** (`stripe_webhooks_service.py:177`). So when Stripe disables a connected account, the webhook's UPDATE raises a constraint violation → the event fails and Stripe keeps retrying. The canonical mapper in `gyms_status_mapping.py` does NOT have this bug (it never emits `disabled`; it surfaces `disabled_reason` in the API payload only).
 

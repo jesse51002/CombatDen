@@ -5,19 +5,21 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/member_details/data/models/duration_unit.dart';
+import 'package:crm/features/member_details/data/models/linked_discount_value.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_create_request.dart';
-import 'package:crm/features/memberships/data/models/membership_plan_price_request.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_update_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/memberships/presentation/widgets/linked_discount_section.dart';
+import 'package:crm/features/memberships/presentation/widgets/plan_price_versions_section.dart';
 import 'package:crm/features/memberships/presentation/widgets/plan_type_cards.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_multi_select.dart';
 import 'package:crm/features/memberships/presentation/widgets/icon_option_cards.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
+import 'package:crm/shared/widgets/confirmation_modal.dart';
 import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/form/app_dropdown_field.dart';
 
@@ -46,8 +48,11 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
   final _price = TextEditingController();
   final _classCount = TextEditingController(text: '10');
   final _trialLength = TextEditingController(text: '1');
-  final _tiers = List.generate(4, (_) => TextEditingController());
   final _formKey = GlobalKey<FormState>();
+
+  // Family tiers as real discount values ($ off / % off), owned by the
+  // linked-discount section and mirrored here for save.
+  List<LinkedDiscountValue> _linkedValues = const [];
 
   // The form reads best capped to a column width rather than stretched
   // across the whole content area.
@@ -90,11 +95,7 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
     if (price != null) _price.text = (price / 100).toStringAsFixed(2);
     _waiverIds.addAll(plan.waiverIds);
     _linkedEnabled = plan.linkedDiscountEnabled;
-    for (var i = 0;
-        i < plan.linkedDiscountPrices.length && i < _tiers.length;
-        i++) {
-      _tiers[i].text = (plan.linkedDiscountPrices[i] / 100).toStringAsFixed(2);
-    }
+    _linkedValues = List.of(plan.linkedDiscountValues);
   }
 
   Future<void> _loadWaivers() async {
@@ -121,9 +122,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
     _price.dispose();
     _classCount.dispose();
     _trialLength.dispose();
-    for (final c in _tiers) {
-      c.dispose();
-    }
     super.dispose();
   }
 
@@ -138,11 +136,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
     if (_type != PlanType.oneTime && _unlimited) return null;
     return int.tryParse(_classCount.text.trim());
   }
-
-  List<int> get _tierCents => [
-        for (final c in _tiers)
-          ((double.tryParse(c.text.trim()) ?? 0) * 100).round(),
-      ];
 
   // Recurring is locked to 1 month by the backend; trial uses its
   // length; one-time has no period.
@@ -164,39 +157,40 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final name = _name.text.trim();
-    final price = _priceCents;
-    if (price == null) return;
     final duration = _duration;
     final waiverIds = _waiverIds.toList();
     // Linked discount is recurring-only.
     final recurringLinked = _type == PlanType.recurring && _linkedEnabled;
-    final tiers = recurringLinked ? _tierCents : <int>[];
+    final linkedValues = recurringLinked ? _linkedValues : <LinkedDiscountValue>[];
+    if (recurringLinked && linkedValues.isEmpty) {
+      _snack('Enter at least one family discount, or turn linked off.');
+      return;
+    }
 
     setState(() => _saving = true);
     try {
       if (_isEdit) {
+        // Price is edited via the versioned price section, not here —
+        // Save only persists the plan metadata.
         await widget.repository.updatePlan(MembershipPlanUpdateRequest(
           planId: widget.plan!.planId,
           gymId: widget.gymId,
           data: MembershipPlanUpdateData(
             planName: name,
-            planType: _type,
             classCount: _resolvedClassCount,
             durationAmount: duration.amount,
             durationUnit: duration.unit,
             waiverIds: waiverIds,
             linkedDiscountEnabled: recurringLinked,
-            linkedDiscountPrices: tiers,
+            linkedDiscountValues: linkedValues,
           ),
         ));
-        if (price != widget.plan!.activePrice?.price) {
-          await widget.repository.setPlanPrice(MembershipPlanPriceRequest(
-            planId: widget.plan!.planId,
-            gymId: widget.gymId,
-            price: price,
-          ));
-        }
       } else {
+        final price = _priceCents;
+        if (price == null) {
+          setState(() => _saving = false);
+          return;
+        }
         await widget.repository.createPlan(MembershipPlanCreateRequest(
           gymId: widget.gymId,
           planName: name,
@@ -206,17 +200,38 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
           durationUnit: duration.unit,
           price: price,
           waiverIds: waiverIds,
-          linkedDiscountEnabled: _linkedEnabled,
-          linkedDiscountPrices: tiers,
+          linkedDiscountEnabled: recurringLinked,
+          linkedDiscountValues: linkedValues,
         ));
       }
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) {
+        _snack(
+          _isEdit ? 'Membership saved.' : 'Membership created.',
+          isError: false,
+        );
+        Navigator.of(context).pop(true);
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
         _snack(e.toString());
       }
     }
+  }
+
+  // Leaving the form discards in-progress changes, so confirm first. Shown
+  // for both the Back button and a system/Escape back (via PopScope).
+  Future<void> _handleBack() async {
+    if (_saving) return;
+    final leave = await ConfirmationModal.show(
+      context: context,
+      title: 'Leave without saving?',
+      message: 'Your changes here will be lost.',
+      confirmLabel: 'Leave',
+      confirmColor: DesignConstants.badRed,
+      cancelLabel: 'Keep editing',
+    );
+    if (leave && mounted) Navigator.of(context).pop();
   }
 
   Future<void> _delete() async {
@@ -232,21 +247,27 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
     }
   }
 
-  void _snack(String message) {
+  void _snack(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           message,
           style: DesignConstants.p.copyWith(color: DesignConstants.surface),
         ),
-        backgroundColor: DesignConstants.badRed,
+        backgroundColor:
+            isError ? DesignConstants.badRed : DesignConstants.goodGreen,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Form(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleBack();
+      },
+      child: Form(
       key: _formKey,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(DesignConstants.paddingBig),
@@ -257,32 +278,15 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
           crossAxisAlignment: CrossAxisAlignment.start,
           spacing: DesignConstants.spacingBig,
           children: [
-            _Header(isEdit: _isEdit),
+            _Header(isEdit: _isEdit, onBack: _handleBack),
             CustomTextField(
               controller: _name,
               label: 'Name',
-              hintText: 'Unlimited Class Membership',
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
             ),
-            _Field(
-              label: 'Membership Type',
-              child: PlanTypeCards(
-                selected: _type,
-                onSelected: (t) => setState(() => _type = t),
-              ),
-            ),
-            CustomTextField(
-              controller: _price,
-              label: 'Price (\$)',
-              hintText: '165',
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-              ],
-              validator: _validatePrice,
-            ),
+            _membershipTypeField(),
+            _priceField(),
             _entitlement(),
             _waiversField(),
             // Linked (family) discount is a recurring-only concept.
@@ -290,8 +294,9 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
               LinkedDiscountSection(
                 enabled: _linkedEnabled,
                 onEnabledChanged: (v) => setState(() => _linkedEnabled = v),
+                initialValues: _linkedValues,
+                onChanged: (v) => _linkedValues = v,
                 priceController: _price,
-                tierControllers: _tiers,
               ),
             _actions(),
           ],
@@ -299,6 +304,48 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
           ),
         ),
       ),
+    ),
+    );
+  }
+
+  // Membership type is fixed at creation. Create lets you pick it; edit
+  // only displays it (changing a plan's type after the fact would break the
+  // billing model, so it's locked).
+  Widget _membershipTypeField() {
+    return _Field(
+      label: 'Membership Type',
+      child: _isEdit
+          ? _TypeDisplay(type: _type)
+          : PlanTypeCards(
+              selected: _type,
+              onSelected: (t) => setState(() => _type = t),
+            ),
+    );
+  }
+
+  // Create: a single price input. Edit: the versioned price list with
+  // "add new price" + per-old-price migrate (prices are immutable
+  // versions, so an edit mints a new one rather than overwriting).
+  Widget _priceField() {
+    if (_isEdit) {
+      return _Field(
+        label: 'Price (\$)',
+        child: PlanPriceVersionsSection(
+          repository: widget.repository,
+          planId: widget.plan!.planId,
+          gymId: widget.gymId,
+          priceController: _price,
+        ),
+      );
+    }
+    return CustomTextField(
+      controller: _price,
+      label: 'Price (\$)',
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+      ],
+      validator: _validatePrice,
     );
   }
 
@@ -328,30 +375,41 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: DesignConstants.spacingMedium,
               children: [
-                WaiverMultiSelect(
-                  waivers: _waivers,
-                  selectedIds: _waiverIds,
-                  onToggle: (id) => setState(() {
-                    _waiverIds.contains(id)
-                        ? _waiverIds.remove(id)
-                        : _waiverIds.add(id);
-                  }),
-                ),
-                AppOutlineButton(
-                  text: 'Manage waivers',
-                  onPressed: _goToWaivers,
-                  borderRadius: DesignConstants.radiusBig,
-                  textStyle: DesignConstants.pSmall,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: DesignConstants.spacingMedium,
-                    vertical: DesignConstants.spacingSmall,
-                  ),
-                  icon: Icon(
-                    Icons.arrow_forward,
-                    size: DesignConstants.iconSizeSmall,
-                    color: DesignConstants.text,
+                Text(
+                  'Members must sign the selected waiver(s) before they can '
+                  'sign up.',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
                   ),
                 ),
+                // No waivers exist yet → offer the way to create them. Once the
+                // gym has waivers you just pick from the list (no Manage button).
+                if (_waivers.isEmpty)
+                  AppOutlineButton(
+                    text: 'Manage waivers',
+                    onPressed: _goToWaivers,
+                    borderRadius: DesignConstants.radiusBig,
+                    textStyle: DesignConstants.pSmall,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: DesignConstants.spacingMedium,
+                      vertical: DesignConstants.spacingSmall,
+                    ),
+                    icon: Icon(
+                      Icons.arrow_forward,
+                      size: DesignConstants.iconSizeSmall,
+                      color: DesignConstants.text,
+                    ),
+                  )
+                else
+                  WaiverMultiSelect(
+                    waivers: _waivers,
+                    selectedIds: _waiverIds,
+                    onToggle: (id) => setState(() {
+                      _waiverIds.contains(id)
+                          ? _waiverIds.remove(id)
+                          : _waiverIds.add(id);
+                    }),
+                  ),
               ],
             ),
     );
@@ -460,8 +518,9 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
 
 class _Header extends StatelessWidget {
   final bool isEdit;
+  final VoidCallback onBack;
 
-  const _Header({required this.isEdit});
+  const _Header({required this.isEdit, required this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -470,7 +529,7 @@ class _Header extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         InkWell(
-          onTap: () => Navigator.of(context).pop(),
+          onTap: onBack,
           borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -516,5 +575,74 @@ class _Field extends StatelessWidget {
         child,
       ],
     );
+  }
+}
+
+/// Read-only membership-type display for the edit screen — the type is
+/// fixed at creation, so it is shown (icon + label + subtitle) with a lock
+/// affordance rather than the interactive [PlanTypeCards] selector.
+class _TypeDisplay extends StatelessWidget {
+  final PlanType type;
+
+  const _TypeDisplay({required this.type});
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, subtitle) = _meta(type);
+    return Container(
+      padding: const EdgeInsets.all(DesignConstants.paddingSmall),
+      decoration: BoxDecoration(
+        color: DesignConstants.backgroundColor,
+        border: Border.all(color: DesignConstants.line),
+        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+      ),
+      child: Row(
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          Icon(
+            icon,
+            size: DesignConstants.iconSizeLarge,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.text2nd,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: DesignConstants.spacingTiny,
+              children: [
+                Text(type.displayLabel, style: DesignConstants.pBig),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Icon(
+            Symbols.lock_sharp,
+            size: DesignConstants.iconSizeSmall,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.text2nd,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Mirrors the icon/subtitle copy in PlanTypeCards.
+  (IconData, String) _meta(PlanType t) {
+    switch (t) {
+      case PlanType.recurring:
+        return (Symbols.calendar_month_sharp, 'Billed monthly');
+      case PlanType.oneTime:
+        return (Symbols.attach_money_sharp, 'Single payment');
+      case PlanType.trial:
+        return (Symbols.card_giftcard_sharp, 'Limited-time');
+      case PlanType.unknown:
+        return (Symbols.help_sharp, '');
+    }
   }
 }

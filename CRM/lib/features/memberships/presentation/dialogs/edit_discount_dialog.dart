@@ -227,8 +227,8 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
       widget.bloc.add(DiscountUpdated(DiscountUpdateRequest(
         discountId: widget.discount!.discountId,
         gymId: widget.gymId,
-        data: DiscountUpdateData(
-          discountName: name,
+        identity: DiscountUpdateIdentity(discountName: name),
+        values: DiscountUpdateValues(
           percentageOff: percentageOff,
           dollarOff: dollarOff,
           discountMode: _mode,
@@ -249,6 +249,15 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
         endDate: endDate,
       )));
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _isEdit ? 'Discount saved.' : 'Discount created.',
+          style: DesignConstants.p.copyWith(color: DesignConstants.surface),
+        ),
+        backgroundColor: DesignConstants.goodGreen,
+      ),
+    );
     Navigator.of(context).pop();
   }
 

@@ -1,6 +1,8 @@
 from dependency_injector import containers, providers
 
-from src.classes.service.classes_checkin_service import ClassesCheckinService
+from src.classes.service.checkin.classes_checkin_service import (
+    ClassesCheckinService,
+)
 from src.classes.service.classes_cycle_counts_service import (
     ClassesCycleCountsService,
 )

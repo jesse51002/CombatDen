@@ -20,6 +20,7 @@ from src.membership_plans.membership_plans_schemas import (
     MembershipPlanCreateRequest,
     MembershipPlanPriceRequest,
     MembershipPlanPriceResponse,
+    MembershipPlanPriceWithCount,
     MembershipPlanResponse,
     MembershipPlanUpdateRequest,
 )
@@ -124,6 +125,14 @@ class MembershipPlansService:
     ) -> MembershipPlanResponse:
         """Get a single plan with its active price."""
         return await self._read.get_plan(plan_id, gym_id)
+
+    async def list_prices(
+        self,
+        plan_id: UUID,
+        gym_id: UUID,
+    ) -> list[MembershipPlanPriceWithCount]:
+        """List a plan's price versions with per-price member counts."""
+        return await self._read.list_prices(plan_id, gym_id)
 
     # ── Price ──────────────────────────────────────────────────
 

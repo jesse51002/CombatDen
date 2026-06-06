@@ -8,6 +8,10 @@ from schema.membership_plan import DurationUnit, PlanType
 
 import src.shared.db_schema_path  # noqa: F401
 
+# A linked (family) discount supports up to this many extra-member tiers
+# (2nd..5th member — a hard cap of 5 members on the membership).
+MAX_LINKED_TIERS = 4
+
 # ── Shared field validators ──────────────────────────────────
 
 
@@ -36,15 +40,49 @@ def _validate_price(v: int) -> int:
     return v
 
 
-def _validate_linked_prices(v: list[int] | None) -> list[int] | None:
-    """Linked-tier amounts (cents) must all be >= 0.
+class LinkedDiscountValue(BaseModel):
+    """One family tier's discount — a real discount value ($ off or % off).
 
-    The CRM enters a dollar amount per family tier; the backend mints a real
-    ``linked`` discount entry per amount on write and stores the ids in
-    ``membership_plans.linked_discount_ids``.
+    Exactly one of ``percentage_off`` / ``dollar_off`` is set, mirroring a
+    regular discount (`gym_discount_values`). The backend mints a real
+    ``linked`` discount entry per tier on write and stores the ids in
+    ``membership_plans.linked_discount_ids``; reads resolve them back here.
     """
-    if v is not None and any(p < 0 for p in v):
-        raise ValueError("linked_discount_prices must all be >= 0")
+
+    percentage_off: float | None = None
+    dollar_off: int | None = None
+
+    @field_validator("percentage_off")
+    @classmethod
+    def _check_percentage(cls, v: float | None) -> float | None:
+        if v is not None and (v <= 0 or v > 100):
+            raise ValueError("percentage_off must be in (0, 100]")
+        return v
+
+    @field_validator("dollar_off")
+    @classmethod
+    def _check_dollar(cls, v: int | None) -> int | None:
+        if v is not None and v <= 0:
+            raise ValueError("dollar_off must be > 0")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_exactly_one(self) -> LinkedDiscountValue:
+        if (self.percentage_off is not None) == (self.dollar_off is not None):
+            raise ValueError(
+                "Exactly one of percentage_off or dollar_off must be set",
+            )
+        return self
+
+
+def _validate_linked_values(
+    v: list[LinkedDiscountValue] | None,
+) -> list[LinkedDiscountValue] | None:
+    """Cap the family tiers at ``MAX_LINKED_TIERS`` (max 5 members)."""
+    if v is not None and len(v) > MAX_LINKED_TIERS:
+        raise ValueError(
+            f"linked_discount_values supports at most {MAX_LINKED_TIERS} tiers",
+        )
     return v
 
 
@@ -64,7 +102,7 @@ class MembershipPlanCreateRequest(BaseModel):
     price: int
     waiver_ids: list[UUID] = []
     linked_discount_enabled: bool = False
-    linked_discount_prices: list[int] = []
+    linked_discount_values: list[LinkedDiscountValue] = []
 
     _v_plan_name = field_validator("plan_name")(_validate_plan_name)
     _v_class_count = field_validator("class_count")(_validate_class_count)
@@ -72,8 +110,8 @@ class MembershipPlanCreateRequest(BaseModel):
         _validate_duration_amount,
     )
     _v_price = field_validator("price")(_validate_price)
-    _v_linked_prices = field_validator("linked_discount_prices")(
-        _validate_linked_prices,
+    _v_linked_values = field_validator("linked_discount_values")(
+        _validate_linked_values,
     )
 
     @model_validator(mode="after")
@@ -92,25 +130,29 @@ class MembershipPlanCreateRequest(BaseModel):
 
 
 class MembershipPlanUpdateData(BaseModel):
-    """Mutable plan fields. All optional — only send what changed."""
+    """Mutable plan fields. All optional — only send what changed.
+
+    ``plan_type`` is intentionally absent: a plan's billing model is fixed at
+    creation (immutable — see ``MEMBERSHIP_PLANS`` in ``immutable_columns.py``
+    and the ``trg_prevent_plan_type_overwrite`` DB trigger).
+    """
 
     plan_name: str | None = None
-    plan_type: PlanType | None = None
     class_count: int | None = None
     duration_amount: int | None = None
     duration_unit: DurationUnit | None = None
     is_public: bool | None = None
     waiver_ids: list[UUID] | None = None
     linked_discount_enabled: bool | None = None
-    linked_discount_prices: list[int] | None = None
+    linked_discount_values: list[LinkedDiscountValue] | None = None
 
     _v_plan_name = field_validator("plan_name")(_validate_plan_name)
     _v_class_count = field_validator("class_count")(_validate_class_count)
     _v_duration_amount = field_validator("duration_amount")(
         _validate_duration_amount,
     )
-    _v_linked_prices = field_validator("linked_discount_prices")(
-        _validate_linked_prices,
+    _v_linked_values = field_validator("linked_discount_values")(
+        _validate_linked_values,
     )
 
 
@@ -168,6 +210,17 @@ class MembershipPlanPriceResponse(BaseModel):
     created_at: datetime
 
 
+class MembershipPlanPriceWithCount(MembershipPlanPriceResponse):
+    """A plan price version plus how many members are still on it.
+
+    Drives the edit-mode price list: the active price plus any older
+    version that still has members (``member_count > 0``) the gym can
+    migrate onto the current price.
+    """
+
+    member_count: int
+
+
 class MembershipPlanResponse(BaseModel):
     """Membership plan with its active price."""
 
@@ -189,11 +242,11 @@ class MembershipPlanResponse(BaseModel):
     waiver_ids: list[UUID] = []
     # Per-plan linked (family) member discount config. The column stores
     # `linked_discount_ids` (real `linked` discount entries the backend mints
-    # from the entered amounts); `linked_discount_prices` is the resolved cents
-    # per tier (2nd..5th+) so the CRM can display/edit the amounts.
+    # from the entered values); `linked_discount_values` is the resolved
+    # $ off / % off per tier (2nd..5th member) so the CRM can display/edit them.
     linked_discount_enabled: bool = False
     linked_discount_ids: list[UUID] = []
-    linked_discount_prices: list[int] = []
+    linked_discount_values: list[LinkedDiscountValue] = []
 
 
 # ── Constraint helpers ───────────────────────────────────────

@@ -15,6 +15,7 @@ from src.discounts.schema.discounts_schema import DiscountCreateRequest
 from src.discounts.service.discounts.discounts_service import DiscountsService
 from src.membership_plans import SQL_DIR
 from src.membership_plans.membership_plans_schemas import (
+    LinkedDiscountValue,
     MembershipPlanPriceResponse,
     MembershipPlanResponse,
 )
@@ -59,24 +60,26 @@ class MembershipPlansBase:
     async def _mint_linked_discounts(
         self,
         gym_id: UUID,
-        prices: list[int],
+        values: list[LinkedDiscountValue],
     ) -> list[str]:
-        """Mint a real ``linked`` discount entry per entered tier amount via the
-        discounts service; return the discount ids in tier order.
+        """Mint a real ``linked`` discount entry per entered tier value ($ off
+        or % off) via the discounts service; return the discount ids in tier
+        order.
 
         The plan stores these in ``linked_discount_ids``; reads resolve them
-        back to amounts. Reuses the discounts service (identity + first active
-        value); editing the amount later mints a new active version there, so
+        back to values. Reuses the discounts service (identity + first active
+        value); editing the value later mints a new active version there, so
         the stored id stays stable. Shared by create and update.
         """
         ids: list[str] = []
-        for tier, amount in enumerate(prices, start=2):
+        for tier, value in enumerate(values, start=2):
             discount = await self._discounts.create_discount(
                 DiscountCreateRequest(
                     gym_id=gym_id,
                     discount_name=f"Family member {tier}",
                     discount_type=DiscountType.linked,
-                    dollar_off=amount,
+                    percentage_off=value.percentage_off,
+                    dollar_off=value.dollar_off,
                     discount_mode=DiscountMode.ongoing,
                 ),
             )
@@ -170,7 +173,7 @@ class MembershipPlansBase:
             linked_discount_ids=MembershipPlansBase._json_list(
                 plan_row.get("linked_discount_ids"),
             ),
-            linked_discount_prices=MembershipPlansBase._json_list(
-                plan_row.get("linked_discount_prices"),
+            linked_discount_values=MembershipPlansBase._json_list(
+                plan_row.get("linked_discount_values"),
             ),
         )

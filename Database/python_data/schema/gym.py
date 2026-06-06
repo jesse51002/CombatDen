@@ -1,6 +1,16 @@
+from enum import StrEnum
 from uuid import UUID
 
 from . import SeedModel
+
+
+class StripeOnboardingStatus(StrEnum):
+    """Mirrors the Postgres `stripe_onboarding_status` enum in gyms.sql."""
+
+    not_started = "not_started"
+    pending = "pending"
+    complete = "complete"
+    disabled = "disabled"
 
 
 class GymCreate(SeedModel):

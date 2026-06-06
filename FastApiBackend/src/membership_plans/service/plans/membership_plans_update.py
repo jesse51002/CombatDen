@@ -70,13 +70,13 @@ class MembershipPlansUpdate(MembershipPlansBase):
         existing = await self._get_plan(request.plan_id, request.gym_id)
 
         changes = self._collect_changes(request.data)
-        # The CRM edits linked discounts as per-tier amounts; mint real
+        # The CRM edits linked discounts as per-tier $/% off values; mint real
         # `linked` discount entries and store their ids (the actual column).
-        if "linked_discount_prices" in changes:
-            prices = changes.pop("linked_discount_prices")
+        if "linked_discount_values" in changes:
+            values = changes.pop("linked_discount_values")
             changes["linked_discount_ids"] = await self._mint_linked_discounts(
                 request.gym_id,
-                prices,  # type: ignore[arg-type]
+                values,  # type: ignore[arg-type]
             )
         if not changes:
             return self._build_plan_response(
@@ -105,8 +105,13 @@ class MembershipPlansUpdate(MembershipPlansBase):
             )
 
         # ── CRM update ───────────────────────────────────────
+        # jsonb columns must use the functional cast CAST(:col AS JSONB); the
+        # shorthand colon-colon cast on a bind param breaks asyncpg binding
+        # (see CLAUDE.md → Database Patterns → SQL Files).
         set_clause = ", ".join(
-            f"{col} = :{col}::jsonb" if col in _JSONB_COLUMNS else f"{col} = :{col}"
+            f"{col} = CAST(:{col} AS JSONB)"
+            if col in _JSONB_COLUMNS
+            else f"{col} = :{col}"
             for col in changes
         )
         update_sql = load_sql(

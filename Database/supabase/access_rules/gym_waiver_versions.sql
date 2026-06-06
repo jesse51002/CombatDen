@@ -20,5 +20,7 @@ CREATE POLICY "Gym staff can insert waiver versions"
     TO authenticated
     WITH CHECK (is_gym_admin_or_owner(gym_waiver_versions.gym_id));
 
--- Immutable: published versions are never updated or deleted.
+-- Clients never write version rows. The backend (service_role) edits an
+-- unsigned current version in place; a signed version is frozen (edits fork a
+-- new version) and is never mutated or deleted.
 REVOKE UPDATE, DELETE ON TABLE gym_waiver_versions FROM authenticated;

@@ -14,7 +14,6 @@ import 'package:crm/features/memberships/bloc/waivers/waivers_bloc.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_event.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/memberships/presentation/dialogs/edit_discount_dialog.dart';
-import 'package:crm/features/memberships/presentation/dialogs/edit_waiver_dialog.dart';
 import 'package:crm/features/memberships/presentation/tabs/discounts_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/plans_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/waivers_tab.dart';
@@ -116,11 +115,8 @@ class _MembershipsBodyState extends State<_MembershipsBody> {
         );
       case 2:
         final waiversBloc = context.read<WaiversBloc>();
-        await EditWaiverDialog.show(
-          context: context,
-          repository: context.read<MembershipsRepository>(),
-          gymId: widget.gymId,
-        );
+        await Navigator.of(context)
+            .pushNamed(AppRoutes.membershipsWaiverEditor);
         waiversBloc.add(WaiversInitRequested(widget.gymId));
     }
   }

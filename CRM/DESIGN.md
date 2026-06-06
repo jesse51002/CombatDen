@@ -143,6 +143,29 @@ second accent.
 `#16181D`), never warm and never `#000`. Cards are pure white (`#FFFFFF`) so they lift cleanly
 off the cool ground.
 
+### Dark theme — the night shift
+
+The CRM ships **light + dark + system** (per-employee, persisted in
+`gym_employees.theme_preference`; chosen in **Settings → Appearance**). Dark is the *same
+Restrained system inverted onto night*, not a separate look — it keeps the single sapphire
+voice and the One Light / Cool-Tinted rules. It is a cool **charcoal**, deliberately **not navy**
+(that would be the gym-admin-dark reflex). Implementation: every color/type/shadow token in
+`design_constants.dart` is a getter that resolves through `themeController.isDark`.
+
+The inversions that matter:
+- **Surfaces lift by getting *lighter***, not by shadow (shadows barely read on dark). Ground
+  `#14161B` (≈ the light theme's ink) → card `#1E212A` → popups `#242833`.
+- **Ink ramp flips:** text `#E9ECF2` / `#A6ACB8` / `#828B98` (never `#fff`).
+- **Hairlines flip light-on-dark** (cool-white @ ~12% / 7%).
+- **Accent lightens** so it reads on dark: sapphire `#3E7CD6` (gradient deep stop `#2F62B5`,
+  links `#5A93E6`); `onAccent` (the label on a sapphire fill) stays near-white in both themes.
+- **Status hues brighten** (the light theme had darkened them to read on white): good `#3FB46A`,
+  warn `#DBA13F`, bad `#E26C64`; the tinted status backgrounds become the hue @ ~18% over ground.
+
+Both themes hold WCAG AA as the floor. The standalone **theme browser stays light-only** (a
+marketing surface), and the member-app preview inside the phone frame is unaffected (it resolves
+the tenant brand through `ShowcaseTokens`, not `DesignConstants`).
+
 ## 3. Typography
 
 **Display / Body Font:** Geist (the landing page's typeface), with `sans-serif` fallback.

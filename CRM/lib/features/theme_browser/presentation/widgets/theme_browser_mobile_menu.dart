@@ -29,7 +29,7 @@ class ThemeBrowserMobileMenu extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: DesignConstants.backgroundColor.withValues(alpha: 0.92),
-            border: const Border(
+            border: Border(
               bottom: BorderSide(color: DesignConstants.line),
             ),
             boxShadow: DesignConstants.cardShadow,
@@ -85,7 +85,7 @@ class _MobileNavLink extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(color: DesignConstants.lineSoft),
           ),

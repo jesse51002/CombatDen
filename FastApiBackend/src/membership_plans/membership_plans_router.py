@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -15,6 +15,7 @@ from src.membership_plans.membership_plans_schemas import (
     MembershipPlanMigrateRequest,
     MembershipPlanPriceRequest,
     MembershipPlanPriceResponse,
+    MembershipPlanPriceWithCount,
     MembershipPlanResponse,
     MembershipPlanUpdateRequest,
 )
@@ -351,6 +352,70 @@ async def get_plan(
         ) from None
 
 
+# ── List Prices ────────────────────────────────────────────────
+
+
+@membership_plans_router.get(
+    "/{plan_id}/prices",
+    response_model=list[MembershipPlanPriceWithCount],
+    status_code=status.HTTP_200_OK,
+    summary="List a plan's price versions",
+    description=(
+        "Lists every price version of a plan (active first) with the "
+        "number of members still on each — so the CRM can show older "
+        "prices that still have members to migrate forward."
+    ),
+    responses={
+        200: {"description": "Prices fetched successfully"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Plan not found"},
+    },
+)
+@inject
+async def list_plan_prices(
+    plan_id: UUID,
+    gym_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    plans_service: MembershipPlansService = Depends(
+        Provide[DependencyInjector.membership_plans_service]
+    ),
+) -> list[MembershipPlanPriceWithCount]:
+    """List a plan's price versions with per-price member counts.
+
+    Args:
+        plan_id: The plan whose prices to list.
+        gym_id: The gym owning the plan.
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        plans_service: Injected plans service.
+
+    Raises:
+        HTTPException: 401/403/404/500 on respective errors.
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+
+    try:
+        return await plans_service.list_prices(plan_id, gym_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to list prices for plan %s",
+            plan_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list plan prices",
+        ) from None
+
+
 # ── Set Price ──────────────────────────────────────────────────
 
 
@@ -430,72 +495,32 @@ async def set_price(
 
 @membership_plans_router.post(
     "/migrate",
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Migrate specific members",
-    description=(
-        "Re-syncs payment state for the specified members on a plan. Runs as a background task."
-    ),
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Migrate specific members (not implemented)",
+    description="Member migration is not implemented yet.",
     responses={
-        202: {"description": "Migration queued"},
-        400: {"description": "Invalid request"},
+        501: {"description": "Member migration is not implemented yet"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        404: {"description": "Plan not found"},
     },
 )
 @inject
 async def migrate_members(
     request: MembershipPlanMigrateRequest,
-    background_tasks: BackgroundTasks,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    plans_service: MembershipPlansService = Depends(
-        Provide[DependencyInjector.membership_plans_service]
-    ),
 ) -> None:
-    """Migrate specific members to the current active price.
-
-    Args:
-        request: Plan ID, gym ID, and list of member_ids.
-        background_tasks: FastAPI background tasks.
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        plans_service: Injected plans service.
+    """Not implemented yet — member migration is pending backend work.
 
     Raises:
-        HTTPException: 400/401/403/404/500 on respective errors.
+        HTTPException: 401/403 on auth, otherwise 501 Not Implemented.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
-
-    try:
-        await plans_service.migrate_members(
-            request.plan_id,
-            request.gym_id,
-            request.member_ids,
-            background_tasks,
-        )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to migrate members for plan %s",
-            request.plan_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to migrate members",
-        ) from None
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Member migration is not implemented yet.",
+    )
 
 
 # ── Migrate All ────────────────────────────────────────────────
@@ -503,68 +528,29 @@ async def migrate_members(
 
 @membership_plans_router.post(
     "/migrate-all",
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Migrate all members on a plan",
-    description=(
-        "Re-syncs payment state for ALL active members on a plan. Runs as a background task."
-    ),
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Migrate all members on a plan (not implemented)",
+    description="Member migration is not implemented yet.",
     responses={
-        202: {"description": "Migration queued"},
-        400: {"description": "Invalid request"},
+        501: {"description": "Member migration is not implemented yet"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        404: {"description": "Plan not found"},
     },
 )
 @inject
 async def migrate_all_members(
     request: MembershipPlanMigrateAllRequest,
-    background_tasks: BackgroundTasks,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    plans_service: MembershipPlansService = Depends(
-        Provide[DependencyInjector.membership_plans_service]
-    ),
 ) -> None:
-    """Migrate all active members on a plan to the current price.
-
-    Args:
-        request: Plan ID and gym ID.
-        background_tasks: FastAPI background tasks.
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        plans_service: Injected plans service.
+    """Not implemented yet — member migration is pending backend work.
 
     Raises:
-        HTTPException: 400/401/403/404/500 on respective errors.
+        HTTPException: 401/403 on auth, otherwise 501 Not Implemented.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
-
-    try:
-        await plans_service.migrate_all_members(
-            request.plan_id,
-            request.gym_id,
-            background_tasks,
-        )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to migrate all members for plan %s",
-            request.plan_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to migrate members",
-        ) from None
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Member migration is not implemented yet.",
+    )

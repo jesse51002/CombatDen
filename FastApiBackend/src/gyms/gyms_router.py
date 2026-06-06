@@ -11,6 +11,8 @@ Endpoints:
     * ``POST /api/v1/gyms/{gym_id}/onboarding/link`` — mint a fresh
       hosted onboarding URL, resume flow (owner only).
     * ``PUT /api/v1/gyms/{gym_id}``     — update mutable gym fields.
+    * ``PUT /api/v1/gyms/{gym_id}/employees/me/theme`` — save the
+      caller's CRM theme preference (system/light/dark).
 """
 
 import logging
@@ -23,6 +25,8 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
 from src.gyms.schema.gyms_schema import (
+    EmployeeThemeResponse,
+    EmployeeThemeUpdateRequest,
     GymCreateRequest,
     GymCreateResponse,
     GymOnboardingLinkResponse,
@@ -362,4 +366,59 @@ async def update_gym(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update gym",
+        ) from None
+
+
+# ── Employee theme preference ─────────────────────────────────
+
+
+@gyms_router.put(
+    "/{gym_id}/employees/me/theme",
+    response_model=EmployeeThemeResponse,
+    summary="Save the caller's CRM theme preference for a gym",
+    description=(
+        "Persists the calling employee's admin-app appearance choice "
+        "(system / light / dark) on their ``gym_employees`` row for "
+        "this gym. Rehydrated at login from ``GET /api/v1/gyms/``."
+    ),
+    responses={
+        200: {"description": "Theme saved"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not an employee of this gym"},
+        404: {"description": "Employee not found for this gym"},
+    },
+)
+@inject
+async def update_my_theme(
+    gym_id: UUID,
+    request: EmployeeThemeUpdateRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    gyms_service: GymsService = Depends(Provide[DependencyInjector.gyms_service]),
+) -> EmployeeThemeResponse:
+    """Save the caller's CRM theme preference for this gym."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(gym_id, user_payload)
+    user_id = UUID(user_payload["sub"])
+
+    try:
+        return await gyms_service.update_employee_theme(
+            gym_id=gym_id,
+            user_id=user_id,
+            theme_preference=request.data.theme_preference,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to update theme: gym_id=%s",
+            gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update theme preference",
         ) from None

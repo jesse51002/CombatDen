@@ -7,8 +7,6 @@ import 'package:crm/features/memberships/bloc/waivers/waivers_bloc.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_event.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_state.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
-import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
-import 'package:crm/features/memberships/presentation/dialogs/edit_waiver_dialog.dart';
 import 'package:crm/features/memberships/presentation/widgets/add_row_button.dart';
 import 'package:crm/features/memberships/presentation/widgets/membership_edit_button.dart';
 import 'package:crm/features/memberships/presentation/widgets/memberships_tab_scaffold.dart';
@@ -51,25 +49,18 @@ class _WaiversTable extends StatelessWidget {
 
   const _WaiversTable({required this.state});
 
-  Future<void> _openDialog(
+  // The waiver editor (rich text + versions + signed-members tab) replaces
+  // the old dialog + roster; refresh the list on return.
+  Future<void> _openEditor(
     BuildContext context, {
     WaiverResponse? waiver,
   }) async {
     final bloc = context.read<WaiversBloc>();
-    await EditWaiverDialog.show(
-      context: context,
-      repository: context.read<MembershipsRepository>(),
-      gymId: state.gymId,
-      waiver: waiver,
-    );
-    bloc.add(WaiversInitRequested(state.gymId));
-  }
-
-  void _openRoster(BuildContext context, WaiverResponse waiver) {
-    Navigator.of(context).pushNamed(
-      AppRoutes.membershipsWaiverRoster,
+    await Navigator.of(context).pushNamed(
+      AppRoutes.membershipsWaiverEditor,
       arguments: waiver,
     );
+    bloc.add(WaiversInitRequested(state.gymId));
   }
 
   @override
@@ -85,7 +76,7 @@ class _WaiversTable extends StatelessWidget {
         rows: [
           for (final waiver in state.waivers)
             AppDataTableRow(
-              onTap: () => _openRoster(context, waiver),
+              onTap: () => _openEditor(context, waiver: waiver),
               cells: [
                 Text(waiver.name, style: DesignConstants.p),
                 Text(
@@ -93,7 +84,7 @@ class _WaiversTable extends StatelessWidget {
                   style: DesignConstants.p,
                 ),
                 MembershipEditButton(
-                  onTap: () => _openDialog(context, waiver: waiver),
+                  onTap: () => _openEditor(context, waiver: waiver),
                 ),
               ],
             ),
@@ -101,7 +92,7 @@ class _WaiversTable extends StatelessWidget {
       ),
       addRow: AddRowButton(
         label: 'Add New Waiver',
-        onTap: () => _openDialog(context),
+        onTap: () => _openEditor(context),
       ),
     );
   }

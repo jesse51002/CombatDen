@@ -124,7 +124,7 @@ class _ThemeBrowserTopBarState extends State<ThemeBrowserTopBar> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: DesignConstants.backgroundColor.withValues(alpha: 0.78),
-                border: const Border(
+                border: Border(
                   bottom: BorderSide(color: DesignConstants.line),
                 ),
               ),

@@ -3,6 +3,7 @@
 from collections import defaultdict
 from uuid import UUID
 
+from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 from src.classes import SQL_DIR
@@ -12,7 +13,6 @@ from src.classes.schema.classes_cycle_counts_schema import (
     MembershipUsage,
     UserCycleCounts,
 )
-from schema.membership_plan import PlanType
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
@@ -81,6 +81,8 @@ class ClassesCycleCountsService:
                     class_count=class_count,
                     classes_used=classes_used,
                     classes_remaining=remaining,
+                    renew_date=row["next_due_date"],
+                    end_date=row["end_date"],
                 )
             )
 

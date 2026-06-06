@@ -274,7 +274,7 @@ class _ViewChip extends StatelessWidget {
           label,
           style: DesignConstants.h3.copyWith(
             color: isActive
-                ? DesignConstants.backgroundColor
+                ? DesignConstants.onAccent
                 : DesignConstants.text,
           ),
         ),

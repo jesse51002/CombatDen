@@ -104,9 +104,17 @@ view exposing only `stripe_product_id IS NOT NULL` rows; the base table is
 table and the view (`access_rules/membership_plans.sql`), so every write goes
 through `service_role`. On top of that DB grant, `MEMBERSHIP_PLANS` in
 `immutable_columns.py` adds a Python-layer guard that rejects any client payload
-carrying `plan_id`, `gym_id`, `created_at`, or `stripe_product_id`. Reads
-(`hide_incomplete_stripe_records` restrictive policy) never surface a half-synced
-plan.
+carrying `plan_id`, `gym_id`, `created_at`, `plan_type`, or `stripe_product_id`.
+Reads (`hide_incomplete_stripe_records` restrictive policy) never surface a
+half-synced plan.
+
+**`plan_type` is immutable after creation.** A plan's billing model
+(trial / recurring / one_time) is fixed at create time — changing it would break
+how existing members on the plan are billed. It is enforced at three layers:
+the `trg_prevent_plan_type_overwrite` DB trigger (the real enforcement, since the
+table is service_role-write-only), its membership in the `MEMBERSHIP_PLANS`
+immutable set, and its **absence** from `MembershipPlanUpdateData` (the update
+model carries only mutable fields). The CRM edit screen only *displays* the type.
 
 ---
 
@@ -169,15 +177,18 @@ sub-services that all extend `MembershipPlansBase`. Endpoints live on
    half-built state safe.
 
 **Linked-discount re-mint** (`MembershipPlansBase._mint_linked_discounts`): the
-CRM edits family tiers as per-tier *amounts* (`linked_discount_prices`). The plan
-service mints one real `linked` discount entry per amount via `DiscountsService`
-(tiers numbered from 2 = 2nd family member up) and stores their ids in
-`linked_discount_ids`. **The discount model itself is owned by `discounts-guide`**
-— this doc only notes the mint-and-store seam. Plan **reads resolve those ids
-back to amounts** with a subquery joining `gym_discount_values WHERE is_active`
-(`membership_plans_get.sql`, `membership_plans_list.sql`) so the CRM can
-display/edit the dollar amounts without ever seeing the linked discounts in the
-regular preset picker.
+CRM edits family tiers as per-tier **$ off / % off values** — a list of
+`LinkedDiscountValue` (`{percentage_off | dollar_off}`, exactly one set), capped
+at `MAX_LINKED_TIERS` (4 → max 5 members), sent as `linked_discount_values`. The
+plan service mints one real `linked` discount entry per value via
+`DiscountsService` (tiers numbered from 2 = 2nd family member up) and stores
+their ids in `linked_discount_ids`. **The discount model itself is owned by
+`discounts-guide`** — this doc only notes the mint-and-store seam. Plan **reads
+resolve those ids back to values** with a subquery joining
+`gym_discount_values WHERE is_active` that builds a `{percentage_off, dollar_off}`
+object per tier (`membership_plans_get.sql`, `membership_plans_list.sql`) so the
+CRM can display/edit them without ever seeing the linked discounts in the regular
+preset picker.
 
 **Update** (`membership_plans_update.py`): collect non-None changes, re-mint
 linked discounts if `linked_discount_prices` changed (swapping it for
@@ -202,7 +213,11 @@ referencing the plan.
 **Read** (`membership_plans_read.py`): list / get a plan joined to its active
 price (`_extract_active_price`) and to resolved linked-discount amounts; the list
 SQL also computes `enrolled_count` from `member_memberships_status` where
-`status = 'active'`.
+`status = 'active'`. `list_prices` returns **all** price versions of one plan
+(`membership_plans_list_prices.sql`, active first), each with a per-price
+`member_count` over the same active-membership set the migrate uses — so the CRM
+edit form can show the active price plus any older version that still has members
+to migrate forward.
 
 **Member migration via bulk sync** (`MembershipPlansPrice.migrate_all_members` /
 `migrate_members`): the deliberate, opt-in way to move members onto the current
@@ -335,9 +350,10 @@ writing rows.
 | `DELETE /` | soft-delete a plan (204; `plan_id` + `gym_id` query params) |
 | `GET /` | list a gym's non-deleted plans with active price + `enrolled_count` |
 | `GET /{plan_id}` | get one plan with its active price |
+| `GET /{plan_id}/prices` | list every price version with per-price `member_count` (active first) |
 | `POST /price` | set a new active price (201) |
-| `POST /migrate` | bulk-sync specific members to the active price (202, background) |
-| `POST /migrate-all` | bulk-sync all active members on a plan (202, background) |
+| `POST /migrate` | **not implemented yet** — returns 501 (stubbed pending the migration work; the `migrate_members` service method still exists) |
+| `POST /migrate-all` | **not implemented yet** — returns 501 (stubbed pending the migration work; the `migrate_all_members` service method still exists) |
 
 **Memberships** — `member_memberships_router.py`, prefix
 `/api/v1/member_memberships`:
@@ -383,7 +399,7 @@ gate on access to that member rather than on gym-employee status).
   `membership_plans/sql/` (`..._insert`, `..._get`, `..._list`, `..._update`,
   `..._delete`, `..._set_stripe_product_id`, `..._price_insert`,
   `..._price_deactivate_all`, `..._price_set_stripe_price_id`,
-  `..._get_affected_members`, the `..._delete_pending` pair).
+  `..._get_affected_members`, `..._list_prices`, the `..._delete_pending` pair).
 - **Membership service:**
   `FastApiBackend/src/member_memberships/service/memberships/`
   (`member_memberships_service.py` facade + `_base`, `_start`, `_cancel`,
