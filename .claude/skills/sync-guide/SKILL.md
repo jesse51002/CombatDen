@@ -95,13 +95,13 @@ Three properties fall out of "re-derive from scratch every time":
 
 ## 2. Triggers + entry points
 
-`PaymentSyncService` exposes exactly three public entry points (plus
-`resolve_parent`, which now just delegates to `BillingParentResolver` for
-upstream validation):
+`PaymentSyncService` exposes exactly three public entry points (the
+`resolve_parent` delegate is gone — callers that need parent resolution inject the
+shared `BillingParentResolver` directly, e.g. `member_memberships_start`):
 
 | method | what it does | callers |
 | --- | --- | --- |
-| `update_payments_recurring(member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none")` | the real sync: resolve → maintenance freeze re-apply → settle once → build (re-derive bucket **and resolve coupons**) → execute → write coupon links + sub id + prices back (§3) | every membership mutation |
+| `update_payments_recurring(member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none") -> None` | the real sync: resolve → maintenance freeze re-apply → settle once → build (re-derive bucket **and resolve coupons**) → execute → **`PaymentSyncWriteback`** persists the full sync-owned state (§3). Returns **None** — callers read the DB (the `applied` status) | every membership mutation |
 | `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: same DB-derived build **incl. discount resolution** (so the preview reflects discounts), then a Stripe invoice *preview*, **no writes** (§9) | the CRM "what will this charge?" preview |
 | `bulk_payment_sync(member_ids)` | loop members, fresh `uuid4()` idempotency key each, call `update_payments_recurring` | reprice fan-out; the future reconciler (§10) |
 
@@ -187,21 +187,16 @@ sequence is:
 5. **Execute the sync** (`PaymentSyncStripe.execute_sync`, §8) — create / update /
    cancel the monthly subscription to match the bucket, with the explicit
    `proration_behavior`.
-6. **Write back** — persist each resolved coupon link
-   (`set_applied_discount_coupon_id` for every `applied_discount_id → coupon_id`
-   in `params.coupon_links`), then `update_profile_sub_id`
-   (→ `update_profile_sub_ids.sql`) writes the new sub id (or `None` if cancelled)
-   onto the parent's `members` row, then `PriceWriteback.sync_prices_from_stripe`
-   (§8) reads the upcoming invoice and fans the post-discount line totals across
-   the family's membership rows + the parent's monthly total. *(These writebacks
-   are still an interim inline sequence in the orchestrator — the unified
-   `PaymentSyncWriteback` that also stamps `stripe_sync_status` is the next step,
-   not done here.)*
+6. **Write back** (`PaymentSyncWriteback.write`, §8) — persists the **full
+   sync-owned state** in one place: per-membership Stripe line id + next_due_date
+   + `stripe_sync_status = 'applied'` (mapping the live items → rows by price),
+   the coupon links (+ `applied` on the applied-discount rows), `deleted` on
+   cancelled rows confirmed gone from the live sub, the parent's sub id, and the
+   post-discount price totals (it composes `PriceWriteback` for the last).
 
-Returns the `PaymentsSubscriptionResponse`, or `None` if the sync cancelled the
-subscription (empty bucket). *(Returning a value is itself deferred — the
-DB-first design intends the sync to be fire-and-forget; for now it still returns
-the response for the callers that read it.)*
+Returns **`None`** — the sync writes everything it owns back to the DB; callers
+read the DB (the `applied` status) to confirm it landed, and use
+`preview_update_payments_recurring` for the invoice figures.
 
 ---
 
@@ -220,9 +215,10 @@ rather than re-running the query. The `ParentProfile` model lives in
 | `resolve_parent(member_id)` | `ParentProfile` | follow `account_linked_to_id` **once** (single-level hierarchy) to the paying parent; raise if no profile or no `stripe_customer_id` (`resolve_parent.sql`) |
 | `resolve(member_id)` | `(ParentProfile, stripe_account_id)` | `resolve_parent` **then** `GymStripeService.get_stripe_account_id(gym_id)` — the one call the sync's step 1 makes |
 
-`PaymentSyncService` injects this resolver as `_parent`; its own public
-`resolve_parent` (kept for upstream validation callers) just delegates to it.
-(`PaymentSyncQueries.resolve_parent` no longer exists.)
+`PaymentSyncService` injects this resolver as `_parent`. The old
+`PaymentSyncService.resolve_parent` delegate is **removed** — callers that need
+parent resolution (e.g. `member_memberships_start`) inject `BillingParentResolver`
+directly. (`PaymentSyncQueries.resolve_parent` also no longer exists.)
 
 `resolve_parent.sql` reads **`member_billing_profile`** (a `security_invoker` view
 over `members` exposing the billing columns incl. `account_linked_to_id`) and
@@ -241,7 +237,7 @@ resolution, and assembles the bucket:
 | step | how | SQL |
 | --- | --- | --- |
 | **family ids** | parent + every child whose `account_linked_to_id = parent` in that gym | `get_family_ids.sql` |
-| **active memberships, each with its discounts** | `get_active_memberships(family_ids, today)` makes **one call**: `plan_type = 'recurring' AND cancel_date IS NULL` on `member_memberships` (rows are `stripe_item_id IS NOT NULL`), joined to plan + price; then reads the family's **active** applied discounts and **attaches each membership's discounts onto its `ActiveMembershipRow.discounts`** (the discount rides the membership). | `get_active_recurring.sql` + `get_applied_discounts_by_member.sql` |
+| **active memberships, each with its discounts** | `get_active_memberships(family_ids, today)` makes **one call**: `plan_type = 'recurring' AND cancel_date IS NULL` on **`member_memberships_unfiltered`** — the engine reads the **unfiltered** base so **pending rows (`stripe_item_id IS NULL`, the just-inserted adds) are visible**; excludes `deleted` / `preview_*` sync statuses — joined to plan + price; then reads the family's **active** applied discounts and **attaches each membership's discounts onto its `ActiveMembershipRow.discounts`**. | `get_active_recurring.sql` + `get_applied_discounts_by_member.sql` |
 
 `get_family_ids.sql` reads the same `member_billing_profile` view. The
 applied-discount read joins the **unfiltered** base tables
@@ -616,15 +612,15 @@ guard so an hourly sweep isn't pointless Stripe writes.
 
 ## 11. Engine gotchas
 
-- **A brand-new membership with no `stripe_item_id` isn't seen yet — but not
-  because of the discount math.** The aggregation no longer keys on
-  `stripe_item_id` (it groups memberships by `price_id` and reads discounts off
-  the rows), so a line's coupons are computed whether or not Stripe has assigned
-  an item id. The remaining limitation is the **read filter**: `member_memberships`
-  (the view `get_active_recurring.sql` reads) filters `stripe_item_id IS NOT NULL`,
-  so a just-inserted pending row is invisible to the sync until its item id is
-  written back (`update_stripe_item_id.sql`). The DB-first caller rewiring (the
-  deferred `stripe_sync_status` / #16 work) is what makes pending rows visible.
+- **Pending (just-inserted) rows ARE now visible — DB-first start works.** A new
+  membership is inserted with `stripe_item_id IS NULL`; `get_active_recurring.sql`
+  reads `member_memberships_unfiltered`, so that pending row is in the desired set,
+  the sync creates its Stripe line, and `PaymentSyncWriteback` stamps the line id /
+  next_due_date / `applied` status back. (The start caller no longer extracts the
+  Stripe response — it inserts, calls the param-less sync, and the writeback
+  persists everything.) The client-facing `member_memberships` view still filters
+  `stripe_item_id IS NOT NULL` + hides `preview_*`, so pending/preview rows never
+  surface to clients — only the engine's unfiltered read sees them.
 - **Idempotency keys are suffixed per sub-operation** (`:sub_create`,
   `:sub_update`, `:sub_cancel` in `PaymentSyncStripe`; `:freeze` / `:unfreeze` in
   `PaymentSyncFreeze`) off one base key, so the several Stripe calls in one sync
@@ -656,10 +652,15 @@ guard so an hourly sweep isn't pointless Stripe writes.
 
 - **Orchestrator:**
   `FastApiBackend/src/member_memberships/service/payment_sync/payment_sync_service.py`
-  (`PaymentSyncService` — `update_payments_recurring`,
-  `preview_update_payments_recurring`, `bulk_payment_sync`, the delegating
-  `resolve_parent`; injects `_parent` / `_freeze` / `_once_discounts` / `_builder`,
-  builds `_queries` / `_stripe` / `_price_writeback`).
+  (`PaymentSyncService` — `update_payments_recurring` (**`-> None`**),
+  `preview_update_payments_recurring`, `bulk_payment_sync`; injects `_parent` /
+  `_freeze` / `_once_discounts` / `_builder`, builds `_stripe` / `_writeback`).
+- **Writeback:** `payment_sync_writeback.py` (`PaymentSyncWriteback.write` →
+  `_apply_membership_rows` / `_mark_removed_deleted`; per-row line id /
+  next_due_date / `applied`, coupon links + status, `deleted` on removed rows, sub
+  id, and prices — composes `PriceWriteback`). New writeback SQL:
+  `apply_membership_sync.sql`, `get_cancelled_recurring.sql`,
+  `mark_membership_deleted.sql`.
 - **Shared parent resolver:** `src/shared/billing_parent_resolver.py`
   (`BillingParentResolver` — `resolve_parent`, `resolve`) + the `ParentProfile`
   model in `src/shared/billing_parent.py`. DI-registered; used by the sync, the

@@ -99,11 +99,12 @@ preview total now reflects discounts.
 | Dead `IntervalBucket.total_price` removed | ✅ DONE |
 | **`PaymentSyncCoupons` delegates all Stripe coupon I/O to `PaymentsStripeDiscountService`** (no direct SDK in engine); dead `crm_discount_id`/`StripeCouponMetadata`/`update_discount` removed | ✅ DONE |
 | `sync-guide` + `payments-guide` skills | ✅ UPDATED to current engine |
-| **Part D — unified `PaymentSyncWriteback`** (links + sync-status `applied`/`deleted` + sub-id + prices, via `PaymentSyncQueries`) | ❌ LEFT — writeback is still interim inline in the orchestrator |
-| **Preview correctness** (#19 — due-now vs recurring split; the consumed-but-unstamped `once` over-state) | ❌ LEFT — needs scoping |
-| **Lifecycle callers** (start/cancel/update_price/freeze/link) — DB-first rewiring (#16/#17) | ❌ LEFT — the big *functional* work; engine non-functional at caller layer until done |
+| **Part D — unified `PaymentSyncWriteback`** | ✅ DONE — per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on cancelled-and-gone rows, sub-id, prices (composes `PriceWriteback`); `update_payments_recurring -> None` |
+| **#16 read change** — sync reads `member_memberships_unfiltered` (pending rows visible); client views hide `preview_*` | ✅ DONE |
+| **Preview correctness** (#19 — due-now vs recurring split; start-preview needs preview-staging) | ❌ LEFT — needs scoping |
+| **Lifecycle callers** DB-first rewiring | 🟡 **START rewired + functional** (DB-first, injects `BillingParentResolver`); cancel/update_price/freeze/link still on the old path |
 | **Concurrency / global member lock** (NEW — serialize concurrent edits/sync on the same parent family) | ❌ LEFT — design below (§11) |
-| `update_payments_recurring -> None` (#21) | ❌ LEFT (still returns the sub response) |
+| `update_payments_recurring -> None` (#21) | ✅ DONE |
 | `ActiveMembershipRow.price` orphaned by `total_price` removal | 🟡 pending decision (remove field + parse + `mpp.price` SELECT?) |
 | Tests | ❌ STALE/RED by design — see §6 |
 | `discounts-guide` ("snapshot"→"applied discount" rename) + `payment_sync.mermaid` | ❌ LEFT |

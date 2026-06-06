@@ -17,12 +17,12 @@ below (#13–#23). Snapshot of where each stands — full handoff in
 | #13 Part C — per-discount coupons | ❌ **REJECTED** — kept the 4-bucket sum model (Stripe stacks sequentially, so we sum ourselves; per-membership-sequential percent math verified) |
 | #14 — split explicit freeze into its own service | ✅ DONE (`PaymentSyncFreeze`) |
 | #15 — `_SyncParams` → schema | ✅ DONE (`SyncParams`) |
-| #16 — DB-first + `stripe_sync_status` enum | 🟡 schema column DONE; caller rewiring + status stamping ❌ not done |
-| #17 — full writeback | ❌ not done (Part D — unified `PaymentSyncWriteback`) |
+| #16 — DB-first + `stripe_sync_status` enum | 🟡 sync reads the unfiltered base (pending rows visible) + stamps `applied`/`deleted`; **START caller rewired DB-first (functional)**; cancel/update_price/freeze/link callers still on the old path |
+| #17 — full writeback | ✅ DONE — `PaymentSyncWriteback` (per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on removed rows, sub id, prices) |
 | #18 — discounts ride the membership/item (drop the parallel list) | ✅ DONE ("Part E") |
 | #19 — preview due-now vs recurring split | ❌ not done |
 | #20 — extract once-consumption/end_date settle | ✅ DONE (`PaymentSyncOnceDiscounts`) |
-| #21 — `update_payments_recurring -> None` | ❌ not done |
+| #21 — `update_payments_recurring -> None` | ✅ DONE — returns None; the start caller reads the DB (`applied` status), no return extraction |
 | #22 — explicit `proration_behavior` | ✅ DONE (incl. create-path `item.prorate` removal) |
 | #23 — shared `BillingParentResolver` | 🟡 resolver DONE; caller migration deferred |
 | #24 (NEW) — coupon I/O via `PaymentsStripeDiscountService` | ✅ DONE |
