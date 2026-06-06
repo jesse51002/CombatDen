@@ -77,18 +77,19 @@ CREATE TRIGGER trg_prevent_plan_id_overwrite
     BEFORE UPDATE OF plan_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_plan_id_overwrite();
 
--- Trigger: cancel_date is immutable once set — EXCEPT while the row is
--- mid-migration. A DB-first caller stages stripe_sync_status = 'migrating' before
--- its Stripe sync, so a sync that does not confirm can revert (clear) cancel_date
--- and the DB stays in sync with Stripe. Once the writeback stamps a terminal
--- status (applied / deleted) the column is immutable again.
+-- Trigger: cancel_date locks only once the membership is actually REMOVED from
+-- Stripe (stripe_sync_status = 'deleted'). Before that the cancel is unconfirmed,
+-- so a DB-first cancel whose sync did not land can revert simply by clearing
+-- cancel_date — no transient status to stage/un-stage. (Cancel is a foreground,
+-- verified op; it never uses 'migrating'. 'migrating' is reserved for the
+-- background price migration that moves stripe_item_id — see that trigger below.)
 CREATE OR REPLACE FUNCTION prevent_cancel_date_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.cancel_date IS NOT NULL
        AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date
-       AND OLD.stripe_sync_status <> 'migrating' THEN
-        RAISE EXCEPTION 'cancel_date cannot be changed once set'
+       AND OLD.stripe_sync_status = 'deleted' THEN
+        RAISE EXCEPTION 'cancel_date cannot be changed once the membership is removed from Stripe'
             USING CONSTRAINT = 'cancel_date_immutable';
     END IF;
     RETURN NEW;
@@ -100,10 +101,11 @@ CREATE TRIGGER trg_prevent_cancel_date_overwrite
     FOR EACH ROW EXECUTE FUNCTION prevent_cancel_date_overwrite();
 
 -- Trigger: stripe_item_id is immutable once set — EXCEPT while the row is
--- mid-migration. A price migration moves the membership's line to the new price's
--- Stripe item; the caller stages stripe_sync_status = 'migrating' first, so the
--- writeback may re-stamp the line id (and a failed migration can revert). Once the
--- writeback stamps a terminal status (applied) the line id is immutable again.
+-- 'migrating'. A PRICE MIGRATION moves the membership's line to the new price's
+-- Stripe item, so while stripe_sync_status = 'migrating' the writeback may
+-- re-stamp the line id; once it stamps 'applied' the id is immutable again.
+-- 'migrating' is ONLY for price migrations (mutating the line id then is safe) —
+-- cancel/add are foreground verified ops and never use it.
 CREATE OR REPLACE FUNCTION prevent_stripe_item_id_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN

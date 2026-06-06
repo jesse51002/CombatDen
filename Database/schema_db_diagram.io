@@ -449,13 +449,13 @@ Table member_memberships_unfiltered {
   price_id uuid [not null]
   start_date date [not null]
   end_date date [note: 'nullable; forbidden for recurring plans']
-  cancel_date date [note: 'nullable; immutable once set (trigger), EXCEPT while stripe_sync_status = migrating']
+  cancel_date date [note: 'nullable; locks only once removed from Stripe (stripe_sync_status=deleted); clearable while unconfirmed (the cancel revert)']
   last_paid_date date [note: 'gym-local']
   next_due_date date [note: 'gym-local']
-  stripe_item_id varchar [note: 'immutable once set EXCEPT while migrating; never nulled (historical line record)']
+  stripe_item_id varchar [note: 'immutable once set EXCEPT while migrating (price migration moves the line); never nulled (historical line record)']
   prorate boolean [not null, default: true]
   total_price integer [not null, note: 'CHECK >= 0']
-  stripe_sync_status stripe_sync_status [not null, default: 'not_added', note: 'not_added = pending; sync stamps applied/deleted; migrating = mid cancel/price-migration (unlocks the immutable-column revert); client view hides not_added/preview_*; orthogonal to lifecycle status view']
+  stripe_sync_status stripe_sync_status [not null, default: 'not_added', note: 'not_added = pending; sync stamps applied/deleted; migrating = price migration ONLY (unlocks the stripe_item_id move); client view hides not_added/preview_*; orthogonal to lifecycle status view']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {

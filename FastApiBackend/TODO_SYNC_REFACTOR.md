@@ -61,11 +61,15 @@ uncommitted to their DB:
    `stripe_sync_status` columns are now **`NOT NULL DEFAULT 'not_added'`**.
 2. The client views `member_memberships` and `member_membership_applied_discounts` changed their
    `WHERE` to `stripe_sync_status NOT IN ('not_added','preview_add','preview_remove')`.
-3. **NEW:** `trg_prevent_cancel_date_overwrite` and `trg_prevent_stripe_item_id_overwrite` now skip
-   the immutability check when `OLD.stripe_sync_status = 'migrating'` — this is what lets the
-   DB-first cancel revert (clear `cancel_date`) and `update_price` move the immutable
-   `stripe_item_id` to the new price's line. Without the re-run, cancel-revert and price migration
-   raise the old immutability error.
+3. **NEW (two distinct rules):**
+   - `trg_prevent_cancel_date_overwrite` now locks `cancel_date` only once the membership is
+     **removed from Stripe** (`OLD.stripe_sync_status = 'deleted'`) — while the cancel is unconfirmed
+     it stays clearable, so the DB-first cancel reverts by simply clearing `cancel_date` (no
+     `migrating`).
+   - `trg_prevent_stripe_item_id_overwrite` skips the immutability check when
+     `OLD.stripe_sync_status = 'migrating'` — reserved for the **price migration** (`update_price`)
+     moving the line. `migrating` is price-migration-only; cancel/add never use it.
+   Without the re-run, cancel-revert and price migration raise the old immutability error.
 (Per `Database/CLAUDE.md`: **never run `supabase` migrations or `python_data/main.py` seeds.**)
 
 ---
@@ -153,10 +157,12 @@ contract"** (read it). Shape: write the desired DB state → call the param-less
 `stripe_sync_status` writeback landed → revert the DB change if not (`sync_or_revert` in
 `src/shared/db_first_helpers.py`).
 
-- **cancel** — DB-first set `cancel_date` + stage `migrating` → sync → verify `deleted` → revert
-  (`uncancel`). Keeps the `PaymentsResourceNotFoundError` tolerance. `stripe_item_id` kept.
-- **update_price** — DB-first write new price + stage `migrating` → sync (writeback moves the line)
-  → verify `applied` → revert to old price.
+- **cancel** — DB-first set `cancel_date` (status stays `applied`) → sync → verify `deleted` →
+  revert by clearing `cancel_date` (`uncancel`; allowed because the row isn't `deleted` yet). Keeps
+  the `PaymentsResourceNotFoundError` tolerance. `stripe_item_id` kept. **No `migrating`.**
+- **update_price** — DB-first write new price + stage `migrating` → sync (writeback moves the line,
+  allowed while `migrating`) → verify `applied` → revert to old price. `migrating` is for price
+  migrations only.
 - **freeze/unfreeze** — DB-first window write → `PaymentSyncFreeze.sync_freeze_state` directly
   (injected) → revert the window on failure. NOT through `update_payments_recurring`.
 - **link/unlink** — DB-first `account_linked_to_id` → sync the parent → revert relationship on
@@ -166,9 +172,10 @@ contract"** (read it). Shape: write the desired DB state → call the param-less
 - **update_discounts** — dropped the removed `add_ids`/`cancel_ids` (already DB-first). `SyncItem`
   deleted.
 
-**The `migrating` status is load-bearing:** the immutability triggers (`cancel_date`,
-`stripe_item_id`) now allow the change while `stripe_sync_status = 'migrating'` — that's what lets
-cancel revert and update_price move the line. **User owes the trigger migration (§0).**
+**Immutability is keyed on the real Stripe state, not a transient flag:** `cancel_date` locks only
+once the membership is **removed from Stripe** (`deleted`) so the cancel reverts by clearing it (no
+`migrating`); `stripe_item_id` is immutable except while `migrating`, which is **reserved for the
+price migration** (`update_price` moves the line). **User owes the trigger migration (§0).**
 
 **The engine is functional again.** Tests (§2.4) can be restabilized.
 

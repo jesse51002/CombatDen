@@ -35,15 +35,16 @@ class MemberMembershipsCancel(MemberMembershipsBase):
     ) -> date:
         """Cancel a specific active recurring membership (DB-first, verified).
 
-        Writes ``cancel_date`` + stages ``stripe_sync_status = 'migrating'`` FIRST,
-        then runs the param-less sync, which re-derives the desired state (the
-        cancelled row is excluded by the read), removes the line from Stripe, and
-        stamps the row ``deleted``. The cancel is then **verified**: if the sync
-        did not confirm on Stripe (the row was not stamped ``deleted``), the
-        cancel is reverted — ``cancel_date`` is cleared and the row reset to
-        ``applied`` (the ``migrating`` state is what permits clearing the
-        otherwise-immutable ``cancel_date``). ``stripe_item_id`` is left intact
-        (historical invoice-line record).
+        Writes ``cancel_date`` FIRST (status stays ``applied``), then runs the
+        param-less sync, which re-derives the desired state (the cancelled row is
+        excluded by the read), removes the line from Stripe, and stamps the row
+        ``deleted``. The cancel is then **verified**: if the sync did not confirm
+        on Stripe (the row was not stamped ``deleted``), the cancel is reverted by
+        clearing ``cancel_date``. This works because ``cancel_date`` only locks
+        once the membership is actually removed from Stripe (``deleted``) — while
+        the cancel is unconfirmed it stays clearable, so no transient status is
+        staged. ``stripe_item_id`` is left intact (historical invoice-line
+        record).
 
         If the membership is already cancelled, this is a no-op.
 
@@ -68,7 +69,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
-        # ── DB-first: set cancel_date + stage 'migrating', THEN converge Stripe ──
+        # ── DB-first: set cancel_date (status stays 'applied'), THEN converge ──
         cancel_date = await self._crm_cancel(
             item_id,
             member_id,
@@ -169,12 +170,11 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         member_id: UUID,
         today: date,
     ) -> date:
-        """Set ``cancel_date`` + stage ``migrating`` in the CRM database.
+        """Set ``cancel_date`` in the CRM database (status stays ``applied``).
 
         Returns the resolved ``cancel_date`` (the date through which the
-        membership remains active). Only writes ``cancel_date`` +
-        ``stripe_sync_status`` — ``stripe_item_id`` is left intact as the
-        historical invoice-line record.
+        membership remains active). Only writes ``cancel_date`` —
+        ``stripe_item_id`` is left intact as the historical invoice-line record.
         """
         cancel_sql = load_sql(SQL_DIR / "member_memberships_cancel.sql")
         params = {
@@ -193,10 +193,11 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         item_id: UUID,
         member_id: UUID,
     ) -> None:
-        """Revert a cancel whose sync did not confirm.
+        """Revert a cancel whose sync did not confirm: clear ``cancel_date``.
 
-        Clears ``cancel_date`` and resets the row to ``applied`` (permitted only
-        while the row is ``migrating``). Leaves ``stripe_item_id`` intact.
+        Permitted while the membership has not been removed from Stripe yet
+        (status is not ``deleted``) — the exact revert case. Status is left
+        ``applied``; ``stripe_item_id`` is left intact.
         """
         sql = load_sql(SQL_DIR / "member_memberships_uncancel.sql")
         params = {

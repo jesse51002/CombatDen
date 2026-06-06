@@ -167,7 +167,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    | caller | DB write | verify | revert |
    | --- | --- | --- | --- |
    | start (recurring) | insert pending row (`not_added`) | row flips `not_added → applied` | delete the pending row |
-   | cancel | set `cancel_date` + stage `migrating` | row flips `migrating → deleted` | clear `cancel_date`, reset `applied` |
+   | cancel | set `cancel_date` (status stays `applied`) | row flips `applied → deleted` | clear `cancel_date` |
    | update_price | write new `price_id` + stage `migrating` | row flips `migrating → applied` | restore old `price_id`/`total_price`, reset `applied` |
    | freeze / unfreeze | write / clear the freeze window | — (no membership-row status) | restore / re-clear the freeze window |
    | link / unlink | set / clear `account_linked_to_id` | — (child has no recurring) | unlink / re-link |
@@ -176,16 +176,22 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    transition (freeze, link) pass `verify_fn=None` and get the achievable
    guarantee: **revert-on-exception**.
 
-**The `migrating` status unlocks the revert past the immutability triggers.**
-`cancel_date` and `stripe_item_id` are immutable once set (`trg_prevent_cancel_date_overwrite`
-/ `trg_prevent_stripe_item_id_overwrite`) — **except while the row's
-`stripe_sync_status = 'migrating'`**. So cancel and update_price stage `migrating`
-as part of their DB-first write: that lets the writeback move the immutable
-`stripe_item_id` to the new line (price migration), and lets the revert clear
-`cancel_date` / restore the price when the sync does not confirm. The writeback
-stamps a terminal status (`applied` / `deleted`), after which the columns are
-immutable again. (This is the engine half of the rule the `migrating` enum value
-exists for — keep it in sync with the schema triggers if either changes.)
+**Immutability is keyed on the real Stripe state, not a transient flag** — and the
+two columns differ on purpose:
+- **`cancel_date` (foreground, verified)** locks only once the membership is
+  actually **removed from Stripe** (`stripe_sync_status = 'deleted'`,
+  `trg_prevent_cancel_date_overwrite`). While the cancel is unconfirmed the column
+  stays clearable, so the revert just clears `cancel_date` — **no status to stage
+  or un-stage** (cancel never uses `migrating`).
+- **`stripe_item_id`** is immutable **except while `stripe_sync_status = 'migrating'`**
+  (`trg_prevent_stripe_item_id_overwrite`). `migrating` is reserved for the **price
+  migration** (`update_price`): mutating the line id is safe then because a price
+  migration is a background-style converge, not a paying↔cancel transition. The
+  caller stages `migrating`, the writeback moves the line + stamps `applied`, after
+  which the id is immutable again. **`migrating` is ONLY for price migrations** —
+  add/cancel are foreground verified ops and never use it. (Engine half of the
+  rule the `migrating` enum value exists for — keep it in sync with the schema
+  triggers if either changes.)
 
 > **Known residual:** if Stripe converged but the writeback failed to stamp the
 > column (rare — it is the last step), the revert undoes the DB change while Stripe
