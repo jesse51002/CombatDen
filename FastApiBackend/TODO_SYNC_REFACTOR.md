@@ -61,6 +61,11 @@ uncommitted to their DB:
    `stripe_sync_status` columns are now **`NOT NULL DEFAULT 'not_added'`**.
 2. The client views `member_memberships` and `member_membership_applied_discounts` changed their
    `WHERE` to `stripe_sync_status NOT IN ('not_added','preview_add','preview_remove')`.
+3. **NEW:** `trg_prevent_cancel_date_overwrite` and `trg_prevent_stripe_item_id_overwrite` now skip
+   the immutability check when `OLD.stripe_sync_status = 'migrating'` — this is what lets the
+   DB-first cancel revert (clear `cancel_date`) and `update_price` move the immutable
+   `stripe_item_id` to the new price's line. Without the re-run, cancel-revert and price migration
+   raise the old immutability error.
 (Per `Database/CLAUDE.md`: **never run `supabase` migrations or `python_data/main.py` seeds.**)
 
 ---
@@ -141,36 +146,31 @@ proration_behavior="none") -> None`** (real path):
 
 ## 2. WHAT'S LEFT (the actual work — in priority order)
 
-### 2.1 🔴 Rewire the other 4 lifecycle callers (the biggest, makes the engine functional)
+### 2.1 ✅ DONE — Rewire the lifecycle callers DB-first + verify-and-revert
 
-Only **START** was rewired this session. The other four are **broken-by-design** — they pass
-removed kwargs (`add_ids`/`cancel_ids`/freeze params) and/or call the **deleted**
-`PaymentSyncService.resolve_parent`. Until rewired, cancel/price-change/freeze/link **do not work**.
+All lifecycle callers are rewired. The contract is documented in **`sync-guide` §2 "The caller
+contract"** (read it). Shape: write the desired DB state → call the param-less sync → verify the
+`stripe_sync_status` writeback landed → revert the DB change if not (`sync_or_revert` in
+`src/shared/db_first_helpers.py`).
 
-**The DB-first pattern (copy START):** write the desired DB state FIRST, then call the
-**param-less** sync, which derives everything from the DB and writes back via `PaymentSyncWriteback`.
-Each caller must also **inject `BillingParentResolver` directly** (like START did — the
-`resolve_parent` delegate is gone). Read `member_memberships_start.py` as the worked example, and
-read each caller fully before editing.
+- **cancel** — DB-first set `cancel_date` + stage `migrating` → sync → verify `deleted` → revert
+  (`uncancel`). Keeps the `PaymentsResourceNotFoundError` tolerance. `stripe_item_id` kept.
+- **update_price** — DB-first write new price + stage `migrating` → sync (writeback moves the line)
+  → verify `applied` → revert to old price.
+- **freeze/unfreeze** — DB-first window write → `PaymentSyncFreeze.sync_freeze_state` directly
+  (injected) → revert the window on failure. NOT through `update_payments_recurring`.
+- **link/unlink** — DB-first `account_linked_to_id` → sync the parent → revert relationship on
+  failure (revert-on-exception; child has no recurring so no status verify).
+- **#23** — `charge_card` + `mark_paid_cash` inject `BillingParentResolver` (drop the deleted
+  `PaymentSyncService.resolve_parent`).
+- **update_discounts** — dropped the removed `add_ids`/`cancel_ids` (already DB-first). `SyncItem`
+  deleted.
 
-| Caller (file) | What it must do (DB-first) |
-| --- | --- |
-| `member_memberships_cancel.py` | Set `cancel_date` on the membership FIRST, then call `update_payments_recurring(member_id, idempotency_key, proration_behavior=...)`. The read excludes the cancelled row (`cancel_date IS NULL`), so Stripe removes the line and the writeback stamps it `deleted` (via `get_cancelled_recurring` ∧ absent-from-live-sub). **No `cancel_ids`.** Inject `BillingParentResolver`. |
-| `member_memberships_update_price.py` | Mid-cycle price swap: write the new `price_id` (and `total_price` if still set) on the row FIRST, then call the param-less sync with the **explicit** `proration_behavior` (the admin's choice — usually `always_invoice` for a mid-cycle change). The sync re-reads, builds the new line, prorates. Inject `BillingParentResolver`. |
-| `member_memberships_freeze.py` | **Does NOT go through `update_payments_recurring`** (#14). Write the freeze window (`freeze_start_date`/`freeze_end_date`) to the DB, then call **`PaymentSyncFreeze.sync_freeze_state(parent, account, *, idempotency_key)` directly** (resolve parent via `BillingParentResolver` first). Unfreeze = clear the window then call the same. |
-| `members/service/management/members_management_linked.py` | Link/unlink: write `account_linked_to_id` FIRST, then call the param-less sync on the parent so the family subscription is recomputed (the child's membership now bills under the parent). Inject `BillingParentResolver`. |
+**The `migrating` status is load-bearing:** the immutability triggers (`cancel_date`,
+`stripe_item_id`) now allow the change while `stripe_sync_status = 'migrating'` — that's what lets
+cancel revert and update_price move the line. **User owes the trigger migration (§0).**
 
-**Important detail for the cancel/remove path:** the writeback stamps `deleted` only for rows that
-are (a) `cancel_date IS NOT NULL`, (b) `stripe_item_id IS NOT NULL`, (c) not already `deleted`
-(`get_cancelled_recurring.sql`), AND (d) confirmed **absent** from the live `sub_result` items. So a
-cancel works as: caller sets `cancel_date` → sync excludes the row → Stripe drops the line → writeback
-sees it's gone → stamps `deleted`. Verify this end-to-end when you wire `cancel`.
-
-**Also (#23):** `member_memberships_charge_card.py` and `member_memberships_mark_paid_cash.py` ALSO
-call the deleted `PaymentSyncService.resolve_parent` (they validate the parent). Migrate them to
-inject `BillingParentResolver` too — they're broken until then.
-
-After this section, **the engine is functional again** and the tests (§2.4) can be restabilized.
+**The engine is functional again.** Tests (§2.4) can be restabilized.
 
 ### 2.2 🟡 Finish PREVIEW (the toggle is done; the staging + response shape are not)
 

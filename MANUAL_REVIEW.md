@@ -17,29 +17,32 @@ below (#13–#23). Snapshot of where each stands — full handoff in
 | #13 Part C — per-discount coupons | ❌ **REJECTED** — kept the 4-bucket sum model (Stripe stacks sequentially, so we sum ourselves; per-membership-sequential percent math verified) |
 | #14 — split explicit freeze into its own service | ✅ DONE (`PaymentSyncFreeze`) |
 | #15 — `_SyncParams` → schema | ✅ DONE (`SyncParams`) |
-| #16 — DB-first + `stripe_sync_status` enum | 🟡 sync reads the unfiltered base (pending rows visible) + stamps `applied`/`deleted`; **START caller rewired DB-first (functional)**; cancel/update_price/freeze/link callers still on the old path |
+| #16 — DB-first + `stripe_sync_status` enum | ✅ DONE — sync reads the unfiltered base (pending rows visible) + stamps `applied`/`deleted`; **ALL lifecycle callers rewired DB-first with verify-and-revert** (`sync_or_revert`); cancel/update_price stage `migrating` so the immutability triggers permit the revert/line-move |
 | #17 — full writeback | ✅ DONE — `PaymentSyncWriteback` (per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on removed rows, sub id, prices) |
 | #18 — discounts ride the membership/item (drop the parallel list) | ✅ DONE ("Part E") |
 | #19 — preview due-now vs recurring split | 🟡 read TOGGLE done (`build_sync_params(..., preview)`; reads bind `:excluded_statuses`); caller-side `preview_*` staging + cleanup + the response split still TODO |
 | #20 — extract once-consumption/end_date settle | ✅ DONE (`PaymentSyncOnceDiscounts`) |
 | #21 — `update_payments_recurring -> None` | ✅ DONE — returns None; the start caller reads the DB (`applied` status), no return extraction |
 | #22 — explicit `proration_behavior` | ✅ DONE (incl. create-path `item.prorate` removal) |
-| #23 — shared `BillingParentResolver` | 🟡 resolver DONE; caller migration deferred |
+| #23 — shared `BillingParentResolver` | ✅ DONE — resolver + all callers migrated (start/freeze + charge_card/mark_paid_cash inject it directly; the `PaymentSyncService.resolve_parent` delegate is gone) |
 | #24 (NEW) — coupon I/O via `PaymentsStripeDiscountService` | ✅ DONE |
 | #25 (NEW) — concurrency / global member lock | ❌ to design |
 | #26 (NEW) — never archive Stripe prices (DB `is_active` gates current) | ✅ DONE |
 | #27 (NEW) — `next_due_date` / `last_paid_date` gym-local (was UTC, off-by-one east of UTC) | ✅ DONE |
 | #28 (NEW) — `stripe_sync_status` NOT NULL + `not_added` (no NULL state) | ✅ DONE |
+| #29 (NEW) — DB-first **verify-and-revert** caller contract + `migrating`-status triggers | ✅ DONE — `sync_or_revert` helper; every lifecycle caller writes DB → sync → verify `stripe_sync_status` → revert on failure. The immutability triggers (`cancel_date`/`stripe_item_id`) now allow the change while `migrating`, unlocking the cancel revert + price-migration line-move. `stripe_item_id` never nulled (historical record). **User owes the trigger migration.** |
 
 Also done this session (not original audit items): the verified per-membership-sequential discount
 math; `ResolvedDiscounts` model (no tuple); `LineDiscountValue` bounds + XOR validators; the
 date-lifetime filter moved into SQL (`:today`); dead `IntervalBucket.total_price` removed;
-`PaymentSyncWriteback` (#17) + `update_payments_recurring -> None` (#21); the #16 read change
-(unfiltered base, pending rows visible) + the DB-first **START** caller; never-archive-prices (#26);
-gym-local dates (#27); `stripe_sync_status` NOT NULL + `not_added` (#28); the preview read toggle;
-`sync-guide` + `payments-guide` brought current. **The engine is still non-functional for the OTHER
-callers** (cancel/update_price/freeze/link) until they're rewired DB-first (#16 §2.1 in
-`FastApiBackend/TODO_SYNC_REFACTOR.md`).
+`PaymentSyncWriteback` (#17) + `update_payments_recurring -> None` (#21); the #16 read change +
+**all lifecycle callers rewired DB-first** with verify-and-revert (#16/#23/#29); never-archive-prices
+(#26); gym-local dates (#27); `stripe_sync_status` NOT NULL + `not_added` (#28); the preview read
+toggle; `discounts-guide` rename + minor cleanups (§2.6); `sync-guide` / `memberships-guide` /
+`payments-guide` / dbdiagram brought current. **The engine is functional for all lifecycle callers.**
+Still TODO (this batch): caller-side `preview_*` staging + cleanup (the preview methods currently
+preview the family's CURRENT state, flagged with NOTEs). Deferred (separate, awaiting review): the
+#19 due-now/recurring split; the #25 concurrency lock; tests; `payment_sync.mermaid`.
 
 ---
 
