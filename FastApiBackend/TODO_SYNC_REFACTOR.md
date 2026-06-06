@@ -153,9 +153,11 @@ proration_behavior="none") -> None`** (real path):
 ### 2.1 ✅ DONE — Rewire the lifecycle callers DB-first + verify-and-revert
 
 All lifecycle callers are rewired. The contract is documented in **`sync-guide` §2 "The caller
-contract"** (read it). Shape: write the desired DB state → call the param-less sync → verify the
-`stripe_sync_status` writeback landed → revert the DB change if not (`sync_or_revert` in
-`src/shared/db_first_helpers.py`).
+contract"** (read it). Shape: **pre-sync to a clean baseline** (`_pre_sync_payments`, fresh key — so
+the op never builds on a drifted DB) → write the desired DB state → call the param-less sync → verify
+the `stripe_sync_status` writeback landed → revert the DB change if not (`sync_or_revert` in
+`src/shared/db_first_helpers.py`). Every mutating op thus runs **two** syncs (pre + post); previews
+skip the pre-sync (read-only).
 
 - **cancel** — DB-first set `cancel_date` (status stays `applied`) → sync → verify `deleted` →
   revert by clearing `cancel_date` (`uncancel`; allowed because the row isn't `deleted` yet). Keeps

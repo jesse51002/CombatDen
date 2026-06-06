@@ -79,6 +79,9 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         gym_id = row["gym_id"]
         apply_date = gym_today(row["timezone"])
 
+        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
+        await self._pre_sync_payments(member_id)
+
         await self._remove_snapshots(member_id, remove_applied_ids)
         await self._add_preset_snapshots(
             item_id=item_id,

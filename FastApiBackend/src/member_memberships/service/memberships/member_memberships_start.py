@@ -131,6 +131,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
         if not plan_price["stripe_price_id"]:
             raise ValueError(f"Plan price {plan_price['price_id']} missing stripe_price_id")
 
+        # Pre-sync (recurring): converge the family to a clean DB↔Stripe baseline
+        # before inserting the new membership. (One-time has no subscription to
+        # converge.)
+        if is_recurring:
+            await self._pre_sync_payments(member_id)
+
         # ── Step 1: DB insert (NULL stripe_item_id) ───────────
         item_id = await self._crm_insert(
             member_id=member_id,

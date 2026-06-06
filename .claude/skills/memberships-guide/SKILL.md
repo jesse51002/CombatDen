@@ -281,11 +281,12 @@ account freeze) — the view is authoritative.
 
 `src/member_memberships/service/memberships/`. The facade
 (`member_memberships_service.py`, `MemberMembershipsService`) delegates to
-sub-services extending `MemberMembershipsBase`. **Every mutating op is DB-first:
-write the desired state to the DB, call the param-less sync
-(`update_payments_recurring`, or `PaymentSyncFreeze` for freeze), then verify the
-`stripe_sync_status` writeback landed and revert the DB change if it did not** (via
-`sync_or_revert`). The full caller contract — what each op writes, verifies, and
+sub-services extending `MemberMembershipsBase`. **Every mutating op is DB-first and
+pre-synced: it first converges the family to a clean DB↔Stripe baseline
+(`_pre_sync_payments`, so it never builds on a drifted DB), then writes the desired
+state to the DB, calls the param-less sync (`update_payments_recurring`, or
+`PaymentSyncFreeze` for freeze), then verifies the `stripe_sync_status` writeback
+landed and reverts the DB change if it did not** (via `sync_or_revert`). The full caller contract — what each op writes, verifies, and
 reverts, and how the `migrating` status unlocks the immutable-column revert — is
 owned by `sync-guide` (§2 "The caller contract"); the sync engine itself is owned
 by `sync-guide` too. Each op has a parallel `preview_*` that runs the same

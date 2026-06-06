@@ -78,6 +78,9 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         old_price_id = row["price_id"]
         old_total_price = row["price"]
 
+        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
+        await self._pre_sync_payments(member_id)
+
         # ── DB-first: write new price + stage 'migrating', THEN converge Stripe ──
         # 'migrating' lets the writeback move the (otherwise immutable)
         # stripe_item_id to the new price's line, and lets a failed migration

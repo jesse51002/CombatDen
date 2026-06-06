@@ -97,6 +97,13 @@ class MembersManagementLinked(MembersManagementBase):
 
         await self._assert_no_active_recurring(member_id)
 
+        # Pre-sync: converge the parent's family to a clean DB↔Stripe baseline
+        # before mutating, so the link recompute starts from a synced state.
+        await self._sync.update_payments_recurring(
+            parent_member_id,
+            idempotency_key=uuid4(),
+        )
+
         # ── DB-first: write the link, THEN converge the parent's Stripe sub ──
         await self._write_link(member_id, parent_member_id)
 
@@ -225,6 +232,13 @@ class MembersManagementLinked(MembersManagementBase):
         old_parent_id = child.account_linked_to_id
 
         await self._assert_no_active_recurring(member_id)
+
+        # Pre-sync: converge the old parent's family to a clean DB↔Stripe baseline
+        # before mutating, so the unlink recompute starts from a synced state.
+        await self._sync.update_payments_recurring(
+            old_parent_id,
+            idempotency_key=uuid4(),
+        )
 
         # ── DB-first: write the unlink, THEN converge the old parent's sub ──
         await self._write_unlink(member_id)

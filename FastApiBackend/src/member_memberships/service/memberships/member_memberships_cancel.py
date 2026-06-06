@@ -69,6 +69,9 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
+        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
+        await self._pre_sync_payments(member_id)
+
         # ── DB-first: set cancel_date (status stays 'applied'), THEN converge ──
         cancel_date = await self._crm_cancel(
             item_id,

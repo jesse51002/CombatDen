@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from schema.member_membership import StripeSyncStatus
 from sqlalchemy import text
@@ -91,6 +91,21 @@ class MemberMembershipsBase:
             result = await session.execute(text(sql), params)
             row = result.fetchone()
         return StripeSyncStatus(row[0]) if row else None
+
+    async def _pre_sync_payments(self, member_id: UUID) -> None:
+        """Converge the family to a clean DB↔Stripe baseline BEFORE mutating.
+
+        Every lifecycle op runs this first so it never builds a new desired state
+        on top of a DB that has drifted from Stripe (e.g. a half-finished prior
+        op left a pending or unsettled row). Uses a FRESH idempotency key —
+        independent of the operation's own key, since it is a separate converge —
+        and default ``proration_behavior`` (``none``), so it reconciles without
+        billing. If it raises, the operation aborts before any DB change.
+        """
+        await self._payment_sync.update_payments_recurring(
+            member_id,
+            idempotency_key=uuid4(),
+        )
 
     async def _set_sync_status(
         self,
