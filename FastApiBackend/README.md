@@ -36,14 +36,16 @@ The CRM calls this API; it reads/writes the shared **Supabase** Postgres (auth v
 talks to **Stripe** for payments, Connect onboarding, and inbound webhooks. Dashed = WIP / inbound.
 
 **For the full internal graph** — every route, the service classes, the grouped **Payments** Stripe
-core, and the cross-cutting **`MembershipPaymentSyncService`** (called by three domains; computes each
-membership's discount coupons at sync from its frozen applied-discount snapshots) — see
+core, the cross-cutting **`PaymentSyncService`** (the declarative reconciler called by three domains —
+it re-derives each family's desired Stripe state from the DB and converges Stripe onto it), and the
+shared **`BillingParentResolver`** — see
 **[`architecture.mermaid`](architecture.mermaid)** (generated from the DI wiring; render it with the
 `mermaid-creation` skill).
 
 **For the payment-sync engine in depth** — the step-by-step orchestration flow of
-`update_payments_recurring` (re-derive desired state → freeze → compute + attach coupons → execute →
-write back), plus the `preview` / `bulk` / deferred-reconciler branches — see
+`update_payments_recurring` (resolve → freeze re-apply → settle once → build + resolve coupons →
+execute → write back, returning `None`), plus the `preview` / `bulk` / deferred-reconciler branches —
+see
 **[`payment_sync.mermaid`](payment_sync.mermaid)**. The sync steps are grouped in one box with
 **Supabase** + **Stripe** as outside actors and box-level edges (same convention as
 `architecture.mermaid`). Green = the engine's steps / entry points, orange = the external actors;

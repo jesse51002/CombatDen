@@ -9,7 +9,7 @@ flowchart TB
     r_rew["<b>rewards</b> · /api/v1/rewards · 7 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem<br/>GET /redemptions"]
     r_waiver["<b>waivers</b> · /api/v1/waivers · 8 routes<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /{waiver_id}<br/>GET /{waiver_id}/versions<br/>GET /{waiver_id}/signatures<br/>GET /signatures/by-member/{member_id}"]
     r_disc["<b>discounts</b> · /api/v1/discounts · 4 routes<br/>(coupon-free presets)<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /"]
-    r_mm["<b>member_memberships</b> · /api/v1/member_memberships · 12 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price<br/>POST /preview<br/>POST /cancel/preview<br/>POST /price/preview<br/>PUT /discounts (apply = add/remove snapshots)<br/>POST /discounts/preview<br/>POST /mark-paid-cash<br/>POST /charge-card"]
+    r_mm["<b>member_memberships</b> · /api/v1/member_memberships · 12 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price<br/>POST /preview<br/>POST /cancel/preview<br/>POST /price/preview<br/>PUT /discounts (apply = add/remove applied discounts)<br/>POST /discounts/preview<br/>POST /mark-paid-cash<br/>POST /charge-card"]
     r_plan["<b>membership_plans</b> · /api/v1/membership_plans · 8 routes<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /<br/>GET /{plan_id}<br/>POST /price<br/>POST /migrate<br/>POST /migrate-all"]
     r_hook["<b>stripe_webhooks</b> · /api/v1/stripe · 1 route<br/>POST /webhooks"]
     checkin_service["ClassesCheckinService"]
@@ -20,10 +20,11 @@ flowchart TB
     gym_stripe_service["GymStripeService"]
     gyms_service["GymsService"]
     gyms_stripe_connect_service["GymsStripeConnectService"]
-    member_memberships_service["MemberMembershipsService<br/>apply = add/remove applied-discount snapshots"]
+    member_memberships_service["MemberMembershipsService<br/>DB-first lifecycle ops + verify/revert"]
     members_billing_detail_service["MembersBillingDetailService"]
     members_management_service["MembersManagementService"]
-    membership_payment_sync_service["MembershipPaymentSyncService<br/>+ PaymentSyncCoupons (compute coupons at sync)"]
+    payment_sync_service["PaymentSyncService — declarative reconciler<br/>orchestrates: Builder→Discounts (coupons at build), Freeze,<br/>OnceDiscounts settle, Stripe (execute), Writeback · -> None"]
+    billing_parent_resolver["BillingParentResolver<br/>shared paying-parent / family resolution"]
     membership_plans_service["MembershipPlansService"]
     ranks_service["RanksService"]
     rewards_redemption_service["RewardsRedemptionService"]
@@ -72,22 +73,24 @@ flowchart TB
     members_billing_detail_service --> streak_service
     members_billing_detail_service --> cycle_counts_service
     members_management_service --> Payments
-    members_management_service --> membership_payment_sync_service
+    members_management_service --> payment_sync_service
     gyms_service --> gyms_stripe_connect_service
     gyms_stripe_connect_service --> Payments
-    member_memberships_service --> membership_payment_sync_service
+    member_memberships_service --> payment_sync_service
     member_memberships_service --> Payments
     member_memberships_service --> gym_stripe_service
+    member_memberships_service --> billing_parent_resolver
     membership_plans_service --> gym_stripe_service
     membership_plans_service --> Payments
-    membership_plans_service --> membership_payment_sync_service
-    membership_payment_sync_service --> Payments
-    membership_payment_sync_service --> gym_stripe_service
+    membership_plans_service --> payment_sync_service
+    payment_sync_service --> Payments
+    payment_sync_service --> billing_parent_resolver
+    billing_parent_resolver --> gym_stripe_service
   end
-  Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)<br/>member_membership_applied_discounts<br/>(immutable snapshots · sync writes back stripe_coupon_id)"]
+  Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)<br/>member_membership_applied_discounts<br/>(applied-discount rows · sync writes back stripe_coupon_id + status)"]
   Stripe["Stripe — payments · Connect · webhooks"]
   CRM -->|"authenticated REST · Supabase JWT · WIP"| FastApiBackend
-  FastApiBackend -->|"read/write · JWT auth · read+write applied-discount snapshots"| Supabase
+  FastApiBackend -->|"read/write · JWT auth · read+write applied-discount rows"| Supabase
   FastApiBackend -->|"via Payments core · compute coupons at sync, write back stripe_coupon_id"| Stripe
   Stripe -.->|"webhooks → /api/v1/stripe/webhooks"| FastApiBackend
   classDef client fill:#eaf2ff,stroke:#2f6fb0,color:#0b2942;
@@ -99,7 +102,7 @@ flowchart TB
   class Supabase,Stripe ext;
   class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook route;
   class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_management_service,membership_plans_service,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service svc;
-  class membership_payment_sync_service hub;
+  class payment_sync_service,billing_parent_resolver hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;
   style Payments fill:#eafaf0,stroke:#2f8f53;
