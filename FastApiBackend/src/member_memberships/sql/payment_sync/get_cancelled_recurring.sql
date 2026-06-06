@@ -13,4 +13,4 @@ WHERE mm.member_id = ANY(:member_ids)
   AND mp.plan_type = 'recurring'
   AND mm.cancel_date IS NOT NULL
   AND mm.stripe_item_id IS NOT NULL
-  AND (mm.stripe_sync_status IS NULL OR mm.stripe_sync_status <> 'deleted')
+  AND mm.stripe_sync_status <> 'deleted'

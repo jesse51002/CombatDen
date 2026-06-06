@@ -24,7 +24,4 @@ JOIN membership_plan_prices mpp
 WHERE mm.member_id = ANY(:member_ids)
   AND mp.plan_type = 'recurring'
   AND mm.cancel_date IS NULL
-  AND (
-      mm.stripe_sync_status IS NULL
-      OR mm.stripe_sync_status NOT IN ('deleted', 'preview_add', 'preview_remove')
-  )
+  AND mm.stripe_sync_status NOT IN ('deleted', 'preview_add', 'preview_remove')

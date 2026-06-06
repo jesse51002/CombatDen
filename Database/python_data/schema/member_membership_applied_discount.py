@@ -27,4 +27,4 @@ class MemberMembershipAppliedDiscountCreate(SeedModel):
     value_id: UUID
     end_date: date | None = None
     stripe_coupon_id: str | None = None
-    stripe_sync_status: StripeSyncStatus | None = None
+    stripe_sync_status: StripeSyncStatus = StripeSyncStatus.not_added

@@ -8,6 +8,7 @@
 -- `migrating` (memberships only) marks that a migration was requested but has
 -- not completed yet.
 CREATE TYPE stripe_sync_status AS ENUM (
+    'not_added',
     'applied',
     'deleted',
     'preview_add',
@@ -35,10 +36,11 @@ CREATE TABLE member_memberships_unfiltered (
     total_price INTEGER NOT NULL CHECK (total_price >= 0),
 
     -- Stripe-sync confirmation (service_role writeback). NULL = pending: the row
-    -- is asking the sync to add it to Stripe; the sync stamps `applied` once
-    -- Stripe confirms (and `deleted` when it removes the row). Orthogonal to the
-    -- lifecycle status derived by the member_memberships_status view.
-    stripe_sync_status stripe_sync_status,
+    -- 'not_added' (default) = pending: the row is asking the sync to add it to
+    -- Stripe; the sync stamps `applied` once Stripe confirms (and `deleted` when
+    -- it removes the row). Orthogonal to the lifecycle status derived by the
+    -- member_memberships_status view.
+    stripe_sync_status stripe_sync_status NOT NULL DEFAULT 'not_added',
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (item_id),
@@ -236,18 +238,15 @@ CREATE TRIGGER trg_recurring_chronological_start_date
     BEFORE INSERT ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION check_recurring_chronological_start_date();
 
--- View: only exposes memberships with a completed Stripe item sync, and never
--- preview-staged rows (preview_add / preview_remove are dry-run staging that the
--- end user must never see).
+-- View: gate on the sync-status enum — hide `not_added` (pending, not on Stripe
+-- yet) and `preview_*` (dry-run staging) so the client only sees real synced
+-- rows (applied / deleted / migrating). `member_memberships_status` reads this
+-- view, so cancelled (`deleted`) rows must stay visible.
 CREATE VIEW member_memberships
 WITH (security_invoker = true)
 AS
 SELECT * FROM member_memberships_unfiltered
-WHERE stripe_item_id IS NOT NULL
-  AND (
-      stripe_sync_status IS NULL
-      OR stripe_sync_status NOT IN ('preview_add', 'preview_remove')
-  );
+WHERE stripe_sync_status NOT IN ('not_added', 'preview_add', 'preview_remove');
 
 ALTER VIEW member_memberships SET (security_invoker = true);
 
