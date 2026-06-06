@@ -261,30 +261,36 @@ engine/caller.
   no `-> None`). Re-author with the `mermaid-creation` skill (top-down `TB`, sibling-only edges,
   fixed palette, render + `check_siblings.py` + Mermaid-9 parse). Keep it in sync per `sync-guide`.
 
-### 2.6 Minor cleanups (do opportunistically; each is small)
-- **`ActiveMembershipRow.price` is orphaned** — `total_price` was removed, and `price` is now read
-  (`mpp.price` in `get_active_recurring.sql` + parsed) but **never used**. Decide: drop the field +
-  the parse line + `mpp.price` from the SELECT. (User flagged it; awaiting the call.)
-- **`SyncItem` / `SyncItem.prorate`** — `SyncItem` is engine-vestigial (the start caller stopped
-  importing it). Check for any remaining importers; if none, remove `SyncItem` entirely (else at
-  least drop the vestigial `prorate`).
-- **`stripe_ts_to_date` in `src/stripe_webhooks/service/stripe_time.py`** is now likely **uncalled**
-  (the webhook switched to `stripe_ts_to_gym_date`). Confirm + remove, or keep as a primitive.
-- **Disjoint `contributing_ids` (the once-handle fragility)** — see §3. Give percent vs dollar
-  `LineDiscountValue`s **disjoint** `contributing_ids` so a dollar-`once` stores its OWN coupon as
-  the consumption handle, not the percent coupon.
-- **`gyms_stripe_connect_service.py` calls Stripe directly** (Connect-account onboarding) — the one
+### 2.6 Minor cleanups
+- ✅ **`ActiveMembershipRow.price` orphan removed** — dropped the field, the `price=row["price"]`
+  parse (`payment_sync_queries.py`), and `mpp.price` from `get_active_recurring.sql`. (NB
+  `member_memberships.total_price` is a **separate** DB column, still in active use — untouched.)
+- ✅ **`stripe_ts_to_date` removed** — it was uncalled (every importer uses `stripe_ts_to_datetime`);
+  deleted it + the now-unused `date` import from `stripe_time.py`.
+- ✅ **Disjoint `contributing_ids`** — `_aggregate_line_values` now gives the percent value and the
+  dollar value **disjoint** id lists (each discount is percent XOR dollar), so a dollar-`once`'s
+  presence handle is its own dollar coupon, not the percent coupon. (Resolves the old §3 once-handle
+  fragility — no value changes, only which ids each value writes back to.)
+- 🔜 **`SyncItem` / `SyncItem.prorate`** — **NOT vestigial yet**: still imported by
+  `member_memberships_cancel.py` + `member_memberships_update_price.py` (the old-path callers). Remove
+  `SyncItem` **as part of the §2.1 caller rewiring** — those two stop importing it there.
+- ❓ **`gyms_stripe_connect_service.py` calls Stripe directly** (Connect-account onboarding) — the one
   other direct-Stripe caller outside `src/payments/`. Different domain (no payments-layer service);
-  decide whether to route it through a service too.
+  decide whether to route it through a service too. (Unchanged — flagged for the user.)
+- ❓ **Applied-discount RLS vs view gate drift** — the filtered view
+  `member_membership_applied_discounts` now gates on `stripe_sync_status NOT IN
+  ('not_added','preview_add','preview_remove')`, but the `hide_incomplete_stripe_records` RLS policy
+  in `access_rules/member_membership_applied_discounts.sql` still gates `USING (stripe_coupon_id IS
+  NOT NULL)`. They mostly agree but can diverge (a `deleted` row has a coupon → passes RLS, hidden by
+  view). Reconciling the RLS to the sync-status gate is a **schema/RLS change → needs a migration**;
+  left for the user to decide (is coupon-presence RLS intentional belt-and-suspenders?). The stale
+  comment in `set_applied_discount_coupon_id.sql` (says the *view* gates on coupon presence) rides on
+  this decision.
 
 ---
 
 ## 3. Gotchas still live (don't get surprised)
 
-- **Once-handle fragility (pre-existing, not introduced):** when one consolidated line carries BOTH
-  a percent AND a dollar `once`, both `LineDiscountValue`s share the same `contributing_ids`, so the
-  dollar-`once` stores the *percent* coupon as its handle (last-write-wins). Consumption still works
-  (same-mode coupons invoice/drop together), but it's fragile — fix per §2.6.
 - **Preview over-states a consumed-but-unstamped `once`** on an idle member — preview skips the
   pre-sync settle (a write), so the number is optimistic until the next real sync stamps it.
 - **Consolidated fixed-dollar discount applies to the whole qty-N line**, not one member (percents

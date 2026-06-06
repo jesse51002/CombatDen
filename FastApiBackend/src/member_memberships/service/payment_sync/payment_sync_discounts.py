@@ -117,13 +117,17 @@ class PaymentSyncDiscounts:
 
         Dollar vs percent are **not** combined here — they become separate
         coupons and Stripe applies them sequentially (dollar→percent) via the
-        attach order. Each value carries the ``applied_discount_id`` of every
-        same-mode discount that fed it.
+        attach order. The percent value and the dollar value carry **disjoint**
+        ``contributing_ids`` (each discount is percent XOR dollar), so each
+        value's resolved coupon is written back onto only its own rows — a
+        dollar-``once``'s presence handle is its own dollar coupon, never the
+        percent coupon.
         """
         divisor = len(memberships) if memberships else 1
         values: list[LineDiscountValue] = []
         for mode in (DiscountMode.once, DiscountMode.ongoing):
-            contributing_ids: list[UUID] = []
+            percent_ids: list[UUID] = []
+            dollar_ids: list[UUID] = []
             effective_fraction = 0.0
             dollar_sum = 0
             for membership in memberships:
@@ -131,10 +135,11 @@ class PaymentSyncDiscounts:
                 for discount in membership.discounts:
                     if discount.discount_mode != mode:
                         continue
-                    contributing_ids.append(discount.applied_discount_id)
                     if discount.percentage_off:
+                        percent_ids.append(discount.applied_discount_id)
                         member_percents.append(discount.percentage_off)
                     if discount.dollar_off:
+                        dollar_ids.append(discount.applied_discount_id)
                         dollar_sum += discount.dollar_off
                 remaining = 1.0
                 for percent in member_percents:
@@ -147,7 +152,7 @@ class PaymentSyncDiscounts:
                     LineDiscountValue(
                         discount_mode=mode,
                         percentage_off=line_percent,
-                        contributing_ids=contributing_ids,
+                        contributing_ids=percent_ids,
                     )
                 )
             if dollar_sum > 0:
@@ -155,7 +160,7 @@ class PaymentSyncDiscounts:
                     LineDiscountValue(
                         discount_mode=mode,
                         dollar_off=dollar_sum,
-                        contributing_ids=contributing_ids,
+                        contributing_ids=dollar_ids,
                     )
                 )
         return values

@@ -123,7 +123,6 @@ class PaymentSyncQueries:
             stripe_price_id=row["stripe_price_id"],
             stripe_item_id=row["stripe_item_id"],
             duration_unit=DurationUnit(row["duration_unit"]),
-            price=row["price"],
         )
 
     # ── Applied Discounts ───────────────────────────────────────

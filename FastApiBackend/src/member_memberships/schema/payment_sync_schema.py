@@ -57,7 +57,6 @@ class ActiveMembershipRow(BaseModel):
     stripe_price_id: str
     stripe_item_id: str | None = None
     duration_unit: DurationUnit
-    price: int
     discounts: list[AppliedDiscount] = []
 
 
@@ -107,10 +106,12 @@ class LineDiscountValue(BaseModel):
     are summed. Exactly one of ``percentage_off`` / ``dollar_off`` is set.
     ``once`` and ``ongoing`` never mix into the same value.
 
-    ``contributing_ids`` are the applied-discount rows of this exact mode that
-    fed the value — the sync writes the value's resolved coupon back onto only
-    these, so a line mixing a ``once`` and an ``ongoing`` value records each
-    coupon on its own contributors and keeps the ``once`` presence handle exact.
+    ``contributing_ids`` are the applied-discount rows of this exact mode **and
+    kind** (percent vs dollar) that fed the value — disjoint, so the sync writes
+    the value's resolved coupon back onto only its own contributors. A line
+    mixing a percent and a dollar ``once`` records each coupon on its own rows,
+    so a dollar-``once``'s presence handle is its own dollar coupon, not the
+    percent coupon (keeps the ``once`` consumption check exact).
     """
 
     discount_mode: DiscountMode
