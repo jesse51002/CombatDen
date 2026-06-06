@@ -368,17 +368,19 @@ async def test_set_price(
     assert new_price.active is True
     assert new_price.unit_amount == 7500
 
-    # Old Stripe price must be archived after the swap. The service
-    # points ``product.default_price`` at the new price first (Stripe
-    # refuses to archive the current default), then calls
-    # ``deactivate_price`` on the old one.
+    # The old Stripe price stays ACTIVE after the swap — set_price never
+    # archives a Stripe price (the DB ``is_active`` flag is the single gate for
+    # which price is current; archiving the old price would break an in-flight
+    # subscription migration onto the new one). The service only re-points
+    # ``product.default_price`` at the new price.
     old_price = await _fetch_price(
         stripe_client,
         old_stripe_price_id,
         connect_opts,
     )
-    assert old_price.active is False, (
-        f"Old Stripe price {old_price.id} should be archived after set_price"
+    assert old_price.active is True, (
+        f"Old Stripe price {old_price.id} should stay active after set_price "
+        f"(set_price never archives a Stripe price)"
     )
 
 

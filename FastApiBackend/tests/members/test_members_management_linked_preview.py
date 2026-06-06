@@ -2,8 +2,7 @@
 
 Every test asserts:
 
-1. The ``members`` row is unchanged
-   (``account_linked_to_id`` and ``linked_discount_id`` both untouched).
+1. The ``members`` row is unchanged (``account_linked_to_id`` untouched).
 2. Stripe state is unchanged (no new invoices, no subscription items
    added/removed, no charges).
 3. The preview return value is a
@@ -28,7 +27,7 @@ async def _fetch_profile(db_pool, member_id):
     async with db_pool.session() as session:
         result = await session.execute(
             text(
-                "SELECT account_linked_to_id, linked_discount_id, "
+                "SELECT account_linked_to_id, "
                 "stripe_sub_id_month "
                 "FROM members "
                 "WHERE member_id = :id"
@@ -130,7 +129,6 @@ async def test_preview_link_with_paying_parent_no_mutation(
         # CRM: child still unlinked, parent still has same sub id.
         child_row = await _fetch_profile(db_pool, child.member_id)
         assert child_row["account_linked_to_id"] is None
-        assert child_row["linked_discount_id"] is None
 
         parent_row = await _fetch_profile(db_pool, parent.member_id)
         assert parent_row["stripe_sub_id_month"] == sub_id

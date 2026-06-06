@@ -15,7 +15,7 @@ async def _fetch_profile(db_pool, member_id):
     async with db_pool.session() as session:
         result = await session.execute(
             text(
-                "SELECT account_linked_to_id, linked_discount_id, "
+                "SELECT account_linked_to_id, "
                 "stripe_sub_id_month, stripe_payment_method_id, "
                 "card_brand, card_last_four, card_exp_month, "
                 "card_exp_year, freeze_start_date, freeze_end_date, "
@@ -252,7 +252,6 @@ async def test_unlink_happy_path(
 
         row = await _fetch_profile(db_pool, child.member_id)
         assert row["account_linked_to_id"] is None
-        assert row["linked_discount_id"] is None
     finally:
         await delete_member_data(db_pool, child.member_id)
         await delete_member_data(db_pool, parent.member_id)
@@ -297,19 +296,21 @@ async def test_unlink_with_active_recurring_raises(
         last_name="UnlinkRecur",
         payment_method_id=pm_id,
     )
-    # Create child already linked to parent — linked accounts can
-    # still have memberships (billed through parent's sub).
     child_req = MemberCreateRequest(
         gym_id=gym_id,
         first_name="C",
         last_name="UnlinkRecur",
-        account_linked_to_id=parent.member_id,
     )
     child = await management_service.create_member(child_req)
     created.track_customer(child.stripe_customer_id)
     plan = await created.plan(gym_id)
 
     try:
+        # Link via the supported flow — create_member never sets
+        # account_linked_to_id (linking NULLs the child's own Stripe/card
+        # fields). The linked child's membership then bills through the parent's
+        # subscription.
+        await management_service.link_account(child.member_id, parent.member_id)
         await memberships_service.start(
             member_id=child.member_id,
             gym_id=gym_id,

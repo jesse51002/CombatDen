@@ -162,11 +162,17 @@ async def test_update_membership_add_price(
     assert len(active_prices) == 2
 
 
-async def test_update_membership_deactivate_omitted_prices(
+async def test_update_membership_keeps_omitted_prices_active(
     membership_service,
     stripe_account_id,
     created,
 ):
+    """update_membership never deactivates a Stripe price.
+
+    The DB (`membership_plan_prices.is_active`) gates which price is current, so
+    every Stripe price stays active — archiving an omitted price would break an
+    in-progress subscription migration. An omitted price therefore stays active.
+    """
     created_resp = await membership_service.create_membership(
         PaymentsMembershipCreateRequest(
             plan_name="Two Tier",
@@ -210,11 +216,11 @@ async def test_update_membership_deactivate_omitted_prices(
         stripe_account_id,
     )
 
-    active_prices = [p for p in resp.prices if p.active]
-    inactive_prices = [p for p in resp.prices if not p.active]
-    assert len(active_prices) == 1
-    assert len(inactive_prices) == 1
-    assert active_prices[0].stripe_price_id == keep_price.stripe_price_id
+    # Both prices remain active — the omitted one is NOT deactivated.
+    active_ids = {p.stripe_price_id for p in resp.prices if p.active}
+    assert all(p.active for p in resp.prices)
+    assert keep_price.stripe_price_id in active_ids
+    assert len(active_ids) == 2
 
 
 async def test_deactivate_membership(

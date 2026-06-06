@@ -40,8 +40,11 @@ INVOICE_POLL_MAX_WAIT_S = 60
 INVOICE_LIST_LIMIT = 100
 SUBSCRIPTION_EXPAND_DEFAULTS: tuple[str, ...] = (
     "items.data.price",
-    "items.data.discounts",
-    "discounts",
+    # Expand down to the coupon: a subscription retrieve returns item/sub
+    # ``discounts`` as bare Discount-id strings (``di_…``) unless the nested
+    # ``.coupon`` is expanded, so reading ``discount.coupon.id`` needs this.
+    "items.data.discounts.coupon",
+    "discounts.coupon",
 )
 
 

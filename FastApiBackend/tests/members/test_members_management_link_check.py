@@ -99,17 +99,18 @@ async def test_check_candidate_is_parent_blocked(
     """A candidate that already has linked children cannot become a child."""
     grandparent = await created.member(gym_id, first_name="GP", last_name="IsParent")
     candidate = await created.member(gym_id, first_name="Cand", last_name="IsParent")
-    # A child linked to `candidate` — making `candidate` a parent.
-    child_req = MemberCreateRequest(
+    kid_req = MemberCreateRequest(
         gym_id=gym_id,
         first_name="Kid",
         last_name="IsParent",
-        account_linked_to_id=candidate.member_id,
     )
-    kid = await management_service.create_member(child_req)
+    kid = await management_service.create_member(kid_req)
     created.track_customer(kid.stripe_customer_id)
 
     try:
+        # Link kid to candidate via the supported flow — this makes candidate a
+        # parent (create_member never sets account_linked_to_id).
+        await management_service.link_account(kid.member_id, candidate.member_id)
         result = await management_service.check_link_account(
             candidate.member_id,
             grandparent.member_id,

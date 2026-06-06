@@ -40,15 +40,34 @@ CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 NEXT_CYCLE = CLOCK_START + timedelta(days=35)
 
 
+def _discount_coupon_id(disc) -> str | None:
+    """Coupon id referenced by a Stripe sub-item Discount, or None.
+
+    The coupon lives at ``discount.source.coupon`` (a coupon-id string) in the
+    current Stripe shape; the legacy ``discount.coupon`` object is null. A bare
+    ``di_`` id means the expansion hasn't materialized (read-after-write) — treat
+    it as "not yet readable" rather than mistaking it for a coupon.
+    """
+    if isinstance(disc, str):
+        return None
+    source = getattr(disc, "source", None)
+    cid = getattr(source, "coupon", None) if source is not None else None
+    if cid is None:
+        coupon = getattr(disc, "coupon", None)
+        cid = getattr(coupon, "id", coupon)
+    if isinstance(cid, str) and not cid.startswith("di_"):
+        return cid
+    return None
+
+
 def _line_coupon_ids(sub, stripe_price_id: str) -> set[str]:
     for item in sub.items.data:
         if item.price.id != stripe_price_id:
             continue
         found: set[str] = set()
         for disc in getattr(item, "discounts", None) or []:
-            coupon = getattr(disc, "coupon", disc)
-            cid = getattr(coupon, "id", coupon)
-            if isinstance(cid, str):
+            cid = _discount_coupon_id(disc)
+            if cid is not None:
                 found.add(cid)
         return found
     raise AssertionError(f"No item on {sub.id} uses price {stripe_price_id}")
