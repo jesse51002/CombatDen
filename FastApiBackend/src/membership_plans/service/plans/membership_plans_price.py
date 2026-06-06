@@ -27,7 +27,6 @@ from src.payments.schema.metadata.stripe_price_metadata import (
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_price_schema import (
     PaymentsPriceCreateRequest,
-    PaymentsPriceDeactivateRequest,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.db_first_helpers import cleanup_pending_row
@@ -190,10 +189,12 @@ class MembershipPlansPrice(MembershipPlansBase):
                 crm_pk=price_id,
             ) from exc
 
-        # ── Stripe: point product at the new price, then archive old ─
-        # Stripe refuses to archive a price that is still a product's
-        # ``default_price``. Reassign the default to the new price
-        # before attempting to deactivate the old one.
+        # ── Stripe: point the product at the new price; keep the old ACTIVE ─
+        # We never archive a Stripe price. A gym can update a price while a
+        # subscription migration onto it is mid-flight, and archiving the old
+        # price would break that migration. The DB
+        # (``membership_plan_prices.is_active``) is the single gate for which
+        # price is current; every Stripe price stays active forever.
         if old_price and old_price.get("stripe_price_id"):
             try:
                 await self._stripe_prices.set_product_default_price(
@@ -201,16 +202,11 @@ class MembershipPlansPrice(MembershipPlansBase):
                     stripe_price_id=stripe_resp.stripe_price_id,
                     stripe_account_id=stripe_account_id,
                 )
-                await self._stripe_prices.deactivate_price(
-                    PaymentsPriceDeactivateRequest(
-                        stripe_price_id=old_price["stripe_price_id"],
-                    ),
-                    stripe_account_id,
-                )
             except Exception:
                 logger.warning(
-                    "Failed to deactivate old Stripe price %s (orphaned in Stripe)",
-                    old_price["stripe_price_id"],
+                    "Failed to set product %s default price to %s",
+                    stripe_product_id,
+                    stripe_resp.stripe_price_id,
                     exc_info=True,
                 )
 

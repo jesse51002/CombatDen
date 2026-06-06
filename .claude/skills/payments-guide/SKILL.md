@@ -149,8 +149,12 @@ a membership plan as a Stripe **Product + Prices**:
 
 - `create_membership` — Product + each Price (delegates Price creation to the
   price service), sets `default_price`.
-- `update_membership` — reconciles prices: activates/deactivates existing,
-  creates new, **deactivates any active price not in the request list**.
+- `update_membership` — reconciles prices: re-activates an archived existing
+  price + creates new ones. **It never deactivates a Stripe price** — the DB
+  (`membership_plan_prices.is_active`) gates which price is current, so every
+  Stripe price stays active forever (archiving the old price would break a
+  subscription migration that's mid-flight). `deactivate_price` is therefore now
+  **uncalled** (kept as a low-level primitive).
 - `deactivate_membership` — archives the Product (`active=False`); does not
   cancel subscriptions.
 
