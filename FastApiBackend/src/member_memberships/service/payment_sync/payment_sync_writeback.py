@@ -1,6 +1,5 @@
 """Unified writeback: persist the full sync-owned state after Stripe converges."""
 
-from datetime import UTC, date, datetime
 from uuid import UUID
 
 from src.member_memberships.schema.payment_sync_schema import SyncParams
@@ -18,6 +17,7 @@ from src.payments.service.subscription import (
 )
 from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import stripe_ts_to_gym_date
 
 
 class PaymentSyncWriteback:
@@ -100,7 +100,10 @@ class PaymentSyncWriteback:
                 membership.item_id,
                 membership.member_id,
                 line.stripe_subscription_item_id,
-                self._period_end_to_date(line.current_period_end),
+                stripe_ts_to_gym_date(
+                    line.current_period_end,
+                    params.parent.timezone,
+                ),
             )
 
     async def _mark_removed_deleted(
@@ -123,8 +126,3 @@ class PaymentSyncWriteback:
             if stripe_item_id not in live_item_ids
         ]
         await self._queries.mark_memberships_deleted(removed)
-
-    @staticmethod
-    def _period_end_to_date(period_end: int) -> date:
-        """Convert a Stripe unix current_period_end into a UTC date."""
-        return datetime.fromtimestamp(period_end, tz=UTC).date()
