@@ -20,19 +20,26 @@ below (#13–#23). Snapshot of where each stands — full handoff in
 | #16 — DB-first + `stripe_sync_status` enum | 🟡 sync reads the unfiltered base (pending rows visible) + stamps `applied`/`deleted`; **START caller rewired DB-first (functional)**; cancel/update_price/freeze/link callers still on the old path |
 | #17 — full writeback | ✅ DONE — `PaymentSyncWriteback` (per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on removed rows, sub id, prices) |
 | #18 — discounts ride the membership/item (drop the parallel list) | ✅ DONE ("Part E") |
-| #19 — preview due-now vs recurring split | ❌ not done |
+| #19 — preview due-now vs recurring split | 🟡 read TOGGLE done (`build_sync_params(..., preview)`; reads bind `:excluded_statuses`); caller-side `preview_*` staging + cleanup + the response split still TODO |
 | #20 — extract once-consumption/end_date settle | ✅ DONE (`PaymentSyncOnceDiscounts`) |
 | #21 — `update_payments_recurring -> None` | ✅ DONE — returns None; the start caller reads the DB (`applied` status), no return extraction |
 | #22 — explicit `proration_behavior` | ✅ DONE (incl. create-path `item.prorate` removal) |
 | #23 — shared `BillingParentResolver` | 🟡 resolver DONE; caller migration deferred |
 | #24 (NEW) — coupon I/O via `PaymentsStripeDiscountService` | ✅ DONE |
 | #25 (NEW) — concurrency / global member lock | ❌ to design |
+| #26 (NEW) — never archive Stripe prices (DB `is_active` gates current) | ✅ DONE |
+| #27 (NEW) — `next_due_date` / `last_paid_date` gym-local (was UTC, off-by-one east of UTC) | ✅ DONE |
+| #28 (NEW) — `stripe_sync_status` NOT NULL + `not_added` (no NULL state) | ✅ DONE |
 
 Also done this session (not original audit items): the verified per-membership-sequential discount
 math; `ResolvedDiscounts` model (no tuple); `LineDiscountValue` bounds + XOR validators; the
 date-lifetime filter moved into SQL (`:today`); dead `IntervalBucket.total_price` removed;
-`sync-guide` + `payments-guide` brought current. **The engine is non-functional at the caller layer**
-until #16 (caller rewiring) lands.
+`PaymentSyncWriteback` (#17) + `update_payments_recurring -> None` (#21); the #16 read change
+(unfiltered base, pending rows visible) + the DB-first **START** caller; never-archive-prices (#26);
+gym-local dates (#27); `stripe_sync_status` NOT NULL + `not_added` (#28); the preview read toggle;
+`sync-guide` + `payments-guide` brought current. **The engine is still non-functional for the OTHER
+callers** (cancel/update_price/freeze/link) until they're rewired DB-first (#16 §2.1 in
+`FastApiBackend/TODO_SYNC_REFACTOR.md`).
 
 ---
 
@@ -549,5 +556,40 @@ around the lifecycle callers + the sync entry points).
 
 **Files:** `src/shared/database.py` (or a new lock helper), the lifecycle callers + the sync entry
 points, and `Database/supabase/schemas/` only if the UI `member_locks` table is chosen.
+
+## 26. Never archive Stripe prices — the DB gates the current price
+
+**Status:** ✅ DONE (membership-refactor worktree)
+
+**What landed:** Stripe prices are **never deactivated** anymore. Removed the `deactivate_price`
+calls from the price-version bump (`membership_plans_price.py` — kept `set_product_default_price`)
+and from the `update_membership` reconciliation (`payments_stripe_membership_service.py` — now
+activate-only; dropped the "not in request → deactivate" loop). The DB
+(`membership_plan_prices.is_active`) is the single gate for which price is current; every Stripe
+price stays active forever. **Why:** a gym can update a price while a subscription migration *onto*
+it is mid-flight — archiving the old Stripe price would break that migration. `deactivate_price` is
+now uncalled (kept as a primitive); payments-guide updated.
+
+## 27. `next_due_date` / `last_paid_date` are gym-local, not UTC
+
+**Status:** ✅ DONE
+
+**What landed:** Stripe billing anchors are pinned to midnight in the gym's timezone, so converting
+a period-end back via UTC lands `next_due_date` a day early for gyms **east of UTC** (US/west-of-UTC
+gyms were correct by coincidence). Added `stripe_ts_to_gym_date(ts, tz)` + `get_gym_timezone(session,
+gym_id)` to `src/shared/gym_timezone.py` (SQL in `src/shared/sql/`); used in BOTH the writeback and
+the `invoice.paid` webhook. Now consistent with `start_date` / `end_date` / `gym_today`. No schema
+change.
+
+## 28. `stripe_sync_status` NOT NULL + `not_added` (consistently an enum)
+
+**Status:** ✅ DONE — **needs a migration re-run**
+
+**What landed:** "Pending" is now the enum value `not_added`, not NULL. Added `not_added` to the
+enum; both columns are `NOT NULL DEFAULT 'not_added'`. Client views gate purely on the enum
+(`stripe_sync_status NOT IN ('not_added','preview_add','preview_remove')`) — they show
+`applied`/`deleted`/`migrating` (so the lifecycle status view, which reads the *filtered* view,
+keeps showing cancelled memberships), and hide pending + preview. Engine reads + Python `StripeSyncStatus`
+mirror + dbdiagram updated; inserts rely on the DB default.
 
 <!-- Entries appended below as we go. -->
