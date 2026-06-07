@@ -19,13 +19,20 @@ CREATE POLICY "Members can view own memberships"
         )
     );
 
--- Restrictive policy: authenticated users cannot see memberships without a Stripe item sync
+-- Restrictive policy: authenticated users only see memberships that are real and
+-- synced — both a Stripe item id (was actually put on Stripe) AND a sync status
+-- past the pending / preview-staging states. Kept in lockstep with the filtered
+-- `member_memberships` view's WHERE (schemas/member_memberships.sql) so the two
+-- never drift.
 CREATE POLICY "hide_incomplete_stripe_records"
     ON member_memberships_unfiltered
     AS RESTRICTIVE
     FOR SELECT
     TO authenticated
-    USING (stripe_item_id IS NOT NULL);
+    USING (
+        stripe_item_id IS NOT NULL
+        AND stripe_sync_status NOT IN ('not_added', 'preview_add', 'preview_remove')
+    );
 
 -- Column-level permissions: Revoke UPDATE on immutable columns
 REVOKE UPDATE ON TABLE member_memberships_unfiltered FROM authenticated;

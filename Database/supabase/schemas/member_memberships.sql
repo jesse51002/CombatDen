@@ -252,15 +252,20 @@ CREATE TRIGGER trg_recurring_chronological_start_date
     BEFORE INSERT ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION check_recurring_chronological_start_date();
 
--- View: gate on the sync-status enum — hide `not_added` (pending, not on Stripe
--- yet) and `preview_*` (dry-run staging) so the client only sees real synced
--- rows (applied / deleted / migrating). `member_memberships_status` reads this
--- view, so cancelled (`deleted`) rows must stay visible.
+-- View: gate on BOTH the Stripe id and the sync-status enum. A row with no
+-- `stripe_item_id` was never put on Stripe (not valid to surface), and the
+-- sync-status hides `not_added` (pending) and `preview_*` (dry-run staging), so
+-- the client only sees real synced rows (applied / deleted / migrating). The two
+-- conditions are kept in lockstep with the `hide_incomplete_stripe_records` RLS
+-- policy (`access_rules/member_memberships.sql`) so the view and RLS can't drift.
+-- `member_memberships_status` reads this view, so cancelled (`deleted`) rows —
+-- which keep their `stripe_item_id` — must stay visible.
 CREATE VIEW member_memberships
 WITH (security_invoker = true)
 AS
 SELECT * FROM member_memberships_unfiltered
-WHERE stripe_sync_status NOT IN ('not_added', 'preview_add', 'preview_remove');
+WHERE stripe_item_id IS NOT NULL
+  AND stripe_sync_status NOT IN ('not_added', 'preview_add', 'preview_remove');
 
 ALTER VIEW member_memberships SET (security_invoker = true);
 

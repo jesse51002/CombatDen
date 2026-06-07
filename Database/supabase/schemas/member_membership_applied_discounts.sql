@@ -83,14 +83,18 @@ CREATE INDEX idx_member_membership_applied_discounts_member
 CREATE INDEX idx_member_membership_applied_discounts_value
     ON member_membership_applied_discounts_unfiltered (value_id);
 
--- View: gate on the sync-status enum — hide `not_added` (pending, the discount
--- before the sync resolves its coupon) and `preview_*` (dry-run staging) so
--- clients only see synced applied discounts.
+-- View: gate on BOTH the Stripe coupon id and the sync-status enum. A row with
+-- no `stripe_coupon_id` has no coupon resolved yet (not valid to surface), and
+-- the sync-status hides `not_added` (pending) and `preview_*` (dry-run staging),
+-- so clients only see synced applied discounts. The two conditions are kept in
+-- lockstep with the `hide_incomplete_stripe_records` RLS policy
+-- (`access_rules/member_membership_applied_discounts.sql`) so they can't drift.
 CREATE VIEW member_membership_applied_discounts
 WITH (security_invoker = true)
 AS
 SELECT * FROM member_membership_applied_discounts_unfiltered
-WHERE stripe_sync_status NOT IN ('not_added', 'preview_add', 'preview_remove');
+WHERE stripe_coupon_id IS NOT NULL
+  AND stripe_sync_status NOT IN ('not_added', 'preview_add', 'preview_remove');
 
 -- Safety net: CLI migration diffing can strip security_invoker from CREATE VIEW
 ALTER VIEW member_membership_applied_discounts SET (security_invoker = true);
