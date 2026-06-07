@@ -18,9 +18,11 @@ Linked children POST with no card (they can hold none per the
 `linked_account_no_stripe` constraint); they still get a cardless Stripe
 customer, and the parent pays.
 
-Links and account freezes are applied in later passes (after memberships are
-started), since linking re-syncs the parent subscription and a frozen account
-can't start a membership.
+Member creation has no per-family billing lock, so it runs concurrently across
+members (each member is independent). Linking children to parents and account
+freezes happen later, inside the family-grouped membership pipeline
+(api_creation/memberships.py), since linking re-syncs the parent subscription
+and a frozen account can't start a membership.
 
 Idempotent: if a member with the same email already exists for this gym we
 skip the POST (where the Stripe customer-create round-trip lives), PUT any
@@ -31,10 +33,10 @@ from __future__ import annotations
 
 import uuid
 
-import progress
 from api_client import GymApiClient
-from api_creation.upsert import diff_update, find_member, find_member_by_id
-from constants import AUTH_MEMBERS_PER_GYM
+from api_creation.upsert import diff_update, find_member
+from concurrency import run_concurrent
+from constants import AUTH_MEMBERS_PER_GYM, SEED_WORKERS
 from generators import auth
 from generators.members import MemberPlan
 from supabase import Client
@@ -77,129 +79,91 @@ def _api_member_fields(member: MemberPlan) -> dict:
     }
 
 
+def _create_one(
+    api: GymApiClient,
+    client: Client,
+    gym_id: uuid.UUID,
+    idx: int,
+    member: MemberPlan,
+) -> bool:
+    """Create (or reconcile) one member. Returns True iff freshly created.
+
+    Mutates the MemberPlan in-place to set member_id. ``idx`` is the member's
+    position so the first AUTH_MEMBERS_PER_GYM get a real Supabase auth login.
+    Safe to run concurrently across members — each member is independent (no
+    per-family billing lock is taken here).
+    """
+    # Give the first few members a real auth login (idempotent by email).
+    if idx < AUTH_MEMBERS_PER_GYM and member.auth_user_id is None:
+        user = auth.create_user(client, member.email)
+        member.auth_user_id = uuid.UUID(user["id"])
+
+    existing = find_member(client, gym_id, member.email)
+    if existing is not None:
+        member.member_id = uuid.UUID(existing["member_id"])
+
+        # points_balance is rewards-managed (immutable to the API) and the
+        # user_id backfill is identity — both go direct via service-role.
+        direct = {"points_balance": member.points_balance}
+        if member.auth_user_id is not None and existing.get("user_id") is None:
+            direct["user_id"] = str(member.auth_user_id)
+        diff_update(client, "members", "member_id", str(member.member_id), direct, existing)
+
+        # Identity + contact drift goes through the API.
+        desired = _api_member_fields(member)
+        drifted = {k: v for k, v in desired.items() if existing.get(k) != v}
+        if drifted:
+            api.put(f"/api/v1/members/{member.member_id}", json={"data": drifted})
+        return False
+
+    payload: dict = {
+        "gym_id": str(gym_id),
+        "first_name": member.first_name,
+        "last_name": member.last_name,
+        "email": member.email,
+        **_contact_fields(member),
+    }
+    if member.current_rank_id is not None:
+        payload["current_rank_id"] = str(member.current_rank_id)
+    if member.auth_user_id is not None:
+        payload["user_id"] = str(member.auth_user_id)
+    # Every member is provisioned a Stripe customer at creation. Non-children
+    # also get a default card in the same call; linked children hold no card
+    # (the parent pays) and are linked under the parent in the family pipeline.
+    if not member.is_linked_child:
+        payload["payment_method_id"] = "pm_card_visa"
+
+    resp = api.post("/api/v1/members/", json=payload)
+    assert resp is not None, "POST /members returned no body"
+    member.member_id = uuid.UUID(resp["member_id"])
+
+    # points_balance is rewards-managed — the create endpoint won't accept
+    # it, so set it directly via service-role.
+    if member.points_balance:
+        client.table("members").update(
+            {"points_balance": member.points_balance}
+        ).eq("member_id", str(member.member_id)).execute()
+
+    return True
+
+
 def create_all(
     api: GymApiClient,
     client: Client,
     gym_id: uuid.UUID,
     members: list[MemberPlan],
+    workers: int = SEED_WORKERS,
 ) -> CreateAllResult:
     """POST /members for every member plan (or reuse an existing row).
 
-    Mutates each MemberPlan in-place to set member_id. The first
+    Mutates each MemberPlan in-place to set member_id. Runs concurrently across
+    members (no per-family lock is taken at creation). The first
     AUTH_MEMBERS_PER_GYM members get a real Supabase auth login.
     """
-    had_any_new = False
-
-    total = len(members)
-    for idx, member in enumerate(members):
-        progress.item(
-            idx + 1, total, f"{member.first_name} {member.last_name}"
-        )
-        # Give the first few members a real auth login (idempotent by email).
-        if idx < AUTH_MEMBERS_PER_GYM and member.auth_user_id is None:
-            user = auth.create_user(client, member.email)
-            member.auth_user_id = uuid.UUID(user["id"])
-
-        existing = find_member(client, gym_id, member.email)
-        if existing is not None:
-            member.member_id = uuid.UUID(existing["member_id"])
-
-            # points_balance is rewards-managed (immutable to the API) and the
-            # user_id backfill is identity — both go direct via service-role.
-            direct = {"points_balance": member.points_balance}
-            if member.auth_user_id is not None and existing.get("user_id") is None:
-                direct["user_id"] = str(member.auth_user_id)
-            diff_update(client, "members", "member_id", str(member.member_id), direct, existing)
-
-            # Identity + contact drift goes through the API.
-            desired = _api_member_fields(member)
-            drifted = {k: v for k, v in desired.items() if existing.get(k) != v}
-            if drifted:
-                api.put(f"/api/v1/members/{member.member_id}", json={"data": drifted})
-            continue
-
-        had_any_new = True
-        payload: dict = {
-            "gym_id": str(gym_id),
-            "first_name": member.first_name,
-            "last_name": member.last_name,
-            "email": member.email,
-            **_contact_fields(member),
-        }
-        if member.current_rank_id is not None:
-            payload["current_rank_id"] = str(member.current_rank_id)
-        if member.auth_user_id is not None:
-            payload["user_id"] = str(member.auth_user_id)
-        # Every member is provisioned a Stripe customer at creation. Non-children
-        # also get a default card in the same call; linked children hold no card
-        # (the parent pays) and get the linked tier applied when linked below.
-        if not member.is_linked_child:
-            payload["payment_method_id"] = "pm_card_visa"
-
-        resp = api.post("/api/v1/members/", json=payload)
-        assert resp is not None, "POST /members returned no body"
-        member.member_id = uuid.UUID(resp["member_id"])
-
-        # points_balance is rewards-managed — the create endpoint won't accept
-        # it, so set it directly via service-role.
-        if member.points_balance:
-            client.table("members").update(
-                {"points_balance": member.points_balance}
-            ).eq("member_id", str(member.member_id)).execute()
-
-    return CreateAllResult(had_any_new=had_any_new)
-
-
-def apply_links(api: GymApiClient, members: list[MemberPlan]) -> None:
-    """Link each child to its parent via the backend.
-
-    Runs AFTER parent memberships are started: the link endpoint requires the
-    parent to have an active subscription and re-syncs it to apply the linked
-    discount tier. The endpoint also clears any child card/freeze state.
-    """
-    by_handle: dict[str, MemberPlan] = {m.local_handle: m for m in members}
-    children = [m for m in members if m.is_linked_child]
-    total = len(children)
-    for n, member in enumerate(children, start=1):
-        parent = by_handle.get(member.linked_primary_handle)
-        name = f"{member.first_name} {member.last_name}"
-        if parent is None or parent.member_id is None or member.member_id is None:
-            progress.item(n, total, f"{name} — link SKIPPED (parent unresolved)")
-            continue
-        progress.item(
-            n, total, f"{name} — link to {parent.first_name} {parent.last_name}"
-        )
-        api.put(
-            f"/api/v1/members/{member.member_id}/link",
-            json={"parent_member_id": str(parent.member_id)},
-        )
-
-
-def apply_freezes(client: Client, members: list[MemberPlan]) -> None:
-    """Set account-level freeze windows on members directly.
-
-    Runs after memberships are started (the backend rejects starting a
-    membership on a frozen account). Freeze lives on the account row; the
-    member_memberships_status view derives 'frozen' from it. Children never
-    carry a freeze (the linked_account_no_stripe constraint forbids it —
-    they inherit the parent's window through the status view).
-    """
-    eligible = [
-        m
-        for m in members
-        if not m.is_linked_child and m.account_freeze_start is not None
-    ]
-    total = len(eligible)
-    for n, member in enumerate(eligible, start=1):
-        assert member.member_id is not None
-        name = f"{member.first_name} {member.last_name}"
-        existing = find_member_by_id(client, member.member_id)
-        if existing is None:
-            progress.item(n, total, f"{name} — freeze SKIPPED (member not found)")
-            continue
-        progress.item(n, total, f"{name} — apply account freeze")
-        expected = {
-            "freeze_start_date": member.account_freeze_start.isoformat(),
-            "freeze_end_date": member.account_freeze_end.isoformat(),
-        }
-        diff_update(client, "members", "member_id", str(member.member_id), expected, existing)
+    created_flags = run_concurrent(
+        list(enumerate(members)),
+        lambda pair: _create_one(api, client, gym_id, pair[0], pair[1]),
+        label="member",
+        workers=workers,
+    )
+    return CreateAllResult(had_any_new=any(created_flags))

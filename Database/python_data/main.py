@@ -13,16 +13,20 @@ Flow:
        a. Clone the rank ladder into gym_ranks (direct DB).
        b. Plans + prices via the backend (real Stripe products/prices).
        c. Discounts (regular-only presets) via the backend (coupons computed
-          at sync, not on the preset).
-       d. Build the per-member billing lifecycle, then create every member
-          via the backend (POST /members shell -> contact UPDATE -> PUT /card
-          creates the Stripe customer). The backend member_id threads into all
-          engagement seeding below.
+          at sync, not on the preset). The catalog randomizes %/$ , once vs
+          ongoing, and duration.
+       d. Build the per-member billing lifecycle (incl. a random
+          0-DISCOUNTS_PER_MEMBERSHIP_MAX discount set per membership), then
+          create every member concurrently via the backend (POST /members shell
+          -> contact UPDATE -> PUT /card creates the Stripe customer). The
+          backend member_id threads into all engagement seeding below.
        e. Historical (closed) memberships inserted direct-DB BEFORE live ones
           (keeps the recurring chronological/no-active triggers happy).
-       f. Live memberships via the backend (real Stripe subscriptions).
-       g. Link children to parents; apply account freezes.
-       h. A couple of overdue members via Stripe test clocks (direct Stripe).
+       f. Live memberships via the backend (real Stripe subscriptions),
+          concurrent BY FAMILY: each paying-parent family runs its sequence
+          (start parent -> link + start children -> freeze -> apply discounts)
+          on one worker, several families at once.
+       g. A couple of overdue members via Stripe test clocks (direct Stripe).
        i. Engagement (direct DB, keyed on the backend member_ids): classes,
           class_history + attendance, rewards + redemptions, activities.
        j. Invoice + charge history (direct DB, synthetic Stripe IDs).
@@ -95,33 +99,35 @@ def seed() -> None:
             ranks = bs_ranks.create_gym_ranks(client, gym_id, gym_type)
             progress.log(f"  {len(ranks)} ranks")
 
-            # Plans + prices (real Stripe products + prices); the first plan
-            # gets linked (family) discounts — the backend mints a real `linked`
-            # discount entry per entered tier amount and stores their ids on the
-            # plan (linked_discount_ids).
+            # Plans + prices (real Stripe products + prices).
             progress.log("Creating plans...")
             plan_records = api_plans.create_all(
-                api, client, gym_id, PLANS_PER_GYM, linked_prices=[2000, 3000]
+                api, client, gym_id, PLANS_PER_GYM
             )
             progress.log(f"  {len(plan_records)} plans")
 
-            # Discounts (regular presets; coupons computed at sync).
+            # Discounts (regular presets; coupons computed at sync). The catalog
+            # randomizes %/$ , once/ongoing, and duration; memberships draw a
+            # random subset of it below.
             progress.log("Creating discounts...")
             regular_discounts = api_discounts.create_regular(
                 api, client, gym_id, DISCOUNTS_PER_GYM
             )
             progress.log(f"  {len(regular_discounts)} discounts")
 
-            # Build the per-member billing lifecycle (memberships are seeded
-            # discount-free — discounts are explicit snapshot adds, Phase 2).
+            # Build the per-member billing lifecycle. Each live membership is
+            # pre-assigned a random 0-DISCOUNTS_PER_MEMBERSHIP_MAX set of the
+            # gym's discounts (applied when the membership is started below).
             progress.log("Building member plans...")
             member_plans = members_generator.build_plans(
                 gym_handle=f"gym-{gym_id}",
                 ranks=ranks,
                 plans=plan_records,
+                discounts=regular_discounts,
             )
 
             # Create every member via the backend (real Stripe customers).
+            # Concurrent across members — creation takes no per-family lock.
             progress.log(f"Creating {len(member_plans)} members via API...")
             result = api_members.create_all(api, client, gym_id, member_plans)
 
@@ -135,37 +141,16 @@ def seed() -> None:
                 history_rows = gen_memberships.create_history(client, gym_id, member_plans)
                 progress.log(f"  {len(history_rows)} historical rows")
 
-            # Live memberships for paying parents + solo members (real Stripe
-            # subscriptions).
-            progress.log("Starting live memberships via API...")
-            current_records = api_memberships.create_current(api, client, gym_id, member_plans)
-            progress.log(f"  {len(current_records)} live memberships")
-
-            # Link children to parents (parents now have an active sub).
-            api_members.apply_links(api, member_plans)
-
-            # Now that children are linked, start each child's own membership —
-            # it rides the parent's subscription (linking required the child to
-            # have no active membership, so this must run AFTER apply_links).
-            child_records = api_memberships.create_current(
-                api, client, gym_id, member_plans, linked_children=True
+            # Live memberships, concurrent BY FAMILY: each paying-parent family
+            # runs its sequence on one worker (start parent -> link + start each
+            # child -> freeze -> apply that membership's random discounts), and
+            # several families run at once. Families have disjoint per-parent
+            # lock keys, so concurrency never contends the billing lock.
+            progress.log("Starting live memberships + discounts via API...")
+            current_records = api_memberships.create_memberships(
+                api, client, gym_id, member_plans
             )
-            current_records += child_records
-            progress.log(f"  {len(child_records)} linked-child memberships")
-
-            # Apply account freezes (can't start a membership while frozen).
-            api_members.apply_freezes(client, member_plans)
-
-            # Apply the plan's linked (family) discount to members on that plan
-            # so the seed exercises real linked discount snapshots end-to-end.
-            if plan_records and plan_records[0].linked_discount_ids:
-                n_linked = api_memberships.apply_linked(
-                    api,
-                    plan_records[0].linked_discount_ids,
-                    current_records,
-                    plan_records[0].plan_id,
-                )
-                progress.log(f"  applied linked discount to {n_linked} member(s)")
+            progress.log(f"  {len(current_records)} live memberships")
 
             # A couple of overdue members via Stripe test clocks.
             if result.had_any_new:
