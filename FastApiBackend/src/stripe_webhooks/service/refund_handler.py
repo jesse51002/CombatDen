@@ -87,7 +87,10 @@ class RefundHandler:
                 "status": CHARGE_STATUS_SUCCEEDED,
                 "amount": -int(refund.get("amount") or 0),
                 "currency": refund.get("currency", "usd"),
-                "payment_method_type": None,
+                # A refund reverses the parent charge — carry its card so the
+                # refund row shows which card the money went back to.
+                "payment_method_type": parent.get("payment_method_type"),
+                "card_last_four": parent.get("card_last_four"),
                 "stripe_charge_id": None,
                 "stripe_refund_id": stripe_refund_id,
                 "refunds_charge_id": str(parent["charge_id"]),

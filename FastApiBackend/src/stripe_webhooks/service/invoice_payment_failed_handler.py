@@ -148,7 +148,10 @@ class InvoicePaymentFailedHandler:
             "status": CHARGE_STATUS_FAILED,
             "amount": int(invoice.get("amount_due") or 0),
             "currency": invoice.get("currency", "usd"),
+            # A failed attempt carries no charge on the invoice payload, so
+            # the method type / card last 4 aren't available here.
             "payment_method_type": None,
+            "card_last_four": None,
             "stripe_charge_id": None,
             "stripe_refund_id": None,
             "refunds_charge_id": None,

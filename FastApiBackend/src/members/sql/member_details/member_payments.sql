@@ -70,7 +70,23 @@ SELECT
          FROM member_invoice_applied_discounts ad
          WHERE ad.invoice_id = i.invoice_id),
         '[]'::jsonb
-    ) AS applied_discounts
+    ) AS applied_discounts,
+    -- Every charge against this invoice (each retry + the success + any
+    -- refunds), so the invoice popup can show the full attempt history.
+    COALESCE(
+        (SELECT jsonb_agg(jsonb_build_object(
+            'charge_id', ac.charge_id,
+            'kind', ac.kind,
+            'status', ac.status,
+            'amount', ac.amount,
+            'payment_method_type', ac.payment_method_type,
+            'card_last_four', ac.card_last_four,
+            'charge_time', ac.charge_time
+         ) ORDER BY ac.charge_time, ac.charge_id)
+         FROM member_charges ac
+         WHERE ac.invoice_id = i.invoice_id),
+        '[]'::jsonb
+    ) AS attempts
 FROM member_charges c
 JOIN member_invoices i ON i.invoice_id = c.invoice_id
 CROSS JOIN ctx

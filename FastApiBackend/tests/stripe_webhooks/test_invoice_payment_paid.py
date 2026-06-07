@@ -19,7 +19,10 @@ from sqlalchemy import text
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
     InvoiceNotYetRecordedError,
 )
-from tests.stripe_webhooks.conftest import fake_charge_id_for
+from tests.stripe_webhooks.conftest import (
+    FAKE_PI_CARD_LAST4,
+    fake_charge_id_for,
+)
 from tests.stripe_webhooks.event_builders import (
     make_invoice_paid_event,
     make_invoice_payment_paid_event,
@@ -50,7 +53,7 @@ async def _fetch_charge_for_invoice(db_pool, stripe_invoice_id: str) -> dict | N
         result = await session.execute(
             text(
                 "SELECT kind, status, amount, currency, member_id, "
-                "payment_method_type, stripe_charge_id "
+                "payment_method_type, card_last_four, stripe_charge_id "
                 "FROM member_charges "
                 "WHERE invoice_id = ("
                 "  SELECT invoice_id FROM member_invoices "
@@ -107,9 +110,45 @@ async def test_card_payment_records_succeeded_charge(
     assert charge["status"] == "succeeded"
     assert charge["amount"] == 5000
     assert charge["currency"] == "usd"
+    # No expanded charge → method/card detail unknown (degrades gracefully).
     assert charge["payment_method_type"] is None
+    assert charge["card_last_four"] is None
     assert charge["stripe_charge_id"] == fake_charge_id_for(pi)
     assert str(charge["member_id"]) == str(webhook_fixture.member_id)
+
+
+async def test_card_payment_captures_method_and_last_four(
+    stripe_webhooks_service,
+    db_pool,
+    stripe_account_id,
+    webhook_fixture,
+):
+    """When the PI's ``latest_charge`` expands, we record the real method
+    type ('card') and the card's last four."""
+    sid = "in_test_inpay_last4_1"
+    pi = "pi_test_inpay_last4_1"
+    FAKE_PI_CARD_LAST4[pi] = "4242"
+    try:
+        await _record_invoice(
+            stripe_webhooks_service, stripe_account_id, webhook_fixture,
+            stripe_invoice_id=sid, amount=5000,
+        )
+        await stripe_webhooks_service.handle_event(
+            make_invoice_payment_paid_event(
+                stripe_account_id=stripe_account_id,
+                stripe_invoice_id=sid,
+                amount_paid=5000,
+                payment_intent_id=pi,
+            )
+        )
+    finally:
+        FAKE_PI_CARD_LAST4.pop(pi, None)
+
+    charge = await _fetch_charge_for_invoice(db_pool, sid)
+    assert charge is not None
+    assert charge["payment_method_type"] == "card"
+    assert charge["card_last_four"] == "4242"
+    assert charge["stripe_charge_id"] == fake_charge_id_for(pi)
 
 
 async def test_out_of_band_payment_records_cash_charge(

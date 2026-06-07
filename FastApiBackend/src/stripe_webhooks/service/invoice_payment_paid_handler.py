@@ -87,8 +87,8 @@ class InvoicePaymentPaidHandler:
             )
 
         stripe_account_id = event.get("account")
-        charge_id, payment_method_type = await self._resolve_charge(
-            invoice_payment, stripe_account_id
+        charge_id, payment_method_type, card_last_four = (
+            await self._resolve_charge(invoice_payment, stripe_account_id)
         )
 
         amount_paid = int(invoice_payment.get("amount_paid") or 0)
@@ -114,6 +114,7 @@ class InvoicePaymentPaidHandler:
             amount=amount_paid,
             stripe_charge_id=charge_id,
             payment_method_type=payment_method_type,
+            card_last_four=card_last_four,
         )
 
     async def _lookup_invoice(
@@ -137,35 +138,64 @@ class InvoicePaymentPaidHandler:
         self,
         invoice_payment: dict[str, Any],
         stripe_account_id: str | None,
-    ) -> tuple[str | None, str | None]:
-        """Return ``(stripe_charge_id, payment_method_type)`` for the payment.
+    ) -> tuple[str | None, str | None, str | None]:
+        """Return ``(charge_id, payment_method_type, card_last_four)``.
 
-        A card/bank payment carries a PaymentIntent — retrieve it to read
-        ``latest_charge``. An out-of-band payment is cash (no charge id).
+        A card/bank payment carries a PaymentIntent — retrieve it with
+        ``latest_charge`` expanded so we read the real payment method type
+        (the webhook itself doesn't carry it) and, for a card, its last 4.
+        An out-of-band payment is cash (no charge id, no card).
         """
         payment = invoice_payment.get("payment") or {}
         payment_type = payment.get("type")
 
         if payment_type == PAYMENT_TYPE_OUT_OF_BAND:
-            return None, PAYMENT_METHOD_TYPE_CASH
+            return None, PAYMENT_METHOD_TYPE_CASH, None
 
         if payment_type == PAYMENT_TYPE_PAYMENT_INTENT:
             payment_intent_id = payment.get("payment_intent")
             if not payment_intent_id or not stripe_account_id:
-                return None, None
+                return None, None, None
             opts = PaymentsStripeClient.connect_opts_readonly(stripe_account_id)
             intent = await self._stripe.v1.payment_intents.retrieve_async(
                 payment_intent_id,
+                params={"expand": ["latest_charge"]},
                 options=opts,
             )
-            latest_charge = getattr(intent, "latest_charge", None)
-            # ``latest_charge`` is a charge id string by default; tolerate an
-            # expanded object too.
-            if isinstance(latest_charge, dict):
-                latest_charge = latest_charge.get("id")
-            return latest_charge, None
+            return self._read_charge_details(
+                getattr(intent, "latest_charge", None)
+            )
 
-        return None, None
+        return None, None, None
+
+    @staticmethod
+    def _attr(obj: Any, key: str) -> Any:
+        """Read ``key`` off a Stripe object or a plain dict (or None)."""
+        if obj is None:
+            return None
+        if isinstance(obj, dict):
+            return obj.get(key)
+        return getattr(obj, key, None)
+
+    def _read_charge_details(
+        self,
+        charge: Any,
+    ) -> tuple[str | None, str | None, str | None]:
+        """Pull ``(charge_id, payment_method_type, card_last_four)`` from an
+        (expanded) charge. Degrades gracefully: an unexpanded id string still
+        yields the charge id, just without the method/card detail.
+        """
+        if charge is None:
+            return None, None, None
+        if isinstance(charge, str):
+            return charge, None, None
+        charge_id = self._attr(charge, "id")
+        details = self._attr(charge, "payment_method_details")
+        method_type = self._attr(details, "type")
+        card_last_four = None
+        if method_type == "card":
+            card_last_four = self._attr(self._attr(details, "card"), "last4")
+        return charge_id, method_type, card_last_four
 
     async def _insert_charge(
         self,
@@ -178,6 +208,7 @@ class InvoicePaymentPaidHandler:
         amount: int,
         stripe_charge_id: str | None,
         payment_method_type: str | None,
+        card_last_four: str | None,
     ) -> None:
         insert_sql = load_sql(SQL_DIR / "member_charge_insert.sql")
         paid_at_ts = (
@@ -195,6 +226,7 @@ class InvoicePaymentPaidHandler:
                 "amount": amount,
                 "currency": invoice_payment.get("currency", "usd"),
                 "payment_method_type": payment_method_type,
+                "card_last_four": card_last_four,
                 "stripe_charge_id": stripe_charge_id,
                 "stripe_refund_id": None,
                 "refunds_charge_id": None,

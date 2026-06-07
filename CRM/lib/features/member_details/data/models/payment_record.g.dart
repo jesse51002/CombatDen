@@ -35,4 +35,9 @@ PaymentRecord _$PaymentRecordFromJson(Map<String, dynamic> json) =>
               )
               .toList() ??
           [],
+      attempts:
+          (json['attempts'] as List<dynamic>?)
+              ?.map((e) => InvoiceAttempt.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );

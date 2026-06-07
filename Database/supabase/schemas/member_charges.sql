@@ -21,6 +21,7 @@ CREATE TABLE member_charges (
     amount INTEGER NOT NULL,  -- signed: payment >= 0, refund <= 0
     currency CHAR(3) NOT NULL DEFAULT 'usd',
     payment_method_type VARCHAR,  -- 'card' | 'us_bank_account' | 'cash' | ...
+    card_last_four VARCHAR,  -- last 4 of the card, when the charge was on a card
 
     -- Exactly one of these is populated per row (enforced by kind-based checks).
     stripe_charge_id VARCHAR UNIQUE,

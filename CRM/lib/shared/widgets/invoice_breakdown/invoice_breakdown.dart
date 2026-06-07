@@ -111,6 +111,30 @@ class InvoiceBreakdown extends StatelessWidget {
             emphasised: true,
           ),
         ],
+        if (data.attempts.isNotEmpty) ...[
+          Divider(
+            color: DesignConstants.divider,
+            height: 1,
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              Text(
+                'Payment attempts',
+                style: DesignConstants.h3.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+              ...data.attempts.map(
+                (a) => _AttemptRow(
+                  attempt: a,
+                  currency: data.currency,
+                ),
+              ),
+            ],
+          ),
+        ],
         if (onRefundPressed != null)
           AppOutlineButton(
             fullWidth: true,
@@ -210,6 +234,63 @@ class _LineRow extends StatelessWidget {
         Text(
           formatMinorUnits(amount, currency: currency),
           style: style,
+        ),
+      ],
+    );
+  }
+}
+
+/// One payment attempt row: the method + time on the left, a
+/// status chip and the signed amount on the right.
+class _AttemptRow extends StatelessWidget {
+  final InvoiceAttemptLine attempt;
+  final String currency;
+
+  const _AttemptRow({
+    required this.attempt,
+    required this.currency,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingTiny,
+            children: [
+              Text(
+                attempt.method,
+                style: DesignConstants.p,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                attempt.timeLabel,
+                style: DesignConstants.pSmall.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: DesignConstants.spacingSmall,
+          children: [
+            InvoiceChip(
+              label: attempt.statusLabel,
+              tone: attempt.statusTone,
+            ),
+            Text(
+              formatMinorUnits(attempt.amount, currency: currency),
+              style: DesignConstants.p,
+            ),
+          ],
         ),
       ],
     );

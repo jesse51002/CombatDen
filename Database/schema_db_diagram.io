@@ -549,6 +549,7 @@ Table member_charges {
   amount integer [not null, note: 'signed: payment >= 0, refund <= 0']
   currency char(3) [not null, default: 'usd']
   payment_method_type varchar
+  card_last_four varchar [note: 'last 4 of the card, when on a card']
   stripe_charge_id varchar [unique, note: 'nullable']
   stripe_refund_id varchar [unique, note: 'nullable']
   refunds_charge_id uuid [note: 'nullable; self-FK to member_charges(charge_id)']

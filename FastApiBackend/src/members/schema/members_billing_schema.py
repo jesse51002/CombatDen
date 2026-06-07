@@ -206,6 +206,23 @@ class BillingLineItemRecord(BaseModel):
     item_id: UUID | None = None
 
 
+class BillingInvoiceAttempt(BaseModel):
+    """One charge against an invoice — a retry, the success, or a refund.
+
+    The invoice popup lists every attempt so staff see the full payment
+    history of a single invoice (e.g. a failed card, then a successful one),
+    each with its method and, for a card, the last four digits.
+    """
+
+    charge_id: UUID
+    kind: ChargeKind
+    status: ChargeStatus
+    amount: int
+    payment_method_type: str | None = None
+    card_last_four: str | None = None
+    charge_time: datetime
+
+
 class BillingPaymentRecord(BaseModel):
     """A single charge (payment or refund) against an invoice.
 
@@ -230,6 +247,7 @@ class BillingPaymentRecord(BaseModel):
     paid_by_photo_url: str | None = None
     line_items: list[BillingLineItemRecord] = []
     applied_discounts: list[BillingDiscountInfo] = []
+    attempts: list[BillingInvoiceAttempt] = []
 
 
 class BillingCardOnFile(BaseModel):

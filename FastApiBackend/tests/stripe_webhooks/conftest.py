@@ -61,14 +61,45 @@ def fake_charge_id_for(payment_intent_id: str) -> str:
     return f"ch_for_{payment_intent_id}"
 
 
+# When set for a PI id, the fake returns an EXPANDED charge carrying this
+# card last 4 (and method type 'card'); otherwise ``latest_charge`` is a bare
+# charge-id string, matching a retrieve where the expand resolved nothing.
+FAKE_PI_CARD_LAST4: dict[str, str] = {}
+
+
+class _FakeCard:
+    def __init__(self, last4: str) -> None:
+        self.last4 = last4
+
+
+class _FakePaymentMethodDetails:
+    def __init__(self, type_: str, card: _FakeCard) -> None:
+        self.type = type_
+        self.card = card
+
+
+class _FakeCharge:
+    def __init__(self, charge_id: str, last4: str) -> None:
+        self.id = charge_id
+        self.payment_method_details = _FakePaymentMethodDetails(
+            "card", _FakeCard(last4)
+        )
+
+
 class _FakePaymentIntent:
-    def __init__(self, latest_charge: str) -> None:
+    def __init__(self, latest_charge: object) -> None:
         self.latest_charge = latest_charge
 
 
 class _FakePaymentIntents:
-    async def retrieve_async(self, payment_intent_id, options=None):
-        return _FakePaymentIntent(fake_charge_id_for(payment_intent_id))
+    async def retrieve_async(
+        self, payment_intent_id, params=None, options=None
+    ):
+        charge_id = fake_charge_id_for(payment_intent_id)
+        last4 = FAKE_PI_CARD_LAST4.get(payment_intent_id)
+        if last4 is not None:
+            return _FakePaymentIntent(_FakeCharge(charge_id, last4))
+        return _FakePaymentIntent(charge_id)
 
 
 # Discounts the fake invoice-retrieve should return per invoice id, set by a

@@ -5,6 +5,7 @@ import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
+import 'package:crm/features/member_details/data/models/invoice_attempt.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/presentation/dialogs/refund_charge_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
@@ -93,7 +94,50 @@ class PaymentInvoiceDialog extends StatelessWidget {
             ),
           )
           .toList(),
+      attempts: payment.attempts
+          .map(
+            (a) => InvoiceAttemptLine(
+              method: _attemptMethod(a),
+              timeLabel: formatDay(a.chargeTime),
+              amount: a.amount,
+              statusLabel: _attemptStatusLabel(a),
+              statusTone: _attemptStatusTone(a),
+            ),
+          )
+          .toList(),
     );
+  }
+
+  /// "•••• 4242" for a card, "Cash" for cash, else the method
+  /// type (or "—" when we never captured one — e.g. a failed
+  /// attempt, whose card isn't on the webhook payload).
+  String _attemptMethod(InvoiceAttempt a) {
+    final last4 = a.cardLastFour;
+    if (last4 != null && last4.isNotEmpty) {
+      return '•••• $last4';
+    }
+    final type = a.paymentMethodType;
+    if (type == null || type.isEmpty) return '—';
+    if (type == 'cash') return 'Cash';
+    if (type == 'card') return 'Card';
+    return type;
+  }
+
+  String _attemptStatusLabel(InvoiceAttempt a) =>
+      a.kind == ChargeKind.refund
+          ? 'Refunded'
+          : a.status.displayLabel;
+
+  InvoiceChipTone _attemptStatusTone(InvoiceAttempt a) {
+    if (a.kind == ChargeKind.refund) {
+      return InvoiceChipTone.neutral;
+    }
+    return switch (a.status) {
+      ChargeStatus.succeeded => InvoiceChipTone.good,
+      ChargeStatus.pending => InvoiceChipTone.warning,
+      ChargeStatus.failed => InvoiceChipTone.bad,
+      ChargeStatus.unknown => InvoiceChipTone.neutral,
+    };
   }
 
   /// Closes the invoice, then routes the refund through the

@@ -16,6 +16,7 @@ from sqlalchemy import text
 from src.members import SQL_DIR
 from src.members.schema.members_billing_schema import (
     BillingDiscountInfo,
+    BillingInvoiceAttempt,
     BillingLineItemRecord,
     BillingPaymentRecord,
 )
@@ -82,6 +83,18 @@ class MembersPaymentsService:
             )
             for ad in (row["applied_discounts"] or [])
         ]
+        attempts = [
+            BillingInvoiceAttempt(
+                charge_id=at["charge_id"],
+                kind=at["kind"],
+                status=at["status"],
+                amount=at["amount"],
+                payment_method_type=at.get("payment_method_type"),
+                card_last_four=at.get("card_last_four"),
+                charge_time=at["charge_time"],
+            )
+            for at in (row["attempts"] or [])
+        ]
         return BillingPaymentRecord(
             charge_id=row["charge_id"],
             invoice_id=row["invoice_id"],
@@ -99,4 +112,5 @@ class MembersPaymentsService:
             paid_by_photo_url=row["paid_by_photo_url"],
             line_items=line_items,
             applied_discounts=applied,
+            attempts=attempts,
         )
