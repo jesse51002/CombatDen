@@ -10,8 +10,8 @@
 > primitives + webhooks). Read those for how the live system works.
 >
 > The transient **session-level engineering TODOs** (the per-parent concurrency
-> lock #25, the preview due-now/recurring split #19, the rewards endpoint) live in
-> `FastApiBackend/TODO_SYNC_REFACTOR.md`. This file holds the deferred **features**.
+> lock #25, the rewards endpoint) live in `FastApiBackend/TODO_SYNC_REFACTOR.md`.
+> This file holds the deferred **features**.
 
 ## 1. Scheduled reconciler (load-bearing, not built)
 
@@ -225,7 +225,31 @@ differ per member:
 - **Interaction with the per-member preview** (the add/remove discount preview) — the
   preview should be able to show the per-membership post-discount figure too.
 
-## 6. Open questions & cross-cutting deferrals
+## 6. Preview: split due-now vs recurring (not built)
+
+**Current state — one flat preview.** Every preview path
+(`preview_update_payments_recurring` → `PaymentSyncStripe.preview_execute_sync`)
+returns a single `PaymentsInvoicePreviewResponse` — one `amount_due` for the
+upcoming invoice, with no breakdown of what is charged **now** vs. what **recurs**,
+and no per-line classification.
+
+**What's needed — `{due_now, recurring}` with typed lines.** Restructure the preview
+into two buckets, each line carrying a `kind` (base / proration / discount) and its
+period, so the CRM can render "Due now $X = proration + first period − discount,
+then $Y/mo after" instead of one opaque total. This applies to **every** preview
+surface — start, price-change, and the add/remove-discount previews.
+
+**Touches:** `payments_invoice_schema.py` (the response shape),
+`payment_sync_stripe.py` (`preview_execute_sync` → emit the split), the preview
+callers + the `member_memberships_router.py` preview endpoints (including the
+`discounts/add` + `discounts/remove` previews), `Database/openapi.json` (regenerated,
+gitignored), the CRM preview UI, and the preview tests.
+
+**Open questions:** the exact line taxonomy (is `proration` always separable from
+`base`? where do multi-membership consolidated lines land?); and a dedicated
+due-now preview test landing with it. Confirm the shape before starting.
+
+## 7. Open questions & cross-cutting deferrals
 
 - **Discount auto-update (deferred).** Today a preset edit affects only *new*
   applications — existing snapshots stay pinned to their old value version (the
@@ -237,9 +261,6 @@ differ per member:
   deriving from a preset sits on the same plan/quantity shape, re-applying a changed
   value is unambiguous). Not decided — enabled by the provenance fields but
   intentionally not built.
-- **`gyms_stripe_connect_service.py` calls Stripe directly** (Connect onboarding) —
-  the one direct-Stripe caller outside `src/payments/`. Decide whether to route it
-  through a payments service.
-- **Session-level engineering TODOs** (the per-parent concurrency lock #25, the
-  preview due-now/recurring split #19, the rewards `GET /rewards/{reward_id}`
-  endpoint) are tracked in `FastApiBackend/TODO_SYNC_REFACTOR.md`, not here.
+- **Session-level engineering TODOs** (the per-parent concurrency lock #25 and the
+  rewards `GET /rewards/{reward_id}` endpoint) are tracked in
+  `FastApiBackend/TODO_SYNC_REFACTOR.md`, not here.

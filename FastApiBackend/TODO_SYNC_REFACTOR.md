@@ -234,23 +234,16 @@ settle and the §2.5 discount preview staging** (the `preview_remove`-races-a-re
   fail-fast 409 ("member is being updated, try again") vs. block-with-timeout. The user leaned "fix it
   properly"; flavor unconfirmed.
 
-### 3.4 🟡 §2.3 — Preview due-now vs recurring split (#19) — deferred feature
-Today `preview_*` returns ONE `PaymentsInvoicePreviewResponse`. Restructure to `{due_now, recurring}`
-with per-line `kind` (base / proration / discount) + period, so the CRM can render
-"Due now $X = proration + first period − discount." Touches `payments_invoice_schema.py`,
-`payment_sync_stripe.py` (`preview_execute_sync` → split), the preview callers + the
-`member_memberships_router.py` preview endpoints (now the `add`/`remove` previews too),
-`Database/openapi.json` (gitignored), the CRM preview UI, tests. **Confirm before starting.**
-
-### 3.5 Open decisions + smaller items
-- **`gyms_stripe_connect_service.py` calls Stripe directly** (Connect onboarding) — the one
-  direct-Stripe caller outside `src/payments/`. Decide whether to route it through a service. (§2.6
-  originally bundled this; only the RLS/view half was done.)
+### 3.4 Open decisions + smaller items
 - **Rewards `GET /rewards/{reward_id}` is unwired** — `RewardsService.get_reward` exists but no route;
   7 `TestGetReward` tests (in `tests/integration/test_rewards_integration.py`) expect it and 405.
   **Pre-existing, UNRELATED to this refactor** (since the base commit). User said leave it: decide to
   wire `GET /{reward_id} → get_reward` or delete the TestGetReward class.
-- **A NEW dedicated preview-due-now test once §2.3 lands.**
+
+> **Moved/resolved (no longer session TODOs):** the **preview due-now vs recurring split (#19)** is a
+> future feature, now in `FastApiBackend/PaymentRefactor.md` §6 (the roadmap). The
+> **`gyms_stripe_connect_service` direct-Stripe call** is **accepted as-is** — Connect onboarding talks
+> to Stripe directly on purpose; not a TODO.
 
 ---
 
