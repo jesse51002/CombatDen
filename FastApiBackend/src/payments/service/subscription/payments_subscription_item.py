@@ -56,8 +56,11 @@ class PaymentsSubscriptionItem(PaymentsSubscriptionBase):
         discount_ids: list[str] = []
         if hasattr(si, "discounts") and si.discounts:
             for d in si.discounts:
-                if hasattr(d, "coupon") and d.coupon:
-                    discount_ids.append(d.coupon.id)
+                # dahlia moved the coupon to discount.source.coupon — use the
+                # shared resolver (a raw d.coupon read silently yields nothing).
+                coupon_id = self._coupon_id_from_discount(d)
+                if coupon_id:
+                    discount_ids.append(coupon_id)
 
         return PaymentsSubscriptionItemResponse(
             stripe_subscription_item_id=si.id,
