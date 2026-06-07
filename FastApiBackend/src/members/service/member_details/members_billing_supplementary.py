@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.members import SQL_DIR
 from src.members.schema.members_billing_schema import (
-    BillingDiscountInfo,
     BillingLinkedAccount,
     BillingRewardCard,
 )
@@ -29,7 +28,6 @@ class MembersBillingSupplementary:
 
     def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db_pool = db_pool
-        self._discounts: dict[UUID, BillingDiscountInfo] = {}
         self._profiles: dict[UUID, BillingLinkedAccount] = {}
         self._rewards: dict[UUID, BillingRewardCard] = {}
         self._redeemed_rewards: list[BillingRewardCard] = []
@@ -53,7 +51,6 @@ class MembersBillingSupplementary:
         }
 
         async with self._db_pool.session() as session:
-            self._discounts = await self._fetch_discounts(session, gym_params)
             self._profiles = await self._fetch_profiles(session, gym_params)
             self._rewards = await self._fetch_rewards(session, gym_params)
             self._redeemed_rewards = await self._fetch_reward_redemptions(
@@ -63,30 +60,9 @@ class MembersBillingSupplementary:
 
     def _reset(self) -> None:
         """Clear all internal lookup state."""
-        self._discounts.clear()
         self._profiles.clear()
         self._rewards.clear()
         self._redeemed_rewards.clear()
-
-    async def _fetch_discounts(
-        self,
-        session: AsyncSession,
-        params: dict[str, str],
-    ) -> dict[UUID, BillingDiscountInfo]:
-        """Load gym discounts into lookup dict."""
-        sql = load_sql(_DETAILS_SQL / "member_details_discounts.sql")
-        result = await session.execute(text(sql), params)
-        discounts: dict[UUID, BillingDiscountInfo] = {}
-        for row in result.mappings().all():
-            discount = BillingDiscountInfo(
-                discount_id=row["discount_id"],
-                discount_name=row["discount_name"],
-                discount_type=row["discount_type"],
-                percentage_off=row["percentage_off"],
-                dollar_off=row["dollar_off"],
-            )
-            discounts[row["discount_id"]] = discount
-        return discounts
 
     async def _fetch_profiles(
         self,
@@ -171,11 +147,6 @@ class MembersBillingSupplementary:
             if profile:
                 accounts.append(profile)
         return accounts
-
-    @property
-    def discounts_dict(self) -> dict[UUID, BillingDiscountInfo]:
-        """Return the raw discounts lookup dict."""
-        return self._discounts
 
     @property
     def profiles_dict(self) -> dict[UUID, BillingLinkedAccount]:
