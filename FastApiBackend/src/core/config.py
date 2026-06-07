@@ -60,6 +60,12 @@ class Settings(BaseSettings):
 MONTHLY_BILLING_ANCHOR_DAY: Final[int] = 1  # 1st of month
 WEEKLY_BILLING_ANCHOR_WEEKDAY: Final[int] = 6  # Sunday (Python weekday: Mon=0, Sun=6)
 
+# Resource-lock (concurrency lease) timings — see src/shared/resource_lock.py
+LOCK_TTL_SECONDS: Final[int] = 60  # hard cap; a crashed/stuck holder self-heals
+LOCK_MAX_HOLD_SECONDS: Final[float] = 55.0  # abort the op before its lease expires (< TTL)
+LOCK_ACQUIRE_TIMEOUT_SECONDS: Final[float] = 5.0  # block this long, then LockBusyError -> 409
+LOCK_POLL_INTERVAL_SECONDS: Final[float] = 0.25  # retry cadence while waiting
+
 
 settings = Settings()
 

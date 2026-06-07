@@ -74,6 +74,7 @@ from src.shared.auth import Auth
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.resource_lock import ResourceLock
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
@@ -190,6 +191,12 @@ class DependencyInjector(containers.DeclarativeContainer):
         BillingParentResolver,
         db_pool=db_pool,
         gym_stripe_service=gym_stripe_service,
+    )
+    # Generic per-key concurrency lock (TTL lease). Billing ops guard on the
+    # paying-parent key so no two ops sync the same family at once.
+    resource_lock = providers.Factory(
+        ResourceLock,
+        db_pool=db_pool,
     )
     # Standalone freeze service: the dedicated freeze/unfreeze request resolves
     # the parent then calls this directly; the sync uses it for the maintenance
