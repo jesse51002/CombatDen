@@ -117,31 +117,37 @@ void main() {
   });
 
   group('previewInvoiceBreakdown', () {
-    test('maps lines plainly, surfacing subtotal only when it differs', () {
+    test('emits list price + per-line discount, reconciling to total', () {
+      // Stripe returns line.amount pre-discount and folds the coupon
+      // into discount_amounts; subtotal comes back already post-discount.
       const preview = PreviewInvoice(
         amountDue: 7200,
-        subtotal: 9000,
+        subtotal: 7200,
         total: 7200,
         currency: 'usd',
         lines: [
           PreviewInvoiceLine(
             amount: 9000,
             discountedAmount: 7200,
-            description: 'Boxing',
+            description: '3 × Premium',
           ),
         ],
       );
 
       final data = previewInvoiceBreakdown(preview, amountSuffix: '/mo');
 
-      expect(data.lines.single.amount, 9000);
-      expect(data.lines.single.previousAmount, isNull); // plain, no compare
-      expect(data.subtotal, 9000); // differs from total → surfaced
+      final line = data.lines.single;
+      expect(line.amount, 9000); // undiscounted list price
+      expect(line.discountAmount, -1800); // discountedAmount - amount
+      expect(line.previousAmount, isNull); // plain, no before/after
+      expect(data.subtotal, isNull); // discount line bridges to total
       expect(data.total, 7200);
+      // list + discount reconciles to the post-discount total.
+      expect(line.amount + line.discountAmount!, data.total);
       expect(data.amountSuffix, '/mo');
     });
 
-    test('subtotal omitted when equal to total', () {
+    test('no discount row when the net equals the list price', () {
       const preview = PreviewInvoice(
         amountDue: 9000,
         subtotal: 9000,
@@ -158,6 +164,7 @@ void main() {
 
       final data = previewInvoiceBreakdown(preview);
 
+      expect(data.lines.single.discountAmount, isNull);
       expect(data.subtotal, isNull);
     });
   });

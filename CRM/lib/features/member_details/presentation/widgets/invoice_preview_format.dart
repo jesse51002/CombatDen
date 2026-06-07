@@ -6,24 +6,27 @@ import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart
 /// the membership-start preview, the recurring half, and the
 /// overdue/upcoming card.
 ///
-/// Discount lines arrive inline as negative line items from Stripe, so
-/// the subtotal is only surfaced when it actually differs from the
-/// total. [amountSuffix] tags a recurring total as "/mo".
+/// Each line shows its undiscounted (list) price ([PreviewInvoiceLine.amount])
+/// and, beneath it, the discount on that line (`discountedAmount − amount`,
+/// negative). Stripe folds subscription coupons into `discount_amounts`
+/// (not separate negative lines) and returns an already-post-discount
+/// `subtotal`, so without this the lines would not reconcile with the
+/// post-discount [PreviewInvoice.total]. [amountSuffix] tags a recurring
+/// total as "/mo".
 InvoiceBreakdownData previewInvoiceBreakdown(
   PreviewInvoice preview, {
   String? amountSuffix,
 }) {
   return InvoiceBreakdownData(
-    lines: preview.lines
-        .map(
-          (l) => InvoiceLineItem(
-            description: l.description ?? 'Line item',
-            amount: l.amount,
-          ),
-        )
-        .toList(),
-    subtotal:
-        preview.subtotal == preview.total ? null : preview.subtotal,
+    lines: preview.lines.map((l) {
+      // Negative when the line is discounted (net below list).
+      final discount = l.discountedAmount - l.amount;
+      return InvoiceLineItem(
+        description: l.description ?? 'Line item',
+        amount: l.amount,
+        discountAmount: discount != 0 ? discount : null,
+      );
+    }).toList(),
     total: preview.total,
     currency: preview.currency,
     amountSuffix: amountSuffix,
