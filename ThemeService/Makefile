@@ -7,7 +7,7 @@ smoke:
 	poetry run python -m src --app-yaml apps/smoketest/app.yaml --customization-yaml apps/smoketest/customization.yaml
 
 api:
-	poetry run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+	poetry run python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8001 --reload
 
 test:
 	poetry run pytest tests/ -v

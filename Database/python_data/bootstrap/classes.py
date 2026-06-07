@@ -16,6 +16,7 @@ from schema.gym_class import (
 )
 from schema.gym_employee import GymEmployeeCreate
 from schema.member import MemberCreate
+from schema.member_membership import MemberMembershipCreate
 from supabase import Client
 
 
@@ -50,9 +51,10 @@ def create_history_and_attendance(
     gym_name: str,
     classes: list[GymClassCreate],
     members: list[MemberCreate],
+    membership_rows: list[MemberMembershipCreate],
 ) -> tuple[list[ClassHistoryCreate], list[MemberAttendanceCreate]]:
     history, attendance = classes_generator.generate_class_history_and_attendance(
-        gym_id, classes, members
+        gym_id, classes, members, membership_rows
     )
     if history:
         _bulk_insert(client, "class_history", history)

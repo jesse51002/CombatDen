@@ -19,6 +19,7 @@ dependencies = [
     "asyncpg (>=0.31.0,<0.32.0)",
     "python-dateutil (>=2.9.0.post0,<3.0.0)",
     "email-validator (>=2.3.0,<3.0.0)",
+    "stripe (>=15.2.0,<16.0.0)",
 ]
 
 [build-system]

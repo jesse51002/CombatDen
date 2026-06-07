@@ -5,6 +5,9 @@ CREATE TABLE gym_classes (
     gym_id UUID NOT NULL CONSTRAINT fk_class_gym REFERENCES gyms(gym_id),
     class_name VARCHAR NOT NULL CHECK (class_name <> ''),
     class_description VARCHAR,
+    -- JSONB array of plan_id strings allowed to attend this class.
+    -- NULL = all plans allowed (used by the check-in eligibility gate).
+    allowed_plan_ids JSONB,
     max_capacity INTEGER CHECK (max_capacity > 0),
     image_url VARCHAR,
     points_worth INTEGER NOT NULL DEFAULT 50 CHECK (points_worth > 0),

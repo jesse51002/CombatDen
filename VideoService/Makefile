@@ -1,4 +1,4 @@
-.PHONY: api test gym-check sync-gyms import-yaml sync-gyms-prod import-yaml-prod scrape scan docker-build ecr-push pause resume
+.PHONY: api test gym-check sync-gyms sync-gyms-prod scrape scan docker-build ecr-push pause resume
 
 # `python -m uvicorn` (not the console script) survives stale .venv shebangs
 # left over from the CustomYoutubeService -> VideoService rename.
@@ -17,31 +17,26 @@ gym-check:
 	poetry run python -m scripts.gym_maker.run check $(if $(filter all,$(GYM_ID)),--all,--gym-id $(GYM_ID))
 
 # Sync the authored gym YAML files into SQL (video_gym + query/class/reward
-# tables). Idempotent; never touches the curated feed. Run after the migration
-# creates the video_* tables. Usage: make sync-gyms GYM_ID=vinyasa (GYM_ID=all).
+# tables), then load the existing videos/ pool + each gym's good/rejected feeds
+# into SQL (pool upserts, feeds rewrite per gym — both idempotent, no re-scrape).
+# The append-only cost_log is intentionally NOT imported here (--skip-cost-log)
+# so re-running never duplicates ledger rows; import it once by hand if needed:
+#   poetry run python -m scripts.import_yaml.run
+# Run after the migration creates the video_* tables.
+# Usage: make sync-gyms GYM_ID=vinyasa  (GYM_ID=all for every gym).
 # Targets the local DB (.env) by default; ENV_FILE=.env.prod targets prod, e.g.
 #   ENV_FILE=.env.prod make sync-gyms GYM_ID=all
 sync-gyms:
 	poetry run python -m scripts.sync_gyms.run $(if $(filter all,$(GYM_ID)),--all,--gym-id $(GYM_ID))
-
-# One-time cutover: load the EXISTING videos/ pool + each gym's good/rejected
-# feeds + cost_log.yaml into SQL (no re-scrape). Run AFTER `make sync-gyms
-# GYM_ID=all`. Re-runnable; pass --skip-cost-log to avoid duplicate ledger rows.
-# Local DB (.env) by default; ENV_FILE=.env.prod targets prod, e.g.
-#   ENV_FILE=.env.prod make import-yaml
-import-yaml:
-	poetry run python -m scripts.import_yaml.run
+	poetry run python -m scripts.import_yaml.run --skip-cost-log
 
 # --- Prod (.env.prod) — same as above but against the prod DB ---------------
 # Needs a .env.prod with the prod DATABASE_URL (gitignored). The host is logged
-# before any write so you can confirm you're hitting prod.
+# before any write so you can confirm you're hitting prod. ENV_FILE propagates
+# through the sync-gyms call, so this runs the sync + import against prod.
 # Usage: make sync-gyms-prod GYM_ID=all
 sync-gyms-prod:
 	ENV_FILE=.env.prod $(MAKE) --no-print-directory sync-gyms GYM_ID=$(GYM_ID)
-
-# Usage: make import-yaml-prod
-import-yaml-prod:
-	ENV_FILE=.env.prod $(MAKE) --no-print-directory import-yaml
 
 # Scrape + classify the shared pool in one run: gather the gyms' queries, fetch
 # from Apify (ONE actor does search + metadata + channel avatar + the transcript

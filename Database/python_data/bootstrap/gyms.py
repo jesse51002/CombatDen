@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from constants import EXTRA_EMPLOYEES_PER_GYM, NUM_GYMS
+from constants import EXTRA_EMPLOYEES_PER_GYM, NUM_GYMS, STRIPE_TEST_ACCOUNT_ID
 from generators import auth, employees, gyms
 from schema.gym import GymCreate
 from schema.gym_employee import GymEmployeeCreate
@@ -58,7 +58,10 @@ def create_all(client: Client) -> list[GymBundle]:
     print("Creating gyms...")
     gym_records: list[GymCreate] = []
     for i in range(NUM_GYMS):
-        gym = gyms.generate(gym_id=gym_ids[i])
+        # Every seeded gym needs a Stripe Connect account so the backend can
+        # create products/customers/subscriptions on its behalf. The column is
+        # UNIQUE, so with one shared test account NUM_GYMS is 1.
+        gym = gyms.generate(gym_id=gym_ids[i], stripe_account_id=STRIPE_TEST_ACCOUNT_ID)
         gym_records.append(gym)
         print(f"  {gym.gym_name}")
     client.table("gyms").upsert(

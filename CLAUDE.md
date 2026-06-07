@@ -4,12 +4,41 @@
 
 When a decision has more than one reasonable answer, ask and wait for the user's explicit response. Never assume, recommend-and-proceed, or defer the choice unilaterally. Presenting researched options is encouraged; making the choice for the user is not.
 
+## Skills
+
+All skills live in one place: `.claude/skills/` at the codebase root. This is the single, centralized place to look — skills for every subsystem (FastApi backend, CRM, services, data models) live here together, not scattered in per-system `.claude/` folders. Before starting any task, check this directory for a relevant skill and use it.
+
+**Do not list the skills in this file.** Reading `.claude/skills/` yourself is the job — a hardcoded list here would drift out of date the moment a skill is added or renamed. Check the directory, don't trust a copy of it.
+
+**When to create a skill** — a skill must capture something **specific**, never a general overview of a whole system. Create one when either is true:
+- A specific complex piece of a subsystem — a particular data model, mechanism, or workflow (e.g. the discount snapshot model, the QA-the-pages flow) is involved enough to need more guidance than a lean CLAUDE.md should carry.
+- There's a specific how-to that isn't covered in any CLAUDE.md and is too detailed to add without cluttering it. CLAUDE.md stays lean (how to work here); deep or specific knowledge becomes a skill.
+
+**Never make a general "FastApi skill" or "CRM skill"** *as documentation*. A whole-system skill that just *describes* a system would copy that system's CLAUDE.md and add nothing — a knowledge/instruction skill has to be about one specific complex thing or one specific procedure. The two existing knowledge skills are the model: `qa-crm` is a concrete QA-the-pages workflow and `discounts-guide` is one complex data model — neither is "the CRM" in general.
+
+**Exception — skills that *are* the system's functionality.** Some skills aren't instructions at all: they're operational agents that run an engine — e.g. ThemeService and VideoService have skills that scrape, scan, generate a theme, or produce a video brief. These are part of the subsystem's functionality, not a description of it, so the "no general system skill" rule does not apply to them. The test: does the skill *do* something the system needs done (an executable capability/agent), or does it just *explain* the system (which duplicates the CLAUDE.md)? The former is always fine, even when it's "for the whole system"; only the latter is banned. (The root System map already frames these as "the skills/scripts that operate each engine.")
+
+Per *No assumptions*, propose the skill and wait for confirmation before creating it.
+
+**Naming** — short and descriptive, kebab-case, 2–3 words max. Specific enough to tell skills apart, never generic: `qa-crm` (not `qa`), `discounts-guide`. The two existing skills, `.claude/skills/qa-crm/` and `.claude/skills/discounts-guide/`, are the model to follow.
+
+**Describe what it IS, not what was dropped.** A skill (and any doc) states how the system works *now* — never a changelog of what was removed or how it used to work. Don't narrate deletions ("X was deleted", "previously stored Y", "the old design"). The one exception: mention a removed/rejected approach only when it's a load-bearing **"what we want / don't want" example** that explains why the current design is shaped this way (e.g. "the thing we never want here: a cross-member recalculation"). Otherwise, cut it.
+
 ## Skills are living documents
 When working through a skill (or a reference doc / `SKILL.md` it loads) you realize its guidance is wrong, outdated, or holding the work back — a recommended data/image source that returns bad results, a step that no longer fits, a better tool you've found — do not silently work around it. Use the better approach for the task, then **recommend the specific skill fix to the user and wait for approval** (per *No assumptions*); on approval, **update the skill file** so the lesson sticks. Skills are ever-evolving — every real-world correction should feed back into them. This applies to every system's skills.
 
 ## CLAUDE.md is a living document
 
 Every CLAUDE.md in this repo is a living document — exactly like a skill, it must track reality. Whenever code genuinely diverges from what a CLAUDE.md says (a new live backend call, a renamed system, an added dependency, a rule the code has outgrown on purpose, an architecture change), **update that CLAUDE.md in the same change** so the doc and the code never drift apart. Never leave one stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
+
+## System map — keep README.md and architecture.mermaid current
+- The root `README.md` holds the **high-level** system graph (the systems and how they connect); `architecture.mermaid` holds the **full detailed** graph (every system's inner nodes, the ThemeService/VideoService API-vs-creation split, and the skills/scripts that operate each engine).
+- Both are living documents. Whenever the architecture changes — a new system, a new or removed cross-system dependency, a renamed service, a new external service, an API/creation change, a new skill or script on an engine — **update both the README high-level graph and `architecture.mermaid` in the same change** so neither drifts from reality.
+- Author/edit both graphs with the `mermaid-creation` skill and follow its rules (top-down `TB`, sibling-only edges, the fixed color palette, render + `check_siblings.py` validation). Don't hand-edit a graph in a way that breaks those rules.
+
+## Editing the Claude review workflows (`.github/workflows/claude*.yml`)
+- `claude-code-review.yml` (auto PR review) and `claude.yml` (the `@claude` assistant) run `claude-code-action`, whose GitHub App token exchange requires the workflow file on a PR branch to be **byte-identical to the version on `main`**. If a feature branch edits one of them, every review run on that branch dies at startup with `App token exchange failed: 401 Unauthorized — Workflow validation failed`.
+- So any change to these files must land on `main` FIRST, via a small dedicated PR, then be synced onto the feature branch — **never edit them on a feature branch alone.** This bites often; treat it as a hard rule. (Even the dedicated PR's own review run will 401, because that PR is the one changing the file — that's expected, ignore it; the merge still works.)
 
 ## No inline prompts or SQL
 - Never inline an LLM/agent prompt in code. Every prompt lives in its own `.md` file and is read at use; code may hold the path, never the prompt text.

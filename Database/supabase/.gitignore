@@ -2,6 +2,9 @@
 .branches
 .temp
 
+# JWT signing key — local-dev only, regenerated per developer; never commit
+signing_keys.json
+
 # dotenvx
 .env.keys
 .env.local

@@ -13,7 +13,9 @@ from src.classes.schema.classes_schema import (
     CheckinResponse,
     StreakResponse,
 )
-from src.classes.service.classes_checkin_service import ClassesCheckinService
+from src.classes.service.checkin.classes_checkin_service import (
+    ClassesCheckinService,
+)
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.core.dependencies import DependencyInjector
 from src.shared.auth import Auth, security
@@ -31,14 +33,18 @@ classes_router = APIRouter(
     response_model=CheckinResponse,
     summary="Check a member into a class instance",
     description=(
-        "Inserts a row in ``member_attendance`` and bumps the "
-        "member's ``last_class`` to the class_history occurred_at. "
-        "Idempotent — a second call for the same "
+        "Selects the best eligible membership plan with remaining "
+        "capacity (trial -> one_time -> recurring), logs the "
+        "attendance against it, bumps ``last_class``, and auto-ends "
+        "trial / punch-card memberships once depleted. Returns the "
+        "membership breakdown. If no plan covers the class with "
+        "capacity, the check-in is rejected: ``log_id`` is null and "
+        "no attendance is written. Idempotent — a repeat for the same "
         "(member_id, class_history_id) returns the existing log_id "
-        "with ``already_checked_in = True``."
+        "with ``already_checked_in = True`` and consumes no capacity."
     ),
     responses={
-        200: {"description": "Check-in recorded"},
+        200: {"description": "Check-in result returned (recorded or rejected)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this member"},
     },

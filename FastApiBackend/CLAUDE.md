@@ -4,13 +4,37 @@
 
 When a decision has more than one reasonable answer, ask and wait for the user's explicit response. Never assume, recommend-and-proceed, or defer the choice unilaterally. Presenting researched options is encouraged; making the choice for the user is not.
 
-## Skills are living documents
-
-When working through a skill (or a reference doc / `SKILL.md` it loads) you realize its guidance is wrong, outdated, or holding the work back — a recommended data/image source that returns bad results, a step that no longer fits, a better tool you've found — do not silently work around it. Use the better approach for the task, then **recommend the specific skill fix to the user and wait for approval** (per *No assumptions*); on approval, **update the skill file** so the lesson sticks. Skills are ever-evolving — every real-world correction should feed back into them.
-
 ## CLAUDE.md is a living document
 
 This file is a living document — exactly like a skill, it must track reality. Whenever the code genuinely diverges from what this CLAUDE.md says (a new domain, a renamed module, an added dependency, a rule the code has outgrown on purpose, an architecture change), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
+
+## README — keep it current
+
+Two living documents describe this system, both kept in sync with the code (exactly like this file):
+
+- **`README.md`** — a **simple** overview chart (CRM → FastApiBackend → Supabase + Stripe) plus the domain list and the load-bearing conventions.
+- **`architecture.mermaid`** — the **full** internal graph, mirroring the real DI wiring in `core/dependencies.py`. Everything lives in **one `FastApiBackend` box** with **flat internals** (routes + every service, including the cross-cutting **`PaymentSyncService`** whose fan-in stays visible) and exactly **one nested group, `Payments`** (the Stripe core). `CRM`, `Supabase`, and `Stripe` sit **outside** the box; the box's external arrows are drawn at the box level — one arrow to **`Supabase`** (our DB), one to **`Stripe`** — so there's no `db_pool` hub and no hairball of per-service arrows.
+
+Whenever the API surface or architecture changes — **a route or service added / removed / renamed**, a new domain/router, a changed DI dependency, a new external dependency, an auth/data-access change, or the CRM↔backend wiring status — **update both `README.md` and `architecture.mermaid` in the same change** so neither drifts. Author/edit the charts with the `mermaid-creation` skill and follow its rules (top-down `TB`, sibling-only edges, fixed palette, **no `~~~`** — Mermaid-9-safe — render + `check_siblings.py` validation).
+
+One deep-dive diagram sits beside these: **`payment_sync.mermaid`** — the step-by-step orchestration flow of the payment-sync engine (`update_payments_recurring`), referenced from `README.md`. Its keep-in-sync owner is the **`sync-guide`** skill (update the diagram in the same change as the engine, per that skill); it follows the same `mermaid-creation` rules and validation.
+
+## ⚠️ Payment sync + member_memberships — critical billing infrastructure, human in the loop
+
+`src/member_memberships/` — and especially the payment-sync engine in
+`src/member_memberships/service/payment_sync/` — is **the most critical code in
+this backend: it decides how real members are billed.** A mistake here mis-bills
+real customers, so it is edited under a stricter rule than the rest of the repo:
+
+- **One approved piece at a time. Never a big sweep.** Propose the change, wait
+  for explicit approval, then write — for **each** part, as you go. Do **not**
+  build out multiple parts and present them together; do not "just build
+  everything."
+- This overrides any instinct to batch related edits. Even when several changes
+  are obviously connected, land and get each one reviewed on its own.
+- The deep domain knowledge for the engine lives in the **`sync-guide`** skill
+  (a living document) — read it before touching the engine, and update it in the
+  same change when the engine changes.
 
 ## Workflow
 
@@ -30,6 +54,18 @@ This file is a living document — exactly like a skill, it must track reality. 
   - Docstrings that say "since X doesn't actually Y, we do Z instead" — if you catch yourself writing that comment, file the bug instead
 - When a test discovers a production bug, the correct workflow is: (1) reproduce, (2) **write the test against the correct behavior so it fails loudly**, (3) fix production, (4) watch the test turn green. Not: (1) reproduce, (2) reshape the test until it passes.
 - Regression guards for *already-fixed* bugs are fine and encouraged — the distinction is that the production code is correct now and the test locks it in. A test shaped around a *live* bug is not a regression guard, it is camouflage.
+
+**Don't test retired or non-existent routes**
+- When a route is removed or renamed, **delete its tests** — never keep a test that asserts the old path now returns 404/405. A "this route is gone" assertion has no behavioral value, silently rots as the router grows (a future unrelated route on that path flips it green or red for the wrong reason), and just adds noise. The same goes for asserting that a route which never existed is absent.
+- Test the routes that **exist** and their real behavior (status codes, payloads, auth). Coverage of the API surface comes from `Database/openapi.json` + the live router, not from negative existence checks.
+
+**Integration tests must clean up exactly what they create (the `created` fixture)**
+- Tests run against a **real shared local Supabase DB + a real shared Stripe test Connect account** — no transaction rollback, no ephemeral DB. Every test must delete exactly the rows/Stripe objects it created, and **never** the single seeded gym (`tests/seed_constants.py`) or any other shared/seed data.
+- Use the function-scoped **`created`** fixture (a `CreatedResources` registry in `tests/conftest.py`); it deletes everything registered on teardown, FK-safe and best-effort. Two ways to register:
+  - **Create-and-track wrappers** for the data factory: `await created.member(...)`, `.plan(...)`, `.discount(...)`, `.payment_method()`, `.test_clock(...)` — prefer these over calling `tests/helpers/data_factory.py` directly so cleanup is automatic.
+  - **Manual trackers** for objects a service returns: `created.track_customer/track_product/track_price/track_coupon(<stripe_id>)`, `created.track_plan_db(plan_id)`, `created.track_discount(discount_id)`, `created.track_member(member_id)`.
+- Teardown order is clocks → members → plans → discounts → Stripe customers → coupons → archive prices/products. Stripe prices/products can only be **archived** (`active=false`), not deleted; coupons and customers are deleted (customer-delete cascades its subs/invoices); a test clock cascades its own clock-scoped customer/subs/invoices, so don't separately track those. Cleanup helpers live in `tests/helpers/cleanup.py`.
+- A test that needs special teardown ordering may keep its own `try/finally`, but the default is: register with `created` and let the fixture clean up.
 
 ## General Principles
 
@@ -92,9 +128,14 @@ This file is a living document — exactly like a skill, it must track reality. 
 - **Prefer flat functions with an orchestrator over deep nesting** (situational)
   - Write small, focused functions that each do one thing
   - Use an orchestrator function to call them in sequence
-  - Good: `orchestrate()` calls `_validate()`, `_transform()`, `_persist()` sequentially
+  - Good: `orchestrate()` calls `_validate()`, `_transform()`, `_persist()` sequentially — **but inside a service class these are private methods (`self._validate()`), not module-level functions** (see the next rule)
   - Bad: `orchestrate()` contains all logic in deeply nested blocks
   - Use judgment — simple logic doesn't need to be split into 5 tiny functions
+- **No loose module-level functions in a service file** — a file built around a service class must keep its helpers *inside* that class as private methods, never as bare `def`s hanging above or below the class.
+  - When you "extract a helper" (above) inside a service, extract it as a **private method** (`self._foo(...)`), not a module-level `def`. A `@staticmethod` is fine when the helper uses no instance state.
+  - If a helper genuinely doesn't belong on the class, pull it into its **own dedicated class/module** — never leave a standalone function floating next to a class.
+  - Good: `MembersBillingDetailService._build_rank(self, ...)`. Bad: a bare `def _build_rank(...)` sitting below the class in the same file.
+  - **Exception:** standalone, class-less *concern modules* (e.g. `formatters.py`, pure mappers like `payments_stripe_mappers.py` / `gyms_status_mapping.py`, `queries.py`) are function modules by design and stay as free functions — this rule is about service files built around a class.
 - **Keep files small and focused** — don't put everything in one giant file
   - Split logically distinct concerns into separate modules (e.g., formatters, query builders, mappers)
   - A file with 5+ responsibilities is too big — break it up
@@ -177,6 +218,15 @@ src/
 - Teams can work independently
 - Promotes separation of concerns
 
+**Service-Layer Organization**
+- When a service grows past one file, its pieces live in a **subfolder** under `service/` (e.g. `members/service/management/`, `member_memberships/service/payment_sync/`).
+- The orchestrator `*_service.py` **lives inside that subfolder, grouped with the code it orchestrates** — never floating one level above it.
+  - Good: `members/service/management/members_management_service.py` (sits with `members_management_create.py`, `_update.py`, …).
+  - Bad: `members/service/members_management_service.py` floating above a sibling `management/` folder.
+- A genuinely standalone service with no implementation subfolder stays as a single file at the `service/` top level — that's fine (e.g. a one-file `foo/service/foo_widget_service.py` that orchestrates nothing else). Today every service happens to live in an implementation subfolder, but a future single-file service belongs flat at `service/`, not buried in a one-member subdir.
+- **Don't add a nesting level for a single group.** If a folder would only ever hold one related set, keep those files flat in `service/` instead of burying them (e.g. webhook handlers live directly in `stripe_webhooks/service/`, not in a `handlers/` subdir).
+- No bare module-level helper functions in a service file — fold them into the service class as private methods (see *Code Complexity & Nesting → No loose module-level functions in a service file*).
+
 ## FastAPI Patterns
 
 **Dependency Injection (dependency_injector)**
@@ -209,6 +259,7 @@ src/
 - **Update requests must separate IDs from mutable data** — the request model contains identity fields (path parameters or top-level fields) and a nested `data` model with only mutable optional fields. This allows the service to extract change keys from `data` and validate them against the immutable columns guard (`validate_mutable_columns` from `src/shared/column_guard.py` + frozensets in `schema.immutable_columns` from the Database package).
 - Good: `RewardUpdateRequest(data: RewardUpdateData)` where `RewardUpdateData` has only mutable optional fields and the reward_id comes from the URL path
 - Bad: Flat update model mixing PKs, immutable columns, and mutable fields together
+- **Discounts are a deliberate variant of this rule, not a violation.** A discount is a two-table identity/version model (`gym_discounts` identity + immutable `gym_discount_values` versions), so `DiscountUpdateRequest` splits the mutable data **by destination** into two sub-models — `identity` (rename in place) and `values` (mint a new version) — instead of one flat `data`. The model shape itself encodes which table each field writes (no runtime field-partition set), while the service **still** runs the same `validate_mutable_columns(GYM_DISCOUNTS, …)` guard over the combined change keys. `discount_id`/`gym_id` stay top-level for the auth `gym_id` check. See `src/discounts/schema/discounts_schema.py` + `service/discounts/discounts_update.py` and the `discounts-guide` skill.
 
 **Error Handling**
 - Create custom exception hierarchy
@@ -243,6 +294,10 @@ src/
 - Use `{variable_name}` for structural parts (e.g., WHERE clauses) and `:param_name` for bind parameters
 - Good: `load_sql(SQL_DIR / "all_view.sql", {"where_clause": where})` then pass params to SQLAlchemy
 - Bad: Inline SQL strings in service files
+- **NEVER cast a bind parameter with `:param::type`** (e.g. `:waiver_ids::jsonb`, `:id::uuid`). SQLAlchemy `text()` over asyncpg cannot bind a parameter that is immediately followed by `::`, so Postgres raises `syntax error at or near ":"` and the query 500s. **Always use the functional cast `CAST(:param AS TYPE)`** instead.
+  - Good: `CAST(:waiver_ids AS JSONB)`, `CAST(:member_id AS UUID)`
+  - Bad: `:waiver_ids::jsonb`, `:member_id::uuid`
+  - This applies to `.sql` files **and** any SET/VALUES clause built dynamically in Python (e.g. an f-string `f"{col} = CAST(:{col} AS JSONB)"`, never `f"{col} = :{col}::jsonb"`). This bug has recurred — it bit the membership-plans update path.
 
 **Repository Pattern**
 - Separate data access from business logic
@@ -269,15 +324,19 @@ src/
 
 Tables whose "status" is a function of multiple date columns expose
 that derivation through a Postgres view rather than repeating the
-`CASE` expression in every query. Example: `members_with_status`
-(in `Database/supabase/schemas/members.sql`) wraps the `members`
-table and adds `status` (`trial` / `active` / `inactive`) and
-`last_class_days_ago`. All read-paths (`list_members.sql`,
-`counts_members.sql`, `member_detail.sql`) SELECT from the view.
-Writes go directly to the underlying table.
+`CASE` expression in every query. Example: `member_memberships_status`
+(in `Database/supabase/schemas/member_memberships.sql`) wraps
+`member_memberships` and derives `status`
+(`active` / `cancelled` / `ended` / `frozen`) from `cancel_date`,
+`end_date`, and the account's freeze window on `members`. The member
+read-paths (`src/members/sql/crm_views/*.sql`, `member_details/*.sql`)
+SELECT from this view; writes go directly to the underlying table.
+
+Member-level status is membership-derived (from `member_memberships_status`),
+NOT stored on `members` — there is no `member_status` column or table.
 
 When you add a similar derived field, prefer extending an existing
-`*_with_status` view or adding a new view — never duplicate the
+`*_status` view or adding a new view — never duplicate the
 derivation across SQL files.
 
 ## Security

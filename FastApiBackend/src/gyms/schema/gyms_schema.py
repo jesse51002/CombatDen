@@ -1,21 +1,33 @@
 """Pydantic models for the gyms domain."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from schema.gym import StripeOnboardingStatus
+from schema.gym_employee import EmployeeType, ThemeMode
+
+import src.shared.db_schema_path  # noqa: F401
 
 
 class GymCreateRequest(BaseModel):
     """Body for POST /api/v1/gyms/."""
 
-    gym_name: str = Field(min_length=1)
+    gym_name: str = Field(min_length=1, max_length=255)
     gym_description: str | None = None
     timezone: str = "America/Chicago"
-    owner_first_name: str = Field(min_length=1)
-    owner_last_name: str = Field(min_length=1)
+    owner_first_name: str = Field(min_length=1, max_length=255)
+    owner_last_name: str = Field(min_length=1, max_length=255)
     owner_phone: str | None = None
-    owner_email: str | None = None
+
+    @field_validator("gym_name", "owner_first_name", "owner_last_name")
+    @classmethod
+    def _strip_and_require_nonempty(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must be a non-empty string")
+        return stripped
 
 
 class GymUpdateData(BaseModel):
@@ -37,12 +49,50 @@ class GymUpdateRequest(BaseModel):
 
 
 class GymResponse(BaseModel):
-    """A single gym row."""
+    """A single gym row (basic fields, no Stripe state)."""
 
     gym_id: UUID
     gym_name: str
     gym_description: str | None
     timezone: str
+
+
+class GymWithRoleResponse(GymResponse):
+    """A gym the caller administers, annotated with their role.
+
+    Returned by ``GET /api/v1/gyms/`` — the list of gyms the
+    authenticated user owns or admins (``employee_type`` is the
+    caller's role for that gym). ``theme_preference`` is the caller's
+    own CRM appearance choice for that gym, so the admin app can
+    hydrate the theme at login.
+    """
+
+    employee_type: EmployeeType
+    theme_preference: ThemeMode
+
+
+class EmployeeThemeUpdateData(BaseModel):
+    """Mutable field for PUT .../employees/me/theme.
+
+    Per project convention, update requests separate identity (the
+    URL ``gym_id`` + the caller's JWT) from a nested ``data`` model.
+    Theme is the only settable field here.
+    """
+
+    theme_preference: ThemeMode
+
+
+class EmployeeThemeUpdateRequest(BaseModel):
+    """Body for PUT /api/v1/gyms/{gym_id}/employees/me/theme."""
+
+    data: EmployeeThemeUpdateData
+
+
+class EmployeeThemeResponse(BaseModel):
+    """The caller's saved theme for a gym (echoed back on update)."""
+
+    gym_id: UUID
+    theme_preference: ThemeMode
 
 
 class GymEmployeeResponse(BaseModel):
@@ -62,7 +112,52 @@ class GymEmployeeResponse(BaseModel):
 
 
 class GymCreateResponse(BaseModel):
-    """Response for POST /api/v1/gyms/."""
+    """Response for POST /api/v1/gyms/ (Stripe onboarding path).
 
-    gym: GymResponse
-    owner: GymEmployeeResponse
+    Returned after a new gym + Stripe Connect Express account are
+    created.  The ``onboarding_url`` is short-lived (~5 minutes).
+    """
+
+    gym_id: UUID
+    stripe_account_id: str
+    stripe_onboarding_status: Literal[StripeOnboardingStatus.pending]
+    onboarding_url: str
+    onboarding_url_expires_at: datetime
+
+
+class GymStripeAccountSnapshot(BaseModel):
+    """Flat projection of the Stripe Account fields we care about.
+
+    The shared output of the canonical mapper in
+    ``gyms_status_mapping.py`` — fed both by the status-refresh
+    endpoint and the ``account.updated`` webhook.
+    """
+
+    status: StripeOnboardingStatus
+    details_submitted: bool
+    charges_enabled: bool
+    payouts_enabled: bool
+    disabled_reason: str | None = None
+    requirements_currently_due: list[str] = []
+
+
+class GymOnboardingStatusResponse(BaseModel):
+    """Response for GET /api/v1/gyms/{gym_id}/onboarding."""
+
+    gym_id: UUID
+    stripe_onboarding_status: StripeOnboardingStatus
+    onboarding_url: str | None = None
+    onboarding_url_expires_at: datetime | None = None
+    details_submitted: bool
+    charges_enabled: bool
+    payouts_enabled: bool
+    disabled_reason: str | None = None
+    requirements_currently_due: list[str] = []
+
+
+class GymOnboardingLinkResponse(BaseModel):
+    """Response for POST /api/v1/gyms/{gym_id}/onboarding/link."""
+
+    gym_id: UUID
+    onboarding_url: str
+    onboarding_url_expires_at: datetime

@@ -1,5 +1,12 @@
 CREATE TYPE employee_type AS ENUM ('owner', 'admin', 'trainer');
 
+-- Per-employee CRM admin-app appearance preference. 'system' follows the OS.
+CREATE TYPE theme_mode AS ENUM ('system', 'light', 'dark');
+
+CREATE TYPE stripe_onboarding_status AS ENUM (
+    'not_started', 'pending', 'complete', 'disabled'
+);
+
 CREATE TABLE gyms (
     gym_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
@@ -7,6 +14,9 @@ CREATE TABLE gyms (
     timezone TEXT NOT NULL DEFAULT 'America/Chicago'
         CONSTRAINT gyms_timezone_valid CHECK (now() AT TIME ZONE timezone IS NOT NULL),
     is_rank_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Stripe Connect onboarding state (service_role-only writes; see access_rules/gyms.sql)
+    stripe_account_id TEXT UNIQUE,
+    stripe_onboarding_status stripe_onboarding_status NOT NULL DEFAULT 'not_started',
     PRIMARY KEY (gym_id)
 );
 
@@ -25,6 +35,8 @@ CREATE TABLE gym_employees (
     email VARCHAR,
     employee_pic_url VARCHAR,
     employee_public_description VARCHAR,
+    -- CRM admin-app theme this employee chose (client-editable; see immutable_columns).
+    theme_preference theme_mode NOT NULL DEFAULT 'system',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (employee_id),
     UNIQUE (user_id, gym_id),

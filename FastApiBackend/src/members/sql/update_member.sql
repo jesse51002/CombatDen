@@ -10,9 +10,11 @@ RETURNING
     email,
     points_balance,
     last_class,
-    trial_start_date,
-    trial_end_date,
-    fully_active_start_date,
-    inactive_start_date,
     current_rank_id,
-    created_at
+    created_at,
+    phone,
+    address,
+    emergency_contact_name,
+    emergency_contact_phone,
+    emergency_contact_email,
+    photo_url

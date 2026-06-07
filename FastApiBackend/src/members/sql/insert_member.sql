@@ -4,11 +4,13 @@ INSERT INTO members (
     first_name,
     last_name,
     email,
-    trial_start_date,
-    trial_end_date,
-    fully_active_start_date,
-    inactive_start_date,
-    current_rank_id
+    current_rank_id,
+    phone,
+    address,
+    emergency_contact_name,
+    emergency_contact_phone,
+    emergency_contact_email,
+    photo_url
 )
 VALUES (
     :gym_id,
@@ -16,11 +18,13 @@ VALUES (
     :first_name,
     :last_name,
     :email,
-    :trial_start_date,
-    :trial_end_date,
-    :fully_active_start_date,
-    :inactive_start_date,
-    :current_rank_id
+    :current_rank_id,
+    :phone,
+    :address,
+    :emergency_contact_name,
+    :emergency_contact_phone,
+    :emergency_contact_email,
+    :photo_url
 )
 RETURNING
     member_id,
@@ -31,9 +35,11 @@ RETURNING
     email,
     points_balance,
     last_class,
-    trial_start_date,
-    trial_end_date,
-    fully_active_start_date,
-    inactive_start_date,
     current_rank_id,
-    created_at
+    created_at,
+    phone,
+    address,
+    emergency_contact_name,
+    emergency_contact_phone,
+    emergency_contact_email,
+    photo_url

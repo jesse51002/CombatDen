@@ -13,9 +13,9 @@ cdn.combatden.net     → CloudFront → S3 (combatden-assets)       theme image
 ```
 
 `themes.combatden.net` is the **public theme browser** — a second build target of
-the same `AppManagement/` Flutter project (`--target lib/main_theme_browser.dart`),
+the same `CRM/` Flutter project (`--target lib/main_theme_browser.dart`),
 not a separate app. It hits the same two read-only APIs. The marketing landing
-page just links to it (and it links back). See `AppManagement/CLAUDE.md`
+page just links to it (and it links back). See `CRM/CLAUDE.md`
 → *Standalone theme browser*.
 
 The app build bakes in the two API URLs via `--dart-define` (CUST_BASE_URL,
@@ -116,7 +116,7 @@ now `ASSETS_CDN_BASE_URL` too — see the assets section below.) The rule:
 ThemeService images/icons are served from CloudFront, not the container (the
 Dockerfile no longer bakes the ~2.6 GB — only `output.yaml` metadata). One-time
 provision via `ThemeService/deploy-assets/` (boto3, its own isolated venv — no
-uvloop; mirrors `AppManagement/deploy/`):
+uvloop; mirrors `CRM/deploy/`):
 
 ```bash
 cd ThemeService
@@ -179,11 +179,11 @@ Then:
 - Then `make ecr-push` (ThemeService) to ship the de-baked image. **No Flutter
   change needed** — the clients render whatever URL the API returns.
 
-**App** (from `AppManagement/`): `make deploy-provision` → add app cert record →
+**App** (from `CRM/`): `make deploy-provision` → add app cert record →
 `make deploy-finalize` → add the `app` CNAME → `make deploy` (build + upload +
 invalidate). Day-to-day after setup: just `make deploy`.
 
-**Theme browser** (from `AppManagement/`, tooling in `deploy-themes/`): same
+**Theme browser** (from `CRM/`, tooling in `deploy-themes/`): same
 flow, own bucket/domain — `make deploy-themes-install` → `make
 deploy-themes-provision` → add the `themes` cert record → `make
 deploy-themes-finalize` → add the `themes` CNAME → `make deploy-themes` (build

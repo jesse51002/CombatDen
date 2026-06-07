@@ -8,10 +8,19 @@ import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.classes_router import classes_router
 from src.core.config import settings
 from src.core.dependencies import DependencyInjector
+from src.discounts.discounts_router import discounts_router
 from src.gyms.gyms_router import gyms_router
+from src.member_memberships.member_memberships_router import (
+    member_memberships_router,
+)
 from src.members.members_router import members_router
+from src.membership_plans.membership_plans_router import (
+    membership_plans_router,
+)
 from src.ranks.ranks_router import ranks_router
 from src.rewards.rewards_router import rewards_router
+from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
+from src.waivers.waivers_router import waivers_router
 
 
 @asynccontextmanager
@@ -48,6 +57,16 @@ def create_app() -> FastAPI:
     application.include_router(members_router)
     application.include_router(ranks_router)
     application.include_router(rewards_router)
+    application.include_router(waivers_router)
+
+    # === CRM billing routers (restored) ===
+    # The payments package is a pure service core (no router); it is
+    # injected by the billing domains rather than mounted directly.
+    application.include_router(discounts_router)
+    application.include_router(member_memberships_router)
+    application.include_router(membership_plans_router)
+    application.include_router(stripe_webhooks_router)
+    # === end CRM billing routers ===
 
     return application
 

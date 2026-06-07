@@ -1,7 +1,7 @@
 .PHONY: run dev lint format token webhook test test-payments test-members test-memberships test-plans test-discounts
 
 run:
-	poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+	poetry run python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 format:
 	poetry run ruff check --fix src/

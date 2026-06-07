@@ -6,7 +6,9 @@ from uuid import UUID
 import jwt
 from fastapi import HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from schema.gym_employee import EmployeeType
 
+import src.shared.db_schema_path  # noqa: F401
 from src.core.config import settings
 from src.shared.database import SupabaseClient
 
@@ -90,6 +92,43 @@ class Auth:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to access this gym",
+            ) from None
+
+    async def verify_gym_owner(
+        self,
+        gym_id: UUID,
+        user_payload: dict,
+    ) -> None:
+        """Verify the authenticated user is an OWNER of the gym.
+
+        Gates owner-only actions (Stripe Connect onboarding). Admins
+        and trainers are rejected even though they may otherwise
+        access the gym.
+
+        Raises:
+            HTTPException: 403 if the user is not an owner of the gym.
+        """
+        auth_user_id = user_payload["sub"]
+
+        owner = await (
+            self._supabase.client.from_("gym_employees")
+            .select("employee_id")
+            .eq("user_id", auth_user_id)
+            .eq("gym_id", str(gym_id))
+            .eq("employee_type", EmployeeType.owner.value)
+            .maybe_single()
+            .execute()
+        )
+
+        if not owner or not owner.data:
+            logger.warning(
+                "Unauthorized gym-owner action attempt: user=%s, gym_id=%s",
+                auth_user_id,
+                gym_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized: gym owner only",
             ) from None
 
     async def verify_can_view_member(

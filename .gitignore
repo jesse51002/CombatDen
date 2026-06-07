@@ -2,3 +2,6 @@
 __pycache__
 .gstack/
 .env
+CRM/.env.dev
+CRM/.env.prod
+openapi.json
