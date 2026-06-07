@@ -249,7 +249,86 @@ gitignored), the CRM preview UI, and the preview tests.
 `base`? where do multi-membership consolidated lines land?); and a dedicated
 due-now preview test landing with it. Confirm the shape before starting.
 
-## 7. Open questions & cross-cutting deferrals
+## 7. Per-membership `paid_by_member_id` — who actually pays each membership (not built)
+
+> Linked (family) members currently have **no independent billing identity** — everything
+> resolves to the paying parent. But a linked member will sometimes need to pay for their
+> **own** things on their **own** payment method: a store purchase, a drop-in / daily class,
+> or even carrying their own membership line — without routing it through the parent.
+
+### Current state — everything resolves to the paying parent
+`BillingParentResolver.resolve_parent` follows `members.account_linked_to_id` **once** to the
+paying parent, who owns the `stripe_customer_id` and the subscription(s). The sync consolidates
+the whole family's recurring memberships onto the parent's subscription, and every ad-hoc charge
+(`charge_card`, one-time invoices) targets the **resolved parent's** customer. A linked child has
+**no way to be billed on their own card** today — the resolver always redirects to the parent.
+
+### What's needed — a per-membership `paid_by_member_id` (a payer reference, not a boolean)
+Add a **`paid_by_member_id`** column on each `member_memberships` row — the member who actually
+pays for that membership. **Always populated** (see Approach): for a normal family membership it
+is the resolved paying parent; for a self-payer it is that member, whose own Stripe customer +
+payment method is billed. This lets a family member buy from the store, pay a drop-in class, or
+carry their own membership on their own card while still belonging to the family.
+
+**Why a member-id reference, not a `paid_by_linked_account` boolean.** A boolean only encodes
+"self vs parent," and the **linked relationship can change** — a child can be unlinked, re-linked
+to a different parent, or the payer can shift — at which point a boolean is ambiguous about *who*
+pays. Storing the concrete `member_id` of the payer pins it exactly, **survives re-linking**, and
+lets *any* member (not just "the one linked account") be the payer.
+
+### Immutable — changing the payer is a NEW row, never an in-place edit
+`paid_by_member_id` must be an **immutable column** (added to the `MEMBER_MEMBERSHIPS` immutable set
++ a guard trigger, alongside the already-immutable `item_id`, `stripe_item_id`, `plan_id`,
+`price_id`). Changing who pays is **a whole new `member_memberships` row** — cancel the old one,
+insert a new one with the new `paid_by_member_id` — exactly the append-only model memberships
+already follow (re-enrolling is always a new row, never a flip-back-to-active). This is required,
+not stylistic: changing the payer moves the line from one Stripe customer's subscription to a
+**different** customer's subscription, so it is a cancel-on-the-old-sub + create-on-the-new-sub
+(a brand-new `stripe_item_id`) — **never an in-place reassignment of the existing line**, and **not**
+a `migrating` price-migration (that moves a line *within* one subscription). The existing `item_id`
+(the membership PK / Stripe-item identity) and `stripe_item_id` are already immutable (the latter
+only mutable during a price `migrating` migration), so this slots straight into that model.
+
+### Approach — group by `paid_by_member_id` (it's not a big change)
+This is **not** a structural fight with the consolidate-to-parent model — it's a change of
+grouping key. Today `PaymentSyncBuilder` resolves the family to **one** paying parent and
+consolidates every membership onto that parent's subscription. With `paid_by_member_id` the builder
+**groups by payer** instead: each distinct `paid_by_member_id` in the family is its own
+consolidation → its own subscription → its own sync call. A family with one self-paying member is
+simply **two sync calls** — the parent's payer-group and the self-payer's — each converging its own
+subscription. The per-line discount math, writeback, and once-settle are unchanged *within* each
+payer group.
+
+**Simplest version — always populate the column.** Default every membership's `paid_by_member_id`
+to the resolved paying parent's `member_id` so it is **never NULL**, then make **every** engine
+read / filter / grouping key on `paid_by_member_id` from now on. The parent-paid case is just
+`paid_by_member_id = parent` and the self-paid case is `paid_by_member_id = self` — **no special
+branch anywhere**, one uniform "who pays this line" column. `BillingParentResolver`'s parent-follow
+becomes the rule that *sets* `paid_by_member_id` (default = parent) rather than a redirect every
+read repeats.
+
+### Still real work (not hard, just real)
+- **The payer needs their own Stripe customer.** A self-paying linked member is billed on their
+  **own** `stripe_customer_id` + payment method, which a linked child doesn't have today — so the
+  link / payment flow has to create one for a member who is going to self-pay (membership or ad-hoc).
+- **Ad-hoc charges follow the same key.** `charge_card` / store / drop-in target the paying
+  member's customer — the store / drop-in cases are *charges*, not memberships, so they read the
+  payer the same way (see open questions).
+
+### Open questions
+- Does a membership paid by a non-parent member still **consolidate for family discounts**, or is it
+  priced on its own line? Grouping by payer naturally splits it off — confirm that's the intended
+  discount behavior, or whether family-tier counting should still include it.
+- **Ad-hoc charges:** the store / drop-in target is a *charge*, not a membership. Does the charge
+  path read a per-membership `paid_by_member_id`, or does the paying member need a payer reference
+  of its own?
+- **Where the payer's Stripe customer lives and when it's created** — at link time, or lazily on the
+  first self-paid action?
+- **Freeze is account-level (on the parent)** — when a membership is paid by a non-parent member,
+  does the parent's freeze still cascade to it, or does that payer group freeze independently? Plus
+  the interaction with the consolidated subscription per interval (§2).
+
+## 8. Open questions & cross-cutting deferrals
 
 - **Discount auto-update (deferred).** Today a preset edit affects only *new*
   applications — existing snapshots stay pinned to their old value version (the
