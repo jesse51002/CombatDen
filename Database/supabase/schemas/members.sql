@@ -77,6 +77,15 @@ CREATE UNIQUE INDEX unique_member_user_gym
 CREATE UNIQUE INDEX idx_members_stripe_customer
     ON members (stripe_customer_id);
 
+-- Index on the family-billing link. The payment sync resolves each family on
+-- every billing op via `... OR account_linked_to_id = :parent`, and the
+-- enforce_linked_account_hierarchy trigger checks `account_linked_to_id = NEW.member_id`
+-- on every member insert/link — both seq-scan members without this. Partial
+-- (the column is NULL for everyone except linked children) to stay lean.
+CREATE INDEX idx_members_account_linked_to
+    ON members (account_linked_to_id)
+    WHERE account_linked_to_id IS NOT NULL;
+
 -- Trigger: once user_id is set, it cannot be changed to a different value
 CREATE OR REPLACE FUNCTION prevent_user_id_overwrite()
 RETURNS TRIGGER AS $$
