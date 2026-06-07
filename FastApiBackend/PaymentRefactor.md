@@ -13,78 +13,23 @@
 > lists only remaining work — when something ships it is **removed**, never
 > annotated "done".
 
-## 1. Scheduled reconciler (load-bearing, not built)
+## 1. Reconciler skip-if-equal guard (not built)
 
-The engine self-heals drift **only when a member is actively touched** — every
-mutation re-derives the desired state from the CRM and converges Stripe. Drift on
-an **idle** member persists until the next manual op. A periodic sweep that runs
-the sync on a clock, independent of user activity, closes that gap.
+The scheduled reconciler itself is **shipped** — the `reconciler` domain: a
+twice-daily sweep (invoice-fetch backfill -> Stripe->CRM cancellation absorption ->
+orphan cleanup -> CRM->Stripe push) behind a global `resource_locks` sweep lock,
+started by APScheduler in the app lifespan. See `sync-guide` for the engine-side
+detail. Only one optimization was deliberately deferred:
 
-This is **load-bearing**, not merely a drift backstop, because two shipped
-discount features depend on a sync running mid-cycle on idle members:
-
-1. **Arbitrary `end_date` enforcement.** An ongoing discount's lifetime is an
-   absolute `end_date` we enforce ourselves (Stripe coupons only know
-   `once`/`forever`). The discount drops off the line the first time a sync runs on
-   or after that date. An actively-billed member's end-of-cycle sync drops it on
-   time; an **idle** member triggers no sync, so it would keep applying past its
-   `end_date`. The sweep runs the sync on schedule.
-2. **`once`-discount consumption finalization.** A `once` discount is consumed when
-   Stripe invoices it; the once-settle stamps its `end_date` so it is never
-   re-added. The `invoice.paid` webhook now triggers that settle promptly
-   (`PaymentSyncService.settle_once_discounts`), so the common case is covered — the
-   sweep is the backstop for a **missed** webhook on an idle member.
-
-### What already exists (the sweep reuses, no rewrite)
-- **`PaymentSyncService.bulk_payment_sync(member_ids)`** loops members, mints a
-  fresh `uuid4()` idempotency key per member, and calls `update_payments_recurring`.
-  A scheduled job is just a **third trigger** for it (alongside the lifecycle
-  callers and the plan-reprice fan-out). The CRM→Stripe config push reuses as-is.
-- **`PaymentSyncOnceDiscounts`** is the once-finalization duty factored into a
-  standalone service so the sweep can call it directly; **`BillingParentResolver`**
-  is the shared parent/family resolution it leans on. The once-consumption
-  **read-half** (read the live subscription's coupons, set-math the consumed ones)
-  is **built** — that part of the old "push-only" read gap is closed.
-
-### What does NOT exist — the genuinely-new work
-The sync only ever **pushes** CRM-derived desired state onto Stripe; it never reads
-a subscription's **actual** Stripe lifecycle status. So a naive sweep will **not**
-detect that Stripe's dunning engine moved a sub `past_due → unpaid → canceled` on
-its own schedule — `PaymentSyncStripe.execute_sync` would just call
-`update_subscription` on a now-cancelled sub, error
-(`PaymentsResourceNotFoundError`), get logged, and **leave the CRM stuck on
-"active."** The **Stripe→CRM outcome-absorption** half is new logic.
-
-**Conflict-resolution rule (load-bearing).** When the sweep finds Stripe ≠ CRM, the
-winner depends on the kind of difference:
-- **Config drift** — wrong items / quantities / discount / price on the sub →
-  **CRM wins** → push to Stripe (reuse the recompute). This is config the CRM
-  authored (no member self-serves via a Stripe-hosted portal, so config never
-  originates on Stripe's side).
-- **Lifecycle / outcome drift** — Stripe shows `canceled` / `past_due` / `unpaid`
-  from dunning → **Stripe wins** → absorb into the CRM (mark the member delinquent /
-  cancelled). **Do NOT recreate the subscription or re-bill.** Blindly converging
-  here resurrects a delinquent member's sub and fights Stripe's billing engine every
-  run. This split is the difference between a safe reconciler and one that undoes
-  Stripe's dunning.
-
-### Other requirements
-- **No-op when already in sync.** `execute_sync` always issues a Stripe `update` for
-  an existing sub with items (it does not diff). Fine on a per-request change; on an
-  hourly sweep it means pointless writes (and proration risk if anything is off). The
-  scheduled path needs a **compare-desired-vs-actual, skip-if-equal** guard.
-- **What to compare:** subscription status (to catch dunning), items/quantities,
-  discounts, and price/cost.
-- **The sweep validates convergence-to-our-logic, not correctness.** A bug in the
-  desired-state computation reproduces identically in the per-request path and the
-  sweep (same code). The independent correctness check on *outcomes* stays the
-  webhook mirror + tests — not the sweep.
-
-**Open questions:** cadence + scope (all active subs each run, or changed-since /
-per-gym batching?); the exact **status-absorption mapping** — which Stripe statuses
-(`canceled` / `unpaid` / `past_due`) map to which CRM member/membership states, and
-how that interacts with the existing webhook handlers (`invoice.payment_failed`,
-`account.updated`) to avoid double-applying.
+`PaymentSyncStripe.execute_sync` always issues a Stripe `update` for an existing
+sub with items (it does not diff), so the push sweep writes to every active
+family's sub every run — harmless with `proration_behavior="none"` (no charge),
+but wasteful, and a proration risk if a future change makes the converge
+non-idempotent. The deferred work is a **compare-desired-vs-actual, skip-if-equal**
+guard on the scheduled push path: compare items / quantities, discounts, and
+price / cost, and skip the Stripe write when already in sync. (Subscription
+*status* drift is already handled — the status sweep reads the live sub and
+absorbs `canceled` / not-found into the CRM.)
 
 ## 5. Post-discount amount PER MEMBERSHIP (not built)
 

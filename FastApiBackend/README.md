@@ -15,7 +15,7 @@ read/write REST API over the shared Supabase Postgres, authenticated with Supaba
 ```mermaid
 flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
-  FB["⚙️ FastApiBackend — CRM / billing API<br/>10 domains · 69 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · member_memberships · membership_plans · stripe_webhooks"]
+  FB["⚙️ FastApiBackend — CRM / billing API<br/>10 domains · 69 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · member_memberships · membership_plans · stripe_webhooks<br/>+ payments · reconciler (router-less; reconciler = twice-daily billing sweep)"]
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)"]
   Stripe["Stripe — payments · Connect · webhooks"]
   CRM -->|"authenticated REST · WIP"| FB
@@ -77,8 +77,9 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 | `discounts` | Coupon-free discount presets (plain gym config; coupons computed at sync, not on the preset) |
 | `member_memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount snapshots; coupons computed + written back at sync), previews, cash/card charge, link/unlink family accounts (pure DB change) |
 | `membership_plans` | Plan + price templates (Stripe products / prices) + migration |
-| `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB |
+| `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB (invoices, charges, refunds, and `customer.subscription.deleted` → cancellation absorbed into the CRM) |
 | `payments` *(no router)* | Stripe service core (client, payment, price, members, membership, subscription, discount) injected into the billing domains |
+| `reconciler` *(no router)* | Twice-daily billing safety-net sweep (APScheduler in the lifespan, behind a global `resource_locks` lock): invoice-fetch backfill, Stripe→CRM cancellation absorption, `not_added` orphan cleanup, and the CRM→Stripe push (`bulk_payment_sync`). See the `sync-guide` skill |
 
 ## Conventions (the load-bearing rules)
 
