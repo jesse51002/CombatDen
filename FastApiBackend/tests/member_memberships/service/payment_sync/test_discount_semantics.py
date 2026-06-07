@@ -166,7 +166,6 @@ async def test_line_amount_vs_subtotal_with_discount(
 
 async def test_line_amount_is_total_for_quantity_not_per_unit(
     memberships_service,
-    management_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -209,7 +208,7 @@ async def test_line_amount_is_total_for_quantity_not_per_unit(
     )
 
     try:
-        await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent.member_id,
         )

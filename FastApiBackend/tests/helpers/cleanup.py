@@ -84,6 +84,19 @@ async def delete_member_data(
             text("DELETE FROM member_charges WHERE member_id = :id"),
             {"id": str(member_id)},
         )
+        # Invoice line items can reference THIS member's memberships from
+        # ANOTHER member's invoice (family billing: a child's membership is
+        # billed on the paying parent's invoice). Deleting only this member's
+        # invoices misses those, so the membership delete below would hit
+        # fk_line_item_membership_gym — delete them by membership item_id.
+        await session.execute(
+            text(
+                "DELETE FROM member_invoice_line_items WHERE item_id IN "
+                "(SELECT item_id FROM member_memberships_unfiltered "
+                "WHERE member_id = :id)"
+            ),
+            {"id": str(member_id)},
+        )
         await session.execute(
             text("DELETE FROM member_invoices WHERE member_id = :id"),
             {"id": str(member_id)},
