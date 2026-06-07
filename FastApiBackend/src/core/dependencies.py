@@ -100,6 +100,9 @@ from src.shared.resource_lock import ResourceLock
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
+from src.stripe_webhooks.service.customer_subscription_deleted_handler import (
+    CustomerSubscriptionDeletedHandler,
+)
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
@@ -221,6 +224,14 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Generic non-blocking TTL-lease lock (key-agnostic). Used by the scheduled
     # reconciler's global sweep lock and the orphan-cleanup family check.
     resource_lock = providers.Factory(ResourceLock, db_pool=db_pool)
+    # CRM-only absorption of a Stripe-cancelled family sub. Shared by the
+    # reconciler status sweep (B) and the customer.subscription.deleted webhook,
+    # so it is defined here (before both the webhooks and reconciler blocks).
+    subscription_cancellation_absorber = providers.Factory(
+        SubscriptionCancellationAbsorber,
+        db_pool=db_pool,
+        parent_resolver=billing_parent_resolver,
+    )
     # The one concurrency lock: a TTL lease keyed on a member's paying parent,
     # so no two billing ops sync the same family at once. Used by the facade,
     # the webhook settle, and the bulk fan-out.
@@ -358,6 +369,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_webhook_account_updated_handler = providers.Factory(
         AccountUpdatedHandler,
     )
+    stripe_webhook_customer_subscription_deleted_handler = providers.Factory(
+        CustomerSubscriptionDeletedHandler,
+        cancellation_absorber=subscription_cancellation_absorber,
+    )
     stripe_webhooks_service = providers.Factory(
         StripeWebhooksService,
         db_pool=db_pool,
@@ -367,6 +382,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         invoice_payment_failed_handler=stripe_webhook_invoice_payment_failed_handler,
         refund_handler=stripe_webhook_refund_handler,
         account_updated_handler=stripe_webhook_account_updated_handler,
+        customer_subscription_deleted_handler=(
+            stripe_webhook_customer_subscription_deleted_handler
+        ),
     )
     # === end CRM billing DI providers ===
 
@@ -390,11 +408,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         members_service=payments_members_service,
         price_service=payments_price_service,
         discount_service=payments_discount_service,
-    )
-    subscription_cancellation_absorber = providers.Factory(
-        SubscriptionCancellationAbsorber,
-        db_pool=db_pool,
-        parent_resolver=billing_parent_resolver,
     )
     reconciler_subscription_status_sweep = providers.Factory(
         SubscriptionStatusSweep,
