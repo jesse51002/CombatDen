@@ -160,7 +160,8 @@ def build_member_management_service(
     """
     members_svc = PaymentsStripeMembersService(stripe_client)
     sync_svc = build_payment_sync_service(db_pool, stripe_client)
-    return MembersManagementService(db_pool, members_svc, sync_svc)
+    paying_lock = build_paying_member_lock(db_pool)
+    return MembersManagementService(db_pool, members_svc, sync_svc, paying_lock)
 
 
 def build_member_memberships_service(

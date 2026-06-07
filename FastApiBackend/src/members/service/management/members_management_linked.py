@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         PaymentsStripeMembersService,
     )
     from src.shared.database import DirectDatabasePool
+    from src.shared.paying_member_lock import PayingMemberLock
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +50,11 @@ class MembersManagementLinked(MembersManagementBase):
         db_pool: DirectDatabasePool,
         payments_members_service: PaymentsStripeMembersService,
         payment_sync_service: PaymentSyncService,
+        paying_lock: PayingMemberLock,
     ) -> None:
         super().__init__(db_pool, payments_members_service)
         self._sync = payment_sync_service
+        self._paying_lock = paying_lock
 
     # ── Link ───────────────────────────────────────────────────
 
@@ -89,6 +92,17 @@ class MembersManagementLinked(MembersManagementBase):
         if member_id == parent_member_id:
             raise ValueError("A member cannot be linked to themselves")
 
+        # Lock BOTH families — the child's own and the new paying parent's — so
+        # the move can't race a concurrent op on either.
+        async with self._paying_lock.lock([member_id, parent_member_id]):
+            return await self._link_locked(member_id, parent_member_id)
+
+    async def _link_locked(
+        self,
+        member_id: UUID,
+        parent_member_id: UUID,
+    ) -> MembersBillingProfileResponse:
+        """Link under the family lock — the body of ``link_account``."""
         child = await self._get_member(member_id)
         if child.account_linked_to_id is not None:
             raise ValueError(
@@ -231,6 +245,17 @@ class MembersManagementLinked(MembersManagementBase):
             raise ValueError(f"Member {member_id} is not linked to a parent account")
         old_parent_id = child.account_linked_to_id
 
+        # Lock the child + its old paying parent so the unlink can't race a
+        # concurrent op on that family.
+        async with self._paying_lock.lock([member_id, old_parent_id]):
+            return await self._unlink_locked(member_id, old_parent_id)
+
+    async def _unlink_locked(
+        self,
+        member_id: UUID,
+        old_parent_id: UUID,
+    ) -> MembersBillingProfileResponse:
+        """Unlink under the family lock — the body of ``unlink_account``."""
         await self._assert_no_active_recurring(member_id)
 
         # Pre-sync: converge the old parent's family to a clean DB↔Stripe baseline
@@ -278,17 +303,18 @@ class MembersManagementLinked(MembersManagementBase):
         if member_id == parent_member_id:
             raise ValueError("A member cannot be linked to themselves")
 
-        child = await self._get_member(member_id)
-        if child.account_linked_to_id is not None:
-            raise ValueError(
-                f"Member {member_id} is already linked to {child.account_linked_to_id}"
+        async with self._paying_lock.lock([member_id, parent_member_id]):
+            child = await self._get_member(member_id)
+            if child.account_linked_to_id is not None:
+                raise ValueError(
+                    f"Member {member_id} is already linked to {child.account_linked_to_id}"
+                )
+
+            await self._assert_no_active_recurring(member_id)
+
+            return await self._sync.preview_update_payments_recurring(
+                parent_member_id,
             )
-
-        await self._assert_no_active_recurring(member_id)
-
-        return await self._sync.preview_update_payments_recurring(
-            parent_member_id,
-        )
 
     async def preview_unlink_account(
         self,
@@ -312,11 +338,12 @@ class MembersManagementLinked(MembersManagementBase):
             raise ValueError(f"Member {member_id} is not linked to a parent account")
         old_parent_id = child.account_linked_to_id
 
-        await self._assert_no_active_recurring(member_id)
+        async with self._paying_lock.lock([member_id, old_parent_id]):
+            await self._assert_no_active_recurring(member_id)
 
-        return await self._sync.preview_update_payments_recurring(
-            old_parent_id,
-        )
+            return await self._sync.preview_update_payments_recurring(
+                old_parent_id,
+            )
 
     # ── Private ────────────────────────────────────────────────
 

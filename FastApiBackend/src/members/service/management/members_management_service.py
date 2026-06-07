@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from src.payments.service.payments_stripe_members_service import (
         PaymentsStripeMembersService,
     )
+    from src.shared.paying_member_lock import PayingMemberLock
 
 
 class MembersManagementService:
@@ -59,6 +60,7 @@ class MembersManagementService:
         db_pool: DirectDatabasePool,
         payments_members_service: PaymentsStripeMembersService,
         payment_sync_service: PaymentSyncService,
+        paying_lock: PayingMemberLock,
     ) -> None:
         deps = (db_pool, payments_members_service)
         self._create = MembersManagementCreate(*deps)
@@ -68,6 +70,7 @@ class MembersManagementService:
             db_pool,
             payments_members_service,
             payment_sync_service,
+            paying_lock,
         )
 
     # ── Create / Update member ─────────────────────────────────
