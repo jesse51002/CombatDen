@@ -66,6 +66,11 @@ class InvoicesSection extends StatefulWidget {
   final String payerName;
   final String? payerPhotoUrl;
 
+  /// Re-fetches the invoices whenever this changes — bump it after a
+  /// billing mutation (discount or membership add/remove) so the card
+  /// reflects the new charge instead of the one loaded at first build.
+  final Object? refreshKey;
+
   const InvoicesSection({
     super.key,
     required this.memberId,
@@ -73,6 +78,7 @@ class InvoicesSection extends StatefulWidget {
     required this.payerName,
     this.nextDueDate,
     this.payerPhotoUrl,
+    this.refreshKey,
   });
 
   @override
@@ -81,12 +87,22 @@ class InvoicesSection extends StatefulWidget {
 }
 
 class _InvoicesSectionState extends State<InvoicesSection> {
-  late final Future<_InvoicesData> _future;
+  late Future<_InvoicesData> _future;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant InvoicesSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshKey != widget.refreshKey) {
+      setState(() {
+        _future = _load();
+      });
+    }
   }
 
   Future<_InvoicesData> _load() async {
