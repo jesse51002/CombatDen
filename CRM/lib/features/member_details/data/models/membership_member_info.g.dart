@@ -17,4 +17,6 @@ MembershipMemberInfo _$MembershipMemberInfoFromJson(
       ? null
       : DateTime.parse(json['cancel_date'] as String),
   onOutdatedPrice: json['on_outdated_price'] as bool? ?? false,
+  baseCost: (json['base_cost'] as num?)?.toInt() ?? 0,
+  totalPrice: (json['total_price'] as num?)?.toInt() ?? 0,
 );

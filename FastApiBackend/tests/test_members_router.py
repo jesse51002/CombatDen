@@ -309,7 +309,6 @@ def test_member_detail_includes_streak_and_redemptions(
             videos_watched=0,
         ),
         recently_redeemed_rewards=[],
-        payment_history=[],
     )
 
     mock_service = MagicMock()
@@ -353,7 +352,6 @@ def test_member_detail_hydrates_nested_rank(
             videos_watched=10,
         ),
         recently_redeemed_rewards=[],
-        payment_history=[],
     )
 
     mock_service = MagicMock()

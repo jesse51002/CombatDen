@@ -33,6 +33,12 @@ class MembershipInfo extends Equatable {
   @JsonKey(fromJson: MembershipStatus.fromJson)
   final MembershipStatus status;
   final int baseCost;
+
+  /// The plan's current active price (minor units), or null
+  /// when the plan has no active price. Used to show the
+  /// "migrate to current price" prompt when a member is on
+  /// an older pinned price.
+  final int? currentActivePrice;
   final int durationAmount;
   final String durationUnit;
   final int totalPrice;
@@ -53,6 +59,7 @@ class MembershipInfo extends Equatable {
     this.planType,
     required this.status,
     required this.baseCost,
+    this.currentActivePrice,
     required this.durationAmount,
     required this.durationUnit,
     required this.totalPrice,
@@ -90,6 +97,26 @@ class MembershipInfo extends Equatable {
   bool isOnOutdatedPriceFor(String memberId) =>
       members[memberId]?.onOutdatedPrice ?? false;
 
+  /// This member's own after-discount total (minor units),
+  /// falling back to the plan-level total when the member is
+  /// not present in [members].
+  int totalPriceFor(String memberId) =>
+      members[memberId]?.totalPrice ?? totalPrice;
+
+  /// This member's own pinned price (minor units), falling
+  /// back to the plan-level base cost when absent.
+  int baseCostFor(String memberId) =>
+      members[memberId]?.baseCost ?? baseCost;
+
+  /// The covered person's class-usage row for this plan, or
+  /// null when they are not in the paying-for roster.
+  PayingForMember? payingForMemberFor(String memberId) {
+    for (final p in payingFor) {
+      if (p.memberId == memberId) return p;
+    }
+    return null;
+  }
+
   @override
   List<Object?> get props => [
         members,
@@ -98,6 +125,7 @@ class MembershipInfo extends Equatable {
         planType,
         status,
         baseCost,
+        currentActivePrice,
         durationAmount,
         durationUnit,
         totalPrice,

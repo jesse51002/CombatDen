@@ -8,9 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.members import SQL_DIR
 from src.members.schema.members_billing_schema import (
     BillingDiscountInfo,
-    BillingLineItemRecord,
     BillingLinkedAccount,
-    BillingPaymentRecord,
     BillingRewardCard,
 )
 from src.shared.database import DirectDatabasePool
@@ -34,7 +32,6 @@ class MembersBillingSupplementary:
         self._discounts: dict[UUID, BillingDiscountInfo] = {}
         self._profiles: dict[UUID, BillingLinkedAccount] = {}
         self._rewards: dict[UUID, BillingRewardCard] = {}
-        self._payment_history: list[BillingPaymentRecord] = []
         self._redeemed_rewards: list[BillingRewardCard] = []
 
     async def fetch_all(
@@ -59,7 +56,6 @@ class MembersBillingSupplementary:
             self._discounts = await self._fetch_discounts(session, gym_params)
             self._profiles = await self._fetch_profiles(session, gym_params)
             self._rewards = await self._fetch_rewards(session, gym_params)
-            self._payment_history = await self._fetch_charges(session, member_params)
             self._redeemed_rewards = await self._fetch_reward_redemptions(
                 session,
                 member_params,
@@ -70,7 +66,6 @@ class MembersBillingSupplementary:
         self._discounts.clear()
         self._profiles.clear()
         self._rewards.clear()
-        self._payment_history.clear()
         self._redeemed_rewards.clear()
 
     async def _fetch_discounts(
@@ -132,51 +127,6 @@ class MembersBillingSupplementary:
             rewards[row["reward_id"]] = reward
         return rewards
 
-    async def _fetch_charges(
-        self,
-        session: AsyncSession,
-        params: dict[str, str],
-    ) -> list[BillingPaymentRecord]:
-        """Load member charges with aggregated line items and applied discounts."""
-        sql = load_sql(_DETAILS_SQL / "member_details_transactions.sql")
-        result = await session.execute(text(sql), params)
-        payments: list[BillingPaymentRecord] = []
-        for row in result.mappings().all():
-            line_items = [
-                BillingLineItemRecord(
-                    line_item_id=li["line_item_id"],
-                    item_type=li["item_type"],
-                    name=li["name"],
-                    amount=li["amount"],
-                    stripe_product_id=li.get("stripe_product_id"),
-                    item_id=(UUID(li["item_id"]) if li.get("item_id") else None),
-                )
-                for li in (row["line_items"] or [])
-            ]
-
-            applied: list[BillingDiscountInfo] = []
-            for ad in row["applied_discounts"] or []:
-                discount = self._discounts.get(UUID(ad["discount_id"]))
-                if discount:
-                    applied.append(discount)
-
-            payments.append(
-                BillingPaymentRecord(
-                    charge_id=row["charge_id"],
-                    invoice_id=row["invoice_id"],
-                    kind=row["kind"],
-                    status=row["status"],
-                    amount=row["amount"],
-                    currency=row["currency"],
-                    payment_method_type=row["payment_method_type"],
-                    charge_time=row["charge_time"],
-                    refunds_charge_id=row["refunds_charge_id"],
-                    line_items=line_items,
-                    applied_discounts=applied,
-                )
-            )
-        return payments
-
     async def _fetch_reward_redemptions(
         self,
         session: AsyncSession,
@@ -231,11 +181,6 @@ class MembersBillingSupplementary:
     def profiles_dict(self) -> dict[UUID, BillingLinkedAccount]:
         """Return the raw profiles lookup dict."""
         return self._profiles
-
-    @property
-    def payment_history(self) -> list[BillingPaymentRecord]:
-        """Return all payment records for the member."""
-        return self._payment_history
 
     @property
     def redeemed_rewards(self) -> list[BillingRewardCard]:

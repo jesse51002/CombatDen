@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
-import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 
@@ -56,11 +55,11 @@ bool isTerminalStatus(MembershipStatus status) =>
     status == MembershipStatus.cancelled ||
     status == MembershipStatus.ended;
 
-/// Cost display from the membership's total price (minor
-/// currency units).
-Widget costValue(MembershipInfo membership) {
+/// Cost display for an explicit amount (minor currency
+/// units) — the selected member's own after-discount total.
+Widget costValue(int amount) {
   return Text(
-    formatMinorUnits(membership.totalPrice),
+    formatMinorUnits(amount),
     style: DesignConstants.h2.copyWith(
       fontWeight: FontWeight.w700,
     ),

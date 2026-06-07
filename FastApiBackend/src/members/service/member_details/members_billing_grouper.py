@@ -78,6 +78,8 @@ class MembersBillingGrouper:
                     end_date=row["membership_end_date"],
                     cancel_date=row["membership_cancel_date"],
                     on_outdated_price=bool(row["on_outdated_price"]),
+                    base_cost=row["base_cost"],
+                    total_price=row["total_price"] or 0,
                 )
                 for row in rows
             }
@@ -93,6 +95,9 @@ class MembersBillingGrouper:
                         today,
                     ),
                     base_cost=representative["base_cost"],
+                    current_active_price=representative[
+                        "current_active_price"
+                    ],
                     duration_amount=representative["duration_amount"],
                     duration_unit=representative["duration_unit"],
                     total_price=total_price,

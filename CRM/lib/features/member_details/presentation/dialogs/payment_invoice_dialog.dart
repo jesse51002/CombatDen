@@ -48,11 +48,12 @@ class PaymentInvoiceDialog extends StatelessWidget {
   bool get _isRefund => payment.kind == ChargeKind.refund;
 
   /// Refundable only when this is a succeeded payment (not
-  /// already a refund and not pending/failed).
+  /// already a refund, not pending/failed) with an
+  /// un-refunded balance left.
   bool get _canRefund =>
       !_isRefund &&
       payment.status == ChargeStatus.succeeded &&
-      payment.amount > 0;
+      payment.netAmount > 0;
 
   /// Adapts the [PaymentRecord] into the shared,
   /// presentation-only [InvoiceBreakdownData] shape. Falls
@@ -63,7 +64,9 @@ class PaymentInvoiceDialog extends StatelessWidget {
         ? payment.lineItems
             .map(
               (l) => InvoiceLineItem(
-                description: l.name,
+                description: l.quantity > 1
+                    ? '${l.name} ×${l.quantity}'
+                    : l.name,
                 amount: l.amount,
               ),
             )
@@ -79,6 +82,7 @@ class PaymentInvoiceDialog extends StatelessWidget {
       total: payment.amount,
       currency: payment.currency,
       isRefund: _isRefund,
+      refundedAmount: payment.refundedAmount,
       appliedDiscounts: payment.appliedDiscounts
           .map(
             (d) => InvoiceDiscount(

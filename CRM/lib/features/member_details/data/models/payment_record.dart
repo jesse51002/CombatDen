@@ -29,6 +29,21 @@ class PaymentRecord extends Equatable {
   final String? paymentMethodType;
   final DateTime chargeTime;
   final String? refundsChargeId;
+
+  /// Total refunded against this charge (minor units, >= 0).
+  /// Refunds are folded into the original charge rather than
+  /// shown as separate rows.
+  @JsonKey(defaultValue: 0)
+  final int refundedAmount;
+
+  /// The account that was charged (the payer).
+  final String paidByMemberId;
+  @JsonKey(defaultValue: '')
+  final String paidByFirstName;
+  @JsonKey(defaultValue: '')
+  final String paidByLastName;
+  final String? paidByPhotoUrl;
+
   @JsonKey(defaultValue: [])
   final List<LineItemRecord> lineItems;
   @JsonKey(defaultValue: [])
@@ -44,9 +59,29 @@ class PaymentRecord extends Equatable {
     this.paymentMethodType,
     required this.chargeTime,
     this.refundsChargeId,
+    this.refundedAmount = 0,
+    required this.paidByMemberId,
+    this.paidByFirstName = '',
+    this.paidByLastName = '',
+    this.paidByPhotoUrl,
     this.lineItems = const [],
     this.appliedDiscounts = const [],
   });
+
+  /// The payer's display name.
+  String get paidByName =>
+      '$paidByFirstName $paidByLastName'.trim();
+
+  /// Amount left after refunds (minor units).
+  int get netAmount => amount - refundedAmount;
+
+  /// True when some — but not all — of the charge was refunded.
+  bool get isPartiallyRefunded =>
+      refundedAmount > 0 && refundedAmount < amount;
+
+  /// True when the whole charge was refunded.
+  bool get isFullyRefunded =>
+      refundedAmount > 0 && refundedAmount >= amount;
 
   factory PaymentRecord.fromJson(
     Map<String, dynamic> json,
@@ -64,6 +99,11 @@ class PaymentRecord extends Equatable {
         paymentMethodType,
         chargeTime,
         refundsChargeId,
+        refundedAmount,
+        paidByMemberId,
+        paidByFirstName,
+        paidByLastName,
+        paidByPhotoUrl,
         lineItems,
         appliedDiscounts,
       ];

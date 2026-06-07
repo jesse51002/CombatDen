@@ -226,7 +226,6 @@ class MembersBillingDetailService:
             ),
             rank=self._build_rank(target_row),
             recently_redeemed_rewards=(self._supplementary.redeemed_rewards),
-            payment_history=(self._supplementary.payment_history),
             card_on_file=self._build_card_on_file(parent_row),
         )
 

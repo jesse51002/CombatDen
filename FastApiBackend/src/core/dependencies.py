@@ -31,6 +31,9 @@ from src.members.service.management.members_management_service import (
 from src.members.service.member_details.members_billing_detail_service import (
     MembersBillingDetailService,
 )
+from src.members.service.member_payments_service import (
+    MembersPaymentsService,
+)
 from src.membership_plans.service.plans.membership_plans_service import (
     MembershipPlansService,
 )
@@ -206,11 +209,16 @@ class DependencyInjector(containers.DeclarativeContainer):
         streak_service=streak_service,
         cycle_counts_service=cycle_counts_service,
     )
+    members_payments_service = providers.Factory(
+        MembersPaymentsService,
+        db_pool=db_pool,
+    )
     members_management_service = providers.Factory(
         MembersManagementService,
         db_pool=db_pool,
         payments_members_service=payments_members_service,
         payment_sync_service=membership_payment_sync_service,
+        subscription_service=payments_subscription_service,
     )
 
     # ── Discounts ────────────────────────────────────────────────

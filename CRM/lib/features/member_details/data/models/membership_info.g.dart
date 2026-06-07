@@ -21,6 +21,7 @@ MembershipInfo _$MembershipInfoFromJson(Map<String, dynamic> json) =>
       planType: json['plan_type'] as String?,
       status: MembershipStatus.fromJson(json['status'] as String),
       baseCost: (json['base_cost'] as num).toInt(),
+      currentActivePrice: (json['current_active_price'] as num?)?.toInt(),
       durationAmount: (json['duration_amount'] as num).toInt(),
       durationUnit: json['duration_unit'] as String,
       totalPrice: (json['total_price'] as num).toInt(),

@@ -512,7 +512,8 @@ Table member_invoice_line_items {
   gym_id uuid [not null]
   item_type varchar [not null, note: 'enum: membership | custom']
   name varchar [not null]
-  amount integer [not null, note: 'CHECK >= 0']
+  amount integer [not null, note: 'CHECK >= 0 (line total, post-qty)']
+  quantity integer [not null, note: 'default 1; CHECK > 0']
   stripe_product_id varchar
   item_id uuid [note: 'nullable; required when item_type = membership']
 

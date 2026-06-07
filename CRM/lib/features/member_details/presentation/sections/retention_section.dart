@@ -8,6 +8,11 @@ import 'package:crm/features/member_details/data/models/reward_card_model.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
+/// Height of the horizontal reward strip — fixed so it measures
+/// cleanly under the grid's equal-height layout. Sized to fit a
+/// card's image, a one-line title, and a two-line description.
+const double _kRewardStripHeight = 140;
+
 /// Retention stats (last class, class streak, points,
 /// videos watched) with threshold-driven coloring, plus a
 /// horizontal strip of recently redeemed rewards.
@@ -35,7 +40,7 @@ class RetentionSection extends StatelessWidget {
             child: rewards.isEmpty
                 ? _EmptyRewards()
                 : SizedBox(
-                    height: 132,
+                    height: _kRewardStripHeight,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: rewards.length,
@@ -234,7 +239,7 @@ class _RewardCard extends StatelessWidget {
             reward.title,
             style: DesignConstants.h3,
             textAlign: TextAlign.center,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           if (reward.amountOff != null)
@@ -244,6 +249,8 @@ class _RewardCard extends StatelessWidget {
                 color: DesignConstants.text2nd,
               ),
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
         ],
       ),

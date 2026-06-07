@@ -12,6 +12,7 @@ LineItemRecord _$LineItemRecordFromJson(Map<String, dynamic> json) =>
       itemType: LineItemType.fromJson(json['item_type'] as String),
       name: json['name'] as String,
       amount: (json['amount'] as num).toInt(),
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
       stripeProductId: json['stripe_product_id'] as String?,
       itemId: json['item_id'] as String?,
     );

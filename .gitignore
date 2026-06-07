@@ -4,3 +4,4 @@ __pycache__
 .env
 CRM/.env.dev
 CRM/.env.prod
+openapi.json

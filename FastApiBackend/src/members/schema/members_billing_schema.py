@@ -122,12 +122,21 @@ class BillingDiscountInfo(BaseModel):
 
 
 class BillingMembershipMemberInfo(BaseModel):
-    """Per-member membership details within a grouped plan."""
+    """Per-member membership details within a grouped plan.
+
+    ``base_cost`` and ``total_price`` are this member's own
+    ``member_memberships`` numbers (their pinned price and their
+    after-discount total), so the CRM can render the membership card
+    atomically for one covered member at a time rather than as a
+    family-wide aggregate.
+    """
 
     item_id: UUID
     end_date: date | None = None
     cancel_date: date | None = None
     on_outdated_price: bool = False
+    base_cost: int
+    total_price: int
 
 
 class BillingMembershipInfo(BaseModel):
@@ -138,6 +147,7 @@ class BillingMembershipInfo(BaseModel):
     plan_type: PlanType | None = None
     status: CrmMemberStatus
     base_cost: int
+    current_active_price: int | None = None
     duration_amount: int
     duration_unit: str
     total_price: int
@@ -193,12 +203,18 @@ class BillingLineItemRecord(BaseModel):
     item_type: LineItemType
     name: str
     amount: int
+    quantity: int = 1
     stripe_product_id: str | None = None
     item_id: UUID | None = None
 
 
 class BillingPaymentRecord(BaseModel):
-    """A single charge (payment or refund) against an invoice."""
+    """A single charge (payment or refund) against an invoice.
+
+    ``paid_by_*`` identify the account that was charged (the payer) so the
+    member-detail history can label each row — the charges are attributed to
+    the member by membership, so the payer may be a paying parent.
+    """
 
     charge_id: UUID
     invoice_id: UUID
@@ -209,6 +225,11 @@ class BillingPaymentRecord(BaseModel):
     payment_method_type: str | None = None
     charge_time: datetime
     refunds_charge_id: UUID | None = None
+    refunded_amount: int = 0
+    paid_by_member_id: UUID
+    paid_by_first_name: str
+    paid_by_last_name: str
+    paid_by_photo_url: str | None = None
     line_items: list[BillingLineItemRecord] = []
     applied_discounts: list[BillingDiscountInfo] = []
 
@@ -245,5 +266,4 @@ class MemberBillingDetailResponse(BaseModel):
     retention: BillingRetention
     rank: BillingRank | None = None
     recently_redeemed_rewards: list[BillingRewardCard] = []
-    payment_history: list[BillingPaymentRecord] = []
     card_on_file: BillingCardOnFile | None = None
