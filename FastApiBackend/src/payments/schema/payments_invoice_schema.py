@@ -44,6 +44,22 @@ class UpcomingInvoiceResponse(BaseModel):
     lines: list[UpcomingInvoiceLine] = []
 
 
+# ── Due-now vs Recurring Preview ────────────────────────────────
+
+
+class DueNowVsRecurringPreview(BaseModel):
+    """A preview split into what is charged now vs. what recurs.
+
+    Both halves are ordinary invoice previews assembled by the caller:
+    ``due_now`` is the immediate invoice (``None`` when nothing is
+    charged now), ``recurring`` is the steady-state per-cycle invoice
+    (the ``proration_behavior=none`` preview).
+    """
+
+    due_now: PaymentsInvoicePreviewResponse | None = None
+    recurring: PaymentsInvoicePreviewResponse | None = None
+
+
 # ── Invoice List ────────────────────────────────────────────────
 
 

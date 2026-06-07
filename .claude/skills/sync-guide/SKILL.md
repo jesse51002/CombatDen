@@ -113,7 +113,7 @@ parent resolution inject the shared `BillingParentResolver` directly — not via
 | method | what it does | callers |
 | --- | --- | --- |
 | `update_payments_recurring(member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none") -> None` | the real sync: resolve → settle once → build (re-derive bucket **and resolve coupons**) → execute → **`PaymentSyncWriteback`** persists the full sync-owned state (§3). Returns **None** — callers read the DB (the `applied` status) | every membership mutation |
-| `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: resolve → **settle once-discounts** (same as real) → same DB-derived build **incl. discount resolution** (so the preview reflects discounts) → Stripe invoice *preview*. Skips the convergence writeback (§9) | the CRM "what will this charge?" preview |
+| `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: resolve → **settle once-discounts** (same as real) → same DB-derived discount-aware build → assemble a **`DueNowVsRecurringPreview`** split via `PaymentSyncStripe.preview_execute_sync` (proration `none` → `recurring`; `always_invoice` → `due_now` when prorating, else `due_now` reuses `recurring`). Skips the convergence writeback (§9) | every CRM preview (start / cancel / price / discounts) |
 | `settle_once_discounts(member_id)` | a thin wrapper: resolve parent → `PaymentSyncOnceDiscounts.sync_once_discounts` — stamp a consumed `once` discount's `end_date` promptly, on its own, with no full sync (§6) | the `invoice.paid` webhook (`payments-guide`), best-effort |
 | `bulk_payment_sync(member_ids)` | loop members, fresh `uuid4()` idempotency key each, call `update_payments_recurring` | reprice fan-out; the future reconciler (§10) |
 
@@ -638,13 +638,31 @@ Stripe's invoice **preview**, never a mutation.
   cancelled. So the real-vs-preview boundary is the **convergence writeback**
   (execute vs preview-execute), not the settle or the discounts.
 
-`preview_execute_sync` mirrors `execute_sync`'s dispatch (`preview_update_…` for an
-existing sub, `preview_create_…` for a new one), threads the explicit
-`proration_behavior`, and returns `None` for a pure cancellation or no-op — there's
-no upcoming invoice to preview. Freeze/unfreeze is intentionally unsupported in
-preview (a `pause_collection` change produces no invoice). The idempotency key is a
-throwaway `uuid4()` (preview writes nothing, so the key is unused downstream — it
-only satisfies the shared request schema).
+**`preview_update_payments_recurring` returns a `DueNowVsRecurringPreview` split**
+(`{due_now, recurring}`) — the single preview entry point every surface uses (start,
+cancel, price-change, discounts add/remove). It delegates to
+`PaymentSyncStripe.preview_execute_sync`, which mirrors `execute_sync`'s dispatch
+(`preview_update_…` for an existing sub, `preview_create_…` for a new one) and
+**assembles the split** by calling a private `_run_preview` (the actual one-shot
+Stripe preview) up to twice:
+
+- **`recurring`** ← `_run_preview(..., "none")` — the steady-state next full cycle
+  (proration filtered out by `none`), so the recurring line is always present (a
+  single `always_invoice` preview carries only proration lines, so the recurring
+  figure can't come from it).
+- **`due_now`** ← `_run_preview(..., "always_invoice")` when the caller prorates;
+  otherwise `due_now` **reuses the `recurring` result** ("same thing twice") — a
+  non-prorating change charges nothing extra now.
+
+So it's **one** Stripe preview call for a `none` surface, **two** for a prorating
+one. Returns `None` for a pure cancellation / no-op (empty bucket — no upcoming
+invoice). Freeze/unfreeze is intentionally unsupported in preview (a
+`pause_collection` change produces no invoice). The idempotency key is a throwaway
+`uuid4()` (preview writes nothing). **Payments stays dumb** — it still exposes only
+the flat `preview_*_subscription` requests (each a single preview at a given
+`proration_behavior`); the engine owns the splitting. A one-time start has no engine
+sync — the start service wraps its one-time preview as `{due_now, recurring=None}`
+directly.
 
 ---
 

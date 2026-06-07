@@ -23,6 +23,7 @@ from src.payments.schema.metadata.stripe_membership_one_time_metadata import (
 )
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_invoice_schema import (
+    DueNowVsRecurringPreview,
     PaymentsInvoicePreviewResponse,
 )
 from src.payments.schema.payments_payment_schema import (
@@ -236,7 +237,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         price_id: UUID,
         prorate: bool = True,
         paid_with_cash: bool = False,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Preview what starting a membership would charge.
 
         Runs every validation ``start`` runs (plan/price lookup,
@@ -250,8 +251,10 @@ class MemberMembershipsStart(MemberMembershipsBase):
             performs no charge.
 
         Returns:
-            Invoice preview, or ``None`` for a recurring plan whose
-            resulting bucket produces no upcoming invoice.
+            A due-now / recurring split, or ``None`` for a recurring
+            plan whose resulting bucket produces no upcoming invoice.
+            A one-time plan returns the whole charge in ``due_now``
+            with an empty ``recurring``.
 
         Raises:
             ValueError: Same conditions as ``start``.
@@ -310,11 +313,13 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 ),
             )
 
-        return await self._preview_one_time(
+        # A one-time purchase is charged entirely now; nothing recurs.
+        one_time = await self._preview_one_time(
             stripe_customer_id=parent.stripe_customer_id,
             stripe_price_id=plan_price["stripe_price_id"],
             gym_id=parent.gym_id,
         )
+        return DueNowVsRecurringPreview(due_now=one_time, recurring=None)
 
     # ── Private ────────────────────────────────────────────────
 

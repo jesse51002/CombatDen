@@ -26,7 +26,7 @@ from src.member_memberships.service.payment_sync.payment_sync_writeback import (
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    DueNowVsRecurringPreview,
 )
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
@@ -136,15 +136,16 @@ class PaymentSyncService:
         self,
         member_id: UUID,
         proration_behavior: Literal["none", "always_invoice"] = "none",
-    ) -> PaymentsInvoicePreviewResponse | None:
-        """Preview what a recurring sync would charge.
+    ) -> DueNowVsRecurringPreview | None:
+        """Preview what a recurring sync would charge, as a split.
 
-        Runs the same DB-derived resolution + discount resolution +
-        subscription-bucket building as ``update_payments_recurring``
-        (the discount coupons ARE resolved — idempotent, gym-wide
-        find-or-create — so the preview total reflects discounts), then
-        calls Stripe's invoice preview endpoint instead of mutating the
-        subscription. No subscription is created, updated, or cancelled.
+        The single preview entry point for every surface. Runs the same
+        DB-derived resolution + discount resolution + subscription-bucket
+        building as ``update_payments_recurring`` (the discount coupons
+        ARE resolved — idempotent, gym-wide find-or-create — so the
+        preview reflects discounts), then previews Stripe's invoice
+        instead of mutating the subscription. No subscription is created,
+        updated, or cancelled.
 
         The once-discount settle DOES run here, same as the real path:
         stamping a consumed ``once``'s ``end_date`` is a settled fact
@@ -154,7 +155,7 @@ class PaymentSyncService:
         totals) — none of the sync's own desired-state results are persisted.
 
         Returns:
-            An invoice preview, or ``None`` if the resulting bucket
+            A ``{due_now, recurring}`` split, or ``None`` if the bucket
             would cancel the subscription (no items remaining) —
             a cancellation has no upcoming invoice.
         """

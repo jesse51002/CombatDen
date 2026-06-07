@@ -123,7 +123,9 @@ async def test_preview_start_one_time_matches_invoice(
             before,
             connect_opts,
         )
-        assert_preview_matches_invoice(preview, invoice)
+        # A one-time charge is entirely due now; nothing recurs.
+        assert_preview_matches_invoice(preview.due_now, invoice)
+        assert preview.recurring is None
     finally:
         await delete_member_data(db_pool, member.member_id)
 
@@ -189,7 +191,9 @@ async def test_preview_start_recurring_matches_first_invoice(
             subscription_id=profile.stripe_sub_id_month,
             min_amount=0,
         )
-        assert_preview_matches_invoice(preview, invoice)
+        # The immediate first invoice is the due-now preview; the
+        # recurring half comes from a separate next-cycle preview.
+        assert_preview_matches_invoice(preview.due_now, invoice)
     finally:
         await delete_member_data(db_pool, member.member_id)
 
@@ -276,7 +280,7 @@ async def test_preview_update_price_prorate_true_matches_invoice(
             subscription_id=profile.stripe_sub_id_month,
             min_amount=0,
         )
-        assert_preview_matches_invoice(preview, invoice)
+        assert_preview_matches_invoice(preview.due_now, invoice)
     finally:
         if member is not None:
             await delete_member_data(db_pool, member.member_id)
@@ -367,7 +371,7 @@ async def test_preview_update_price_prorate_false_matches_renewal(
             before,
             connect_opts,
         )
-        assert_preview_matches_invoice(preview, invoice)
+        assert_preview_matches_invoice(preview.recurring, invoice)
     finally:
         if member is not None:
             await delete_member_data(db_pool, member.member_id)
@@ -466,7 +470,7 @@ async def test_preview_cancel_partial_matches_renewal(
             before,
             connect_opts,
         )
-        assert_preview_matches_invoice(preview, invoice)
+        assert_preview_matches_invoice(preview.recurring, invoice)
     finally:
         if member is not None:
             await delete_member_data(db_pool, member.member_id)
@@ -567,7 +571,7 @@ async def test_preview_applied_discounts_matches_renewal(
             before,
             connect_opts,
         )
-        assert_preview_matches_invoice(preview, invoice)
+        assert_preview_matches_invoice(preview.recurring, invoice)
     finally:
         if member is not None:
             await delete_member_data(db_pool, member.member_id)

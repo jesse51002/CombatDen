@@ -12,7 +12,7 @@ from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    DueNowVsRecurringPreview,
 )
 from src.shared.db_first_helpers import staged_preview, sync_or_revert
 from src.shared.gym_timezone import gym_today
@@ -123,7 +123,7 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         item_id: UUID,
         member_id: UUID,
         prorate: bool = False,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Preview upgrading a membership to the plan's active price.
 
         Runs every validation ``update_price`` runs and returns the Stripe
