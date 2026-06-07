@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
-import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/coming_soon_dialog.dart';
+import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
 /// Stripe invoice status that counts as outstanding/open.
@@ -32,11 +34,17 @@ class _PickedInvoice {
   final String currency;
   final DateTime? date;
 
+  /// The upcoming preview (carries line items) when this is the
+  /// upcoming invoice; null for an open/overdue invoice, which the
+  /// list endpoint surfaces as an amount only.
+  final PreviewInvoice? preview;
+
   const _PickedInvoice({
     required this.overdue,
     required this.amount,
     required this.currency,
     required this.date,
+    this.preview,
   });
 }
 
@@ -113,6 +121,7 @@ class _InvoicesSectionState extends State<InvoicesSection> {
         amount: upcoming.amountDue,
         currency: upcoming.currency,
         date: widget.nextDueDate,
+        preview: upcoming,
       );
     }
     return null;
@@ -158,6 +167,19 @@ class _InvoiceCard extends StatelessWidget {
     required this.payerName,
     required this.payerPhotoUrl,
   });
+
+  /// The money this card shows, through the shared breakdown widget.
+  /// An upcoming invoice carries line items; an open/overdue one is
+  /// surfaced as an amount-only total.
+  InvoiceBreakdownData get _money {
+    final preview = invoice.preview;
+    if (preview != null) return previewInvoiceBreakdown(preview);
+    return InvoiceBreakdownData(
+      lines: const [],
+      total: invoice.amount,
+      currency: invoice.currency,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -219,17 +241,9 @@ class _InvoiceCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                formatMinorUnits(
-                  invoice.amount,
-                  currency: invoice.currency,
-                ),
-                style: DesignConstants.h2.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
             ],
           ),
+          InvoiceBreakdown(data: _money),
           AppOutlineButton(
             fullWidth: true,
             text: 'Mark paid with cash',

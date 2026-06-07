@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
+import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 
-/// Previews a discount add/remove as a **current → new** comparison.
+/// Previews a discount add/remove as a **current → new** comparison,
+/// rendered through the shared [InvoiceBreakdown] so it matches every
+/// other invoice surface.
 ///
 /// Loads the member's current recurring invoice ([loadCurrent]) and the
-/// staged-change preview ([loadPreview]) — both [PreviewInvoice]s with
-/// lines keyed by `stripe_subscription_item_id` — then renders an aligned
-/// table: per line `label ×N  $current → $new` and a Monthly
-/// `$current/mo → $new/mo` row. **Both sides are post-discount**, so the
-/// per-line deltas reconcile with the monthly delta (unlike a
-/// list-price → discounted view, where the line discounts dwarf the
-/// actual change).
+/// staged-change preview ([loadPreview]); `comparisonBreakdownFromPair`
+/// turns the pair into a before→after breakdown — undiscounted price,
+/// the discount, the line net old → new, and the Monthly total old → new
+/// with a Difference row.
 class DiscountChangePreview extends StatefulWidget {
   final Future<PreviewInvoice?> Function() loadCurrent;
   final Future<DueNowVsRecurringPreview?> Function() loadPreview;
@@ -102,209 +102,18 @@ class _DiscountChangePreviewState
                   ),
                 );
               }
-              return _Comparison(
-                current: snapshot.data?.current,
-                next: next,
-                fallbackCurrentMonthly:
-                    widget.fallbackCurrentMonthly,
+              return InvoiceBreakdown(
+                data: comparisonBreakdownFromPair(
+                  current: snapshot.data?.current,
+                  next: next,
+                  fallbackCurrentMonthly:
+                      widget.fallbackCurrentMonthly,
+                ),
               );
             },
           ),
         ),
       ],
-    );
-  }
-}
-
-class _Comparison extends StatelessWidget {
-  final PreviewInvoice? current;
-  final PreviewInvoice next;
-  final int? fallbackCurrentMonthly;
-
-  const _Comparison({
-    required this.current,
-    required this.next,
-    this.fallbackCurrentMonthly,
-  });
-
-  static const _gap = EdgeInsets.only(
-    left: DesignConstants.spacingMedium,
-  );
-  static const _rowPad = EdgeInsets.symmetric(
-    vertical: DesignConstants.spacingSmall,
-  );
-  static const _topGap = EdgeInsets.only(
-    top: DesignConstants.spacingSmall,
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    final currency = next.currency;
-    final muted = DesignConstants.text2nd;
-
-    // Current post-discount line totals, keyed by sub-item.
-    final currentBySi = <String, int>{
-      for (final l in current?.lines ??
-          const <PreviewInvoiceLine>[])
-        if (l.stripeSubscriptionItemId != null)
-          l.stripeSubscriptionItemId!: l.discountedAmount,
-    };
-
-    final rows = <TableRow>[];
-    for (final l in next.lines) {
-      final qty = l.quantity;
-      final label = (qty != null && qty > 1)
-          ? '${l.description ?? 'Line item'}  ×$qty'
-          : (l.description ?? 'Line item');
-      final newAmt = l.discountedAmount;
-      // Fallback to the list amount only when there's no current line
-      // (e.g. current invoice unavailable).
-      final curAmt =
-          currentBySi[l.stripeSubscriptionItemId] ?? l.amount;
-      final changed = curAmt != newAmt;
-      rows.add(
-        TableRow(
-          children: [
-            Padding(
-              padding: _rowPad,
-              child: Text(
-                label,
-                style: DesignConstants.p,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            _amount(
-              changed
-                  ? formatMinorUnits(curAmt, currency: currency)
-                  : null,
-              style: DesignConstants.p.copyWith(
-                color: muted,
-                decoration: TextDecoration.lineThrough,
-              ),
-            ),
-            _arrow(show: changed, style: DesignConstants.p),
-            _amount(
-              formatMinorUnits(newAmt, currency: currency),
-              style: DesignConstants.p,
-            ),
-          ],
-        ),
-      );
-    }
-
-    final curTotal = current?.total ?? fallbackCurrentMonthly;
-    final newTotal = next.total;
-    final totalChanged = curTotal != null && curTotal != newTotal;
-    rows.add(
-      TableRow(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: DesignConstants.divider),
-          ),
-        ),
-        children: [
-          Padding(
-            padding: _rowPad.add(_topGap),
-            child: Text('Monthly', style: DesignConstants.h2),
-          ),
-          _amount(
-            totalChanged
-                ? '${formatMinorUnits(curTotal, currency: currency)}/mo'
-                : null,
-            style: DesignConstants.pSmall.copyWith(
-              color: muted,
-              decoration: TextDecoration.lineThrough,
-            ),
-            topGap: true,
-          ),
-          _arrow(
-            show: totalChanged,
-            style: DesignConstants.pSmall,
-            topGap: true,
-          ),
-          _amount(
-            '${formatMinorUnits(newTotal, currency: currency)}/mo',
-            style: DesignConstants.h2,
-            topGap: true,
-          ),
-        ],
-      ),
-    );
-
-    final diff = curTotal != null ? newTotal - curTotal : null;
-    if (diff != null && diff != 0) {
-      final less = diff < 0;
-      rows.add(
-        TableRow(
-          children: [
-            Padding(
-              padding: _rowPad,
-              child: Text(
-                'Difference',
-                style: DesignConstants.p,
-              ),
-            ),
-            _amount(null, style: DesignConstants.p),
-            _arrow(show: false, style: DesignConstants.p),
-            _amount(
-              '${formatMinorUnits(diff.abs(), currency: currency)}'
-              ' ${less ? 'less' : 'more'}',
-              style: DesignConstants.p,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Table(
-      columnWidths: const {
-        0: FlexColumnWidth(),
-        1: IntrinsicColumnWidth(),
-        2: IntrinsicColumnWidth(),
-        3: IntrinsicColumnWidth(),
-      },
-      defaultVerticalAlignment:
-          TableCellVerticalAlignment.middle,
-      children: rows,
-    );
-  }
-
-  EdgeInsetsGeometry _cellPad(bool topGap) =>
-      topGap ? _gap.add(_rowPad).add(_topGap) : _gap.add(_rowPad);
-
-  Widget _amount(
-    String? text, {
-    required TextStyle style,
-    bool topGap = false,
-  }) {
-    return Padding(
-      padding: _cellPad(topGap),
-      child: text == null
-          ? const SizedBox.shrink()
-          : Text(
-              text,
-              textAlign: TextAlign.right,
-              style: style,
-            ),
-    );
-  }
-
-  Widget _arrow({
-    required bool show,
-    required TextStyle style,
-    bool topGap = false,
-  }) {
-    return Padding(
-      padding: _cellPad(topGap),
-      child: show
-          ? Text(
-              '→',
-              style: style.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            )
-          : const SizedBox.shrink(),
     );
   }
 }

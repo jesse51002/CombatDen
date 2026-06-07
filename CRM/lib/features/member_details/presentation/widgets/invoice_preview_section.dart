@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
+import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
-import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 
 /// Fetches a `*/preview` invoice and renders the due-now /
 /// recurring split as a titled card, handling the four
@@ -13,13 +12,10 @@ import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart
 /// preview-backed billing dialog gets the same behaviour
 /// without re-wiring the fetch.
 ///
-/// Feature-scoped on purpose: it knows the member-detail
-/// [DueNowVsRecurringPreview] and maps each half onto the
-/// shared, presentation-only [InvoiceBreakdownData]. The
-/// shared widget stays decoupled from any billing model
-/// (see `invoice_breakdown_data.dart`). The `due_now` half
-/// renders as the breakdown ("charged today"); the
-/// `recurring` half renders as a "then $Y/mo" summary line.
+/// Both halves render through the shared [InvoiceBreakdown] so
+/// the surface matches every other invoice view. The `due_now`
+/// half is the breakdown "charged today"; the `recurring` half
+/// is captioned "Then, each month" with a `/mo` total.
 class InvoicePreviewSection extends StatefulWidget {
   /// Returns the preview, or `null` when the mutation has
   /// no billing impact (backend returns a null body).
@@ -70,30 +66,6 @@ class _InvoicePreviewSectionState
     }
   }
 
-  /// Maps the backend preview onto the shared breakdown
-  /// shape. Discount lines arrive inline as negative line
-  /// items from Stripe, so the subtotal is only surfaced
-  /// when it actually differs from the total.
-  InvoiceBreakdownData _toBreakdown(
-    PreviewInvoice preview,
-  ) {
-    return InvoiceBreakdownData(
-      lines: preview.lines
-          .map(
-            (l) => InvoiceLineItem(
-              description: l.description ?? 'Line item',
-              amount: l.amount,
-            ),
-          )
-          .toList(),
-      subtotal: preview.subtotal == preview.total
-          ? null
-          : preview.subtotal,
-      total: preview.total,
-      currency: preview.currency,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -117,7 +89,6 @@ class _InvoicePreviewSectionState
           child: _PreviewBody(
             future: _future,
             emptyLabel: widget.emptyLabel,
-            toBreakdown: _toBreakdown,
           ),
         ),
       ],
@@ -128,14 +99,10 @@ class _InvoicePreviewSectionState
 class _PreviewBody extends StatelessWidget {
   final Future<DueNowVsRecurringPreview?> future;
   final String emptyLabel;
-  final InvoiceBreakdownData Function(
-    PreviewInvoice,
-  ) toBreakdown;
 
   const _PreviewBody({
     required this.future,
     required this.emptyLabel,
-    required this.toBreakdown,
   });
 
   @override
@@ -174,45 +141,23 @@ class _PreviewBody extends StatelessWidget {
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingMedium,
+          spacing: DesignConstants.spacingLarge,
           children: [
             if (dueNow != null)
-              InvoiceBreakdown(data: toBreakdown(dueNow)),
+              InvoiceBreakdown(
+                data: previewInvoiceBreakdown(dueNow),
+              ),
             if (recurring != null)
-              _RecurringSummary(recurring: recurring),
+              InvoiceBreakdown(
+                data: previewInvoiceBreakdown(
+                  recurring,
+                  amountSuffix: '/mo',
+                ),
+                headerCaption: 'Then, each month',
+              ),
           ],
         );
       },
-    );
-  }
-}
-
-/// The "then $Y/mo after" line below the due-now breakdown —
-/// the steady-state recurring charge.
-class _RecurringSummary extends StatelessWidget {
-  final PreviewInvoice recurring;
-
-  const _RecurringSummary({required this.recurring});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          'Then, each month',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text2nd,
-          ),
-        ),
-        Text(
-          formatMinorUnits(
-            recurring.total,
-            currency: recurring.currency,
-          ),
-          style: DesignConstants.pSmall,
-        ),
-      ],
     );
   }
 }
