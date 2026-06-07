@@ -311,8 +311,12 @@ state to the DB, calls the param-less sync (`update_payments_recurring`, or
 landed and reverts the DB change if it did not** (via `sync_or_revert`). The full caller contract — what each op writes, verifies, and
 reverts, and how the `migrating` status unlocks the immutable-column revert — is
 owned by `sync-guide` (§2 "The caller contract"); the sync engine itself is owned
-by `sync-guide` too. Each op has a parallel `preview_*` that runs the same
-validation and returns a Stripe invoice preview without writing rows.
+by `sync-guide` too. Most ops also expose a preview (a `preview_*` method or a
+`preview=True` flag) that runs the same validation and returns a Stripe invoice
+preview without writing rows. **Link / unlink are the exception to this whole
+paragraph** — they are pure DB changes (no sync, no `_pre_sync_payments`/verify, no
+preview) and lock **two** families inside the op, so the facade delegates them bare
+(see the table).
 
 | op (file) | what it does |
 | --- | --- |
@@ -323,6 +327,7 @@ validation and returns a Stripe invoice preview without writing rows.
 | **mark_paid_cash** (`member_memberships_mark_paid_cash.py`) | recurring-only; finds the subscription's open Stripe invoice and pays it **out of band** (no card charge). Stripe's `invoice.paid` webhook then writes the CRM invoice/charge rows as cash. Cash is a backup — future cycles still auto-charge the card. |
 | **charge_card** (`member_memberships_charge_card.py`) | ad-hoc, **outside any subscription**: create a one-off Stripe invoice for `amount_cents` + `reason`; `paid_cash=true` routes it out of band instead of charging the card. The webhook persists the CRM rows. |
 | **add / remove discounts** (`member_memberships_update_discounts.py`) | **two separate ops**, `add_discounts(item_id, member_id, preset_ids, idempotency_key, preview=False)` and `remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`. Each writes/deletes applied-discount snapshot rows, then re-syncs so the sync resolves coupons. With `preview=True` it **stages** instead of committing — add inserts `preview_add` rows then deletes them; remove flips the rows to `preview_remove` then reverts to `applied` — runs the read-only preview build (which keeps `preview_add` in / drops `preview_remove`), and always cleans up. **The discount snapshot model is owned by `discounts-guide`** — defer the once/ongoing, value-version, coupon, and preview-staging details there. |
+| **link / unlink** (`member_memberships_linked.py`) | `link_account(member_id, parent_member_id)` sets `members.account_linked_to_id` (and NULLs the child's stripe/card/freeze fields per the `linked_account_no_stripe` check); `unlink_account(member_id)` clears it; `check_link_account` is a read-only pre-flight. **Pure DB change — no Stripe sync, no preview.** Both require the member to have **zero active recurring memberships** (`_assert_no_active_recurring`), and the engine never recomputes discounts family-wide (`discounts-guide`), so adding/removing a membership-less family member can't change anyone's bill — there is nothing to sync or preview. Owns its **own** locking: locks **two** families (`[member_id, parent_member_id]` / `[member_id, old_parent_id]`); since `PayingMemberLock` is non-reentrant the facade delegates these **bare** (no `lock([member_id])` wrap). Self-contained — does **not** extend `MemberMembershipsBase`. |
 
 ---
 
