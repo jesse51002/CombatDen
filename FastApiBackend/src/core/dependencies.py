@@ -81,15 +81,18 @@ from src.shared.paying_member_lock import PayingMemberLock
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
-from src.stripe_webhooks.service.charge_refunded_handler import (
-    ChargeRefundedHandler,
-)
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
 )
 from src.stripe_webhooks.service.invoice_payment_failed_handler import (
     InvoicePaymentFailedHandler,
+)
+from src.stripe_webhooks.service.invoice_payment_paid_handler import (
+    InvoicePaymentPaidHandler,
+)
+from src.stripe_webhooks.service.refund_handler import (
+    RefundHandler,
 )
 from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
@@ -320,11 +323,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_service=payment_sync_service,
         paying_lock=paying_member_lock,
     )
+    stripe_webhook_invoice_payment_paid_handler = providers.Factory(
+        InvoicePaymentPaidHandler,
+        stripe_client=stripe_client,
+    )
     stripe_webhook_invoice_payment_failed_handler = providers.Factory(
         InvoicePaymentFailedHandler,
     )
-    stripe_webhook_charge_refunded_handler = providers.Factory(
-        ChargeRefundedHandler,
+    stripe_webhook_refund_handler = providers.Factory(
+        RefundHandler,
     )
     stripe_webhook_account_updated_handler = providers.Factory(
         AccountUpdatedHandler,
@@ -334,8 +341,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         event_log=stripe_webhook_event_log,
         invoice_paid_handler=stripe_webhook_invoice_paid_handler,
+        invoice_payment_paid_handler=stripe_webhook_invoice_payment_paid_handler,
         invoice_payment_failed_handler=stripe_webhook_invoice_payment_failed_handler,
-        charge_refunded_handler=stripe_webhook_charge_refunded_handler,
+        refund_handler=stripe_webhook_refund_handler,
         account_updated_handler=stripe_webhook_account_updated_handler,
     )
     # === end CRM billing DI providers ===

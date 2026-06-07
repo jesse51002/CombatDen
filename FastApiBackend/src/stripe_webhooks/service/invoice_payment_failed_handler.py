@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
+from src.stripe_webhooks.service.stripe_invoice_fields import (
+    line_subscription_item,
+)
 from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
 from src.stripe_webhooks.service.stripe_time import stripe_ts_to_datetime
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
@@ -47,9 +50,9 @@ class InvoicePaymentFailedHandler:
         member_id = await self._resolve_member_id(session, invoice, gym_id)
         if member_id is None:
             subscription_item_ids = [
-                line["subscription_item"]
+                item_id
                 for line in self._lines(invoice)
-                if line.get("subscription_item")
+                if (item_id := line_subscription_item(line))
             ]
             if subscription_item_ids:
                 raise SubscriptionItemPendingError(
@@ -83,7 +86,7 @@ class InvoicePaymentFailedHandler:
     ) -> UUID | None:
         membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
         for line in self._lines(invoice):
-            stripe_item_id = line.get("subscription_item")
+            stripe_item_id = line_subscription_item(line)
             if not stripe_item_id:
                 continue
             result = await session.execute(

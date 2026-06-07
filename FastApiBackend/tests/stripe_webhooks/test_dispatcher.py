@@ -33,6 +33,16 @@ async def _charges_count(db_pool, gym_id) -> int:
     return int(row["n"])
 
 
+async def _invoices_count(db_pool, gym_id) -> int:
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text("SELECT COUNT(*) AS n FROM member_invoices WHERE gym_id = :gym_id"),
+            {"gym_id": str(gym_id)},
+        )
+        row = result.mappings().fetchone()
+    return int(row["n"])
+
+
 async def test_dispatcher_rejects_event_missing_id(stripe_webhooks_service):
     event = {"type": "invoice.paid", "account": "acct_test", "data": {"object": {}}}
     with pytest.raises(ValueError, match="missing id or type"):
@@ -120,5 +130,7 @@ async def test_dispatcher_dedupes_repeat_event_delivery(
 
     # Exactly one event-log row.
     assert await _event_log_count(db_pool, event["id"]) == 1
-    # Exactly one charge row (not two).
-    assert await _charges_count(db_pool, gym_id) == 1
+    # Exactly one invoice row (not two) — invoice.paid records the bill;
+    # charges come from invoice_payment.paid, so there are none here.
+    assert await _invoices_count(db_pool, gym_id) == 1
+    assert await _charges_count(db_pool, gym_id) == 0

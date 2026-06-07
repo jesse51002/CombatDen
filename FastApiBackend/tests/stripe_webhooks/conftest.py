@@ -16,15 +16,18 @@ from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
-from src.stripe_webhooks.service.charge_refunded_handler import (
-    ChargeRefundedHandler,
-)
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
 )
 from src.stripe_webhooks.service.invoice_payment_failed_handler import (
     InvoicePaymentFailedHandler,
+)
+from src.stripe_webhooks.service.invoice_payment_paid_handler import (
+    InvoicePaymentPaidHandler,
+)
+from src.stripe_webhooks.service.refund_handler import (
+    RefundHandler,
 )
 from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
@@ -46,6 +49,44 @@ from tests.helpers.service_factory import (
 # ``connect_opts`` below continues to target the real Stripe Connect
 # account so ``create_member`` / ``create_plan`` still work.
 _WEBHOOK_STRIPE_ACCOUNT_ID = f"acct_webhook_test_{uuid.uuid4().hex[:16]}"
+
+
+def fake_charge_id_for(payment_intent_id: str) -> str:
+    """The charge id the fake Stripe client resolves a PaymentIntent to.
+
+    ``InvoicePaymentPaidHandler`` retrieves the PaymentIntent and reads
+    ``latest_charge``; the fake below derives it deterministically so tests
+    can assert on (and refund) the resulting ``member_charges`` row.
+    """
+    return f"ch_for_{payment_intent_id}"
+
+
+class _FakePaymentIntent:
+    def __init__(self, latest_charge: str) -> None:
+        self.latest_charge = latest_charge
+
+
+class _FakePaymentIntents:
+    async def retrieve_async(self, payment_intent_id, options=None):
+        return _FakePaymentIntent(fake_charge_id_for(payment_intent_id))
+
+
+class _FakeStripeInner:
+    def __init__(self) -> None:
+        self.v1 = type("V1", (), {"payment_intents": _FakePaymentIntents()})()
+
+
+class FakePaymentsStripeClient:
+    """Stand-in for ``PaymentsStripeClient`` in webhook tests.
+
+    Only ``.client`` is exercised by ``InvoicePaymentPaidHandler`` (the
+    PaymentIntent retrieve); ``connect_opts_readonly`` is the real pure
+    staticmethod on ``PaymentsStripeClient``, so it needs no faking.
+    """
+
+    @property
+    def client(self) -> _FakeStripeInner:
+        return _FakeStripeInner()
 
 
 # ── Overrides to isolate from seeded gyms sharing the real test account ──
@@ -122,13 +163,21 @@ def invoice_paid_handler(db_pool, stripe_client) -> InvoicePaidHandler:
 
 
 @pytest.fixture(scope="module")
+def invoice_payment_paid_handler() -> InvoicePaymentPaidHandler:
+    # Fake Stripe client: the PaymentIntent retrieve is the only Stripe call,
+    # and the webhook test gym uses a synthetic account a real retrieve can't
+    # hit. The live E2E exercises the real retrieve.
+    return InvoicePaymentPaidHandler(stripe_client=FakePaymentsStripeClient())
+
+
+@pytest.fixture(scope="module")
 def invoice_payment_failed_handler() -> InvoicePaymentFailedHandler:
     return InvoicePaymentFailedHandler()
 
 
 @pytest.fixture(scope="module")
-def charge_refunded_handler() -> ChargeRefundedHandler:
-    return ChargeRefundedHandler()
+def refund_handler() -> RefundHandler:
+    return RefundHandler()
 
 
 @pytest.fixture(scope="module")
@@ -141,16 +190,18 @@ def stripe_webhooks_service(
     db_pool,
     event_log,
     invoice_paid_handler,
+    invoice_payment_paid_handler,
     invoice_payment_failed_handler,
-    charge_refunded_handler,
+    refund_handler,
     account_updated_handler,
 ) -> StripeWebhooksService:
     return StripeWebhooksService(
         db_pool=db_pool,
         event_log=event_log,
         invoice_paid_handler=invoice_paid_handler,
+        invoice_payment_paid_handler=invoice_payment_paid_handler,
         invoice_payment_failed_handler=invoice_payment_failed_handler,
-        charge_refunded_handler=charge_refunded_handler,
+        refund_handler=refund_handler,
         account_updated_handler=account_updated_handler,
     )
 

@@ -73,6 +73,7 @@ flowchart TB
     r_plan --> membership_plans_service
     r_hook --> stripe_webhooks_service
     stripe_webhooks_service -->|"invoice.paid → settle once discounts"| payment_sync_service
+    stripe_webhooks_service -->|"invoice_payment.paid → retrieve PaymentIntent for charge id"| Payments
     members_billing_detail_service --> streak_service
     members_billing_detail_service --> cycle_counts_service
     members_management_service --> Payments

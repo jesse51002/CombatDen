@@ -15,12 +15,13 @@ description: >-
   `_map_subscription` / `_consolidate_items` / `_build_reconcile_items` base
   helpers), plus the webhook ingestion (`/api/v1/stripe/webhooks` → signature
   verify → `StripeWebhooksService.handle_event` → gym resolution → `event_log` +
-  `stripe_webhook_events` dedup → the four handlers `invoice.paid` /
-  `invoice.payment_failed` / `charge.refunded` / `account.updated`) and the
-  invoice/charge data model (`member_invoices`, `member_charges`,
-  `member_invoice_line_items`, `member_invoice_applied_discounts`). Trigger on
-  "Stripe", "connect account", "stripe_account_id", "connect_opts", "idempotency
-  key", "webhook", "invoice.paid", "charge.refunded", "account.updated",
+  `stripe_webhook_events` dedup → the handlers `invoice.paid` /
+  `invoice_payment.paid` / `invoice.payment_failed` / `refund.created`+`refund.updated`
+  / `account.updated`) and the invoice/charge data model (`member_invoices`,
+  `member_charges`, `member_invoice_line_items`, `member_invoice_applied_discounts`).
+  Trigger on "Stripe", "connect account", "stripe_account_id", "connect_opts",
+  "idempotency key", "webhook", "invoice.paid", "invoice_payment.paid", "refund",
+  "charge.refunded", "account.updated",
   "subscription", "coupon CRUD", "Stripe customer / payment method", "refund row",
   "member_charges", "member_invoices", "onboarding status", "get_subscription", or
   any change to the Stripe wrapper services, the webhook handlers, or the
@@ -284,10 +285,21 @@ The inbound mirror is `src/stripe_webhooks/`.
 `Stripe-Signature` header against `settings.stripe_connect_webhook_secret` via
 `stripe.Webhook.construct_event`. Missing/invalid signature or bad payload → **400**.
 The verified event is `to_dict()`'d and dispatched to
-`StripeWebhooksService.handle_event`. On `SubscriptionItemPendingError` the router
-returns **200** and schedules `service.retry_pending_event` as a FastAPI
+`StripeWebhooksService.handle_event`. On a **`WebhookRetryableError`** (its
+subclasses `SubscriptionItemPendingError` and `InvoiceNotYetRecordedError`) the
+router returns **200** and schedules `service.retry_pending_event` as a FastAPI
 background task; on any other handler exception it returns **500** so Stripe
 retries.
+
+**Stripe "dahlia" field locations.** The 2026 API generation nests invoice
+fields under a typed `parent`: a line's subscription item is at
+`line.parent.subscription_item_details.subscription_item`, the invoice's
+subscription + metadata at `invoice.parent.subscription_details.*`, and
+`invoice.charge` / `invoice.payment_intent` are **gone** (the charge arrives on
+the separate `invoice_payment.paid` event). The handlers never read these
+inline — they go through the version-tolerant readers in
+`stripe_invoice_fields.py` (`line_subscription_item`, `invoice_metadata`), which
+read the nested location first and fall back to the old flat field.
 
 **Service** (`stripe_webhooks_service.py`): `StripeWebhooksService.handle_event`:
 
@@ -301,18 +313,21 @@ retries.
    returns no row → `is_new = False` → **skip** (idempotent). The event-log insert
    and every handler write **commit or roll back together**, so a Stripe retry
    after a handler failure re-runs the whole thing cleanly.
-4. `_dispatch` routes by `event.type` to one of the four handlers; unknown types
+4. `_dispatch` routes by `event.type` to the matching handler; unknown types
    return silently.
 
-`retry_pending_event` re-runs `handle_event` up to 3 times with a 10s delay (used
-for the sub-item race below).
+`retry_pending_event` re-runs `handle_event` up to 3 times with a 10s delay (it
+catches `WebhookRetryableError`, used for both the sub-item race and the
+invoice-not-yet-recorded race below).
 
 ---
 
-## 6. The four handlers — exactly what each writes
+## 6. The handlers — exactly what each writes
 
-Only **four** event types are registered (constants in
-`stripe_webhooks_service.py`). Each handler is a `Factory` in the DI container.
+The registered event types (constants in `stripe_webhooks_service.py`):
+`invoice.paid`, `invoice_payment.paid`, `invoice.payment_failed`,
+`refund.created` + `refund.updated` (both → the same `RefundHandler`), and
+`account.updated`. Each handler is a `Factory` in the DI container.
 Shared helpers: `dump_stripe_payload` (`stripe_json.py`, JSON with a `Decimal→
 float` fallback so an audit write can never crash a webhook) and `stripe_time.py`
 (`stripe_ts_to_datetime` / `stripe_ts_to_date`). The raw Stripe payload is stored
@@ -331,18 +346,34 @@ into the `stripe_event_payload JSONB` column on every invoice/charge write.
 - **`member_memberships`** — for each billed sub-item, updates `last_paid_date` +
   `next_due_date` (`member_memberships_update_payment_dates.sql`, writes to
   `member_memberships_unfiltered`). **Skipped for one-time invoices.**
-- **`member_charges`** — one `kind='payment'`, `status='succeeded'` row
-  (`member_charge_insert.sql`).
+
+It does **not** write `member_charges` — the succeeded charge is recorded by the
+`invoice_payment.paid` handler (below). This handler owns the bill; that one owns
+the money movement.
 
 Member resolution: one-time invoices carry `member_id` directly in metadata
-(gated on `crm_one_time_payment="true"`); subscription invoices resolve by
-matching a line's `subscription_item` against `member_memberships`
+(gated on `crm_one_time_payment="true"`, read from the invoice root via
+`invoice_metadata`); subscription invoices resolve by matching a line's
+`subscription_item` (read via `line_subscription_item`) against `member_memberships`
 (`membership_by_stripe_item.sql`). If no member resolves **and** lines reference
 sub-items, it raises **`SubscriptionItemPendingError`** (the create-flow hasn't
-committed `stripe_item_id` yet) → 200 + background retry. The cash path
-(`crm_paid_with_cash="true"`) sets `payment_method_type='cash'` and bypasses the
-`stripe_charge_id IS NOT NULL` charge guard; a zero-amount paid invoice with no
-charge id simply skips the charge insert.
+committed `stripe_item_id` yet) → 200 + background retry.
+
+**`invoice_payment.paid` → `InvoicePaymentPaidHandler`**
+(`invoice_payment_paid_handler.py`) — the **charge recorder**. Stripe fires one
+`invoice_payment.paid` per payment (partial **or** full; a $0 invoice fires none,
+so it gets no charge — correct). Writes one **`member_charges`** `kind='payment'`,
+`status='succeeded'` row (`member_charge_insert.sql`):
+
+- Resolves the invoice + member from the already-recorded `member_invoices` row
+  (`member_invoice_by_stripe_id.sql`). If the row isn't there yet (the
+  `invoice.paid` event lost the race), it raises **`InvoiceNotYetRecordedError`**
+  → 200 + retry until it lands.
+- The `ch_…` id comes from the InvoicePayment's `payment.payment_intent` →
+  retrieves the PaymentIntent (read-only, on the connected account) and reads
+  `latest_charge`. An `out_of_band` payment is recorded as cash
+  (`payment_method_type='cash'`, no charge id). DI injects `stripe_client` for the
+  retrieve.
 
 **Once-discount settle (subscription invoices only).** After a *subscription*
 invoice is paid (member resolved, dates updated), the handler calls
@@ -373,16 +404,22 @@ Nothing on the membership row is mutated — Stripe owns dunning; the CRM surfac
 failures by querying `member_charges WHERE status='failed'`. Same
 `SubscriptionItemPendingError` race handling as above.
 
-**`charge.refunded` → `ChargeRefundedHandler`** (`charge_refunded_handler.py`)
+**`refund.created` / `refund.updated` → `RefundHandler`** (`refund_handler.py`)
 writes:
 
-- **`member_charges`** — one `kind='refund'`, `status='succeeded'`,
-  **negative** amount row **per refund in `refunds.data`**, linked to its parent
-  payment via `refunds_charge_id` (looked up by `stripe_charge_id` +
+- **`member_charges`** — one `kind='refund'`, `status='succeeded'`, **negative**
+  amount row per refund, linked to its parent payment via `refunds_charge_id`
+  (the parent is looked up by `refund.charge` → `stripe_charge_id` +
   `kind='payment'` via `member_charge_by_stripe_charge_id.sql`).
 
-If no parent payment row exists it **logs an error and acks** (can't insert a
-refund — `invoice_id` is NOT NULL — needs manual reconciliation, not a retry).
+In dahlia the charge object no longer carries its refunds, so refunds arrive as
+their own `refund.*` events (the event's data object **is** the Refund). Both
+`refund.created` and `refund.updated` route here; the handler records only when
+`status='succeeded'` (a card refund is born succeeded; an async refund succeeds on
+a later update). The `stripe_refund_id` UNIQUE constraint + `ON CONFLICT DO NOTHING`
+makes the create/update overlap and any replay idempotent. If no parent payment
+row exists it **logs an error and acks** (can't insert a refund — `invoice_id` is
+NOT NULL — needs manual reconciliation, not a retry).
 
 **`account.updated` → `AccountUpdatedHandler`** (`account_updated_handler.py`)
 writes:
@@ -533,14 +570,16 @@ are called by the sync engine and the membership/members/plans services
   `src/stripe_webhooks/stripe_webhooks_router.py` (`POST /api/v1/stripe/webhooks`).
 - **Webhook service + handlers:** `src/stripe_webhooks/service/`
   (`stripe_webhooks_service.py`, `event_log.py`, `invoice_paid_handler.py`,
-  `invoice_payment_failed_handler.py`, `charge_refunded_handler.py`,
-  `account_updated_handler.py`, `stripe_json.py`, `stripe_time.py`);
-  exceptions in `stripe_webhooks_exceptions.py` (`SubscriptionItemPendingError`).
+  `invoice_payment_paid_handler.py`, `invoice_payment_failed_handler.py`,
+  `refund_handler.py`, `account_updated_handler.py`, `stripe_json.py`,
+  `stripe_time.py`, `stripe_invoice_fields.py` — the dahlia field readers);
+  exceptions in `stripe_webhooks_exceptions.py` (`WebhookRetryableError` base,
+  `SubscriptionItemPendingError`, `InvoiceNotYetRecordedError`).
 - **Webhook SQL:** `src/stripe_webhooks/sql/` (`gym_by_stripe_account.sql`,
   `stripe_webhook_events_insert.sql`, `member_invoice_upsert.sql`,
   `member_charge_insert.sql`, `member_charge_by_stripe_charge_id.sql`,
-  `membership_by_stripe_item.sql`, `member_memberships_update_payment_dates.sql`,
-  `gyms_set_onboarding_status.sql`).
+  `member_invoice_by_stripe_id.sql`, `membership_by_stripe_item.sql`,
+  `member_memberships_update_payment_dates.sql`, `gyms_set_onboarding_status.sql`).
 - **Schema:** `Database/supabase/schemas/member_invoices.sql`,
   `member_charges.sql`, `member_invoice_line_items.sql`,
   `member_invoice_applied_discounts.sql`, `stripe_webhook_events.sql`, `gyms.sql`

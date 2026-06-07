@@ -13,7 +13,7 @@ from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
 )
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
-    SubscriptionItemPendingError,
+    WebhookRetryableError,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,10 +88,10 @@ async def receive_stripe_webhook(
 
     try:
         await service.handle_event(event_dict)
-    except SubscriptionItemPendingError:
+    except WebhookRetryableError:
         logger.warning(
             "Stripe webhook deferred to background retry "
-            "(subscription item not yet visible): "
+            "(awaited row not yet visible): "
             "event_id=%s event_type=%s",
             event_dict.get("id"),
             event_dict.get("type"),

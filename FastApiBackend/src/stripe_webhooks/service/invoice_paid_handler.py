@@ -13,6 +13,10 @@ from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
 from src.shared.paying_member_lock import LockBusyError
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
+from src.stripe_webhooks.service.stripe_invoice_fields import (
+    invoice_metadata,
+    line_subscription_item,
+)
 from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
 from src.stripe_webhooks.service.stripe_time import (
     stripe_ts_to_datetime,
@@ -30,10 +34,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 EVENT_TYPE = "invoice.paid"
-CHARGE_KIND_PAYMENT = "payment"
-CHARGE_STATUS_SUCCEEDED = "succeeded"
 INVOICE_STATUS_PAID = "paid"
-PAYMENT_METHOD_TYPE_CASH = "cash"
 LINE_ITEM_TYPE_MEMBERSHIP = "membership"
 LINE_ITEM_TYPE_CUSTOM = "custom"
 # Fallback label when a Stripe line carries no description (name <> '').
@@ -53,8 +54,12 @@ class InvoicePaidHandler:
         so the bill is itemized.
       - Update ``member_memberships`` for each billed subscription item
         (``last_paid_date``, ``next_due_date``).
-      - Insert a ``member_charges`` row representing the successful
-        payment.
+
+    The succeeded ``member_charges`` row is NOT written here — a paid
+    invoice's payment(s) arrive on the separate ``invoice_payment.paid``
+    event (one per payment, partial or full), which
+    ``InvoicePaymentPaidHandler`` records. This handler owns the bill;
+    that handler owns the money movement.
 
     Metadata is read directly from the raw invoice envelope — the
     webhook is a pure reader at the Stripe boundary. The typed
@@ -86,9 +91,8 @@ class InvoicePaidHandler:
         if not stripe_invoice_id:
             raise ValueError("invoice.paid event is missing invoice id")
 
-        raw_metadata = invoice.get("metadata") or {}
+        raw_metadata = invoice_metadata(invoice)
         is_one_time = raw_metadata.get("crm_one_time_payment") == STRIPE_METADATA_TRUE
-        paid_with_cash = raw_metadata.get("crm_paid_with_cash") == STRIPE_METADATA_TRUE
 
         member_id = await self._resolve_member_id(
             session,
@@ -99,9 +103,9 @@ class InvoicePaidHandler:
         )
         if member_id is None:
             subscription_item_ids = [
-                line["subscription_item"]
+                item_id
                 for line in self._lines(invoice)
-                if line.get("subscription_item")
+                if (item_id := line_subscription_item(line))
             ]
             if subscription_item_ids:
                 raise SubscriptionItemPendingError(
@@ -124,14 +128,6 @@ class InvoicePaidHandler:
         if not is_one_time:
             await self._update_memberships(session, invoice, gym_id)
             await self._settle_once_discounts(member_id, gym_id)
-        await self._insert_payment_charge(
-            session,
-            invoice,
-            gym_id,
-            member_id,
-            invoice_id,
-            paid_with_cash=paid_with_cash,
-        )
 
     # ── Helpers ────────────────────────────────────────────────
 
@@ -162,7 +158,7 @@ class InvoicePaidHandler:
 
         membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
         for line in self._lines(invoice):
-            stripe_item_id = line.get("subscription_item")
+            stripe_item_id = line_subscription_item(line)
             if not stripe_item_id:
                 continue
             result = await session.execute(
@@ -232,7 +228,7 @@ class InvoicePaidHandler:
 
             item_type = LINE_ITEM_TYPE_CUSTOM
             item_id: str | None = None
-            stripe_item_id = line.get("subscription_item")
+            stripe_item_id = line_subscription_item(line)
             if stripe_item_id:
                 result = await session.execute(
                     text(membership_sql),
@@ -293,7 +289,7 @@ class InvoicePaidHandler:
         )
 
         for line in self._lines(invoice):
-            stripe_item_id = line.get("subscription_item")
+            stripe_item_id = line_subscription_item(line)
             if not stripe_item_id:
                 continue
 
@@ -365,52 +361,6 @@ class InvoicePaidHandler:
                 gym_id,
                 exc_info=True,
             )
-
-    async def _insert_payment_charge(
-        self,
-        session: AsyncSession,
-        invoice: dict[str, Any],
-        gym_id: UUID,
-        member_id: UUID,
-        invoice_id: UUID,
-        *,
-        paid_with_cash: bool,
-    ) -> None:
-        stripe_charge_id = invoice.get("charge")
-        amount_paid = int(invoice.get("amount_paid") or 0)
-
-        # Schema requires payment rows to have a stripe_charge_id
-        # UNLESS payment_method_type='cash' (paid out of band). Skip
-        # the charge insert for zero-amount paid invoices with no
-        # underlying charge (e.g. 100%-off trials).
-        if not stripe_charge_id and not paid_with_cash:
-            if amount_paid == 0:
-                return
-            raise ValueError(
-                f"invoice.paid has amount_paid={amount_paid} but no charge id "
-                f"(stripe_invoice_id={invoice.get('id')})"
-            )
-
-        payment_method_type = PAYMENT_METHOD_TYPE_CASH if paid_with_cash else None
-
-        insert_sql = load_sql(SQL_DIR / "member_charge_insert.sql")
-        paid_at_ts = invoice.get("status_transitions", {}).get("paid_at") or invoice.get("created")
-        params = {
-            "invoice_id": str(invoice_id),
-            "gym_id": str(gym_id),
-            "member_id": str(member_id),
-            "kind": CHARGE_KIND_PAYMENT,
-            "status": CHARGE_STATUS_SUCCEEDED,
-            "amount": amount_paid,
-            "currency": invoice.get("currency", "usd"),
-            "payment_method_type": payment_method_type,
-            "stripe_charge_id": stripe_charge_id,
-            "stripe_refund_id": None,
-            "refunds_charge_id": None,
-            "charge_time": stripe_ts_to_datetime(paid_at_ts),
-            "stripe_event_payload": dump_stripe_payload(invoice),
-        }
-        await session.execute(text(insert_sql), params)
 
     @staticmethod
     def _lines(invoice: dict[str, Any]) -> list[dict[str, Any]]:
