@@ -386,11 +386,18 @@ invoice/charge writes; it is a no-op when the family has no unconsumed `once`. D
 injects `payment_sync_service` into `InvoicePaidHandler` for this (the only handler
 that depends on the sync engine).
 
-> **Applied discounts not written here.** This handler populates
-> `member_invoice_line_items` (above) but does **not** populate
-> `member_invoice_applied_discounts` — that table exists (§7) but no handler writes
-> it today. Do not assert an applied-discount writeback from the webhook; there is
-> none in source today.
+> **Per-invoice discount audit.** After the invoice + line items are written,
+> `_capture_discounts` snapshots the invoice's discounts into
+> `member_invoice_applied_discounts` (§7). The webhook payload carries only
+> opaque `di_` Discount ids, so it **retrieves the invoice** with
+> `expand=["discounts.coupon"]` to resolve each `di_ → coupon`, then stores
+> `{amount_off, stripe_coupon_id}` per discount — **coupon-only, not linked to a
+> CRM discount** (the value-signature coupon is shared across discounts, so the
+> link is ambiguous; we deliberately don't resolve it). It is **SAVEPOINT-isolated
+> best-effort** (`begin_nested` + try/except — a capture failure never rolls back
+> the invoice/charge), a no-op (no Stripe call) when the invoice has no discounts,
+> and idempotent via the row's `UNIQUE (invoice_id, stripe_coupon_id)`. DI injects
+> `stripe_client` into `InvoicePaidHandler` for the retrieve.
 
 **`invoice.payment_failed` → `InvoicePaymentFailedHandler`**
 (`invoice_payment_failed_handler.py`) writes:
@@ -486,14 +493,19 @@ frozen historical label; `amount CHECK (>= 0)` is the line total; `quantity CHEC
 (`membership_line_has_item_id` / `custom_line_has_no_item_id`).
 
 **`member_invoice_applied_discounts`** — a **billing AUDIT trail**, not a
-system-of-record. One row = a discount applied to one invoice: `discount_id` (FK
-→ `gym_discounts_unfiltered`), `amount_off INTEGER CHECK (>= 0)` (the **dollar
-value snapshotted at invoice time** — the underlying discount may change later),
-and `stripe_coupon_id`. **This is explicitly distinct from
+system-of-record. One row = one Stripe coupon that discounted an invoice, written
+by the `invoice.paid` capture (above): `stripe_coupon_id NOT NULL` (the
+identifier), `amount_off INTEGER CHECK (>= 0)` (the **dollars it took off this
+invoice**, snapshotted), and `discount_id` (**nullable, left NULL** — we
+deliberately do **not** resolve back to a CRM `gym_discount`, since the
+value-signature coupon is shared across discounts; the FK is kept only for a
+possible future link). `UNIQUE (invoice_id, stripe_coupon_id)` makes the capture
+idempotent. **This is explicitly distinct from
 `member_membership_applied_discounts`** (the slim, versioned snapshot that pins a
 membership to a discount *value version* — owned by `discounts-guide`). This
-audit table records *what a specific invoice actually charged*; that snapshot
-table records *what a membership is currently entitled to*. Do not conflate them.
+audit table records *what a specific invoice actually discounted (by coupon)*;
+that snapshot table records *what a membership is currently entitled to*. Do not
+conflate them.
 
 **`stripe_webhook_events`** — the idempotency log. PK `event_id VARCHAR`;
 `gym_id`, `event_type`, `processed_at`. `REVOKE ALL … FROM authenticated`
