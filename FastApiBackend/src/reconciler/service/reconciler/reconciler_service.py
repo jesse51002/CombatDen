@@ -16,6 +16,9 @@ from src.core.config import (
     RECONCILER_SWEEP_LOCK_KEY,
     RECONCILER_SWEEP_LOCK_TTL_SECONDS,
 )
+from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
+    InvoiceFetchSweep,
+)
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
@@ -43,11 +46,13 @@ class ReconcilerService:
         orphan_cleanup_sweep: OrphanCleanupSweep,
         payment_push_sweep: PaymentPushSweep,
         subscription_status_sweep: SubscriptionStatusSweep,
+        invoice_fetch_sweep: InvoiceFetchSweep,
     ) -> None:
         self._resource_lock = resource_lock
         self._orphan_cleanup_sweep = orphan_cleanup_sweep
         self._payment_push_sweep = payment_push_sweep
         self._subscription_status_sweep = subscription_status_sweep
+        self._invoice_fetch_sweep = invoice_fetch_sweep
 
     async def run(self) -> ReconcilerRunResult:
         """Run one full sweep, unless another instance already holds the lock.
@@ -68,7 +73,9 @@ class ReconcilerService:
 
             logger.info("Reconciler sweep starting")
             sweeps: list[SweepResult] = []
-            # Final order is D -> B -> A -> C; steps are appended as added.
+            # Order D -> B -> A -> C: refresh dates/charges first, then absorb
+            # cancellations, then clean orphans, then push config drift.
+            sweeps.append(await self._invoice_fetch_sweep.run())
             sweeps.append(await self._subscription_status_sweep.run())
             sweeps.append(await self._orphan_cleanup_sweep.run())
             sweeps.append(await self._payment_push_sweep.run())

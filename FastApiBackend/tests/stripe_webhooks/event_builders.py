@@ -159,8 +159,14 @@ def make_invoice_payment_failed_event(
     currency: str = "usd",
     stripe_invoice_id: str | None = None,
     event_id: str | None = None,
+    attempt_count: int = 1,
 ) -> dict[str, Any]:
-    """Build an ``invoice.payment_failed`` event payload (dahlia shape)."""
+    """Build an ``invoice.payment_failed`` event payload (dahlia shape).
+
+    ``attempt_count`` is Stripe's per-invoice attempt counter; the failed-charge
+    row is keyed on (invoice id, attempt_count), so distinct attempts produce
+    distinct rows while a re-delivered/re-swept same attempt dedupes.
+    """
     now = int(time.time())
     stripe_invoice_id = stripe_invoice_id or f"in_test_{uuid.uuid4().hex[:16]}"
     subscription_id = f"sub_test_{uuid.uuid4().hex[:16]}"
@@ -193,7 +199,7 @@ def make_invoice_payment_failed_event(
         "amount_paid": 0,
         "total": amount_due,
         "currency": currency,
-        "attempt_count": 1,
+        "attempt_count": attempt_count,
         "customer": f"cus_test_{uuid.uuid4().hex[:16]}",
         "created": now,
         "lines": {"data": lines, "object": "list"},

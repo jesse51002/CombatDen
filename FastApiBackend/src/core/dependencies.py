@@ -75,6 +75,9 @@ from src.payments.service.subscription.payments_subscription_retrieve import (
     PaymentsSubscriptionRetrieve,
 )
 from src.ranks.service.ranks_service import RanksService
+from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
+    InvoiceFetchSweep,
+)
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
@@ -416,10 +419,24 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
         cancellation_absorber=subscription_cancellation_absorber,
     )
+    reconciler_invoice_fetch_sweep = providers.Factory(
+        InvoiceFetchSweep,
+        db_pool=db_pool,
+        stripe_client=stripe_client,
+        invoice_paid_handler=stripe_webhook_invoice_paid_handler,
+        invoice_payment_paid_handler=(
+            stripe_webhook_invoice_payment_paid_handler
+        ),
+        invoice_payment_failed_handler=(
+            stripe_webhook_invoice_payment_failed_handler
+        ),
+        refund_handler=stripe_webhook_refund_handler,
+    )
     reconciler_service = providers.Factory(
         ReconcilerService,
         resource_lock=resource_lock,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
         payment_push_sweep=reconciler_payment_push_sweep,
         subscription_status_sweep=reconciler_subscription_status_sweep,
+        invoice_fetch_sweep=reconciler_invoice_fetch_sweep,
     )
