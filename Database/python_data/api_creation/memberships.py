@@ -108,7 +108,9 @@ def create_current(
             continue
         if member.is_linked_child != linked_children:
             continue
-        assert member.member_id is not None, "create_current called before members were created"
+        assert member.member_id is not None, (
+            "create_current called before members were created"
+        )
 
         existing = find_live_membership(client, member.member_id, gym_id)
         if existing is not None:
@@ -160,6 +162,7 @@ def apply_linked(
     immutable snapshot to its active value via the normal apply path
     (``POST /discounts/add`` with ``preset_ids``) and re-syncs Stripe —
     exactly like any discount. We
+
     seed a few members on the linked plan with it so the CRM display and the
     sync's per-line aggregation are exercised end-to-end. Add-only (the seed is
     run against a fresh reset); returns the number applied.
