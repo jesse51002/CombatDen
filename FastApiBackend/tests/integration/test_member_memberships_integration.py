@@ -186,31 +186,36 @@ class TestUnauthenticated:
         assert r.status_code == 401, r.text
 
     def test_discounts_no_auth(self, api):
-        """PUT /discounts without auth returns 401."""
+        """POST /discounts/add without auth returns 401."""
         client = api.__class__(
             base_url=str(api.base_url),
             timeout=api.timeout,
         )
-        r = client.put(
-            f"{BASE}/discounts",
+        r = client.post(
+            f"{BASE}/discounts/add",
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "add_preset_ids": [_NULL_PLAN_ID],
+                "preset_ids": [_NULL_PLAN_ID],
                 "idempotency_key": _IKEY,
             },
         )
         assert r.status_code == 401, r.text
 
     def test_preview_discounts_no_auth(self, api):
-        """POST /discounts/preview (query params) without auth returns 401."""
+        """POST /discounts/remove without auth returns 401."""
         client = api.__class__(
             base_url=str(api.base_url),
             timeout=api.timeout,
         )
         r = client.post(
-            f"{BASE}/discounts/preview",
-            params={"item_id": _NULL_ITEM_ID, "member_id": MEMBER_ID},
+            f"{BASE}/discounts/remove",
+            json={
+                "item_id": _NULL_ITEM_ID,
+                "member_id": MEMBER_ID,
+                "applied_ids": [_NULL_PLAN_ID],
+                "idempotency_key": _IKEY,
+            },
         )
         assert r.status_code == 401, r.text
 
@@ -285,14 +290,14 @@ class TestValidation:
         assert "plan_id" in missing_fields
 
     def test_apply_preset_ids_duplicates_rejected(self, api):
-        """PUT /discounts rejects duplicate UUIDs in add_preset_ids."""
+        """POST /discounts/add rejects duplicate UUIDs in preset_ids."""
         dup_id = str(uuid4())
-        r = api.put(
-            f"{BASE}/discounts",
+        r = api.post(
+            f"{BASE}/discounts/add",
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "add_preset_ids": [dup_id, dup_id],
+                "preset_ids": [dup_id, dup_id],
                 "idempotency_key": _IKEY,
             },
         )
@@ -553,24 +558,34 @@ class TestPreviewPaths:
         assert "not found" in r.json()["detail"].lower()
 
     def test_preview_discounts_nonexistent_item(self, api):
-        """POST /discounts/preview (query params) with nonexistent item -> 404.
+        """POST /discounts/add (preview=true) with a nonexistent item -> 404.
 
-        The preview reads the membership's CURRENT applied-discount snapshots;
-        it takes only item_id + member_id query params (no body). A missing
-        membership is a clean 404.
+        The discount preview is the regular add path with ``preview=true``; a
+        missing membership is a clean 404.
         """
         r = api.post(
-            f"{BASE}/discounts/preview",
-            params={"item_id": _NULL_ITEM_ID, "member_id": MEMBER_ID},
+            f"{BASE}/discounts/add",
+            json={
+                "item_id": _NULL_ITEM_ID,
+                "member_id": MEMBER_ID,
+                "preset_ids": [_NULL_PLAN_ID],
+                "idempotency_key": _IKEY,
+                "preview": True,
+            },
         )
         assert r.status_code == 404, r.text
         assert "not found" in r.json()["detail"].lower()
 
     def test_preview_discounts_missing_member_id_rejected(self, api):
-        """POST /discounts/preview without member_id returns 422."""
+        """POST /discounts/add without member_id returns 422."""
         r = api.post(
-            f"{BASE}/discounts/preview",
-            params={"item_id": _NULL_ITEM_ID},
+            f"{BASE}/discounts/add",
+            json={
+                "item_id": _NULL_ITEM_ID,
+                "preset_ids": [_NULL_PLAN_ID],
+                "idempotency_key": _IKEY,
+                "preview": True,
+            },
         )
         assert r.status_code == 422, r.text
 
