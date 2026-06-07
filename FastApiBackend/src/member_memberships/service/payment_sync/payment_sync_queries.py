@@ -121,6 +121,7 @@ class PaymentSyncQueries:
             plan_id=UUID(str(row["plan_id"])),
             price_id=UUID(str(row["price_id"])),
             stripe_price_id=row["stripe_price_id"],
+            price=row["price"],
             stripe_item_id=row["stripe_item_id"],
             duration_unit=DurationUnit(row["duration_unit"]),
         )

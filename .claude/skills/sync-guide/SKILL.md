@@ -427,7 +427,8 @@ still future work in the reconciler, §10; see `PaymentRefactor.md` §1.)
 `PaymentSyncDiscounts` (`payment_sync_discounts.py`) owns **all** the discount
 math and the coupon resolution. `resolve(groups, stripe_account_id, today)` takes
 the price-grouped memberships (from the builder, §5) and returns a
-**`ResolvedDiscounts`** (`coupons_by_price` + `links`). For each price line:
+**`ResolvedDiscounts`** (`coupons_by_price` + `links` + `member_amounts`). For
+each price line:
 
 1. **Aggregate the line's values** (`_aggregate_line_values`, the math below) → at
    most one `once` value and one `ongoing` value, each a percent **or** a dollar.
@@ -445,6 +446,19 @@ the price-grouped memberships (from the builder, §5) and returns a
    exact. The **real** path writes these links back via
    `set_applied_discount_coupon_id` (→ `set_applied_discount_coupon_id.sql`,
    service-role, unfiltered base table); preview skips this link writeback.
+4. **Per-membership post-discount price** (`member_amounts`) — derived in the
+   **same** single pass as the line values: `_aggregate_line_values` returns
+   `(line_values, member_amounts)`, and for **every** membership (discounted or
+   not) it applies that membership's **own** discounts to its plan `price` (now
+   carried on `ActiveMembershipRow`, read from `membership_plan_prices.price`)
+   via `_post_discount_amount` in `DISCOUNT_APPLICATION_ORDER` (percents
+   compounded via the shared `_remaining_after_percents`, then dollar
+   subtracted; floored at 0). **Ongoing** discounts always count; a **once**
+   discount counts only when the membership is **already on Stripe**
+   (`stripe_item_id` set, so the once applies to a future invoice) — a
+   not-yet-synced membership excludes its once. The **real** path writes each
+   onto its membership row (the "this member pays $X" figure); undiscounted
+   memberships map to their full plan price.
 
 The builder attaches `coupons_by_price` onto the bucket items; the orchestrator
 writes `links` back after `execute_sync`. `resolve` does **no DB writes** (so

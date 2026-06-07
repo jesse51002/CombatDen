@@ -44,10 +44,13 @@ class AppliedDiscount(BaseModel):
 class ActiveMembershipRow(BaseModel):
     """One active recurring membership joined with plan + price info.
 
-    Carries its active discounts (``discounts``): the discount belongs to the
-    membership, so it rides the row rather than a parallel list. The sync groups
-    these rows by ``price_id`` into consolidated lines and reads each line's
-    discounts straight off its memberships.
+    Carries its plan ``price`` (the gross per-unit, in minor units) and its
+    active discounts (``discounts``): both belong to the membership, so they
+    ride the row rather than parallel lists. The sync groups these rows by
+    ``price_id`` into consolidated lines and reads each line's discounts straight
+    off its memberships; ``price`` feeds each membership's own post-discount
+    amount, derived in the same pass by
+    ``PaymentSyncDiscounts._aggregate_line_values``.
     """
 
     item_id: UUID
@@ -55,6 +58,7 @@ class ActiveMembershipRow(BaseModel):
     plan_id: UUID
     price_id: UUID
     stripe_price_id: str
+    price: int
     stripe_item_id: str | None = None
     duration_unit: DurationUnit
     discounts: list[AppliedDiscount] = []
@@ -128,10 +132,19 @@ class ResolvedDiscounts(BaseModel):
     ``applied_discount_id`` to the coupon it resolved to — the **real** path
     writes these back (a ``once`` value records its coupon, the consumption
     handle, on its rows; an ``ongoing`` value on its rows).
+
+    ``member_amounts`` maps each active membership's ``item_id`` to its own
+    post-discount price (minor units) — its plan price with its **ongoing**
+    discounts always applied and its **once** discounts applied only once the
+    membership is on Stripe (its ``stripe_item_id`` is set, so the once applies
+    to a future invoice); a not-yet-synced membership excludes its once. It
+    covers **every** membership in the sync; the **real** path writes each onto
+    its membership row.
     """
 
     coupons_by_price: dict[UUID, list[SubscriptionItemDiscount]] = {}
     links: dict[UUID, str] = {}
+    member_amounts: dict[UUID, int] = {}
 
 
 class SyncParams(BaseModel):
