@@ -68,7 +68,7 @@ class PaymentSyncBuilder:
         rows excluded by the read) — never from imperative add/cancel lists.
         Groups the memberships into consolidated lines by ``price_id`` and hands
         them to ``PaymentSyncDiscounts``, which resolves each line's coupons
-        (find-or-create, dollar→percent) and returns the per-price coupon lists
+        (find-or-create, percent→dollar) and returns the per-price coupon lists
         plus the ``applied_discount_id → coupon_id`` links; the bucket items
         carry the coupons. Shared by the real (``update_payments_recurring``) and
         preview sync paths — so preview reflects discounts. Performs **no DB

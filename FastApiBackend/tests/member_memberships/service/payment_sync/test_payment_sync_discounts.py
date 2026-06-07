@@ -8,7 +8,7 @@ Pure logic, no DB or Stripe. Exercises ``PaymentSyncDiscounts``:
   fractions are summed across the line then divided by the line quantity; fixed
   dollars are summed; ``once`` and ``ongoing`` never mix; percent vs dollar carry
   **disjoint** ``contributing_ids``.
-* ``resolve`` — orders dollar-before-percent, find-or-creates one coupon per
+* ``resolve`` — orders percent-before-dollar, find-or-creates one coupon per
   value (the Stripe I/O mocked), and records the ``applied_discount_id →
   coupon_id`` links.
 
@@ -222,8 +222,8 @@ class _FakeDiscountService:
         return SimpleNamespace(stripe_coupon_id=request.coupon_id)
 
 
-async def test_resolve_orders_dollar_before_percent_and_links() -> None:
-    """One line with a percent + a dollar → dollar coupon first, then percent;
+async def test_resolve_orders_percent_before_dollar_and_links() -> None:
+    """One line with a percent + a dollar → percent coupon first, then dollar;
     links map each contributing id to its own coupon."""
     pct = _disc(discount_mode=DiscountMode.ongoing, percentage_off=10.0)
     amt = _disc(discount_mode=DiscountMode.ongoing, dollar_off=500)
@@ -235,7 +235,7 @@ async def test_resolve_orders_dollar_before_percent_and_links() -> None:
     )
 
     coupons = [d.coupon for d in resolved.coupons_by_price[price_id]]
-    assert coupons == ["amt_500_ongoing", "pct_1000_ongoing"]
+    assert coupons == ["pct_1000_ongoing", "amt_500_ongoing"]
     assert resolved.links[amt.applied_discount_id] == "amt_500_ongoing"
     assert resolved.links[pct.applied_discount_id] == "pct_1000_ongoing"
 

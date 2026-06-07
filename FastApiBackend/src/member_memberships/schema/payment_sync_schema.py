@@ -123,8 +123,8 @@ class ResolvedDiscounts(BaseModel):
     """The discount service's resolved output for one sync.
 
     ``coupons_by_price`` maps each consolidated line's ``price_id`` to the
-    coupons to attach to its bucket item (dollar coupon first, then percent, so
-    Stripe sequences dollar→percent). ``links`` maps each contributing
+    coupons to attach to its bucket item (percent coupon first, then dollar, so
+    Stripe sequences percent→dollar). ``links`` maps each contributing
     ``applied_discount_id`` to the coupon it resolved to — the **real** path
     writes these back (a ``once`` value records its coupon, the consumption
     handle, on its rows; an ``ongoing`` value on its rows).

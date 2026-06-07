@@ -1,5 +1,6 @@
 """Resolve each consolidated line's discount coupons + own the discount math."""
 
+from enum import IntEnum
 from uuid import UUID
 
 from schema.gym_discount import DiscountMode
@@ -20,6 +21,24 @@ from src.payments.service.payments_stripe_discount_service import (
 )
 
 
+class DiscountApplicationKind(IntEnum):
+    """The two discount kinds, ordered by how they sequence on a line."""
+
+    percent = 0
+    dollar = 1
+
+
+# Single source of truth for the order a line's discounts apply — percent
+# first, then dollar. Used by BOTH the Stripe coupon attach order (`resolve`)
+# and the per-member math: percent-first lands the percent on the uniform unit
+# base and leaves the dollar purely additive, so each member's own discounted
+# price sums to the consolidated line total with no rescaling.
+DISCOUNT_APPLICATION_ORDER: tuple[DiscountApplicationKind, ...] = (
+    DiscountApplicationKind.percent,
+    DiscountApplicationKind.dollar,
+)
+
+
 class PaymentSyncDiscounts:
     """Owns the discount math and resolves each line's coupons at build time.
 
@@ -27,9 +46,10 @@ class PaymentSyncDiscounts:
     memberships' discounts into at most one value per mode — percents compound
     **sequentially within a membership** then average across the line (÷
     quantity), dollars sum — find-or-creates the deterministic coupon per value
-    on the gym's Connect account, and orders them **dollar before percent** so
-    Stripe applies them sequentially in that order (we do only the
-    percentage-level math; Stripe sequences dollar→percent on the line).
+    on the gym's Connect account, and orders them **percent before dollar**
+    (``DISCOUNT_APPLICATION_ORDER``) so Stripe applies them sequentially in that
+    order (we do only the percentage-level math; Stripe sequences percent→dollar
+    on the line).
 
     The discounts arrive **already date-filtered by the read** (the query excludes
     any past its end_date as of the gym-timezone today), so the math has no date
@@ -56,8 +76,8 @@ class PaymentSyncDiscounts:
 
         Returns a ``ResolvedDiscounts``:
         - ``coupons_by_price``: ``price_id → [SubscriptionItemDiscount...]`` for
-          the builder to attach onto each consolidated line (dollar coupon
-          first, then percent, so Stripe sequences dollar→percent).
+          the builder to attach onto each consolidated line (percent coupon
+          first, then dollar, so Stripe sequences percent→dollar).
         - ``links``: ``applied_discount_id → coupon_id`` for the real path to
           write back (a ``once`` value records its coupon — the consumption
           handle — on its rows; an ``ongoing`` value on its rows).
@@ -70,12 +90,9 @@ class PaymentSyncDiscounts:
             values = self._aggregate_line_values(memberships)
             if not values:
                 continue
-            # Dollar (`amount_off`) before percent (`percent_off`) so Stripe
-            # sequences dollar→percent on the line.
-            ordered_values = sorted(
-                values,
-                key=lambda v: v.percentage_off is not None,
-            )
+            # Percent (`percent_off`) before dollar (`amount_off`) so Stripe
+            # sequences percent→dollar on the line (DISCOUNT_APPLICATION_ORDER).
+            ordered_values = sorted(values, key=self._application_rank)
             item_discounts: list[SubscriptionItemDiscount] = []
             for value in ordered_values:
                 coupon_id = await self._coupons.find_or_create(
@@ -92,6 +109,20 @@ class PaymentSyncDiscounts:
             coupons_by_price=coupons_by_price,
             links=links,
         )
+
+    @staticmethod
+    def _application_rank(value: LineDiscountValue) -> int:
+        """Sort key placing a value by ``DISCOUNT_APPLICATION_ORDER``.
+
+        Percent values rank before dollar values, so the attach order Stripe
+        applies matches the per-member math (percent→dollar).
+        """
+        kind = (
+            DiscountApplicationKind.percent
+            if value.percentage_off is not None
+            else DiscountApplicationKind.dollar
+        )
+        return DISCOUNT_APPLICATION_ORDER.index(kind)
 
     # ── Discount Math ───────────────────────────────────────────────
 
@@ -116,7 +147,7 @@ class PaymentSyncDiscounts:
           fixed-dollar coupon applies to the whole quantity-N line).
 
         Dollar vs percent are **not** combined here — they become separate
-        coupons and Stripe applies them sequentially (dollar→percent) via the
+        coupons and Stripe applies them sequentially (percent→dollar) via the
         attach order. The percent value and the dollar value carry **disjoint**
         ``contributing_ids`` (each discount is percent XOR dollar), so each
         value's resolved coupon is written back onto only its own rows — a

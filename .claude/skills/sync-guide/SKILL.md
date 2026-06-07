@@ -431,11 +431,13 @@ the price-grouped memberships (from the builder, §5) and returns a
 
 1. **Aggregate the line's values** (`_aggregate_line_values`, the math below) → at
    most one `once` value and one `ongoing` value, each a percent **or** a dollar.
-2. **Order dollar before percent**, then **find-or-create one coupon per value**
-   (`PaymentSyncCoupons.find_or_create`) on the gym's Connect account. The ordered
-   coupons become `coupons_by_price[price_id]` —
-   `[SubscriptionItemDiscount(coupon=cid) …]` — and Stripe applies them in attach
-   order (dollar→percent).
+2. **Order percent before dollar** (`DISCOUNT_APPLICATION_ORDER`), then
+   **find-or-create one coupon per value** (`PaymentSyncCoupons.find_or_create`) on
+   the gym's Connect account. The ordered coupons become `coupons_by_price[price_id]`
+   — `[SubscriptionItemDiscount(coupon=cid) …]` — and Stripe applies them in attach
+   order (percent→dollar). Percent-first is deliberate: it lands the percent on the
+   uniform unit base so each member's own discounted price sums to the consolidated
+   line total without rescaling (the per-member writeback relies on this).
 3. **Record the links** — every `applied_discount_id` in the value's
    `contributing_ids` maps to that value's coupon in `links`. Per-value: a `once`
    value's coupon lands on the `once` rows, an `ongoing` value's on the `ongoing`
@@ -470,7 +472,7 @@ consolidated line (a price group of memberships), per discount mode (`once` /
    memberships (a fixed-dollar coupon applies to the whole quantity-N line).
 
 Dollar vs percent are **never** combined into one value — they become separate
-coupons (Stripe sequences them dollar→percent via attach order); the math is only
+coupons (Stripe sequences them percent→dollar via attach order); the math is only
 the percentage-level compounding/averaging + the dollar sum. Each value carries the
 `applied_discount_id`s of the same-mode discounts that fed it (`contributing_ids`)
 — its writeback set. **No DB or Stripe calls** in the math.
