@@ -344,11 +344,16 @@ invoice/charge writes; it is a no-op when the family has no unconsumed `once`. D
 injects `payment_sync_service` into `InvoicePaidHandler` for this (the only handler
 that depends on the sync engine).
 
-> **Not written here.** This handler does **not** populate
-> `member_invoice_line_items` or `member_invoice_applied_discounts` — those tables
-> exist (§7) but the current handlers only write invoices / charges / membership
-> dates. Do not assert a line-item or applied-discount writeback from the webhook;
-> there is none in source today.
+> **Not written here — or anywhere.** This handler does **not** populate
+> `member_invoice_line_items` or `member_invoice_applied_discounts`, and **no other
+> code path does either** — there is no INSERT into `member_invoice_line_items`
+> anywhere in the repo (the only reference is a *read* in
+> `members/sql/member_details/member_details_transactions.sql`). So both tables are
+> **always empty**: the CRM invoice popup has only ever shown the single
+> "Payment · $X" fallback — itemization is **not a render bug, there is just no
+> data**, and a line-item count can't exist. The current handlers write only
+> invoices / charges / membership dates. Persisting line items (+ the per-invoice
+> discount audit) is roadmap work — `FastApiBackend/PaymentRefactor.md` §9.
 
 **`invoice.payment_failed` → `InvoicePaymentFailedHandler`**
 (`invoice_payment_failed_handler.py`) writes:

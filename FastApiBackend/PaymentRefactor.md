@@ -406,7 +406,29 @@ the scheduled reconciler, §1, needs in the Stripe→CRM direction.)
   the bucket is built, so two desired items could collide on `si_X`). The *current* behavior is worth
   verifying now too (tracked in `TODO_SYNC_REFACTOR.md`).
 
-## 9. Open questions & cross-cutting deferrals
+## 9. Persist invoice line items — itemization has never worked (not built)
+
+> **Found + flagged.** Nothing in the codebase ever inserts into `member_invoice_line_items`. The
+> `invoice.paid` webhook writes the invoice, updates membership dates, and inserts the charge, but
+> **never persists the invoice's line items**. The table is **always empty** (the only reference to
+> it is a *read* in `member_details_transactions.sql`).
+
+### Consequences
+- The CRM invoice popup has **always shown the single "Payment · $X" fallback** — itemization is
+  **not a render bug**, there is simply **no line-item data** to render.
+- Any **line-item count** can't exist — the rows don't exist. (This changes the scope of anything
+  that counts line items.)
+- `member_invoice_applied_discounts` (the per-invoice discount audit table) is in the **same
+  boat** — also never written today.
+
+### What's needed
+Persist the invoice's lines when `invoice.paid` (and `invoice.payment_failed`) fire: write each
+Stripe invoice line into `member_invoice_line_items` (the table already reuses the Stripe `il_…` id
+as its PK, so it's idempotent for free), classified `membership` vs `custom`, with `item_id` set for
+membership lines; and write `member_invoice_applied_discounts` for the discounts the invoice applied.
+Then the invoice popup itemizes from real data and the line-item count becomes meaningful.
+
+## 10. Open questions & cross-cutting deferrals
 
 - **Discount auto-update (deferred).** Today a preset edit affects only *new*
   applications — existing snapshots stay pinned to their old value version (the
