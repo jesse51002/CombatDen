@@ -11,8 +11,8 @@ description: >-
   filtered view. Load this whenever you touch plan CRUD (DB-first/Stripe-second
   create-with-cleanup, set_price versioning, soft delete, linked-discount
   re-mint, bulk member migration) or a membership lifecycle op (start, cancel,
-  freeze, update_price, mark_paid_cash, charge_card, apply discounts) — each of
-  which recomputes payment state through the sync. Trigger on "membership plan",
+  freeze, update_price, mark_paid_cash, charge_card, add/remove discounts) — each
+  of which recomputes payment state through the sync. Trigger on "membership plan",
   "plan price", "set price", "active price", "price pinning", "upgrade a member",
   "migrate members", "start a membership", "cancel membership", "freeze",
   "mark paid cash", "charge card", "member_memberships", "membership status",
@@ -24,10 +24,11 @@ description: >-
 
 This is the deep domain knowledge for CombatDen's membership **plans** and
 member **memberships**. It is the **source of truth** for how these two layers
-behave; CLAUDE.md holds only the "how to work here" rules, and
-`FastApiBackend/PaymentRefactor.md` §1–§3 holds the prose design rationale
-(config-vs-outcomes split, the reconciliation-toward-desired-state engine). When
-the model changes, **update this skill in the same change** (it is a living
+behave; CLAUDE.md holds only the "how to work here" rules. The prose design
+rationale for the engine these ops call (the config-vs-outcomes split, the
+reconciliation-toward-desired-state pattern) lives in the **`sync-guide`** skill;
+`FastApiBackend/PaymentRefactor.md` is the remaining-work roadmap, not rationale.
+When the model changes, **update this skill in the same change** (it is a living
 document — see the bottom).
 
 Three sibling knowledge skills own the seams this doc only points at:
@@ -201,9 +202,11 @@ price — that is `set_price` only.
 **Set price** (`membership_plans_price.py`, `MembershipPlansPrice.set_price`):
 deactivate the old active price + insert the new active price in one txn, create
 the new Stripe Price, stamp its id, then point the Stripe Product's
-`default_price` at the new price and archive the old Stripe price (Stripe refuses
-to archive a price that is still a product's default). **Existing members keep
-their old price** — migration is separate and opt-in.
+`default_price` at the new price. **The old Stripe price is NOT archived** — the
+code never archives a Stripe price; the CRM's `membership_plan_prices.is_active`
+flag is the single gate for which price is current, so every Stripe price stays
+active on Stripe forever (a member pinned to an older version keeps billing on it).
+**Existing members keep their old price** — migration is separate and opt-in.
 
 **Soft delete** (`membership_plans_delete.py`): deactivate the Stripe Product
 (tolerating an already-gone product), then `is_deleted = true`
@@ -226,7 +229,7 @@ price. It collects affected `member_id`s (`migrate_all` uses
 `migrate_members` takes an explicit list) and queues a background
 `bulk_payment_sync` through the sync engine. This is the **one** place a
 template change fans out to many members — and it is intentional and explicit,
-never silent drift (see `PaymentRefactor.md` §6).
+never silent drift.
 
 ---
 
@@ -315,7 +318,7 @@ validation and returns a Stripe invoice preview without writing rows.
 | **freeze / unfreeze** (`member_memberships_freeze.py`) | **account-level** (not per-membership). `freeze` pauses Stripe billing and sets `freeze_start_date`/`freeze_end_date` on the parent `members` row (`member_memberships_freeze_profile.sql`); `unfreeze` resumes and clears them (`member_memberships_unfreeze_profile.sql`). Operates on the resolved parent account, so it covers all the account's memberships at once. |
 | **mark_paid_cash** (`member_memberships_mark_paid_cash.py`) | recurring-only; finds the subscription's open Stripe invoice and pays it **out of band** (no card charge). Stripe's `invoice.paid` webhook then writes the CRM invoice/charge rows as cash. Cash is a backup — future cycles still auto-charge the card. |
 | **charge_card** (`member_memberships_charge_card.py`) | ad-hoc, **outside any subscription**: create a one-off Stripe invoice for `amount_cents` + `reason`; `paid_cash=true` routes it out of band instead of charging the card. The webhook persists the CRM rows. |
-| **apply discounts** (`member_memberships_update_discounts.py`) | add/remove applied-discount snapshots on the membership, then re-sync so the sync resolves coupons. **The discount snapshot model is owned by `discounts-guide`** — this op only writes/deletes snapshot rows and re-syncs; defer the once/ongoing, value-version, and coupon details there. |
+| **add / remove discounts** (`member_memberships_update_discounts.py`) | **two separate ops**, `add_discounts(item_id, member_id, preset_ids, idempotency_key, preview=False)` and `remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`. Each writes/deletes applied-discount snapshot rows, then re-syncs so the sync resolves coupons. With `preview=True` it **stages** instead of committing — add inserts `preview_add` rows then deletes them; remove flips the rows to `preview_remove` then reverts to `applied` — runs the read-only preview build (which keeps `preview_add` in / drops `preview_remove`), and always cleans up. **The discount snapshot model is owned by `discounts-guide`** — defer the once/ongoing, value-version, coupon, and preview-staging details there. |
 
 ---
 
@@ -380,8 +383,8 @@ validation and returns a Stripe invoice preview without writing rows.
 | `POST /preview` | preview a start |
 | `POST /cancel/preview` | preview a cancel |
 | `POST /price/preview` | preview a price update |
-| `PUT /discounts` | add/remove discount snapshots (204) |
-| `POST /discounts/preview` | preview the discounted subscription |
+| `POST /discounts/add` | add discount snapshot(s) to the membership; `preview` bool in the body runs a dry-run instead of committing |
+| `POST /discounts/remove` | remove applied discount(s); `preview` bool in the body runs a dry-run instead of committing |
 | `POST /mark-paid-cash` | pay the open invoice out of band (204) |
 | `POST /charge-card` | ad-hoc card/cash charge |
 
@@ -427,7 +430,9 @@ gate on access to that member rather than on gym-employee status).
   `member_memberships/sql/applied_discounts/` folder + the discount snapshot
   model are owned by `discounts-guide`; Stripe Product/Price/invoice/customer
   primitives are owned by `payments-guide`.
-- **Design rationale (prose):** `FastApiBackend/PaymentRefactor.md` §1–§3 and §6.
+- **Engine design rationale (prose):** the **`sync-guide`** skill (the
+  config-vs-outcomes split + the reconciler). `FastApiBackend/PaymentRefactor.md`
+  is the remaining-work roadmap only.
 
 ---
 

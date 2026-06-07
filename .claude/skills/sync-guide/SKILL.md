@@ -42,10 +42,13 @@ This is the deep domain knowledge for CombatDen's **payment sync engine**: the
 code that, on every membership mutation, throws away whatever Stripe currently
 has and **recomputes the full desired subscription state from the CRM**, then
 forces Stripe to match. It is the **source of truth** for how that engine
-behaves; CLAUDE.md holds only the "how to work here" rules, and
-`FastApiBackend/PaymentRefactor.md` (§1–§4, §6) holds the prose design
-rationale. When the engine changes, **update this skill in the same change** (it
-is a living document — see the bottom).
+behaves; CLAUDE.md holds only the "how to work here" rules. **This skill is the
+prose design rationale for the engine** — the reconciliation pattern, the
+source-of-truth split, and what the discount refactor collapsed all live here now
+(they used to live in `PaymentRefactor.md`). `PaymentRefactor.md` is now the
+**remaining-work roadmap** only (the deferred reconciler, multi-interval, freeze,
+billing anchor, per-membership price). When the engine changes, **update this
+skill in the same change** (it is a living document — see the bottom).
 
 This skill owns the **orchestration / mechanics** in
 `src/member_memberships/service/payment_sync/`. It does **not** own:
@@ -82,7 +85,7 @@ Three properties fall out of "re-derive from scratch every time":
 - **The CRM owns config / intent** (prices, plans, who's enrolled, which
   discounts are applied); **Stripe owns billing outcomes** (did the invoice
   clear, dunning lifecycle). The engine pushes intent → Stripe; webhooks mirror
-  outcomes ← Stripe (see `PaymentRefactor.md` §3).
+  outcomes ← Stripe.
 - **The desired state is a pure function of the member's own family.** There is
   no cross-member reshuffle — everything is computed from the paying parent +
   linked children, deterministically.
@@ -95,7 +98,7 @@ Three properties fall out of "re-derive from scratch every time":
 
 ## 2. Triggers + entry points
 
-`PaymentSyncService` exposes exactly three public entry points (callers that need
+`PaymentSyncService` exposes four public entry points (callers that need
 parent resolution inject the shared `BillingParentResolver` directly — not via
 `PaymentSyncService` — e.g. `member_memberships_start`):
 
@@ -103,6 +106,7 @@ parent resolution inject the shared `BillingParentResolver` directly — not via
 | --- | --- | --- |
 | `update_payments_recurring(member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none") -> None` | the real sync: resolve → maintenance freeze re-apply → settle once → build (re-derive bucket **and resolve coupons**) → execute → **`PaymentSyncWriteback`** persists the full sync-owned state (§3). Returns **None** — callers read the DB (the `applied` status) | every membership mutation |
 | `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: resolve → **settle once-discounts** (same as real) → same DB-derived build **incl. discount resolution** (so the preview reflects discounts) → Stripe invoice *preview*. Skips the freeze re-apply + the convergence writeback (§9) | the CRM "what will this charge?" preview |
+| `settle_once_discounts(member_id)` | a thin wrapper: resolve parent → `PaymentSyncOnceDiscounts.sync_once_discounts` — stamp a consumed `once` discount's `end_date` promptly, on its own, with no full sync (§6) | the `invoice.paid` webhook (`payments-guide`), best-effort |
 | `bulk_payment_sync(member_ids)` | loop members, fresh `uuid4()` idempotency key each, call `update_payments_recurring` | reprice fan-out; the future reconciler (§10) |
 
 **There are no imperative `add_ids` / `cancel_ids` inputs.** The desired state is
@@ -141,7 +145,7 @@ re-resolves the parent (so it carries the window), then converges Stripe.
 
 Plus **plan reprice**: `membership_plans/service/plans/membership_plans_price.py`
 fans out via `bulk_payment_sync` — the one *deliberate* bulk price migration that
-survives (the two discount cascades were removed; see `PaymentRefactor.md` §6).
+survives (the two discount cascades were removed in the discount refactor).
 
 ### The caller contract: DB-first, then verified, then revert-on-failure
 
@@ -371,11 +375,15 @@ account, today)` — **all** the discount math + coupon find-or-create lives the
 ## 6. The pre-sync once-discount settle (`PaymentSyncOnceDiscounts`)
 
 `once`-consumption finalization is a **standalone DI service**,
-`PaymentSyncOnceDiscounts` (`payment_sync_once_discounts.py`), that runs as a
-**pre-sync phase** (step 3 of §3) — before the bucket is built. Its job: settle
-the DB so the convergence reads a DB already in the state it should be in and
-the planner needs no live-Stripe read. It also *is* the scheduled reconciler's
-once-finalization duty, which is why it stands alone for reuse (§10).
+`PaymentSyncOnceDiscounts` (`payment_sync_once_discounts.py`). It runs in **three**
+places, which is why it stands alone as a service:
+- as the **pre-sync phase** of every real sync (step 3 of §3) — before the bucket
+  is built — to settle the DB so the convergence reads a DB already in the state it
+  should be in and the planner needs no live-Stripe read;
+- **directly from the `invoice.paid` webhook** via
+  `PaymentSyncService.settle_once_discounts` (§2), so a consumed `once` finalizes
+  the moment Stripe invoices it rather than at the next manual op;
+- and — once built — the scheduled reconciler's once-finalization duty (§10).
 
 `sync_once_discounts(parent, stripe_account_id)` does:
 
@@ -408,10 +416,9 @@ coupon?" can only be answered by Stripe (Stripe owns outcomes). Doing it as a
 pre-sync settle — set math over the whole candidate set, one batch write — is the
 thing we want, rather than the per-row predicate the convergence used to run
 inline: the convergence stays a pure date-driven function and the once-truth is
-established once, up front. This is the read half `PaymentRefactor.md` §4 calls
-out as the gap the old push-only `execute_sync` left open. (The
-lifecycle/status-absorption half — Stripe-cancelled-by-dunning — is still future
-work in the reconciler, §10.)
+established once, up front. This is the read half the old push-only `execute_sync`
+left open. (The lifecycle/status-absorption half — Stripe-cancelled-by-dunning — is
+still future work in the reconciler, §10; see `PaymentRefactor.md` §1.)
 
 ---
 
@@ -645,7 +652,7 @@ only satisfies the shared request schema).
 
 A periodic sweep that runs `update_payments_recurring` on every member on a clock
 is **not built yet** but is now a **functional dependency**, not merely a drift
-backstop (`PaymentRefactor.md` §4):
+backstop (`PaymentRefactor.md` §1):
 
 1. **Mid-cycle `end_date` enforcement on an idle member.** An ongoing discount's
    cutoff is dropped only the first time a sync runs **on or after** that date. An
@@ -653,10 +660,11 @@ backstop (`PaymentRefactor.md` §4):
    member (no changes near the cutoff) triggers no sync, so the discount would
    keep applying past its `end_date`. The sweep is the only thing that runs the
    sync on schedule.
-2. **`once`-consumption finalization on an idle member.** Detecting that a `once`
-   coupon was invoiced (and stamping its `end_date`) only happens when a sync runs
-   after the invoice. The sweep guarantees prompt finalization instead of leaving
-   it "pending" until the next manual touch.
+2. **`once`-consumption finalization on an idle member.** The `invoice.paid`
+   webhook now settles a consumed `once` promptly (`settle_once_discounts`, §6), so
+   the common case is already covered. The sweep is the **backstop for a missed
+   webhook** — it still stamps the `end_date` instead of leaving the discount
+   "pending" until the next manual touch.
 
 `bulk_payment_sync` is already the seed — a scheduled job is just a third trigger
 for it — **and step 1 already built the two pieces the reconciler's once-and-
@@ -667,7 +675,7 @@ factored out so the sweep can call it directly (its docstring names this), and
 `execute_sync` only pushes CRM-derived state, so a naive sweep won't detect a
 Stripe-dunning cancellation (it would just error and leave the CRM stuck on
 "active"). The reconciler needs the conflict-resolution rule from
-`PaymentRefactor.md` §4 — **config drift → CRM wins** (push), **lifecycle/outcome
+`PaymentRefactor.md` §1 — **config drift → CRM wins** (push), **lifecycle/outcome
 drift → Stripe wins** (absorb, never re-bill) — plus a compare-and-skip-if-equal
 guard so an hourly sweep isn't pointless Stripe writes.
 
@@ -772,8 +780,11 @@ guard so an hourly sweep isn't pointless Stripe writes.
   `payments/service/subscription/payments_subscription_retrieve.py`
   (`get_subscription` — documented as a `payments-guide` primitive; returns
   `PaymentsSubscriptionResponse` with `discounts` + `items[*].discounts`).
-- **Design rationale (prose):** `FastApiBackend/PaymentRefactor.md` §1–§4, §6
-  (the engine, the source-of-truth split, the reconciler, what collapsed).
+- **Remaining-work roadmap (prose):** `FastApiBackend/PaymentRefactor.md` — the
+  deferred reconciler (§1), multi-interval recurring (§2), paid-time-preserving
+  freeze (§3), configurable billing anchor (§4), per-membership post-discount price
+  (§5). The shipped-engine rationale (the fear, the source-of-truth split, what
+  collapsed) lives in **this skill**, not there.
 - **Orchestration flow diagram:** `FastApiBackend/payment_sync.mermaid` — the
   step-by-step flow of `update_payments_recurring` (the §3 sequence), plus the
   `preview` / `bulk` / deferred-reconciler branches. The sync steps are grouped in

@@ -1,7 +1,7 @@
 """Mid-cycle remove-discount tests using Stripe Test Clocks.
 
-Removing a discount is a DELETE of the membership's frozen snapshot row via the
-apply path (``apply_discounts(remove_applied_ids=[...])``). The re-sync then
+Removing a discount is a DELETE of the membership's frozen snapshot row via
+``remove_discounts(applied_ids=[...])``. The re-sync then
 recomputes the line with the row gone, so the coupon leaves the Stripe item and
 the next cycle bills full price.
 

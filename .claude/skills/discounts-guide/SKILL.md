@@ -22,9 +22,10 @@ description: >-
 
 This is the deep domain knowledge for CombatDen's membership discounts. It is the
 **source of truth** for how the system behaves; CLAUDE.md holds only the "how to
-work here" rules, and `FastApiBackend/PaymentRefactor.md` §5 holds the prose
-design rationale. When the discount model changes, **update this skill in the
-same change** (it is a living document — see the bottom).
+work here" rules. This skill *is* the discount design rationale — there is no
+separate prose doc for it (`FastApiBackend/PaymentRefactor.md` is only the
+engine's remaining-work roadmap). When the discount model changes, **update this
+skill in the same change** (it is a living document — see the bottom).
 
 The **#1 goal is predictability:** a member's billing changes **only** via an
 explicit add/remove on *that* member's specific membership, and everything
@@ -145,8 +146,8 @@ value mints a new active version on the same discount, so the stored id stays
 stable.
 
 **Applying** a linked discount is the same as any discount: the membership/family
-flow passes its id to `add_preset_ids`, which pins an applied-discount row to the
-discount's **active** value version. Editing the linked discount mints a new
+flow passes its id to `add_discounts` (`preset_ids`), which pins an applied-discount
+row to the discount's **active** value version. Editing the linked discount mints a new
 version, so future family applications get it — like a regular discount. The
 `linked` tag keeps it out of the regular per-membership discount picker (which
 lists only `preset`); family billing via `members.account_linked_to_id` is
@@ -244,6 +245,34 @@ the coupons** (idempotent, gym-wide find-or-create, so the preview total reflect
 discounts) but writes **nothing** back to the DB. So the coupon *resolution* is
 shared by both paths; the coupon-id *writeback* is real-sync-only. Intentional.
 
+### Previewing an add or remove — staged, then always cleaned up
+
+Adding and removing are **two separate operations**, `add_discounts(item_id,
+member_id, preset_ids, idempotency_key, preview=False)` and
+`remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`
+(`MemberMembershipsUpdateDiscounts`). Each takes a **`preview` bool**. A preview
+must reflect the *proposed* change (not the current bill) yet leave **no permanent
+state**, so it **stages** through the `stripe_sync_status` enum:
+
+- **`add_discounts(preview=True)`** inserts the snapshot rows as **`preview_add`**,
+  runs the read-only preview build, then **deletes** them.
+- **`remove_discounts(preview=True)`** flips the target rows from `applied` to
+  **`preview_remove`**, runs the preview build, then **reverts** them to `applied`.
+
+The build's applied-discount read toggles its `:excluded_statuses` so the preview
+sees the proposed world: it **keeps `preview_add` in** (the added discount shows in
+the previewed total) and **drops `preview_remove`** (the removed one disappears).
+The staging is always undone in a `finally` (a `staged_preview` helper), so a
+preview never commits a discount. A real call (`preview=False`) skips all of this —
+it inserts/deletes the rows for real and re-syncs.
+
+> **The `preview_remove` race** (the reason the per-parent lock matters): flipping a
+> live `applied` row to `preview_remove` is read-safe for the preview, but a
+> **concurrent real sync also drops `preview_remove`**, so it would scrub the
+> membership's live Stripe line. `preview_add` is safe (a real sync ignores it). The
+> `finally` cleanup bounds the window; it is fully closed only by the concurrency
+> lock (`TODO_SYNC_REFACTOR.md` #25).
+
 ---
 
 ## 5. Lifetime = `once` / `ongoing`; once-consumption tracking
@@ -305,7 +334,7 @@ re-applied on later cycles; changing the count while pending re-divides correctl
 - **The scheduled reconciler is a functional dependency, not just a drift
   backstop.** Precise **mid-cycle** `end_date` expiry and `once`-consumption
   finalization on an **idle** member depend on the daily reconciler running the
-  sync on its own. Building it is out of scope (see `PaymentRefactor.md` §4).
+  sync on its own. Building it is out of scope (see `PaymentRefactor.md` §1).
 
 ---
 
@@ -353,7 +382,9 @@ re-applied on later cycles; changing the count while pending re-divides correctl
   reusing the canonical `MemberMembershipsAppliedDiscount` model. The CRM groups
   them under each covered member by `item_id` and removes one by
   `applied_discount_id`, so both fields must be present.
-- **Design rationale (prose):** `FastApiBackend/PaymentRefactor.md` §4–§6.
+- **Engine roadmap (prose):** `FastApiBackend/PaymentRefactor.md` (the deferred
+  reconciler the mid-cycle `end_date` / once-finalization depend on, §1). The
+  discount model rationale is **this skill**.
 - **Sibling skills:** `memberships-guide` (the plans/prices + `member_memberships`
   that host these applied-discount rows), `sync-guide` (the engine that computes
   the coupons), `payments-guide` (the Stripe coupon/subscription/webhook

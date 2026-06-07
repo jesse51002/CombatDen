@@ -33,9 +33,11 @@ This is the deep domain knowledge for CombatDen's **Stripe integration layer**:
 how the backend calls Stripe (the primitives in `src/payments/`) and how Stripe
 outcomes flow back into the CRM (the webhook mirror in `src/stripe_webhooks/`).
 It is the **source of truth** for this layer; CLAUDE.md holds only the "how to
-work here" rules, and `FastApiBackend/PaymentRefactor.md` §3 + §1–§4 hold the
-prose design rationale. When this layer changes, **update this skill in the same
-change** (it is a living document — see the bottom).
+work here" rules. The config-vs-outcomes split this layer rests on is documented
+in §1 here and in the **`sync-guide`** skill; `FastApiBackend/PaymentRefactor.md`
+is only the engine's remaining-work roadmap, not rationale. When this layer
+changes, **update this skill in the same change** (it is a living document — see
+the bottom).
 
 This layer is a set of **primitives**, not a brain. It knows *how* to push a
 desired state to Stripe and *how* to absorb a Stripe event — it does **not**
@@ -49,7 +51,7 @@ inside the seam: this guide stops at the Stripe boundary.
 
 ## 1. Role — config vs. outcomes, and a pure service layer
 
-Two kinds of "truth" are split deliberately (`PaymentRefactor.md` §3):
+Two kinds of "truth" are split deliberately:
 
 - **CRM owns config / intent** — prices, plans, discounts, who is enrolled.
   These originate in the CRM and are *pushed* to Stripe. No member self-serves
@@ -331,6 +333,17 @@ committed `stripe_item_id` yet) → 200 + background retry. The cash path
 `stripe_charge_id IS NOT NULL` charge guard; a zero-amount paid invoice with no
 charge id simply skips the charge insert.
 
+**Once-discount settle (subscription invoices only).** After a *subscription*
+invoice is paid (member resolved, dates updated), the handler calls
+**`PaymentSyncService.settle_once_discounts(member_id)`** so a `once` discount that
+Stripe just consumed gets its `end_date` stamped **promptly** — instead of lingering
+"pending" until the next manual op or the future reconciler (the engine half is owned
+by `sync-guide` §6). It is **best-effort and isolated**: it runs in its **own DB
+session/transaction** and any exception is caught + logged, never rolling back the
+invoice/charge writes; it is a no-op when the family has no unconsumed `once`. DI
+injects `payment_sync_service` into `InvoicePaidHandler` for this (the only handler
+that depends on the sync engine).
+
 > **Not written here.** This handler does **not** populate
 > `member_invoice_line_items` or `member_invoice_applied_discounts` — those tables
 > exist (§7) but the current handlers only write invoices / charges / membership
@@ -525,7 +538,8 @@ are called by the sync engine and the membership/members/plans services
   wrapper services + webhook handlers as Factories; `stripe_webhooks_service`).
 - **Members card endpoints:** `src/members/members_router.py`
   (`PUT /{member_id}/card`, `DELETE /{member_id}/payment`).
-- **Design rationale (prose):** `FastApiBackend/PaymentRefactor.md` §1–§4.
+- **Engine roadmap (prose):** `FastApiBackend/PaymentRefactor.md` (remaining-work
+  only). The config-vs-outcomes rationale is §1 here + the `sync-guide` skill.
 
 ### Seams to sibling skills (reference, don't duplicate)
 

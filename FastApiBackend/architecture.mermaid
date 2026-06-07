@@ -9,7 +9,7 @@ flowchart TB
     r_rew["<b>rewards</b> · /api/v1/rewards · 7 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem<br/>GET /redemptions"]
     r_waiver["<b>waivers</b> · /api/v1/waivers · 8 routes<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /{waiver_id}<br/>GET /{waiver_id}/versions<br/>GET /{waiver_id}/signatures<br/>GET /signatures/by-member/{member_id}"]
     r_disc["<b>discounts</b> · /api/v1/discounts · 4 routes<br/>(coupon-free presets)<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /"]
-    r_mm["<b>member_memberships</b> · /api/v1/member_memberships · 12 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price<br/>POST /preview<br/>POST /cancel/preview<br/>POST /price/preview<br/>PUT /discounts (apply = add/remove applied discounts)<br/>POST /discounts/preview<br/>POST /mark-paid-cash<br/>POST /charge-card"]
+    r_mm["<b>member_memberships</b> · /api/v1/member_memberships · 12 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price<br/>POST /preview<br/>POST /cancel/preview<br/>POST /price/preview<br/>POST /discounts/add (preview bool)<br/>POST /discounts/remove (preview bool)<br/>POST /mark-paid-cash<br/>POST /charge-card"]
     r_plan["<b>membership_plans</b> · /api/v1/membership_plans · 8 routes<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /<br/>GET /{plan_id}<br/>POST /price<br/>POST /migrate<br/>POST /migrate-all"]
     r_hook["<b>stripe_webhooks</b> · /api/v1/stripe · 1 route<br/>POST /webhooks"]
     checkin_service["ClassesCheckinService"]
@@ -70,6 +70,7 @@ flowchart TB
     r_mm --> member_memberships_service
     r_plan --> membership_plans_service
     r_hook --> stripe_webhooks_service
+    stripe_webhooks_service -->|"invoice.paid → settle once discounts"| payment_sync_service
     members_billing_detail_service --> streak_service
     members_billing_detail_service --> cycle_counts_service
     members_management_service --> Payments

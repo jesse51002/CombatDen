@@ -1,11 +1,12 @@
 flowchart TB
   %% Payment-sync engine — orchestration flow of PaymentSyncService.
   %% Source of truth: src/member_memberships/service/payment_sync/ (sync-guide skill).
-  %% TWO entry points (real + preview) SHARE resolve → settle → build_sync_params;
+  %% TWO main entry points (real + preview) SHARE resolve → settle → build_sync_params;
   %% they diverge on freeze (REAL-only, before settle), execute vs preview-execute,
-  %% and writeback (REAL-only). build_sync_params DELEGATES coupon resolution to the
-  %% separate PaymentSyncDiscounts engine. The scheduled reconciler is a FUTURE
-  %% EXTERNAL system, OUTSIDE the engine.
+  %% and writeback (REAL-only). A THIRD thin entry, settle_once_discounts (the
+  %% invoice.paid webhook), runs resolve → settle-once ONLY (no build/execute).
+  %% build_sync_params DELEGATES coupon resolution to the separate PaymentSyncDiscounts
+  %% engine. The scheduled reconciler is a FUTURE EXTERNAL system, OUTSIDE the engine.
   %% Green = engine steps · lighter green = preview-only (read-only) steps · orange =
   %% external actors. Solid = live runtime call · dashed = future / delegation.
 
@@ -18,7 +19,7 @@ flowchart TB
 
     resolve["1 · resolve parent + gym account — SHARED<br/>BillingParentResolver.resolve — follow account_linked_to_id once → (ParentProfile, account)"]
     freeze["2 · maintenance freeze re-apply — REAL ONLY (preview skips this)<br/>PaymentSyncFreeze.sync_freeze_state — converge pause_collection to<br/>parent.is_frozen (DB freeze window) before any item change · no DB write"]
-    settle["3 · settle once discounts — SHARED (preview settles too)<br/>PaymentSyncOnceDiscounts.sync_once_discounts<br/>get_unconsumed_once_discounts → read live sub coupons (get_subscription)<br/>coupon gone from sub = consumed → mark_once_consumed (stamp end_date)"]
+    settle["3 · settle once discounts — SHARED (preview settles too)<br/>PaymentSyncOnceDiscounts.sync_once_discounts<br/>get_unconsumed_once_discounts → read live sub coupons (get_subscription)<br/>coupon gone from sub = consumed → mark_once_consumed (stamp end_date)<br/>ALSO the standalone target of settle_once_discounts (invoice.paid webhook)"]
 
     subgraph build_sp["4 · build_sync_params (PaymentSyncBuilder) — SHARED · pure read, NO DB writes"]
       direction TB
@@ -77,10 +78,13 @@ flowchart TB
 
   reconciler["⏳ Scheduled reconciler — FUTURE external system, NOT built (outside the engine)<br/>sweeps idle members on a clock · drives bulk_payment_sync<br/>mid-cycle end_date expiry + once-consumption finalization · Stripe→CRM dunning absorption"]
 
+  webhook["📨 invoice.paid webhook handler (stripe_webhooks)<br/>after a subscription invoice is paid → settle_once_discounts(member_id)<br/>best-effort · own txn · stamps a consumed once's end_date promptly"]
+
   supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_parent · get_family_ids · get_active_recurring (+ applied discounts)<br/>get_unconsumed_once_discounts · mark_once_consumed<br/>apply_membership_sync · mark_membership_deleted · set_applied_discount_coupon_id<br/>update_profile_sub_ids · sync_prices_by_plan · sync_profile_monthly_total"]
   stripe["💳 Stripe — gym Connect account<br/>get_subscription (live coupons for once-settle)<br/>create / update / cancel subscription · pause_collection<br/>coupons via PaymentsStripeDiscountService (find-or-create) · upcoming invoice (preview)"]
 
   triggers -->|"mutations → update / preview · plan reprice → bulk"| engine
+  webhook -.->|"invoice.paid → settle_once_discounts"| engine
   reconciler -.->|"future: scheduled sweep → bulk sync"| engine
   engine -->|"read/write: parent · family · memberships + discounts · once-candidates · coupon_id · sync status · sub id · totals"| supabase
   engine -->|"live coupons · find-or-create coupons · create / update / cancel sub · pause_collection · upcoming invoice"| stripe
@@ -89,7 +93,7 @@ flowchart TB
   classDef prev fill:#eafff2,stroke:#2f8f53,color:#0c3a1f;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef future fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f,stroke-dasharray:5 4;
-  class triggers,entry_real,resolve,freeze,settle,execute,ret_real,bulk svc;
+  class triggers,webhook,entry_real,resolve,freeze,settle,execute,ret_real,bulk svc;
   class entry_prev,pexec,ret_prev prev;
   class supabase,stripe ext;
   class reconciler future;

@@ -1,7 +1,7 @@
 """Mid-cycle add-discount tests using Stripe Test Clocks.
 
-Exercises the snapshot apply path (``PUT /member_memberships/discounts`` ->
-``memberships_service.apply_discounts``). Applying a regular discount INSERTs a
+Exercises the snapshot add path (``POST /member_memberships/discounts/add`` ->
+``memberships_service.add_discounts``). Adding a regular discount INSERTs a
 frozen snapshot row and re-syncs; the sync computes the consolidated line's
 coupon, attaches it, and writes the resolved stripe_coupon_id back. Editing or
 deleting the source preset never touches these rows.
