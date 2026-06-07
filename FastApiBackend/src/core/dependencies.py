@@ -157,6 +157,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_client = providers.Singleton(
         PaymentsStripeClient,
         secret_key=settings.stripe_secret_key,
+        api_version=settings.stripe_api_version,
     )
     payments_price_service = providers.Factory(
         PaymentsStripePriceService,

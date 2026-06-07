@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     stripe_secret_key: str
     stripe_webhook_secret: str
     stripe_connect_webhook_secret: str
+    # Pin the Stripe API version so an SDK upgrade can't silently change
+    # request/response shapes under us (a version bump moved fields like
+    # discount.coupon -> discount.source.coupon and broke webhook captures).
+    # Bump deliberately, alongside the code that handles the new shapes.
+    stripe_api_version: str = "2026-05-27.dahlia"
 
     # Stripe Connect Express onboarding
     stripe_connect_refresh_url: str

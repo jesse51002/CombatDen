@@ -236,7 +236,10 @@ def db_pool():
 @pytest.fixture(scope="session")
 def stripe_client():
     """Session-wide Stripe client using the test secret key."""
-    return PaymentsStripeClient(secret_key=settings.stripe_secret_key)
+    return PaymentsStripeClient(
+        secret_key=settings.stripe_secret_key,
+        api_version=settings.stripe_api_version,
+    )
 
 
 @pytest.fixture(scope="session")
