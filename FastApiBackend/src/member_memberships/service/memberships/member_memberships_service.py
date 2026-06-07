@@ -12,6 +12,7 @@ from uuid import UUID
 
 from src.member_memberships.schema.member_memberships_schema import (
     MemberMembershipsChargeCardRequest,
+    MembersBillingLinkCheckResponse,
 )
 from src.member_memberships.service.memberships.member_memberships_cancel import (
     MemberMembershipsCancel,
@@ -21,6 +22,9 @@ from src.member_memberships.service.memberships.member_memberships_charge_card i
 )
 from src.member_memberships.service.memberships.member_memberships_freeze import (
     MemberMembershipsFreeze,
+)
+from src.member_memberships.service.memberships.member_memberships_linked import (
+    MemberMembershipsLinked,
 )
 from src.member_memberships.service.memberships.member_memberships_mark_paid_cash import (
     MemberMembershipsMarkPaidCash,
@@ -71,9 +75,12 @@ class MemberMembershipsService:
         freeze_service: PaymentSyncFreeze,
         paying_lock: PayingMemberLock,
     ) -> None:
-        # Every lifecycle op is wrapped in the paying-parent concurrency lock
-        # (held across its pre-sync + DB write + sync) so no two ops sync the
-        # same family at once.
+        # Every single-family lifecycle op is wrapped in the paying-parent
+        # concurrency lock (held across its pre-sync + DB write + sync) so no two
+        # ops sync the same family at once. EXCEPTION: link / unlink lock TWO
+        # families (member + paying parent) themselves, so the facade delegates
+        # them bare — PayingMemberLock is non-reentrant, and a nested same-family
+        # acquire here would deadlock to LockBusyError.
         self._paying_lock = paying_lock
         deps = (
             db_pool,
@@ -103,6 +110,9 @@ class MemberMembershipsService:
             payment_service=payment_service,
             parent_resolver=parent_resolver,
         )
+        # link / unlink is a pure DB change (no sync) and owns its OWN two-family
+        # locking, so it takes only db_pool + the lock — not the sync deps above.
+        self._linked = MemberMembershipsLinked(db_pool, paying_lock)
 
     # ── Cancel ─────────────────────────────────────────────────
 
@@ -293,3 +303,32 @@ class MemberMembershipsService:
                 idempotency_key=idempotency_key,
                 preview=preview,
             )
+
+    # ── Linked account (link / unlink / check) ─────────────────
+    #
+    # Delegated BARE — no ``self._paying_lock.lock(...)`` wrap: link / unlink lock
+    # TWO families (member + paying parent) internally, and the lock is
+    # non-reentrant. These are pure DB changes (no Stripe sync).
+
+    async def link_account(
+        self,
+        member_id: UUID,
+        parent_member_id: UUID,
+    ) -> None:
+        """Link an existing member to a paying parent account."""
+        await self._linked.link_account(member_id, parent_member_id)
+
+    async def unlink_account(
+        self,
+        member_id: UUID,
+    ) -> None:
+        """Unlink a member from their paying parent account."""
+        await self._linked.unlink_account(member_id)
+
+    async def check_link_account(
+        self,
+        member_id: UUID,
+        parent_member_id: UUID,
+    ) -> MembersBillingLinkCheckResponse:
+        """Check whether a member can be linked to a parent account."""
+        return await self._linked.check_link_account(member_id, parent_member_id)

@@ -140,6 +140,23 @@ class MemberMembershipsRemoveDiscountsRequest(BaseModel):
         return value
 
 
+class MembersBillingLinkRequest(BaseModel):
+    """Link an existing member to a paying parent account."""
+
+    parent_member_id: UUID
+
+
+class MembersBillingLinkCheckResponse(BaseModel):
+    """Result of checking whether a member can be linked to a payer.
+
+    ``error`` is a pre-formatted, user-facing string and should be
+    rendered as-is in the UI when ``can_link`` is ``False``.
+    """
+
+    can_link: bool
+    error: str | None = None
+
+
 class MemberMembershipsAppliedDiscount(BaseModel):
     """A single applied-discount snapshot returned to the client.
 

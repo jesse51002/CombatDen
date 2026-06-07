@@ -151,19 +151,19 @@ class MemberRepository {
   }
 
   /// `PUT /api/v1/members/{member_id}/link` — link the
-  /// member's billing to a parent account.
-  Future<MembersManagementResponse> linkMemberAccount(
+  /// member to a paying parent account. A pure DB change
+  /// (the member has no active recurring memberships, so
+  /// nothing is re-billed); the endpoint returns no body,
+  /// so callers refetch member detail afterward.
+  Future<void> linkMemberAccount(
     String memberId,
     String parentMemberId,
   ) async {
-    final response = await _apiClient.put(
+    await _apiClient.put(
       '/api/v1/members/$memberId/link',
       data: MembersManagementLinkRequest(
         parentMemberId: parentMemberId,
       ).toJson(),
-    );
-    return MembersManagementResponse.fromJson(
-      response.data as Map<String, dynamic>,
     );
   }
 
@@ -184,47 +184,15 @@ class MemberRepository {
     );
   }
 
-  /// `POST /api/v1/members/{member_id}/link/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
-      previewLinkMemberAccount(
-    String memberId,
-    String parentMemberId,
-  ) async {
-    final response = await _apiClient.post(
-      '/api/v1/members/$memberId/link/preview',
-      data: MembersManagementLinkRequest(
-        parentMemberId: parentMemberId,
-      ).toJson(),
-    );
-    if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
-      response.data as Map<String, dynamic>,
-    );
-  }
-
-  /// `DELETE /api/v1/members/{member_id}/link`.
-  Future<MembersManagementResponse> unlinkMemberAccount(
+  /// `DELETE /api/v1/members/{member_id}/link` — unlink the
+  /// member from their paying parent account. A pure DB
+  /// change; the endpoint returns no body, so callers
+  /// refetch member detail afterward.
+  Future<void> unlinkMemberAccount(
     String memberId,
   ) async {
-    final response = await _apiClient.delete(
+    await _apiClient.delete(
       '/api/v1/members/$memberId/link',
-    );
-    return MembersManagementResponse.fromJson(
-      response.data as Map<String, dynamic>,
-    );
-  }
-
-  /// `POST /api/v1/members/{member_id}/unlink/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
-      previewUnlinkMemberAccount(
-    String memberId,
-  ) async {
-    final response = await _apiClient.post(
-      '/api/v1/members/$memberId/unlink/preview',
-    );
-    if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
-      response.data as Map<String, dynamic>,
     );
   }
 
