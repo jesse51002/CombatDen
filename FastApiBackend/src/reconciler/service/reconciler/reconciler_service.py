@@ -26,6 +26,9 @@ from src.reconciler.service.reconciler.reconciler_result import (
     ReconcilerRunResult,
     SweepResult,
 )
+from src.reconciler.service.reconciler.reconciler_subscription_status_sweep import (
+    SubscriptionStatusSweep,
+)
 from src.shared.resource_lock import ResourceLock
 
 logger = logging.getLogger(__name__)
@@ -39,10 +42,12 @@ class ReconcilerService:
         resource_lock: ResourceLock,
         orphan_cleanup_sweep: OrphanCleanupSweep,
         payment_push_sweep: PaymentPushSweep,
+        subscription_status_sweep: SubscriptionStatusSweep,
     ) -> None:
         self._resource_lock = resource_lock
         self._orphan_cleanup_sweep = orphan_cleanup_sweep
         self._payment_push_sweep = payment_push_sweep
+        self._subscription_status_sweep = subscription_status_sweep
 
     async def run(self) -> ReconcilerRunResult:
         """Run one full sweep, unless another instance already holds the lock.
@@ -64,6 +69,7 @@ class ReconcilerService:
             logger.info("Reconciler sweep starting")
             sweeps: list[SweepResult] = []
             # Final order is D -> B -> A -> C; steps are appended as added.
+            sweeps.append(await self._subscription_status_sweep.run())
             sweeps.append(await self._orphan_cleanup_sweep.run())
             sweeps.append(await self._payment_push_sweep.run())
             logger.info(

@@ -13,6 +13,9 @@ from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
 )
+from src.member_memberships.service.memberships.member_memberships_cancel_absorber import (
+    SubscriptionCancellationAbsorber,
+)
 from src.member_memberships.service.memberships.member_memberships_service import (
     MemberMembershipsService,
 )
@@ -68,6 +71,9 @@ from src.payments.service.payments_stripe_price_service import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
+from src.payments.service.subscription.payments_subscription_retrieve import (
+    PaymentsSubscriptionRetrieve,
+)
 from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
@@ -77,6 +83,9 @@ from src.reconciler.service.reconciler.reconciler_payment_push_sweep import (
 )
 from src.reconciler.service.reconciler.reconciler_service import (
     ReconcilerService,
+)
+from src.reconciler.service.reconciler.reconciler_subscription_status_sweep import (
+    SubscriptionStatusSweep,
 )
 from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
@@ -375,9 +384,29 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         payment_sync_service=payment_sync_service,
     )
+    payments_subscription_retrieve = providers.Factory(
+        PaymentsSubscriptionRetrieve,
+        stripe_client=stripe_client,
+        members_service=payments_members_service,
+        price_service=payments_price_service,
+        discount_service=payments_discount_service,
+    )
+    subscription_cancellation_absorber = providers.Factory(
+        SubscriptionCancellationAbsorber,
+        db_pool=db_pool,
+        parent_resolver=billing_parent_resolver,
+    )
+    reconciler_subscription_status_sweep = providers.Factory(
+        SubscriptionStatusSweep,
+        db_pool=db_pool,
+        subscription_retrieve=payments_subscription_retrieve,
+        gym_stripe_service=gym_stripe_service,
+        cancellation_absorber=subscription_cancellation_absorber,
+    )
     reconciler_service = providers.Factory(
         ReconcilerService,
         resource_lock=resource_lock,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
         payment_push_sweep=reconciler_payment_push_sweep,
+        subscription_status_sweep=reconciler_subscription_status_sweep,
     )
