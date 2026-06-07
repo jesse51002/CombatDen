@@ -1,24 +1,26 @@
-"""Tests for the generic ``ResourceLock`` TTL-lease lock (real local DB).
+"""Tests for the ``PayingMemberLock`` TTL-lease lock (real local DB).
 
-Exercises the primitive in isolation against the ``resource_locks`` table:
-acquire/release, contention (block then ``LockBusyError``), expiry-steal,
-token-fenced release, independent keys, and the multi-key ``guard_many`` (acquire
-all / release all / partial-failure release / no deadlock on the same pair). The
-timing constants are monkeypatched small so the tests run fast.
+Exercises the one lock service against the ``resource_locks`` table: acquire /
+release, contention (block then ``LockBusyError``), expiry-steal, token-fenced
+release, independent families, and the multi-member ``lock`` (acquire all / dedupe
+/ no deadlock on the same pair / max-hold abort). The resolver is mocked so each
+member resolves to itself as the paying parent; the timing constants are
+monkeypatched small so the tests run fast.
 
 Requires a migrated local DB (the ``resource_locks`` table).
 """
 
 import asyncio
-from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
-from src.shared.resource_lock import LockBusyError, ResourceLock
+from src.shared.paying_member_lock import LockBusyError, PayingMemberLock
 
-MODULE = "src.shared.resource_lock"
+MODULE = "src.shared.paying_member_lock"
 
 
 async def _force_delete(db_pool, *keys: str) -> None:
@@ -31,9 +33,22 @@ async def _force_delete(db_pool, *keys: str) -> None:
         await session.commit()
 
 
+def _resolver() -> MagicMock:
+    """A resolver where each member resolves to itself as the paying parent."""
+    resolver = MagicMock()
+
+    async def _resolve(member_id: UUID) -> MagicMock:
+        parent = MagicMock()
+        parent.member_id = member_id
+        return parent
+
+    resolver.resolve_parent = AsyncMock(side_effect=_resolve)
+    return resolver
+
+
 @pytest.fixture
-def lock(db_pool) -> ResourceLock:
-    return ResourceLock(db_pool)
+def lock(db_pool) -> PayingMemberLock:
+    return PayingMemberLock(db_pool, _resolver())
 
 
 @pytest.fixture
@@ -43,13 +58,13 @@ def fast_acquire(monkeypatch) -> None:
     monkeypatch.setattr(f"{MODULE}.LOCK_POLL_INTERVAL_SECONDS", 0.05)
 
 
-async def test_guard_acquires_then_releases(lock, db_pool) -> None:
-    key = f"test:{uuid4()}"
+async def test_lock_acquires_then_releases(lock, db_pool) -> None:
+    m = uuid4()
+    key = PayingMemberLock._key(m)
     try:
-        async with lock.guard(key):
+        async with lock.lock([m]):
             # Held: a fresh token can't steal a live lease.
             assert await lock._try_acquire(key, uuid4()) is False
-        # Released: the key is free again.
         token = uuid4()
         assert await lock._try_acquire(key, token) is True
         await lock._release(key, token)
@@ -57,21 +72,21 @@ async def test_guard_acquires_then_releases(lock, db_pool) -> None:
         await _force_delete(db_pool, key)
 
 
-async def test_second_acquire_blocks_then_raises(lock, db_pool, fast_acquire) -> None:
-    key = f"test:{uuid4()}"
+async def test_second_lock_blocks_then_raises(lock, db_pool, fast_acquire) -> None:
+    m = uuid4()
+    key = PayingMemberLock._key(m)
     try:
-        async with lock.guard(key):
-            with pytest.raises(LockBusyError) as exc:
-                async with lock.guard(key):
+        async with lock.lock([m]):
+            with pytest.raises(LockBusyError):
+                async with lock.lock([m]):
                     pass
-            assert exc.value.lock_key == key
     finally:
         await _force_delete(db_pool, key)
 
 
 async def test_expired_lease_is_reacquirable(lock, db_pool, monkeypatch) -> None:
     monkeypatch.setattr(f"{MODULE}.LOCK_TTL_SECONDS", 1)
-    key = f"test:{uuid4()}"
+    key = PayingMemberLock._key(uuid4())
     try:
         # Acquire without releasing (simulate a crashed holder).
         assert await lock._try_acquire(key, uuid4()) is True
@@ -84,7 +99,7 @@ async def test_expired_lease_is_reacquirable(lock, db_pool, monkeypatch) -> None
 
 
 async def test_release_with_stale_token_is_noop(lock, db_pool) -> None:
-    key = f"test:{uuid4()}"
+    key = PayingMemberLock._key(uuid4())
     holder = uuid4()
     try:
         assert await lock._try_acquire(key, holder) is True
@@ -92,7 +107,6 @@ async def test_release_with_stale_token_is_noop(lock, db_pool) -> None:
         await lock._release(key, uuid4())
         assert await lock._try_acquire(key, uuid4()) is False
         await lock._release(key, holder)
-        # Now genuinely free.
         token = uuid4()
         assert await lock._try_acquire(key, token) is True
         await lock._release(key, token)
@@ -100,56 +114,40 @@ async def test_release_with_stale_token_is_noop(lock, db_pool) -> None:
         await _force_delete(db_pool, key)
 
 
-async def test_different_keys_acquire_independently(lock, db_pool) -> None:
-    key_a, key_b = f"test:{uuid4()}", f"test:{uuid4()}"
+async def test_different_families_independent(lock, db_pool) -> None:
+    a, b = uuid4(), uuid4()
+    ka, kb = PayingMemberLock._key(a), PayingMemberLock._key(b)
     try:
-        # A different key is unaffected — both acquire immediately.
-        async with lock.guard(key_a), lock.guard(key_b):
-            assert await lock._try_acquire(key_a, uuid4()) is False
-            assert await lock._try_acquire(key_b, uuid4()) is False
+        # Different families are unaffected — both acquire immediately.
+        async with lock.lock([a]), lock.lock([b]):
+            assert await lock._try_acquire(ka, uuid4()) is False
+            assert await lock._try_acquire(kb, uuid4()) is False
     finally:
-        await _force_delete(db_pool, key_a, key_b)
+        await _force_delete(db_pool, ka, kb)
 
 
-async def test_guard_many_acquires_all_then_releases_all(lock, db_pool) -> None:
-    key_a, key_b = f"test:{uuid4()}", f"test:{uuid4()}"
+async def test_lock_acquires_all_and_dedupes(lock, db_pool) -> None:
+    a, b = uuid4(), uuid4()
+    ka, kb = PayingMemberLock._key(a), PayingMemberLock._key(b)
     try:
-        async with lock.guard_many([key_a, key_b]):
-            assert await lock._try_acquire(key_a, uuid4()) is False
-            assert await lock._try_acquire(key_b, uuid4()) is False
-        # Both released on exit.
-        for key in (key_a, key_b):
+        # A duplicate member dedupes to one key; two distinct lock together.
+        async with lock.lock([a, a, b]):
+            assert await lock._try_acquire(ka, uuid4()) is False
+            assert await lock._try_acquire(kb, uuid4()) is False
+        for key in (ka, kb):
             token = uuid4()
             assert await lock._try_acquire(key, token) is True
             await lock._release(key, token)
     finally:
-        await _force_delete(db_pool, key_a, key_b)
+        await _force_delete(db_pool, ka, kb)
 
 
-async def test_guard_many_partial_failure_releases_taken(
-    lock, db_pool, fast_acquire
-) -> None:
-    key_a, key_b = sorted([f"test:{uuid4()}", f"test:{uuid4()}"])
-    held_by_other = uuid4()
-    try:
-        # Pre-hold the second key so guard_many gets key_a but not key_b.
-        assert await lock._try_acquire(key_b, held_by_other) is True
-        with pytest.raises(LockBusyError):
-            async with lock.guard_many([key_a, key_b]):
-                pass
-        # key_a (taken first) must have been released on the failure.
-        token = uuid4()
-        assert await lock._try_acquire(key_a, token) is True
-        await lock._release(key_a, token)
-    finally:
-        await _force_delete(db_pool, key_a, key_b)
-
-
-async def test_guard_many_same_pair_does_not_deadlock(lock, db_pool) -> None:
-    key_a, key_b = f"test:{uuid4()}", f"test:{uuid4()}"
+async def test_same_pair_does_not_deadlock(lock, db_pool) -> None:
+    a, b = uuid4(), uuid4()
+    ka, kb = PayingMemberLock._key(a), PayingMemberLock._key(b)
 
     async def hold_pair() -> None:
-        async with lock.guard_many([key_a, key_b]):
+        async with lock.lock([a, b]):
             await asyncio.sleep(0.1)
 
     try:
@@ -159,17 +157,17 @@ async def test_guard_many_same_pair_does_not_deadlock(lock, db_pool) -> None:
             timeout=10,
         )
     finally:
-        await _force_delete(db_pool, key_a, key_b)
+        await _force_delete(db_pool, ka, kb)
 
 
 async def test_max_hold_aborts_and_releases(lock, db_pool, monkeypatch) -> None:
     monkeypatch.setattr(f"{MODULE}.LOCK_MAX_HOLD_SECONDS", 0.3)
-    key = f"test:{uuid4()}"
+    m = uuid4()
+    key = PayingMemberLock._key(m)
     try:
         with pytest.raises(TimeoutError):
-            async with lock.guard(key):
+            async with lock.lock([m]):
                 await asyncio.sleep(2)  # exceeds the 0.3s max hold
-        # The lease was released when the block was aborted.
         token = uuid4()
         assert await lock._try_acquire(key, token) is True
         await lock._release(key, token)

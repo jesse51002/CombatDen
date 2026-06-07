@@ -57,7 +57,7 @@ from src.payments.service.subscription import (
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
-from src.shared.resource_lock import ResourceLock
+from src.shared.paying_member_lock import PayingMemberLock
 
 # ── Payment services namespace ──────────────────────────────────
 
@@ -103,6 +103,14 @@ def build_payment_services(stripe_client: PaymentsStripeClient) -> PaymentServic
     )
 
 
+def build_paying_member_lock(
+    db_pool: DirectDatabasePool,
+) -> PayingMemberLock:
+    """Build the paying-member concurrency lock (mirrors dependencies.py)."""
+    parent_resolver = BillingParentResolver(db_pool, GymStripeService(db_pool))
+    return PayingMemberLock(db_pool, parent_resolver)
+
+
 def build_payment_sync_service(
     db_pool: DirectDatabasePool,
     stripe_client: PaymentsStripeClient,
@@ -130,7 +138,7 @@ def build_payment_sync_service(
     once_discounts = PaymentSyncOnceDiscounts(db_pool, subscription_svc)
     discounts = PaymentSyncDiscounts(discount_svc)
     builder = PaymentSyncBuilder(db_pool, discounts)
-    resource_lock = ResourceLock(db_pool)
+    paying_lock = PayingMemberLock(db_pool, parent_resolver)
     return PaymentSyncService(
         db_pool,
         subscription_svc,
@@ -138,7 +146,7 @@ def build_payment_sync_service(
         freeze,
         once_discounts,
         builder,
-        resource_lock,
+        paying_lock,
     )
 
 
@@ -180,6 +188,7 @@ def build_member_memberships_service(
     gym_stripe_svc = GymStripeService(db_pool)
     parent_resolver = BillingParentResolver(db_pool, gym_stripe_svc)
     freeze_service = PaymentSyncFreeze(subscription_svc)
+    paying_lock = PayingMemberLock(db_pool, parent_resolver)
     sync_svc = build_payment_sync_service(db_pool, stripe_client)
     return MemberMembershipsService(
         db_pool,
@@ -188,6 +197,7 @@ def build_member_memberships_service(
         gym_stripe_svc,
         parent_resolver,
         freeze_service,
+        paying_lock,
     )
 
 

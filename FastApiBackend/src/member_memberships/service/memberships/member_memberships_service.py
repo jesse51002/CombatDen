@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     )
     from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
+    from src.shared.paying_member_lock import PayingMemberLock
 
 
 class MemberMembershipsService:
@@ -68,7 +69,12 @@ class MemberMembershipsService:
         gym_stripe_service: GymStripeService,
         parent_resolver: BillingParentResolver,
         freeze_service: PaymentSyncFreeze,
+        paying_lock: PayingMemberLock,
     ) -> None:
+        # Every lifecycle op is wrapped in the paying-parent concurrency lock
+        # (held across its pre-sync + DB write + sync) so no two ops sync the
+        # same family at once.
+        self._paying_lock = paying_lock
         deps = (
             db_pool,
             payment_sync_service,
@@ -111,7 +117,10 @@ class MemberMembershipsService:
         Returns the resolved ``cancel_date`` — the date through
         which the membership remains active.
         """
-        return await self._cancel.cancel(item_id, member_id, idempotency_key)
+        async with self._paying_lock.lock([member_id]):
+            return await self._cancel.cancel(
+                item_id, member_id, idempotency_key,
+            )
 
     async def preview_cancel(
         self,
@@ -119,7 +128,8 @@ class MemberMembershipsService:
         member_id: UUID,
     ) -> PaymentsInvoicePreviewResponse | None:
         """Preview what cancelling a membership would charge."""
-        return await self._cancel.preview_cancel(item_id, member_id)
+        async with self._paying_lock.lock([member_id]):
+            return await self._cancel.preview_cancel(item_id, member_id)
 
     # ── Freeze / Unfreeze ──────────────────────────────────────
 
@@ -131,7 +141,10 @@ class MemberMembershipsService:
         idempotency_key: UUID,
     ) -> None:
         """Freeze a member's account (account-level)."""
-        await self._freeze.freeze(member_id, gym_id, freeze_months, idempotency_key)
+        async with self._paying_lock.lock([member_id]):
+            await self._freeze.freeze(
+                member_id, gym_id, freeze_months, idempotency_key,
+            )
 
     async def unfreeze(
         self,
@@ -140,7 +153,8 @@ class MemberMembershipsService:
         idempotency_key: UUID,
     ) -> None:
         """Unfreeze a member's account (account-level)."""
-        await self._freeze.unfreeze(member_id, gym_id, idempotency_key)
+        async with self._paying_lock.lock([member_id]):
+            await self._freeze.unfreeze(member_id, gym_id, idempotency_key)
 
     # ── Start ──────────────────────────────────────────────────
 
@@ -155,15 +169,16 @@ class MemberMembershipsService:
         paid_with_cash: bool = False,
     ) -> None:
         """Start a new membership for a member."""
-        await self._start.start(
-            member_id=member_id,
-            gym_id=gym_id,
-            plan_id=plan_id,
-            price_id=price_id,
-            idempotency_key=idempotency_key,
-            prorate=prorate,
-            paid_with_cash=paid_with_cash,
-        )
+        async with self._paying_lock.lock([member_id]):
+            await self._start.start(
+                member_id=member_id,
+                gym_id=gym_id,
+                plan_id=plan_id,
+                price_id=price_id,
+                idempotency_key=idempotency_key,
+                prorate=prorate,
+                paid_with_cash=paid_with_cash,
+            )
 
     async def preview_start(
         self,
@@ -175,14 +190,15 @@ class MemberMembershipsService:
         paid_with_cash: bool = False,
     ) -> PaymentsInvoicePreviewResponse | None:
         """Preview what starting a membership would charge."""
-        return await self._start.preview(
-            member_id=member_id,
-            gym_id=gym_id,
-            plan_id=plan_id,
-            price_id=price_id,
-            prorate=prorate,
-            paid_with_cash=paid_with_cash,
-        )
+        async with self._paying_lock.lock([member_id]):
+            return await self._start.preview(
+                member_id=member_id,
+                gym_id=gym_id,
+                plan_id=plan_id,
+                price_id=price_id,
+                prorate=prorate,
+                paid_with_cash=paid_with_cash,
+            )
 
     # ── Mark Paid (Cash) ───────────────────────────────────────
 
@@ -193,7 +209,10 @@ class MemberMembershipsService:
         idempotency_key: UUID,
     ) -> None:
         """Mark a recurring membership's open Stripe invoice as paid via cash."""
-        await self._mark_paid_cash.mark_paid_cash(item_id, member_id, idempotency_key)
+        async with self._paying_lock.lock([member_id]):
+            await self._mark_paid_cash.mark_paid_cash(
+                item_id, member_id, idempotency_key,
+            )
 
     # ── Charge Card (ad-hoc amount) ────────────────────────────
 
@@ -202,7 +221,8 @@ class MemberMembershipsService:
         request: MemberMembershipsChargeCardRequest,
     ) -> None:
         """Charge a member's card (or mark as cash) for an ad-hoc amount."""
-        await self._charge_card.charge_card(request)
+        async with self._paying_lock.lock([request.member_id]):
+            await self._charge_card.charge_card(request)
 
     # ── Update Price ───────────────────────────────────────────
 
@@ -214,12 +234,13 @@ class MemberMembershipsService:
         prorate: bool = False,
     ) -> None:
         """Upgrade a membership to its plan's currently active price."""
-        await self._update_price.update_price(
-            item_id=item_id,
-            member_id=member_id,
-            idempotency_key=idempotency_key,
-            prorate=prorate,
-        )
+        async with self._paying_lock.lock([member_id]):
+            await self._update_price.update_price(
+                item_id=item_id,
+                member_id=member_id,
+                idempotency_key=idempotency_key,
+                prorate=prorate,
+            )
 
     async def preview_update_price(
         self,
@@ -228,11 +249,12 @@ class MemberMembershipsService:
         prorate: bool = False,
     ) -> PaymentsInvoicePreviewResponse | None:
         """Preview upgrading a membership to the plan's active price."""
-        return await self._update_price.preview_update_price(
-            item_id=item_id,
-            member_id=member_id,
-            prorate=prorate,
-        )
+        async with self._paying_lock.lock([member_id]):
+            return await self._update_price.preview_update_price(
+                item_id=item_id,
+                member_id=member_id,
+                prorate=prorate,
+            )
 
     # ── Apply Discounts (add / remove snapshots) ───────────────
 
@@ -245,13 +267,14 @@ class MemberMembershipsService:
         preview: bool = False,
     ) -> PaymentsInvoicePreviewResponse | None:
         """Add discount snapshots, or preview the addition (``preview=True``)."""
-        return await self._update_discounts.add_discounts(
-            item_id=item_id,
-            member_id=member_id,
-            preset_ids=preset_ids,
-            idempotency_key=idempotency_key,
-            preview=preview,
-        )
+        async with self._paying_lock.lock([member_id]):
+            return await self._update_discounts.add_discounts(
+                item_id=item_id,
+                member_id=member_id,
+                preset_ids=preset_ids,
+                idempotency_key=idempotency_key,
+                preview=preview,
+            )
 
     async def remove_discounts(
         self,
@@ -262,10 +285,11 @@ class MemberMembershipsService:
         preview: bool = False,
     ) -> PaymentsInvoicePreviewResponse | None:
         """Remove discount snapshots, or preview the removal (``preview=True``)."""
-        return await self._update_discounts.remove_discounts(
-            item_id=item_id,
-            member_id=member_id,
-            applied_ids=applied_ids,
-            idempotency_key=idempotency_key,
-            preview=preview,
-        )
+        async with self._paying_lock.lock([member_id]):
+            return await self._update_discounts.remove_discounts(
+                item_id=item_id,
+                member_id=member_id,
+                applied_ids=applied_ids,
+                idempotency_key=idempotency_key,
+                preview=preview,
+            )

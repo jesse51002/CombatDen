@@ -34,10 +34,9 @@ from src.payments.schema.payments_invoice_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import billing_lock_key
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
-from src.shared.resource_lock import LockBusyError, ResourceLock
+from src.shared.paying_member_lock import LockBusyError, PayingMemberLock
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +63,13 @@ class PaymentSyncService:
         freeze: PaymentSyncFreeze,
         once_discounts: PaymentSyncOnceDiscounts,
         builder: PaymentSyncBuilder,
-        resource_lock: ResourceLock,
+        paying_lock: PayingMemberLock,
     ) -> None:
         self._parent = parent_resolver
         self._freeze = freeze
         self._once_discounts = once_discounts
         self._builder = builder
-        self._lock = resource_lock
+        self._paying_lock = paying_lock
         self._stripe = PaymentSyncStripe(subscription_service)
         self._writeback = PaymentSyncWriteback(
             db_pool=db_pool,
@@ -254,10 +253,7 @@ class PaymentSyncService:
         failed: list[UUID] = []
         for member_id in member_ids:
             try:
-                parent = await self._parent.resolve_parent(member_id)
-                async with self._lock.guard(
-                    billing_lock_key(parent.member_id),
-                ):
+                async with self._paying_lock.lock([member_id]):
                     await self.update_payments_recurring(
                         member_id,
                         idempotency_key=uuid4(),
@@ -295,19 +291,15 @@ class PaymentSyncService:
         Resolves the paying parent, then runs the settle. A no-op when the family
         has no unconsumed ``once`` discounts.
 
-        Runs under the per-parent lock, acquired **here** (unlike
-        ``update_payments_recurring`` / ``preview_…``, which are guarded by their
-        boundary op): this is the only non-nested sync entry — the ``invoice.paid``
-        webhook is its sole caller — so self-guarding is safe and closes the
-        settle-vs-sync race. Raises ``LockBusyError`` if the family is busy; the
-        webhook treats that as a best-effort skip (the next sync settles).
+        The settle itself does **not** lock — its sole caller (the
+        ``invoice.paid`` webhook) wraps it in ``PayingMemberLock`` so it can't
+        race a concurrent sync on the same family.
 
         Args:
             member_id: Any family member's profile ID.
         """
         parent, stripe_account_id = await self._parent.resolve(member_id)
-        async with self._lock.guard(billing_lock_key(parent.member_id)):
-            await self._once_discounts.sync_once_discounts(
-                parent,
-                stripe_account_id,
-            )
+        await self._once_discounts.sync_once_discounts(
+            parent,
+            stripe_account_id,
+        )

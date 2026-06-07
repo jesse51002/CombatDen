@@ -74,7 +74,7 @@ from src.shared.auth import Auth
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
-from src.shared.resource_lock import ResourceLock
+from src.shared.paying_member_lock import PayingMemberLock
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
@@ -192,11 +192,13 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         gym_stripe_service=gym_stripe_service,
     )
-    # Generic per-key concurrency lock (TTL lease). Billing ops guard on the
-    # paying-parent key so no two ops sync the same family at once.
-    resource_lock = providers.Factory(
-        ResourceLock,
+    # The one concurrency lock: a TTL lease keyed on a member's paying parent,
+    # so no two billing ops sync the same family at once. Used by the facade,
+    # the webhook settle, and the bulk fan-out.
+    paying_member_lock = providers.Factory(
+        PayingMemberLock,
         db_pool=db_pool,
+        parent_resolver=billing_parent_resolver,
     )
     # Standalone freeze service: the dedicated freeze/unfreeze request resolves
     # the parent then calls this directly; the sync uses it for the maintenance
@@ -234,7 +236,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         freeze=payment_sync_freeze,
         once_discounts=payment_sync_once_discounts,
         builder=payment_sync_builder,
-        resource_lock=resource_lock,
+        paying_lock=paying_member_lock,
     )
 
     # ── Member memberships ───────────────────────────────────────
@@ -246,6 +248,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
         parent_resolver=billing_parent_resolver,
         freeze_service=payment_sync_freeze,
+        paying_lock=paying_member_lock,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────
@@ -306,6 +309,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_webhook_invoice_paid_handler = providers.Factory(
         InvoicePaidHandler,
         payment_sync_service=payment_sync_service,
+        paying_lock=paying_member_lock,
     )
     stripe_webhook_invoice_payment_failed_handler = providers.Factory(
         InvoicePaymentFailedHandler,

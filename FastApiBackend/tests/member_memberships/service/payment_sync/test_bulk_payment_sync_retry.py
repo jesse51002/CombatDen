@@ -19,37 +19,28 @@ from src.member_memberships.service.payment_sync import (
 from src.member_memberships.service.payment_sync.payment_sync_service import (
     PaymentSyncService,
 )
-from src.shared.resource_lock import LockBusyError
+from src.shared.paying_member_lock import LockBusyError
 
 
 def _build_service() -> PaymentSyncService:
-    """A service whose deps are mocks; bulk only touches the resolver, the lock,
+    """A service whose deps are mocks; bulk only touches the paying-member lock
     and ``update_payments_recurring`` (patched per test)."""
-    resolver = MagicMock()
-
-    async def _resolve_parent(member_id: UUID) -> MagicMock:
-        parent = MagicMock()
-        parent.member_id = member_id  # each member is its own parent here
-        return parent
-
-    resolver.resolve_parent = AsyncMock(side_effect=_resolve_parent)
-
-    lock = MagicMock()
+    paying_lock = MagicMock()
 
     @asynccontextmanager
-    async def _guard(key: str):
+    async def _lock(member_ids: list[UUID]):
         yield
 
-    lock.guard = _guard
+    paying_lock.lock = _lock
 
     return PaymentSyncService(
         db_pool=MagicMock(),
         subscription_service=MagicMock(),
-        parent_resolver=resolver,
+        parent_resolver=MagicMock(),
         freeze=MagicMock(),
         once_discounts=MagicMock(),
         builder=MagicMock(),
-        resource_lock=lock,
+        paying_lock=paying_lock,
     )
 
 

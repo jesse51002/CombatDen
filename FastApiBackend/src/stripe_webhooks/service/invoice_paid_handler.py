@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
-from src.shared.resource_lock import LockBusyError
+from src.shared.paying_member_lock import LockBusyError
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from src.member_memberships.service.payment_sync.payment_sync_service import (
         PaymentSyncService,
     )
+    from src.shared.paying_member_lock import PayingMemberLock
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,13 @@ class InvoicePaidHandler:
     Stripe just consumed has its ``end_date`` stamped promptly.
     """
 
-    def __init__(self, payment_sync_service: PaymentSyncService) -> None:
+    def __init__(
+        self,
+        payment_sync_service: PaymentSyncService,
+        paying_lock: PayingMemberLock,
+    ) -> None:
         self._sync = payment_sync_service
+        self._paying_lock = paying_lock
 
     async def handle(
         self,
@@ -260,7 +266,8 @@ class InvoicePaidHandler:
         own DB transaction (a separate pool), independent of this webhook's.
         """
         try:
-            await self._sync.settle_once_discounts(member_id)
+            async with self._paying_lock.lock([member_id]):
+                await self._sync.settle_once_discounts(member_id)
         except LockBusyError:
             logger.info(
                 "invoice.paid once-discount settle skipped (family busy) for "

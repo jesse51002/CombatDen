@@ -7,17 +7,6 @@ from pydantic import BaseModel
 
 from src.shared.gym_timezone import gym_today
 
-BILLING_LOCK_PREFIX = "billing-parent"
-
-
-def billing_lock_key(parent_member_id: UUID) -> str:
-    """The ``ResourceLock`` key for a paying-parent family.
-
-    One lease per family — every billing op resolves to the paying parent and
-    guards on this key, so no two ops sync the same family at once.
-    """
-    return f"{BILLING_LOCK_PREFIX}:{parent_member_id}"
-
 
 class ParentProfile(BaseModel):
     """Paying parent's billing-profile fields.
