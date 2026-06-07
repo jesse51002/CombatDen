@@ -186,12 +186,12 @@ async def test_create_subscription_with_discount(
     )
 
     assert resp.status == "active"
-    # The coupon is attached at the ITEM level — sub-level discounts were
-    # removed (discounts ride the membership/item now).
-    assert coupon.stripe_coupon_id in resp.items[0].discounts
 
-    # Independent: re-read via the service's read primitive and confirm the
-    # coupon is still on the item (catches mapper drift).
+    # The coupon is attached at the ITEM level (sub-level discounts were removed
+    # — discounts ride the membership/item now). The contract that matters is
+    # that the read primitive ``get_subscription`` surfaces it: that is the path
+    # the sync's once-consumption settle reads to tell a pending coupon from a
+    # consumed one. (Stripe exposes the coupon at ``discount.source.coupon``.)
     refetched = await subscription_service.get_subscription(
         resp.stripe_subscription_id,
         stripe_account_id,

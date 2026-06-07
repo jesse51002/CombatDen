@@ -231,7 +231,9 @@ shared deps and the static/instance helpers.
 
 `get_subscription` (`payments_subscription_retrieve.py`) is **read-only** and is
 the new path the sync depends on. The old push path only ever *wrote* desired
-state to Stripe; this reads it back. The mapped response carries each item's
+state to Stripe; this reads it back. **The retrieve expands
+`items.data.discounts`** so each item discount comes back as a `Discount` object
+(not a bare `di_…` id), and the mapped response carries each item's
 currently-attached coupon ids (`items[*].discounts`) **and** the
 subscription-level coupon ids (`discounts`). `sync-guide` reads these to run the
 `once`-consumption gate (a stored coupon still present = pending; absent = Stripe
@@ -243,9 +245,14 @@ exposes the read.
 `PaymentsSubscriptionBase` (`payments_subscription_base.py`):
 
 - `_map_subscription(sub)` → `PaymentsSubscriptionResponse` — exposes **both**
-  item-level coupon ids (`PaymentsSubscriptionItemResponse.discounts`, read from
-  `si.discounts[*].coupon.id`) **and** sub-level coupon ids (from
-  `sub.discounts`). This is what surfaces the live coupon set the sync unions.
+  item-level coupon ids (`PaymentsSubscriptionItemResponse.discounts`) **and**
+  sub-level coupon ids (from `sub.discounts`), via the `_coupon_id_from_discount`
+  helper. A subscription-item `Discount` exposes its coupon at
+  **`discount.source.coupon`** (a coupon-id string) in the current Stripe shape —
+  `discount.coupon` is null — so the helper reads `source.coupon` first, falling
+  back to the legacy `discount.coupon` object; a bare unexpanded `di_…` string is
+  skipped (the retrieve expands the discounts so this doesn't happen on the read
+  path). This is what surfaces the live coupon set the sync unions.
 - `_consolidate_items(items)` — Stripe allows one item per price, so duplicate
   price ids are merged: quantities summed, coupon ids de-duplicated.
 - `_build_create_items` / `_build_reconcile_items` / `_build_reconcile_entry` —

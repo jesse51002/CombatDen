@@ -73,6 +73,28 @@ class PaymentsSubscriptionBase:
         return int(datetime(next_day.year, next_day.month, next_day.day, tzinfo=UTC).timestamp())
 
     @staticmethod
+    def _coupon_id_from_discount(d: object) -> str | None:
+        """Coupon id referenced by a Stripe Discount on a subscription / item.
+
+        The current Stripe shape exposes the coupon at ``discount.source.coupon``
+        (a coupon-id string) and leaves ``discount.coupon`` null; older shapes
+        used ``discount.coupon`` (a Coupon object). A sub-level discount can also
+        arrive as a bare coupon-id string. A bare ``di_…`` discount-id string is
+        an *unexpanded* Discount and cannot be resolved here, so it is skipped
+        (the retrieve expands ``items.data.discounts`` so this doesn't happen on
+        the read path the once-settle uses).
+        """
+        if isinstance(d, str):
+            return None if d.startswith("di_") else d
+        source = getattr(d, "source", None)
+        if source is not None:
+            cid = getattr(source, "coupon", None)
+            if isinstance(cid, str):
+                return cid
+        coupon = getattr(d, "coupon", None)
+        return getattr(coupon, "id", None)
+
+    @staticmethod
     def _map_subscription(
         sub: stripe.Subscription,
     ) -> PaymentsSubscriptionResponse:
@@ -84,8 +106,9 @@ class PaymentsSubscriptionBase:
                 item_discount_ids: list[str] = []
                 if hasattr(si, "discounts") and si.discounts:
                     for d in si.discounts:
-                        if hasattr(d, "coupon") and d.coupon:
-                            item_discount_ids.append(d.coupon.id)
+                        cid = PaymentsSubscriptionBase._coupon_id_from_discount(d)
+                        if cid is not None:
+                            item_discount_ids.append(cid)
                 items.append(
                     PaymentsSubscriptionItemResponse(
                         stripe_subscription_item_id=si.id,
@@ -100,10 +123,9 @@ class PaymentsSubscriptionBase:
         sub_discount_ids: list[str] = []
         if sub.discounts:
             for d in sub.discounts:
-                if isinstance(d, str):
-                    sub_discount_ids.append(d)
-                elif hasattr(d, "coupon") and d.coupon:
-                    sub_discount_ids.append(d.coupon.id)
+                cid = PaymentsSubscriptionBase._coupon_id_from_discount(d)
+                if cid is not None:
+                    sub_discount_ids.append(cid)
 
         return PaymentsSubscriptionResponse(
             stripe_subscription_id=sub.id,
@@ -237,6 +259,10 @@ class PaymentsSubscriptionBase:
         try:
             subscription = await self._stripe.v1.subscriptions.retrieve_async(
                 subscription_id,
+                # Expand item discounts to Discount objects so _map_subscription
+                # can read each one's coupon (via discount.source.coupon) — the
+                # once-consumption settle reads items[*].discounts off this.
+                params={"expand": ["items.data.discounts"]},
                 options=opts,
             )
         except stripe.InvalidRequestError as exc:

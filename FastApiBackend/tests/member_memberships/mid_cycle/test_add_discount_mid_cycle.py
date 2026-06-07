@@ -172,6 +172,7 @@ async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
 @pytest.mark.timeout(240)
 async def test_once_discount_lands_once_then_consumed(
     memberships_service,
+    payment_sync_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -252,6 +253,19 @@ async def test_once_discount_lands_once_then_consumed(
             f"Consumed once discount must not re-apply; expected full 5000, "
             f"got {invoice2.amount_due}"
         )
+
+        # Stripe has now invoiced (and dropped) the once coupon, but nothing
+        # auto-re-syncs the CRM yet — the webhook once-settle / scheduled
+        # reconciler are unbuilt (TODO sync-guide §2.4 / §10). Trigger the sync
+        # the way the next membership op (or the reconciler) would: its pre-sync
+        # once-settle reads the live sub, sees the coupon is gone, and stamps
+        # end_date. (This is the real settle, not a workaround — it only stamps
+        # because Stripe genuinely consumed the coupon.)
+        await payment_sync_service.update_payments_recurring(
+            member.member_id,
+            idempotency_key=uuid4(),
+        )
+
         snaps_after = await get_applied_snapshots(db_pool, item_id)
         assert snaps_after[0]["end_date"] is not None, (
             "Consumed once snapshot should have its end_date stamped"
