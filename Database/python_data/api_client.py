@@ -7,9 +7,11 @@ callers don't have to juggle URLs and auth headers.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
+import progress
 from config import BACKEND_URL, fetch_access_token
 
 
@@ -48,16 +50,44 @@ class GymApiClient:
         self.close()
 
     def post(self, path: str, json: dict | None = None) -> dict | None:
-        resp = self._client.post(path, json=json)
-        return self._handle(resp, "POST", path)
+        return self._send("POST", path, json=json)
 
     def delete(self, path: str, params: dict | None = None) -> dict | None:
-        resp = self._client.delete(path, params=params)
-        return self._handle(resp, "DELETE", path)
+        return self._send("DELETE", path, params=params)
 
     def put(self, path: str, json: dict | None = None) -> dict | None:
-        resp = self._client.put(path, json=json)
-        return self._handle(resp, "PUT", path)
+        return self._send("PUT", path, json=json)
+
+    def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: dict | None = None,
+        params: dict | None = None,
+    ) -> dict | None:
+        """Issue one request, printing its method/path before and its status +
+        elapsed after — so the seed shows every backend call live and a slow or
+        hung call (e.g. a 60s ReadTimeout on a membership start) reports exactly
+        which call it was and how long it ran before failing.
+        """
+        progress.log(f"    -> {method} {path}")
+        start = time.perf_counter()
+        try:
+            resp = self._client.request(method, path, json=json, params=params)
+        except Exception as exc:
+            elapsed = time.perf_counter() - start
+            progress.log(
+                f"    FAIL {method} {path} after {elapsed:.2f}s "
+                f"({type(exc).__name__})"
+            )
+            raise
+        elapsed = time.perf_counter() - start
+        marker = "OK  " if resp.status_code < 400 else "ERR "
+        progress.log(
+            f"    {marker} {resp.status_code} {method} {path}  ({elapsed:.2f}s)"
+        )
+        return self._handle(resp, method, path)
 
     @staticmethod
     def _handle(resp: httpx.Response, method: str, path: str) -> dict | None:

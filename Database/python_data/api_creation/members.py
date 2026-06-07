@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import uuid
 
+import progress
 from api_client import GymApiClient
 from api_creation.upsert import diff_update, find_member, find_member_by_id
 from constants import AUTH_MEMBERS_PER_GYM
@@ -89,7 +90,11 @@ def create_all(
     """
     had_any_new = False
 
+    total = len(members)
     for idx, member in enumerate(members):
+        progress.item(
+            idx + 1, total, f"{member.first_name} {member.last_name}"
+        )
         # Give the first few members a real auth login (idempotent by email).
         if idx < AUTH_MEMBERS_PER_GYM and member.auth_user_id is None:
             user = auth.create_user(client, member.email)
@@ -153,12 +158,17 @@ def apply_links(api: GymApiClient, members: list[MemberPlan]) -> None:
     discount tier. The endpoint also clears any child card/freeze state.
     """
     by_handle: dict[str, MemberPlan] = {m.local_handle: m for m in members}
-    for member in members:
-        if not member.is_linked_child:
-            continue
+    children = [m for m in members if m.is_linked_child]
+    total = len(children)
+    for n, member in enumerate(children, start=1):
         parent = by_handle.get(member.linked_primary_handle)
+        name = f"{member.first_name} {member.last_name}"
         if parent is None or parent.member_id is None or member.member_id is None:
+            progress.item(n, total, f"{name} — link SKIPPED (parent unresolved)")
             continue
+        progress.item(
+            n, total, f"{name} — link to {parent.first_name} {parent.last_name}"
+        )
         api.put(
             f"/api/v1/members/{member.member_id}/link",
             json={"parent_member_id": str(parent.member_id)},
@@ -174,13 +184,20 @@ def apply_freezes(client: Client, members: list[MemberPlan]) -> None:
     carry a freeze (the linked_account_no_stripe constraint forbids it —
     they inherit the parent's window through the status view).
     """
-    for member in members:
-        if member.is_linked_child or member.account_freeze_start is None:
-            continue
+    eligible = [
+        m
+        for m in members
+        if not m.is_linked_child and m.account_freeze_start is not None
+    ]
+    total = len(eligible)
+    for n, member in enumerate(eligible, start=1):
         assert member.member_id is not None
+        name = f"{member.first_name} {member.last_name}"
         existing = find_member_by_id(client, member.member_id)
         if existing is None:
+            progress.item(n, total, f"{name} — freeze SKIPPED (member not found)")
             continue
+        progress.item(n, total, f"{name} — apply account freeze")
         expected = {
             "freeze_start_date": member.account_freeze_start.isoformat(),
             "freeze_end_date": member.account_freeze_end.isoformat(),

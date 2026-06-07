@@ -21,9 +21,11 @@ events the declining card triggers.
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import progress
 from api_creation.plans import PlanRecord
 from api_creation.stripe_direct import (
     advance_clock,
@@ -69,6 +71,12 @@ def create_overdue(
         first_name = fake.first_name()
         last_name = fake.last_name()
         email = fake.unique.email()
+        progress.item(
+            i + 1,
+            OVERDUE_MEMBERS_PER_GYM,
+            f"{first_name} {last_name} <{email}> — overdue via test clock",
+        )
+        start = time.perf_counter()
 
         clock_id = create_test_clock(STRIPE_TEST_ACCOUNT_ID, frozen_at)
         customer_id = create_customer_under_clock(
@@ -172,6 +180,9 @@ def create_overdue(
         ).eq("stripe_item_id", sub_item_id).execute()
 
         created.append(member_id)
-        print(f"  overdue member created: {email} ({member_id})")
+        elapsed = time.perf_counter() - start
+        progress.log(
+            f"    OK   overdue member {email} ({member_id})  ({elapsed:.2f}s)"
+        )
 
     return created

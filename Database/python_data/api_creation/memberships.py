@@ -19,6 +19,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+import progress
 from api_client import GymApiClient
 from api_creation.upsert import find_live_membership
 from generators.members import CurrentMembership, MemberPlan
@@ -102,14 +103,22 @@ def create_current(
     """
     records: list[CurrentMembershipRecord] = []
 
-    for member in members:
+    # Filter to the members this pass actually starts so the [n/total] counter
+    # is meaningful (the old loop skipped non-matching members mid-iteration).
+    eligible = [
+        m
+        for m in members
+        if m.current is not None and m.is_linked_child == linked_children
+    ]
+    total = len(eligible)
+    for n, member in enumerate(eligible, start=1):
         current = member.current
-        if current is None:
-            continue
-        if member.is_linked_child != linked_children:
-            continue
+        assert current is not None  # guaranteed by the filter above
         assert member.member_id is not None, (
             "create_current called before members were created"
+        )
+        progress.item(
+            n, total, f"{member.first_name} {member.last_name} — start membership"
         )
 
         existing = find_live_membership(client, member.member_id, gym_id)
@@ -119,8 +128,8 @@ def create_current(
                 records.append(_record_from_row(member, existing))
                 continue
             # Mismatch — cancel the old subscription, then create fresh.
-            print(
-                f"  reconciling membership for {member.member_id}: "
+            progress.log(
+                f"    reconciling membership for {member.member_id}: "
                 f"plan_id {existing['plan_id']} -> {current.plan.plan_id}"
             )
             api.delete(
@@ -170,20 +179,26 @@ def apply_linked(
     if not linked_ids:
         return 0
     linked_id = str(linked_ids[0])
-    applied = 0
-    for record in current_records:
-        if applied >= limit:
-            break
-        if record.plan_id != linked_plan_id or record.member.member_id is None:
-            continue
+    eligible = [
+        r
+        for r in current_records
+        if r.plan_id == linked_plan_id and r.member.member_id is not None
+    ][:limit]
+    total = len(eligible)
+    for n, record in enumerate(eligible, start=1):
+        member = record.member
+        progress.item(
+            n,
+            total,
+            f"{member.first_name} {member.last_name} — apply linked discount",
+        )
         api.post(
             "/api/v1/member_memberships/discounts/add",
             json={
                 "item_id": str(record.item_id),
-                "member_id": str(record.member.member_id),
+                "member_id": str(member.member_id),
                 "preset_ids": [linked_id],
                 "idempotency_key": str(uuid.uuid4()),
             },
         )
-        applied += 1
-    return applied
+    return total

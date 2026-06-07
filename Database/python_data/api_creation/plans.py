@@ -13,6 +13,7 @@ import random
 import uuid
 from dataclasses import dataclass, field
 
+import progress
 from api_client import GymApiClient
 from supabase import Client
 
@@ -66,7 +67,9 @@ def create_all(
 
     selected = random.sample(PLAN_TEMPLATES, min(count, len(PLAN_TEMPLATES)))
     records: list[PlanRecord] = []
+    total = len(selected)
     for idx, tmpl in enumerate(selected):
+        progress.item(idx + 1, total, tmpl["plan_name"])
         existing = find_plan(client, gym_id, tmpl["plan_name"])
         if existing is not None:
             existing.handle = f"plan{idx}"
