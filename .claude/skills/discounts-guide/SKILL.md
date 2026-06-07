@@ -266,12 +266,13 @@ The staging is always undone in a `finally` (a `staged_preview` helper), so a
 preview never commits a discount. A real call (`preview=False`) skips all of this —
 it inserts/deletes the rows for real and re-syncs.
 
-> **The `preview_remove` race** (the reason the per-parent lock matters): flipping a
-> live `applied` row to `preview_remove` is read-safe for the preview, but a
-> **concurrent real sync also drops `preview_remove`**, so it would scrub the
-> membership's live Stripe line. `preview_add` is safe (a real sync ignores it). The
-> `finally` cleanup bounds the window; it is fully closed only by the concurrency
-> lock (`TODO_SYNC_REFACTOR.md` #25).
+> **The `preview_remove` race — now closed by the lock.** Flipping a live `applied`
+> row to `preview_remove` is read-safe for the preview, but a **concurrent real sync
+> also drops `preview_remove`**, so it would scrub the membership's live Stripe line
+> (`preview_add` is safe — a real sync ignores it). This is **closed by the
+> per-parent lock**: every lifecycle op, including the add/remove-discount preview,
+> runs under `PayingMemberLock` (the membership facade wraps it), so no concurrent
+> sync on the same family can run during the staged preview.
 
 ---
 

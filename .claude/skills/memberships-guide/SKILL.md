@@ -299,7 +299,11 @@ account freeze) — the view is authoritative.
 
 `src/member_memberships/service/memberships/`. The facade
 (`member_memberships_service.py`, `MemberMembershipsService`) delegates to
-sub-services extending `MemberMembershipsBase`. **Every mutating op is DB-first and
+sub-services extending `MemberMembershipsBase`. **The facade wraps every op (and its
+`preview_*`) in `PayingMemberLock.lock([member_id])`** (`src/shared/paying_member_lock.py`),
+held across the whole op so no two ops sync the same paying-parent family at once —
+a busy family yields `LockBusyError` → HTTP 409. The sub-services don't lock; the
+facade is the single guard point. **Every mutating op is DB-first and
 pre-synced: it first converges the family to a clean DB↔Stripe baseline
 (`_pre_sync_payments`, so it never builds on a drifted DB), then writes the desired
 state to the DB, calls the param-less sync (`update_payments_recurring`, or

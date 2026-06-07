@@ -68,6 +68,14 @@ This skill owns the **orchestration / mechanics** in
   (the anti-pattern `PaymentSyncCoupons` used to have).
 - **The membership lifecycle callers** (start / cancel / freeze / price-change /
   discount-change / link) → `memberships-guide`. They *trigger* the engine.
+- **Concurrency locking.** The engine owns **no** lock logic. The per-paying-parent
+  lock is the shared `PayingMemberLock` (`src/shared/paying_member_lock.py`): a TTL
+  lease in `resource_locks`, one `lock(member_ids)` context manager. The **callers**
+  wrap their op in it (the membership facade, link/unlink, `bulk_payment_sync` per
+  member, the `invoice.paid` webhook around `settle_once_discounts`) — held across
+  the whole op so no two ops sync the same family at once. `update_payments_recurring`
+  / `preview` / `settle_once_discounts` are NOT self-guarded; their boundary caller
+  is. (`bulk_payment_sync` does guard each member, since it's the fan-out point.)
 
 ---
 

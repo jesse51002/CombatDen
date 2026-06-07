@@ -9,9 +9,10 @@
 > `memberships-guide` (the lifecycle callers), `payments-guide` (the Stripe
 > primitives + webhooks). Read those for how the live system works.
 >
-> The transient **session-level engineering TODOs** (the per-parent concurrency
-> lock #25, the rewards endpoint) live in `FastApiBackend/TODO_SYNC_REFACTOR.md`.
-> This file holds the deferred **features**.
+> The transient **session-level engineering TODOs** (the rewards endpoint) live in
+> `FastApiBackend/TODO_SYNC_REFACTOR.md`. This file holds the deferred **features**
+> and is **always forward-looking**: it lists only remaining work — when something
+> ships it is **removed**, never annotated "done".
 
 ## 1. Scheduled reconciler (load-bearing, not built)
 
@@ -440,6 +441,13 @@ Then the invoice popup itemizes from real data and the line-item count becomes m
   deriving from a preset sits on the same plan/quantity shape, re-applying a changed
   value is unambiguous). Not decided — enabled by the provenance fields but
   intentionally not built.
-- **Session-level engineering TODOs** (the per-parent concurrency lock #25 and the
-  rewards `GET /rewards/{reward_id}` endpoint) are tracked in
-  `FastApiBackend/TODO_SYNC_REFACTOR.md`, not here.
+- **Relocate link/unlink into membership handling + a preview flag.** Linking/unlinking a
+  paying parent is **billing-critical** — it reshapes the family's consolidated subscription —
+  but it currently lives in `src/members/service/management/members_management_linked.py`, the
+  wrong domain. Move it under `src/member_memberships/service/memberships/` alongside the other
+  lifecycle ops (start / cancel / discounts), where billing-critical changes belong. And collapse
+  the separate `preview_link_account` / `preview_unlink_account` methods into a **`preview` bool**
+  on `link_account` / `unlink_account` — matching the memberships and add/remove-discounts pattern
+  (one op with a preview flag, not a parallel preview method).
+- **Session-level engineering TODOs** (the rewards `GET /rewards/{reward_id}` endpoint) are
+  tracked in `FastApiBackend/TODO_SYNC_REFACTOR.md`, not here.

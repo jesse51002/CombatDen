@@ -217,22 +217,18 @@ for it to take effect on the live DB. (Dev DB — the user said don't worry abou
 just re-run.) Until then the live DB still has the old single-condition view/RLS (harmless — the
 data already satisfies both conditions).
 
-### 3.3 🟡 §2.2 — Per-parent concurrency lock (#25) — THE BIG REMAINING ONE (user wants it LAST)
-**The need:** while one op syncs a family, no other op (admin, bulk job, second tab, a preview, or
-the §2.4 webhook) may run a conflicting sync on the **same paying-parent family**. Today there is
-**zero guard**: two concurrent `update_payments_recurring` on one family both read, both call Stripe,
-both write back last-write-wins (the sync is a multi-transaction cascade with Stripe HTTP in the
-middle). On billing code this mis-bills / desyncs. **It is now load-bearing for the §2.4 webhook
-settle and the §2.5 discount preview staging** (the `preview_remove`-races-a-real-sync gotcha in §4).
-- **Use a Postgres advisory lock:** `pg_try_advisory_lock(hashtext(parent_member_id::text))` acquired
-  at the start of the op, held across the whole DB+Stripe sequence, released in `finally`. Per-parent,
-  NOT one global lock. `SELECT … FOR UPDATE` is insufficient (one txn; the sync spans many txns + I/O).
-- Attach via a shared decorator / context-manager around the lifecycle callers + the sync entry
-  points (incl. `preview_*`, `settle_once_discounts`, and the webhook).
-- **Open Qs for the user (ASK before building):** advisory-lock (backend serialization) vs. a
-  `member_locks` UI edit-session table (TTL/heartbeat, "Bob is editing → read-only") vs. both;
-  fail-fast 409 ("member is being updated, try again") vs. block-with-timeout. The user leaned "fix it
-  properly"; flavor unconfirmed.
+### 3.3 ✅ Per-parent concurrency lock (#25) — DONE
+The single **`PayingMemberLock`** (`src/shared/paying_member_lock.py`) — a TTL lease in
+`resource_locks` keyed on the resolved paying parent (key `paying_member_lock:<id>`) — wraps every
+billing op so no two ops touch the same family at once: the membership facade (start / cancel /
+freeze / unfreeze / update_price / mark_paid_cash / charge_card / add+remove discounts + previews),
+link/unlink (**both** families via `lock([…])`), `bulk_payment_sync` (per member, with a
+configurable retry loop), and the `invoice.paid` webhook settle. ONE `lock(member_ids)` async
+context manager (caller wraps a single member in a list); block ~5s then `LockBusyError` → 409;
+60s TTL + 55s max-hold; token-fenced release. `PaymentSyncService` owns no lock logic. Closes the
+§2.4 webhook-vs-sync and §2.5 `preview_remove`-vs-sync races. Chosen flavor: DB TTL-lease (not a
+Postgres advisory lock — the multi-txn sync can't hold a session lock; and the table gives a hard
+TTL), per-parent, block-then-409.
 
 ### 3.4 Open decisions + smaller items
 - 🔴 **Verify (and test) repricing one member OFF a shared consolidated line.** N>1 family members on
@@ -256,11 +252,11 @@ settle and the §2.5 discount preview staging** (the `preview_remove`-races-a-re
 ---
 
 ## 4. Gotchas still live (don't get surprised)
-- **🔴 `preview_remove` races a real sync (closed ONLY by §2.2).** Staging `preview_remove` on a real
-  `applied` row (the §2.5 remove-preview): the preview read excludes it (good), but a **concurrent
-  real sync ALSO excludes `preview_remove`, so it drops the membership's live Stripe line → mis-bill.**
-  `preview_add` (add-preview) is safe (a real sync ignores it). Same risk for the §2.4 webhook settle
-  racing a caller's sync. Cleanup is `finally`-bounded, not race-safe.
+- **✅ `preview_remove` races a real sync — CLOSED by the lock (§3.3).** Staging `preview_remove` on a
+  real `applied` row (the §2.5 remove-preview): the preview read excludes it (good), and a concurrent
+  real sync ALSO excludes `preview_remove` — but both now run under `PayingMemberLock` on the same
+  family, so they can't overlap. (`preview_add` was always safe — a real sync ignores it.) Same
+  closure for the §2.4 webhook settle vs a caller's sync.
 - **Stripe coupon shape:** a subscription-item Discount exposes its coupon at
   **`discount.source.coupon`** (a coupon-id string); `discount.coupon` is null; a bare `di_…` is an
   unexpanded Discount. The retrieve must expand `items.data.discounts`. (Bug #2.)
