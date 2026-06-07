@@ -470,8 +470,13 @@ class _AppDataTableState extends State<AppDataTable> {
     final children = <Widget>[];
     for (int i = 0; i < widget.columns.length; i++) {
       final col = widget.columns[i];
+      // heightFactor: 1.0 lets the Align hug its child vertically so a
+      // taller, multi-line cell doesn't demand infinite height once the
+      // row's vertical constraint is a floor (below) rather than a fixed
+      // size — while still left-aligning within the cell's width.
       final cell = Align(
         alignment: Alignment.centerLeft,
+        heightFactor: 1.0,
         child: cells[i],
       );
       if (col.fill) {
@@ -482,8 +487,11 @@ class _AppDataTableState extends State<AppDataTable> {
         );
       }
     }
-    return SizedBox(
-      height: height,
+    // minHeight (not a fixed height) so a multi-line cell grows the row
+    // instead of overflowing; single-line rows stay at `height`. The Row's
+    // default centre cross-axis alignment keeps shorter cells centred.
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: height),
       child: Row(
         spacing: DesignConstants.spacingSmall,
         children: children,

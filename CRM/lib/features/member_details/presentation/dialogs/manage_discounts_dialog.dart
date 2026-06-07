@@ -14,15 +14,12 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// Adds discounts to a membership: lists the gym's regular
-/// presets to add, shows the snapshots already applied to
-/// this member's line (frozen, removed from their own row in
-///
-/// Applying is add-only here: dispatches
-/// [ApplyDiscountsRequested] with the newly-selected preset
-/// ids. Removal happens
-/// per-snapshot from the section's table (never a
-/// replace-set).
+/// Manages the discounts on a membership line as a two-screen
+/// card: an **Add** screen (the gym's not-yet-applied presets)
+/// and a **Remove** screen (the snapshots already applied to
+/// this member's line). Both selections commit together in a
+/// single [ApplyDiscountsRequested] — an explicit add / remove
+/// of immutable snapshot rows, never a replace-set.
 class ManageDiscountsDialog extends StatefulWidget {
   final MemberDetailResponse member;
   final MembershipInfo membership;
@@ -68,7 +65,16 @@ class _ManageDiscountsDialogState
       MemberRepository(apiClient: ApiClient());
 
   late Future<List<DiscountResponse>> _presets;
+
+  /// Preset discount ids selected on the Add screen.
   final Set<String> _toAdd = {};
+
+  /// Applied-discount snapshot ids selected on the Remove
+  /// screen.
+  final Set<String> _toRemove = {};
+
+  /// 0 = Add screen, 1 = Remove screen.
+  int _tab = 0;
 
   @override
   void initState() {
@@ -77,8 +83,8 @@ class _ManageDiscountsDialogState
         _repository.listGymDiscounts(widget.member.gymId);
   }
 
-  /// Snapshots already applied to this member's line — shown
-  /// read-only so staff don't double-add. Resolved by item.
+  /// Snapshots already applied to this member's line — the
+  /// Remove screen lists them. Resolved by item.
   List<DiscountInfo> get _applied {
     final itemId =
         widget.membership.itemIdFor(widget.coveredMemberId);
@@ -88,22 +94,31 @@ class _ManageDiscountsDialogState
         .toList();
   }
 
+  /// Source discount ids of the applied snapshots — used to
+  /// hide already-applied presets from the Add screen.
   Set<String> get _appliedSourceIds => _applied
       .map((d) => d.discountId)
       .whereType<String>()
       .toSet();
 
+  void _toggle(Set<String> selection, String id) {
+    setState(() {
+      if (selection.contains(id)) {
+        selection.remove(id);
+      } else {
+        selection.add(id);
+      }
+    });
+  }
+
+  /// Commits the Add and Remove selections together in one
+  /// request, then closes. A no-op (just close) when nothing
+  /// is selected on either screen.
   void _submit() {
-    if (_toAdd.isEmpty) {
+    if (_toAdd.isEmpty && _toRemove.isEmpty) {
       Navigator.of(context).pop();
       return;
     }
-    _dispatch(presetIds: _toAdd.toList());
-  }
-
-  void _dispatch({
-    List<String> presetIds = const [],
-  }) {
     final itemId =
         widget.membership.itemIdFor(widget.coveredMemberId);
     if (itemId == null) {
@@ -114,7 +129,8 @@ class _ManageDiscountsDialogState
           ApplyDiscountsRequested(
             itemId: itemId,
             memberId: widget.coveredMemberId,
-            addPresetIds: presetIds,
+            addPresetIds: _toAdd.toList(),
+            removeAppliedIds: _toRemove.toList(),
           ),
         );
     Navigator.of(context).pop();
@@ -142,18 +158,16 @@ class _ManageDiscountsDialogState
             appliedSourceIds: _appliedSourceIds,
             appliedDiscounts: _applied,
             selectedToAdd: _toAdd,
-            onToggle: (id) => setState(() {
-              if (_toAdd.contains(id)) {
-                _toAdd.remove(id);
-              } else {
-                _toAdd.add(id);
-              }
-            }),
+            selectedToRemove: _toRemove,
+            activeTab: _tab,
+            onTabChanged: (i) => setState(() => _tab = i),
+            onToggleAdd: (id) => _toggle(_toAdd, id),
+            onToggleRemove: (id) => _toggle(_toRemove, id),
           );
         },
       ),
       actions: AppDialogActions(
-        primaryLabel: 'Apply discounts',
+        primaryLabel: 'Apply changes',
         primaryOnPressed: _submit,
         secondaryLabel: 'Cancel',
         secondaryOnPressed: () =>
