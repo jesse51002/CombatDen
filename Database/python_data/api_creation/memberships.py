@@ -158,7 +158,8 @@ def apply_linked(
 
     A linked discount is a real discount entry; applying one freezes an
     immutable snapshot to its active value via the normal apply path
-    (``add_preset_ids``) and re-syncs Stripe — exactly like any discount. We
+    (``POST /discounts/add`` with ``preset_ids``) and re-syncs Stripe —
+    exactly like any discount. We
     seed a few members on the linked plan with it so the CRM display and the
     sync's per-line aggregation are exercised end-to-end. Add-only (the seed is
     run against a fresh reset); returns the number applied.
@@ -172,13 +173,12 @@ def apply_linked(
             break
         if record.plan_id != linked_plan_id or record.member.member_id is None:
             continue
-        api.put(
-            "/api/v1/member_memberships/discounts",
+        api.post(
+            "/api/v1/member_memberships/discounts/add",
             json={
                 "item_id": str(record.item_id),
                 "member_id": str(record.member.member_id),
-                "add_preset_ids": [linked_id],
-                "remove_applied_ids": [],
+                "preset_ids": [linked_id],
                 "idempotency_key": str(uuid.uuid4()),
             },
         )
