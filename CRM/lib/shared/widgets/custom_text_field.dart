@@ -14,6 +14,17 @@ class CustomTextField extends StatefulWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
 
+  /// Focus node for this field — pass one to drive focus
+  /// transitions (e.g. Enter on a previous field focuses this).
+  final FocusNode? focusNode;
+
+  /// Keyboard action button; on web also drives Enter handling
+  /// alongside [onSubmitted].
+  final TextInputAction? textInputAction;
+
+  /// Called when the field is submitted (Enter pressed).
+  final VoidCallback? onSubmitted;
+
   /// Max lines for the field. Defaults to 1; pass a larger
   /// value (with [minLines]) for a multi-line text area.
   /// Ignored when [isPassword] is true.
@@ -30,6 +41,9 @@ class CustomTextField extends StatefulWidget {
     this.validator,
     this.keyboardType,
     this.inputFormatters,
+    this.focusNode,
+    this.textInputAction,
+    this.onSubmitted,
     this.maxLines = 1,
     this.minLines,
   });
@@ -53,10 +67,13 @@ class _CustomTextFieldState extends State<CustomTextField> {
         ),
         TextFormField(
           controller: widget.controller,
+          focusNode: widget.focusNode,
           enabled: widget.enabled,
           obscureText: widget.isPassword && _obscureText,
           validator: widget.validator,
           keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          onFieldSubmitted: (_) => widget.onSubmitted?.call(),
           inputFormatters: widget.inputFormatters,
           maxLines: widget.isPassword ? 1 : widget.maxLines,
           minLines: widget.isPassword ? 1 : widget.minLines,
