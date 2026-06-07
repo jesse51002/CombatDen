@@ -221,3 +221,24 @@ class PaymentSyncService:
                     member_id,
                     exc_info=True,
                 )
+
+    async def settle_once_discounts(self, member_id: UUID) -> None:
+        """Finalize the family's consumed ``once`` discounts (stamp end_date).
+
+        The same pre-sync once-settle ``update_payments_recurring`` runs,
+        exposed on its own so the ``invoice.paid`` webhook can call it the moment
+        Stripe invoices a subscription: a consumed ``once`` coupon drops off the
+        live sub, and this records its ``end_date`` promptly instead of waiting
+        for the member's next manual op (or the deferred reconciler, §10).
+        Resolves the paying parent, then runs the settle. A no-op when the family
+        has no unconsumed ``once`` discounts. (Must take the per-parent lock once
+        #25 lands.)
+
+        Args:
+            member_id: Any family member's profile ID.
+        """
+        parent, stripe_account_id = await self._parent.resolve(member_id)
+        await self._once_discounts.sync_once_discounts(
+            parent,
+            stripe_account_id,
+        )

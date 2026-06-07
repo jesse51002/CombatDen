@@ -32,6 +32,7 @@ from src.stripe_webhooks.service.stripe_webhooks_service import (
 from tests.conftest import STRIPE_TEST_ACCOUNT_ID
 from tests.helpers.cleanup import delete_all_gym_data
 from tests.helpers.data_factory import create_member, create_plan
+from tests.helpers.service_factory import build_payment_sync_service
 
 # Synthetic stripe_account_id for webhook tests only. The seed script
 # inserts several gyms pointing at the real test account; if the
@@ -110,8 +111,10 @@ def event_log() -> StripeWebhookEventLog:
 
 
 @pytest.fixture(scope="module")
-def invoice_paid_handler() -> InvoicePaidHandler:
-    return InvoicePaidHandler()
+def invoice_paid_handler(db_pool, stripe_client) -> InvoicePaidHandler:
+    return InvoicePaidHandler(
+        payment_sync_service=build_payment_sync_service(db_pool, stripe_client),
+    )
 
 
 @pytest.fixture(scope="module")

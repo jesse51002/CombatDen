@@ -1,7 +1,9 @@
 """Handler for Stripe ``invoice.paid`` events."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import text
@@ -17,6 +19,11 @@ from src.stripe_webhooks.service.stripe_time import (
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
     SubscriptionItemPendingError,
 )
+
+if TYPE_CHECKING:
+    from src.member_memberships.service.payment_sync.payment_sync_service import (
+        PaymentSyncService,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +52,14 @@ class InvoicePaidHandler:
     ``StripeSubscriptionMetadata`` / ``StripeMembershipOneTimeMetadata``
     / ``StripeAdHocInvoiceMetadata`` models guard the *write* side;
     here we only pull out a small set of flow-control fields.
+
+    After a subscription invoice is paid it also triggers the once-discount
+    settle (``PaymentSyncService.settle_once_discounts``) so a ``once`` discount
+    Stripe just consumed has its ``end_date`` stamped promptly.
     """
+
+    def __init__(self, payment_sync_service: PaymentSyncService) -> None:
+        self._sync = payment_sync_service
 
     async def handle(
         self,
@@ -93,6 +107,7 @@ class InvoicePaidHandler:
 
         if not is_one_time:
             await self._update_memberships(session, invoice, gym_id)
+            await self._settle_once_discounts(member_id, gym_id)
         await self._insert_payment_charge(
             session,
             invoice,
@@ -224,6 +239,34 @@ class InvoicePaidHandler:
                     "last_paid_date": last_paid_date,
                     "next_due_date": next_due_date,
                 },
+            )
+
+    async def _settle_once_discounts(
+        self,
+        member_id: UUID,
+        gym_id: UUID,
+    ) -> None:
+        """Promptly finalize any ``once`` discount Stripe just invoiced.
+
+        When a subscription invoice is paid, a consumed ``once`` coupon drops off
+        the live sub — stamp its ``end_date`` now instead of waiting for the
+        member's next manual op (or the deferred reconciler). A no-op when the
+        family has no unconsumed ``once`` discounts.
+
+        Best-effort: a failure here must NOT roll back the invoice/charge writes
+        (the critical path), so it is logged and swallowed — the next sync /
+        reconciler re-settles (the settle is idempotent). The settle runs in its
+        own DB transaction (a separate pool), independent of this webhook's.
+        """
+        try:
+            await self._sync.settle_once_discounts(member_id)
+        except Exception:
+            logger.error(
+                "invoice.paid once-discount settle failed for "
+                "member_id=%s gym_id=%s",
+                member_id,
+                gym_id,
+                exc_info=True,
             )
 
     async def _insert_payment_charge(

@@ -297,6 +297,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_webhook_event_log = providers.Factory(StripeWebhookEventLog)
     stripe_webhook_invoice_paid_handler = providers.Factory(
         InvoicePaidHandler,
+        payment_sync_service=payment_sync_service,
     )
     stripe_webhook_invoice_payment_failed_handler = providers.Factory(
         InvoicePaymentFailedHandler,
