@@ -443,31 +443,46 @@ class InvoicePaidHandler:
     ) -> dict[str, str]:
         """Map each invoice Discount id (``di_``) to its Stripe coupon id.
 
-        Retrieves the invoice with the discount coupons expanded (the webhook
+        Retrieves the invoice with its Discount objects expanded (the webhook
         payload sends only ``di_`` ids). Returns ``{}`` if nothing resolves.
         """
         opts = PaymentsStripeClient.connect_opts_readonly(stripe_account_id)
         retrieved = await self._stripe.v1.invoices.retrieve_async(
             stripe_invoice_id,
-            params={"expand": ["discounts.coupon"]},
+            params={"expand": ["discounts"]},
             options=opts,
         )
         coupon_by_discount: dict[str, str] = {}
         for discount in getattr(retrieved, "discounts", None) or []:
-            discount_id = getattr(discount, "id", None) if not isinstance(
-                discount, str
-            ) else None
-            coupon = getattr(discount, "coupon", None) if not isinstance(
-                discount, str
-            ) else None
-            coupon_id = (
-                getattr(coupon, "id", None) if coupon is not None else None
-            )
-            if isinstance(coupon, str):
-                coupon_id = coupon
+            if isinstance(discount, str):
+                continue  # unexpanded id — can't resolve the coupon
+            discount_id = getattr(discount, "id", None)
+            coupon_id = self._discount_coupon_id(discount)
             if discount_id and coupon_id:
                 coupon_by_discount[discount_id] = coupon_id
         return coupon_by_discount
+
+    @staticmethod
+    def _discount_coupon_id(discount: Any) -> str | None:
+        """The coupon id off a Stripe Discount, dahlia-shaped.
+
+        Dahlia nests it: ``discount.source = {type: 'coupon', coupon: '<id>'}``
+        (``coupon`` is the id string). Falls back to the legacy
+        ``discount.coupon`` (object or id string) so the capture survives an
+        API-version skew either way. ``getattr(..., None)`` is safe on a
+        Stripe object — a missing field returns the default, not raises.
+        """
+        source = getattr(discount, "source", None)
+        coupon = getattr(source, "coupon", None) if source is not None else None
+        if isinstance(coupon, str):
+            return coupon
+        coupon_id = getattr(coupon, "id", None) if coupon is not None else None
+        if coupon_id:
+            return coupon_id
+        legacy = getattr(discount, "coupon", None)  # pre-dahlia fallback
+        if isinstance(legacy, str):
+            return legacy
+        return getattr(legacy, "id", None) if legacy is not None else None
 
     @staticmethod
     def _lines(invoice: dict[str, Any]) -> list[dict[str, Any]]:

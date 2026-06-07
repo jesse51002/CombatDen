@@ -109,28 +109,30 @@ class _FakePaymentIntents:
 FAKE_INVOICE_DISCOUNTS: dict[str, list[tuple[str, str]]] = {}
 
 
-class _FakeCoupon:
+class _FakeDiscountSource:
+    """The dahlia Discount ``source`` — a discriminated union; for a coupon
+    it carries the coupon id (a string) under ``coupon``."""
+
     def __init__(self, coupon_id: str) -> None:
-        self.id = coupon_id
+        self.coupon = coupon_id
+        self.type = "coupon"
 
 
 class _FakeDiscount:
-    def __init__(self, discount_id: str, coupon: _FakeCoupon) -> None:
+    def __init__(self, discount_id: str, coupon_id: str) -> None:
         self.id = discount_id
-        self.coupon = coupon
+        self.source = _FakeDiscountSource(coupon_id)
 
 
 class _FakeInvoice:
-    def __init__(self, discounts: list[_FakeDiscount]) -> None:
+    def __init__(self, discounts: list["_FakeDiscount"]) -> None:
         self.discounts = discounts
 
 
 class _FakeInvoices:
     async def retrieve_async(self, invoice_id, params=None, options=None):
         pairs = FAKE_INVOICE_DISCOUNTS.get(invoice_id, [])
-        return _FakeInvoice(
-            [_FakeDiscount(di, _FakeCoupon(coupon)) for di, coupon in pairs]
-        )
+        return _FakeInvoice([_FakeDiscount(di, coupon) for di, coupon in pairs])
 
 
 class _FakeStripeInner:
