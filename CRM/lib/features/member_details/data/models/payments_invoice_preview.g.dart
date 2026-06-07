@@ -32,3 +32,18 @@ PaymentsInvoicePreviewResponse _$PaymentsInvoicePreviewResponseFromJson(
           .toList() ??
       [],
 );
+
+DueNowVsRecurringPreview _$DueNowVsRecurringPreviewFromJson(
+  Map<String, dynamic> json,
+) => DueNowVsRecurringPreview(
+  dueNow: json['due_now'] == null
+      ? null
+      : PaymentsInvoicePreviewResponse.fromJson(
+          json['due_now'] as Map<String, dynamic>,
+        ),
+  recurring: json['recurring'] == null
+      ? null
+      : PaymentsInvoicePreviewResponse.fromJson(
+          json['recurring'] as Map<String, dynamic>,
+        ),
+);

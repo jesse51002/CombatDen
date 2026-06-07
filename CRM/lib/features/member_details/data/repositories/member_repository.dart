@@ -268,7 +268,7 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
+  Future<DueNowVsRecurringPreview?>
       previewStartMembership(
     MemberMembershipsStartRequest req,
   ) async {
@@ -277,7 +277,7 @@ class MemberRepository {
       data: req.toJson(),
     );
     if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
+    return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
@@ -300,7 +300,7 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/cancel/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
+  Future<DueNowVsRecurringPreview?>
       previewCancelMembership(
     String itemId,
     String memberId,
@@ -310,7 +310,7 @@ class MemberRepository {
       '?item_id=$itemId&member_id=$memberId',
     );
     if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
+    return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
@@ -326,7 +326,7 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/price/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
+  Future<DueNowVsRecurringPreview?>
       previewUpdateMembershipPrice(
     MemberMembershipsUpdatePriceRequest req,
   ) async {
@@ -335,7 +335,7 @@ class MemberRepository {
       data: req.toJson(),
     );
     if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
+    return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
@@ -426,7 +426,7 @@ class MemberRepository {
   /// previews the subscription for the membership's CURRENT
   /// applied-discount snapshots (item-id keyed query params,
   /// no body; apply itself mutates the snapshot rows first).
-  Future<PaymentsInvoicePreviewResponse?>
+  Future<DueNowVsRecurringPreview?>
       previewMembershipDiscounts({
     required String itemId,
     required String memberId,
@@ -436,7 +436,7 @@ class MemberRepository {
       '?item_id=$itemId&member_id=$memberId',
     );
     if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
+    return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
