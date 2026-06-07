@@ -236,30 +236,36 @@ class MemberMembershipsService:
 
     # ── Apply Discounts (add / remove snapshots) ───────────────
 
-    async def apply_discounts(
+    async def add_discounts(
         self,
         item_id: UUID,
         member_id: UUID,
-        add_preset_ids: list[UUID],
-        remove_applied_ids: list[UUID],
+        preset_ids: list[UUID],
         idempotency_key: UUID,
-    ) -> None:
-        """Add / remove discount snapshots on an existing membership."""
-        await self._update_discounts.apply_discounts(
+        preview: bool = False,
+    ) -> PaymentsInvoicePreviewResponse | None:
+        """Add discount snapshots, or preview the addition (``preview=True``)."""
+        return await self._update_discounts.add_discounts(
             item_id=item_id,
             member_id=member_id,
-            add_preset_ids=add_preset_ids,
-            remove_applied_ids=remove_applied_ids,
+            preset_ids=preset_ids,
             idempotency_key=idempotency_key,
+            preview=preview,
         )
 
-    async def preview_apply_discounts(
+    async def remove_discounts(
         self,
         item_id: UUID,
         member_id: UUID,
+        applied_ids: list[UUID],
+        idempotency_key: UUID,
+        preview: bool = False,
     ) -> PaymentsInvoicePreviewResponse | None:
-        """Preview the subscription with the membership's current snapshots."""
-        return await self._update_discounts.preview_apply_discounts(
+        """Remove discount snapshots, or preview the removal (``preview=True``)."""
+        return await self._update_discounts.remove_discounts(
             item_id=item_id,
             member_id=member_id,
+            applied_ids=applied_ids,
+            idempotency_key=idempotency_key,
+            preview=preview,
         )
