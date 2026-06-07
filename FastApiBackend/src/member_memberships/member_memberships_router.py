@@ -10,11 +10,12 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
 from src.member_memberships.schema.member_memberships_schema import (
-    MemberMembershipsApplyDiscountsRequest,
+    MemberMembershipsAddDiscountsRequest,
     MemberMembershipsCancelResponse,
     MemberMembershipsChargeCardRequest,
     MemberMembershipsFreezeRequest,
     MemberMembershipsMarkPaidCashRequest,
+    MemberMembershipsRemoveDiscountsRequest,
     MemberMembershipsStartRequest,
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
@@ -598,115 +599,43 @@ async def preview_update_membership_price(
         ) from None
 
 
-@member_memberships_router.put(
-    "/discounts",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Add / remove a membership's discount snapshots",
-    description=(
-        "Applies discounts as immutable snapshots on an existing "
-        "membership: adds a frozen snapshot per regular preset and "
-        "per entered linked discount, and removes named snapshots. "
-        "A preset already applied is left frozen. A linked discount "
-        "requires a same-plan family sibling. Re-syncs the Stripe "
-        "subscription — no mid-cycle invoice is cut."
-    ),
-    responses={
-        204: {"description": "Discounts applied successfully"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
-    },
-)
-@inject
-async def apply_membership_discounts(
-    request: MemberMembershipsApplyDiscountsRequest,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    memberships_service: MemberMembershipsService = Depends(
-        Provide[DependencyInjector.member_memberships_service]
-    ),
-) -> None:
-    """Add / remove discount snapshots on an existing membership.
-
-    Args:
-        request: Apply request with preset / linked adds and snapshot
-            removes.
-        credentials: Bearer token credentials.
-        auth: Injected auth service.
-        memberships_service: Injected memberships service.
-    """
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
-
-    try:
-        await memberships_service.apply_discounts(
-            item_id=request.item_id,
-            member_id=request.member_id,
-            add_preset_ids=request.add_preset_ids,
-            remove_applied_ids=request.remove_applied_ids,
-            idempotency_key=request.idempotency_key,
-        )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to apply membership discounts: item_id=%s, member_id=%s",
-            request.item_id,
-            request.member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to apply membership discounts",
-        ) from None
-
-
 @member_memberships_router.post(
-    "/discounts/preview",
+    "/discounts/add",
     response_model=PaymentsInvoicePreviewResponse | None,
-    summary="Preview a membership's discounted subscription",
+    summary="Add a membership's discount snapshots (or preview)",
     description=(
-        "Runs the membership validation and returns the Stripe "
-        "invoice preview for the membership's current applied "
-        "discount snapshots, without mutating the subscription."
+        "Adds a frozen snapshot per regular preset and per entered linked "
+        "discount, then re-syncs the Stripe subscription — no mid-cycle invoice "
+        "is cut. A preset already applied is left frozen. With ``preview=true`` "
+        "nothing is committed: the adds are staged as preview rows, the "
+        "resulting invoice preview is returned, and the staged rows are removed."
     ),
     responses={
-        200: {"description": "Preview retrieved successfully"},
+        200: {"description": "Discounts added, or preview returned"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
     },
 )
 @inject
-async def preview_membership_discounts(
-    item_id: UUID,
-    member_id: UUID,
+async def add_membership_discounts(
+    request: MemberMembershipsAddDiscountsRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> PaymentsInvoicePreviewResponse | None:
-    """Preview the membership's current discounted subscription."""
+    """Add discount snapshots on a membership, or preview the addition."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        return await memberships_service.preview_apply_discounts(
-            item_id=item_id,
-            member_id=member_id,
+        return await memberships_service.add_discounts(
+            item_id=request.item_id,
+            member_id=request.member_id,
+            preset_ids=request.preset_ids,
+            idempotency_key=request.idempotency_key,
+            preview=request.preview,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -726,14 +655,80 @@ async def preview_membership_discounts(
         ) from None
     except Exception:
         logger.error(
-            "Failed to preview membership discounts: item_id=%s, member_id=%s",
-            item_id,
-            member_id,
+            "Failed to add membership discounts: item_id=%s, member_id=%s",
+            request.item_id,
+            request.member_id,
             exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to preview membership discounts",
+            detail="Failed to add membership discounts",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/discounts/remove",
+    response_model=PaymentsInvoicePreviewResponse | None,
+    summary="Remove a membership's discount snapshots (or preview)",
+    description=(
+        "Removes the named snapshots, then re-syncs the Stripe subscription — "
+        "no mid-cycle invoice is cut. With ``preview=true`` nothing is "
+        "committed: the rows are staged as preview-removed, the resulting "
+        "invoice preview is returned, and the rows are restored."
+    ),
+    responses={
+        200: {"description": "Discounts removed, or preview returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+    },
+)
+@inject
+async def remove_membership_discounts(
+    request: MemberMembershipsRemoveDiscountsRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> PaymentsInvoicePreviewResponse | None:
+    """Remove discount snapshots from a membership, or preview the removal."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.member_id, user_payload)
+
+    try:
+        return await memberships_service.remove_discounts(
+            item_id=request.item_id,
+            member_id=request.member_id,
+            applied_ids=request.applied_ids,
+            idempotency_key=request.idempotency_key,
+            preview=request.preview,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to remove membership discounts: item_id=%s, member_id=%s",
+            request.item_id,
+            request.member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove membership discounts",
         ) from None
 
 

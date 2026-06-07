@@ -1,7 +1,7 @@
 """Mid-cycle add-discount tests using Stripe Test Clocks.
 
-Exercises the snapshot apply path (``PUT /member_memberships/discounts`` ->
-``memberships_service.apply_discounts``). Applying a regular discount INSERTs a
+Exercises the snapshot add path (``POST /member_memberships/discounts/add`` ->
+``memberships_service.add_discounts``). Adding a regular discount INSERTs a
 frozen snapshot row and re-syncs; the sync computes the consolidated line's
 coupon, attaches it, and writes the resolved stripe_coupon_id back. Editing or
 deleting the source preset never touches these rows.
@@ -48,6 +48,26 @@ async def _start_membership(memberships_service, member, gym_id, plan):
     )
 
 
+def _discount_coupon_id(disc) -> str | None:
+    """Coupon id referenced by a Stripe sub-item Discount, or None.
+
+    The coupon lives at ``discount.source.coupon`` (a coupon-id string) in the
+    current Stripe shape; the legacy ``discount.coupon`` object is null. A bare
+    ``di_`` id means the expansion hasn't materialized (read-after-write) — treat
+    it as "not yet readable" rather than mistaking it for a coupon.
+    """
+    if isinstance(disc, str):
+        return None
+    source = getattr(disc, "source", None)
+    cid = getattr(source, "coupon", None) if source is not None else None
+    if cid is None:
+        coupon = getattr(disc, "coupon", None)
+        cid = getattr(coupon, "id", coupon)
+    if isinstance(cid, str) and not cid.startswith("di_"):
+        return cid
+    return None
+
+
 def _line_coupon_ids(sub, stripe_price_id: str) -> set[str]:
     """Coupon ids on the subscription item using ``stripe_price_id``."""
     for item in sub.items.data:
@@ -55,9 +75,8 @@ def _line_coupon_ids(sub, stripe_price_id: str) -> set[str]:
             continue
         found: set[str] = set()
         for disc in getattr(item, "discounts", None) or []:
-            coupon = getattr(disc, "coupon", disc)
-            cid = getattr(coupon, "id", coupon)
-            if isinstance(cid, str):
+            cid = _discount_coupon_id(disc)
+            if cid is not None:
                 found.add(cid)
         return found
     raise AssertionError(f"No item on {sub.id} uses price {stripe_price_id}")
@@ -108,11 +127,10 @@ async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
             stripe_client, profile.stripe_customer_id, connect_opts
         )
 
-        await memberships_service.apply_discounts(
+        await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[discount.discount_id],
-            remove_applied_ids=[],
+            preset_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 
@@ -153,6 +171,7 @@ async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
 @pytest.mark.timeout(240)
 async def test_once_discount_lands_once_then_consumed(
     memberships_service,
+    payment_sync_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -187,11 +206,10 @@ async def test_once_discount_lands_once_then_consumed(
             stripe_client, profile.stripe_customer_id, connect_opts
         )
 
-        await memberships_service.apply_discounts(
+        await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[discount.discount_id],
-            remove_applied_ids=[],
+            preset_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 
@@ -233,6 +251,19 @@ async def test_once_discount_lands_once_then_consumed(
             f"Consumed once discount must not re-apply; expected full 5000, "
             f"got {invoice2.amount_due}"
         )
+
+        # Stripe has now invoiced (and dropped) the once coupon, but nothing
+        # auto-re-syncs the CRM yet — the webhook once-settle / scheduled
+        # reconciler are unbuilt (TODO sync-guide §2.4 / §10). Trigger the sync
+        # the way the next membership op (or the reconciler) would: its pre-sync
+        # once-settle reads the live sub, sees the coupon is gone, and stamps
+        # end_date. (This is the real settle, not a workaround — it only stamps
+        # because Stripe genuinely consumed the coupon.)
+        await payment_sync_service.update_payments_recurring(
+            member.member_id,
+            idempotency_key=uuid4(),
+        )
+
         snaps_after = await get_applied_snapshots(db_pool, item_id)
         assert snaps_after[0]["end_date"] is not None, (
             "Consumed once snapshot should have its end_date stamped"
@@ -272,11 +303,10 @@ async def test_apply_is_idempotent_no_duplicate_snapshot(
         item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
 
         for _ in range(2):
-            await memberships_service.apply_discounts(
+            await memberships_service.add_discounts(
                 item_id=item_id,
                 member_id=member.member_id,
-                add_preset_ids=[discount.discount_id],
-                remove_applied_ids=[],
+                preset_ids=[discount.discount_id],
                 idempotency_key=uuid4(),
             )
 

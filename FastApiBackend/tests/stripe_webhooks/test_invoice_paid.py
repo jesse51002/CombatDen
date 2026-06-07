@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import text
 
+from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
     SubscriptionItemPendingError,
 )
@@ -267,13 +268,20 @@ async def test_invoice_paid_advances_two_different_period_ends(
         stripe_charge_id="ch_test_advance_2",
     )
 
+    # next_due_date is stored GYM-LOCAL (the handler converts the Stripe
+    # period-end timestamp to the gym's timezone), so compare against the
+    # gym-local date, not the UTC date — a midnight-UTC timestamp lands on the
+    # previous day for a gym west of UTC.
+    async with db_pool.session() as session:
+        gym_tz = await get_gym_timezone(session, gym_id)
+
     await stripe_webhooks_service.handle_event(evt_1)
     dates_1 = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
-    assert dates_1["next_due_date"] == datetime.fromtimestamp(first_end, tz=UTC).date()
+    assert dates_1["next_due_date"] == stripe_ts_to_gym_date(first_end, gym_tz)
 
     await stripe_webhooks_service.handle_event(evt_2)
     dates_2 = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
-    assert dates_2["next_due_date"] == datetime.fromtimestamp(second_end, tz=UTC).date()
+    assert dates_2["next_due_date"] == stripe_ts_to_gym_date(second_end, gym_tz)
 
     # Proximity sanity — the delta is roughly a month.
     assert dates_2["next_due_date"] - dates_1["next_due_date"] >= timedelta(days=28)

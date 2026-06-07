@@ -1,7 +1,7 @@
 """Mid-cycle remove-discount tests using Stripe Test Clocks.
 
-Removing a discount is a DELETE of the membership's frozen snapshot row via the
-apply path (``apply_discounts(remove_applied_ids=[...])``). The re-sync then
+Removing a discount is a DELETE of the membership's frozen snapshot row via
+``remove_discounts(applied_ids=[...])``. The re-sync then
 recomputes the line with the row gone, so the coupon leaves the Stripe item and
 the next cycle bills full price.
 
@@ -40,15 +40,34 @@ CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 NEXT_CYCLE = CLOCK_START + timedelta(days=35)
 
 
+def _discount_coupon_id(disc) -> str | None:
+    """Coupon id referenced by a Stripe sub-item Discount, or None.
+
+    The coupon lives at ``discount.source.coupon`` (a coupon-id string) in the
+    current Stripe shape; the legacy ``discount.coupon`` object is null. A bare
+    ``di_`` id means the expansion hasn't materialized (read-after-write) — treat
+    it as "not yet readable" rather than mistaking it for a coupon.
+    """
+    if isinstance(disc, str):
+        return None
+    source = getattr(disc, "source", None)
+    cid = getattr(source, "coupon", None) if source is not None else None
+    if cid is None:
+        coupon = getattr(disc, "coupon", None)
+        cid = getattr(coupon, "id", coupon)
+    if isinstance(cid, str) and not cid.startswith("di_"):
+        return cid
+    return None
+
+
 def _line_coupon_ids(sub, stripe_price_id: str) -> set[str]:
     for item in sub.items.data:
         if item.price.id != stripe_price_id:
             continue
         found: set[str] = set()
         for disc in getattr(item, "discounts", None) or []:
-            coupon = getattr(disc, "coupon", disc)
-            cid = getattr(coupon, "id", coupon)
-            if isinstance(cid, str):
+            cid = _discount_coupon_id(disc)
+            if cid is not None:
                 found.add(cid)
         return found
     raise AssertionError(f"No item on {sub.id} uses price {stripe_price_id}")
@@ -67,11 +86,10 @@ async def _start_and_apply(memberships_service, db_pool, member, gym_id, plan, d
         idempotency_key=uuid4(),
     )
     item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
-    await memberships_service.apply_discounts(
+    await memberships_service.add_discounts(
         item_id=item_id,
         member_id=member.member_id,
-        add_preset_ids=[discount_id],
-        remove_applied_ids=[],
+        preset_ids=[discount_id],
         idempotency_key=uuid4(),
     )
     return item_id
@@ -125,11 +143,10 @@ async def test_remove_snapshot_scrubs_coupon_and_bills_full_next_cycle(
             stripe_client, profile.stripe_customer_id, connect_opts
         )
 
-        await memberships_service.apply_discounts(
+        await memberships_service.remove_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[],
-            remove_applied_ids=[applied_id],
+            applied_ids=[applied_id],
             idempotency_key=uuid4(),
         )
 

@@ -86,11 +86,10 @@ async def test_billing_detail_surfaces_active_applied_discount(
         profile = await get_profile_stripe_ids(db_pool, member.member_id, gym_id)
         assert profile.stripe_sub_id_month is not None
 
-        await memberships_service.apply_discounts(
+        await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[discount.discount_id],
-            remove_applied_ids=[],
+            preset_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 

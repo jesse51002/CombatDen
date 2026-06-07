@@ -15,7 +15,6 @@ from src.payments.schema.payments_membership_schema import (
 )
 from src.payments.schema.payments_price_schema import (
     PaymentsPriceCreateRequest,
-    PaymentsPriceDeactivateRequest,
     PaymentsPriceResponse,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
@@ -178,10 +177,12 @@ class PaymentsStripeMembershipService:
         """Update a Stripe Product and reconcile its Prices.
 
         For each price in the request:
-        - Existing (has stripe_price_id): update active status if changed.
+        - Existing (has stripe_price_id): activate it if it was archived.
         - New (no stripe_price_id): create a new Stripe Price.
 
-        Any existing active prices not in the request list are deactivated.
+        We never deactivate a Stripe price — the DB
+        (``membership_plan_prices.is_active``) gates which price is current;
+        every Stripe price stays active forever.
         """
         read_opts = self._client.connect_opts_readonly(stripe_account_id)
         product_opts = self._client.connect_opts(stripe_account_id)
@@ -190,26 +191,18 @@ class PaymentsStripeMembershipService:
         existing_prices = await self._list_prices(request.stripe_product_id, read_opts)
         existing_by_id = {p.id: p for p in existing_prices}
 
-        incoming_ids: set[str] = set()
         default_price_id: str | None = None
 
         for item in request.prices:
             if item.stripe_price_id:
-                incoming_ids.add(item.stripe_price_id)
                 existing = existing_by_id.get(item.stripe_price_id)
-                if existing and existing.active != item.active:
-                    if item.active:
-                        await self._price_service.activate_price(
-                            item.stripe_price_id,
-                            stripe_account_id,
-                        )
-                    else:
-                        await self._price_service.deactivate_price(
-                            PaymentsPriceDeactivateRequest(
-                                stripe_price_id=item.stripe_price_id,
-                            ),
-                            stripe_account_id,
-                        )
+                # Never deactivate a Stripe price — the DB gates which is
+                # current. Only ensure an intended-active price is active.
+                if existing and item.active and not existing.active:
+                    await self._price_service.activate_price(
+                        item.stripe_price_id,
+                        stripe_account_id,
+                    )
                 if item.is_default:
                     default_price_id = item.stripe_price_id
             else:
@@ -218,7 +211,6 @@ class PaymentsStripeMembershipService:
                     request.stripe_product_id,
                     stripe_account_id,
                 )
-                incoming_ids.add(price_resp.stripe_price_id)
                 if item.is_default:
                     default_price_id = price_resp.stripe_price_id
 
@@ -236,20 +228,8 @@ class PaymentsStripeMembershipService:
             options=product_opts,
         )
 
-        for price in existing_prices:
-            if price.id not in incoming_ids and price.active:
-                logger.warning(
-                    "Deactivating price %s on product %s — not present in update request",
-                    price.id,
-                    request.stripe_product_id,
-                )
-                await self._price_service.deactivate_price(
-                    PaymentsPriceDeactivateRequest(
-                        stripe_price_id=price.id,
-                    ),
-                    stripe_account_id,
-                )
-
+        # We never archive a Stripe price that's absent from the request — the
+        # DB gates which price is current; every Stripe price stays active.
         prices = await self._list_prices(product.id, read_opts)
         return self._map_product(product, prices)
 

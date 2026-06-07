@@ -1,54 +1,103 @@
 flowchart TB
-  %% Payment-sync engine — orchestration flow of MembershipPaymentSyncService.
+  %% Payment-sync engine — orchestration flow of PaymentSyncService.
   %% Source of truth: src/member_memberships/service/payment_sync/ (sync-guide skill).
-  %% Shape B: the sync steps live in one box; Supabase + Stripe are external actors
-  %% OUTSIDE it, with the external edges drawn at the box level (same convention as
-  %% architecture.mermaid). Which step touches which system is named in the step text.
-  %% Green = engine steps / entry points. Orange = external actors. Solid = live runtime
-  %% call / control-flow sequence. Dashed = future or shared-code annotation.
+  %% TWO main entry points (real + preview) SHARE resolve → settle → build_sync_params;
+  %% they diverge on freeze (REAL-only, before settle), execute vs preview-execute,
+  %% and writeback (REAL-only). A THIRD thin entry, settle_once_discounts (the
+  %% invoice.paid webhook), runs resolve → settle-once ONLY (no build/execute).
+  %% build_sync_params DELEGATES coupon resolution to the separate PaymentSyncDiscounts
+  %% engine. The scheduled reconciler is a FUTURE EXTERNAL system, OUTSIDE the engine.
+  %% Green = engine steps · lighter green = preview-only (read-only) steps · orange =
+  %% external actors. Solid = live runtime call · dashed = future / delegation.
 
-  triggers["🔔 Triggers — lifecycle callers<br/>start · cancel · freeze / unfreeze<br/>price swap · apply / remove discounts · link<br/>plan reprice fan-out"]
+  triggers["🔔 Triggers — lifecycle callers (DB-first + verify/revert)<br/>start · cancel · price swap · apply/remove discounts · link/unlink<br/>each: pre-sync → write DB → THIS sync → verify stripe_sync_status → revert if not<br/>explicit freeze/unfreeze → PaymentSyncFreeze directly · plan reprice → bulk"]
 
-  subgraph engine["⚙️ MembershipPaymentSyncService — the sync engine"]
+  subgraph engine["⚙️ PaymentSyncService — the sync engine"]
     direction TB
-    entry["update_payments_recurring(member, add_ids, cancel_ids, key, freeze)<br/>the real sync — re-derive desired state, converge Stripe"]
-    s1["1 · validate freeze params<br/>freeze XOR membership change · not freeze+unfreeze together"]
-    s2["2 · build sync params — pure read (no writes)<br/>resolve_parent (follow account_linked_to_id once)<br/>gym Stripe account · family ids · active recurring<br/>cancel filter on (member_id, plan_id) — never price alone<br/>applied-discount snapshots → consolidate_by_price → IntervalBucket"]
-    s3["3 · freeze / unfreeze first<br/>pause_collection before any item change (billing order matters)"]
-    s4["4 · compute + attach coupons<br/>read live coupon ids (_current_coupon_ids)<br/>plan_line_discounts per consolidated line:<br/>drop snapshots past end_date · once-consumed gate<br/>aggregate per mode — percent summed then / quantity, dollar summed<br/>find-or-create deterministic coupon (pct_BPS_MODE / amt_CENTS_MODE)"]
-    s5["5 · execute_sync<br/>create | update | cancel the monthly subscription<br/>proration = always_invoice if any item prorates, else none<br/>idempotency keys: sub_create / sub_update / sub_cancel"]
-    s6["6 · write subscription id back<br/>update_profile_sub_ids → parent members row (None if cancelled)"]
-    s7["7 · price writeback — never raises<br/>read upcoming invoice → post-discount line totals<br/>fan per-plan totals across family rows + parent monthly total"]
-    ret["return PaymentsSubscriptionResponse<br/>(None when bucket is empty → subscription cancelled)"]
+    entry_real["▶ update_payments_recurring(member_id, idempotency_key,<br/>pay_first_invoice_out_of_band, proration_behavior) -> None<br/>REAL: converge Stripe + write back · caller reads DB ('applied') to confirm"]
+    entry_prev["▷ preview_update_payments_recurring(member_id, proration_behavior)<br/>-> invoice preview | None · PREVIEW: read-only dry run, no DB writes"]
 
-    preview["preview_update_payments_recurring — dry run<br/>same build params as step 2, then preview_execute_sync<br/>NO coupons · NO writeback · nothing in CRM or Stripe changes"]
-    bulk["bulk_payment_sync<br/>loop members · fresh uuid4 key each · empty add/cancel<br/>swallow per-member errors and continue"]
-    reconciler["⏳ deferred scheduled reconciler — NOT built<br/>sweep idle members on a clock<br/>mid-cycle end_date enforcement + once finalization<br/>Stripe → CRM outcome absorption (dunning cancels)"]
+    resolve["1 · resolve parent + gym account — SHARED<br/>BillingParentResolver.resolve — follow account_linked_to_id once → (ParentProfile, account)"]
+    freeze["2 · maintenance freeze re-apply — REAL ONLY (preview skips this)<br/>PaymentSyncFreeze.sync_freeze_state — converge pause_collection to<br/>parent.is_frozen (DB freeze window) before any item change · no DB write"]
+    settle["3 · settle once discounts — SHARED (preview settles too)<br/>PaymentSyncOnceDiscounts.sync_once_discounts<br/>get_unconsumed_once_discounts → read live sub coupons (get_subscription)<br/>coupon gone from sub = consumed → mark_once_consumed (stamp end_date)<br/>ALSO the standalone target of settle_once_discounts (invoice.paid webhook)"]
 
-    entry --> s1
-    s1 --> s2
-    s2 --> s3
-    s3 --> s4
-    s4 --> s5
-    s5 --> s6
-    s6 --> s7
-    s7 --> ret
-    bulk --> entry
-    preview -.->|"reuses build params (step 2)"| s2
-    reconciler -.->|"seeds the sweep (future)"| bulk
+    subgraph build_sp["4 · build_sync_params (PaymentSyncBuilder) — SHARED · pure read, NO DB writes"]
+      direction TB
+      b_read["get_active_memberships(family_ids, today, preview)<br/>active recurring (cancel_date IS NULL) each carrying its applied discounts<br/>the preview flag toggles which stripe_sync_status set is read"]
+      b_group["_group_by_price → consolidated lines (qty = # memberships on the price)"]
+      b_bucket["_build_bucket → IntervalBucket: one desired item per price,<br/>items carry the resolved coupons + the existing sub id"]
+      b_read --> b_group
+      b_group --> b_bucket
+    end
+
+    subgraph discounts["PaymentSyncDiscounts.resolve(groups) — coupon engine (the builder delegates here)"]
+      direction TB
+      d_agg["_aggregate_line_values — per line, per mode (once / ongoing):<br/>percents compound sequentially within a membership then ÷ quantity ;<br/>dollars summed · disjoint contributing_ids (percent vs dollar)"]
+      d_find["per value: PaymentSyncCoupons.find_or_create → PaymentsStripeDiscountService<br/>deterministic id (pct_&lt;bps&gt;_&lt;mode&gt; / amt_&lt;cents&gt;_&lt;mode&gt;) · validate-or-replace<br/>idempotent gym-wide (safe in preview too)"]
+      d_links["return ResolvedDiscounts: coupons_by_price + applied_discount→coupon links"]
+      d_agg --> d_find
+      d_find --> d_links
+    end
+
+    execute["5 · execute_sync (PaymentSyncStripe) — REAL ONLY<br/>items → existing sub? update_subscription : create_subscription<br/>empty bucket + existing sub → cancel_subscription · else no-op<br/>explicit proration_behavior · keys :sub_create / :sub_update / :sub_cancel"]
+
+    subgraph writeback["6 · PaymentSyncWriteback.write(params, sub_result) — REAL ONLY"]
+      direction TB
+      w_rows["_apply_membership_rows — map live items by stripe_price_id → each row:<br/>apply_membership_sync = stripe_item_id + next_due_date (gym-local) + 'applied'"]
+      w_links["coupon links → set_applied_discount_coupon_id (stripe_coupon_id + 'applied') per row"]
+      w_del["_mark_removed_deleted — cancelled rows gone from live sub → mark_membership_deleted ('deleted')"]
+      w_subid["update_profile_sub_id — parent stripe_sub_id_month (None when cancelled)"]
+      w_prices["PriceWriteback.sync_prices_from_stripe — post-discount per-plan + parent monthly totals"]
+      w_rows --> w_links
+      w_links --> w_del
+      w_del --> w_subid
+      w_subid --> w_prices
+    end
+
+    pexec["5p · preview_execute_sync (PaymentSyncStripe) — PREVIEW ONLY<br/>items → existing sub? preview_update_subscription : preview_create_subscription<br/>empty bucket → None (NEVER cancels) · no Stripe mutation"]
+
+    ret_real["return None (real) — caller verifies via DB stripe_sync_status"]
+    ret_prev["return upcoming-invoice preview (discount-aware) | None"]
+
+    bulk["bulk_payment_sync(member_ids)<br/>loop members · fresh uuid4 key each · calls update_payments_recurring<br/>swallow per-member errors and continue"]
+
+    entry_real --> resolve
+    entry_prev --> resolve
+    resolve -->|"real"| freeze
+    freeze --> settle
+    resolve -->|"preview (skips freeze)"| settle
+    settle --> build_sp
+    build_sp -->|"delegates coupon resolution; coupons attach to bucket items"| discounts
+    build_sp -->|"real"| execute
+    build_sp -->|"preview"| pexec
+    execute --> writeback
+    writeback --> ret_real
+    pexec --> ret_prev
+    bulk --> entry_real
   end
 
-  supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_parent · get_family_ids · get_active_recurring<br/>get_applied_discounts_by_member<br/>set_snapshot_coupon_id · stamp_snapshot_end_date<br/>update_profile_sub_ids · sync_prices_by_plan · sync_profile_monthly_total"]
-  stripe["💳 Stripe — gym Connect account<br/>get_subscription (read live discounts)<br/>create / update / cancel subscription · pause_collection<br/>coupons (find-or-create) · upcoming invoice"]
+  reconciler["⏳ Scheduled reconciler — FUTURE external system, NOT built (outside the engine)<br/>sweeps idle members on a clock · drives bulk_payment_sync<br/>mid-cycle end_date expiry + once-consumption finalization · Stripe→CRM dunning absorption"]
+
+  webhook["📨 invoice.paid webhook handler (stripe_webhooks)<br/>after a subscription invoice is paid → settle_once_discounts(member_id)<br/>best-effort · own txn · stamps a consumed once's end_date promptly"]
+
+  supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_parent · get_family_ids · get_active_recurring (+ applied discounts)<br/>get_unconsumed_once_discounts · mark_once_consumed<br/>apply_membership_sync · mark_membership_deleted · set_applied_discount_coupon_id<br/>update_profile_sub_ids · sync_prices_by_plan · sync_profile_monthly_total"]
+  stripe["💳 Stripe — gym Connect account<br/>get_subscription (live coupons for once-settle)<br/>create / update / cancel subscription · pause_collection<br/>coupons via PaymentsStripeDiscountService (find-or-create) · upcoming invoice (preview)"]
 
   triggers -->|"mutations → update / preview · plan reprice → bulk"| engine
-  engine -->|"read/write: parent · family · memberships · snapshots · coupon_id · sub id · price totals"| supabase
-  engine -->|"live discounts · find-or-create coupons · create / update / cancel sub · pause_collection · upcoming invoice"| stripe
+  webhook -.->|"invoice.paid → settle_once_discounts"| engine
+  reconciler -.->|"future: scheduled sweep → bulk sync"| engine
+  engine -->|"read/write: parent · family · memberships + discounts · once-candidates · coupon_id · sync status · sub id · totals"| supabase
+  engine -->|"live coupons · find-or-create coupons · create / update / cancel sub · pause_collection · upcoming invoice"| stripe
 
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
+  classDef prev fill:#eafff2,stroke:#2f8f53,color:#0c3a1f;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef future fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f,stroke-dasharray:5 4;
-  class triggers,entry,s1,s2,s3,s4,s5,s6,s7,ret,preview,bulk svc;
+  class triggers,webhook,entry_real,resolve,freeze,settle,execute,ret_real,bulk svc;
+  class entry_prev,pexec,ret_prev prev;
   class supabase,stripe ext;
   class reconciler future;
   style engine fill:#f4f9f6,stroke:#2f8f53;
+  style build_sp fill:#eafaf0,stroke:#2f8f53;
+  style discounts fill:#eafaf0,stroke:#2f8f53;
+  style writeback fill:#eafaf0,stroke:#2f8f53;

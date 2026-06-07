@@ -1,3 +1,21 @@
+-- Stripe-sync status: the sync's confirmation of whether a row's intended state
+-- has landed on Stripe. This is the Stripe-convergence axis, kept ORTHOGONAL to
+-- the lifecycle member_memberships_status view (active/cancelled/ended/frozen).
+-- Shared by member_memberships and member_membership_applied_discounts; declared
+-- here because member_memberships is the earliest-loaded table that uses it.
+-- `applied`/`deleted` are stamped by the sync (the writeback) once Stripe
+-- confirms; `preview_add`/`preview_remove` are reserved for preview-staging.
+-- `migrating` (memberships only) marks that a migration was requested but has
+-- not completed yet.
+CREATE TYPE stripe_sync_status AS ENUM (
+    'not_added',
+    'applied',
+    'deleted',
+    'preview_add',
+    'preview_remove',
+    'migrating'
+);
+
 -- Memberships are append-only: once created, a membership can only be
 -- cancelled (cancel_date set), never modified back to active. To start
 -- a new membership the client must INSERT a new row with a different
@@ -16,6 +34,13 @@ CREATE TABLE member_memberships_unfiltered (
     stripe_item_id VARCHAR,
     prorate BOOLEAN NOT NULL DEFAULT true,
     total_price INTEGER NOT NULL CHECK (total_price >= 0),
+
+    -- Stripe-sync confirmation (service_role writeback). 'not_added' (default)
+    -- = pending: the row is asking the sync to add it to Stripe; the sync stamps
+    -- `applied` once Stripe confirms (and `deleted` when it removes the row).
+    -- Orthogonal to the lifecycle status derived by the member_memberships_status
+    -- view.
+    stripe_sync_status stripe_sync_status NOT NULL DEFAULT 'not_added',
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (item_id),
@@ -52,12 +77,19 @@ CREATE TRIGGER trg_prevent_plan_id_overwrite
     BEFORE UPDATE OF plan_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_plan_id_overwrite();
 
--- Trigger: cancel_date is immutable once set
+-- Trigger: cancel_date locks only once the membership is actually REMOVED from
+-- Stripe (stripe_sync_status = 'deleted'). Before that the cancel is unconfirmed,
+-- so a DB-first cancel whose sync did not land can revert simply by clearing
+-- cancel_date — no transient status to stage/un-stage. (Cancel is a foreground,
+-- verified op; it never uses 'migrating'. 'migrating' is reserved for the
+-- background price migration that moves stripe_item_id — see that trigger below.)
 CREATE OR REPLACE FUNCTION prevent_cancel_date_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF OLD.cancel_date IS NOT NULL AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date THEN
-        RAISE EXCEPTION 'cancel_date cannot be changed once set'
+    IF OLD.cancel_date IS NOT NULL
+       AND NEW.cancel_date IS DISTINCT FROM OLD.cancel_date
+       AND OLD.stripe_sync_status = 'deleted' THEN
+        RAISE EXCEPTION 'cancel_date cannot be changed once the membership is removed from Stripe'
             USING CONSTRAINT = 'cancel_date_immutable';
     END IF;
     RETURN NEW;
@@ -68,11 +100,18 @@ CREATE TRIGGER trg_prevent_cancel_date_overwrite
     BEFORE UPDATE OF cancel_date ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_cancel_date_overwrite();
 
--- Trigger: stripe_item_id is immutable
+-- Trigger: stripe_item_id is immutable once set — EXCEPT while the row is
+-- 'migrating'. A PRICE MIGRATION moves the membership's line to the new price's
+-- Stripe item, so while stripe_sync_status = 'migrating' the writeback may
+-- re-stamp the line id; once it stamps 'applied' the id is immutable again.
+-- 'migrating' is ONLY for price migrations (mutating the line id then is safe) —
+-- cancel/add are foreground verified ops and never use it.
 CREATE OR REPLACE FUNCTION prevent_stripe_item_id_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF OLD.stripe_item_id IS NOT NULL AND NEW.stripe_item_id IS DISTINCT FROM OLD.stripe_item_id THEN
+    IF OLD.stripe_item_id IS NOT NULL
+       AND NEW.stripe_item_id IS DISTINCT FROM OLD.stripe_item_id
+       AND OLD.stripe_sync_status <> 'migrating' THEN
         RAISE EXCEPTION 'stripe_item_id cannot be changed once set'
             USING CONSTRAINT = 'stripe_item_id_immutable';
     END IF;
@@ -213,12 +252,20 @@ CREATE TRIGGER trg_recurring_chronological_start_date
     BEFORE INSERT ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION check_recurring_chronological_start_date();
 
--- View: only exposes memberships with a completed Stripe item sync
+-- View: gate on BOTH the Stripe id and the sync-status enum. A row with no
+-- `stripe_item_id` was never put on Stripe (not valid to surface), and the
+-- sync-status hides `not_added` (pending) and `preview_*` (dry-run staging), so
+-- the client only sees real synced rows (applied / deleted / migrating). The two
+-- conditions are kept in lockstep with the `hide_incomplete_stripe_records` RLS
+-- policy (`access_rules/member_memberships.sql`) so the view and RLS can't drift.
+-- `member_memberships_status` reads this view, so cancelled (`deleted`) rows —
+-- which keep their `stripe_item_id` — must stay visible.
 CREATE VIEW member_memberships
 WITH (security_invoker = true)
 AS
 SELECT * FROM member_memberships_unfiltered
-WHERE stripe_item_id IS NOT NULL;
+WHERE stripe_item_id IS NOT NULL
+  AND stripe_sync_status NOT IN ('not_added', 'preview_add', 'preview_remove');
 
 ALTER VIEW member_memberships SET (security_invoker = true);
 

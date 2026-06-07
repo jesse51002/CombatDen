@@ -4,9 +4,6 @@ from uuid import uuid4
 
 from schema.membership_plan import DurationUnit, PlanType
 
-from src.payments.schema.metadata.stripe_coupon_metadata import (
-    StripeCouponMetadata,
-)
 from src.payments.schema.metadata.stripe_customer_metadata import (
     StripeCustomerMetadata,
 )
@@ -35,7 +32,6 @@ from src.payments.schema.payments_membership_schema import (
     PaymentsMembershipPriceItem,
 )
 from tests.helpers.data_factory import create_payment_method
-from tests.helpers.stripe_assertions import _coerce_coupon_id
 
 
 def _customer_metadata() -> StripeCustomerMetadata:
@@ -44,10 +40,6 @@ def _customer_metadata() -> StripeCustomerMetadata:
 
 def _product_metadata() -> StripeProductMetadata:
     return StripeProductMetadata(plan_id=uuid4(), gym_id=uuid4())
-
-
-def _coupon_metadata() -> StripeCouponMetadata:
-    return StripeCouponMetadata(crm_discount_id=uuid4(), gym_id=uuid4())
 
 
 def _subscription_metadata() -> StripeSubscriptionMetadata:
@@ -161,12 +153,13 @@ async def test_create_subscription_with_discount(
     )
     price_id = await _setup_price(membership_service, stripe_account_id, created)
 
+    coupon_id = f"test_subdisc_{uuid4().hex[:12]}"
     coupon = await discount_service.create_discount(
         PaymentsDiscountCreateRequest(
+            coupon_id=coupon_id,
             discount_name="Sub Discount",
             percentage_off=20.0,
             duration=StripeCouponDuration.forever,
-            metadata=_coupon_metadata(),
         ),
         stripe_account_id,
     )
@@ -175,9 +168,15 @@ async def test_create_subscription_with_discount(
     resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
             stripe_customer_id=customer_id,
-            items=[PaymentsSubscriptionDesiredItem(stripe_price_id=price_id)],
-            subscription_discounts=[
-                SubscriptionItemDiscount(coupon=coupon.stripe_coupon_id),
+            items=[
+                PaymentsSubscriptionDesiredItem(
+                    stripe_price_id=price_id,
+                    discounts=[
+                        SubscriptionItemDiscount(
+                            coupon=coupon.stripe_coupon_id
+                        ),
+                    ],
+                ),
             ],
             idempotency_key=str(uuid4()),
             metadata=_subscription_metadata(),
@@ -187,26 +186,17 @@ async def test_create_subscription_with_discount(
     )
 
     assert resp.status == "active"
-    assert len(resp.discounts) >= 1
 
-    # Independent: retrieve the subscription with discounts expanded
-    # and verify the coupon is attached. Stripe's `Subscription.discounts`
-    # is a list whose elements are either raw discount ids (strings)
-    # or expanded Discount objects with `.coupon` pointing at a Coupon.
-    sub = await stripe_client.client.v1.subscriptions.retrieve_async(
+    # The coupon is attached at the ITEM level (sub-level discounts were removed
+    # — discounts ride the membership/item now). The contract that matters is
+    # that the read primitive ``get_subscription`` surfaces it: that is the path
+    # the sync's once-consumption settle reads to tell a pending coupon from a
+    # consumed one. (Stripe exposes the coupon at ``discount.source.coupon``.)
+    refetched = await subscription_service.get_subscription(
         resp.stripe_subscription_id,
-        options=connect_opts,
-        params={"expand": ["discounts"]},
+        stripe_account_id,
     )
-    sub_coupon_ids: set[str] = set()
-    for disc in sub.discounts or []:
-        coupon_id = _coerce_coupon_id(disc)
-        if coupon_id is not None:
-            sub_coupon_ids.add(coupon_id)
-    assert coupon.stripe_coupon_id in sub_coupon_ids, (
-        f"Expected coupon {coupon.stripe_coupon_id} on subscription "
-        f"{resp.stripe_subscription_id}, got {sub_coupon_ids}"
-    )
+    assert coupon.stripe_coupon_id in refetched.items[0].discounts
 
 
 async def test_update_subscription_add_item(
@@ -253,6 +243,7 @@ async def test_update_subscription_add_item(
             proration_behavior="none",
             idempotency_key=str(uuid4()),
             metadata=_subscription_metadata(),
+            gym_timezone="America/Chicago",
         ),
         stripe_account_id,
     )
@@ -314,6 +305,7 @@ async def test_update_subscription_remove_item(
             proration_behavior="none",
             idempotency_key=str(uuid4()),
             metadata=_subscription_metadata(),
+            gym_timezone="America/Chicago",
         ),
         stripe_account_id,
     )

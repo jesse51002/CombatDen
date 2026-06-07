@@ -15,7 +15,6 @@ from src.payments.schema.payments_membership_schema import (
 )
 from src.payments.schema.payments_price_schema import (
     PaymentsPriceCreateRequest,
-    PaymentsPriceDeactivateRequest,
 )
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -43,6 +42,22 @@ async def _create_product(membership_service, stripe_account_id, created):
     for p in resp.prices:
         created.track_price(p.stripe_price_id)
     return resp.stripe_product_id
+
+
+async def _archive_price(stripe_client, price_id, stripe_account_id):
+    """Archive a price directly on Stripe.
+
+    Our own code never deactivates a price (the DB gates which is current),
+    so there's no service method for it. The reactivation paths
+    (``activate_price`` / ``validate_price_active``) defend against a price
+    archived *out of band* — manually in the Stripe Dashboard or a legacy
+    price — so these tests stage that precondition via the raw SDK.
+    """
+    await stripe_client.client.v1.prices.update_async(
+        price_id,
+        params={"active": False},
+        options=stripe_client.connect_opts(stripe_account_id),
+    )
 
 
 # ── Tests ───────────────────────────────────────────────────────
@@ -123,45 +138,6 @@ async def test_create_one_time_price(
     assert price.recurring is None
 
 
-async def test_deactivate_price(
-    price_service,
-    membership_service,
-    stripe_client,
-    stripe_account_id,
-    connect_opts,
-    created,
-):
-    product_id = await _create_product(membership_service, stripe_account_id, created)
-    created_resp = await price_service.create_price(
-        PaymentsPriceCreateRequest(
-            stripe_product_id=product_id,
-            unit_amount=3000,
-            plan_type=PlanType.recurring,
-            recurring_interval=DurationUnit.month,
-            recurring_interval_count=1,
-        ),
-        stripe_account_id,
-    )
-    created.track_price(created_resp.stripe_price_id)
-
-    resp = await price_service.deactivate_price(
-        PaymentsPriceDeactivateRequest(
-            stripe_price_id=created_resp.stripe_price_id,
-        ),
-        stripe_account_id,
-    )
-
-    assert resp.active is False
-    assert resp.stripe_price_id == created_resp.stripe_price_id
-
-    # Independent verification: Stripe must agree the price is inactive.
-    price = await stripe_client.client.v1.prices.retrieve_async(
-        created_resp.stripe_price_id,
-        options=connect_opts,
-    )
-    assert price.active is False
-
-
 async def test_activate_price(
     price_service,
     membership_service,
@@ -183,11 +159,8 @@ async def test_activate_price(
     )
     created.track_price(created_resp.stripe_price_id)
 
-    await price_service.deactivate_price(
-        PaymentsPriceDeactivateRequest(
-            stripe_price_id=created_resp.stripe_price_id,
-        ),
-        stripe_account_id,
+    await _archive_price(
+        stripe_client, created_resp.stripe_price_id, stripe_account_id
     )
 
     resp = await price_service.activate_price(
@@ -258,11 +231,8 @@ async def test_validate_price_active_reactivates_archived(
     )
     created.track_price(created_resp.stripe_price_id)
 
-    await price_service.deactivate_price(
-        PaymentsPriceDeactivateRequest(
-            stripe_price_id=created_resp.stripe_price_id,
-        ),
-        stripe_account_id,
+    await _archive_price(
+        stripe_client, created_resp.stripe_price_id, stripe_account_id
     )
 
     resp = await price_service.validate_price_active(

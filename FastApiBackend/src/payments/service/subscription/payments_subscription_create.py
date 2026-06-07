@@ -69,7 +69,7 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         items = self._build_create_items(consolidated)
 
         proration_behavior: Literal["none", "always_invoice"] = (
-            "always_invoice" if any(item.prorate for item in request.items) else "none"
+            request.proration_behavior
         )
 
         create_params = SubscriptionCreateParams(
@@ -82,12 +82,6 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         if request.pay_first_invoice_out_of_band and proration_behavior == "always_invoice":
             create_params["payment_behavior"] = "default_incomplete"
             create_params["expand"] = ["latest_invoice"]
-
-        sub_discounts = self._build_subscription_discounts(
-            request.subscription_discounts,
-        )
-        if sub_discounts:
-            create_params["discounts"] = sub_discounts
 
         if recurring_interval == DurationUnit.month:
             create_params["billing_cycle_anchor"] = await self._next_monthly_anchor_timestamp(

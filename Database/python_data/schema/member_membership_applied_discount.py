@@ -2,6 +2,7 @@ from datetime import date
 from uuid import UUID
 
 from . import SeedModel
+from .member_membership import StripeSyncStatus
 
 __all__ = [
     "MemberMembershipAppliedDiscountCreate",
@@ -26,3 +27,4 @@ class MemberMembershipAppliedDiscountCreate(SeedModel):
     value_id: UUID
     end_date: date | None = None
     stripe_coupon_id: str | None = None
+    stripe_sync_status: StripeSyncStatus = StripeSyncStatus.not_added

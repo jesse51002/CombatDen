@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
+from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.member_memberships import SQL_DIR
-from src.member_memberships.schema.payment_sync_schema import SyncItem
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
@@ -30,18 +30,23 @@ from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentPreviewRequest,
 )
 from src.shared.database import DirectDatabasePool
-from src.shared.db_first_helpers import cleanup_pending_row
+from src.shared.db_first_helpers import (
+    cleanup_pending_row,
+    staged_preview,
+    sync_or_revert,
+)
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-        MembershipPaymentSyncService,
+    from src.member_memberships.service.payment_sync.payment_sync_service import (
+        PaymentSyncService,
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
+    from src.shared.billing_parent_resolver import BillingParentResolver
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +57,10 @@ class MemberMembershipsStart(MemberMembershipsBase):
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        payment_sync_service: MembershipPaymentSyncService,
+        payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
+        parent_resolver: BillingParentResolver,
     ) -> None:
         super().__init__(
             db_pool,
@@ -62,6 +68,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
             gym_stripe_service,
         )
         self._payment_service = payment_service
+        self._parent_resolver = parent_resolver
 
     async def start(
         self,
@@ -104,7 +111,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
         await self._check_no_existing(member_id, gym_id, plan_id)
 
-        parent = await self._payment_sync.resolve_parent(member_id)
+        parent = await self._parent_resolver.resolve_parent(member_id)
         if parent.is_frozen:
             raise ValueError("Cannot start membership: account is frozen")
 
@@ -124,6 +131,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
         if not plan_price["stripe_price_id"]:
             raise ValueError(f"Plan price {plan_price['price_id']} missing stripe_price_id")
 
+        # Pre-sync (recurring): converge the family to a clean DB↔Stripe baseline
+        # before inserting the new membership. (One-time has no subscription to
+        # converge.)
+        if is_recurring:
+            await self._pre_sync_payments(member_id)
+
         # ── Step 1: DB insert (NULL stripe_item_id) ───────────
         item_id = await self._crm_insert(
             member_id=member_id,
@@ -140,34 +153,40 @@ class MemberMembershipsStart(MemberMembershipsBase):
         )
 
         # ── Step 2: Stripe ────────────────────────────────────
+        # Recurring is DB-first: the pending row inserted above is now visible to
+        # the sync, which adds it to Stripe and writes its line id / next_due_date
+        # / 'applied' status back itself — nothing to extract here. One-time still
+        # charges a single invoice and returns its id to stamp below.
         stripe_item_id: str | None = None
-        next_due_date: date | None = None
 
-        try:
-            if is_recurring:
-                add_item = SyncItem(
-                    stripe_price_id=plan_price["stripe_price_id"],
-                    member_id=member_id,
-                    plan_id=plan_id,
-                    prorate=prorate,
-                )
-                response = await self._payment_sync.update_payments_recurring(
+        if is_recurring:
+            # Recurring is DB-first + verified: the sync adds the pending row to
+            # Stripe and writes its line id / next_due_date / 'applied' status
+            # back. If the sync fails or the row is not stamped 'applied', the
+            # pending row is deleted so the DB stays in sync with Stripe.
+            async def _sync_recurring() -> None:
+                await self._payment_sync.update_payments_recurring(
                     member_id,
-                    add_ids=[add_item],
-                    cancel_ids=[],
                     idempotency_key=idempotency_key,
                     pay_first_invoice_out_of_band=paid_with_cash,
+                    proration_behavior=(
+                        "always_invoice" if prorate else "none"
+                    ),
                 )
-                if response:
-                    stripe_item_id = self._extract_stripe_item_id(
-                        response,
-                        plan_price["stripe_price_id"],
-                    )
-                    first_item = response.items[0] if response.items else None
-                    next_due_date = self._period_end_to_date(
-                        first_item.current_period_end if first_item else None,
-                    )
-            else:
+
+            async def _verify_added() -> bool:
+                status = await self._get_sync_status(item_id, member_id)
+                return status == StripeSyncStatus.applied
+
+            await sync_or_revert(
+                sync_fn=_sync_recurring,
+                revert_fn=lambda: self._delete_pending(str(item_id)),
+                entity_name="member_membership",
+                crm_pk=str(item_id),
+                verify_fn=_verify_added,
+            )
+        else:
+            try:
                 stripe_item_id = await self._charge_one_time(
                     stripe_customer_id=parent.stripe_customer_id,
                     stripe_price_id=plan_price["stripe_price_id"],
@@ -177,15 +196,18 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     idempotency_key=idempotency_key,
                     paid_with_cash=paid_with_cash,
                 )
-        except Exception:
-            await cleanup_pending_row(
-                delete_fn=lambda: self._delete_pending(str(item_id)),
-                entity_name="member_membership",
-                crm_pk=str(item_id),
-            )
-            raise
+            except Exception:
+                await cleanup_pending_row(
+                    delete_fn=lambda: self._delete_pending(str(item_id)),
+                    entity_name="member_membership",
+                    crm_pk=str(item_id),
+                )
+                raise
 
-        # ── Step 3: Set stripe_item_id ────────────────────────
+        # ── Step 3: Set stripe_item_id + mark the row live ────
+        # (one-time path only). update_stripe_item_id.sql also stamps
+        # stripe_sync_status='applied' so the one-time membership is visible
+        # through the filtered view (the recurring path's writeback does this).
         if stripe_item_id:
             set_item_sql = load_sql(
                 SQL_DIR / "payment_sync" / "update_stripe_item_id.sql",
@@ -205,14 +227,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     stripe_id=stripe_item_id,
                     crm_pk=str(item_id),
                 ) from exc
-
-        # ── Update next_due_date if we got one ────────────────
-        if next_due_date:
-            await self._update_next_due_date(
-                str(item_id),
-                str(member_id),
-                next_due_date,
-            )
 
     async def preview(
         self,
@@ -245,7 +259,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
         await self._check_no_existing(member_id, gym_id, plan_id)
 
-        parent = await self._payment_sync.resolve_parent(member_id)
+        parent = await self._parent_resolver.resolve_parent(member_id)
         if parent.is_frozen:
             raise ValueError("Cannot start membership: account is frozen")
 
@@ -256,16 +270,44 @@ class MemberMembershipsStart(MemberMembershipsBase):
         is_recurring = plan_type == PlanType.recurring
 
         if is_recurring:
-            add_item = SyncItem(
-                stripe_price_id=plan_price["stripe_price_id"],
-                member_id=member_id,
-                plan_id=plan_id,
-                prorate=prorate,
-            )
-            return await self._payment_sync.preview_update_payments_recurring(
-                member_id,
-                add_ids=[add_item],
-                cancel_ids=[],
+            # Stage a 'preview_add' membership row so the preview reflects the new
+            # membership, then delete it (finally). The real path excludes
+            # preview_add (can never bill it); the preview build (preview=True)
+            # includes it. Race vs a concurrent real sync is bounded by the
+            # cleanup; the per-parent lock (#25) closes it (TODO).
+            start_date = gym_today(parent.timezone)
+            staged: list[UUID] = []
+
+            async def _stage() -> None:
+                item_id = await self._crm_insert(
+                    member_id=member_id,
+                    gym_id=gym_id,
+                    plan_id=plan_id,
+                    price_id=price_id,
+                    start_date=start_date,
+                    end_date=None,
+                    last_paid_date=start_date,
+                    next_due_date=None,
+                    stripe_item_id=None,
+                    prorate=prorate,
+                    total_price=plan_price["price"],
+                    sync_status=StripeSyncStatus.preview_add,
+                )
+                staged.append(item_id)
+
+            async def _cleanup() -> None:
+                if staged:
+                    await self._delete_pending(str(staged[0]))
+
+            return await staged_preview(
+                stage_fn=_stage,
+                cleanup_fn=_cleanup,
+                preview_fn=lambda: self._payment_sync.preview_update_payments_recurring(
+                    member_id,
+                    proration_behavior=(
+                        "always_invoice" if prorate else "none"
+                    ),
+                ),
             )
 
         return await self._preview_one_time(
@@ -348,11 +390,14 @@ class MemberMembershipsStart(MemberMembershipsBase):
         stripe_item_id: str | None,
         prorate: bool,
         total_price: int,
+        sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
     ) -> UUID:
         """Insert a new membership row. Returns the generated item_id.
 
-        Memberships are created discount-free — discounts are applied as
-        snapshots afterward via the apply path.
+        ``sync_status`` defaults to ``not_added`` (the real start's pending row);
+        the start preview inserts ``preview_add`` so the dry-run sees it but the
+        real path never bills it. Memberships are created discount-free —
+        discounts are applied afterward via the apply path.
         """
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
@@ -367,34 +412,13 @@ class MemberMembershipsStart(MemberMembershipsBase):
             "stripe_item_id": stripe_item_id,
             "prorate": prorate,
             "total_price": total_price,
+            "sync_status": sync_status.value,
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
             row = result.mappings().one()
             await session.commit()
         return row["item_id"]
-
-    async def _update_next_due_date(
-        self,
-        item_id: str,
-        member_id: str,
-        next_due_date: date,
-    ) -> None:
-        """Set next_due_date on the membership row after Stripe sync."""
-        async with self._db_pool.session() as session:
-            await session.execute(
-                text(
-                    "UPDATE member_memberships_unfiltered "
-                    "SET next_due_date = :next_due_date "
-                    "WHERE item_id = :item_id AND member_id = :member_id"
-                ),
-                {
-                    "item_id": item_id,
-                    "member_id": member_id,
-                    "next_due_date": next_due_date,
-                },
-            )
-            await session.commit()
 
     async def _delete_pending(self, item_id: str) -> None:
         """Hard-delete a pending membership row (NULL stripe_item_id)."""

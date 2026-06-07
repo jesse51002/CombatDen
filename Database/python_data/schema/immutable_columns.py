@@ -267,6 +267,7 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "created_at",  # auto-generated timestamp
         # Stripe columns — always set by backend
         "stripe_item_id",
+        "stripe_sync_status",  # sync writeback (Stripe-convergence confirmation)
         "price_id",
     }
 )
@@ -284,6 +285,7 @@ MEMBER_MEMBERSHIP_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
         "value_id",  # identity FK, the frozen discount value version
         "end_date",  # sync writeback (resolved / consumption-stamped)
         "stripe_coupon_id",  # sync writeback (resolved coupon / once handle)
+        "stripe_sync_status",  # sync writeback (Stripe-convergence confirmation)
         "created_at",  # auto-generated timestamp
     }
 )

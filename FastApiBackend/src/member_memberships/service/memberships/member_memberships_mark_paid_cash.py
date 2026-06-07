@@ -21,12 +21,13 @@ from src.member_memberships.service.memberships.member_memberships_base import (
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-        MembershipPaymentSyncService,
+    from src.member_memberships.service.payment_sync.payment_sync_service import (
+        PaymentSyncService,
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
+    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
 
 logger = logging.getLogger(__name__)
@@ -38,9 +39,10 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        payment_sync_service: MembershipPaymentSyncService,
+        payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
+        parent_resolver: BillingParentResolver,
     ) -> None:
         super().__init__(
             db_pool,
@@ -48,6 +50,7 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
             gym_stripe_service,
         )
         self._payment_service = payment_service
+        self._parent_resolver = parent_resolver
 
     async def mark_paid_cash(
         self,
@@ -81,7 +84,7 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
         if not membership["stripe_item_id"]:
             raise ValueError(f"Membership {item_id} is not linked to a Stripe subscription")
 
-        parent = await self._payment_sync.resolve_parent(member_id)
+        parent = await self._parent_resolver.resolve_parent(member_id)
         if not parent.stripe_sub_id_month:
             raise ValueError(f"No active monthly subscription for member_id={member_id}")
 

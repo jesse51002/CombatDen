@@ -38,8 +38,8 @@ from src.payments.schema.payments_invoice_schema import (
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-        MembershipPaymentSyncService,
+    from src.member_memberships.service.payment_sync.payment_sync_service import (
+        PaymentSyncService,
     )
     from src.payments.service.payments_stripe_members_service import (
         PaymentsStripeMembersService,
@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from src.payments.service.subscription import (
         PaymentsStripeSubscriptionService,
     )
+    from src.shared.paying_member_lock import PayingMemberLock
 
 
 class MembersManagementService:
@@ -62,8 +63,9 @@ class MembersManagementService:
         self,
         db_pool: DirectDatabasePool,
         payments_members_service: PaymentsStripeMembersService,
-        payment_sync_service: MembershipPaymentSyncService,
+        payment_sync_service: PaymentSyncService,
         subscription_service: PaymentsStripeSubscriptionService,
+        paying_lock: PayingMemberLock,
     ) -> None:
         deps = (db_pool, payments_members_service)
         self._create = MembersManagementCreate(*deps)
@@ -77,6 +79,7 @@ class MembersManagementService:
             db_pool,
             payments_members_service,
             payment_sync_service,
+            paying_lock,
         )
 
     # ── Create / Update member ─────────────────────────────────

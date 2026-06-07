@@ -9,7 +9,7 @@ description: >-
   `PaymentsStripeClient.connect_opts` / `connect_opts_readonly` account scoping +
   idempotency keys), the typed metadata models that pin each Stripe resource to a
   CRM row, the service primitives (members / membership-product / price / payment /
-  low-level coupon CRUD) and the subscription sub-services
+  low-level coupon find/create/delete I/O) and the subscription sub-services
   (`PaymentsStripeSubscriptionService` facade + create/update/cancel/freeze/
   migration/upcoming/retrieve/item delegates + `get_subscription` read primitive +
   `_map_subscription` / `_consolidate_items` / `_build_reconcile_items` base
@@ -33,9 +33,11 @@ This is the deep domain knowledge for CombatDen's **Stripe integration layer**:
 how the backend calls Stripe (the primitives in `src/payments/`) and how Stripe
 outcomes flow back into the CRM (the webhook mirror in `src/stripe_webhooks/`).
 It is the **source of truth** for this layer; CLAUDE.md holds only the "how to
-work here" rules, and `FastApiBackend/PaymentRefactor.md` §3 + §1–§4 hold the
-prose design rationale. When this layer changes, **update this skill in the same
-change** (it is a living document — see the bottom).
+work here" rules. The config-vs-outcomes split this layer rests on is documented
+in §1 here and in the **`sync-guide`** skill; `FastApiBackend/PaymentRefactor.md`
+is only the engine's remaining-work roadmap, not rationale. When this layer
+changes, **update this skill in the same change** (it is a living document — see
+the bottom).
 
 This layer is a set of **primitives**, not a brain. It knows *how* to push a
 desired state to Stripe and *how* to absorb a Stripe event — it does **not**
@@ -49,7 +51,7 @@ inside the seam: this guide stops at the Stripe boundary.
 
 ## 1. Role — config vs. outcomes, and a pure service layer
 
-Two kinds of "truth" are split deliberately (`PaymentRefactor.md` §3):
+Two kinds of "truth" are split deliberately:
 
 - **CRM owns config / intent** — prices, plans, discounts, who is enrolled.
   These originate in the CRM and are *pushed* to Stripe. No member self-serves
@@ -113,7 +115,6 @@ an inbound event can be correlated back to CRM rows. All models subclass
 | `StripeCustomerMetadata` | customer create/update | `member_id`, `gym_id` |
 | `StripeProductMetadata` | membership product create/update | `plan_id`, `gym_id` |
 | `StripePriceMetadata` | price create | `crm_price_id`, `plan_id`, `gym_id` |
-| `StripeCouponMetadata` | coupon create/update | `crm_discount_id`, `gym_id` |
 | `StripeSubscriptionMetadata` | sub create/update/freeze/migration | `member_id`, `gym_id`, `crm_paid_with_cash` (default `False`) |
 | `StripeMembershipOneTimeMetadata` | one-time membership invoice | `member_id`, `gym_id`, `plan_id`, `crm_one_time_payment=True`, `type="membership_one_time"`, `crm_paid_with_cash` |
 | `StripeAdHocInvoiceMetadata` | ad-hoc charge-card invoice | `member_id`, `gym_id`, `crm_one_time_payment=True`, `crm_paid_with_cash` |
@@ -150,18 +151,27 @@ a membership plan as a Stripe **Product + Prices**:
 
 - `create_membership` — Product + each Price (delegates Price creation to the
   price service), sets `default_price`.
-- `update_membership` — reconciles prices: activates/deactivates existing,
-  creates new, **deactivates any active price not in the request list**.
+- `update_membership` — reconciles prices: re-activates an archived existing
+  price + creates new ones. **It never deactivates a Stripe price** — the DB
+  (`membership_plan_prices.is_active`) gates which price is current, so every
+  Stripe price stays active forever (archiving the old price would break a
+  subscription migration that's mid-flight). The thing we never want here: our
+  own code archiving a price — so there is deliberately **no `deactivate_price`**;
+  the only direction is reactivation.
 - `deactivate_membership` — archives the Product (`active=False`); does not
   cancel subscriptions.
 
 **`PaymentsStripePriceService`** (`payments_stripe_price_service.py`) — Stripe
 **Price** ops: `create_price` (recurring when `plan_type == PlanType.recurring`),
-`get_price`, `deactivate_price` / `activate_price`, `set_product_default_price`
-(must run before archiving the previous default — Stripe rejects archiving a
-product's current `default_price`), and `validate_price_active` (retrieve the
-price + its product and **reactivate either if archived** — the gym owner is
-explicitly trying to use it).
+`get_price`, `set_product_default_price` (must run before archiving the previous
+default — Stripe rejects archiving a product's current `default_price`), and the
+two **reactivation** guards — `activate_price` (used by the plan reconcile) and
+`validate_price_active` (retrieve the price + its product and **reactivate either
+if archived**; called on the charge / subscription-create / migration paths right
+before price-attach). These defend against a price archived *out of band* —
+manually in the Stripe Dashboard, or a legacy price: our code never archives one,
+but Stripe rejects attaching an archived price to a subscription, so they flip it
+back to active because the DB says it's current.
 
 **`PaymentsStripePaymentService`** (`payments_stripe_payment_service.py`) —
 one-time charges, all money-moving (per-step idempotency keys
@@ -180,14 +190,20 @@ one-time charges, all money-moving (per-step idempotency keys
   metadata to generated invoices, so the webhook recovers `member_id` via
   sub-item lookup; only the cash flag rides on the invoice itself.)
 
-**`PaymentsStripeDiscountService`** (`payments_stripe_discount_service.py`) —
-**low-level Stripe Coupon CRUD only**: `create_discount`, `update_discount` (name
-+ metadata only), `delete_discount`, `retrieve_discount`. This is a dumb wrapper.
-The **deterministic find-or-create** of a coupon from a value signature
-(`pct_<bps>_<mode>` / `amt_<cents>_<mode>`) at sync time is **not here** — it is
-`PaymentSyncCoupons`, owned by `sync-guide` (cross-reference: it consumes
-`get_subscription` from §4). The `StripeCouponDuration` enum (`once` /
-`repeating` / `forever`) lives in `schema/payments_enums.py`.
+**`PaymentsStripeDiscountService`** (`payments_stripe_discount_service.py`) — the
+**single owner of low-level Stripe Coupon I/O**: `find_discount(coupon_id,
+account)` (retrieve-or-`None`, the non-raising lookup), `create_discount` (creates
+under a **caller-supplied deterministic `coupon_id`**; idempotent — a create race
+on the same id returns the existing coupon), `delete_discount`, and
+`retrieve_discount` (raises; used by the subscription coupon-validation path).
+Coupons carry **no CRM back-reference metadata** — a value-coupon is shared across
+every discount at that value, so there is nothing to back-reference. The
+**deterministic id scheme + validate-or-replace policy** (the
+value signature `pct_<bps>_<mode>` / `amt_<cents>_<mode>`) lives in
+`PaymentSyncCoupons` (`sync-guide`), which **delegates all coupon I/O here** — no
+service outside this payments layer touches the Stripe SDK. The
+`StripeCouponDuration` enum (`once` / `repeating` / `forever`) lives in
+`schema/payments_enums.py`.
 
 **`payments_stripe_mappers.py`** — a class-less concern module (free functions by
 design): `map_invoice_preview`, `map_upcoming_invoice`, and the line-item helpers
@@ -222,7 +238,9 @@ shared deps and the static/instance helpers.
 
 `get_subscription` (`payments_subscription_retrieve.py`) is **read-only** and is
 the new path the sync depends on. The old push path only ever *wrote* desired
-state to Stripe; this reads it back. The mapped response carries each item's
+state to Stripe; this reads it back. **The retrieve expands
+`items.data.discounts`** so each item discount comes back as a `Discount` object
+(not a bare `di_…` id), and the mapped response carries each item's
 currently-attached coupon ids (`items[*].discounts`) **and** the
 subscription-level coupon ids (`discounts`). `sync-guide` reads these to run the
 `once`-consumption gate (a stored coupon still present = pending; absent = Stripe
@@ -234,9 +252,14 @@ exposes the read.
 `PaymentsSubscriptionBase` (`payments_subscription_base.py`):
 
 - `_map_subscription(sub)` → `PaymentsSubscriptionResponse` — exposes **both**
-  item-level coupon ids (`PaymentsSubscriptionItemResponse.discounts`, read from
-  `si.discounts[*].coupon.id`) **and** sub-level coupon ids (from
-  `sub.discounts`). This is what surfaces the live coupon set the sync unions.
+  item-level coupon ids (`PaymentsSubscriptionItemResponse.discounts`) **and**
+  sub-level coupon ids (from `sub.discounts`), via the `_coupon_id_from_discount`
+  helper. A subscription-item `Discount` exposes its coupon at
+  **`discount.source.coupon`** (a coupon-id string) in the current Stripe shape —
+  `discount.coupon` is null — so the helper reads `source.coupon` first, falling
+  back to the legacy `discount.coupon` object; a bare unexpanded `di_…` string is
+  skipped (the retrieve expands the discounts so this doesn't happen on the read
+  path). This is what surfaces the live coupon set the sync unions.
 - `_consolidate_items(items)` — Stripe allows one item per price, so duplicate
   price ids are merged: quantities summed, coupon ids de-duplicated.
 - `_build_create_items` / `_build_reconcile_items` / `_build_reconcile_entry` —
@@ -244,7 +267,6 @@ exposes the read.
   current Stripe items by `stripe_item_id`; an unmatched id raises
   `PaymentsResourceNotFoundError` (`subscription_item`, "Stripe may be out of
   sync"); current items not referenced are emitted as `{"id": …, "deleted": True}`.
-- `_build_subscription_discounts` — sub-level discount params (`""` clears).
 - `_retrieve_subscription` — raises `PaymentsResourceNotFoundError` if missing
   **or `status == "canceled"`**.
 - `_validate_subscription_request` / `_validate_coupon_ids` — pre-validate all
@@ -321,6 +343,17 @@ committed `stripe_item_id` yet) → 200 + background retry. The cash path
 (`crm_paid_with_cash="true"`) sets `payment_method_type='cash'` and bypasses the
 `stripe_charge_id IS NOT NULL` charge guard; a zero-amount paid invoice with no
 charge id simply skips the charge insert.
+
+**Once-discount settle (subscription invoices only).** After a *subscription*
+invoice is paid (member resolved, dates updated), the handler calls
+**`PaymentSyncService.settle_once_discounts(member_id)`** so a `once` discount that
+Stripe just consumed gets its `end_date` stamped **promptly** — instead of lingering
+"pending" until the next manual op or the future reconciler (the engine half is owned
+by `sync-guide` §6). It is **best-effort and isolated**: it runs in its **own DB
+session/transaction** and any exception is caught + logged, never rolling back the
+invoice/charge writes; it is a no-op when the family has no unconsumed `once`. DI
+injects `payment_sync_service` into `InvoicePaidHandler` for this (the only handler
+that depends on the sync engine).
 
 > **Applied discounts not written here.** This handler populates
 > `member_invoice_line_items` (above) but does **not** populate
@@ -483,11 +516,14 @@ are called by the sync engine and the membership/members/plans services
   `payments/schema/payments_enums.py` (`StripeCouponDuration`,
   `StripeResourceType`).
 - **Metadata models:** `payments/schema/metadata/` (`stripe_metadata_base.py` +
-  the seven per-resource models).
+  the six per-resource models). Coupons have no metadata model — a value-coupon
+  is shared across every discount at that value, so it carries no CRM
+  back-reference.
 - **Non-subscription services:** `payments/service/payments_stripe_members_service.py`,
   `payments_stripe_membership_service.py`, `payments_stripe_price_service.py`,
   `payments_stripe_payment_service.py`, `payments_stripe_discount_service.py`
-  (low-level coupon CRUD only), `payments_stripe_mappers.py`.
+  (the single owner of low-level coupon find/create/delete — sync delegates here),
+  `payments_stripe_mappers.py`.
 - **Subscription sub-services:** `payments/service/subscription/`
   (`payments_subscription_facade.py` = `PaymentsStripeSubscriptionService`,
   `payments_subscription_base.py`, and the create/update/cancel/freeze/migration/
@@ -514,7 +550,8 @@ are called by the sync engine and the membership/members/plans services
   wrapper services + webhook handlers as Factories; `stripe_webhooks_service`).
 - **Members card endpoints:** `src/members/members_router.py`
   (`PUT /{member_id}/card`, `DELETE /{member_id}/payment`).
-- **Design rationale (prose):** `FastApiBackend/PaymentRefactor.md` §1–§4.
+- **Engine roadmap (prose):** `FastApiBackend/PaymentRefactor.md` (remaining-work
+  only). The config-vs-outcomes rationale is §1 here + the `sync-guide` skill.
 
 ### Seams to sibling skills (reference, don't duplicate)
 

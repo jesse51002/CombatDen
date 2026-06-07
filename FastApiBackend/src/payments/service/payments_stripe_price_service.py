@@ -13,7 +13,6 @@ from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_price_schema import (
     PaymentsPriceCreateRequest,
-    PaymentsPriceDeactivateRequest,
     PaymentsPriceResponse,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
@@ -95,23 +94,6 @@ class PaymentsStripePriceService:
             params={"default_price": stripe_price_id},
             options=opts,
         )
-
-    async def deactivate_price(
-        self,
-        request: PaymentsPriceDeactivateRequest,
-        stripe_account_id: str,
-    ) -> PaymentsPriceResponse:
-        """Archive (deactivate) a Stripe Price."""
-        await self.get_price(request.stripe_price_id, stripe_account_id)
-
-        opts = self._client.connect_opts(stripe_account_id)
-
-        price = await self._stripe.v1.prices.update_async(
-            request.stripe_price_id,
-            params=PriceUpdateParams(active=False),
-            options=opts,
-        )
-        return self._map_price(price)
 
     async def activate_price(
         self,

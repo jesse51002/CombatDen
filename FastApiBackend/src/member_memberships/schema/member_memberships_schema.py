@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 from schema.gym_discount import DiscountType
 
 import src.shared.db_schema_path  # noqa: F401
@@ -90,37 +90,54 @@ class MemberMembershipsUpdatePriceRequest(BaseModel):
     idempotency_key: UUID
 
 
-class MemberMembershipsApplyDiscountsRequest(BaseModel):
-    """Add / remove discount snapshots on an existing membership.
+class MemberMembershipsAddDiscountsRequest(BaseModel):
+    """Add discount snapshots to a membership (or preview the addition).
 
-    Apply is an explicit add / remove of immutable snapshot rows — never a
-    replace-set. ``add_preset_ids`` references live discounts whose ACTIVE value
-    version is frozen onto a snapshot (any discount, including a ``linked``
-    family discount). ``remove_applied_ids`` deletes existing snapshots by their
-    ``applied_discount_id``. Editing a discount is removing one row and adding
-    another — a snapshot is never updated.
+    An explicit add of immutable snapshot rows — never a replace-set.
+    ``preset_ids`` references live discounts whose ACTIVE value version is frozen
+    onto a snapshot (any discount, including a ``linked`` family discount).
+    ``preview=True`` stages the adds as ``preview_add`` rows and returns the
+    resulting invoice preview without committing.
     """
 
     item_id: UUID
     member_id: UUID
-    add_preset_ids: list[UUID] = Field(default_factory=list)
-    remove_applied_ids: list[UUID] = Field(default_factory=list)
+    preset_ids: list[UUID] = Field(default_factory=list)
     idempotency_key: UUID
+    preview: bool = False
 
-    @field_validator("add_preset_ids", "remove_applied_ids")
+    @field_validator("preset_ids")
     @classmethod
-    def _reject_duplicates(cls, value: list[UUID]) -> list[UUID]:
+    def _validate_preset_ids(cls, value: list[UUID]) -> list[UUID]:
+        if not value:
+            raise ValueError("preset_ids must not be empty")
         if len(value) != len(set(value)):
-            raise ValueError("id lists must not contain duplicates")
+            raise ValueError("preset_ids must not contain duplicates")
         return value
 
-    @model_validator(mode="after")
-    def _reject_empty(self) -> MemberMembershipsApplyDiscountsRequest:
-        if not (self.add_preset_ids or self.remove_applied_ids):
-            raise ValueError(
-                "apply request must add or remove at least one discount",
-            )
-        return self
+
+class MemberMembershipsRemoveDiscountsRequest(BaseModel):
+    """Remove discount snapshots from a membership (or preview the removal).
+
+    ``applied_ids`` deletes existing snapshots by their ``applied_discount_id``.
+    ``preview=True`` stages the removal as ``preview_remove`` rows and returns
+    the resulting invoice preview without committing.
+    """
+
+    item_id: UUID
+    member_id: UUID
+    applied_ids: list[UUID] = Field(default_factory=list)
+    idempotency_key: UUID
+    preview: bool = False
+
+    @field_validator("applied_ids")
+    @classmethod
+    def _validate_applied_ids(cls, value: list[UUID]) -> list[UUID]:
+        if not value:
+            raise ValueError("applied_ids must not be empty")
+        if len(value) != len(set(value)):
+            raise ValueError("applied_ids must not contain duplicates")
+        return value
 
 
 class MemberMembershipsAppliedDiscount(BaseModel):

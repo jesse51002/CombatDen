@@ -19,12 +19,6 @@ class PaymentsPriceCreateRequest(BaseModel):
     metadata: StripePriceMetadata | None = None
 
 
-class PaymentsPriceDeactivateRequest(BaseModel):
-    """Archive (deactivate) a Stripe Price."""
-
-    stripe_price_id: str
-
-
 class PaymentsPriceResponse(BaseModel):
     """Stripe Price details."""
 

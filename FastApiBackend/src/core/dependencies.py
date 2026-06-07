@@ -16,8 +16,20 @@ from src.gyms.service.gyms_stripe_connect_service import (
 from src.member_memberships.service.memberships.member_memberships_service import (
     MemberMembershipsService,
 )
-from src.member_memberships.service.payment_sync.membership_payment_sync_service import (
-    MembershipPaymentSyncService,
+from src.member_memberships.service.payment_sync.payment_sync_builder import (
+    PaymentSyncBuilder,
+)
+from src.member_memberships.service.payment_sync.payment_sync_discounts import (
+    PaymentSyncDiscounts,
+)
+from src.member_memberships.service.payment_sync.payment_sync_freeze import (
+    PaymentSyncFreeze,
+)
+from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
+    PaymentSyncOnceDiscounts,
+)
+from src.member_memberships.service.payment_sync.payment_sync_service import (
+    PaymentSyncService,
 )
 from src.members.service.crm_member_services.members_crm_members_list_service import (
     CrmMembersListService,
@@ -62,8 +74,10 @@ from src.rewards.service.rewards_redemption_service import (
 )
 from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth
+from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.paying_member_lock import PayingMemberLock
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
@@ -173,23 +187,71 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # ── Payment sync ─────────────────────────────────────────────
-    # Linked-discount recalculation is gone — family discounts are frozen
-    # snapshot rows divided across the consolidated line at sync.
-    membership_payment_sync_service = providers.Factory(
-        MembershipPaymentSyncService,
+    # Shared parent/billing-account resolver, injected wherever parent
+    # resolution is needed: the sync, the freeze service, and the lifecycle /
+    # validation callers (start, freeze, charge_card, mark_paid_cash).
+    billing_parent_resolver = providers.Factory(
+        BillingParentResolver,
+        db_pool=db_pool,
+        gym_stripe_service=gym_stripe_service,
+    )
+    # The one concurrency lock: a TTL lease keyed on a member's paying parent,
+    # so no two billing ops sync the same family at once. Used by the facade,
+    # the webhook settle, and the bulk fan-out.
+    paying_member_lock = providers.Factory(
+        PayingMemberLock,
+        db_pool=db_pool,
+        parent_resolver=billing_parent_resolver,
+    )
+    # Standalone freeze service: the dedicated freeze/unfreeze request resolves
+    # the parent then calls this directly; the sync uses it for the maintenance
+    # re-apply with the parent it already resolved.
+    payment_sync_freeze = providers.Factory(
+        PaymentSyncFreeze,
+        subscription_service=payments_subscription_service,
+    )
+    # Pre-sync settle of the once-discount lifecycle (stamps consumed `once`
+    # snapshots); also the scheduled reconciler's core duty.
+    payment_sync_once_discounts = providers.Factory(
+        PaymentSyncOnceDiscounts,
         db_pool=db_pool,
         subscription_service=payments_subscription_service,
-        gym_stripe_service=gym_stripe_service,
-        stripe_client=stripe_client,
+    )
+    # Owns the discount math + resolves each line's coupons (find-or-create,
+    # dollar→percent), for both real and preview. Coupon I/O is delegated to the
+    # payments discount service — the sync never touches the Stripe SDK directly.
+    payment_sync_discounts = providers.Factory(
+        PaymentSyncDiscounts,
+        discount_service=payments_discount_service,
+    )
+    # Builds the desired SyncParams from the DB: read memberships + discounts,
+    # group by price, resolve coupons, assemble the bucket.
+    payment_sync_builder = providers.Factory(
+        PaymentSyncBuilder,
+        db_pool=db_pool,
+        discounts=payment_sync_discounts,
+    )
+    payment_sync_service = providers.Factory(
+        PaymentSyncService,
+        db_pool=db_pool,
+        subscription_service=payments_subscription_service,
+        parent_resolver=billing_parent_resolver,
+        freeze=payment_sync_freeze,
+        once_discounts=payment_sync_once_discounts,
+        builder=payment_sync_builder,
+        paying_lock=paying_member_lock,
     )
 
     # ── Member memberships ───────────────────────────────────────
     member_memberships_service = providers.Factory(
         MemberMembershipsService,
         db_pool=db_pool,
-        payment_sync_service=membership_payment_sync_service,
+        payment_sync_service=payment_sync_service,
         payment_service=payments_payment_service,
         gym_stripe_service=gym_stripe_service,
+        parent_resolver=billing_parent_resolver,
+        freeze_service=payment_sync_freeze,
+        paying_lock=paying_member_lock,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────
@@ -217,8 +279,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         MembersManagementService,
         db_pool=db_pool,
         payments_members_service=payments_members_service,
-        payment_sync_service=membership_payment_sync_service,
+        payment_sync_service=payment_sync_service,
         subscription_service=payments_subscription_service,
+        paying_lock=paying_member_lock,
     )
 
     # ── Discounts ────────────────────────────────────────────────
@@ -235,7 +298,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
         stripe_membership_service=payments_membership_service,
         stripe_price_service=payments_price_service,
-        membership_payment_sync_service=membership_payment_sync_service,
+        payment_sync_service=payment_sync_service,
         discounts_service=discounts_service,
     )
 
@@ -254,6 +317,8 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_webhook_event_log = providers.Factory(StripeWebhookEventLog)
     stripe_webhook_invoice_paid_handler = providers.Factory(
         InvoicePaidHandler,
+        payment_sync_service=payment_sync_service,
+        paying_lock=paying_member_lock,
     )
     stripe_webhook_invoice_payment_failed_handler = providers.Factory(
         InvoicePaymentFailedHandler,

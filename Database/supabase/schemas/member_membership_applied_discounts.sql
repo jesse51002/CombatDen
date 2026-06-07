@@ -41,6 +41,18 @@ CREATE TABLE member_membership_applied_discounts_unfiltered (
     -- handle (present on the subscription = pending, absent = consumed).
     stripe_coupon_id VARCHAR,
 
+    -- Stripe-sync confirmation (service_role writeback). The `stripe_sync_status`
+    -- enum is declared in member_memberships.sql (the earliest-loaded consumer).
+    -- 'not_added' (default) = pending: the row is asking the sync to resolve its
+    -- coupon; the sync stamps `applied` once it does. `preview_*` reserved for
+    -- preview-staging. The enum is shared with member_memberships, but `migrating`
+    -- is a membership-only state (a subscription item being re-pointed to a new
+    -- price) — it never applies to an applied-discount row, so the CHECK rules it
+    -- out even though the shared enum technically allows the value.
+    stripe_sync_status stripe_sync_status NOT NULL DEFAULT 'not_added'
+        CONSTRAINT applied_discount_sync_status_not_migrating
+        CHECK (stripe_sync_status <> 'migrating'),
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     PRIMARY KEY (applied_discount_id),
@@ -71,14 +83,18 @@ CREATE INDEX idx_member_membership_applied_discounts_member
 CREATE INDEX idx_member_membership_applied_discounts_value
     ON member_membership_applied_discounts_unfiltered (value_id);
 
--- View: only exposes snapshots whose Stripe coupon has been written back by the
--- sync, so half-synced rows (a just-applied discount before the sync resolves
--- its coupon) are hidden from clients.
+-- View: gate on BOTH the Stripe coupon id and the sync-status enum. A row with
+-- no `stripe_coupon_id` has no coupon resolved yet (not valid to surface), and
+-- the sync-status hides `not_added` (pending) and `preview_*` (dry-run staging),
+-- so clients only see synced applied discounts. The two conditions are kept in
+-- lockstep with the `hide_incomplete_stripe_records` RLS policy
+-- (`access_rules/member_membership_applied_discounts.sql`) so they can't drift.
 CREATE VIEW member_membership_applied_discounts
 WITH (security_invoker = true)
 AS
 SELECT * FROM member_membership_applied_discounts_unfiltered
-WHERE stripe_coupon_id IS NOT NULL;
+WHERE stripe_coupon_id IS NOT NULL
+  AND stripe_sync_status NOT IN ('not_added', 'preview_add', 'preview_remove');
 
 -- Safety net: CLI migration diffing can strip security_invoker from CREATE VIEW
 ALTER VIEW member_membership_applied_discounts SET (security_invoker = true);

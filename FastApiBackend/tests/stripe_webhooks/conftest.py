@@ -13,13 +13,13 @@ import pytest
 from sqlalchemy import text
 
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
-from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
 from src.stripe_webhooks.service.charge_refunded_handler import (
     ChargeRefundedHandler,
 )
+from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
 )
@@ -32,6 +32,10 @@ from src.stripe_webhooks.service.stripe_webhooks_service import (
 from tests.conftest import STRIPE_TEST_ACCOUNT_ID
 from tests.helpers.cleanup import delete_all_gym_data
 from tests.helpers.data_factory import create_member, create_plan
+from tests.helpers.service_factory import (
+    build_paying_member_lock,
+    build_payment_sync_service,
+)
 
 # Synthetic stripe_account_id for webhook tests only. The seed script
 # inserts several gyms pointing at the real test account; if the
@@ -110,8 +114,11 @@ def event_log() -> StripeWebhookEventLog:
 
 
 @pytest.fixture(scope="module")
-def invoice_paid_handler() -> InvoicePaidHandler:
-    return InvoicePaidHandler()
+def invoice_paid_handler(db_pool, stripe_client) -> InvoicePaidHandler:
+    return InvoicePaidHandler(
+        payment_sync_service=build_payment_sync_service(db_pool, stripe_client),
+        paying_lock=build_paying_member_lock(db_pool),
+    )
 
 
 @pytest.fixture(scope="module")
@@ -191,13 +198,17 @@ async def webhook_fixture(
     )
 
     stripe_item_id = f"si_test_webhook_{member.member_id.hex[:12]}"
+    # A live, synced membership is stamped 'applied' by the sync writeback — set
+    # it here so the row is visible through the client-facing `member_memberships`
+    # view that the webhook's `membership_by_stripe_item.sql` resolver reads
+    # (the view hides 'not_added', which is the column default).
     insert_sql = """
         INSERT INTO member_memberships_unfiltered (
             member_id, gym_id, plan_id, price_id,
-            start_date, stripe_item_id, total_price
+            start_date, stripe_item_id, total_price, stripe_sync_status
         ) VALUES (
             :member_id, :gym_id, :plan_id, :price_id,
-            CURRENT_DATE, :stripe_item_id, :total_price
+            CURRENT_DATE, :stripe_item_id, :total_price, 'applied'
         )
         RETURNING item_id
     """

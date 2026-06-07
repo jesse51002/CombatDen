@@ -138,6 +138,10 @@ def create_overdue(
                 "stripe_item_id": sub_item_id,
                 "prorate": True,
                 "total_price": plan.base_cost,
+                # Direct insert (not via the API) of a live membership — stamp
+                # 'applied' so it's visible through the client-facing
+                # member_memberships view (the default 'not_added' is hidden).
+                "stripe_sync_status": "applied",
             }
         ).execute()
 

@@ -9,21 +9,37 @@ coupon per value is reused across every member on the gym's Connect account.
 
 ``once`` discounts map to a Stripe ``once`` coupon, ``ongoing`` to a Stripe
 ``forever`` coupon. Stripe has no native arbitrary end date — we enforce the
-``end_date`` cutoff ourselves by dropping the snapshot once it passes (see the
-sync's end_date exclusion), so an ongoing coupon is always ``forever`` on Stripe.
+``end_date`` cutoff ourselves by dropping the applied discount once it passes
+(in the read), so an ongoing coupon is always ``forever`` on Stripe.
+
+Because a coupon's value is **immutable** on Stripe, a coupon that already exists
+under a deterministic id is **validated** against the value before reuse: a
+stored amount/duration that no longer matches (a stale or hand-edited coupon) is
+deleted and recreated, so the id always resolves to a correctly-valued coupon.
+
+This class owns only that **id scheme + validate-or-replace policy**. The actual
+Stripe coupon I/O (find / create / delete) is delegated to
+``PaymentsStripeDiscountService`` — the single payments-layer owner of the Stripe
+SDK; nothing here touches Stripe directly.
 """
 
 import logging
 
-import stripe
 from schema.gym_discount import DiscountMode
-from stripe.params._coupon_create_params import CouponCreateParams
 
 from src.member_memberships.schema.payment_sync_schema import (
     LineDiscountValue,
 )
+from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.payments_discount_schema import (
+    PaymentsDiscountCreateRequest,
+    PaymentsDiscountDeleteRequest,
+    PaymentsDiscountResponse,
+)
 from src.payments.schema.payments_enums import StripeCouponDuration
-from src.payments.service.payments_stripe_client import PaymentsStripeClient
+from src.payments.service.payments_stripe_discount_service import (
+    PaymentsStripeDiscountService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +56,11 @@ _MODE_TO_STRIPE_DURATION: dict[DiscountMode, StripeCouponDuration] = {
 class PaymentSyncCoupons:
     """Find-or-create deterministic Stripe coupons for consolidated lines."""
 
-    def __init__(self, stripe_client: PaymentsStripeClient) -> None:
-        self._client = stripe_client
-        self._stripe = stripe_client.client
+    def __init__(
+        self,
+        discount_service: PaymentsStripeDiscountService,
+    ) -> None:
+        self._discounts = discount_service
 
     @staticmethod
     def coupon_id(value: LineDiscountValue) -> str:
@@ -63,77 +81,104 @@ class PaymentSyncCoupons:
         value: LineDiscountValue,
         stripe_account_id: str,
     ) -> str:
-        """Return the deterministic coupon id, creating it if absent.
+        """Return the deterministic coupon id, creating it if absent or wrong.
 
-        Creation passes the deterministic id so a concurrent or repeat call
-        for the same value collides on Stripe's side; the collision is caught
-        and treated as "already exists" (idempotent).
+        Finds the coupon by its deterministic id (via the discount service). If
+        one exists, its stored amount + duration are **validated** against the
+        value: a match is reused; a mismatch (a stale or hand-edited coupon —
+        Stripe coupons are immutable, so the value can only be fixed by replacing
+        it) is **deleted** so the correct one is recreated under the same id. The
+        create is idempotent on the id, so a concurrent create of the same value
+        is safe.
 
         Args:
             value: The line's effective discount value + mode.
             stripe_account_id: The gym's Stripe Connect account ID.
 
         Returns:
-            The coupon id now present on the Connect account.
+            The coupon id now present (and correctly valued) on the account.
         """
         coupon_id = self.coupon_id(value)
-        read_opts = self._client.connect_opts_readonly(stripe_account_id)
 
-        existing = await self._retrieve(coupon_id, read_opts)
+        existing = await self._discounts.find_discount(
+            coupon_id,
+            stripe_account_id,
+        )
         if existing is not None:
-            return coupon_id
-
-        write_opts = self._client.connect_opts(stripe_account_id)
-        params = self._build_create_params(coupon_id, value)
-        try:
-            created = await self._stripe.v1.coupons.create_async(
-                params=params,
-                options=write_opts,
+            if self._matches_value(existing, value):
+                return coupon_id
+            # Stale/corrupted coupon under this id — Stripe coupons are
+            # immutable, so delete it and recreate with the correct value.
+            logger.warning(
+                "Coupon %s on %s has the wrong value; replacing it.",
+                coupon_id,
+                stripe_account_id,
             )
-            return created.id
-        except stripe.InvalidRequestError:
-            # Lost a create race (id already taken) — the coupon now exists.
-            return coupon_id
+            await self._delete(coupon_id, stripe_account_id)
 
-    async def _retrieve(
+        created = await self._discounts.create_discount(
+            self._build_create_request(coupon_id, value),
+            stripe_account_id,
+        )
+        return created.stripe_coupon_id
+
+    async def _delete(
         self,
         coupon_id: str,
-        opts: stripe.RequestOptions,
-    ) -> stripe.Coupon | None:
-        """Retrieve a coupon by id, or None if it does not exist."""
+        stripe_account_id: str,
+    ) -> None:
+        """Delete a coupon by id, ignoring an already-absent one."""
         try:
-            coupon = await self._stripe.v1.coupons.retrieve_async(
-                coupon_id,
-                options=opts,
+            await self._discounts.delete_discount(
+                PaymentsDiscountDeleteRequest(stripe_coupon_id=coupon_id),
+                stripe_account_id,
             )
-        except stripe.InvalidRequestError:
-            return None
-        if getattr(coupon, "deleted", False):
-            return None
-        return coupon
+        except PaymentsResourceNotFoundError:
+            # Already gone (a concurrent replace deleted it) — fine.
+            return
 
     @staticmethod
-    def _build_create_params(
+    def _matches_value(
+        coupon: PaymentsDiscountResponse,
+        value: LineDiscountValue,
+    ) -> bool:
+        """Whether an existing coupon's amount + duration match a value.
+
+        Guards against reusing a stale/corrupted coupon: the deterministic id
+        encodes the intended value, but the coupon object on Stripe could have
+        drifted (hand-edited, or created by older math). Compares exactly the
+        fields ``_build_create_request`` would set.
+        """
+        if coupon.duration != _MODE_TO_STRIPE_DURATION[value.discount_mode]:
+            return False
+        if value.percentage_off is not None:
+            expected_percent = round(value.percentage_off, _PERCENT_DECIMALS)
+            return coupon.percentage_off == expected_percent
+        return coupon.amount_off == int(value.dollar_off or 0)
+
+    @staticmethod
+    def _build_create_request(
         coupon_id: str,
         value: LineDiscountValue,
-    ) -> CouponCreateParams:
-        """Build Stripe coupon-create params for a line value.
+    ) -> PaymentsDiscountCreateRequest:
+        """Build the coupon-create request for a line value.
 
-        ``once`` -> Stripe ``once`` duration; ``ongoing`` -> Stripe
-        ``forever`` duration (our end_date cutoff is enforced separately).
+        ``once`` -> Stripe ``once`` duration; ``ongoing`` -> Stripe ``forever``
+        duration (our end_date cutoff is enforced separately, in the read). The
+        id is mirrored into the name so the dashboard shows the value signature.
         """
         duration = _MODE_TO_STRIPE_DURATION[value.discount_mode]
-        params = CouponCreateParams(
-            id=coupon_id,
-            name=coupon_id,
-            duration=duration.value,
-        )
         if value.percentage_off is not None:
-            params["percent_off"] = round(
-                value.percentage_off,
-                _PERCENT_DECIMALS,
+            return PaymentsDiscountCreateRequest(
+                coupon_id=coupon_id,
+                discount_name=coupon_id,
+                duration=duration,
+                percentage_off=round(value.percentage_off, _PERCENT_DECIMALS),
             )
-        else:
-            params["amount_off"] = int(value.dollar_off or 0)
-            params["currency"] = "usd"
-        return params
+        return PaymentsDiscountCreateRequest(
+            coupon_id=coupon_id,
+            discount_name=coupon_id,
+            duration=duration,
+            amount_off=int(value.dollar_off or 0),
+            currency="usd",
+        )

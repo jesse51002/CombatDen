@@ -69,13 +69,25 @@ async def delete_member_data(
     db_pool: DirectDatabasePool,
     member_id: UUID,
 ) -> None:
-    """Delete a single member, their applied-discount snapshots, and
-    their memberships.
+    """Delete a single member, their billing rows, applied-discount snapshots,
+    and their memberships, in FK-safe order.
 
-    The frozen snapshot rows FK both the membership and the member, so they
-    are removed before the memberships and the member row.
+    ``member_charges`` / ``member_invoices`` are written by the Stripe webhook
+    mirror (e.g. an out-of-band cash invoice's ``invoice.paid`` lands in the
+    shared local DB), so they can legitimately reference a test member and must
+    be removed before the member row — charges FK invoices, so charges go first.
+    The frozen snapshot rows FK both the membership and the member, so they are
+    removed before the memberships and the member row.
     """
     async with db_pool.session() as session:
+        await session.execute(
+            text("DELETE FROM member_charges WHERE member_id = :id"),
+            {"id": str(member_id)},
+        )
+        await session.execute(
+            text("DELETE FROM member_invoices WHERE member_id = :id"),
+            {"id": str(member_id)},
+        )
         await session.execute(
             text(
                 "DELETE FROM member_membership_applied_discounts_unfiltered WHERE member_id = :id"
