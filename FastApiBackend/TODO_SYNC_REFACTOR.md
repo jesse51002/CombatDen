@@ -184,9 +184,12 @@ contract (pre-sync → write → verify `stripe_sync_status` → `sync_or_revert
 
 ## 3. What's LEFT (in priority order)
 
-### 3.1 🔴 Update the living docs (the skills) — DO FIRST
-The skills are now stale relative to the code changed this session. Update (each is a living
-document; per the repo rules, code + doc must agree):
+### 3.1 ✅ Update the living docs (the skills) — DONE
+All done this session: memberships-guide (add/remove ops + endpoints + the set_price
+no-archive fix), discounts-guide §4 (preview staging), payments-guide §6 (invoice.paid
+settle), sync-guide (webhook settle + the concurrency lock section), the 2 test
+docstrings, and both diagrams (`payment_sync.mermaid` + `architecture.mermaid`,
+validated). (Original checklist kept below for reference.)
 - **`memberships-guide`** §6 + §8: the discount op is now **add_discounts / remove_discounts** (two
   ops, not one `apply_discounts`); endpoints are `POST /discounts/add` + `POST /discounts/remove`
   (drop `PUT /discounts` + `POST /discounts/preview`). Each takes a `preview` bool. (The §6 row was
