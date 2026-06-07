@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Literal
 from uuid import UUID, uuid4
 
 import src.shared.db_schema_path  # noqa: F401
+from src.core.config import (
+    BULK_SYNC_MAX_RETRIES,
+    BULK_SYNC_RETRY_DELAY_SECONDS,
+)
 from src.member_memberships.service.payment_sync.payment_sync_builder import (
     PaymentSyncBuilder,
 )
@@ -29,8 +34,10 @@ from src.payments.schema.payments_invoice_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
+from src.shared.billing_parent import billing_lock_key
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
+from src.shared.resource_lock import LockBusyError, ResourceLock
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +64,13 @@ class PaymentSyncService:
         freeze: PaymentSyncFreeze,
         once_discounts: PaymentSyncOnceDiscounts,
         builder: PaymentSyncBuilder,
+        resource_lock: ResourceLock,
     ) -> None:
         self._parent = parent_resolver
         self._freeze = freeze
         self._once_discounts = once_discounts
         self._builder = builder
+        self._lock = resource_lock
         self._stripe = PaymentSyncStripe(subscription_service)
         self._writeback = PaymentSyncWriteback(
             db_pool=db_pool,
@@ -196,31 +205,84 @@ class PaymentSyncService:
     ) -> None:
         """Re-sync payment state for multiple members.
 
-        A fresh idempotency key is generated per member since bulk
-        sync is a background re-sync — there is no client-supplied
-        key, and each member's sync is an independent operation.
+        A fresh idempotency key is generated per member since bulk sync is a
+        background re-sync — there is no client-supplied key, and each member's
+        sync is an independent operation.
+
+        Each member's sync is guarded on its paying-parent key, so the batch never
+        collides with a concurrent op on the same family; different families are
+        independent. Members that fail a pass (most often a transient
+        ``LockBusyError`` — the family was momentarily busy) are collected and
+        **retried in a loop, up to ``BULK_SYNC_MAX_RETRIES`` times**. The
+        ``BULK_SYNC_RETRY_DELAY_SECONDS`` wait happens **after** a pass that left
+        failures and only before another attempt — never after the final attempt.
+        Anything still failing once the retries are exhausted is logged.
 
         Args:
             member_ids: Members whose memberships need sync.
         """
+        pending = member_ids
+        for attempt in range(BULK_SYNC_MAX_RETRIES + 1):
+            pending = await self._sync_members(pending)
+            if not pending:
+                return
+            # Failures remain — wait before retrying, but never after the last
+            # attempt (we're giving up, not retrying).
+            if attempt < BULK_SYNC_MAX_RETRIES:
+                logger.info(
+                    "Bulk payment sync: %d members failed; retry %d/%d in %ds",
+                    len(pending),
+                    attempt + 1,
+                    BULK_SYNC_MAX_RETRIES,
+                    BULK_SYNC_RETRY_DELAY_SECONDS,
+                )
+                await asyncio.sleep(BULK_SYNC_RETRY_DELAY_SECONDS)
+        logger.error(
+            "Bulk payment sync: %d members still failed after %d retries: %s",
+            len(pending),
+            BULK_SYNC_MAX_RETRIES,
+            pending,
+        )
+
+    async def _sync_members(self, member_ids: list[UUID]) -> list[UUID]:
+        """Sync each member under its family lock; return the ones that failed.
+
+        Each failure (a busy family, a missing Stripe resource, or any other
+        error) is logged and the member is added to the returned list so the
+        caller can retry the batch's failures.
+        """
+        failed: list[UUID] = []
         for member_id in member_ids:
             try:
-                await self.update_payments_recurring(
+                parent = await self._parent.resolve_parent(member_id)
+                async with self._lock.guard(
+                    billing_lock_key(parent.member_id),
+                ):
+                    await self.update_payments_recurring(
+                        member_id,
+                        idempotency_key=uuid4(),
+                    )
+            except LockBusyError:
+                logger.warning(
+                    "Payment sync deferred (family busy) for %s",
                     member_id,
-                    idempotency_key=uuid4(),
                 )
+                failed.append(member_id)
             except PaymentsResourceNotFoundError:
                 logger.error(
                     "Stripe resource not found during payment sync for %s",
                     member_id,
                     exc_info=True,
                 )
+                failed.append(member_id)
             except Exception:
                 logger.error(
                     "Payment sync failed for %s",
                     member_id,
                     exc_info=True,
                 )
+                failed.append(member_id)
+        return failed
 
     async def settle_once_discounts(self, member_id: UUID) -> None:
         """Finalize the family's consumed ``once`` discounts (stamp end_date).
@@ -231,14 +293,21 @@ class PaymentSyncService:
         live sub, and this records its ``end_date`` promptly instead of waiting
         for the member's next manual op (or the deferred reconciler, §10).
         Resolves the paying parent, then runs the settle. A no-op when the family
-        has no unconsumed ``once`` discounts. (Must take the per-parent lock once
-        #25 lands.)
+        has no unconsumed ``once`` discounts.
+
+        Runs under the per-parent lock, acquired **here** (unlike
+        ``update_payments_recurring`` / ``preview_…``, which are guarded by their
+        boundary op): this is the only non-nested sync entry — the ``invoice.paid``
+        webhook is its sole caller — so self-guarding is safe and closes the
+        settle-vs-sync race. Raises ``LockBusyError`` if the family is busy; the
+        webhook treats that as a best-effort skip (the next sync settles).
 
         Args:
             member_id: Any family member's profile ID.
         """
         parent, stripe_account_id = await self._parent.resolve(member_id)
-        await self._once_discounts.sync_once_discounts(
-            parent,
-            stripe_account_id,
-        )
+        async with self._lock.guard(billing_lock_key(parent.member_id)):
+            await self._once_discounts.sync_once_discounts(
+                parent,
+                stripe_account_id,
+            )

@@ -234,6 +234,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         freeze=payment_sync_freeze,
         once_discounts=payment_sync_once_discounts,
         builder=payment_sync_builder,
+        resource_lock=resource_lock,
     )
 
     # ── Member memberships ───────────────────────────────────────

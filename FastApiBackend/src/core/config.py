@@ -66,6 +66,12 @@ LOCK_MAX_HOLD_SECONDS: Final[float] = 55.0  # abort the op before its lease expi
 LOCK_ACQUIRE_TIMEOUT_SECONDS: Final[float] = 5.0  # block this long, then LockBusyError -> 409
 LOCK_POLL_INTERVAL_SECONDS: Final[float] = 0.25  # retry cadence while waiting
 
+# Bulk payment-sync retry — re-attempt members that failed a pass (most often a
+# transient busy family): up to BULK_SYNC_MAX_RETRIES retry passes, each after a
+# BULK_SYNC_RETRY_DELAY_SECONDS wait.
+BULK_SYNC_RETRY_DELAY_SECONDS: Final[int] = 10
+BULK_SYNC_MAX_RETRIES: Final[int] = 3
+
 
 settings = Settings()
 

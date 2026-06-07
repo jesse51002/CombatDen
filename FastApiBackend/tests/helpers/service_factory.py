@@ -57,6 +57,7 @@ from src.payments.service.subscription import (
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.resource_lock import ResourceLock
 
 # ── Payment services namespace ──────────────────────────────────
 
@@ -129,6 +130,7 @@ def build_payment_sync_service(
     once_discounts = PaymentSyncOnceDiscounts(db_pool, subscription_svc)
     discounts = PaymentSyncDiscounts(discount_svc)
     builder = PaymentSyncBuilder(db_pool, discounts)
+    resource_lock = ResourceLock(db_pool)
     return PaymentSyncService(
         db_pool,
         subscription_svc,
@@ -136,6 +138,7 @@ def build_payment_sync_service(
         freeze,
         once_discounts,
         builder,
+        resource_lock,
     )
 
 

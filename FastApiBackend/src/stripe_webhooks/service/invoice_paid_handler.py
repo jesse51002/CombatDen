@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
+from src.shared.resource_lock import LockBusyError
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
@@ -260,6 +261,13 @@ class InvoicePaidHandler:
         """
         try:
             await self._sync.settle_once_discounts(member_id)
+        except LockBusyError:
+            logger.info(
+                "invoice.paid once-discount settle skipped (family busy) for "
+                "member_id=%s gym_id=%s; the next sync settles it",
+                member_id,
+                gym_id,
+            )
         except Exception:
             logger.error(
                 "invoice.paid once-discount settle failed for "
