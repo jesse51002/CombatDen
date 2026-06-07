@@ -3,7 +3,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
-import 'package:crm/features/member_details/data/models/discount_info.dart';
+import 'package:crm/features/member_details/data/models/invoice_applied_discount.dart';
 import 'package:crm/features/member_details/data/models/line_item_record.dart';
 
 part 'payment_record.g.dart';
@@ -47,7 +47,7 @@ class PaymentRecord extends Equatable {
   @JsonKey(defaultValue: [])
   final List<LineItemRecord> lineItems;
   @JsonKey(defaultValue: [])
-  final List<DiscountInfo> appliedDiscounts;
+  final List<InvoiceAppliedDiscount> appliedDiscounts;
 
   const PaymentRecord({
     required this.chargeId,

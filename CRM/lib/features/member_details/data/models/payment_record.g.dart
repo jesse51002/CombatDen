@@ -29,7 +29,10 @@ PaymentRecord _$PaymentRecordFromJson(Map<String, dynamic> json) =>
           [],
       appliedDiscounts:
           (json['applied_discounts'] as List<dynamic>?)
-              ?.map((e) => DiscountInfo.fromJson(e as Map<String, dynamic>))
+              ?.map(
+                (e) =>
+                    InvoiceAppliedDiscount.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           [],
     );

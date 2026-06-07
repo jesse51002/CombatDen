@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
@@ -86,10 +87,9 @@ class PaymentInvoiceDialog extends StatelessWidget {
       appliedDiscounts: payment.appliedDiscounts
           .map(
             (d) => InvoiceDiscount(
-              label: d.discountName,
-              subLabel: d.discountLabel.isEmpty
-                  ? null
-                  : d.discountLabel,
+              label:
+                  '${formatMinorUnits(d.amountOff, currency: payment.currency)} off',
+              subLabel: d.stripeCouponId,
             ),
           )
           .toList(),
