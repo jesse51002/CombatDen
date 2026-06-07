@@ -241,10 +241,16 @@ sequence is:
    Connect account. Everything below operates on this resolved parent.
 2. **Maintenance freeze re-apply** (`PaymentSyncFreeze.sync_freeze_state` with the
    resolved parent, §8) — converge `pause_collection` to the parent's DB freeze
-   window (`parent.is_frozen`) **before any item change**, so a membership change
-   on a frozen account keeps the pause in the correct billing order. This is a
-   *re-apply*, not the freeze action itself — the explicit freeze/unfreeze wrote
-   the DB and called `PaymentSyncFreeze` directly.
+   window **before any item change**, so a membership change on a frozen account
+   keeps the pause in the correct billing order. This is a *re-apply*, not the
+   freeze action itself — the explicit freeze/unfreeze wrote the DB and called
+   `PaymentSyncFreeze` directly. **Runs only when `parent.is_frozen`:** a
+   non-frozen account has nothing to converge here, so the maintenance path skips
+   the call rather than issuing a no-op unfreeze (`pause_collection=""`) on every
+   single membership op (which was a wasted Stripe round-trip). The explicit
+   unfreeze action still calls `sync_freeze_state` directly (§8), so real
+   unfreezes are unaffected; and a freeze window that ends naturally is resumed by
+   Stripe's own `resumes_at` (set at freeze time), not by this re-apply.
 3. **Finalize once discounts** (`PaymentSyncOnceDiscounts.sync_once_discounts`,
    §6) — a **pre-sync DB settle**: detect any `once` discount Stripe has already
    invoiced and stamp its `end_date`, so the build below reads an
@@ -592,7 +598,11 @@ Two callers:
   then calls `sync_freeze_state` **directly** with the resolved parent.
 - **The main sync** calls it for a **maintenance re-apply** (step 2 of §3) with the
   parent it already resolved — no extra read — so a membership change on a frozen
-  account keeps `pause_collection` in the correct billing order.
+  account keeps `pause_collection` in the correct billing order. This runs **only
+  when `parent.is_frozen`** (§3 step 2): the unconditional per-op unfreeze it used
+  to issue on every non-frozen sync was removed as wasted Stripe I/O — a non-frozen
+  account has nothing to converge, and the explicit unfreeze action owns real
+  unfreezes.
 
 No-op (returns the DB state) when there's no `stripe_sub_id`. **Idempotent**
 (re-freezing updates the resume date; unfreezing a non-paused sub is a Stripe

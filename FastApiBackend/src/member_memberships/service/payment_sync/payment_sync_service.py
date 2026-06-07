@@ -109,14 +109,21 @@ class PaymentSyncService:
         parent, stripe_account_id = await self._parent.resolve(member_id)
 
         # ── Maintenance freeze re-apply first ─────────────
-        # Re-syncs pause_collection to the parent's DB freeze window
-        # so a membership change on a frozen account keeps the pause
-        # in the correct billing order, before any item change.
-        await self._freeze.sync_freeze_state(
-            parent,
-            stripe_account_id,
-            idempotency_key=idempotency_key,
-        )
+        # Re-syncs pause_collection to the parent's DB freeze window so a
+        # membership change on a frozen account keeps the pause in the correct
+        # billing order, before any item change. Only when the account is
+        # actually frozen: a non-frozen account has nothing to converge here, and
+        # issuing an unconditional unfreeze (pause_collection="") on every
+        # membership op was a wasted Stripe round-trip. The explicit
+        # freeze/unfreeze action calls PaymentSyncFreeze.sync_freeze_state
+        # directly, so real unfreezes still work — this is only the maintenance
+        # re-apply.
+        if parent.is_frozen:
+            await self._freeze.sync_freeze_state(
+                parent,
+                stripe_account_id,
+                idempotency_key=idempotency_key,
+            )
 
         # ── Finalize once discounts in the DB (pre-sync) ──
         # Stamps any `once` discount Stripe already invoiced, so the
