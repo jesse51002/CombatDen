@@ -15,7 +15,7 @@ from src.member_memberships.service.memberships.member_memberships_base import (
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    DueNowVsRecurringPreview,
 )
 from src.shared.db_first_helpers import staged_preview, sync_or_revert
 from src.shared.gym_timezone import gym_today
@@ -115,7 +115,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         self,
         item_id: UUID,
         member_id: UUID,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Preview what cancelling a membership would charge.
 
         Runs every validation ``cancel`` runs (membership lookup,

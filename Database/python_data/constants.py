@@ -28,7 +28,12 @@ AUTH_MEMBERS_PER_GYM = 5
 LINKED_FAMILY_FRACTION = 0.5
 MAX_LINKED_CHILDREN_PER_PARENT = 5
 PLANS_PER_GYM = 7
-DISCOUNTS_PER_GYM = 2
+# Regular discount presets created per gym (the catalog members can be given).
+# Must be <= len(DISCOUNT_NAMES) in api_creation/discounts.py.
+DISCOUNTS_PER_GYM = 10
+# At membership creation each live membership is given a random number of
+# distinct discounts from the gym's catalog, uniformly in [0, this] inclusive.
+DISCOUNTS_PER_MEMBERSHIP_MAX = 3
 OVERDUE_MEMBERS_PER_GYM = 2
 REWARDS_PER_GYM = 4
 EXTRA_EMPLOYEES_PER_GYM = 2
@@ -38,3 +43,10 @@ HISTORY_DAYS = 30
 
 # Days per billing-cycle unit, used to space historical invoices/charges.
 UNIT_DAYS = {"week": 7, "month": 30, "year": 365}
+
+# Worker count for the seed's concurrent loops (member creation + the
+# family-grouped membership/discount pipeline). Concurrency is across families
+# (disjoint paying-parent lock keys); within a family ops stay sequential, so
+# the per-parent lock never contends. Keep <= the backend db_pool_size (10): a
+# concurrent family holds a connection across its slow Stripe sync.
+SEED_WORKERS = 5

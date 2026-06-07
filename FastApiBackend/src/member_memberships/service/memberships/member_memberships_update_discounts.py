@@ -42,7 +42,7 @@ from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    DueNowVsRecurringPreview,
 )
 from src.shared.db_first_helpers import staged_preview
 from src.shared.gym_timezone import gym_today
@@ -63,7 +63,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         preset_ids: list[UUID],
         idempotency_key: UUID,
         preview: bool = False,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Add a snapshot per named preset and re-sync — or preview the add.
 
         Inserts a snapshot for each newly-desired regular preset (skipping
@@ -132,7 +132,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         applied_ids: list[UUID],
         idempotency_key: UUID,
         preview: bool = False,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Remove the named discount snapshots and re-sync — or preview it.
 
         Deletes the named snapshot rows then re-syncs Stripe so the consolidated

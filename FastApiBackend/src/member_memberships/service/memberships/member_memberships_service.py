@@ -39,7 +39,7 @@ from src.member_memberships.service.memberships.member_memberships_update_price 
     MemberMembershipsUpdatePrice,
 )
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    DueNowVsRecurringPreview,
 )
 from src.shared.database import DirectDatabasePool
 
@@ -136,7 +136,7 @@ class MemberMembershipsService:
         self,
         item_id: UUID,
         member_id: UUID,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Preview what cancelling a membership would charge."""
         async with self._paying_lock.lock([member_id]):
             return await self._cancel.preview_cancel(item_id, member_id)
@@ -198,7 +198,7 @@ class MemberMembershipsService:
         price_id: UUID,
         prorate: bool = True,
         paid_with_cash: bool = False,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Preview what starting a membership would charge."""
         async with self._paying_lock.lock([member_id]):
             return await self._start.preview(
@@ -257,7 +257,7 @@ class MemberMembershipsService:
         item_id: UUID,
         member_id: UUID,
         prorate: bool = False,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Preview upgrading a membership to the plan's active price."""
         async with self._paying_lock.lock([member_id]):
             return await self._update_price.preview_update_price(
@@ -275,7 +275,7 @@ class MemberMembershipsService:
         preset_ids: list[UUID],
         idempotency_key: UUID,
         preview: bool = False,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Add discount snapshots, or preview the addition (``preview=True``)."""
         async with self._paying_lock.lock([member_id]):
             return await self._update_discounts.add_discounts(
@@ -293,7 +293,7 @@ class MemberMembershipsService:
         applied_ids: list[UUID],
         idempotency_key: UUID,
         preview: bool = False,
-    ) -> PaymentsInvoicePreviewResponse | None:
+    ) -> DueNowVsRecurringPreview | None:
         """Remove discount snapshots, or preview the removal (``preview=True``)."""
         async with self._paying_lock.lock([member_id]):
             return await self._update_discounts.remove_discounts(

@@ -134,7 +134,6 @@ def build_payment_sync_service(
     )
     gym_stripe_svc = GymStripeService(db_pool)
     parent_resolver = BillingParentResolver(db_pool, gym_stripe_svc)
-    freeze = PaymentSyncFreeze(subscription_svc)
     once_discounts = PaymentSyncOnceDiscounts(db_pool, subscription_svc)
     discounts = PaymentSyncDiscounts(discount_svc)
     builder = PaymentSyncBuilder(db_pool, discounts)
@@ -143,7 +142,6 @@ def build_payment_sync_service(
         db_pool,
         subscription_svc,
         parent_resolver,
-        freeze,
         once_discounts,
         builder,
         paying_lock,

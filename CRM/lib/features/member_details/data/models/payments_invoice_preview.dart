@@ -72,3 +72,32 @@ class PaymentsInvoicePreviewResponse extends Equatable {
         lines,
       ];
 }
+
+/// A preview split into what is charged now vs. what recurs.
+///
+/// Both halves are ordinary invoice previews: [dueNow] is the
+/// immediate charge (`null` when nothing is charged now), [recurring]
+/// is the steady-state per-cycle invoice (`null` for a one-time
+/// purchase, which never recurs). Returned by every `*/preview`
+/// backend endpoint.
+@JsonSerializable(
+  fieldRename: FieldRename.snake,
+  createToJson: false,
+)
+class DueNowVsRecurringPreview extends Equatable {
+  final PaymentsInvoicePreviewResponse? dueNow;
+  final PaymentsInvoicePreviewResponse? recurring;
+
+  const DueNowVsRecurringPreview({
+    this.dueNow,
+    this.recurring,
+  });
+
+  factory DueNowVsRecurringPreview.fromJson(
+    Map<String, dynamic> json,
+  ) =>
+      _$DueNowVsRecurringPreviewFromJson(json);
+
+  @override
+  List<Object?> get props => [dueNow, recurring];
+}

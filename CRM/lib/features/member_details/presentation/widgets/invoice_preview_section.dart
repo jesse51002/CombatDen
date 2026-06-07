@@ -1,26 +1,29 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 
-/// Fetches a `*/preview` invoice and renders it as a
-/// titled [InvoiceBreakdown] card, handling the four render
-/// states (loading, error, empty, populated) so every
+/// Fetches a `*/preview` invoice and renders the due-now /
+/// recurring split as a titled card, handling the four
+/// render states (loading, error, empty, populated) so every
 /// preview-backed billing dialog gets the same behaviour
 /// without re-wiring the fetch.
 ///
 /// Feature-scoped on purpose: it knows the member-detail
-/// [PaymentsInvoicePreviewResponse] and maps it onto the
+/// [DueNowVsRecurringPreview] and maps each half onto the
 /// shared, presentation-only [InvoiceBreakdownData]. The
 /// shared widget stays decoupled from any billing model
-/// (see `invoice_breakdown_data.dart`).
+/// (see `invoice_breakdown_data.dart`). The `due_now` half
+/// renders as the breakdown ("charged today"); the
+/// `recurring` half renders as a "then $Y/mo" summary line.
 class InvoicePreviewSection extends StatefulWidget {
   /// Returns the preview, or `null` when the mutation has
   /// no billing impact (backend returns a null body).
-  final Future<PaymentsInvoicePreviewResponse?> Function()
+  final Future<DueNowVsRecurringPreview?> Function()
       loadPreview;
 
   /// Re-fetches the preview whenever this key changes.
@@ -47,7 +50,7 @@ class InvoicePreviewSection extends StatefulWidget {
 
 class _InvoicePreviewSectionState
     extends State<InvoicePreviewSection> {
-  late Future<PaymentsInvoicePreviewResponse?> _future;
+  late Future<DueNowVsRecurringPreview?> _future;
 
   @override
   void initState() {
@@ -123,7 +126,7 @@ class _InvoicePreviewSectionState
 }
 
 class _PreviewBody extends StatelessWidget {
-  final Future<PaymentsInvoicePreviewResponse?> future;
+  final Future<DueNowVsRecurringPreview?> future;
   final String emptyLabel;
   final InvoiceBreakdownData Function(
     PaymentsInvoicePreviewResponse,
@@ -137,7 +140,7 @@ class _PreviewBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<PaymentsInvoicePreviewResponse?>(
+    return FutureBuilder<DueNowVsRecurringPreview?>(
       future: future,
       builder: (context, snapshot) {
         if (snapshot.connectionState !=
@@ -159,7 +162,9 @@ class _PreviewBody extends StatelessWidget {
           );
         }
         final preview = snapshot.data;
-        if (preview == null) {
+        final dueNow = preview?.dueNow;
+        final recurring = preview?.recurring;
+        if (dueNow == null && recurring == null) {
           return Text(
             emptyLabel,
             style: DesignConstants.pSmall.copyWith(
@@ -167,10 +172,47 @@ class _PreviewBody extends StatelessWidget {
             ),
           );
         }
-        return InvoiceBreakdown(
-          data: toBreakdown(preview),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            if (dueNow != null)
+              InvoiceBreakdown(data: toBreakdown(dueNow)),
+            if (recurring != null)
+              _RecurringSummary(recurring: recurring),
+          ],
         );
       },
+    );
+  }
+}
+
+/// The "then $Y/mo after" line below the due-now breakdown —
+/// the steady-state recurring charge.
+class _RecurringSummary extends StatelessWidget {
+  final PaymentsInvoicePreviewResponse recurring;
+
+  const _RecurringSummary({required this.recurring});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          'Then, each month',
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.text2nd,
+          ),
+        ),
+        Text(
+          formatMinorUnits(
+            recurring.total,
+            currency: recurring.currency,
+          ),
+          style: DesignConstants.pSmall,
+        ),
+      ],
     );
   }
 }

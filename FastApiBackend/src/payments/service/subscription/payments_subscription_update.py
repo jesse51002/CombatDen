@@ -45,10 +45,18 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
             read_opts,
         )
 
-        await self._validate_subscription_request(
-            request,
-            stripe_account_id,
-        )
+        # No price/coupon re-validation on update. It discarded its return here
+        # (the recurring interval is only needed by create, for the monthly
+        # billing_cycle_anchor) and looped a price+product retrieve over EVERY
+        # item on the sub, so re-syncing an N-item family cost 2N wasted Stripe
+        # round-trips that grew with family size. The items are already-live
+        # (validated when first added) or freshly added from memberships whose
+        # prices were validated at start, and their coupons were just
+        # find-or-created by this same sync. _build_reconcile_items still raises
+        # if a desired item's stripe_item_id is missing from the live sub
+        # (out-of-sync detection); a genuinely bad price now surfaces as a Stripe
+        # error on the update itself. (Create still validates + reactivates an
+        # archived price.)
         consolidated = self._consolidate_items(request.items)
         items = self._build_reconcile_items(consolidated, sub)
 

@@ -15,9 +15,6 @@ from src.core.config import (
 from src.member_memberships.service.payment_sync.payment_sync_builder import (
     PaymentSyncBuilder,
 )
-from src.member_memberships.service.payment_sync.payment_sync_freeze import (
-    PaymentSyncFreeze,
-)
 from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
     PaymentSyncOnceDiscounts,
 )
@@ -29,7 +26,7 @@ from src.member_memberships.service.payment_sync.payment_sync_writeback import (
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    DueNowVsRecurringPreview,
 )
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
@@ -45,8 +42,7 @@ class PaymentSyncService:
     """Syncs membership payment state with Stripe.
 
     Thin orchestrator over focused sub-services: resolve the paying parent
-    (``BillingParentResolver``), re-apply the parent's freeze window
-    (``PaymentSyncFreeze``), finalize the once-discount lifecycle
+    (``BillingParentResolver``), finalize the once-discount lifecycle
     (``PaymentSyncOnceDiscounts``), build the desired subscription bucket +
     resolved discount coupons from the DB (``PaymentSyncBuilder`` →
     ``PaymentSyncDiscounts``, at build time so preview reflects discounts), then
@@ -60,13 +56,11 @@ class PaymentSyncService:
         db_pool: DirectDatabasePool,
         subscription_service: PaymentsStripeSubscriptionService,
         parent_resolver: BillingParentResolver,
-        freeze: PaymentSyncFreeze,
         once_discounts: PaymentSyncOnceDiscounts,
         builder: PaymentSyncBuilder,
         paying_lock: PayingMemberLock,
     ) -> None:
         self._parent = parent_resolver
-        self._freeze = freeze
         self._once_discounts = once_discounts
         self._builder = builder
         self._paying_lock = paying_lock
@@ -88,14 +82,14 @@ class PaymentSyncService:
         Re-derives the full desired subscription state from the DB — the active
         recurring memberships, each carrying its applied discounts — and
         converges Stripe onto it; there are no imperative add/cancel inputs.
-        Resolves the paying parent, re-applies the parent's intrinsic freeze
-        state (maintenance), finalizes once discounts, computes and attaches
-        each consolidated line's coupon, then reconciles the monthly
+        Resolves the paying parent, finalizes once discounts, computes and
+        attaches each consolidated line's coupon, then reconciles the monthly
         subscription.
 
-        The explicit freeze/unfreeze action lives in the dedicated
-        ``PaymentSyncFreeze`` service, not here — this path only re-applies the
-        freeze the parent already carries.
+        Freeze is out of this path entirely: the explicit freeze/unfreeze
+        action owns ``pause_collection`` (via ``PaymentSyncFreeze``), and
+        because the pause is subscription-level it persists across item changes
+        — so a membership op on a frozen account needs no freeze re-apply here.
 
         Args:
             member_id: Any family member's profile ID.
@@ -107,16 +101,6 @@ class PaymentSyncService:
             Use ``preview_update_payments_recurring`` for the invoice figures.
         """
         parent, stripe_account_id = await self._parent.resolve(member_id)
-
-        # ── Maintenance freeze re-apply first ─────────────
-        # Re-syncs pause_collection to the parent's DB freeze window
-        # so a membership change on a frozen account keeps the pause
-        # in the correct billing order, before any item change.
-        await self._freeze.sync_freeze_state(
-            parent,
-            stripe_account_id,
-            idempotency_key=idempotency_key,
-        )
 
         # ── Finalize once discounts in the DB (pre-sync) ──
         # Stamps any `once` discount Stripe already invoiced, so the
@@ -152,26 +136,26 @@ class PaymentSyncService:
         self,
         member_id: UUID,
         proration_behavior: Literal["none", "always_invoice"] = "none",
-    ) -> PaymentsInvoicePreviewResponse | None:
-        """Preview what a recurring sync would charge.
+    ) -> DueNowVsRecurringPreview | None:
+        """Preview what a recurring sync would charge, as a split.
 
-        Runs the same DB-derived resolution + discount resolution +
-        subscription-bucket building as ``update_payments_recurring``
-        (the discount coupons ARE resolved — idempotent, gym-wide
-        find-or-create — so the preview total reflects discounts), then
-        calls Stripe's invoice preview endpoint instead of mutating the
-        subscription. No subscription is created, updated, or cancelled.
+        The single preview entry point for every surface. Runs the same
+        DB-derived resolution + discount resolution + subscription-bucket
+        building as ``update_payments_recurring`` (the discount coupons
+        ARE resolved — idempotent, gym-wide find-or-create — so the
+        preview reflects discounts), then previews Stripe's invoice
+        instead of mutating the subscription. No subscription is created,
+        updated, or cancelled.
 
         The once-discount settle DOES run here, same as the real path:
         stamping a consumed ``once``'s ``end_date`` is a settled fact
         (Stripe already invoiced it), not a hypothetical, so the preview
         must reflect it dropping off. What a dry run skips is the
-        **freeze re-apply** (it pauses billing) and the **convergence
-        writeback** (line ids / sync status / sub id / price totals) —
-        none of the sync's own desired-state results are persisted.
+        **convergence writeback** (line ids / sync status / sub id / price
+        totals) — none of the sync's own desired-state results are persisted.
 
         Returns:
-            An invoice preview, or ``None`` if the resulting bucket
+            A ``{due_now, recurring}`` split, or ``None`` if the bucket
             would cancel the subscription (no items remaining) —
             a cancellation has no upcoming invoice.
         """

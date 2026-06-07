@@ -208,8 +208,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         parent_resolver=billing_parent_resolver,
     )
     # Standalone freeze service: the dedicated freeze/unfreeze request resolves
-    # the parent then calls this directly; the sync uses it for the maintenance
-    # re-apply with the parent it already resolved.
+    # the parent then calls this directly. The main sync no longer does a
+    # maintenance freeze re-apply (pause_collection is subscription-level and
+    # persists across item changes), so only the explicit action uses this.
     payment_sync_freeze = providers.Factory(
         PaymentSyncFreeze,
         subscription_service=payments_subscription_service,
@@ -240,7 +241,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         subscription_service=payments_subscription_service,
         parent_resolver=billing_parent_resolver,
-        freeze=payment_sync_freeze,
         once_discounts=payment_sync_once_discounts,
         builder=payment_sync_builder,
         paying_lock=paying_member_lock,

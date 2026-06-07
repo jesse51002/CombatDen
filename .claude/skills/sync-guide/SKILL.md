@@ -112,8 +112,8 @@ parent resolution inject the shared `BillingParentResolver` directly — not via
 
 | method | what it does | callers |
 | --- | --- | --- |
-| `update_payments_recurring(member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none") -> None` | the real sync: resolve → maintenance freeze re-apply → settle once → build (re-derive bucket **and resolve coupons**) → execute → **`PaymentSyncWriteback`** persists the full sync-owned state (§3). Returns **None** — callers read the DB (the `applied` status) | every membership mutation |
-| `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: resolve → **settle once-discounts** (same as real) → same DB-derived build **incl. discount resolution** (so the preview reflects discounts) → Stripe invoice *preview*. Skips the freeze re-apply + the convergence writeback (§9) | the CRM "what will this charge?" preview |
+| `update_payments_recurring(member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none") -> None` | the real sync: resolve → settle once → build (re-derive bucket **and resolve coupons**) → execute → **`PaymentSyncWriteback`** persists the full sync-owned state (§3). Returns **None** — callers read the DB (the `applied` status) | every membership mutation |
+| `preview_update_payments_recurring(member_id, proration_behavior="none")` | the dry run: resolve → **settle once-discounts** (same as real) → same DB-derived discount-aware build → assemble a **`DueNowVsRecurringPreview`** split via `PaymentSyncStripe.preview_execute_sync` (proration `none` → `recurring`; `always_invoice` → `due_now` when prorating, else `due_now` reuses `recurring`). Skips the convergence writeback (§9) | every CRM preview (start / cancel / price / discounts) |
 | `settle_once_discounts(member_id)` | a thin wrapper: resolve parent → `PaymentSyncOnceDiscounts.sync_once_discounts` — stamp a consumed `once` discount's `end_date` promptly, on its own, with no full sync (§6) | the `invoice.paid` webhook (`payments-guide`), best-effort |
 | `bulk_payment_sync(member_ids)` | loop members, fresh `uuid4()` idempotency key each, call `update_payments_recurring` | reprice fan-out; the future reconciler (§10) |
 
@@ -237,18 +237,12 @@ sequence is:
    one call returns `(ParentProfile, stripe_account_id)`: follow
    `account_linked_to_id` once to the paying parent, then look up the gym's
    Connect account. Everything below operates on this resolved parent.
-2. **Maintenance freeze re-apply** (`PaymentSyncFreeze.sync_freeze_state` with the
-   resolved parent, §8) — converge `pause_collection` to the parent's DB freeze
-   window (`parent.is_frozen`) **before any item change**, so a membership change
-   on a frozen account keeps the pause in the correct billing order. This is a
-   *re-apply*, not the freeze action itself — the explicit freeze/unfreeze wrote
-   the DB and called `PaymentSyncFreeze` directly.
-3. **Finalize once discounts** (`PaymentSyncOnceDiscounts.sync_once_discounts`,
+2. **Finalize once discounts** (`PaymentSyncOnceDiscounts.sync_once_discounts`,
    §6) — a **pre-sync DB settle**: detect any `once` discount Stripe has already
    invoiced and stamp its `end_date`, so the build below reads an
    already-settled DB and the **applied-discount read excludes** the consumed
    ones by their stamped `end_date` (no live-Stripe read in the convergence).
-4. **Build the desired bucket + resolve coupons**
+3. **Build the desired bucket + resolve coupons**
    (`PaymentSyncBuilder.build_sync_params`, §4–§5) — read family ids + active
    memberships (each carrying its applied discounts), **group by `price_id`**,
    hand the groups to `PaymentSyncDiscounts` (the math + find-or-create, §7) which
@@ -257,10 +251,10 @@ sequence is:
    to each line. Returns `SyncParams` (bucket + parent + account + `coupon_links`).
    **DB-derived, no add/cancel inputs, no DB writes** (find-or-create is an
    idempotent gym-wide Stripe op).
-5. **Execute the sync** (`PaymentSyncStripe.execute_sync`, §8) — create / update /
+4. **Execute the sync** (`PaymentSyncStripe.execute_sync`, §8) — create / update /
    cancel the monthly subscription to match the bucket, with the explicit
    `proration_behavior`.
-6. **Write back** (`PaymentSyncWriteback.write`, §8) — persists the **full
+5. **Write back** (`PaymentSyncWriteback.write`, §8) — persists the **full
    sync-owned state** in one place: per-membership Stripe line id + next_due_date
    + `stripe_sync_status = 'applied'` (mapping the live items → rows by price),
    the coupon links (+ `applied` on the applied-discount rows), `deleted` on
@@ -584,13 +578,13 @@ before this service is called. Freeze is a standalone subscription-level pause,
 independent of the membership sync, so there is no freeze-vs-membership-change
 conflict to validate.
 
-Two callers:
-
-- **The explicit freeze/unfreeze request** writes the freeze window to the DB,
-  then calls `sync_freeze_state` **directly** with the resolved parent.
-- **The main sync** calls it for a **maintenance re-apply** (step 2 of §3) with the
-  parent it already resolved — no extra read — so a membership change on a frozen
-  account keeps `pause_collection` in the correct billing order.
+**One caller:** the **explicit freeze/unfreeze request** writes the freeze window
+to the DB, then calls `sync_freeze_state` **directly** with the resolved parent.
+The **main sync no longer does a maintenance re-apply** — `pause_collection` is
+subscription-level, so it persists across item changes; a membership op on a
+frozen account needs no re-apply, and the unconditional per-op unfreeze the sync
+used to issue on every non-frozen op was pure wasted Stripe I/O. A freeze window
+that ends naturally is resumed by Stripe's own `resumes_at` (set at freeze time).
 
 No-op (returns the DB state) when there's no `stripe_sub_id`. **Idempotent**
 (re-freezing updates the resume date; unfreezing a non-paused sub is a Stripe
@@ -634,23 +628,41 @@ Stripe's invoice **preview**, never a mutation.
 - **Discounts ARE resolved.** The shared build runs `PaymentSyncDiscounts.resolve`,
   which find-or-creates the deterministic coupons (idempotent, gym-wide) and
   attaches them to the bucket, **so the preview total reflects discounts**.
-- **The once-settle DOES run; the convergence writeback + freeze do NOT.** Preview
+- **The once-settle DOES run; the convergence writeback does NOT.** Preview
   runs the same `PaymentSyncOnceDiscounts.sync_once_discounts` as the real path — it
   stamps a consumed `once`'s `end_date`, a settled fact (Stripe already invoiced it),
   not a hypothetical, so the preview reflects it dropping off. What a dry run skips is
-  the **freeze re-apply** (it pauses billing) and the **convergence writeback** (the
-  per-row line id / sync status, the coupon-link writeback, the sub-id write, and the
-  price writeback) — none of the sync's *desired-state* results are persisted and no
-  subscription is created / updated / cancelled. So the real-vs-preview boundary is
-  the **convergence writeback + freeze**, not the settle or the discounts.
+  the **convergence writeback** (the per-row line id / sync status, the coupon-link
+  writeback, the sub-id write, and the price writeback) — none of the sync's
+  *desired-state* results are persisted and no subscription is created / updated /
+  cancelled. So the real-vs-preview boundary is the **convergence writeback**
+  (execute vs preview-execute), not the settle or the discounts.
 
-`preview_execute_sync` mirrors `execute_sync`'s dispatch (`preview_update_…` for an
-existing sub, `preview_create_…` for a new one), threads the explicit
-`proration_behavior`, and returns `None` for a pure cancellation or no-op — there's
-no upcoming invoice to preview. Freeze/unfreeze is intentionally unsupported in
-preview (a `pause_collection` change produces no invoice). The idempotency key is a
-throwaway `uuid4()` (preview writes nothing, so the key is unused downstream — it
-only satisfies the shared request schema).
+**`preview_update_payments_recurring` returns a `DueNowVsRecurringPreview` split**
+(`{due_now, recurring}`) — the single preview entry point every surface uses (start,
+cancel, price-change, discounts add/remove). It delegates to
+`PaymentSyncStripe.preview_execute_sync`, which mirrors `execute_sync`'s dispatch
+(`preview_update_…` for an existing sub, `preview_create_…` for a new one) and
+**assembles the split** by calling a private `_run_preview` (the actual one-shot
+Stripe preview) up to twice:
+
+- **`recurring`** ← `_run_preview(..., "none")` — the steady-state next full cycle
+  (proration filtered out by `none`), so the recurring line is always present (a
+  single `always_invoice` preview carries only proration lines, so the recurring
+  figure can't come from it).
+- **`due_now`** ← `_run_preview(..., "always_invoice")` when the caller prorates;
+  otherwise `due_now` **reuses the `recurring` result** ("same thing twice") — a
+  non-prorating change charges nothing extra now.
+
+So it's **one** Stripe preview call for a `none` surface, **two** for a prorating
+one. Returns `None` for a pure cancellation / no-op (empty bucket — no upcoming
+invoice). Freeze/unfreeze is intentionally unsupported in preview (a
+`pause_collection` change produces no invoice). The idempotency key is a throwaway
+`uuid4()` (preview writes nothing). **Payments stays dumb** — it still exposes only
+the flat `preview_*_subscription` requests (each a single preview at a given
+`proration_behavior`); the engine owns the splitting. A one-time start has no engine
+sync — the start service wraps its one-time preview as `{due_now, recurring=None}`
+directly.
 
 ---
 

@@ -6,8 +6,10 @@ Every test asserts two invariants:
 2. Stripe billing state is untouched (no new invoices, no subscription
    changes, no charges).
 
-And the returned ``PaymentsInvoicePreviewResponse`` has plausible
-shape when the operation would produce a real invoice.
+And the returned preview has a plausible shape when the operation
+would produce a real invoice — every surface returns a
+``DueNowVsRecurringPreview`` split whose ``due_now`` / ``recurring``
+halves are flat ``PaymentsInvoicePreviewResponse`` objects.
 """
 
 from uuid import UUID, uuid4
@@ -17,6 +19,7 @@ from sqlalchemy import text
 
 from src.membership_plans.membership_plans_schemas import MembershipPlanPriceRequest
 from src.payments.schema.payments_invoice_schema import (
+    DueNowVsRecurringPreview,
     PaymentsInvoicePreviewResponse,
 )
 from tests.helpers.cleanup import delete_member_data
@@ -77,6 +80,19 @@ def _assert_valid_preview(preview) -> None:
     assert preview.total >= 0
 
 
+def _assert_valid_split(preview) -> None:
+    """Shape checks for a due-now / recurring split preview.
+
+    Both halves are ordinary invoice previews (or ``None``): ``due_now``
+    is the immediate charge, ``recurring`` the steady-state cycle.
+    """
+    assert isinstance(preview, DueNowVsRecurringPreview)
+    if preview.due_now is not None:
+        _assert_valid_preview(preview.due_now)
+    if preview.recurring is not None:
+        _assert_valid_preview(preview.recurring)
+
+
 # ── Start preview ───────────────────────────────────────────────────
 
 
@@ -106,9 +122,16 @@ async def test_preview_start_recurring(
             price_id=plan.price_id,
         )
 
-        _assert_valid_preview(preview)
-        assert preview.amount_due <= plan.price_cents, (
-            f"preview amount_due={preview.amount_due} exceeds plan price_cents={plan.price_cents}"
+        _assert_valid_split(preview)
+        # Recurring is the full monthly price (no discount here); due-now
+        # is the prorated first payment, never more than a full period.
+        assert preview.recurring.amount_due == plan.price_cents, (
+            f"recurring.amount_due={preview.recurring.amount_due} != "
+            f"plan price_cents={plan.price_cents}"
+        )
+        assert preview.due_now.amount_due <= plan.price_cents, (
+            f"due_now.amount_due={preview.due_now.amount_due} exceeds "
+            f"plan price_cents={plan.price_cents}"
         )
 
         # No DB row should have been inserted.
@@ -163,14 +186,69 @@ async def test_preview_start_one_time(
             price_id=plan.price_id,
         )
 
-        _assert_valid_preview(preview)
-        assert preview.amount_due == plan.price_cents, (
-            f"one-time preview amount_due={preview.amount_due} != "
+        _assert_valid_split(preview)
+        # A one-time purchase is entirely due now; nothing recurs.
+        assert preview.due_now.amount_due == plan.price_cents, (
+            f"one-time due_now.amount_due={preview.due_now.amount_due} != "
             f"plan price_cents={plan.price_cents}"
         )
+        assert preview.recurring is None
 
         assert await _count_memberships(db_pool, member.member_id) == 0
 
+        await assert_no_unexpected_charges(
+            stripe_client,
+            before,
+            connect_opts,
+        )
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+async def test_preview_start_no_prorate_due_now_equals_recurring(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """prorate=False: due-now and recurring are the same preview.
+
+    When not prorating, nothing extra is charged now, so the immediate
+    and steady-state previews are identical — the split returns the same
+    thing twice. Deterministic regardless of the billing anchor date.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
+
+    try:
+        before = await snapshot_billing_state(
+            stripe_client,
+            member.stripe_customer_id,
+            connect_opts,
+        )
+
+        preview = await memberships_service.preview_start(
+            member_id=member.member_id,
+            gym_id=gym_id,
+            plan_id=plan.plan_id,
+            price_id=plan.price_id,
+            prorate=False,
+        )
+
+        _assert_valid_split(preview)
+        assert preview.due_now is not None
+        assert preview.recurring is not None
+        assert preview.due_now.amount_due == preview.recurring.amount_due
+        assert preview.recurring.amount_due == plan.price_cents, (
+            f"recurring.amount_due={preview.recurring.amount_due} != "
+            f"plan price_cents={plan.price_cents}"
+        )
+        assert preview.recurring.lines, "recurring should carry the plan line"
+
+        assert await _count_memberships(db_pool, member.member_id) == 0
         await assert_no_unexpected_charges(
             stripe_client,
             before,
@@ -441,7 +519,7 @@ async def test_preview_update_price(
             prorate=False,
         )
 
-        _assert_valid_preview(preview)
+        _assert_valid_split(preview)
 
         # CRM price_id must still be the ORIGINAL — preview does no writes.
         async with db_pool.session() as session:

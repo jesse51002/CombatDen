@@ -10,6 +10,7 @@ from src.payments.schema.metadata.stripe_subscription_metadata import (
     StripeSubscriptionMetadata,
 )
 from src.payments.schema.payments_invoice_schema import (
+    DueNowVsRecurringPreview,
     PaymentsInvoicePreviewResponse,
 )
 from src.payments.schema.payments_members_schema import (
@@ -89,32 +90,59 @@ class PaymentSyncStripe:
         parent: ParentProfile,
         stripe_account_id: str,
         proration_behavior: Literal["none", "always_invoice"] = "none",
-    ) -> PaymentsInvoicePreviewResponse | None:
-        """Preview what ``execute_sync`` would charge, without mutating.
+    ) -> DueNowVsRecurringPreview | None:
+        """Preview the sync as a due-now / recurring split.
 
-        Mirrors ``execute_sync`` dispatch rules: calls
-        ``preview_update_subscription`` when an existing sub will
-        be updated, ``preview_create_subscription`` when a new sub
-        will be created. Returns ``None`` for pure cancellations
-        (empty bucket) and no-op syncs — a cancellation has no
-        upcoming invoice.
+        Always returns both halves. ``recurring`` is the steady-state
+        preview (``proration_behavior=none``); ``due_now`` is the
+        immediate ``always_invoice`` preview when prorating, otherwise
+        the same as ``recurring`` — nothing extra is charged now.
+        Returns ``None`` for a pure cancellation / no-op (empty bucket),
+        which has no upcoming invoice.
 
         Args:
             bucket: Desired subscription state.
             parent: Paying parent profile (customer + metadata source).
             stripe_account_id: The gym's Stripe Connect account ID.
+            proration_behavior: ``always_invoice`` to also fetch the
+                immediate (prorated) ``due_now`` invoice; ``none`` to
+                reuse the recurring preview as ``due_now``.
 
         Returns:
-            Invoice preview if the sync would create/update a
-            subscription; ``None`` if the sync would cancel or
-            no-op.
+            The due-now / recurring split, or ``None`` if the sync would
+            cancel the subscription.
         """
         if not bucket.items:
             return None
 
-        # Preview calls do not write to Stripe, so idempotency_key is
-        # unused downstream — supply a throwaway key to satisfy the
-        # shared request schema.
+        recurring = await self._run_preview(
+            bucket, parent, stripe_account_id, "none"
+        )
+        if proration_behavior == "always_invoice":
+            due_now = await self._run_preview(
+                bucket, parent, stripe_account_id, "always_invoice"
+            )
+        else:
+            due_now = recurring
+        return DueNowVsRecurringPreview(
+            due_now=due_now,
+            recurring=recurring,
+        )
+
+    async def _run_preview(
+        self,
+        bucket: IntervalBucket,
+        parent: ParentProfile,
+        stripe_account_id: str,
+        proration_behavior: Literal["none", "always_invoice"],
+    ) -> PaymentsInvoicePreviewResponse:
+        """One Stripe invoice preview at a given proration behavior.
+
+        Mirrors ``execute_sync`` dispatch: ``preview_update_subscription``
+        for an existing sub, ``preview_create_subscription`` for a new
+        one. Preview calls do not write to Stripe, so the idempotency
+        key is a throwaway only used to satisfy the request schema.
+        """
         placeholder_key = str(uuid4())
         metadata = StripeSubscriptionMetadata(
             member_id=parent.member_id,
