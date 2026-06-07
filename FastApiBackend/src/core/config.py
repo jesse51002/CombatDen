@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # Logging Configuration
     log_level: str = "DEBUG"
 
+    # Scheduled reconciler (twice-daily billing safety-net sweep)
+    reconciler_enabled: bool = True
+    reconciler_cron_hours: list[int] = [2, 14]  # UTC hours, twice daily
+
 
 # Billing cycle anchor constants
 MONTHLY_BILLING_ANCHOR_DAY: Final[int] = 1  # 1st of month
@@ -78,6 +82,14 @@ PAYING_MEMBER_LOCK_PREFIX: Final[str] = "paying_member_lock"
 # BULK_SYNC_RETRY_DELAY_SECONDS wait.
 BULK_SYNC_RETRY_DELAY_SECONDS: Final[int] = 10
 BULK_SYNC_MAX_RETRIES: Final[int] = 3
+
+# Scheduled reconciler — see src/reconciler/. The global sweep lock is a single
+# resource_locks key so multiple app instances can't run the sweep concurrently;
+# its TTL must exceed a full sweep's runtime (minutes), unlike the 60s family TTL.
+RECONCILER_SWEEP_LOCK_KEY: Final[str] = "reconciler_sweep"
+RECONCILER_SWEEP_LOCK_TTL_SECONDS: Final[int] = 1800
+RECONCILER_INVOICE_LOOKBACK_DAYS: Final[int] = 2
+RECONCILER_STRIPE_PAGE_SIZE: Final[int] = 100
 
 
 settings = Settings()

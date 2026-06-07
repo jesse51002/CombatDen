@@ -69,6 +69,9 @@ from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
 from src.ranks.service.ranks_service import RanksService
+from src.reconciler.service.reconciler.reconciler_service import (
+    ReconcilerService,
+)
 from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
 )
@@ -351,3 +354,11 @@ class DependencyInjector(containers.DeclarativeContainer):
         account_updated_handler=stripe_webhook_account_updated_handler,
     )
     # === end CRM billing DI providers ===
+
+    # ── Scheduled reconciler ─────────────────────────────────────
+    # Thin orchestrator behind the global sweep lock. Step-services are
+    # injected here as they are added (D -> B -> A -> C).
+    reconciler_service = providers.Factory(
+        ReconcilerService,
+        resource_lock=resource_lock,
+    )
