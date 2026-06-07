@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
 from src.shared.paying_member_lock import LockBusyError
 from src.shared.sql_loader import load_sql
@@ -76,9 +77,11 @@ class InvoicePaidHandler:
         self,
         payment_sync_service: PaymentSyncService,
         paying_lock: PayingMemberLock,
+        stripe_client: PaymentsStripeClient,
     ) -> None:
         self._sync = payment_sync_service
         self._paying_lock = paying_lock
+        self._stripe = stripe_client.client
 
     async def handle(
         self,
@@ -128,6 +131,14 @@ class InvoicePaidHandler:
         if not is_one_time:
             await self._update_memberships(session, invoice, gym_id)
             await self._settle_once_discounts(member_id, gym_id)
+
+        await self._capture_discounts(
+            session,
+            invoice,
+            gym_id,
+            invoice_id,
+            stripe_account_id=event.get("account"),
+        )
 
     # ── Helpers ────────────────────────────────────────────────
 
@@ -361,6 +372,102 @@ class InvoicePaidHandler:
                 gym_id,
                 exc_info=True,
             )
+
+    async def _capture_discounts(
+        self,
+        session: AsyncSession,
+        invoice: dict[str, Any],
+        gym_id: UUID,
+        invoice_id: UUID,
+        *,
+        stripe_account_id: str | None,
+    ) -> None:
+        """Snapshot the invoice's discounts into ``member_invoice_applied_discounts``.
+
+        The webhook payload carries discount *amounts* but only opaque ``di_``
+        Discount ids — so we retrieve the invoice with the coupon expanded to map
+        each ``di_`` to its Stripe coupon id, and store ``{amount_off, stripe_coupon_id}``
+        per discount (no CRM-discount link — the coupon id is the identifier).
+
+        Best-effort and isolated: a no-op when the invoice has no discounts (the
+        common case → no Stripe call); otherwise the retrieve + inserts run inside
+        a SAVEPOINT so any failure here rolls back ONLY the audit, never the
+        invoice / line-item writes. Idempotent on re-delivery via the row's
+        ``UNIQUE (invoice_id, stripe_coupon_id)``.
+        """
+        discount_amounts = invoice.get("total_discount_amounts") or []
+        if not discount_amounts or not stripe_account_id:
+            return
+
+        try:
+            coupon_by_discount = await self._fetch_invoice_coupons(
+                invoice["id"], stripe_account_id
+            )
+            if not coupon_by_discount:
+                return
+            insert_sql = load_sql(
+                SQL_DIR / "member_invoice_applied_discount_insert.sql"
+            )
+            async with session.begin_nested():
+                for entry in discount_amounts:
+                    discount_ref = entry.get("discount")
+                    coupon_id = (
+                        coupon_by_discount.get(discount_ref)
+                        if isinstance(discount_ref, str)
+                        else None
+                    )
+                    if not coupon_id:
+                        continue
+                    await session.execute(
+                        text(insert_sql),
+                        {
+                            "invoice_id": str(invoice_id),
+                            "gym_id": str(gym_id),
+                            "amount_off": int(entry.get("amount") or 0),
+                            "stripe_coupon_id": coupon_id,
+                        },
+                    )
+        except Exception:
+            logger.error(
+                "invoice.paid discount-audit capture failed "
+                "(stripe_invoice_id=%s gym_id=%s); invoice/charge unaffected",
+                invoice.get("id"),
+                gym_id,
+                exc_info=True,
+            )
+
+    async def _fetch_invoice_coupons(
+        self,
+        stripe_invoice_id: str,
+        stripe_account_id: str,
+    ) -> dict[str, str]:
+        """Map each invoice Discount id (``di_``) to its Stripe coupon id.
+
+        Retrieves the invoice with the discount coupons expanded (the webhook
+        payload sends only ``di_`` ids). Returns ``{}`` if nothing resolves.
+        """
+        opts = PaymentsStripeClient.connect_opts_readonly(stripe_account_id)
+        retrieved = await self._stripe.v1.invoices.retrieve_async(
+            stripe_invoice_id,
+            params={"expand": ["discounts.coupon"]},
+            options=opts,
+        )
+        coupon_by_discount: dict[str, str] = {}
+        for discount in getattr(retrieved, "discounts", None) or []:
+            discount_id = getattr(discount, "id", None) if not isinstance(
+                discount, str
+            ) else None
+            coupon = getattr(discount, "coupon", None) if not isinstance(
+                discount, str
+            ) else None
+            coupon_id = (
+                getattr(coupon, "id", None) if coupon is not None else None
+            )
+            if isinstance(coupon, str):
+                coupon_id = coupon
+            if discount_id and coupon_id:
+                coupon_by_discount[discount_id] = coupon_id
+        return coupon_by_discount
 
     @staticmethod
     def _lines(invoice: dict[str, Any]) -> list[dict[str, Any]]:

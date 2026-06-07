@@ -27,6 +27,7 @@ def make_invoice_paid_event(
     period_end: int | None = None,
     event_id: str | None = None,
     metadata: dict[str, str] | None = None,
+    total_discount_amounts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build an ``invoice.paid`` event payload in the Stripe "dahlia" shape.
 
@@ -78,6 +79,8 @@ def make_invoice_paid_event(
         "status_transitions": {"paid_at": paid_at},
         "created": now,
         "lines": {"data": lines, "object": "list"},
+        # dahlia: amounts + opaque di_ Discount ids (no coupon inline).
+        "total_discount_amounts": total_discount_amounts or [],
     }
     if stripe_item_ids:
         invoice["parent"] = {

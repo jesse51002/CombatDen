@@ -322,6 +322,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         InvoicePaidHandler,
         payment_sync_service=payment_sync_service,
         paying_lock=paying_member_lock,
+        stripe_client=stripe_client,
     )
     stripe_webhook_invoice_payment_paid_handler = providers.Factory(
         InvoicePaymentPaidHandler,

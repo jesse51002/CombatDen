@@ -71,17 +71,56 @@ class _FakePaymentIntents:
         return _FakePaymentIntent(fake_charge_id_for(payment_intent_id))
 
 
+# Discounts the fake invoice-retrieve should return per invoice id, set by a
+# test before dispatch: {stripe_invoice_id: [(di_id, coupon_id), ...]}. Used by
+# the invoice.paid discount-audit capture (which retrieves the invoice with the
+# coupon expanded). Empty by default → no discounts.
+FAKE_INVOICE_DISCOUNTS: dict[str, list[tuple[str, str]]] = {}
+
+
+class _FakeCoupon:
+    def __init__(self, coupon_id: str) -> None:
+        self.id = coupon_id
+
+
+class _FakeDiscount:
+    def __init__(self, discount_id: str, coupon: _FakeCoupon) -> None:
+        self.id = discount_id
+        self.coupon = coupon
+
+
+class _FakeInvoice:
+    def __init__(self, discounts: list[_FakeDiscount]) -> None:
+        self.discounts = discounts
+
+
+class _FakeInvoices:
+    async def retrieve_async(self, invoice_id, params=None, options=None):
+        pairs = FAKE_INVOICE_DISCOUNTS.get(invoice_id, [])
+        return _FakeInvoice(
+            [_FakeDiscount(di, _FakeCoupon(coupon)) for di, coupon in pairs]
+        )
+
+
 class _FakeStripeInner:
     def __init__(self) -> None:
-        self.v1 = type("V1", (), {"payment_intents": _FakePaymentIntents()})()
+        self.v1 = type(
+            "V1",
+            (),
+            {
+                "payment_intents": _FakePaymentIntents(),
+                "invoices": _FakeInvoices(),
+            },
+        )()
 
 
 class FakePaymentsStripeClient:
     """Stand-in for ``PaymentsStripeClient`` in webhook tests.
 
-    Only ``.client`` is exercised by ``InvoicePaymentPaidHandler`` (the
-    PaymentIntent retrieve); ``connect_opts_readonly`` is the real pure
-    staticmethod on ``PaymentsStripeClient``, so it needs no faking.
+    ``.client`` exposes the PaymentIntent retrieve (``InvoicePaymentPaidHandler``)
+    and the invoice retrieve with expanded coupons (``InvoicePaidHandler`` discount
+    capture); ``connect_opts_readonly`` is the real pure staticmethod on
+    ``PaymentsStripeClient``, so it needs no faking.
     """
 
     @property
@@ -156,9 +195,12 @@ def event_log() -> StripeWebhookEventLog:
 
 @pytest.fixture(scope="module")
 def invoice_paid_handler(db_pool, stripe_client) -> InvoicePaidHandler:
+    # payment_sync uses the real test-account client; the discount-audit
+    # retrieve is faked (the webhook test gym's account isn't real).
     return InvoicePaidHandler(
         payment_sync_service=build_payment_sync_service(db_pool, stripe_client),
         paying_lock=build_paying_member_lock(db_pool),
+        stripe_client=FakePaymentsStripeClient(),
     )
 
 
