@@ -17,7 +17,6 @@ import 'package:crm/features/member_details/data/models/membership_plan_response
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
-import 'package:crm/features/member_details/data/models/upcoming_invoice_response.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
@@ -243,14 +242,14 @@ class MemberRepository {
   ///
   /// Returns null when the member's account has no recurring
   /// subscription (the endpoint responds with a null body).
-  Future<UpcomingInvoiceResponse?> getUpcomingInvoice(
+  Future<PreviewInvoice?> getUpcomingInvoice(
     String memberId,
   ) async {
     final response = await _apiClient.get(
       '/api/v1/members/$memberId/upcoming-invoice',
     );
     if (response.data == null) return null;
-    return UpcomingInvoiceResponse.fromJson(
+    return PreviewInvoice.fromJson(
       response.data as Map<String, dynamic>,
     );
   }

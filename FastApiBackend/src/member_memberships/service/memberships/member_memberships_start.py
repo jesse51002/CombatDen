@@ -24,7 +24,7 @@ from src.payments.schema.metadata.stripe_membership_one_time_metadata import (
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
-    PaymentsInvoicePreviewResponse,
+    PreviewInvoice,
 )
 from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentCreateRequest,
@@ -437,7 +437,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         stripe_customer_id: str,
         stripe_price_id: str,
         gym_id: UUID,
-    ) -> PaymentsInvoicePreviewResponse:
+    ) -> PreviewInvoice:
         """Preview the invoice for a non-recurring plan."""
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(gym_id)
         request = PaymentsInvoicePaymentPreviewRequest(

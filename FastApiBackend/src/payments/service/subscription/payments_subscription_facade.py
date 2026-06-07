@@ -1,6 +1,5 @@
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
-    UpcomingInvoiceResponse,
+    PreviewInvoice,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCancelRequest,
@@ -97,7 +96,7 @@ class PaymentsStripeSubscriptionService:
         self,
         request: PaymentsSubscriptionCreateRequest,
         stripe_account_id: str,
-    ) -> PaymentsInvoicePreviewResponse:
+    ) -> PreviewInvoice:
         """Preview the first invoice for a new subscription."""
         return await self._create.preview_create_subscription(request, stripe_account_id)
 
@@ -115,7 +114,7 @@ class PaymentsStripeSubscriptionService:
         self,
         request: PaymentsSubscriptionUpdateRequest,
         stripe_account_id: str,
-    ) -> PaymentsInvoicePreviewResponse:
+    ) -> PreviewInvoice:
         """Preview the next invoice after updating a subscription."""
         return await self._update.preview_update_subscription(request, stripe_account_id)
 
@@ -151,7 +150,7 @@ class PaymentsStripeSubscriptionService:
         self,
         stripe_subscription_id: str,
         stripe_account_id: str,
-    ) -> UpcomingInvoiceResponse:
+    ) -> PreviewInvoice:
         """Fetch the next invoice preview for an existing subscription."""
         return await self._upcoming.fetch_upcoming(
             stripe_subscription_id,

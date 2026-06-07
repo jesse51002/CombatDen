@@ -20,14 +20,14 @@ from src.payments.schema.metadata.stripe_subscription_metadata import (
     StripeSubscriptionMetadata,
 )
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    PreviewInvoice,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCreateRequest,
     PaymentsSubscriptionResponse,
 )
 from src.payments.service.payments_stripe_mappers import (
-    map_invoice_preview,
+    map_preview_invoice,
 )
 from src.payments.service.subscription.payments_subscription_base import (
     PaymentsSubscriptionBase,
@@ -251,7 +251,7 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         self,
         request: PaymentsSubscriptionCreateRequest,
         stripe_account_id: str,
-    ) -> PaymentsInvoicePreviewResponse:
+    ) -> PreviewInvoice:
         """Preview the first invoice for a new subscription."""
         create_params, opts = await self._build_create_params(
             request, stripe_account_id, for_preview=True
@@ -276,4 +276,4 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
             params=preview_params,
             options=opts,
         )
-        return map_invoice_preview(invoice)
+        return map_preview_invoice(invoice)

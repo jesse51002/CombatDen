@@ -50,7 +50,7 @@ from src.members.service.member_payments_service import (
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoiceResponse,
-    UpcomingInvoiceResponse,
+    PreviewInvoice,
 )
 from src.shared.auth import Auth, security
 
@@ -703,7 +703,7 @@ async def list_member_invoices(
 
 @members_router.get(
     "/{member_id}/upcoming-invoice",
-    response_model=UpcomingInvoiceResponse | None,
+    response_model=PreviewInvoice | None,
     summary="Get member's upcoming invoice",
     description=(
         "Returns the upcoming (next) Stripe invoice preview for the "
@@ -725,7 +725,7 @@ async def get_member_upcoming_invoice(
     management_service: MembersManagementService = Depends(
         Provide[DependencyInjector.members_management_service]
     ),
-) -> UpcomingInvoiceResponse | None:
+) -> PreviewInvoice | None:
     """Fetch the upcoming invoice preview for a member's account."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)

@@ -9,8 +9,8 @@ from stripe.params._invoice_create_preview_params import (
 
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_enums import StripeResourceType
-from src.payments.schema.payments_invoice_schema import UpcomingInvoiceResponse
-from src.payments.service.payments_stripe_mappers import map_upcoming_invoice
+from src.payments.schema.payments_invoice_schema import PreviewInvoice
+from src.payments.service.payments_stripe_mappers import map_preview_invoice
 from src.payments.service.subscription.payments_subscription_base import (
     PaymentsSubscriptionBase,
 )
@@ -25,7 +25,7 @@ class PaymentsSubscriptionUpcoming(PaymentsSubscriptionBase):
         self,
         stripe_subscription_id: str,
         stripe_account_id: str,
-    ) -> UpcomingInvoiceResponse:
+    ) -> PreviewInvoice:
         """Fetch the next (upcoming) invoice preview for a subscription.
 
         This uses ``invoices.create_preview`` with the existing
@@ -60,4 +60,19 @@ class PaymentsSubscriptionUpcoming(PaymentsSubscriptionBase):
                 resource_type=StripeResourceType.subscription,
             ) from exc
 
-        return map_upcoming_invoice(invoice)
+        preview = map_preview_invoice(invoice)
+        # Keep only the steady-state recurring sub-item lines (drop
+        # prorations / one-offs) so the upcoming view reflects the next
+        # full cycle, not a one-time adjustment.
+        recurring_lines = [
+            line
+            for line in preview.lines
+            if not line.is_proration and line.stripe_subscription_item_id
+        ]
+        return PreviewInvoice(
+            amount_due=preview.amount_due,
+            subtotal=preview.subtotal,
+            total=preview.total,
+            currency=preview.currency,
+            lines=recurring_lines,
+        )

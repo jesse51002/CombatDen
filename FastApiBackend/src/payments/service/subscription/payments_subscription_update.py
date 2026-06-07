@@ -7,14 +7,14 @@ from stripe.params._subscription_update_params import (
 )
 
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    PreviewInvoice,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionResponse,
     PaymentsSubscriptionUpdateRequest,
 )
 from src.payments.service.payments_stripe_mappers import (
-    map_invoice_preview,
+    map_preview_invoice,
 )
 from src.payments.service.subscription.payments_subscription_base import (
     PaymentsSubscriptionBase,
@@ -95,7 +95,7 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
         self,
         request: PaymentsSubscriptionUpdateRequest,
         stripe_account_id: str,
-    ) -> PaymentsInvoicePreviewResponse:
+    ) -> PreviewInvoice:
         """Preview the next invoice after updating a subscription."""
         update_params, _, opts = await self._build_update_params(
             request, stripe_account_id, for_preview=True
@@ -117,4 +117,4 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
             params=preview_params,
             options=opts,
         )
-        return map_invoice_preview(invoice)
+        return map_preview_invoice(invoice)

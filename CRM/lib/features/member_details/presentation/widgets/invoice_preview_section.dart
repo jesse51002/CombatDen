@@ -75,7 +75,7 @@ class _InvoicePreviewSectionState
   /// items from Stripe, so the subtotal is only surfaced
   /// when it actually differs from the total.
   InvoiceBreakdownData _toBreakdown(
-    PaymentsInvoicePreviewResponse preview,
+    PreviewInvoice preview,
   ) {
     return InvoiceBreakdownData(
       lines: preview.lines
@@ -129,7 +129,7 @@ class _PreviewBody extends StatelessWidget {
   final Future<DueNowVsRecurringPreview?> future;
   final String emptyLabel;
   final InvoiceBreakdownData Function(
-    PaymentsInvoicePreviewResponse,
+    PreviewInvoice,
   ) toBreakdown;
 
   const _PreviewBody({
@@ -190,7 +190,7 @@ class _PreviewBody extends StatelessWidget {
 /// The "then $Y/mo after" line below the due-now breakdown —
 /// the steady-state recurring charge.
 class _RecurringSummary extends StatelessWidget {
-  final PaymentsInvoicePreviewResponse recurring;
+  final PreviewInvoice recurring;
 
   const _RecurringSummary({required this.recurring});
 

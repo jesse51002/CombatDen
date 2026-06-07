@@ -24,7 +24,7 @@ from sqlalchemy import text
 
 from src.member_memberships import SQL_DIR
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
-from src.payments.schema.payments_invoice_schema import UpcomingInvoiceLine
+from src.payments.schema.payments_invoice_schema import PreviewInvoiceLine
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
@@ -129,7 +129,9 @@ class PriceWriteback:
         # Sum the recurring lines (proration already filtered out by
         # the mapper) so the profile monthly total reflects steady
         # state, not a one-time post-add invoice spike.
-        recurring_total = sum(max(line.amount, 0) for line in upcoming.lines)
+        recurring_total = sum(
+            max(line.discounted_amount, 0) for line in upcoming.lines
+        )
         await self._update_parent_monthly_total(
             parent_member_id,
             recurring_total,
@@ -165,13 +167,13 @@ class PriceWriteback:
     async def _update_plan_totals(
         self,
         family_ids: list[UUID],
-        lines: list[UpcomingInvoiceLine],
+        lines: list[PreviewInvoiceLine],
     ) -> None:
         """Write plan-level post-discount totals across family rows."""
         payload = [
             {
                 "stripe_price_id": line.stripe_price_id,
-                "amount": max(line.amount, 0),
+                "amount": max(line.discounted_amount, 0),
             }
             for line in lines
             if line.stripe_price_id

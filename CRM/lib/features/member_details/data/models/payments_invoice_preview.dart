@@ -4,53 +4,70 @@ import 'package:json_annotation/json_annotation.dart';
 part 'payments_invoice_preview.g.dart';
 
 /// A single line item from an invoice preview.
+///
+/// [amount] is Stripe's raw line amount (pre-discount on a subscription
+/// preview); [discountedAmount] is the post-discount value. The line also
+/// carries [stripeSubscriptionItemId] (null for one-off items) and
+/// [isProration] so callers can filter to the steady-state recurring view.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
 )
-class PaymentsInvoicePreviewLineItem extends Equatable {
+class PreviewInvoiceLine extends Equatable {
   final int amount;
+  final int discountedAmount;
   final String? description;
   final String? stripePriceId;
   final int? quantity;
+  final String? stripeSubscriptionItemId;
+  @JsonKey(defaultValue: false)
+  final bool isProration;
 
-  const PaymentsInvoicePreviewLineItem({
+  const PreviewInvoiceLine({
     required this.amount,
+    required this.discountedAmount,
     this.description,
     this.stripePriceId,
     this.quantity,
+    this.stripeSubscriptionItemId,
+    this.isProration = false,
   });
 
-  factory PaymentsInvoicePreviewLineItem.fromJson(
+  factory PreviewInvoiceLine.fromJson(
     Map<String, dynamic> json,
   ) =>
-      _$PaymentsInvoicePreviewLineItemFromJson(json);
+      _$PreviewInvoiceLineFromJson(json);
 
   @override
   List<Object?> get props => [
         amount,
+        discountedAmount,
         description,
         stripePriceId,
         quantity,
+        stripeSubscriptionItemId,
+        isProration,
       ];
 }
 
-/// Preview of what an invoice would look like without
-/// actually charging. Returned by every `*/preview`
-/// backend endpoint.
+/// Preview of what an invoice would look like without actually
+/// charging — the one preview shape. Returned (directly, wrapped in
+/// [DueNowVsRecurringPreview], or filtered to recurring lines for the
+/// upcoming-invoice read) by every `*/preview` backend endpoint and the
+/// upcoming-invoice endpoint.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
 )
-class PaymentsInvoicePreviewResponse extends Equatable {
+class PreviewInvoice extends Equatable {
   final int amountDue;
   final int subtotal;
   final int total;
   final String currency;
   @JsonKey(defaultValue: [])
-  final List<PaymentsInvoicePreviewLineItem> lines;
+  final List<PreviewInvoiceLine> lines;
 
-  const PaymentsInvoicePreviewResponse({
+  const PreviewInvoice({
     required this.amountDue,
     required this.subtotal,
     required this.total,
@@ -58,10 +75,10 @@ class PaymentsInvoicePreviewResponse extends Equatable {
     this.lines = const [],
   });
 
-  factory PaymentsInvoicePreviewResponse.fromJson(
+  factory PreviewInvoice.fromJson(
     Map<String, dynamic> json,
   ) =>
-      _$PaymentsInvoicePreviewResponseFromJson(json);
+      _$PreviewInvoiceFromJson(json);
 
   @override
   List<Object?> get props => [
@@ -85,8 +102,8 @@ class PaymentsInvoicePreviewResponse extends Equatable {
   createToJson: false,
 )
 class DueNowVsRecurringPreview extends Equatable {
-  final PaymentsInvoicePreviewResponse? dueNow;
-  final PaymentsInvoicePreviewResponse? recurring;
+  final PreviewInvoice? dueNow;
+  final PreviewInvoice? recurring;
 
   const DueNowVsRecurringPreview({
     this.dueNow,

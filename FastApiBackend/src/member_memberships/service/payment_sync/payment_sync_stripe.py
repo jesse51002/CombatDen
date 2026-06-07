@@ -11,7 +11,7 @@ from src.payments.schema.metadata.stripe_subscription_metadata import (
 )
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
-    PaymentsInvoicePreviewResponse,
+    PreviewInvoice,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionCancelRequest,
@@ -135,7 +135,7 @@ class PaymentSyncStripe:
         parent: ParentProfile,
         stripe_account_id: str,
         proration_behavior: Literal["none", "always_invoice"],
-    ) -> PaymentsInvoicePreviewResponse:
+    ) -> PreviewInvoice:
         """One Stripe invoice preview at a given proration behavior.
 
         Mirrors ``execute_sync`` dispatch: ``preview_update_subscription``

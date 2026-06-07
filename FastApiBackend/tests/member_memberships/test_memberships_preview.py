@@ -9,7 +9,7 @@ Every test asserts two invariants:
 And the returned preview has a plausible shape when the operation
 would produce a real invoice — every surface returns a
 ``DueNowVsRecurringPreview`` split whose ``due_now`` / ``recurring``
-halves are flat ``PaymentsInvoicePreviewResponse`` objects.
+halves are flat ``PreviewInvoice`` objects.
 """
 
 from uuid import UUID, uuid4
@@ -20,7 +20,7 @@ from sqlalchemy import text
 from src.membership_plans.membership_plans_schemas import MembershipPlanPriceRequest
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
-    PaymentsInvoicePreviewResponse,
+    PreviewInvoice,
 )
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
@@ -72,7 +72,7 @@ async def _start_and_get_item_id(
 
 
 def _assert_valid_preview(preview) -> None:
-    assert isinstance(preview, PaymentsInvoicePreviewResponse)
+    assert isinstance(preview, PreviewInvoice)
     assert preview.currency
     # Non-negative — a preview of a prorated cancel could be $0, but it
     # should never be reported as a negative charge on the response model.

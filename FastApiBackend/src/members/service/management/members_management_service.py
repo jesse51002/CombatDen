@@ -28,7 +28,7 @@ from src.members.service.management.members_management_update import (
 )
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoiceResponse,
-    UpcomingInvoiceResponse,
+    PreviewInvoice,
 )
 from src.shared.database import DirectDatabasePool
 
@@ -117,6 +117,6 @@ class MembersManagementService:
     async def get_upcoming_invoice(
         self,
         member_id: UUID,
-    ) -> UpcomingInvoiceResponse | None:
+    ) -> PreviewInvoice | None:
         """Fetch the upcoming (next) invoice for a member's account."""
         return await self._invoices.get_upcoming_invoice(member_id)

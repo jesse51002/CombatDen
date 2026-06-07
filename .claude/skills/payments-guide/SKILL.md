@@ -207,10 +207,21 @@ service outside this payments layer touches the Stripe SDK. The
 `schema/payments_enums.py`.
 
 **`payments_stripe_mappers.py`** — a class-less concern module (free functions by
-design): `map_invoice_preview`, `map_upcoming_invoice`, and the line-item helpers
-(`_post_discount_amount` computes `subtotal − Σ discount_amounts` itself rather
-than trusting `line.amount`; `_extract_subscription_item_id` / `_is_proration`
-handle legacy vs. `parent`-nested Stripe shapes).
+design): the **single** preview mapper `map_preview_invoice` plus the line-item
+helpers (`_post_discount_amount` computes `subtotal − Σ discount_amounts` itself
+rather than trusting `line.amount`; `_extract_subscription_item_id` /
+`_is_proration` handle legacy vs. `parent`-nested Stripe shapes). It maps **any**
+`create_preview` result (the proposed-change previews **and** the existing-sub
+upcoming invoice — there is no separate `map_upcoming_invoice`) to one
+**`PreviewInvoice`** of **`PreviewInvoiceLine`**, returning **every** line; a
+consumer wanting only the steady-state recurring view filters on `is_proration`
+/ `stripe_subscription_item_id` (the upcoming read does this in
+`PaymentsSubscriptionUpcoming.fetch_upcoming`). Each line carries Stripe's **raw
+`amount`** (`line.amount` — *pre*-discount on a subscription preview, not
+repurposed) **and** the computed post-discount **`discounted_amount`**
+(`_post_discount_amount`), so a consumer reads the net directly with no client
+math. The one finalized-invoice model `PaymentsInvoiceResponse` (§7) is separate
+and unchanged.
 
 ---
 
