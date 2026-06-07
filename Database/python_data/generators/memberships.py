@@ -58,11 +58,17 @@ def create_history(
                     prorate=True,
                     total_price=h.total_price,
                     stripe_item_id=f"si_{uuid.uuid4().hex[:24]}",
-                    # Direct-inserted (not via the API), so stamp 'applied'
-                    # ourselves — the column defaults to 'not_added', which the
-                    # client-facing member_memberships view hides, so these
-                    # historical rows would otherwise be invisible in the CRM.
-                    stripe_sync_status=StripeSyncStatus.applied,
+                    # Direct-inserted (not via the API), so stamp the Stripe-sync
+                    # status ourselves — the 'not_added' default is hidden by the
+                    # client-facing member_memberships view. A cancelled
+                    # membership was removed from Stripe → 'deleted' (matches the
+                    # real cancel flow's writeback); a non-recurring one that
+                    # ended by date was never removed, so it stays 'applied'.
+                    stripe_sync_status=(
+                        StripeSyncStatus.deleted
+                        if h.cancel_date is not None
+                        else StripeSyncStatus.applied
+                    ),
                 )
             )
 
