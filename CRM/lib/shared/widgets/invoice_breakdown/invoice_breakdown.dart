@@ -65,21 +65,15 @@ class InvoiceBreakdown extends StatelessWidget {
             currency: data.currency,
           ),
         ),
-        if (data.appliedDiscounts.isNotEmpty)
-          Wrap(
-            spacing: DesignConstants.spacingSmall,
-            runSpacing: DesignConstants.spacingSmall,
-            children: data.appliedDiscounts
-                .map(
-                  (d) => InvoiceChip(
-                    label: d.subLabel == null
-                        ? d.label
-                        : '${d.label} · ${d.subLabel}',
-                    tone: InvoiceChipTone.good,
-                  ),
-                )
-                .toList(),
+        ...data.appliedDiscounts.map(
+          (d) => _LineRow(
+            label: d.label,
+            amount: d.amount,
+            currency: data.currency,
+            muted: true,
+            indent: true,
           ),
+        ),
         if (data.subtotal != null)
           _LineRow(
             label: 'Subtotal',
@@ -203,6 +197,7 @@ class _LineRow extends StatelessWidget {
   final String currency;
   final bool emphasised;
   final bool muted;
+  final bool indent;
 
   const _LineRow({
     required this.label,
@@ -210,6 +205,7 @@ class _LineRow extends StatelessWidget {
     required this.currency,
     this.emphasised = false,
     this.muted = false,
+    this.indent = false,
   });
 
   @override
@@ -224,11 +220,16 @@ class _LineRow extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         Expanded(
-          child: Text(
-            label,
-            style: style,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: indent ? DesignConstants.spacingLarge : 0,
+            ),
+            child: Text(
+              label,
+              style: style,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
         Text(

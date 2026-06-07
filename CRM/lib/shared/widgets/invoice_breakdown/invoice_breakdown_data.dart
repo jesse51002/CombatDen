@@ -17,24 +17,24 @@ class InvoiceLineItem extends Equatable {
   List<Object?> get props => [description, amount];
 }
 
-/// One applied-discount pill on an invoice breakdown.
+/// One applied-discount line on an invoice breakdown — a label
+/// and the (signed, negative) amount it took off, rendered as a
+/// regular offset line row rather than a pill.
 ///
-/// A plain display shape (label + optional sub-label) so
-/// the shared widget never depends on a billing feature's
-/// own discount model — the member-detail dialogs adapt
-/// their richer models into this when composing the
-/// breakdown.
+/// [amount] is signed minor units (negative; it reduces the
+/// total). A plain display shape so the shared widget never
+/// depends on a billing feature's own discount model.
 class InvoiceDiscount extends Equatable {
   final String label;
-  final String? subLabel;
+  final int amount;
 
   const InvoiceDiscount({
     required this.label,
-    this.subLabel,
+    required this.amount,
   });
 
   @override
-  List<Object?> get props => [label, subLabel];
+  List<Object?> get props => [label, amount];
 }
 
 /// One payment attempt against an invoice — a retry, the
