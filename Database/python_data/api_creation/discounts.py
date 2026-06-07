@@ -33,6 +33,8 @@ class DiscountRecord:
     end_date: str | None
 
 
+# The catalog the seed draws from; DISCOUNTS_PER_GYM names are sampled per gym,
+# so keep this list at least that long.
 DISCOUNT_NAMES = [
     "Military Discount",
     "Student Discount",
@@ -40,6 +42,12 @@ DISCOUNT_NAMES = [
     "Senior Discount",
     "Family Bundle",
     "Referral Bonus",
+    "Loyalty Reward",
+    "New Year Special",
+    "Summer Promo",
+    "Corporate Rate",
+    "Veteran Discount",
+    "Off-Peak Discount",
 ]
 
 

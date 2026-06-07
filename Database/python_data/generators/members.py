@@ -25,9 +25,11 @@ import random
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from typing import TYPE_CHECKING
 
 from api_creation.plans import PlanRecord
 from constants import (
+    DISCOUNTS_PER_MEMBERSHIP_MAX,
     LINKED_FAMILY_FRACTION,
     MAX_LINKED_CHILDREN_PER_PARENT,
     MEMBERS_PER_GYM,
@@ -38,6 +40,9 @@ from schema.gym_rank import GymRankCreate
 from schema.member import MemberCreate
 from utils import today_offset
 
+if TYPE_CHECKING:
+    from api_creation.discounts import DiscountRecord
+
 fake = Faker()
 
 
@@ -45,16 +50,18 @@ fake = Faker()
 class CurrentMembership:
     """A live membership to start via the backend (real Stripe subscription).
 
-    Discounts are no longer applied at membership creation: applying a discount
-    is an explicit add (a snapshot row on member_membership_applied_discounts)
-    via a dedicated backend path (FastApiBackend Phase 2). The seed creates
-    memberships discount-free; seeding applied-discount snapshots is a Phase 2
-    follow-up once that apply endpoint lands.
+    ``discount_ids`` is a pre-drawn set (0-DISCOUNTS_PER_MEMBERSHIP_MAX distinct
+    regular discounts) applied to this membership right after it is started, via
+    the backend apply path (POST /member_memberships/discounts/add). The draw
+    happens in the sequential build phase (``_assign_discounts``) so the random
+    choices stay deterministic and the concurrent creation pipeline only does
+    I/O.
     """
 
     plan: PlanRecord
     prorate: bool = True
     cancel_after_start: bool = False
+    discount_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 @dataclass
@@ -246,6 +253,31 @@ def _assign_lifecycle(
     member.current = CurrentMembership(plan=random.choice(recurring))
 
 
+def _assign_discounts(
+    members: list[MemberPlan],
+    discounts: list[DiscountRecord],
+) -> None:
+    """Pre-draw 0-DISCOUNTS_PER_MEMBERSHIP_MAX distinct discounts per membership.
+
+    Drawn here in the sequential build phase (not in the concurrent creation
+    pipeline) so the choices stay deterministic under the seed PRNG and the
+    worker threads only do I/O. A membership that is cancelled right after start
+    gets none (pointless). Stores discount ids on each member's CurrentMembership;
+    the creation pipeline applies them after the membership is started.
+    """
+    if not discounts:
+        return
+    cap = min(DISCOUNTS_PER_MEMBERSHIP_MAX, len(discounts))
+    for m in members:
+        if m.current is None or m.current.cancel_after_start:
+            continue
+        k = random.randint(0, cap)
+        if k == 0:
+            continue
+        chosen = random.sample(discounts, k)
+        m.current.discount_ids = [d.discount_id for d in chosen]
+
+
 def _apply_freezes(members: list[MemberPlan]) -> None:
     """~15% of non-child members with a current membership get a frozen window."""
     for m in members:
@@ -272,9 +304,8 @@ def _form_linked_families(
     membership (on any plan, not necessarily the parent's); the child references
     the root via linked_primary_handle and is linked (cardless) after creation,
     and its membership is started afterward so the item rides the parent's
-    subscription. (Linked-discount presets are gone — a family discount is now
-    an explicit snapshot applied via the Phase 2 apply path, not auto-assigned
-    here.)
+    subscription. Regular discounts are drawn per membership in
+    ``_assign_discounts`` (family members included, like any other membership).
 
     Operates on member *indices* (never reorders `members`, since create_all
     keys the first AUTH_MEMBERS_PER_GYM members to real auth logins by position).
@@ -314,12 +345,14 @@ def build_plans(
     gym_handle: str,
     ranks: list[GymRankCreate],
     plans: list[PlanRecord],
+    discounts: list[DiscountRecord],
 ) -> list[MemberPlan]:
     """Build MEMBERS_PER_GYM member plans for one gym.
 
-    Memberships are seeded discount-free: applying a discount is now an explicit
-    snapshot add (FastApiBackend Phase 2). Family linking itself (the paying
-    parent + cardless children under it) is unchanged.
+    Each live membership is given a random 0-DISCOUNTS_PER_MEMBERSHIP_MAX set of
+    distinct regular discounts (pre-drawn here; applied after the membership is
+    started). Family linking (a paying parent + cardless children under it) is
+    unchanged; linked/family discounts are no longer seeded.
     """
     members: list[MemberPlan] = [
         _demographics(f"{gym_handle}/member{i}", _pick_rank_id(ranks))
@@ -341,6 +374,7 @@ def build_plans(
         _assign_lifecycle(member, plans)
 
     _apply_freezes(members)
+    _assign_discounts(members, discounts)
     return members
 
 
