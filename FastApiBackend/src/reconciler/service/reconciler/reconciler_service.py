@@ -16,6 +16,9 @@ from src.core.config import (
     RECONCILER_SWEEP_LOCK_KEY,
     RECONCILER_SWEEP_LOCK_TTL_SECONDS,
 )
+from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
+    OrphanCleanupSweep,
+)
 from src.reconciler.service.reconciler.reconciler_result import (
     ReconcilerRunResult,
     SweepResult,
@@ -31,8 +34,10 @@ class ReconcilerService:
     def __init__(
         self,
         resource_lock: ResourceLock,
+        orphan_cleanup_sweep: OrphanCleanupSweep,
     ) -> None:
         self._resource_lock = resource_lock
+        self._orphan_cleanup_sweep = orphan_cleanup_sweep
 
     async def run(self) -> ReconcilerRunResult:
         """Run one full sweep, unless another instance already holds the lock.
@@ -53,7 +58,8 @@ class ReconcilerService:
 
             logger.info("Reconciler sweep starting")
             sweeps: list[SweepResult] = []
-            # Step-services are added in later stages (D -> B -> A -> C).
+            # Final order is D -> B -> A -> C; steps are appended as added.
+            sweeps.append(await self._orphan_cleanup_sweep.run())
             logger.info(
                 "Reconciler sweep complete (%d step(s))",
                 len(sweeps),

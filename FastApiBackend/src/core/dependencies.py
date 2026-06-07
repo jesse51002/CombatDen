@@ -69,6 +69,9 @@ from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
 from src.ranks.service.ranks_service import RanksService
+from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
+    OrphanCleanupSweep,
+)
 from src.reconciler.service.reconciler.reconciler_service import (
     ReconcilerService,
 )
@@ -358,7 +361,14 @@ class DependencyInjector(containers.DeclarativeContainer):
     # ── Scheduled reconciler ─────────────────────────────────────
     # Thin orchestrator behind the global sweep lock. Step-services are
     # injected here as they are added (D -> B -> A -> C).
+    reconciler_orphan_cleanup_sweep = providers.Factory(
+        OrphanCleanupSweep,
+        db_pool=db_pool,
+        parent_resolver=billing_parent_resolver,
+        resource_lock=resource_lock,
+    )
     reconciler_service = providers.Factory(
         ReconcilerService,
         resource_lock=resource_lock,
+        orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
     )
