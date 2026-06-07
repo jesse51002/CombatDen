@@ -11,7 +11,7 @@ from tests.helpers.cleanup import delete_member_data
 
 
 async def test_check_happy_path(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -22,7 +22,7 @@ async def test_check_happy_path(
     child = await created.member(gym_id, first_name="Child", last_name="Check")
 
     try:
-        result = await management_service.check_link_account(
+        result = await memberships_service.check_link_account(
             child.member_id,
             parent.member_id,
         )
@@ -37,7 +37,7 @@ async def test_check_happy_path(
 
 
 async def test_check_self_link_blocked(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -47,7 +47,7 @@ async def test_check_self_link_blocked(
     member = await created.member(gym_id)
 
     try:
-        result = await management_service.check_link_account(
+        result = await memberships_service.check_link_account(
             member.member_id,
             member.member_id,
         )
@@ -58,7 +58,7 @@ async def test_check_self_link_blocked(
 
 
 async def test_check_already_linked_blocked(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -70,12 +70,12 @@ async def test_check_already_linked_blocked(
     child = await created.member(gym_id, first_name="C", last_name="AL")
 
     try:
-        await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent1.member_id,
         )
 
-        result = await management_service.check_link_account(
+        result = await memberships_service.check_link_account(
             child.member_id,
             parent2.member_id,
         )
@@ -90,6 +90,7 @@ async def test_check_already_linked_blocked(
 
 async def test_check_candidate_is_parent_blocked(
     management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -110,8 +111,8 @@ async def test_check_candidate_is_parent_blocked(
     try:
         # Link kid to candidate via the supported flow — this makes candidate a
         # parent (create_member never sets account_linked_to_id).
-        await management_service.link_account(kid.member_id, candidate.member_id)
-        result = await management_service.check_link_account(
+        await memberships_service.link_account(kid.member_id, candidate.member_id)
+        result = await memberships_service.check_link_account(
             candidate.member_id,
             grandparent.member_id,
         )
@@ -124,7 +125,7 @@ async def test_check_candidate_is_parent_blocked(
 
 
 async def test_check_parent_is_child_blocked(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -138,12 +139,12 @@ async def test_check_parent_is_child_blocked(
 
     try:
         # Make `middle` a child of `top_parent`.
-        await management_service.link_account(
+        await memberships_service.link_account(
             middle.member_id,
             top_parent.member_id,
         )
 
-        result = await management_service.check_link_account(
+        result = await memberships_service.check_link_account(
             candidate.member_id,
             middle.member_id,
         )
@@ -156,7 +157,6 @@ async def test_check_parent_is_child_blocked(
 
 
 async def test_check_active_recurring_blocked(
-    management_service,
     memberships_service,
     db_pool,
     gym_id,
@@ -183,7 +183,7 @@ async def test_check_active_recurring_blocked(
             idempotency_key=uuid4(),
         )
 
-        result = await management_service.check_link_account(
+        result = await memberships_service.check_link_account(
             child.member_id,
             parent.member_id,
         )
@@ -196,7 +196,7 @@ async def test_check_active_recurring_blocked(
 
 
 async def test_check_parent_not_found_blocked(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -206,7 +206,7 @@ async def test_check_parent_not_found_blocked(
     child = await created.member(gym_id, first_name="C", last_name="NoPayer")
 
     try:
-        result = await management_service.check_link_account(
+        result = await memberships_service.check_link_account(
             child.member_id,
             uuid4(),
         )
@@ -217,7 +217,7 @@ async def test_check_parent_not_found_blocked(
 
 
 async def test_check_candidate_not_found_raises(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -228,7 +228,7 @@ async def test_check_candidate_not_found_raises(
 
     try:
         with pytest.raises(ValueError, match="not found"):
-            await management_service.check_link_account(
+            await memberships_service.check_link_account(
                 uuid4(),
                 parent.member_id,
             )
