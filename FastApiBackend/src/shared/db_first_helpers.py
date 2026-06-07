@@ -139,11 +139,13 @@ async def staged_preview[T](
     ``preview=True``; the real path excludes ``preview_*`` so it can never bill a
     staged add.
 
-    ⚠️ **Not race-safe on its own.** A real sync on the same paying-parent family
-    during the preview window can act on a staged ``preview_remove`` / flipped row
-    (e.g. drop a live Stripe line) — this MUST be wrapped in the per-parent
-    concurrency lock (#25) once it lands. Until then the cleanup (``finally``)
-    bounds the window but does not close the race.
+    ⚠️ **Not race-safe on its own — the caller MUST hold the per-parent
+    ``PayingMemberLock``.** A concurrent real sync on the same paying-parent
+    family could otherwise act on a staged ``preview_remove`` / flipped row
+    (e.g. drop a live Stripe line) before ``finally`` reverts it. Every caller
+    runs inside the facade's ``lock([member_id])`` boundary, which serializes
+    the family so no real sync overlaps the staged window; ``finally`` then
+    reverts the staged state.
     """
     await stage_fn()
     try:

@@ -155,18 +155,23 @@ a membership plan as a Stripe **Product + Prices**:
   price + creates new ones. **It never deactivates a Stripe price** — the DB
   (`membership_plan_prices.is_active`) gates which price is current, so every
   Stripe price stays active forever (archiving the old price would break a
-  subscription migration that's mid-flight). `deactivate_price` is therefore now
-  **uncalled** (kept as a low-level primitive).
+  subscription migration that's mid-flight). The thing we never want here: our
+  own code archiving a price — so there is deliberately **no `deactivate_price`**;
+  the only direction is reactivation.
 - `deactivate_membership` — archives the Product (`active=False`); does not
   cancel subscriptions.
 
 **`PaymentsStripePriceService`** (`payments_stripe_price_service.py`) — Stripe
 **Price** ops: `create_price` (recurring when `plan_type == PlanType.recurring`),
-`get_price`, `deactivate_price` / `activate_price`, `set_product_default_price`
-(must run before archiving the previous default — Stripe rejects archiving a
-product's current `default_price`), and `validate_price_active` (retrieve the
-price + its product and **reactivate either if archived** — the gym owner is
-explicitly trying to use it).
+`get_price`, `set_product_default_price` (must run before archiving the previous
+default — Stripe rejects archiving a product's current `default_price`), and the
+two **reactivation** guards — `activate_price` (used by the plan reconcile) and
+`validate_price_active` (retrieve the price + its product and **reactivate either
+if archived**; called on the charge / subscription-create / migration paths right
+before price-attach). These defend against a price archived *out of band* —
+manually in the Stripe Dashboard, or a legacy price: our code never archives one,
+but Stripe rejects attaching an archived price to a subscription, so they flip it
+back to active because the DB says it's current.
 
 **`PaymentsStripePaymentService`** (`payments_stripe_payment_service.py`) —
 one-time charges, all money-moving (per-step idempotency keys

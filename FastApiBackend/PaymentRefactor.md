@@ -9,10 +9,9 @@
 > `memberships-guide` (the lifecycle callers), `payments-guide` (the Stripe
 > primitives + webhooks). Read those for how the live system works.
 >
-> The transient **session-level engineering TODOs** (the rewards endpoint) live in
-> `FastApiBackend/TODO_SYNC_REFACTOR.md`. This file holds the deferred **features**
-> and is **always forward-looking**: it lists only remaining work — when something
-> ships it is **removed**, never annotated "done".
+> This file holds the deferred **features** and is **always forward-looking**: it
+> lists only remaining work — when something ships it is **removed**, never
+> annotated "done".
 
 ## 1. Scheduled reconciler (load-bearing, not built)
 
@@ -405,7 +404,7 @@ the scheduled reconciler, §1, needs in the Stripe→CRM direction.)
   applied discounts followed to the new row. **No such test exists today — and the current in-place
   path may not split the line correctly** (the repriced row still carries the old shared `si_X` when
   the bucket is built, so two desired items could collide on `si_X`). The *current* behavior is worth
-  verifying now too (tracked in `TODO_SYNC_REFACTOR.md`).
+  verifying now too.
 
 ## 9. Persist the per-invoice applied-discount audit (not built)
 
@@ -437,5 +436,3 @@ entitlement) — this records what a specific invoice charged.
   the separate `preview_link_account` / `preview_unlink_account` methods into a **`preview` bool**
   on `link_account` / `unlink_account` — matching the memberships and add/remove-discounts pattern
   (one op with a preview flag, not a parallel preview method).
-- **Session-level engineering TODOs** (the rewards `GET /rewards/{reward_id}` endpoint) are
-  tracked in `FastApiBackend/TODO_SYNC_REFACTOR.md`, not here.

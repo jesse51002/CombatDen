@@ -143,10 +143,10 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         then reverts them to ``applied`` — nothing is committed. Returns the
         invoice preview in that mode, else ``None``.
 
-        Not race-safe vs a concurrent real sync until the per-parent lock (#25)
-        lands: a staged ``preview_remove`` on a real ``applied`` row would be
-        dropped by a concurrent sync. The ``finally`` cleanup bounds the window
-        but does not close it.
+        The staged ``preview_remove`` is safe only because the facade holds the
+        per-parent ``PayingMemberLock`` around this op — that serializes the
+        paying family, so no concurrent real sync can drop the staged row before
+        ``finally`` reverts it to ``applied``.
 
         Raises:
             ValueError: If membership not found, cancelled, ended, or missing
