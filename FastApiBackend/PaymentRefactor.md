@@ -86,91 +86,6 @@ per-gym batching?); the exact **status-absorption mapping** — which Stripe sta
 how that interacts with the existing webhook handlers (`invoice.payment_failed`,
 `account.updated`) to avoid double-applying.
 
-## 2. Multi-interval recurring — weekly / yearly (not built)
-
-> Recurring is **monthly-only** today; weekly and yearly are needed. The blocker
-> that pushed this past MVP was the paid-time-preserving freeze (§3) — its interval
-> math + Stripe billing-anchor work was too much for the MVP window, so a simple
-> pause shipped instead.
-
-### Current state — monthly only, one bucket, one sub
-The DB `recurring_must_be_monthly` CHECK, the engine's single monthly
-`IntervalBucket` ("exactly one bucket"), and the interval-named
-`members.stripe_sub_id_month` column all assume one interval. The
-`IntervalBucket.interval` field and the `_month` suffix were left in deliberately to
-anticipate this extension.
-
-### What it takes
-- **Lift `recurring_must_be_monthly`** — allow recurring
-  `duration_unit ∈ week / month / year`.
-- **One Stripe subscription per interval.** Stripe cannot mix billing intervals on a
-  single subscription, so a family with weekly + monthly + yearly memberships needs
-  up to **three** subscriptions. `members` gains `stripe_sub_id_week` /
-  `stripe_sub_id_year` alongside the existing `stripe_sub_id_month`.
-- **One bucket per interval present.** The read path groups the family's active
-  recurring memberships by `duration_unit`; the builder produces a bucket per
-  interval instead of forcing a single month bucket; `execute_sync` runs per bucket
-  (create/update/cancel its own sub); the writeback fans per sub. Per-line
-  consolidation and the discount/coupon logic are unchanged **within** each bucket.
-
-## 3. Paid-time-preserving freeze (not built)
-
-**Why the current freeze is insufficient.** Today freeze = Stripe
-`pause_collection` + a resume date. Pausing collection does **not** give the member
-back the time they were frozen — the billing clock keeps ticking through the pause,
-so they don't resume with exactly the remaining interval they had paid for. For
-monthly that was "close enough" to ship; for **weekly** (day/week precision) and
-**yearly** (a few frozen months is real money against a year) it is not.
-
-**What a correct freeze does:**
-1. **On freeze**, capture the **remaining time** until `next_due_date` — the credit
-   the member already paid for (e.g. "11 days left in the cycle", "4 months left in
-   the year").
-2. **On unfreeze**, set the **next billing date = unfreeze_date + that remaining
-   credit**, so the member resumes with exactly the interval they had left and the
-   whole cadence shifts forward by the freeze duration — the billing clock
-   effectively *stops* during the freeze instead of continuing to tick.
-3. **In Stripe**, shift the subscription's **billing anchor** (`billing_cycle_anchor`
-   / `trial_end` / proration controls) so the next invoice lands on the recomputed
-   date — not merely pausing and resuming collection.
-4. **Across every interval sub** (§2) — each interval subscription's anchor is
-   recomputed independently; remaining time uses `relativedelta` for month/year and
-   `timedelta` for week.
-
-It builds on the **standalone `PaymentSyncFreeze`** service (already split out of the
-main sync) so the freeze path can own this anchor math without running a full sync.
-
-**Open questions:** the exact Stripe mechanism for the anchor shift
-(`billing_cycle_anchor` reset vs `trial_end` vs pause + manual anchor) and its
-proration / invoice-timing implications per interval; the freeze input shape
-(explicit end-date vs a span) and how partial-cycle remaining time is computed and
-stored per interval; the **discount-lifetime interaction** — an absolute discount
-`end_date` does *not* move with a freeze, so a member loses discount time while
-frozen; confirm that's intended or whether a freeze should extend it.
-
-## 4. Configurable billing anchor — create-only (not built)
-
-**Current state — forced to the 1st.** Every recurring subscription is pinned to one
-fixed anchor day: `payments_subscription_create.py` sets `billing_cycle_anchor` from
-`MONTHLY_BILLING_ANCHOR_DAY` via `_next_monthly_anchor_timestamp`, so all members
-bill on the 1st.
-
-**Needed — optional anchor date.** The anchor should be **configurable** — the
-member/gym chooses what date to bill on, not hard-coded to the 1st. This matters more
-with multi-interval (§2): the anchor generalizes to a **day-of-week** for weekly and
-a **date** for yearly, and the paid-time-preserving freeze (§3) already manipulates
-the anchor.
-
-**Constraint — create-only, then locked.** The anchor is settable **only at
-subscription create** (when there is no active sub). **Once a sub is active the
-anchor is locked down** — re-anchoring a live subscription mid-life disrupts
-billing/proration, so it must be immutable after create. Changing it would mean
-cancel + recreate, never an in-place re-anchor.
-
-**Open questions:** where the chosen anchor lives (per member? per membership? gym
-default + override?); how it interacts with first-invoice proration; and the
-per-interval anchor shape (day-of-month vs day-of-week vs date) under §2.
-
 ## 5. Post-discount amount PER MEMBERSHIP (not built)
 
 > A new feature, separate from the engine itself. Today the CRM cannot read a single
@@ -225,29 +140,6 @@ differ per member:
 - **Interaction with the per-member preview** (the add/remove discount preview) — the
   preview should be able to show the per-membership post-discount figure too.
 
-## 6. Preview: split due-now vs recurring (not built)
-
-**Current state — one flat preview.** Every preview path
-(`preview_update_payments_recurring` → `PaymentSyncStripe.preview_execute_sync`)
-returns a single `PaymentsInvoicePreviewResponse` — one `amount_due` for the
-upcoming invoice, with no breakdown of what is charged **now** vs. what **recurs**,
-and no per-line classification.
-
-**What's needed — `{due_now, recurring}` with typed lines.** Restructure the preview
-into two buckets, each line carrying a `kind` (base / proration / discount) and its
-period, so the CRM can render "Due now $X = proration + first period − discount,
-then $Y/mo after" instead of one opaque total. This applies to **every** preview
-surface — start, price-change, and the add/remove-discount previews.
-
-**Touches:** `payments_invoice_schema.py` (the response shape),
-`payment_sync_stripe.py` (`preview_execute_sync` → emit the split), the preview
-callers + the `member_memberships_router.py` preview endpoints (including the
-`discounts/add` + `discounts/remove` previews), `Database/openapi.json` (regenerated,
-gitignored), the CRM preview UI, and the preview tests.
-
-**Open questions:** the exact line taxonomy (is `proration` always separable from
-`base`? where do multi-membership consolidated lines land?); and a dedicated
-due-now preview test landing with it. Confirm the shape before starting.
 
 ## 7. Per-membership `paid_by_member_id` — who actually pays each membership (not built)
 
@@ -406,33 +298,94 @@ the scheduled reconciler, §1, needs in the Stripe→CRM direction.)
   the bucket is built, so two desired items could collide on `si_X`). The *current* behavior is worth
   verifying now too.
 
-## 9. Persist the per-invoice applied-discount audit (not built)
 
-The `invoice.paid` webhook now persists invoice **line items**
-(`member_invoice_line_items`, via `_insert_line_items`), so the CRM invoice popup itemizes from real
-data. **Still not written:** `member_invoice_applied_discounts` — the per-invoice discount **audit**
-(what each invoice actually discounted, snapshotted at invoice time). Write it from `invoice.paid`
-(the discounts ride the Stripe invoice lines) so the CRM can show a per-invoice discount breakdown,
-not just the line totals. Distinct from `member_membership_applied_discounts` (the current
-entitlement) — this records what a specific invoice charged.
+--------------------------
 
-## 10. Open questions & cross-cutting deferrals
 
-- **Discount auto-update (deferred).** Today a preset edit affects only *new*
-  applications — existing snapshots stay pinned to their old value version (the
-  predictability guarantee in `discounts-guide`). The **provenance fields**
-  (`source_discount_id`, `linked_discount_planid` + `linked_discount_num`) exist
-  precisely so a future "re-apply this preset to its existing holders" bulk action
-  *can* find and update the snapshots deriving from a given preset. A possible "same
-  membership type" constraint would make that edge-case-free (if every snapshot
-  deriving from a preset sits on the same plan/quantity shape, re-applying a changed
-  value is unambiguous). Not decided — enabled by the provenance fields but
-  intentionally not built.
-- **Relocate link/unlink into membership handling + a preview flag.** Linking/unlinking a
-  paying parent is **billing-critical** — it reshapes the family's consolidated subscription —
-  but it currently lives in `src/members/service/management/members_management_linked.py`, the
-  wrong domain. Move it under `src/member_memberships/service/memberships/` alongside the other
-  lifecycle ops (start / cancel / discounts), where billing-critical changes belong. And collapse
-  the separate `preview_link_account` / `preview_unlink_account` methods into a **`preview` bool**
-  on `link_account` / `unlink_account` — matching the memberships and add/remove-discounts pattern
-  (one op with a preview flag, not a parallel preview method).
+
+# Later
+
+## 2. Multi-interval recurring — weekly / yearly (not built)
+
+> Recurring is **monthly-only** today; weekly and yearly are needed. The blocker
+> that pushed this past MVP was the paid-time-preserving freeze (§3) — its interval
+> math + Stripe billing-anchor work was too much for the MVP window, so a simple
+> pause shipped instead.
+
+### Current state — monthly only, one bucket, one sub
+The DB `recurring_must_be_monthly` CHECK, the engine's single monthly
+`IntervalBucket` ("exactly one bucket"), and the interval-named
+`members.stripe_sub_id_month` column all assume one interval. The
+`IntervalBucket.interval` field and the `_month` suffix were left in deliberately to
+anticipate this extension.
+
+### What it takes
+- **Lift `recurring_must_be_monthly`** — allow recurring
+  `duration_unit ∈ week / month / year`.
+- **One Stripe subscription per interval.** Stripe cannot mix billing intervals on a
+  single subscription, so a family with weekly + monthly + yearly memberships needs
+  up to **three** subscriptions. `members` gains `stripe_sub_id_week` /
+  `stripe_sub_id_year` alongside the existing `stripe_sub_id_month`.
+- **One bucket per interval present.** The read path groups the family's active
+  recurring memberships by `duration_unit`; the builder produces a bucket per
+  interval instead of forcing a single month bucket; `execute_sync` runs per bucket
+  (create/update/cancel its own sub); the writeback fans per sub. Per-line
+  consolidation and the discount/coupon logic are unchanged **within** each bucket.
+
+## 3. Paid-time-preserving freeze (not built)
+
+**Why the current freeze is insufficient.** Today freeze = Stripe
+`pause_collection` + a resume date. Pausing collection does **not** give the member
+back the time they were frozen — the billing clock keeps ticking through the pause,
+so they don't resume with exactly the remaining interval they had paid for. For
+monthly that was "close enough" to ship; for **weekly** (day/week precision) and
+**yearly** (a few frozen months is real money against a year) it is not.
+
+**What a correct freeze does:**
+1. **On freeze**, capture the **remaining time** until `next_due_date` — the credit
+   the member already paid for (e.g. "11 days left in the cycle", "4 months left in
+   the year").
+2. **On unfreeze**, set the **next billing date = unfreeze_date + that remaining
+   credit**, so the member resumes with exactly the interval they had left and the
+   whole cadence shifts forward by the freeze duration — the billing clock
+   effectively *stops* during the freeze instead of continuing to tick.
+3. **In Stripe**, shift the subscription's **billing anchor** (`billing_cycle_anchor`
+   / `trial_end` / proration controls) so the next invoice lands on the recomputed
+   date — not merely pausing and resuming collection.
+4. **Across every interval sub** (§2) — each interval subscription's anchor is
+   recomputed independently; remaining time uses `relativedelta` for month/year and
+   `timedelta` for week.
+
+It builds on the **standalone `PaymentSyncFreeze`** service (already split out of the
+main sync) so the freeze path can own this anchor math without running a full sync.
+
+**Open questions:** the exact Stripe mechanism for the anchor shift
+(`billing_cycle_anchor` reset vs `trial_end` vs pause + manual anchor) and its
+proration / invoice-timing implications per interval; the freeze input shape
+(explicit end-date vs a span) and how partial-cycle remaining time is computed and
+stored per interval; the **discount-lifetime interaction** — an absolute discount
+`end_date` does *not* move with a freeze, so a member loses discount time while
+frozen; confirm that's intended or whether a freeze should extend it.
+
+## 4. Configurable billing anchor — create-only (not built)
+
+**Current state — forced to the 1st.** Every recurring subscription is pinned to one
+fixed anchor day: `payments_subscription_create.py` sets `billing_cycle_anchor` from
+`MONTHLY_BILLING_ANCHOR_DAY` via `_next_monthly_anchor_timestamp`, so all members
+bill on the 1st.
+
+**Needed — optional anchor date.** The anchor should be **configurable** — the
+member/gym chooses what date to bill on, not hard-coded to the 1st. This matters more
+with multi-interval (§2): the anchor generalizes to a **day-of-week** for weekly and
+a **date** for yearly, and the paid-time-preserving freeze (§3) already manipulates
+the anchor.
+
+**Constraint — create-only, then locked.** The anchor is settable **only at
+subscription create** (when there is no active sub). **Once a sub is active the
+anchor is locked down** — re-anchoring a live subscription mid-life disrupts
+billing/proration, so it must be immutable after create. Changing it would mean
+cancel + recreate, never an in-place re-anchor.
+
+**Open questions:** where the chosen anchor lives (per member? per membership? gym
+default + override?); how it interacts with first-invoice proration; and the
+per-interval anchor shape (day-of-month vs day-of-week vs date) under §2.
