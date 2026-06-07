@@ -242,10 +242,6 @@ TTL), per-parent, block-then-409.
   built, so the desired items may **collide on `si_X`** (old-price line + the split-off both referencing
   it). **No test exists** for the multi-person reprice. Verify the current behavior is correct or a
   bug; the planned fix is the new-row reprice model (`FastApiBackend/PaymentRefactor.md` §8).
-- **Rewards `GET /rewards/{reward_id}` is unwired** — `RewardsService.get_reward` exists but no route;
-  7 `TestGetReward` tests (in `tests/integration/test_rewards_integration.py`) expect it and 405.
-  **Pre-existing, UNRELATED to this refactor** (since the base commit). User said leave it: decide to
-  wire `GET /{reward_id} → get_reward` or delete the TestGetReward class.
 
 > **Moved/resolved (no longer session TODOs):** the **preview due-now vs recurring split (#19)** is a
 > future feature, now in `FastApiBackend/PaymentRefactor.md` §6 (the roadmap). The

@@ -301,3 +301,36 @@ async def get_redemptions(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve redemptions",
         ) from None
+
+
+@rewards_router.get(
+    "/{reward_id}",
+    response_model=RewardResponse,
+    summary="Get a single reward by id",
+    responses={
+        200: {"description": "Reward returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+        404: {"description": "Reward not found"},
+    },
+)
+@inject
+async def get_reward_by_id(
+    reward_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    rewards_service: RewardsService = Depends(Provide[DependencyInjector.rewards_service]),
+) -> RewardResponse:
+    """Get a single reward by id (gym-employee scoped)."""
+    user_payload = auth.get_current_user(credentials)
+
+    try:
+        reward = await rewards_service.get_reward(reward_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reward not found",
+        ) from None
+
+    await auth.verify_gym_employee(reward.gym_id, user_payload)
+    return reward
