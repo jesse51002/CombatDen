@@ -235,6 +235,14 @@ settle and the §2.5 discount preview staging** (the `preview_remove`-races-a-re
   properly"; flavor unconfirmed.
 
 ### 3.4 Open decisions + smaller items
+- 🔴 **Verify (and test) repricing one member OFF a shared consolidated line.** N>1 family members on
+  one price share **one** Stripe sub-item (quantity-N `si_X`); every one of their `member_memberships`
+  rows carries the **same** `stripe_item_id`. When `update_price` reprices one of them, that member
+  must be **split onto a new sub-item** (`si_Y`) while the remaining N-1 stay on `si_X` at quantity
+  N-1. **Suspected gap:** the repriced row still carries the old shared `si_X` when the sync bucket is
+  built, so the desired items may **collide on `si_X`** (old-price line + the split-off both referencing
+  it). **No test exists** for the multi-person reprice. Verify the current behavior is correct or a
+  bug; the planned fix is the new-row reprice model (`FastApiBackend/PaymentRefactor.md` §8).
 - **Rewards `GET /rewards/{reward_id}` is unwired** — `RewardsService.get_reward` exists but no route;
   7 `TestGetReward` tests (in `tests/integration/test_rewards_integration.py`) expect it and 405.
   **Pre-existing, UNRELATED to this refactor** (since the base commit). User said leave it: decide to
