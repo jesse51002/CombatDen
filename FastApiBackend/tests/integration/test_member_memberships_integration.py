@@ -8,7 +8,7 @@ Strategy:
   - 404 not-found: hit write endpoints with valid auth but nonexistent
     IDs; expect 404 with a legible detail string (DB lookup, no Stripe).
   - Preview paths: call /preview, /cancel/preview, /price/preview, and
-    /discounts/preview; expect 404 (no membership) or 400 (no plan).
+    /discounts/add (preview=true); expect 404 (no membership) or 400 (no plan).
     These are the safe dry-run paths — any 500 is a real backend bug.
   - NO real Stripe charges are driven. charge-card, mark-paid-cash,
     start, cancel, freeze, unfreeze, update_price, and update_discounts
@@ -503,7 +503,7 @@ class TestPreviewPaths:
     - /preview (start)     → 404 (plan not found) or 502 (Stripe not wired)
     - /cancel/preview      → 404 (membership not found)
     - /price/preview       → 404 (membership not found)
-    - /discounts/preview   → 404 (membership not found)
+    - /discounts/add (preview=true) → 404 (membership not found)
 
     Any 500 indicates a real backend bug (serialisation, SQL, or unhandled
     exception that should have been a domain error).
