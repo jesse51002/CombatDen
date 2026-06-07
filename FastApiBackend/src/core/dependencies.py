@@ -78,6 +78,7 @@ from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.paying_member_lock import PayingMemberLock
+from src.shared.resource_lock import ResourceLock
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
@@ -199,6 +200,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         gym_stripe_service=gym_stripe_service,
     )
+    # Generic non-blocking TTL-lease lock (key-agnostic). Used by the scheduled
+    # reconciler's global sweep lock and the orphan-cleanup family check.
+    resource_lock = providers.Factory(ResourceLock, db_pool=db_pool)
     # The one concurrency lock: a TTL lease keyed on a member's paying parent,
     # so no two billing ops sync the same family at once. Used by the facade,
     # the webhook settle, and the bulk fan-out.
