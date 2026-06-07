@@ -19,6 +19,9 @@ from src.core.config import (
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
+from src.reconciler.service.reconciler.reconciler_payment_push_sweep import (
+    PaymentPushSweep,
+)
 from src.reconciler.service.reconciler.reconciler_result import (
     ReconcilerRunResult,
     SweepResult,
@@ -35,9 +38,11 @@ class ReconcilerService:
         self,
         resource_lock: ResourceLock,
         orphan_cleanup_sweep: OrphanCleanupSweep,
+        payment_push_sweep: PaymentPushSweep,
     ) -> None:
         self._resource_lock = resource_lock
         self._orphan_cleanup_sweep = orphan_cleanup_sweep
+        self._payment_push_sweep = payment_push_sweep
 
     async def run(self) -> ReconcilerRunResult:
         """Run one full sweep, unless another instance already holds the lock.
@@ -60,6 +65,7 @@ class ReconcilerService:
             sweeps: list[SweepResult] = []
             # Final order is D -> B -> A -> C; steps are appended as added.
             sweeps.append(await self._orphan_cleanup_sweep.run())
+            sweeps.append(await self._payment_push_sweep.run())
             logger.info(
                 "Reconciler sweep complete (%d step(s))",
                 len(sweeps),

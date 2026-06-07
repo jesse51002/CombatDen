@@ -72,6 +72,9 @@ from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
+from src.reconciler.service.reconciler.reconciler_payment_push_sweep import (
+    PaymentPushSweep,
+)
 from src.reconciler.service.reconciler.reconciler_service import (
     ReconcilerService,
 )
@@ -367,8 +370,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         parent_resolver=billing_parent_resolver,
         resource_lock=resource_lock,
     )
+    reconciler_payment_push_sweep = providers.Factory(
+        PaymentPushSweep,
+        db_pool=db_pool,
+        payment_sync_service=payment_sync_service,
+    )
     reconciler_service = providers.Factory(
         ReconcilerService,
         resource_lock=resource_lock,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
+        payment_push_sweep=reconciler_payment_push_sweep,
     )
