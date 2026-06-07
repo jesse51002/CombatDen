@@ -5,7 +5,8 @@ import 'package:crm/features/member_details/data/models/member_memberships_freez
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
-import 'package:crm/features/member_details/data/models/member_memberships_apply_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_check_response.dart';
@@ -406,18 +407,37 @@ class MemberRepository {
         .toList();
   }
 
-  /// `PUT /api/v1/member_memberships/discounts` — adds /
-  /// removes immutable applied-discount snapshots on an
-  /// existing membership. Applying is an explicit add /
-  /// remove, never a replace-set: [req] names the regular
-  /// presets and linked discounts to add and the snapshot
-  /// ids to remove. Re-syncs the subscription.
-  Future<void> applyMembershipDiscounts(
-    MemberMembershipsApplyDiscountsRequest req,
+  /// `POST /api/v1/member_memberships/discounts/add` — adds the
+  /// named preset snapshots. With `req.preview` true it returns the
+  /// resulting [DueNowVsRecurringPreview] (nothing committed); else it
+  /// commits, re-syncs, and returns null.
+  Future<DueNowVsRecurringPreview?> addMembershipDiscounts(
+    MemberMembershipsAddDiscountsRequest req,
   ) async {
-    await _apiClient.put(
-      '/api/v1/member_memberships/discounts',
+    final response = await _apiClient.post(
+      '/api/v1/member_memberships/discounts/add',
       data: req.toJson(),
+    );
+    if (response.data == null) return null;
+    return DueNowVsRecurringPreview.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `POST /api/v1/member_memberships/discounts/remove` — removes the
+  /// named applied-discount snapshots. With `req.preview` true it returns
+  /// the resulting [DueNowVsRecurringPreview] (nothing committed); else it
+  /// commits, re-syncs, and returns null.
+  Future<DueNowVsRecurringPreview?> removeMembershipDiscounts(
+    MemberMembershipsRemoveDiscountsRequest req,
+  ) async {
+    final response = await _apiClient.post(
+      '/api/v1/member_memberships/discounts/remove',
+      data: req.toJson(),
+    );
+    if (response.data == null) return null;
+    return DueNowVsRecurringPreview.fromJson(
+      response.data as Map<String, dynamic>,
     );
   }
 

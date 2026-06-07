@@ -8,7 +8,8 @@ import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
-import 'package:crm/features/member_details/data/models/member_memberships_apply_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 
@@ -39,7 +40,8 @@ class MemberDetailBloc
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
     on<MarkPaidCashRequested>(_onMarkPaidCash);
 
-    on<ApplyDiscountsRequested>(_onApplyDiscounts);
+    on<AddDiscountsRequested>(_onAddDiscounts);
+    on<RemoveDiscountsRequested>(_onRemoveDiscounts);
 
     on<ChargeCardRequested>(_onChargeCard);
     on<RefundChargeRequested>(_onRefundCharge);
@@ -366,24 +368,47 @@ class MemberDetailBloc
     );
   }
 
-  Future<void> _onApplyDiscounts(
-    ApplyDiscountsRequested event,
+  Future<void> _onAddDiscounts(
+    AddDiscountsRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
     await _runMutation(
-      actionLabel: 'Apply discounts',
+      actionLabel: 'Add discounts',
       emit: emit,
-      action: () => _repository.applyMembershipDiscounts(
-        MemberMembershipsApplyDiscountsRequest(
-          itemId: event.itemId,
-          memberId: event.memberId,
-          addPresetIds: event.addPresetIds,
-          removeAppliedIds: event.removeAppliedIds,
-          idempotencyKey: const Uuid().v4(),
-        ),
-      ),
+      action: () async {
+        await _repository.addMembershipDiscounts(
+          MemberMembershipsAddDiscountsRequest(
+            itemId: event.itemId,
+            memberId: event.memberId,
+            presetIds: event.presetIds,
+            idempotencyKey: const Uuid().v4(),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _onRemoveDiscounts(
+    RemoveDiscountsRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    await _runMutation(
+      actionLabel: 'Remove discounts',
+      emit: emit,
+      action: () async {
+        await _repository.removeMembershipDiscounts(
+          MemberMembershipsRemoveDiscountsRequest(
+            itemId: event.itemId,
+            memberId: event.memberId,
+            appliedIds: event.appliedIds,
+            idempotencyKey: const Uuid().v4(),
+          ),
+        );
+      },
     );
   }
 
