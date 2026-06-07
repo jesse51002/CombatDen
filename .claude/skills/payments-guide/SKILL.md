@@ -271,6 +271,16 @@ exposes the read.
   **or `status == "canceled"`**.
 - `_validate_subscription_request` / `_validate_coupon_ids` — pre-validate all
   prices (single shared recurring interval) and coupons exist before writing.
+  **Called on the create path only** (it returns the recurring interval, which
+  create uses for the monthly `billing_cycle_anchor`). The **update** path no
+  longer calls it: its return was discarded there and it looped a price+product
+  retrieve over every item on the sub (2N wasted Stripe round-trips that grew
+  with family size on each re-sync). On update the items are already-live or
+  freshly added from already-validated memberships and the coupons were just
+  find-or-created by the same sync; `_build_reconcile_items` still detects an
+  out-of-sync `stripe_item_id`, and a genuinely bad price surfaces as a Stripe
+  error on the update call. (Trade-off: the update path no longer
+  auto-reactivates an archived price — create still does.)
 
 ---
 
