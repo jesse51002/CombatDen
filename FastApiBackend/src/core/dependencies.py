@@ -282,9 +282,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         MembersManagementService,
         db_pool=db_pool,
         payments_members_service=payments_members_service,
-        payment_sync_service=payment_sync_service,
         subscription_service=payments_subscription_service,
-        paying_lock=paying_member_lock,
     )
 
     # ── Discounts ────────────────────────────────────────────────

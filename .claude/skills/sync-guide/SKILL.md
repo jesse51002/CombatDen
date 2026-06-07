@@ -67,11 +67,11 @@ This skill owns the **orchestration / mechanics** in
   service. A direct `stripe.*` / `.v1.*` call anywhere in the engine is a bug
   (the anti-pattern `PaymentSyncCoupons` used to have).
 - **The membership lifecycle callers** (start / cancel / freeze / price-change /
-  discount-change / link) → `memberships-guide`. They *trigger* the engine.
+  discount-change) → `memberships-guide`. They *trigger* the engine.
 - **Concurrency locking.** The engine owns **no** lock logic. The per-paying-parent
   lock is the shared `PayingMemberLock` (`src/shared/paying_member_lock.py`): a TTL
   lease in `resource_locks`, one `lock(member_ids)` context manager. The **callers**
-  wrap their op in it (the membership facade, link/unlink, `bulk_payment_sync` per
+  wrap their op in it (the membership facade, `bulk_payment_sync` per
   member, the `invoice.paid` webhook around `settle_once_discounts`) — held across
   the whole op so no two ops sync the same family at once. `update_payments_recurring`
   / `preview` / `settle_once_discounts` are NOT self-guarded; their boundary caller
@@ -137,11 +137,10 @@ converges Stripe to it.)
 | `member_memberships_cancel.py` | cancel a membership |
 | `member_memberships_update_price.py` | mid-cycle price swap |
 | `member_memberships_update_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
-| `members_management_linked.py` | link / unlink a family account |
 
-The first callers live in `src/member_memberships/service/memberships/`;
-`members_management_linked.py` lives in `src/members/service/management/`
-(linking is a member-management action, not a membership-lifecycle one).
+These callers all live in `src/member_memberships/service/memberships/`.
+(Link / unlink is **not** a sync caller — it is a pure DB change that never
+touches Stripe; see `memberships-guide`.)
 
 **Freeze / unfreeze no longer flows through the main sync.** The explicit freeze
 action writes the freeze window to the DB, then calls the standalone
@@ -161,8 +160,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
 `src/shared/db_first_helpers.py` encapsulates steps 2–3:
 
 0. **Pre-sync to a clean baseline** — call the sync once FIRST
-   (`_pre_sync_payments` on `MemberMembershipsBase`, or an inline
-   `update_payments_recurring` for link/unlink), with a **fresh** idempotency key
+   (`_pre_sync_payments` on `MemberMembershipsBase`), with a **fresh** idempotency key
    and default (no) proration, to converge the family's DB↔Stripe state **before
    mutating**. This stops the op from building new desired state on top of a
    drifted DB (e.g. a half-finished prior op left a pending/unsettled row). If it

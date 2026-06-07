@@ -2,7 +2,7 @@ flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing API (WIP)"]
     direction TB
-    r_mem["<b>members</b> · /api/v1/members · 16 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link<br/>DELETE /{member_id}/link<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/preview<br/>POST /{member_id}/unlink/preview<br/>GET /{member_id}/invoices<br/>GET /{member_id}/upcoming-invoice<br/>GET /{member_id}/payments"]
+    r_mem["<b>members</b> · /api/v1/members · 14 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link<br/>DELETE /{member_id}/link<br/>POST /{member_id}/link/check<br/>GET /{member_id}/invoices<br/>GET /{member_id}/upcoming-invoice<br/>GET /{member_id}/payments"]
     r_gym["<b>gyms</b> · /api/v1/gyms · 5 routes<br/>POST /<br/>GET /<br/>GET /{gym_id}/onboarding<br/>POST /{gym_id}/onboarding/link<br/>PUT /{gym_id}"]
     r_cls["<b>classes</b> · /api/v1/classes · 2 routes<br/>POST /checkin<br/>GET /streak"]
     r_rank["<b>ranks</b> · /api/v1/ranks · 10 routes<br/>GET /<br/>POST /<br/>POST /from-preset<br/>GET /presets<br/>GET /presets/grouped<br/>GET /enabled<br/>PUT /enabled<br/>GET /{rank_id}<br/>PUT /{rank_id}<br/>DELETE /{rank_id}"]
@@ -77,7 +77,6 @@ flowchart TB
     members_billing_detail_service --> streak_service
     members_billing_detail_service --> cycle_counts_service
     members_management_service --> Payments
-    members_management_service --> payment_sync_service
     gyms_service --> gyms_stripe_connect_service
     gyms_stripe_connect_service --> Payments
     member_memberships_service --> payment_sync_service
