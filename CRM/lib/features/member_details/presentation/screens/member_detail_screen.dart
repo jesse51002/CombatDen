@@ -168,6 +168,13 @@ class _Loaded extends StatelessWidget {
                             CrossAxisAlignment.stretch,
                         spacing: DesignConstants.spacingBig,
                         children: [
+                          _BackToMembersButton(
+                            onPressed: () => Navigator.of(
+                              context,
+                            ).pushReplacementNamed(
+                              AppRoutes.members,
+                            ),
+                          ),
                           ProfileHeaderSection(
                             member: member,
                             onLinkedAccountTap: onMemberTap,
@@ -181,7 +188,6 @@ class _Loaded extends StatelessWidget {
                                 .add(
                                   MembershipPageChanged(i),
                                 ),
-                            onLinkedAccountTap: onMemberTap,
                           ),
                         ],
                       ),
@@ -202,6 +208,50 @@ class _Loaded extends StatelessWidget {
             child: _MutationOverlay(),
           ),
       ],
+    );
+  }
+}
+
+/// A left-aligned "back to the members list" affordance at the
+/// top of the detail page (the page is reached via
+/// pushReplacement, so there is no pop stack to fall back on).
+class _BackToMembersButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _BackToMembersButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(
+          DesignConstants.radiusSmall,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: DesignConstants.spacingSmall,
+            vertical: DesignConstants.spacingSmall,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              Icon(
+                Symbols.arrow_back_sharp,
+                size: DesignConstants.iconSizeMedium,
+                weight: DesignConstants.iconWeight,
+                color: DesignConstants.text,
+              ),
+              Text(
+                'Members',
+                style: DesignConstants.h3,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

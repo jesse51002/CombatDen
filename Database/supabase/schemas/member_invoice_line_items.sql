@@ -12,7 +12,8 @@ CREATE TABLE member_invoice_line_items (
 
     item_type line_item_type NOT NULL,
     name VARCHAR NOT NULL CHECK (name <> ''),  -- frozen historical label
-    amount INTEGER NOT NULL CHECK (amount >= 0),
+    amount INTEGER NOT NULL CHECK (amount >= 0),  -- line total (post-qty)
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
 
     -- Stripe-side trace. Nullable for cash / non-Stripe lines.
     stripe_product_id VARCHAR,

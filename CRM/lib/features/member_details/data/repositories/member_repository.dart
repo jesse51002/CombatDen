@@ -14,8 +14,10 @@ import 'package:crm/features/member_details/data/models/members_management_respo
 import 'package:crm/features/member_details/data/models/members_management_update_card_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
+import 'package:crm/features/member_details/data/models/upcoming_invoice_response.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
@@ -247,6 +249,42 @@ class MemberRepository {
           ),
         )
         .toList();
+  }
+
+  /// `GET /api/v1/members/{member_id}/payments` — one page of the
+  /// member's payment history: the charges that paid for any membership
+  /// this member has held, plus their own direct charges, newest first.
+  Future<List<PaymentRecord>> getPayments(
+    String memberId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final response = await _apiClient.get(
+      '/api/v1/members/$memberId/payments',
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
+    return (response.data as List<dynamic>)
+        .map(
+          (e) =>
+              PaymentRecord.fromJson(e as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
+  /// `GET /api/v1/members/{member_id}/upcoming-invoice`.
+  ///
+  /// Returns null when the member's account has no recurring
+  /// subscription (the endpoint responds with a null body).
+  Future<UpcomingInvoiceResponse?> getUpcomingInvoice(
+    String memberId,
+  ) async {
+    final response = await _apiClient.get(
+      '/api/v1/members/$memberId/upcoming-invoice',
+    );
+    if (response.data == null) return null;
+    return UpcomingInvoiceResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   // ----- Member memberships -----

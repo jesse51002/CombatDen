@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
 from src.members.schema.members_billing_schema import (
+    BillingPaymentRecord,
     MemberBillingDetailResponse,
     MembersBillingLinkCheckResponse,
     MembersBillingLinkRequest,
@@ -38,10 +39,14 @@ from src.members.service.management.members_management_service import (
 from src.members.service.member_details.members_billing_detail_service import (
     MembersBillingDetailService,
 )
+from src.members.service.member_payments_service import (
+    MembersPaymentsService,
+)
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
     PaymentsInvoiceResponse,
+    UpcomingInvoiceResponse,
 )
 from src.shared.auth import Auth, security
 
@@ -850,4 +855,108 @@ async def list_member_invoices(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list invoices",
+        ) from None
+
+
+@members_router.get(
+    "/{member_id}/upcoming-invoice",
+    response_model=UpcomingInvoiceResponse | None,
+    summary="Get member's upcoming invoice",
+    description=(
+        "Returns the upcoming (next) Stripe invoice preview for the "
+        "member's paying account, or null when there is no recurring "
+        "subscription."
+    ),
+    responses={
+        200: {"description": "Upcoming invoice retrieved (or null)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def get_member_upcoming_invoice(
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> UpcomingInvoiceResponse | None:
+    """Fetch the upcoming invoice preview for a member's account."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await management_service.get_upcoming_invoice(member_id)
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to get upcoming invoice: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get upcoming invoice",
+        ) from None
+
+
+@members_router.get(
+    "/{member_id}/payments",
+    response_model=list[BillingPaymentRecord],
+    summary="List member payment history (paginated)",
+    description=(
+        "Returns a page of the member's payment history — the charges that "
+        "paid for any membership this member has held (by membership "
+        "item_id) plus their own direct charges, newest first — each "
+        "labelled with who was charged."
+    ),
+    responses={
+        200: {"description": "Payment history page retrieved"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def list_member_payments(
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    payments_service: MembersPaymentsService = Depends(
+        Provide[DependencyInjector.members_payments_service]
+    ),
+    limit: int = 20,
+    offset: int = 0,
+) -> list[BillingPaymentRecord]:
+    """List one page of a member's payment history."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await payments_service.list_payments(
+            member_id,
+            limit=limit,
+            offset=offset,
+        )
+    except Exception:
+        logger.error(
+            "Failed to list payments: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list payments",
         ) from None

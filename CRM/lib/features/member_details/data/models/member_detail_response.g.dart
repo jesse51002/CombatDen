@@ -42,11 +42,6 @@ MemberDetailResponse _$MemberDetailResponseFromJson(
           ?.map((e) => RewardCardModel.fromJson(e as Map<String, dynamic>))
           .toList() ??
       [],
-  paymentHistory:
-      (json['payment_history'] as List<dynamic>?)
-          ?.map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
-          .toList() ??
-      [],
   cardOnFile: json['card_on_file'] == null
       ? null
       : CardOnFile.fromJson(json['card_on_file'] as Map<String, dynamic>),

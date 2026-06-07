@@ -60,6 +60,11 @@ class InvoiceBreakdownData extends Equatable {
   /// "Total" — refunds render the same breakdown, relabeled.
   final bool isRefund;
 
+  /// Amount refunded against this charge (minor units, >= 0).
+  /// When non-zero a "Refunded" line and a "Net" line render
+  /// below the total, so it's clear what was returned.
+  final int refundedAmount;
+
   const InvoiceBreakdownData({
     required this.lines,
     required this.total,
@@ -67,6 +72,7 @@ class InvoiceBreakdownData extends Equatable {
     this.subtotal,
     this.appliedDiscounts = const [],
     this.isRefund = false,
+    this.refundedAmount = 0,
   });
 
   @override
@@ -77,5 +83,6 @@ class InvoiceBreakdownData extends Equatable {
         total,
         currency,
         isRefund,
+        refundedAmount,
       ];
 }

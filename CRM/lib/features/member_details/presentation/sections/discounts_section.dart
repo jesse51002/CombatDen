@@ -16,17 +16,13 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
-/// Applied discounts on this membership, grouped UNDER each
-/// covered person's membership line so it is exact what is
-/// discounted and what is not — every discount is a frozen,
-/// item-scoped snapshot. Plus a Manage Discounts entry point
-/// targeting the primary member's slot ([coveredMemberId]).
+/// Applied discounts for the **selected covered member**
+/// ([coveredMemberId]) only — every discount is a frozen,
+/// item-scoped snapshot on that member's membership. Plus a
+/// Manage Discounts entry point targeting that member's slot.
 class DiscountsSection extends StatelessWidget {
   final MemberDetailResponse member;
   final MembershipInfo membership;
-
-  /// The covered person whose discount set is managed —
-  /// the primary member when present on the plan.
   final String coveredMemberId;
 
   const DiscountsSection({
@@ -40,60 +36,38 @@ class DiscountsSection extends StatelessWidget {
       !isTerminalStatus(membership.status) &&
       membership.itemIdFor(coveredMemberId) != null;
 
-  /// Display name for a covered member id — resolved from
-  /// the queried member, the paying-for roster, then linked
-  /// accounts. Falls back to a generic label.
-  String _nameFor(String memberId) {
-    if (memberId == member.memberId) return member.fullName;
-    for (final p in membership.payingFor) {
-      if (p.memberId == memberId) return p.fullName;
-    }
-    for (final a in member.linkedAccounts) {
-      if (a.memberId == memberId) return a.fullName;
-    }
-    return 'Member';
-  }
-
-  /// Covered member ids in a stable order: the managed
-  /// member first, then any others on the plan group.
-  List<String> get _coveredOrder {
-    final ids = membership.members.keys.toList();
-    ids.sort((a, b) {
-      if (a == coveredMemberId) return -1;
-      if (b == coveredMemberId) return 1;
-      return 0;
-    });
-    return ids;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final showPerson = membership.members.length > 1;
+    final itemId = membership.itemIdFor(coveredMemberId);
+    final discounts = membership.discounts
+        .where((d) => itemId != null && d.itemId == itemId)
+        .toList();
+
     return SubtitleSection(
       title: 'Discounts',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingMedium,
         children: [
-          if (membership.discounts.isEmpty)
+          if (discounts.isEmpty)
             const _Empty()
           else
-            for (final coveredId in _coveredOrder)
-              _MemberDiscountGroup(
-                memberName: _nameFor(coveredId),
-                showName: showPerson,
-                memberId: coveredId,
-                itemId: membership.itemIdFor(coveredId),
-                discounts: membership.discounts
-                    .where(
-                      (d) =>
-                          membership.itemIdFor(coveredId) !=
-                              null &&
-                          d.itemId ==
-                              membership.itemIdFor(coveredId),
-                    )
-                    .toList(),
-              ),
+            AppDataTable(
+              shrinkWrap: true,
+              stickyHeader: false,
+              columns: const [
+                AppDataTableColumn(label: 'Name', fill: true),
+                AppDataTableColumn(label: 'Ends', minWidth: 110),
+                AppDataTableColumn(
+                  label: 'Discount',
+                  minWidth: 96,
+                ),
+                AppDataTableColumn(label: '', minWidth: 44),
+              ],
+              rows: discounts
+                  .map((d) => _row(context, d, itemId))
+                  .toList(),
+            ),
           AppOutlineButton(
             fullWidth: true,
             text: 'Manage discounts',
@@ -111,61 +85,12 @@ class DiscountsSection extends StatelessWidget {
       ),
     );
   }
-}
 
-/// One covered person's applied discounts under their
-/// membership line. Hidden entirely when they have none, so
-/// the section reads exactly what is and isn't discounted.
-class _MemberDiscountGroup extends StatelessWidget {
-  final String memberName;
-  final bool showName;
-  final String memberId;
-  final String? itemId;
-  final List<DiscountInfo> discounts;
-
-  const _MemberDiscountGroup({
-    required this.memberName,
-    required this.showName,
-    required this.memberId,
-    required this.itemId,
-    required this.discounts,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (discounts.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingSmall,
-      children: [
-        if (showName)
-          Text(
-            memberName,
-            style: DesignConstants.h3.copyWith(
-              color: DesignConstants.text2nd,
-            ),
-          ),
-        AppDataTable(
-          shrinkWrap: true,
-          stickyHeader: false,
-          columns: const [
-            AppDataTableColumn(label: 'Name', fill: true),
-            AppDataTableColumn(label: 'Ends', minWidth: 110),
-            AppDataTableColumn(
-              label: 'Discount',
-              minWidth: 96,
-            ),
-            AppDataTableColumn(label: '', minWidth: 44),
-          ],
-          rows: discounts
-              .map((d) => _row(context, d))
-              .toList(),
-        ),
-      ],
-    );
-  }
-
-  AppDataTableRow _row(BuildContext context, DiscountInfo d) {
+  AppDataTableRow _row(
+    BuildContext context,
+    DiscountInfo d,
+    String? itemId,
+  ) {
     return AppDataTableRow(
       cells: [
         Column(
@@ -203,7 +128,7 @@ class _MemberDiscountGroup extends StatelessWidget {
         ),
         _RemoveButton(
           itemId: itemId,
-          memberId: memberId,
+          memberId: coveredMemberId,
           appliedDiscountId: d.appliedDiscountId,
         ),
       ],

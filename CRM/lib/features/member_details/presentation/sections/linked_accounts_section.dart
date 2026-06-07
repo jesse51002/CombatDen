@@ -131,9 +131,7 @@ class _LinkedAccountChip extends StatelessWidget {
             DesignConstants.radiusBig,
           ),
           border: Border.all(
-            color: isPayingAccount
-                ? DesignConstants.goodGreen
-                : DesignConstants.divider,
+            color: DesignConstants.divider,
           ),
         ),
         child: Row(
@@ -160,24 +158,25 @@ class _LinkedAccountChip extends StatelessWidget {
             ),
             Flexible(
               child: Text(
-                isPayingAccount
-                    ? '${account.fullName} · paying'
-                    : account.fullName,
+                account.fullName,
                 style: DesignConstants.h3.copyWith(
-                  color: isPayingAccount
-                      ? DesignConstants.goodGreen
-                      : DesignConstants.text,
+                  color: DesignConstants.text,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            // Subtle paying-account marker: a muted dollar
+            // glyph, no loud color treatment.
             if (isPayingAccount)
-              Icon(
-                Symbols.verified_sharp,
-                size: DesignConstants.iconSizeSmall,
-                weight: DesignConstants.iconWeight,
-                color: DesignConstants.goodGreen,
+              Tooltip(
+                message: 'Paying account',
+                child: Icon(
+                  Symbols.attach_money_sharp,
+                  size: DesignConstants.iconSizeSmall,
+                  weight: DesignConstants.iconWeight,
+                  color: DesignConstants.text3rd,
+                ),
               ),
           ],
         ),

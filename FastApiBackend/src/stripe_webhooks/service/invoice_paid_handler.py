@@ -34,6 +34,10 @@ CHARGE_KIND_PAYMENT = "payment"
 CHARGE_STATUS_SUCCEEDED = "succeeded"
 INVOICE_STATUS_PAID = "paid"
 PAYMENT_METHOD_TYPE_CASH = "cash"
+LINE_ITEM_TYPE_MEMBERSHIP = "membership"
+LINE_ITEM_TYPE_CUSTOM = "custom"
+# Fallback label when a Stripe line carries no description (name <> '').
+LINE_ITEM_DEFAULT_NAME = "Charge"
 
 # Stripe serializes bool metadata values as string "true" / "false".
 STRIPE_METADATA_TRUE = "true"
@@ -44,6 +48,9 @@ class InvoicePaidHandler:
 
     Writes:
       - Upsert ``member_invoices`` row to ``status='paid'``.
+      - Insert one ``member_invoice_line_items`` row per Stripe line
+        (name / amount / quantity; membership lines carry their item_id),
+        so the bill is itemized.
       - Update ``member_memberships`` for each billed subscription item
         (``last_paid_date``, ``next_due_date``).
       - Insert a ``member_charges`` row representing the successful
@@ -111,6 +118,8 @@ class InvoicePaidHandler:
             member_id,
         )
         invoice_id: UUID = invoice_row["invoice_id"]
+
+        await self._insert_line_items(session, invoice, gym_id, invoice_id)
 
         if not is_one_time:
             await self._update_memberships(session, invoice, gym_id)
@@ -193,6 +202,79 @@ class InvoicePaidHandler:
         if row is None:
             raise RuntimeError(f"Failed to upsert invoice for stripe_invoice_id={invoice['id']}")
         return dict(row)
+
+    async def _insert_line_items(
+        self,
+        session: AsyncSession,
+        invoice: dict[str, Any],
+        gym_id: UUID,
+        invoice_id: UUID,
+    ) -> None:
+        """Persist each Stripe invoice line so the bill is itemized.
+
+        A line that maps to a membership (its ``subscription_item``
+        resolves to a ``member_memberships`` row) is stored as
+        ``item_type='membership'`` with that ``item_id``; everything
+        else is ``custom``. Idempotent on the Stripe line id. Negative
+        lines (proration credits) are skipped — the schema requires
+        ``amount >= 0``.
+        """
+        membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
+        insert_sql = load_sql(SQL_DIR / "member_invoice_line_item_insert.sql")
+
+        for line in self._lines(invoice):
+            line_item_id = line.get("id")
+            if not line_item_id:
+                continue
+            amount = int(line.get("amount") or 0)
+            if amount < 0:
+                continue
+
+            item_type = LINE_ITEM_TYPE_CUSTOM
+            item_id: str | None = None
+            stripe_item_id = line.get("subscription_item")
+            if stripe_item_id:
+                result = await session.execute(
+                    text(membership_sql),
+                    {
+                        "stripe_item_id": stripe_item_id,
+                        "gym_id": str(gym_id),
+                    },
+                )
+                row = result.mappings().fetchone()
+                if row is not None:
+                    item_type = LINE_ITEM_TYPE_MEMBERSHIP
+                    item_id = str(row["item_id"])
+
+            await session.execute(
+                text(insert_sql),
+                {
+                    "line_item_id": line_item_id,
+                    "invoice_id": str(invoice_id),
+                    "gym_id": str(gym_id),
+                    "item_type": item_type,
+                    "name": (line.get("description") or "").strip()
+                    or LINE_ITEM_DEFAULT_NAME,
+                    "amount": amount,
+                    "quantity": max(1, int(line.get("quantity") or 1)),
+                    "stripe_product_id": self._line_product(line),
+                    "item_id": item_id,
+                },
+            )
+
+    @staticmethod
+    def _line_product(line: dict[str, Any]) -> str | None:
+        """Best-effort Stripe product id across invoice-line shapes."""
+        price = line.get("price")
+        if isinstance(price, dict):
+            product = price.get("product")
+            if isinstance(product, dict):
+                return product.get("id")
+            if isinstance(product, str):
+                return product
+        pricing = line.get("pricing") or {}
+        details = pricing.get("price_details") or {}
+        return details.get("product")
 
     async def _update_memberships(
         self,

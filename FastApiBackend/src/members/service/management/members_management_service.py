@@ -33,6 +33,7 @@ from src.members.service.management.members_management_update import (
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoicePreviewResponse,
     PaymentsInvoiceResponse,
+    UpcomingInvoiceResponse,
 )
 from src.shared.database import DirectDatabasePool
 
@@ -42,6 +43,9 @@ if TYPE_CHECKING:
     )
     from src.payments.service.payments_stripe_members_service import (
         PaymentsStripeMembersService,
+    )
+    from src.payments.service.subscription import (
+        PaymentsStripeSubscriptionService,
     )
     from src.shared.paying_member_lock import PayingMemberLock
 
@@ -60,12 +64,17 @@ class MembersManagementService:
         db_pool: DirectDatabasePool,
         payments_members_service: PaymentsStripeMembersService,
         payment_sync_service: PaymentSyncService,
+        subscription_service: PaymentsStripeSubscriptionService,
         paying_lock: PayingMemberLock,
     ) -> None:
         deps = (db_pool, payments_members_service)
         self._create = MembersManagementCreate(*deps)
         self._update = MembersManagementUpdate(*deps)
-        self._invoices = MembersManagementInvoices(*deps)
+        self._invoices = MembersManagementInvoices(
+            db_pool,
+            payments_members_service,
+            subscription_service,
+        )
         self._linked = MembersManagementLinked(
             db_pool,
             payments_members_service,
@@ -161,3 +170,10 @@ class MembersManagementService:
             limit=limit,
             starting_after=starting_after,
         )
+
+    async def get_upcoming_invoice(
+        self,
+        member_id: UUID,
+    ) -> UpcomingInvoiceResponse | None:
+        """Fetch the upcoming (next) invoice for a member's account."""
+        return await self._invoices.get_upcoming_invoice(member_id)

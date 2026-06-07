@@ -17,6 +17,11 @@ PaymentRecord _$PaymentRecordFromJson(Map<String, dynamic> json) =>
       paymentMethodType: json['payment_method_type'] as String?,
       chargeTime: DateTime.parse(json['charge_time'] as String),
       refundsChargeId: json['refunds_charge_id'] as String?,
+      refundedAmount: (json['refunded_amount'] as num?)?.toInt() ?? 0,
+      paidByMemberId: json['paid_by_member_id'] as String,
+      paidByFirstName: json['paid_by_first_name'] as String? ?? '',
+      paidByLastName: json['paid_by_last_name'] as String? ?? '',
+      paidByPhotoUrl: json['paid_by_photo_url'] as String?,
       lineItems:
           (json['line_items'] as List<dynamic>?)
               ?.map((e) => LineItemRecord.fromJson(e as Map<String, dynamic>))

@@ -317,6 +317,12 @@ into the `stripe_event_payload JSONB` column on every invoice/charge write.
 
 - **`member_invoices`** — upsert to `status='paid'` (`member_invoice_upsert.sql`,
   `ON CONFLICT (stripe_invoice_id) DO UPDATE`), returning `invoice_id`.
+- **`member_invoice_line_items`** — one row per Stripe invoice line
+  (`member_invoice_line_item_insert.sql`, idempotent `ON CONFLICT (line_item_id)`,
+  PK = the Stripe line id): `name` (the line description), `amount` (line total),
+  `quantity`, and `stripe_product_id`. A line whose `subscription_item` resolves to
+  a membership is stored `item_type='membership'` with that `item_id`; everything
+  else is `custom`. Negative (proration-credit) lines are skipped (`amount >= 0`).
 - **`member_memberships`** — for each billed sub-item, updates `last_paid_date` +
   `next_due_date` (`member_memberships_update_payment_dates.sql`, writes to
   `member_memberships_unfiltered`). **Skipped for one-time invoices.**
@@ -344,16 +350,11 @@ invoice/charge writes; it is a no-op when the family has no unconsumed `once`. D
 injects `payment_sync_service` into `InvoicePaidHandler` for this (the only handler
 that depends on the sync engine).
 
-> **Not written here — or anywhere.** This handler does **not** populate
-> `member_invoice_line_items` or `member_invoice_applied_discounts`, and **no other
-> code path does either** — there is no INSERT into `member_invoice_line_items`
-> anywhere in the repo (the only reference is a *read* in
-> `members/sql/member_details/member_details_transactions.sql`). So both tables are
-> **always empty**: the CRM invoice popup has only ever shown the single
-> "Payment · $X" fallback — itemization is **not a render bug, there is just no
-> data**, and a line-item count can't exist. The current handlers write only
-> invoices / charges / membership dates. Persisting line items (+ the per-invoice
-> discount audit) is roadmap work — `FastApiBackend/PaymentRefactor.md` §9.
+> **Applied discounts not written here.** This handler populates
+> `member_invoice_line_items` (above) but does **not** populate
+> `member_invoice_applied_discounts` — that table exists (§7) but no handler writes
+> it today. Do not assert an applied-discount writeback from the webhook; there is
+> none in source today.
 
 **`invoice.payment_failed` → `InvoicePaymentFailedHandler`**
 (`invoice_payment_failed_handler.py`) writes:
@@ -437,7 +438,8 @@ constraints (the contract):
 **reuses the Stripe line-item id (`il_…`)** directly — line items always
 originate from Stripe, so reusing the id gives free idempotency with no mapping
 layer. Column `item_type` (enum `line_item_type`) ∈ `membership` / `custom`. `name CHECK (<> '')` is a
-frozen historical label; `amount CHECK (>= 0)`. `item_id` (→
+frozen historical label; `amount CHECK (>= 0)` is the line total; `quantity CHECK (> 0)`
+(default 1) is the billed count. `item_id` (→
 `member_memberships_unfiltered`) is set **only** for membership lines
 (`membership_line_has_item_id` / `custom_line_has_no_item_id`).
 

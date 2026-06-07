@@ -33,11 +33,23 @@ class MembershipMemberInfo extends Equatable {
   @JsonKey(defaultValue: false)
   final bool onOutdatedPrice;
 
+  /// This member's own pinned price (minor units) — what
+  /// they are actually billed before discounts. Lets the
+  /// card render the cost atomically for one member.
+  @JsonKey(defaultValue: 0)
+  final int baseCost;
+
+  /// This member's own after-discount total (minor units).
+  @JsonKey(defaultValue: 0)
+  final int totalPrice;
+
   const MembershipMemberInfo({
     required this.itemId,
     this.endDate,
     this.cancelDate,
     this.onOutdatedPrice = false,
+    this.baseCost = 0,
+    this.totalPrice = 0,
   });
 
   factory MembershipMemberInfo.fromJson(
@@ -76,8 +88,14 @@ class MembershipMemberInfo extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [itemId, endDate, cancelDate, onOutdatedPrice];
+  List<Object?> get props => [
+        itemId,
+        endDate,
+        cancelDate,
+        onOutdatedPrice,
+        baseCost,
+        totalPrice,
+      ];
 }
 
 enum MembershipExitKind { cancelling, ending }

@@ -36,6 +36,10 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 - Both are living documents. Whenever the architecture changes — a new system, a new or removed cross-system dependency, a renamed service, a new external service, an API/creation change, a new skill or script on an engine — **update both the README high-level graph and `architecture.mermaid` in the same change** so neither drifts from reality.
 - Author/edit both graphs with the `mermaid-creation` skill and follow its rules (top-down `TB`, sibling-only edges, the fixed color palette, render + `check_siblings.py` validation). Don't hand-edit a graph in a way that breaks those rules.
 
+## Editing the Claude review workflows (`.github/workflows/claude*.yml`)
+- `claude-code-review.yml` (auto PR review) and `claude.yml` (the `@claude` assistant) run `claude-code-action`, whose GitHub App token exchange requires the workflow file on a PR branch to be **byte-identical to the version on `main`**. If a feature branch edits one of them, every review run on that branch dies at startup with `App token exchange failed: 401 Unauthorized — Workflow validation failed`.
+- So any change to these files must land on `main` FIRST, via a small dedicated PR, then be synced onto the feature branch — **never edit them on a feature branch alone.** This bites often; treat it as a hard rule. (Even the dedicated PR's own review run will 401, because that PR is the one changing the file — that's expected, ignore it; the merge still works.)
+
 ## No inline prompts or SQL
 - Never inline an LLM/agent prompt in code. Every prompt lives in its own `.md` file and is read at use; code may hold the path, never the prompt text.
 - Never inline SQL in code. Every query lives in its own `.sql` file and is read at use.

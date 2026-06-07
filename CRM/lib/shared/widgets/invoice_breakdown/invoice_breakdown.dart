@@ -95,8 +95,22 @@ class InvoiceBreakdown extends StatelessWidget {
           label: data.isRefund ? 'Refunded' : 'Total',
           amount: data.total,
           currency: data.currency,
-          emphasised: true,
+          emphasised: data.refundedAmount == 0,
         ),
+        if (data.refundedAmount > 0) ...[
+          _LineRow(
+            label: 'Refunded',
+            amount: -data.refundedAmount,
+            currency: data.currency,
+            muted: true,
+          ),
+          _LineRow(
+            label: 'Net',
+            amount: data.total - data.refundedAmount,
+            currency: data.currency,
+            emphasised: true,
+          ),
+        ],
         if (onRefundPressed != null)
           AppOutlineButton(
             fullWidth: true,

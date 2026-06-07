@@ -16,6 +16,8 @@ class LineItemRecord extends Equatable {
   final LineItemType itemType;
   final String name;
   final int amount;
+  @JsonKey(defaultValue: 1)
+  final int quantity;
   final String? stripeProductId;
   final String? itemId;
 
@@ -24,6 +26,7 @@ class LineItemRecord extends Equatable {
     required this.itemType,
     required this.name,
     required this.amount,
+    this.quantity = 1,
     this.stripeProductId,
     this.itemId,
   });
@@ -39,6 +42,7 @@ class LineItemRecord extends Equatable {
         itemType,
         name,
         amount,
+        quantity,
         stripeProductId,
         itemId,
       ];

@@ -78,6 +78,13 @@ SELECT
     mp.plan_type,
     mpp.price     AS base_cost,
     COALESCE(NOT mpp.is_active, false) AS on_outdated_price,
+    (
+        SELECT ap.price
+        FROM membership_plan_prices ap
+        WHERE ap.plan_id = ms.plan_id
+          AND ap.gym_id = ms.gym_id
+          AND ap.is_active = TRUE
+    ) AS current_active_price,
     mp.duration_amount,
     mp.duration_unit,
     gr.rank_id              AS rank_id,

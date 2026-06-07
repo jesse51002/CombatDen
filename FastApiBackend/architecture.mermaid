@@ -2,7 +2,7 @@ flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing API (WIP)"]
     direction TB
-    r_mem["<b>members</b> · /api/v1/members · 14 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link<br/>DELETE /{member_id}/link<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/preview<br/>POST /{member_id}/unlink/preview<br/>GET /{member_id}/invoices"]
+    r_mem["<b>members</b> · /api/v1/members · 16 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link<br/>DELETE /{member_id}/link<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/preview<br/>POST /{member_id}/unlink/preview<br/>GET /{member_id}/invoices<br/>GET /{member_id}/upcoming-invoice<br/>GET /{member_id}/payments"]
     r_gym["<b>gyms</b> · /api/v1/gyms · 5 routes<br/>POST /<br/>GET /<br/>GET /{gym_id}/onboarding<br/>POST /{gym_id}/onboarding/link<br/>PUT /{gym_id}"]
     r_cls["<b>classes</b> · /api/v1/classes · 2 routes<br/>POST /checkin<br/>GET /streak"]
     r_rank["<b>ranks</b> · /api/v1/ranks · 10 routes<br/>GET /<br/>POST /<br/>POST /from-preset<br/>GET /presets<br/>GET /presets/grouped<br/>GET /enabled<br/>PUT /enabled<br/>GET /{rank_id}<br/>PUT /{rank_id}<br/>DELETE /{rank_id}"]
@@ -22,6 +22,7 @@ flowchart TB
     gyms_stripe_connect_service["GymsStripeConnectService"]
     member_memberships_service["MemberMembershipsService<br/>DB-first lifecycle ops + verify/revert"]
     members_billing_detail_service["MembersBillingDetailService"]
+    members_payments_service["MembersPaymentsService"]
     members_management_service["MembersManagementService"]
     payment_sync_service["PaymentSyncService — declarative reconciler<br/>orchestrates: Builder→Discounts (coupons at build), Freeze,<br/>OnceDiscounts settle, Stripe (execute), Writeback · -> None"]
     billing_parent_resolver["BillingParentResolver<br/>shared paying-parent / family resolution"]
@@ -57,6 +58,7 @@ flowchart TB
     r_mem --> crm_members_list_service
     r_mem --> crm_total_counts_service
     r_mem --> members_billing_detail_service
+    r_mem --> members_payments_service
     r_mem --> members_management_service
     r_gym --> gyms_service
     r_cls --> checkin_service
@@ -102,7 +104,7 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe ext;
   class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook route;
-  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_management_service,membership_plans_service,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service svc;
+  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,membership_plans_service,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service svc;
   class payment_sync_service,billing_parent_resolver hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

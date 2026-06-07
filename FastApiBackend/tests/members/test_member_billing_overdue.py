@@ -47,6 +47,7 @@ def _membership_row(*, status: str, next_due: date | None, **overrides) -> dict:
         "membership_status": status,
         "next_due_date": next_due,
         "base_cost": 12000,
+        "current_active_price": 12000,
         "duration_amount": 1,
         "duration_unit": "month",
         "total_price": 12000,
