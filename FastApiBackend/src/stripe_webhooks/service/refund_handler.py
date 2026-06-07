@@ -48,7 +48,20 @@ class RefundHandler:
         event: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        refund = event["data"]["object"]
+        await self.absorb(session, event["data"]["object"], gym_id)
+
+    async def absorb(
+        self,
+        session: AsyncSession,
+        refund: dict[str, Any],
+        gym_id: UUID,
+    ) -> None:
+        """Record a succeeded refund (Refund object) as a negative charge.
+
+        The seam shared by the webhook dispatcher (``handle`` unwraps the event)
+        and the reconciler invoice fetcher (passes the listed Refund directly).
+        Idempotent via ``member_charges.stripe_refund_id`` UNIQUE.
+        """
         if refund.get("status") != REFUND_STATUS_SUCCEEDED:
             # Pending/failed refunds are recorded once (if) they succeed.
             return

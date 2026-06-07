@@ -12,9 +12,17 @@ from uuid import UUID
 import pytest
 from sqlalchemy import text
 
+from src.member_memberships.service.memberships.member_memberships_cancel_absorber import (
+    SubscriptionCancellationAbsorber,
+)
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
+from src.shared.billing_parent_resolver import BillingParentResolver
+from src.shared.gym_stripe_service import GymStripeService
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
+)
+from src.stripe_webhooks.service.customer_subscription_deleted_handler import (
+    CustomerSubscriptionDeletedHandler,
 )
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
@@ -125,7 +133,7 @@ class _FakeDiscount:
 
 
 class _FakeInvoice:
-    def __init__(self, discounts: list["_FakeDiscount"]) -> None:
+    def __init__(self, discounts: list[_FakeDiscount]) -> None:
         self.discounts = discounts
 
 
@@ -261,6 +269,20 @@ def account_updated_handler() -> AccountUpdatedHandler:
 
 
 @pytest.fixture(scope="module")
+def customer_subscription_deleted_handler(
+    db_pool,
+) -> CustomerSubscriptionDeletedHandler:
+    absorber = SubscriptionCancellationAbsorber(
+        db_pool=db_pool,
+        parent_resolver=BillingParentResolver(
+            db_pool,
+            GymStripeService(db_pool),
+        ),
+    )
+    return CustomerSubscriptionDeletedHandler(cancellation_absorber=absorber)
+
+
+@pytest.fixture(scope="module")
 def stripe_webhooks_service(
     db_pool,
     event_log,
@@ -269,6 +291,7 @@ def stripe_webhooks_service(
     invoice_payment_failed_handler,
     refund_handler,
     account_updated_handler,
+    customer_subscription_deleted_handler,
 ) -> StripeWebhooksService:
     return StripeWebhooksService(
         db_pool=db_pool,
@@ -278,6 +301,9 @@ def stripe_webhooks_service(
         invoice_payment_failed_handler=invoice_payment_failed_handler,
         refund_handler=refund_handler,
         account_updated_handler=account_updated_handler,
+        customer_subscription_deleted_handler=(
+            customer_subscription_deleted_handler
+        ),
     )
 
 

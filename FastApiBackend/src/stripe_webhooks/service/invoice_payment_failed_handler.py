@@ -42,7 +42,19 @@ class InvoicePaymentFailedHandler:
         event: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        invoice = event["data"]["object"]
+        await self.absorb(session, event["data"]["object"], gym_id)
+
+    async def absorb(
+        self,
+        session: AsyncSession,
+        invoice: dict[str, Any],
+        gym_id: UUID,
+    ) -> None:
+        """Record a failed payment attempt (invoice object) as a charge.
+
+        The seam shared by the webhook dispatcher (``handle`` unwraps the event)
+        and the reconciler invoice fetcher (passes the listed invoice directly).
+        """
         stripe_invoice_id = invoice.get("id")
         if not stripe_invoice_id:
             raise ValueError("invoice.payment_failed event is missing invoice id")

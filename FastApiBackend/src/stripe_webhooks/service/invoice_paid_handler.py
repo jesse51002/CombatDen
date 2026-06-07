@@ -89,7 +89,28 @@ class InvoicePaidHandler:
         event: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        invoice = event["data"]["object"]
+        await self.absorb(
+            session,
+            event["data"]["object"],
+            gym_id,
+            stripe_account_id=event.get("account"),
+        )
+
+    async def absorb(
+        self,
+        session: AsyncSession,
+        invoice: dict[str, Any],
+        gym_id: UUID,
+        *,
+        stripe_account_id: str | None = None,
+    ) -> None:
+        """Apply a paid invoice (object) to the CRM.
+
+        The seam shared by the webhook dispatcher (``handle`` unwraps the event
+        envelope) and the reconciler invoice fetcher (which passes the listed
+        invoice object directly). Idempotent via the upsert / line-item /
+        discount-audit unique constraints.
+        """
         stripe_invoice_id = invoice.get("id")
         if not stripe_invoice_id:
             raise ValueError("invoice.paid event is missing invoice id")
@@ -137,7 +158,7 @@ class InvoicePaidHandler:
             invoice,
             gym_id,
             invoice_id,
-            stripe_account_id=event.get("account"),
+            stripe_account_id=stripe_account_id,
         )
 
     # ── Helpers ────────────────────────────────────────────────
