@@ -17,7 +17,7 @@ from src.payments.payments_exceptions import (
 )
 from src.payments.schema.payments_invoice_schema import (
     PaymentsInvoiceResponse,
-    UpcomingInvoiceResponse,
+    PreviewInvoice,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -85,7 +85,7 @@ class MembersManagementInvoices(MembersManagementBase):
     async def get_upcoming_invoice(
         self,
         member_id: UUID,
-    ) -> UpcomingInvoiceResponse | None:
+    ) -> PreviewInvoice | None:
         """Fetch the upcoming (next) invoice for a member's account.
 
         Resolves the paying account (a linked child resolves to its

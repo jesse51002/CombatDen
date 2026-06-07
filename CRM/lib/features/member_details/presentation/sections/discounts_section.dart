@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
-import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/discount_info.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
@@ -18,8 +14,9 @@ import 'package:crm/shared/widgets/subtitle_section.dart';
 
 /// Applied discounts for the **selected covered member**
 /// ([coveredMemberId]) only — every discount is a frozen,
-/// item-scoped snapshot on that member's membership. Plus a
-/// Manage Discounts entry point targeting that member's slot.
+/// item-scoped snapshot on that member's membership. Adding and
+/// removing both happen in the Manage Discounts dialog (this
+/// table is read-only).
 class DiscountsSection extends StatelessWidget {
   final MemberDetailResponse member;
   final MembershipInfo membership;
@@ -62,11 +59,8 @@ class DiscountsSection extends StatelessWidget {
                   label: 'Discount',
                   minWidth: 96,
                 ),
-                AppDataTableColumn(label: '', minWidth: 44),
               ],
-              rows: discounts
-                  .map((d) => _row(context, d, itemId))
-                  .toList(),
+              rows: discounts.map(_row).toList(),
             ),
           AppOutlineButton(
             fullWidth: true,
@@ -86,11 +80,7 @@ class DiscountsSection extends StatelessWidget {
     );
   }
 
-  AppDataTableRow _row(
-    BuildContext context,
-    DiscountInfo d,
-    String? itemId,
-  ) {
+  AppDataTableRow _row(DiscountInfo d) {
     return AppDataTableRow(
       cells: [
         Column(
@@ -126,50 +116,7 @@ class DiscountsSection extends StatelessWidget {
                 : InvoiceChipTone.good,
           ),
         ),
-        _RemoveButton(
-          itemId: itemId,
-          memberId: coveredMemberId,
-          appliedDiscountId: d.appliedDiscountId,
-        ),
       ],
-    );
-  }
-}
-
-/// Removes a single applied-discount snapshot by its id —
-/// the apply path deletes one row, never a replace-set.
-class _RemoveButton extends StatelessWidget {
-  final String? itemId;
-  final String memberId;
-  final String appliedDiscountId;
-
-  const _RemoveButton({
-    required this.itemId,
-    required this.memberId,
-    required this.appliedDiscountId,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final id = itemId;
-    return IconButton(
-      tooltip: 'Remove discount',
-      visualDensity: VisualDensity.compact,
-      onPressed: id == null
-          ? null
-          : () => context.read<MemberDetailBloc>().add(
-                ApplyDiscountsRequested(
-                  itemId: id,
-                  memberId: memberId,
-                  removeAppliedIds: [appliedDiscountId],
-                ),
-              ),
-      icon: Icon(
-        Symbols.close_sharp,
-        size: DesignConstants.iconSizeSmall,
-        weight: DesignConstants.iconWeight,
-        color: DesignConstants.badRed,
-      ),
     );
   }
 }

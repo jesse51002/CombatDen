@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import random
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
+import progress
 from api_client import GymApiClient
 from supabase import Client
 
@@ -30,9 +31,6 @@ class PlanRecord:
     duration_unit: str | None
     class_count: int | None
     base_cost: int
-    # Real `linked` discount entry ids the backend minted from the plan's
-    # entered tier amounts (empty unless this plan has linked discounts).
-    linked_discount_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 # plan_type / duration_unit values mirror the backend PlanType / DurationUnit
@@ -53,7 +51,6 @@ def create_all(
     client: Client,
     gym_id: uuid.UUID,
     count: int,
-    linked_prices: list[int] | None = None,
 ) -> list[PlanRecord]:
     """Create up to `count` plans for one gym via the backend API.
 
@@ -66,7 +63,9 @@ def create_all(
 
     selected = random.sample(PLAN_TEMPLATES, min(count, len(PLAN_TEMPLATES)))
     records: list[PlanRecord] = []
+    total = len(selected)
     for idx, tmpl in enumerate(selected):
+        progress.item(idx + 1, total, tmpl["plan_name"])
         existing = find_plan(client, gym_id, tmpl["plan_name"])
         if existing is not None:
             existing.handle = f"plan{idx}"
@@ -80,13 +79,6 @@ def create_all(
             "price": tmpl["price"],
             "is_public": True,
         }
-        if idx == 0 and linked_prices:
-            payload["linked_discount_enabled"] = True
-            # Each tier is now a real discount value ($ off / % off); the seed's
-            # dollar amounts map to dollar_off.
-            payload["linked_discount_values"] = [
-                {"dollar_off": p} for p in linked_prices
-            ]
         if "duration_amount" in tmpl:
             payload["duration_amount"] = tmpl["duration_amount"]
             payload["duration_unit"] = tmpl["duration_unit"]
@@ -113,9 +105,6 @@ def create_all(
                 duration_unit=resp.get("duration_unit"),
                 class_count=resp.get("class_count"),
                 base_cost=tmpl["price"],
-                linked_discount_ids=[
-                    uuid.UUID(x) for x in resp.get("linked_discount_ids", [])
-                ],
             )
         )
     return records

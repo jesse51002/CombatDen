@@ -15,7 +15,7 @@ read/write REST API over the shared Supabase Postgres, authenticated with Supaba
 ```mermaid
 flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
-  FB["⚙️ FastApiBackend — CRM / billing API<br/>10 domains · 71 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · member_memberships · membership_plans · stripe_webhooks"]
+  FB["⚙️ FastApiBackend — CRM / billing API<br/>10 domains · 69 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · member_memberships · membership_plans · stripe_webhooks"]
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)"]
   Stripe["Stripe — payments · Connect · webhooks"]
   CRM -->|"authenticated REST · WIP"| FB
@@ -68,14 +68,14 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 
 | Domain | What it does |
 |---|---|
-| `members` | Member records + management + billing detail (profile, card, Stripe customer, invoices, linking) |
+| `members` | Member records + management + billing detail (profile, card, Stripe customer, invoices) |
 | `classes` | Gated class check-in (plan eligibility + capacity + auto-end) + attendance streaks + per-cycle class usage (feeds member billing detail) |
 | `gyms` | Gym records + Stripe **Connect** Express onboarding |
 | `ranks` | Rank tiers / point thresholds + presets |
 | `rewards` | Reward catalog + redemptions |
 | `waivers` | Versioned waiver documents (plain gym config) + read-only e-sign signature tracking (per-waiver roster + per-member status) |
 | `discounts` | Coupon-free discount presets (plain gym config; coupons computed at sync, not on the preset) |
-| `member_memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount snapshots; coupons computed + written back at sync), previews, cash/card charge |
+| `member_memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount snapshots; coupons computed + written back at sync), previews, cash/card charge, link/unlink family accounts (pure DB change) |
 | `membership_plans` | Plan + price templates (Stripe products / prices) + migration |
 | `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB |
 | `payments` *(no router)* | Stripe service core (client, payment, price, members, membership, subscription, discount) injected into the billing domains |

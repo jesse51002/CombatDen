@@ -28,11 +28,13 @@ class _LoginFormState extends State<LoginForm> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordFocus = FocusNode();
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -91,6 +93,8 @@ class _LoginFormState extends State<LoginForm> {
                           enabled: !isLoading,
                           validator: Validators.validateEmail,
                           keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: () => _passwordFocus.requestFocus(),
                         ),
                         CustomTextField(
                           controller: _passwordController,
@@ -98,6 +102,9 @@ class _LoginFormState extends State<LoginForm> {
                           hintText: 'Enter your password',
                           isPassword: true,
                           enabled: !isLoading,
+                          focusNode: _passwordFocus,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: _submit,
                           validator: (v) => (v?.isEmpty ?? true)
                               ? 'Password is required'
                               : null,

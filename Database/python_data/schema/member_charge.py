@@ -26,6 +26,7 @@ class MemberChargeCreate(SeedModel):
     amount: int  # signed: payment >= 0, refund <= 0
     currency: str = "usd"
     payment_method_type: str | None = None
+    card_last_four: str | None = None
     stripe_charge_id: str | None = None
     stripe_refund_id: str | None = None
     refunds_charge_id: UUID | None = None

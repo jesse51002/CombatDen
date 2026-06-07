@@ -4,7 +4,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
-import 'package:crm/features/member_details/data/models/upcoming_invoice_response.dart';
+import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/coming_soon_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
@@ -17,7 +17,7 @@ const _kOpenStatus = 'open';
 /// Bundle of the two read-only invoice reads this card uses.
 class _InvoicesData {
   final List<PaymentsInvoiceResponse> invoices;
-  final UpcomingInvoiceResponse? upcoming;
+  final PreviewInvoice? upcoming;
 
   const _InvoicesData({
     required this.invoices,

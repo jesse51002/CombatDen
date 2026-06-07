@@ -37,7 +37,6 @@ def _build_service() -> PaymentSyncService:
         db_pool=MagicMock(),
         subscription_service=MagicMock(),
         parent_resolver=MagicMock(),
-        freeze=MagicMock(),
         once_discounts=MagicMock(),
         builder=MagicMock(),
         paying_lock=paying_lock,

@@ -13,9 +13,6 @@ from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
-from src.stripe_webhooks.service.charge_refunded_handler import (
-    ChargeRefundedHandler,
-)
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
@@ -23,15 +20,23 @@ from src.stripe_webhooks.service.invoice_paid_handler import (
 from src.stripe_webhooks.service.invoice_payment_failed_handler import (
     InvoicePaymentFailedHandler,
 )
+from src.stripe_webhooks.service.invoice_payment_paid_handler import (
+    InvoicePaymentPaidHandler,
+)
+from src.stripe_webhooks.service.refund_handler import (
+    RefundHandler,
+)
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
-    SubscriptionItemPendingError,
+    WebhookRetryableError,
 )
 
 logger = logging.getLogger(__name__)
 
 EVENT_INVOICE_PAID = "invoice.paid"
+EVENT_INVOICE_PAYMENT_PAID = "invoice_payment.paid"
 EVENT_INVOICE_PAYMENT_FAILED = "invoice.payment_failed"
-EVENT_CHARGE_REFUNDED = "charge.refunded"
+EVENT_REFUND_CREATED = "refund.created"
+EVENT_REFUND_UPDATED = "refund.updated"
 EVENT_ACCOUNT_UPDATED = "account.updated"
 
 
@@ -49,15 +54,17 @@ class StripeWebhooksService:
         db_pool: DirectDatabasePool,
         event_log: StripeWebhookEventLog,
         invoice_paid_handler: InvoicePaidHandler,
+        invoice_payment_paid_handler: InvoicePaymentPaidHandler,
         invoice_payment_failed_handler: InvoicePaymentFailedHandler,
-        charge_refunded_handler: ChargeRefundedHandler,
+        refund_handler: RefundHandler,
         account_updated_handler: AccountUpdatedHandler,
     ) -> None:
         self._db_pool = db_pool
         self._event_log = event_log
         self._invoice_paid = invoice_paid_handler
+        self._invoice_payment_paid = invoice_payment_paid_handler
         self._invoice_payment_failed = invoice_payment_failed_handler
-        self._charge_refunded = charge_refunded_handler
+        self._refund = refund_handler
         self._account_updated = account_updated_handler
 
     async def handle_event(self, event: dict[str, Any]) -> None:
@@ -131,7 +138,7 @@ class StripeWebhooksService:
                     event_id,
                 )
                 return
-            except SubscriptionItemPendingError:
+            except WebhookRetryableError:
                 logger.info(
                     "Background retry %d/%d still pending: event_id=%s",
                     attempt,
@@ -140,8 +147,8 @@ class StripeWebhooksService:
                 )
         logger.error(
             "Background retry exhausted after %d attempts: event_id=%s. "
-            "Subscription item was never written — possible StripeOrphanError "
-            "or create-flow failure.",
+            "Awaited row was never written — possible StripeOrphanError, "
+            "create-flow failure, or an invoice that was never recorded.",
             max_attempts,
             event_id,
         )
@@ -169,10 +176,12 @@ class StripeWebhooksService:
     ) -> None:
         if event_type == EVENT_INVOICE_PAID:
             await self._invoice_paid.handle(session, event, gym_id)
+        elif event_type == EVENT_INVOICE_PAYMENT_PAID:
+            await self._invoice_payment_paid.handle(session, event, gym_id)
         elif event_type == EVENT_INVOICE_PAYMENT_FAILED:
             await self._invoice_payment_failed.handle(session, event, gym_id)
-        elif event_type == EVENT_CHARGE_REFUNDED:
-            await self._charge_refunded.handle(session, event, gym_id)
+        elif event_type in (EVENT_REFUND_CREATED, EVENT_REFUND_UPDATED):
+            await self._refund.handle(session, event, gym_id)
         elif event_type == EVENT_ACCOUNT_UPDATED:
             await self._account_updated.handle(session, event, gym_id)
         else:

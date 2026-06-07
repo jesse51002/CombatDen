@@ -15,6 +15,7 @@ import random
 import uuid
 from dataclasses import dataclass
 
+import progress
 from api_client import GymApiClient
 from supabase import Client
 
@@ -32,6 +33,8 @@ class DiscountRecord:
     end_date: str | None
 
 
+# The catalog the seed draws from; DISCOUNTS_PER_GYM names are sampled per gym,
+# so keep this list at least that long.
 DISCOUNT_NAMES = [
     "Military Discount",
     "Student Discount",
@@ -39,6 +42,12 @@ DISCOUNT_NAMES = [
     "Senior Discount",
     "Family Bundle",
     "Referral Bonus",
+    "Loyalty Reward",
+    "New Year Special",
+    "Summer Promo",
+    "Corporate Rate",
+    "Veteran Discount",
+    "Off-Peak Discount",
 ]
 
 
@@ -69,7 +78,9 @@ def create_regular(
 
     names = random.sample(DISCOUNT_NAMES, min(count, len(DISCOUNT_NAMES)))
     records: list[DiscountRecord] = []
-    for name in names:
+    total = len(names)
+    for n, name in enumerate(names, start=1):
+        progress.item(n, total, name)
         use_pct = random.choice([True, False])
         discount_type = random.choices(["preset", "custom"], weights=[75, 25])[0]
         discount_mode = random.choice(["once", "ongoing"])

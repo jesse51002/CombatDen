@@ -3,7 +3,8 @@ import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
-import 'package:crm/features/member_details/data/models/discount_info.dart';
+import 'package:crm/features/member_details/data/models/invoice_applied_discount.dart';
+import 'package:crm/features/member_details/data/models/invoice_attempt.dart';
 import 'package:crm/features/member_details/data/models/line_item_record.dart';
 
 part 'payment_record.g.dart';
@@ -47,7 +48,12 @@ class PaymentRecord extends Equatable {
   @JsonKey(defaultValue: [])
   final List<LineItemRecord> lineItems;
   @JsonKey(defaultValue: [])
-  final List<DiscountInfo> appliedDiscounts;
+  final List<InvoiceAppliedDiscount> appliedDiscounts;
+
+  /// Every charge against this invoice (each retry, the success, any
+  /// refunds) — so the invoice popup can show the full attempt history.
+  @JsonKey(defaultValue: [])
+  final List<InvoiceAttempt> attempts;
 
   const PaymentRecord({
     required this.chargeId,
@@ -66,6 +72,7 @@ class PaymentRecord extends Equatable {
     this.paidByPhotoUrl,
     this.lineItems = const [],
     this.appliedDiscounts = const [],
+    this.attempts = const [],
   });
 
   /// The payer's display name.
@@ -106,5 +113,6 @@ class PaymentRecord extends Equatable {
         paidByPhotoUrl,
         lineItems,
         appliedDiscounts,
+        attempts,
       ];
 }

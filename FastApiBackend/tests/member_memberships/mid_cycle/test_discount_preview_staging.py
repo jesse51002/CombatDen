@@ -67,7 +67,8 @@ async def test_add_discount_preview_reflects_then_stages_nothing(
         )
         assert preview is not None
         # 5000 with 20% off ≈ 4000 — strictly less than full price.
-        assert preview.amount_due < PLAN_CENTS
+        # Non-prorating discount preview: due_now == recurring.
+        assert preview.recurring.amount_due < PLAN_CENTS
 
         # Nothing persisted: the preview_add row was staged then deleted.
         assert await get_applied_snapshots(db_pool, item_id) == []
@@ -118,7 +119,7 @@ async def test_remove_discount_preview_reflects_then_reverts(
         )
         assert preview is not None
         # Removing the 20% discount returns the bill to the full price.
-        assert preview.amount_due == PLAN_CENTS
+        assert preview.recurring.amount_due == PLAN_CENTS
 
         # The row is still present and applied (the preview_remove was reverted).
         snaps_after = await get_applied_snapshots(db_pool, item_id)

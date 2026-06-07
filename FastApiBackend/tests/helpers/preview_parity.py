@@ -30,16 +30,13 @@ from __future__ import annotations
 
 import stripe
 
-from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
-    UpcomingInvoiceResponse,
-)
+from src.payments.schema.payments_invoice_schema import PreviewInvoice
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from tests.helpers.stripe_assertions import BillingSnapshot
 
 
 def assert_preview_matches_invoice(
-    preview: PaymentsInvoicePreviewResponse | UpcomingInvoiceResponse,
+    preview: PreviewInvoice,
     invoice: stripe.Invoice,
 ) -> None:
     """Assert preview totals equal the realised invoice totals.

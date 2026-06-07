@@ -26,31 +26,12 @@ class MembersBillingUpdateCardRequest(BaseModel):
     payment_method_id: str
 
 
-class MembersBillingLinkRequest(BaseModel):
-    """Link an existing member to a paying parent account."""
-
-    parent_member_id: UUID
-
-
-class MembersBillingLinkCheckResponse(BaseModel):
-    """Result of checking whether a member can be linked to a payer.
-
-    ``error`` is a pre-formatted, user-facing string and should be
-    rendered as-is in the UI when ``can_link`` is ``False``.
-    """
-
-    can_link: bool
-    error: str | None = None
-
-
 class MembersBillingProfileResponse(BaseModel):
-    """Shared response for card update / payment unlink / link operations.
+    """Shared response for card update / payment unlink operations.
 
     Returned by:
     - PUT  /{member_id}/card
     - DELETE /{member_id}/payment
-    - PUT    /{member_id}/link
-    - DELETE /{member_id}/link
     """
 
     member_id: UUID
@@ -105,20 +86,18 @@ class BillingPayingForMember(BillingLinkedAccount):
 
 
 class BillingDiscountInfo(BaseModel):
-    """A discount applied to a past invoice (payment-history line).
+    """A discount that was applied to a past invoice (payment-history line).
 
-    Used by ``BillingPaymentRecord.applied_discounts`` to name the
-    discounts on a historical charge. Currently-applied membership
-    discounts use the snapshot model ``MemberMembershipsAppliedDiscount``
-    on ``BillingMembershipInfo.discounts``.
+    Sourced from ``member_invoice_applied_discounts`` — the per-invoice audit
+    the ``invoice.paid`` webhook captures from Stripe. It is deliberately
+    coupon-only (the Stripe coupon id + the dollars it took off this invoice),
+    NOT linked back to a CRM discount. Currently-applied membership discounts
+    use the snapshot model ``MemberMembershipsAppliedDiscount`` on
+    ``BillingMembershipInfo.discounts``.
     """
 
-    discount_id: UUID
-    discount_name: str
-    discount_type: str
-    percentage_off: float | None = None
-    dollar_off: int | None = None
-    end_date: date | None = None
+    stripe_coupon_id: str
+    amount_off: int
 
 
 class BillingMembershipMemberInfo(BaseModel):
@@ -208,6 +187,23 @@ class BillingLineItemRecord(BaseModel):
     item_id: UUID | None = None
 
 
+class BillingInvoiceAttempt(BaseModel):
+    """One charge against an invoice — a retry, the success, or a refund.
+
+    The invoice popup lists every attempt so staff see the full payment
+    history of a single invoice (e.g. a failed card, then a successful one),
+    each with its method and, for a card, the last four digits.
+    """
+
+    charge_id: UUID
+    kind: ChargeKind
+    status: ChargeStatus
+    amount: int
+    payment_method_type: str | None = None
+    card_last_four: str | None = None
+    charge_time: datetime
+
+
 class BillingPaymentRecord(BaseModel):
     """A single charge (payment or refund) against an invoice.
 
@@ -232,6 +228,7 @@ class BillingPaymentRecord(BaseModel):
     paid_by_photo_url: str | None = None
     line_items: list[BillingLineItemRecord] = []
     applied_discounts: list[BillingDiscountInfo] = []
+    attempts: list[BillingInvoiceAttempt] = []
 
 
 class BillingCardOnFile(BaseModel):

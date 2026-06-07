@@ -65,21 +65,15 @@ class InvoiceBreakdown extends StatelessWidget {
             currency: data.currency,
           ),
         ),
-        if (data.appliedDiscounts.isNotEmpty)
-          Wrap(
-            spacing: DesignConstants.spacingSmall,
-            runSpacing: DesignConstants.spacingSmall,
-            children: data.appliedDiscounts
-                .map(
-                  (d) => InvoiceChip(
-                    label: d.subLabel == null
-                        ? d.label
-                        : '${d.label} · ${d.subLabel}',
-                    tone: InvoiceChipTone.good,
-                  ),
-                )
-                .toList(),
+        ...data.appliedDiscounts.map(
+          (d) => _LineRow(
+            label: d.label,
+            amount: d.amount,
+            currency: data.currency,
+            muted: true,
+            indent: true,
           ),
+        ),
         if (data.subtotal != null)
           _LineRow(
             label: 'Subtotal',
@@ -109,6 +103,30 @@ class InvoiceBreakdown extends StatelessWidget {
             amount: data.total - data.refundedAmount,
             currency: data.currency,
             emphasised: true,
+          ),
+        ],
+        if (data.attempts.isNotEmpty) ...[
+          Divider(
+            color: DesignConstants.divider,
+            height: 1,
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              Text(
+                'Payment attempts',
+                style: DesignConstants.h3.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+              ...data.attempts.map(
+                (a) => _AttemptRow(
+                  attempt: a,
+                  currency: data.currency,
+                ),
+              ),
+            ],
           ),
         ],
         if (onRefundPressed != null)
@@ -179,6 +197,7 @@ class _LineRow extends StatelessWidget {
   final String currency;
   final bool emphasised;
   final bool muted;
+  final bool indent;
 
   const _LineRow({
     required this.label,
@@ -186,6 +205,7 @@ class _LineRow extends StatelessWidget {
     required this.currency,
     this.emphasised = false,
     this.muted = false,
+    this.indent = false,
   });
 
   @override
@@ -200,16 +220,78 @@ class _LineRow extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         Expanded(
-          child: Text(
-            label,
-            style: style,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: indent ? DesignConstants.spacingLarge : 0,
+            ),
+            child: Text(
+              label,
+              style: style,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
         Text(
           formatMinorUnits(amount, currency: currency),
           style: style,
+        ),
+      ],
+    );
+  }
+}
+
+/// One payment attempt row: the method + time on the left, a
+/// status chip and the signed amount on the right.
+class _AttemptRow extends StatelessWidget {
+  final InvoiceAttemptLine attempt;
+  final String currency;
+
+  const _AttemptRow({
+    required this.attempt,
+    required this.currency,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingTiny,
+            children: [
+              Text(
+                attempt.method,
+                style: DesignConstants.p,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                attempt.timeLabel,
+                style: DesignConstants.pSmall.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: DesignConstants.spacingSmall,
+          children: [
+            InvoiceChip(
+              label: attempt.statusLabel,
+              tone: attempt.statusTone,
+            ),
+            Text(
+              formatMinorUnits(attempt.amount, currency: currency),
+              style: DesignConstants.p,
+            ),
+          ],
         ),
       ],
     );

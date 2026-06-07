@@ -15,7 +15,7 @@ from stripe.params._refund_create_params import RefundCreateParams
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    PreviewInvoice,
 )
 from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentByAmountRequest,
@@ -27,7 +27,7 @@ from src.payments.schema.payments_payment_schema import (
     PaymentsRefundResponse,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
-from src.payments.service.payments_stripe_mappers import map_invoice_preview
+from src.payments.service.payments_stripe_mappers import map_preview_invoice
 from src.payments.service.payments_stripe_members_service import (
     PaymentsStripeMembersService,
 )
@@ -232,7 +232,7 @@ class PaymentsStripePaymentService:
         self,
         request: PaymentsInvoicePaymentPreviewRequest,
         stripe_account_id: str,
-    ) -> PaymentsInvoicePreviewResponse:
+    ) -> PreviewInvoice:
         """Preview a one-time invoice charge without paying.
 
         Stateless preview, but ``validate_price_active`` may
@@ -261,7 +261,7 @@ class PaymentsStripePaymentService:
             ),
             options=opts,
         )
-        return map_invoice_preview(invoice)
+        return map_preview_invoice(invoice)
 
     # ── Refunds ──────────────────────────────────────────────────
 

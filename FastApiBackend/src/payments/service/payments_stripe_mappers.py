@@ -1,19 +1,23 @@
 import stripe
 
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewLineItem,
-    PaymentsInvoicePreviewResponse,
-    UpcomingInvoiceLine,
-    UpcomingInvoiceResponse,
+    PreviewInvoice,
+    PreviewInvoiceLine,
 )
 
 
-def map_invoice_preview(
+def map_preview_invoice(
     invoice: stripe.Invoice,
-) -> PaymentsInvoicePreviewResponse:
+) -> PreviewInvoice:
     """Map a Stripe Invoice preview to our response schema.
 
-    Shared by subscription and payment preview methods.
+    The single mapper for every ``create_preview`` result — the
+    proposed-change previews (start / cancel / price / discounts) and the
+    existing subscription's upcoming invoice. Returns **every** line
+    (prorations and one-off items included); a consumer that wants only the
+    steady-state recurring view filters on ``is_proration`` /
+    ``stripe_subscription_item_id``. Each line carries Stripe's raw ``amount``
+    and the computed post-discount ``discounted_amount``.
 
     Args:
         invoice: Stripe Invoice object from ``create_preview``.
@@ -21,28 +25,24 @@ def map_invoice_preview(
     Returns:
         Flattened invoice preview with line items.
     """
-    lines: list[PaymentsInvoicePreviewLineItem] = []
+    lines: list[PreviewInvoiceLine] = []
     if invoice.lines and invoice.lines.data:
         for line in invoice.lines.data:
-            # Resolve price ID from either legacy ``price`` or new ``pricing``.
-            price_id = None
-            if hasattr(line, "pricing") and line.pricing:
-                pd = getattr(line.pricing, "price_details", None)
-                if pd:
-                    price_ref = pd.price
-                    price_id = price_ref if isinstance(price_ref, str) else price_ref.id
-            if not price_id and hasattr(line, "price") and line.price:
-                price_id = line.price if isinstance(line.price, str) else line.price.id
             lines.append(
-                PaymentsInvoicePreviewLineItem(
+                PreviewInvoiceLine(
                     amount=line.amount,
+                    discounted_amount=_post_discount_amount(line),
                     description=line.description,
-                    stripe_price_id=price_id,
+                    stripe_price_id=_extract_price_id(line),
                     quantity=line.quantity,
+                    stripe_subscription_item_id=(
+                        _extract_subscription_item_id(line)
+                    ),
+                    is_proration=_is_proration(line),
                 )
             )
 
-    return PaymentsInvoicePreviewResponse(
+    return PreviewInvoice(
         amount_due=invoice.amount_due,
         subtotal=invoice.subtotal,
         total=invoice.total,
@@ -130,49 +130,3 @@ def _extract_subscription_item_id(
     if legacy:
         return legacy if isinstance(legacy, str) else legacy.id
     return None
-
-
-def map_upcoming_invoice(
-    invoice: stripe.Invoice,
-) -> UpcomingInvoiceResponse:
-    """Map a Stripe upcoming/preview invoice to the upcoming-invoice schema.
-
-    Only recurring subscription lines (those tied to a subscription
-    item) are included — one-off invoice items are ignored. Mid-cycle
-    proration lines (``line.proration is True``) are also skipped so
-    the result reflects the steady-state recurring cost, not one-time
-    adjustments that inflate the next invoice after an add/change.
-
-    Args:
-        invoice: Stripe Invoice object from ``create_preview_async``
-            using ``subscription=<sub_id>``.
-
-    Returns:
-        Upcoming invoice with per-line post-discount totals, keyed by
-        ``stripe_subscription_item_id``.
-    """
-    lines: list[UpcomingInvoiceLine] = []
-    if invoice.lines and invoice.lines.data:
-        for line in invoice.lines.data:
-            if _is_proration(line):
-                continue
-            si_id = _extract_subscription_item_id(line)
-            if not si_id:
-                continue
-            quantity = line.quantity or 1
-            lines.append(
-                UpcomingInvoiceLine(
-                    stripe_subscription_item_id=si_id,
-                    stripe_price_id=_extract_price_id(line),
-                    quantity=quantity,
-                    amount=_post_discount_amount(line),
-                )
-            )
-
-    return UpcomingInvoiceResponse(
-        amount_due=invoice.amount_due,
-        subtotal=invoice.subtotal,
-        total=invoice.total,
-        currency=invoice.currency,
-        lines=lines,
-    )

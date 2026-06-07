@@ -7,14 +7,14 @@ from stripe.params._subscription_update_params import (
 )
 
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    PreviewInvoice,
 )
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionResponse,
     PaymentsSubscriptionUpdateRequest,
 )
 from src.payments.service.payments_stripe_mappers import (
-    map_invoice_preview,
+    map_preview_invoice,
 )
 from src.payments.service.subscription.payments_subscription_base import (
     PaymentsSubscriptionBase,
@@ -45,10 +45,18 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
             read_opts,
         )
 
-        await self._validate_subscription_request(
-            request,
-            stripe_account_id,
-        )
+        # No price/coupon re-validation on update. It discarded its return here
+        # (the recurring interval is only needed by create, for the monthly
+        # billing_cycle_anchor) and looped a price+product retrieve over EVERY
+        # item on the sub, so re-syncing an N-item family cost 2N wasted Stripe
+        # round-trips that grew with family size. The items are already-live
+        # (validated when first added) or freshly added from memberships whose
+        # prices were validated at start, and their coupons were just
+        # find-or-created by this same sync. _build_reconcile_items still raises
+        # if a desired item's stripe_item_id is missing from the live sub
+        # (out-of-sync detection); a genuinely bad price now surfaces as a Stripe
+        # error on the update itself. (Create still validates + reactivates an
+        # archived price.)
         consolidated = self._consolidate_items(request.items)
         items = self._build_reconcile_items(consolidated, sub)
 
@@ -87,7 +95,7 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
         self,
         request: PaymentsSubscriptionUpdateRequest,
         stripe_account_id: str,
-    ) -> PaymentsInvoicePreviewResponse:
+    ) -> PreviewInvoice:
         """Preview the next invoice after updating a subscription."""
         update_params, _, opts = await self._build_update_params(
             request, stripe_account_id, for_preview=True
@@ -109,4 +117,4 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
             params=preview_params,
             options=opts,
         )
-        return map_invoice_preview(invoice)
+        return map_preview_invoice(invoice)

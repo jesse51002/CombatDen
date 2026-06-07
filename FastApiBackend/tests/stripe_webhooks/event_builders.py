@@ -22,32 +22,47 @@ def make_invoice_paid_event(
     amount_paid: int = 5000,
     currency: str = "usd",
     stripe_invoice_id: str | None = None,
-    stripe_charge_id: str | None = "ch_test_paid_1",
+    subscription_id: str | None = None,
     paid_at: int | None = None,
     period_end: int | None = None,
     event_id: str | None = None,
     metadata: dict[str, str] | None = None,
+    total_discount_amounts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build an ``invoice.paid`` event payload.
+    """Build an ``invoice.paid`` event payload in the Stripe "dahlia" shape.
 
     One line per ``stripe_item_id`` is emitted with an identical
-    ``period.end`` (simulating a multi-item subscription renewal).
+    ``period.end`` (simulating a multi-item subscription renewal). The
+    subscription item id and subscription metadata live under the nested
+    ``parent`` discriminator (dahlia). ``invoice.charge`` / ``payment_intent``
+    are gone — the charge arrives separately on ``invoice_payment.paid``.
+
+    A subscription invoice (non-empty ``stripe_item_ids``) carries its
+    metadata under ``parent.subscription_details.metadata``; a one-time
+    invoice (empty) carries it on the invoice root.
     """
     now = int(time.time())
     paid_at = paid_at or now
     period_end = period_end or (now + 30 * 24 * 60 * 60)
     stripe_invoice_id = stripe_invoice_id or f"in_test_{uuid.uuid4().hex[:16]}"
+    subscription_id = subscription_id or f"sub_test_{uuid.uuid4().hex[:16]}"
 
     lines = [
         {
             "id": f"il_test_{i}",
-            "subscription_item": si,
             "amount": amount_paid,
             "currency": currency,
             "period": {"start": now, "end": period_end},
             # Stripe's ``Event.to_dict()`` yields ``Decimal`` here — the
             # field that crashed the webhook before ``dump_stripe_payload``.
             "pricing": {"unit_amount_decimal": Decimal(str(amount_paid))},
+            "parent": {
+                "type": "subscription_item_details",
+                "subscription_item_details": {
+                    "subscription": subscription_id,
+                    "subscription_item": si,
+                },
+            },
         }
         for i, si in enumerate(stripe_item_ids)
     ]
@@ -60,20 +75,79 @@ def make_invoice_paid_event(
         "amount_due": amount_paid,
         "total": amount_paid,
         "currency": currency,
-        "charge": stripe_charge_id,
-        "payment_intent": f"pi_test_{uuid.uuid4().hex[:16]}",
         "customer": f"cus_test_{uuid.uuid4().hex[:16]}",
         "status_transitions": {"paid_at": paid_at},
         "created": now,
         "lines": {"data": lines, "object": "list"},
-        "metadata": metadata or {},
+        # dahlia: amounts + opaque di_ Discount ids (no coupon inline).
+        "total_discount_amounts": total_discount_amounts or [],
     }
+    if stripe_item_ids:
+        invoice["parent"] = {
+            "type": "subscription_details",
+            "subscription_details": {
+                "subscription": subscription_id,
+                "metadata": metadata or {},
+            },
+        }
+        invoice["metadata"] = {}
+    else:
+        invoice["metadata"] = metadata or {}
+
     return {
         "id": event_id or _evt_id("evt_test_paid"),
         "type": "invoice.paid",
         "account": stripe_account_id,
         "created": now,
         "data": {"object": invoice},
+    }
+
+
+def make_invoice_payment_paid_event(
+    *,
+    stripe_account_id: str,
+    stripe_invoice_id: str,
+    amount_paid: int = 5000,
+    currency: str = "usd",
+    payment_type: str = "payment_intent",
+    payment_intent_id: str | None = None,
+    paid_at: int | None = None,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """Build an ``invoice_payment.paid`` event payload (an InvoicePayment).
+
+    ``payment_type='payment_intent'`` (card/bank) carries a PaymentIntent the
+    handler retrieves to resolve the charge id; ``payment_type='out_of_band'``
+    is a cash payment with no PaymentIntent.
+    """
+    now = int(time.time())
+    paid_at = paid_at or now
+    payment_intent_id = payment_intent_id or f"pi_test_{uuid.uuid4().hex[:16]}"
+
+    if payment_type == "out_of_band":
+        payment: dict[str, Any] = {"type": "out_of_band"}
+    else:
+        payment = {"type": "payment_intent", "payment_intent": payment_intent_id}
+
+    invoice_payment = {
+        "id": f"inpay_test_{uuid.uuid4().hex[:16]}",
+        "object": "invoice_payment",
+        "invoice": stripe_invoice_id,
+        "status": "paid",
+        "amount_paid": amount_paid,
+        "amount_requested": amount_paid,
+        "currency": currency,
+        "is_default": True,
+        "created": now,
+        "status_transitions": {"paid_at": paid_at},
+        "payment": payment,
+    }
+    return {
+        "id": event_id or _evt_id("evt_test_inpay"),
+        "type": "invoice_payment.paid",
+        "account": stripe_account_id,
+        "created": now,
+        "data": {"object": invoice_payment},
     }
 
 
@@ -86,20 +160,27 @@ def make_invoice_payment_failed_event(
     stripe_invoice_id: str | None = None,
     event_id: str | None = None,
 ) -> dict[str, Any]:
-    """Build an ``invoice.payment_failed`` event payload."""
+    """Build an ``invoice.payment_failed`` event payload (dahlia shape)."""
     now = int(time.time())
     stripe_invoice_id = stripe_invoice_id or f"in_test_{uuid.uuid4().hex[:16]}"
+    subscription_id = f"sub_test_{uuid.uuid4().hex[:16]}"
 
     lines = [
         {
             "id": f"il_test_{i}",
-            "subscription_item": si,
             "amount": amount_due,
             "currency": currency,
             "period": {"start": now, "end": now + 30 * 24 * 60 * 60},
             # Stripe's ``Event.to_dict()`` yields ``Decimal`` here — the
             # field that crashed the webhook before ``dump_stripe_payload``.
             "pricing": {"unit_amount_decimal": Decimal(str(amount_due))},
+            "parent": {
+                "type": "subscription_item_details",
+                "subscription_item_details": {
+                    "subscription": subscription_id,
+                    "subscription_item": si,
+                },
+            },
         }
         for i, si in enumerate(stripe_item_ids)
     ]
@@ -112,12 +193,15 @@ def make_invoice_payment_failed_event(
         "amount_paid": 0,
         "total": amount_due,
         "currency": currency,
-        "charge": None,
         "attempt_count": 1,
-        "payment_intent": f"pi_test_{uuid.uuid4().hex[:16]}",
         "customer": f"cus_test_{uuid.uuid4().hex[:16]}",
         "created": now,
         "lines": {"data": lines, "object": "list"},
+        "parent": {
+            "type": "subscription_details",
+            "subscription_details": {"subscription": subscription_id, "metadata": {}},
+        },
+        "metadata": {},
     }
     return {
         "id": event_id or _evt_id("evt_test_failed"),
@@ -128,43 +212,41 @@ def make_invoice_payment_failed_event(
     }
 
 
-def make_charge_refunded_event(
+def make_refund_event(
     *,
     stripe_account_id: str,
     stripe_charge_id: str,
-    refund_amounts: list[int],
+    amount: int,
     currency: str = "usd",
+    status: str = "succeeded",
+    event_type: str = "refund.created",
+    refund_id: str | None = None,
+    created: int | None = None,
     event_id: str | None = None,
 ) -> dict[str, Any]:
-    """Build a ``charge.refunded`` event payload.
+    """Build a ``refund.created`` / ``refund.updated`` event payload.
 
-    One refund per entry in ``refund_amounts``.
+    The event's data object is the Refund itself (dahlia shape). One refund
+    per event; ``refund.charge`` links back to the original charge. ``status``
+    and ``event_type`` are configurable to cover the pending→succeeded path.
     """
     now = int(time.time())
-    refunds = [
-        {
-            "id": f"re_test_{uuid.uuid4().hex[:16]}",
-            "amount": amount,
-            "currency": currency,
-            "created": now,
-            "charge": stripe_charge_id,
-        }
-        for amount in refund_amounts
-    ]
-    charge = {
-        "id": stripe_charge_id,
-        "object": "charge",
-        "amount": sum(refund_amounts),
-        "amount_refunded": sum(refund_amounts),
+    refund = {
+        "id": refund_id or f"re_test_{uuid.uuid4().hex[:16]}",
+        "object": "refund",
+        "amount": amount,
         "currency": currency,
-        "refunds": {"data": refunds, "object": "list"},
+        "status": status,
+        "charge": stripe_charge_id,
+        "payment_intent": f"pi_test_{uuid.uuid4().hex[:16]}",
+        "created": created or now,
     }
     return {
         "id": event_id or _evt_id("evt_test_refund"),
-        "type": "charge.refunded",
+        "type": event_type,
         "account": stripe_account_id,
         "created": now,
-        "data": {"object": charge},
+        "data": {"object": refund},
     }
 
 

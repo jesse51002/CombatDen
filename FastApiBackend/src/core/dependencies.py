@@ -81,15 +81,18 @@ from src.shared.paying_member_lock import PayingMemberLock
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
-from src.stripe_webhooks.service.charge_refunded_handler import (
-    ChargeRefundedHandler,
-)
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
 )
 from src.stripe_webhooks.service.invoice_payment_failed_handler import (
     InvoicePaymentFailedHandler,
+)
+from src.stripe_webhooks.service.invoice_payment_paid_handler import (
+    InvoicePaymentPaidHandler,
+)
+from src.stripe_webhooks.service.refund_handler import (
+    RefundHandler,
 )
 from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
@@ -154,6 +157,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_client = providers.Singleton(
         PaymentsStripeClient,
         secret_key=settings.stripe_secret_key,
+        api_version=settings.stripe_api_version,
     )
     payments_price_service = providers.Factory(
         PaymentsStripePriceService,
@@ -204,8 +208,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         parent_resolver=billing_parent_resolver,
     )
     # Standalone freeze service: the dedicated freeze/unfreeze request resolves
-    # the parent then calls this directly; the sync uses it for the maintenance
-    # re-apply with the parent it already resolved.
+    # the parent then calls this directly. The main sync no longer does a
+    # maintenance freeze re-apply (pause_collection is subscription-level and
+    # persists across item changes), so only the explicit action uses this.
     payment_sync_freeze = providers.Factory(
         PaymentSyncFreeze,
         subscription_service=payments_subscription_service,
@@ -236,7 +241,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         subscription_service=payments_subscription_service,
         parent_resolver=billing_parent_resolver,
-        freeze=payment_sync_freeze,
         once_discounts=payment_sync_once_discounts,
         builder=payment_sync_builder,
         paying_lock=paying_member_lock,
@@ -279,9 +283,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         MembersManagementService,
         db_pool=db_pool,
         payments_members_service=payments_members_service,
-        payment_sync_service=payment_sync_service,
         subscription_service=payments_subscription_service,
-        paying_lock=paying_member_lock,
     )
 
     # ── Discounts ────────────────────────────────────────────────
@@ -319,12 +321,17 @@ class DependencyInjector(containers.DeclarativeContainer):
         InvoicePaidHandler,
         payment_sync_service=payment_sync_service,
         paying_lock=paying_member_lock,
+        stripe_client=stripe_client,
+    )
+    stripe_webhook_invoice_payment_paid_handler = providers.Factory(
+        InvoicePaymentPaidHandler,
+        stripe_client=stripe_client,
     )
     stripe_webhook_invoice_payment_failed_handler = providers.Factory(
         InvoicePaymentFailedHandler,
     )
-    stripe_webhook_charge_refunded_handler = providers.Factory(
-        ChargeRefundedHandler,
+    stripe_webhook_refund_handler = providers.Factory(
+        RefundHandler,
     )
     stripe_webhook_account_updated_handler = providers.Factory(
         AccountUpdatedHandler,
@@ -334,8 +341,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         event_log=stripe_webhook_event_log,
         invoice_paid_handler=stripe_webhook_invoice_paid_handler,
+        invoice_payment_paid_handler=stripe_webhook_invoice_payment_paid_handler,
         invoice_payment_failed_handler=stripe_webhook_invoice_payment_failed_handler,
-        charge_refunded_handler=stripe_webhook_charge_refunded_handler,
+        refund_handler=stripe_webhook_refund_handler,
         account_updated_handler=stripe_webhook_account_updated_handler,
     )
     # === end CRM billing DI providers ===

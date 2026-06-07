@@ -9,10 +9,15 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
 from src.shared.paying_member_lock import LockBusyError
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
+from src.stripe_webhooks.service.stripe_invoice_fields import (
+    invoice_metadata,
+    line_subscription_item,
+)
 from src.stripe_webhooks.service.stripe_json import dump_stripe_payload
 from src.stripe_webhooks.service.stripe_time import (
     stripe_ts_to_datetime,
@@ -30,10 +35,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 EVENT_TYPE = "invoice.paid"
-CHARGE_KIND_PAYMENT = "payment"
-CHARGE_STATUS_SUCCEEDED = "succeeded"
 INVOICE_STATUS_PAID = "paid"
-PAYMENT_METHOD_TYPE_CASH = "cash"
 LINE_ITEM_TYPE_MEMBERSHIP = "membership"
 LINE_ITEM_TYPE_CUSTOM = "custom"
 # Fallback label when a Stripe line carries no description (name <> '').
@@ -53,8 +55,12 @@ class InvoicePaidHandler:
         so the bill is itemized.
       - Update ``member_memberships`` for each billed subscription item
         (``last_paid_date``, ``next_due_date``).
-      - Insert a ``member_charges`` row representing the successful
-        payment.
+
+    The succeeded ``member_charges`` row is NOT written here — a paid
+    invoice's payment(s) arrive on the separate ``invoice_payment.paid``
+    event (one per payment, partial or full), which
+    ``InvoicePaymentPaidHandler`` records. This handler owns the bill;
+    that handler owns the money movement.
 
     Metadata is read directly from the raw invoice envelope — the
     webhook is a pure reader at the Stripe boundary. The typed
@@ -71,9 +77,11 @@ class InvoicePaidHandler:
         self,
         payment_sync_service: PaymentSyncService,
         paying_lock: PayingMemberLock,
+        stripe_client: PaymentsStripeClient,
     ) -> None:
         self._sync = payment_sync_service
         self._paying_lock = paying_lock
+        self._stripe = stripe_client.client
 
     async def handle(
         self,
@@ -86,9 +94,8 @@ class InvoicePaidHandler:
         if not stripe_invoice_id:
             raise ValueError("invoice.paid event is missing invoice id")
 
-        raw_metadata = invoice.get("metadata") or {}
+        raw_metadata = invoice_metadata(invoice)
         is_one_time = raw_metadata.get("crm_one_time_payment") == STRIPE_METADATA_TRUE
-        paid_with_cash = raw_metadata.get("crm_paid_with_cash") == STRIPE_METADATA_TRUE
 
         member_id = await self._resolve_member_id(
             session,
@@ -99,9 +106,9 @@ class InvoicePaidHandler:
         )
         if member_id is None:
             subscription_item_ids = [
-                line["subscription_item"]
+                item_id
                 for line in self._lines(invoice)
-                if line.get("subscription_item")
+                if (item_id := line_subscription_item(line))
             ]
             if subscription_item_ids:
                 raise SubscriptionItemPendingError(
@@ -124,13 +131,13 @@ class InvoicePaidHandler:
         if not is_one_time:
             await self._update_memberships(session, invoice, gym_id)
             await self._settle_once_discounts(member_id, gym_id)
-        await self._insert_payment_charge(
+
+        await self._capture_discounts(
             session,
             invoice,
             gym_id,
-            member_id,
             invoice_id,
-            paid_with_cash=paid_with_cash,
+            stripe_account_id=event.get("account"),
         )
 
     # ── Helpers ────────────────────────────────────────────────
@@ -162,7 +169,7 @@ class InvoicePaidHandler:
 
         membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
         for line in self._lines(invoice):
-            stripe_item_id = line.get("subscription_item")
+            stripe_item_id = line_subscription_item(line)
             if not stripe_item_id:
                 continue
             result = await session.execute(
@@ -232,7 +239,7 @@ class InvoicePaidHandler:
 
             item_type = LINE_ITEM_TYPE_CUSTOM
             item_id: str | None = None
-            stripe_item_id = line.get("subscription_item")
+            stripe_item_id = line_subscription_item(line)
             if stripe_item_id:
                 result = await session.execute(
                     text(membership_sql),
@@ -293,7 +300,7 @@ class InvoicePaidHandler:
         )
 
         for line in self._lines(invoice):
-            stripe_item_id = line.get("subscription_item")
+            stripe_item_id = line_subscription_item(line)
             if not stripe_item_id:
                 continue
 
@@ -366,51 +373,116 @@ class InvoicePaidHandler:
                 exc_info=True,
             )
 
-    async def _insert_payment_charge(
+    async def _capture_discounts(
         self,
         session: AsyncSession,
         invoice: dict[str, Any],
         gym_id: UUID,
-        member_id: UUID,
         invoice_id: UUID,
         *,
-        paid_with_cash: bool,
+        stripe_account_id: str | None,
     ) -> None:
-        stripe_charge_id = invoice.get("charge")
-        amount_paid = int(invoice.get("amount_paid") or 0)
+        """Snapshot the invoice's discounts into ``member_invoice_applied_discounts``.
 
-        # Schema requires payment rows to have a stripe_charge_id
-        # UNLESS payment_method_type='cash' (paid out of band). Skip
-        # the charge insert for zero-amount paid invoices with no
-        # underlying charge (e.g. 100%-off trials).
-        if not stripe_charge_id and not paid_with_cash:
-            if amount_paid == 0:
+        The webhook payload carries discount *amounts* but only opaque ``di_``
+        Discount ids — so we retrieve the invoice with the coupon expanded to map
+        each ``di_`` to its Stripe coupon id, and store ``{amount_off, stripe_coupon_id}``
+        per discount (no CRM-discount link — the coupon id is the identifier).
+
+        Best-effort and isolated: a no-op when the invoice has no discounts (the
+        common case → no Stripe call); otherwise the retrieve + inserts run inside
+        a SAVEPOINT so any failure here rolls back ONLY the audit, never the
+        invoice / line-item writes. Idempotent on re-delivery via the row's
+        ``UNIQUE (invoice_id, stripe_coupon_id)``.
+        """
+        discount_amounts = invoice.get("total_discount_amounts") or []
+        if not discount_amounts or not stripe_account_id:
+            return
+
+        try:
+            coupon_by_discount = await self._fetch_invoice_coupons(
+                invoice["id"], stripe_account_id
+            )
+            if not coupon_by_discount:
                 return
-            raise ValueError(
-                f"invoice.paid has amount_paid={amount_paid} but no charge id "
-                f"(stripe_invoice_id={invoice.get('id')})"
+            insert_sql = load_sql(
+                SQL_DIR / "member_invoice_applied_discount_insert.sql"
+            )
+            async with session.begin_nested():
+                for entry in discount_amounts:
+                    discount_ref = entry.get("discount")
+                    coupon_id = (
+                        coupon_by_discount.get(discount_ref)
+                        if isinstance(discount_ref, str)
+                        else None
+                    )
+                    if not coupon_id:
+                        continue
+                    await session.execute(
+                        text(insert_sql),
+                        {
+                            "invoice_id": str(invoice_id),
+                            "gym_id": str(gym_id),
+                            "amount_off": int(entry.get("amount") or 0),
+                            "stripe_coupon_id": coupon_id,
+                        },
+                    )
+        except Exception:
+            logger.error(
+                "invoice.paid discount-audit capture failed "
+                "(stripe_invoice_id=%s gym_id=%s); invoice/charge unaffected",
+                invoice.get("id"),
+                gym_id,
+                exc_info=True,
             )
 
-        payment_method_type = PAYMENT_METHOD_TYPE_CASH if paid_with_cash else None
+    async def _fetch_invoice_coupons(
+        self,
+        stripe_invoice_id: str,
+        stripe_account_id: str,
+    ) -> dict[str, str]:
+        """Map each invoice Discount id (``di_``) to its Stripe coupon id.
 
-        insert_sql = load_sql(SQL_DIR / "member_charge_insert.sql")
-        paid_at_ts = invoice.get("status_transitions", {}).get("paid_at") or invoice.get("created")
-        params = {
-            "invoice_id": str(invoice_id),
-            "gym_id": str(gym_id),
-            "member_id": str(member_id),
-            "kind": CHARGE_KIND_PAYMENT,
-            "status": CHARGE_STATUS_SUCCEEDED,
-            "amount": amount_paid,
-            "currency": invoice.get("currency", "usd"),
-            "payment_method_type": payment_method_type,
-            "stripe_charge_id": stripe_charge_id,
-            "stripe_refund_id": None,
-            "refunds_charge_id": None,
-            "charge_time": stripe_ts_to_datetime(paid_at_ts),
-            "stripe_event_payload": dump_stripe_payload(invoice),
-        }
-        await session.execute(text(insert_sql), params)
+        Retrieves the invoice with its Discount objects expanded (the webhook
+        payload sends only ``di_`` ids). Returns ``{}`` if nothing resolves.
+        """
+        opts = PaymentsStripeClient.connect_opts_readonly(stripe_account_id)
+        retrieved = await self._stripe.v1.invoices.retrieve_async(
+            stripe_invoice_id,
+            params={"expand": ["discounts"]},
+            options=opts,
+        )
+        coupon_by_discount: dict[str, str] = {}
+        for discount in getattr(retrieved, "discounts", None) or []:
+            if isinstance(discount, str):
+                continue  # unexpanded id — can't resolve the coupon
+            discount_id = getattr(discount, "id", None)
+            coupon_id = self._discount_coupon_id(discount)
+            if discount_id and coupon_id:
+                coupon_by_discount[discount_id] = coupon_id
+        return coupon_by_discount
+
+    @staticmethod
+    def _discount_coupon_id(discount: Any) -> str | None:
+        """The coupon id off a Stripe Discount, dahlia-shaped.
+
+        Dahlia nests it: ``discount.source = {type: 'coupon', coupon: '<id>'}``
+        (``coupon`` is the id string). Falls back to the legacy
+        ``discount.coupon`` (object or id string) so the capture survives an
+        API-version skew either way. ``getattr(..., None)`` is safe on a
+        Stripe object — a missing field returns the default, not raises.
+        """
+        source = getattr(discount, "source", None)
+        coupon = getattr(source, "coupon", None) if source is not None else None
+        if isinstance(coupon, str):
+            return coupon
+        coupon_id = getattr(coupon, "id", None) if coupon is not None else None
+        if coupon_id:
+            return coupon_id
+        legacy = getattr(discount, "coupon", None)  # pre-dahlia fallback
+        if isinstance(legacy, str):
+            return legacy
+        return getattr(legacy, "id", None) if legacy is not None else None
 
     @staticmethod
     def _lines(invoice: dict[str, Any]) -> list[dict[str, Any]]:

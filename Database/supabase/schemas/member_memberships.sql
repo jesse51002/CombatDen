@@ -57,6 +57,15 @@ CREATE TABLE member_memberships_unfiltered (
         REFERENCES membership_plan_prices_unfiltered (price_id, plan_id)
 );
 
+-- Index on member_id. The only other indexes are the PK/UNIQUE on item_id, which
+-- cannot serve a `member_id`-keyed lookup, so every membership read and the three
+-- INSERT triggers below (no-active / no-overlap / chronological-start) filter
+-- `member_id = ...` with a sequential scan that grows with the table. The payment
+-- sync reads each family's memberships (`member_id = ANY(...)`) on every billing
+-- op, so without this the per-op cost grows linearly with total membership rows.
+CREATE INDEX idx_member_memberships_member
+    ON member_memberships_unfiltered (member_id);
+
 -- Discounts no longer live on the membership row: applying a discount writes a
 -- frozen snapshot into member_membership_applied_discounts (keyed by item_id).
 -- The old discount_ids JSONB column + its gym-match validation trigger are gone.

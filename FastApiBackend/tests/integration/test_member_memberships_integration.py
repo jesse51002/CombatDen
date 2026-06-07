@@ -592,7 +592,7 @@ class TestPreviewPaths:
     def test_preview_start_response_is_none_or_object(self, api):
         """POST /preview that reaches Stripe-not-configured returns 502 not 500.
 
-        If Stripe is configured the response is a PaymentsInvoicePreviewResponse
+        If Stripe is configured the response is a DueNowVsRecurringPreview
         object or null. If Stripe is not configured the router wraps it in 502
         (PaymentsStripeError). A 500 means an unhandled exception leaked through.
 

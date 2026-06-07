@@ -5,7 +5,8 @@ import 'package:crm/features/member_details/data/models/member_memberships_freez
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
-import 'package:crm/features/member_details/data/models/member_memberships_apply_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/members_management_link_check_response.dart';
@@ -17,7 +18,6 @@ import 'package:crm/features/member_details/data/models/membership_plan_response
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
-import 'package:crm/features/member_details/data/models/upcoming_invoice_response.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
@@ -151,19 +151,19 @@ class MemberRepository {
   }
 
   /// `PUT /api/v1/members/{member_id}/link` — link the
-  /// member's billing to a parent account.
-  Future<MembersManagementResponse> linkMemberAccount(
+  /// member to a paying parent account. A pure DB change
+  /// (the member has no active recurring memberships, so
+  /// nothing is re-billed); the endpoint returns no body,
+  /// so callers refetch member detail afterward.
+  Future<void> linkMemberAccount(
     String memberId,
     String parentMemberId,
   ) async {
-    final response = await _apiClient.put(
+    await _apiClient.put(
       '/api/v1/members/$memberId/link',
       data: MembersManagementLinkRequest(
         parentMemberId: parentMemberId,
       ).toJson(),
-    );
-    return MembersManagementResponse.fromJson(
-      response.data as Map<String, dynamic>,
     );
   }
 
@@ -184,47 +184,15 @@ class MemberRepository {
     );
   }
 
-  /// `POST /api/v1/members/{member_id}/link/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
-      previewLinkMemberAccount(
-    String memberId,
-    String parentMemberId,
-  ) async {
-    final response = await _apiClient.post(
-      '/api/v1/members/$memberId/link/preview',
-      data: MembersManagementLinkRequest(
-        parentMemberId: parentMemberId,
-      ).toJson(),
-    );
-    if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
-      response.data as Map<String, dynamic>,
-    );
-  }
-
-  /// `DELETE /api/v1/members/{member_id}/link`.
-  Future<MembersManagementResponse> unlinkMemberAccount(
+  /// `DELETE /api/v1/members/{member_id}/link` — unlink the
+  /// member from their paying parent account. A pure DB
+  /// change; the endpoint returns no body, so callers
+  /// refetch member detail afterward.
+  Future<void> unlinkMemberAccount(
     String memberId,
   ) async {
-    final response = await _apiClient.delete(
+    await _apiClient.delete(
       '/api/v1/members/$memberId/link',
-    );
-    return MembersManagementResponse.fromJson(
-      response.data as Map<String, dynamic>,
-    );
-  }
-
-  /// `POST /api/v1/members/{member_id}/unlink/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
-      previewUnlinkMemberAccount(
-    String memberId,
-  ) async {
-    final response = await _apiClient.post(
-      '/api/v1/members/$memberId/unlink/preview',
-    );
-    if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
-      response.data as Map<String, dynamic>,
     );
   }
 
@@ -275,14 +243,14 @@ class MemberRepository {
   ///
   /// Returns null when the member's account has no recurring
   /// subscription (the endpoint responds with a null body).
-  Future<UpcomingInvoiceResponse?> getUpcomingInvoice(
+  Future<PreviewInvoice?> getUpcomingInvoice(
     String memberId,
   ) async {
     final response = await _apiClient.get(
       '/api/v1/members/$memberId/upcoming-invoice',
     );
     if (response.data == null) return null;
-    return UpcomingInvoiceResponse.fromJson(
+    return PreviewInvoice.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
@@ -300,7 +268,7 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
+  Future<DueNowVsRecurringPreview?>
       previewStartMembership(
     MemberMembershipsStartRequest req,
   ) async {
@@ -309,7 +277,7 @@ class MemberRepository {
       data: req.toJson(),
     );
     if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
+    return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
@@ -332,7 +300,7 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/cancel/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
+  Future<DueNowVsRecurringPreview?>
       previewCancelMembership(
     String itemId,
     String memberId,
@@ -342,7 +310,7 @@ class MemberRepository {
       '?item_id=$itemId&member_id=$memberId',
     );
     if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
+    return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
@@ -358,7 +326,7 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/price/preview`.
-  Future<PaymentsInvoicePreviewResponse?>
+  Future<DueNowVsRecurringPreview?>
       previewUpdateMembershipPrice(
     MemberMembershipsUpdatePriceRequest req,
   ) async {
@@ -367,7 +335,7 @@ class MemberRepository {
       data: req.toJson(),
     );
     if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
+    return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
@@ -439,18 +407,37 @@ class MemberRepository {
         .toList();
   }
 
-  /// `PUT /api/v1/member_memberships/discounts` — adds /
-  /// removes immutable applied-discount snapshots on an
-  /// existing membership. Applying is an explicit add /
-  /// remove, never a replace-set: [req] names the regular
-  /// presets and linked discounts to add and the snapshot
-  /// ids to remove. Re-syncs the subscription.
-  Future<void> applyMembershipDiscounts(
-    MemberMembershipsApplyDiscountsRequest req,
+  /// `POST /api/v1/member_memberships/discounts/add` — adds the
+  /// named preset snapshots. With `req.preview` true it returns the
+  /// resulting [DueNowVsRecurringPreview] (nothing committed); else it
+  /// commits, re-syncs, and returns null.
+  Future<DueNowVsRecurringPreview?> addMembershipDiscounts(
+    MemberMembershipsAddDiscountsRequest req,
   ) async {
-    await _apiClient.put(
-      '/api/v1/member_memberships/discounts',
+    final response = await _apiClient.post(
+      '/api/v1/member_memberships/discounts/add',
       data: req.toJson(),
+    );
+    if (response.data == null) return null;
+    return DueNowVsRecurringPreview.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `POST /api/v1/member_memberships/discounts/remove` — removes the
+  /// named applied-discount snapshots. With `req.preview` true it returns
+  /// the resulting [DueNowVsRecurringPreview] (nothing committed); else it
+  /// commits, re-syncs, and returns null.
+  Future<DueNowVsRecurringPreview?> removeMembershipDiscounts(
+    MemberMembershipsRemoveDiscountsRequest req,
+  ) async {
+    final response = await _apiClient.post(
+      '/api/v1/member_memberships/discounts/remove',
+      data: req.toJson(),
+    );
+    if (response.data == null) return null;
+    return DueNowVsRecurringPreview.fromJson(
+      response.data as Map<String, dynamic>,
     );
   }
 
@@ -458,7 +445,7 @@ class MemberRepository {
   /// previews the subscription for the membership's CURRENT
   /// applied-discount snapshots (item-id keyed query params,
   /// no body; apply itself mutates the snapshot rows first).
-  Future<PaymentsInvoicePreviewResponse?>
+  Future<DueNowVsRecurringPreview?>
       previewMembershipDiscounts({
     required String itemId,
     required String memberId,
@@ -468,7 +455,7 @@ class MemberRepository {
       '?item_id=$itemId&member_id=$memberId',
     );
     if (response.data == null) return null;
-    return PaymentsInvoicePreviewResponse.fromJson(
+    return DueNowVsRecurringPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }

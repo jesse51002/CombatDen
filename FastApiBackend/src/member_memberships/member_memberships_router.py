@@ -25,7 +25,7 @@ from src.member_memberships.service.memberships.member_memberships_service impor
 )
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
+    DueNowVsRecurringPreview,
 )
 from src.shared.auth import Auth, security
 
@@ -410,7 +410,7 @@ async def update_membership_price(
 
 @member_memberships_router.post(
     "/preview",
-    response_model=PaymentsInvoicePreviewResponse | None,
+    response_model=DueNowVsRecurringPreview | None,
     summary="Preview starting a membership",
     description=(
         "Dry-run of the start endpoint: runs every validation "
@@ -431,7 +431,7 @@ async def preview_start_membership(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> PaymentsInvoicePreviewResponse | None:
+) -> DueNowVsRecurringPreview | None:
     """Preview what starting a membership would charge."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
@@ -476,7 +476,7 @@ async def preview_start_membership(
 
 @member_memberships_router.post(
     "/cancel/preview",
-    response_model=PaymentsInvoicePreviewResponse | None,
+    response_model=DueNowVsRecurringPreview | None,
     summary="Preview cancelling a membership",
     description=(
         "Dry-run of the cancel endpoint: runs every validation "
@@ -500,7 +500,7 @@ async def preview_cancel_membership(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> PaymentsInvoicePreviewResponse | None:
+) -> DueNowVsRecurringPreview | None:
     """Preview what cancelling a membership would charge."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
@@ -538,7 +538,7 @@ async def preview_cancel_membership(
 
 @member_memberships_router.post(
     "/price/preview",
-    response_model=PaymentsInvoicePreviewResponse | None,
+    response_model=DueNowVsRecurringPreview | None,
     summary="Preview updating a membership's price",
     description=(
         "Dry-run of the update-price endpoint: runs every "
@@ -559,7 +559,7 @@ async def preview_update_membership_price(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> PaymentsInvoicePreviewResponse | None:
+) -> DueNowVsRecurringPreview | None:
     """Preview what updating a membership's price would charge."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
@@ -601,7 +601,7 @@ async def preview_update_membership_price(
 
 @member_memberships_router.post(
     "/discounts/add",
-    response_model=PaymentsInvoicePreviewResponse | None,
+    response_model=DueNowVsRecurringPreview | None,
     summary="Add a membership's discount snapshots (or preview)",
     description=(
         "Adds a frozen snapshot per regular preset and per entered linked "
@@ -624,7 +624,7 @@ async def add_membership_discounts(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> PaymentsInvoicePreviewResponse | None:
+) -> DueNowVsRecurringPreview | None:
     """Add discount snapshots on a membership, or preview the addition."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
@@ -668,7 +668,7 @@ async def add_membership_discounts(
 
 @member_memberships_router.post(
     "/discounts/remove",
-    response_model=PaymentsInvoicePreviewResponse | None,
+    response_model=DueNowVsRecurringPreview | None,
     summary="Remove a membership's discount snapshots (or preview)",
     description=(
         "Removes the named snapshots, then re-syncs the Stripe subscription — "
@@ -690,7 +690,7 @@ async def remove_membership_discounts(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> PaymentsInvoicePreviewResponse | None:
+) -> DueNowVsRecurringPreview | None:
     """Remove discount snapshots from a membership, or preview the removal."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)

@@ -1,4 +1,11 @@
-"""Integration tests for linked-account management."""
+"""Integration tests for linked-account management (link / unlink).
+
+Link / unlink are pure DB changes (no Stripe sync): they set / clear
+``members.account_linked_to_id`` (and NULL the child's stripe/card fields) for a
+member with zero active recurring memberships, so the family's consolidated
+subscription is never touched. ``test_link_unlink_issues_no_charges`` is the
+explicit guarantee of that.
+"""
 
 from uuid import uuid4
 
@@ -49,7 +56,7 @@ async def _retrieve_sub(stripe_client, connect_opts, sub_id):
 
 
 async def test_link_happy_path(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -68,12 +75,10 @@ async def test_link_happy_path(
     )
 
     try:
-        resp = await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent.member_id,
         )
-
-        assert resp.account_linked_to_id == parent.member_id
 
         row = await _fetch_profile(db_pool, child.member_id)
         assert row["account_linked_to_id"] is not None
@@ -93,7 +98,7 @@ async def test_link_happy_path(
 
 
 async def test_link_clears_existing_card_fields(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -118,7 +123,7 @@ async def test_link_clears_existing_card_fields(
         pre = await _fetch_profile(db_pool, child.member_id)
         assert pre["card_brand"] is not None  # sanity
 
-        await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent.member_id,
         )
@@ -137,7 +142,7 @@ async def test_link_clears_existing_card_fields(
 
 
 async def test_link_self_raises(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -148,7 +153,7 @@ async def test_link_self_raises(
 
     try:
         with pytest.raises(ValueError, match="themselves"):
-            await management_service.link_account(
+            await memberships_service.link_account(
                 member.member_id,
                 member.member_id,
             )
@@ -157,7 +162,7 @@ async def test_link_self_raises(
 
 
 async def test_link_already_linked_raises(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -168,12 +173,12 @@ async def test_link_already_linked_raises(
     child = await created.member(gym_id, first_name="C", last_name="A")
 
     try:
-        await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent.member_id,
         )
         with pytest.raises(ValueError, match="already linked"):
-            await management_service.link_account(
+            await memberships_service.link_account(
                 child.member_id,
                 parent.member_id,
             )
@@ -183,7 +188,6 @@ async def test_link_already_linked_raises(
 
 
 async def test_link_with_active_recurring_raises(
-    management_service,
     memberships_service,
     db_pool,
     gym_id,
@@ -212,7 +216,7 @@ async def test_link_with_active_recurring_raises(
         )
 
         with pytest.raises(ValueError, match="active recurring"):
-            await management_service.link_account(
+            await memberships_service.link_account(
                 child.member_id,
                 parent.member_id,
             )
@@ -229,7 +233,7 @@ async def test_link_with_active_recurring_raises(
 
 
 async def test_unlink_happy_path(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -240,15 +244,14 @@ async def test_unlink_happy_path(
     child = await created.member(gym_id, first_name="Child", last_name="Unlink")
 
     try:
-        await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent.member_id,
         )
 
-        resp = await management_service.unlink_account(
+        await memberships_service.unlink_account(
             child.member_id,
         )
-        assert resp.account_linked_to_id is None
 
         row = await _fetch_profile(db_pool, child.member_id)
         assert row["account_linked_to_id"] is None
@@ -261,7 +264,7 @@ async def test_unlink_happy_path(
 
 
 async def test_unlink_not_linked_raises(
-    management_service,
+    memberships_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -272,7 +275,7 @@ async def test_unlink_not_linked_raises(
 
     try:
         with pytest.raises(ValueError, match="not linked"):
-            await management_service.unlink_account(
+            await memberships_service.unlink_account(
                 member.member_id,
             )
     finally:
@@ -310,7 +313,7 @@ async def test_unlink_with_active_recurring_raises(
         # account_linked_to_id (linking NULLs the child's own Stripe/card
         # fields). The linked child's membership then bills through the parent's
         # subscription.
-        await management_service.link_account(child.member_id, parent.member_id)
+        await memberships_service.link_account(child.member_id, parent.member_id)
         await memberships_service.start(
             member_id=child.member_id,
             gym_id=gym_id,
@@ -320,7 +323,7 @@ async def test_unlink_with_active_recurring_raises(
         )
 
         with pytest.raises(ValueError, match="active recurring"):
-            await management_service.unlink_account(
+            await memberships_service.unlink_account(
                 child.member_id,
             )
 
@@ -336,7 +339,6 @@ async def test_unlink_with_active_recurring_raises(
 
 
 async def test_link_unlink_issues_no_charges(
-    management_service,
     memberships_service,
     db_pool,
     gym_id,
@@ -347,7 +349,8 @@ async def test_link_unlink_issues_no_charges(
     """Link + unlink must not create new invoices or proration items on
     the parent's Stripe subscription. The parent has an active recurring
     plan; we snapshot the subscription around each operation and confirm
-    its invoice identity is unchanged.
+    its invoice identity is unchanged. (Link / unlink are pure DB changes —
+    they never call Stripe — so this holds by construction.)
     """
     pm_id = await created.payment_method()
     parent = await created.member(
@@ -380,7 +383,7 @@ async def test_link_unlink_issues_no_charges(
         invoice_before = sub_before.latest_invoice
 
         # ── Link the bare child ─────────────────────────────────
-        await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent.member_id,
         )
@@ -401,7 +404,7 @@ async def test_link_unlink_issues_no_charges(
         )
 
         # ── Unlink the child ─────────────────────────────────────
-        await management_service.unlink_account(
+        await memberships_service.unlink_account(
             child.member_id,
         )
 

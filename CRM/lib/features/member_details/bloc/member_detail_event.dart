@@ -170,31 +170,41 @@ class MarkPaidCashRequested extends MemberDetailEvent {
   List<Object?> get props => [itemId, memberId];
 }
 
-/// Adds / removes applied-discount snapshots on a
-/// membership. Apply is an explicit add / remove of
-/// immutable snapshot rows, never a replace-set:
-/// [addPresetIds] are discounts to add by id (any type,
-/// including a `linked` family discount); [removeAppliedIds]
-/// are existing snapshot ids to delete.
-class ApplyDiscountsRequested extends MemberDetailEvent {
+/// Commits adding applied-discount snapshots to a membership
+/// — the named [presetIds] (by discount id, any type incl. a
+/// `linked` family discount) frozen at their active value
+/// version. A single-operation commit (the backend has no
+/// combined add+remove); preview happens repository-direct.
+class AddDiscountsRequested extends MemberDetailEvent {
   final String itemId;
   final String memberId;
-  final List<String> addPresetIds;
-  final List<String> removeAppliedIds;
-  const ApplyDiscountsRequested({
+  final List<String> presetIds;
+  const AddDiscountsRequested({
     required this.itemId,
     required this.memberId,
-    this.addPresetIds = const [],
-    this.removeAppliedIds = const [],
+    required this.presetIds,
   });
 
   @override
-  List<Object?> get props => [
-        itemId,
-        memberId,
-        addPresetIds,
-        removeAppliedIds,
-      ];
+  List<Object?> get props => [itemId, memberId, presetIds];
+}
+
+/// Commits removing applied-discount snapshots from a
+/// membership — the snapshots named by their
+/// `applied_discount_id` ([appliedIds]). A single-operation
+/// commit; preview happens repository-direct.
+class RemoveDiscountsRequested extends MemberDetailEvent {
+  final String itemId;
+  final String memberId;
+  final List<String> appliedIds;
+  const RemoveDiscountsRequested({
+    required this.itemId,
+    required this.memberId,
+    required this.appliedIds,
+  });
+
+  @override
+  List<Object?> get props => [itemId, memberId, appliedIds];
 }
 
 // ----- Charges / refunds -----

@@ -9,8 +9,12 @@ class PaymentsStripeClient:
     underlying StripeClient and Connect request options.
     """
 
-    def __init__(self, secret_key: str) -> None:
-        self._client = stripe.StripeClient(secret_key)
+    def __init__(self, secret_key: str, api_version: str) -> None:
+        # Pin the API version explicitly so an SDK upgrade can't silently
+        # change request/response shapes (see Settings.stripe_api_version).
+        self._client = stripe.StripeClient(
+            secret_key, stripe_version=api_version
+        )
 
     @property
     def client(self) -> stripe.StripeClient:

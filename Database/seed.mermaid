@@ -66,13 +66,12 @@ flowchart TB
   Plans -->|"1/7"| p_once["one_time ×1 · 14%<br/>Drop-In $25 (3 cls / 1 wk)"]
   Plans -->|"1/7"| p_trial["trial ×1 · 14%<br/>Free Trial $0 (5 cls / 2 wk)"]
 
-  %% ── Discounts ×4 — regular's facets (amount + duration + kind) co-occur, so
-  %% they're stacked and reconverge; linked is the other branch.
-  Discounts["🏷️ Discounts ×4"]
-  Discounts -->|"~50%"| d_linked["linked / family ×2<br/>$20 & $30 off, ongoing · used by Family plan"]
-  Discounts -->|"~50%"| d_reg["regular ×2"]
-
-  d_reg --> d_amt["amount (co-occurs)"]
+  %% ── Discounts ×10 — all regular presets (no linked/family discounts). The
+  %% facets (amount + duration + kind) co-occur, so they're stacked and
+  %% reconverge. Each live membership is given a random 0–3 of them at start
+  %% (applied-snapshot overlay).
+  Discounts["🏷️ Discounts ×10"]
+  Discounts --> d_amt["amount (co-occurs)"]
   d_amt -->|"50%"| d_pct["percent 5–25%"]
   d_amt -->|"50%"| d_dollar["dollar $5–$50"]
   d_pct --> d_dur
@@ -87,6 +86,8 @@ flowchart TB
   d_kind["kind (co-occurs)"]
   d_kind -->|"75%"| d_preset["preset"]
   d_kind -->|"25%"| d_custom["custom"]
+
+  Discounts -.->|"applied 0–3 / live membership"| d_applied["applied snapshots<br/>random subset per membership"]
 
   %% ── Memberships · grouped live vs closed (one status each) ──
   Memberships["📄 Memberships · live ≈50 + closed ≈50–70"]
@@ -164,5 +165,5 @@ flowchart TB
   classDef dim  fill:#ffe6cc,stroke:#d98a3a,color:#4a2c08;
   classDef leaf fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
   class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History hub;
-  class m_life,m_frz,m_acc,d_reg,d_amt,d_dur,d_kind,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
-  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_linked,d_pct,d_dollar,d_once,d_ongoing,d_preset,d_custom,ms_active,ms_trial,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;
+  class m_life,m_frz,m_acc,d_amt,d_dur,d_kind,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
+  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_preset,d_custom,d_applied,ms_active,ms_trial,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;

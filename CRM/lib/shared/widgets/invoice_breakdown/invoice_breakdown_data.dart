@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
+
 /// One line on an invoice breakdown: a label and a signed
 /// amount in minor currency units (cents for USD).
 class InvoiceLineItem extends Equatable {
@@ -15,24 +17,57 @@ class InvoiceLineItem extends Equatable {
   List<Object?> get props => [description, amount];
 }
 
-/// One applied-discount pill on an invoice breakdown.
+/// One applied-discount line on an invoice breakdown — a label
+/// and the (signed, negative) amount it took off, rendered as a
+/// regular offset line row rather than a pill.
 ///
-/// A plain display shape (label + optional sub-label) so
-/// the shared widget never depends on a billing feature's
-/// own discount model — the member-detail dialogs adapt
-/// their richer models into this when composing the
-/// breakdown.
+/// [amount] is signed minor units (negative; it reduces the
+/// total). A plain display shape so the shared widget never
+/// depends on a billing feature's own discount model.
 class InvoiceDiscount extends Equatable {
   final String label;
-  final String? subLabel;
+  final int amount;
 
   const InvoiceDiscount({
     required this.label,
-    this.subLabel,
+    required this.amount,
   });
 
   @override
-  List<Object?> get props => [label, subLabel];
+  List<Object?> get props => [label, amount];
+}
+
+/// One payment attempt against an invoice — a retry, the
+/// success, or a refund — as a presentation-only row.
+///
+/// A plain display shape so the shared widget never depends
+/// on a billing feature's charge model; the member-detail
+/// dialog adapts its richer model into this.
+class InvoiceAttemptLine extends Equatable {
+  /// How it was paid, e.g. "•••• 4242", "Cash", "Card".
+  final String method;
+
+  /// Formatted timestamp for the attempt.
+  final String timeLabel;
+
+  /// Signed amount in minor units (refunds are negative).
+  final int amount;
+
+  /// "Succeeded" / "Failed" / "Refunded" / …
+  final String statusLabel;
+  final InvoiceChipTone statusTone;
+
+  const InvoiceAttemptLine({
+    required this.method,
+    required this.timeLabel,
+    required this.amount,
+    required this.statusLabel,
+    required this.statusTone,
+  });
+
+  @override
+  List<Object?> get props =>
+      [method, timeLabel, amount, statusLabel, statusTone];
 }
 
 /// Normalised, presentation-only shape consumed by the
@@ -53,6 +88,10 @@ class InvoiceBreakdownData extends Equatable {
 
   final List<InvoiceDiscount> appliedDiscounts;
 
+  /// Every charge against the invoice (retries, success,
+  /// refunds). Rendered as an "Attempts" section when present.
+  final List<InvoiceAttemptLine> attempts;
+
   final int total;
   final String currency;
 
@@ -71,6 +110,7 @@ class InvoiceBreakdownData extends Equatable {
     required this.currency,
     this.subtotal,
     this.appliedDiscounts = const [],
+    this.attempts = const [],
     this.isRefund = false,
     this.refundedAmount = 0,
   });
@@ -80,6 +120,7 @@ class InvoiceBreakdownData extends Equatable {
         lines,
         subtotal,
         appliedDiscounts,
+        attempts,
         total,
         currency,
         isRefund,

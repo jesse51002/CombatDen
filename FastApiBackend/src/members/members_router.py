@@ -9,11 +9,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
+from src.member_memberships.schema.member_memberships_schema import (
+    MembersBillingLinkCheckResponse,
+    MembersBillingLinkRequest,
+)
+from src.member_memberships.service.memberships.member_memberships_service import (
+    MemberMembershipsService,
+)
 from src.members.schema.members_billing_schema import (
     BillingPaymentRecord,
     MemberBillingDetailResponse,
-    MembersBillingLinkCheckResponse,
-    MembersBillingLinkRequest,
     MembersBillingProfileResponse,
     MembersBillingUpdateCardRequest,
 )
@@ -44,9 +49,8 @@ from src.members.service.member_payments_service import (
 )
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (
-    PaymentsInvoicePreviewResponse,
     PaymentsInvoiceResponse,
-    UpcomingInvoiceResponse,
+    PreviewInvoice,
 )
 from src.shared.auth import Auth, security
 
@@ -469,15 +473,14 @@ async def unlink_member_payment(
 
 @members_router.put(
     "/{member_id}/link",
-    response_model=MembersBillingProfileResponse,
     summary="Link member to a parent account",
     description=(
-        "Links an existing member to a paying parent account. "
-        "The child must have zero active recurring memberships. "
-        "Clears any stripe subscription, card, and freeze state on the child "
-        "(required by the linked_account_no_stripe DB constraint) and re-syncs "
-        "the parent's subscription so linked-discount assignments are "
-        "recalculated. No proration or mid-cycle charges are issued."
+        "Links an existing member to a paying parent account. The child must "
+        "have zero active recurring memberships. Clears any stripe subscription, "
+        "card, and freeze state on the child (required by the "
+        "linked_account_no_stripe DB constraint). This is a relationship change "
+        "only — the member carries no active recurring membership, so no "
+        "subscription is re-billed and no charges are issued."
     ),
     responses={
         200: {"description": "Member linked successfully"},
@@ -485,7 +488,6 @@ async def unlink_member_payment(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
-        502: {"description": "Stripe error"},
     },
 )
 @inject
@@ -494,16 +496,16 @@ async def link_member_account(
     request: MembersBillingLinkRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    management_service: MembersManagementService = Depends(
-        Provide[DependencyInjector.members_management_service]
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
     ),
-) -> MembersBillingProfileResponse:
+) -> None:
     """Link a member to a paying parent account."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        return await management_service.link_account(
+        await memberships_service.link_account(
             member_id,
             request.parent_member_id,
         )
@@ -517,16 +519,6 @@ async def link_member_account(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        logger.error(
-            "Stripe error linking member: member_id=%s",
-            member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -542,14 +534,12 @@ async def link_member_account(
 
 @members_router.delete(
     "/{member_id}/link",
-    response_model=MembersBillingProfileResponse,
     summary="Unlink member from a parent account",
     description=(
-        "Unlinks a member from their paying parent account. "
-        "Clears account_linked_to_id on the child, then re-syncs the old "
-        "parent's subscription so the consolidated line reflects the smaller "
-        "family. The child must have zero active recurring memberships. "
-        "No proration or mid-cycle charges are issued."
+        "Unlinks a member from their paying parent account by clearing "
+        "account_linked_to_id on the child. The child must have zero active "
+        "recurring memberships, so this is a relationship change only — no "
+        "subscription is re-billed and no charges are issued."
     ),
     responses={
         200: {"description": "Member unlinked successfully"},
@@ -557,7 +547,6 @@ async def link_member_account(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
-        502: {"description": "Stripe error"},
     },
 )
 @inject
@@ -565,16 +554,16 @@ async def unlink_member_account(
     member_id: UUID,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    management_service: MembersManagementService = Depends(
-        Provide[DependencyInjector.members_management_service]
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
     ),
-) -> MembersBillingProfileResponse:
+) -> None:
     """Unlink a member from their paying parent account."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        return await management_service.unlink_account(member_id)
+        await memberships_service.unlink_account(member_id)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -585,16 +574,6 @@ async def unlink_member_account(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        logger.error(
-            "Stripe error unlinking member: member_id=%s",
-            member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -629,8 +608,8 @@ async def check_link_member_account(
     request: MembersBillingLinkRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    management_service: MembersManagementService = Depends(
-        Provide[DependencyInjector.members_management_service]
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> MembersBillingLinkCheckResponse:
     """Check whether a member can be linked to a parent account."""
@@ -638,7 +617,7 @@ async def check_link_member_account(
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        return await management_service.check_link_account(
+        return await memberships_service.check_link_account(
             member_id,
             request.parent_member_id,
         )
@@ -662,142 +641,6 @@ async def check_link_member_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to check member link",
-        ) from None
-
-
-@members_router.post(
-    "/{member_id}/link/preview",
-    response_model=PaymentsInvoicePreviewResponse | None,
-    summary="Preview linking a member to a parent account",
-    description=(
-        "Dry-run of the link endpoint: runs every validation and returns the "
-        "Stripe invoice preview for the parent's resulting subscription. "
-        "Returns null if the parent has no recurring subscription to preview."
-    ),
-    responses={
-        200: {"description": "Preview retrieved successfully"},
-        400: {"description": "Child is already linked or has active recurring memberships"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
-        404: {"description": "Member not found"},
-        502: {"description": "Stripe error"},
-    },
-)
-@inject
-async def preview_link_member_account(
-    member_id: UUID,
-    request: MembersBillingLinkRequest,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    management_service: MembersManagementService = Depends(
-        Provide[DependencyInjector.members_management_service]
-    ),
-) -> PaymentsInvoicePreviewResponse | None:
-    """Preview what linking a member to a parent would charge."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
-
-    try:
-        return await management_service.preview_link_account(
-            member_id,
-            request.parent_member_id,
-        )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        logger.error(
-            "Stripe error previewing link: member_id=%s",
-            member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to preview link member: member_id=%s",
-            member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to preview member link",
-        ) from None
-
-
-@members_router.post(
-    "/{member_id}/unlink/preview",
-    response_model=PaymentsInvoicePreviewResponse | None,
-    summary="Preview unlinking a member from a parent account",
-    description=(
-        "Dry-run of the unlink endpoint: runs every validation and returns "
-        "the Stripe invoice preview for the old parent's resulting subscription. "
-        "Returns null if the old parent has no recurring subscription to preview."
-    ),
-    responses={
-        200: {"description": "Preview retrieved successfully"},
-        400: {"description": "Child is not linked or has active recurring memberships"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
-        404: {"description": "Member not found"},
-        502: {"description": "Stripe error"},
-    },
-)
-@inject
-async def preview_unlink_member_account(
-    member_id: UUID,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    management_service: MembersManagementService = Depends(
-        Provide[DependencyInjector.members_management_service]
-    ),
-) -> PaymentsInvoicePreviewResponse | None:
-    """Preview what unlinking a member from a parent would charge."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
-
-    try:
-        return await management_service.preview_unlink_account(member_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        logger.error(
-            "Stripe error previewing unlink: member_id=%s",
-            member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to preview unlink member: member_id=%s",
-            member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to preview member unlink",
         ) from None
 
 
@@ -860,7 +703,7 @@ async def list_member_invoices(
 
 @members_router.get(
     "/{member_id}/upcoming-invoice",
-    response_model=UpcomingInvoiceResponse | None,
+    response_model=PreviewInvoice | None,
     summary="Get member's upcoming invoice",
     description=(
         "Returns the upcoming (next) Stripe invoice preview for the "
@@ -882,7 +725,7 @@ async def get_member_upcoming_invoice(
     management_service: MembersManagementService = Depends(
         Provide[DependencyInjector.members_management_service]
     ),
-) -> UpcomingInvoiceResponse | None:
+) -> PreviewInvoice | None:
     """Fetch the upcoming invoice preview for a member's account."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)

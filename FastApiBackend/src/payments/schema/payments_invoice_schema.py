@@ -1,47 +1,56 @@
 from pydantic import BaseModel
 
-# ── Invoice Preview ─────────────────────────────────────────────
+# ── Invoice preview ─────────────────────────────────────────────
 
 
-class PaymentsInvoicePreviewLineItem(BaseModel):
-    """A single line item from an invoice preview."""
+class PreviewInvoiceLine(BaseModel):
+    """A single line item from an invoice preview.
+
+    ``amount`` is Stripe's raw line amount (untouched); ``discounted_amount``
+    is the post-discount value (``subtotal − Σ discount_amounts``). The line
+    also carries ``stripe_subscription_item_id`` (None for one-off items) and
+    ``is_proration`` so a consumer that wants only the steady-state recurring
+    view can filter — the mapper itself returns every line.
+    """
 
     amount: int
+    discounted_amount: int
     description: str | None = None
     stripe_price_id: str | None = None
     quantity: int | None = None
+    stripe_subscription_item_id: str | None = None
+    is_proration: bool = False
 
 
-class PaymentsInvoicePreviewResponse(BaseModel):
-    """Preview of what an invoice would look like without charging."""
+class PreviewInvoice(BaseModel):
+    """Preview of what an invoice would look like without charging.
 
-    amount_due: int
-    subtotal: int
-    total: int
-    currency: str
-    lines: list[PaymentsInvoicePreviewLineItem] = []
-
-
-# ── Upcoming Invoice ────────────────────────────────────────────
-
-
-class UpcomingInvoiceLine(BaseModel):
-    """A single post-discount line item on an upcoming subscription invoice."""
-
-    stripe_subscription_item_id: str
-    stripe_price_id: str | None = None
-    quantity: int
-    amount: int  # post-discount line total in cents
-
-
-class UpcomingInvoiceResponse(BaseModel):
-    """Preview of the next invoice for an existing subscription."""
+    The one preview shape, produced by ``map_preview_invoice`` and returned
+    (directly, wrapped in ``DueNowVsRecurringPreview``, or filtered to the
+    recurring lines for the upcoming-invoice read) by every preview surface.
+    """
 
     amount_due: int
     subtotal: int
     total: int
     currency: str
-    lines: list[UpcomingInvoiceLine] = []
+    lines: list[PreviewInvoiceLine] = []
+
+
+# ── Due-now vs Recurring Preview ────────────────────────────────
+
+
+class DueNowVsRecurringPreview(BaseModel):
+    """A preview split into what is charged now vs. what recurs.
+
+    Both halves are ordinary invoice previews assembled by the caller:
+    ``due_now`` is the immediate invoice (``None`` when nothing is
+    charged now), ``recurring`` is the steady-state per-cycle invoice
+    (the ``proration_behavior=none`` preview).
+    """
+
+    due_now: PreviewInvoice | None = None
+    recurring: PreviewInvoice | None = None
 
 
 # ── Invoice List ────────────────────────────────────────────────

@@ -86,7 +86,6 @@ async def _fetch_item_id(db_pool, member_id: UUID, plan_id: UUID) -> UUID:
 
 async def test_family_same_plan_both_rows_sum_to_plan_total(
     memberships_service,
-    management_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -119,7 +118,7 @@ async def test_family_same_plan_both_rows_sum_to_plan_total(
     )
 
     try:
-        await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent.member_id,
         )
@@ -191,7 +190,6 @@ async def test_family_same_plan_both_rows_sum_to_plan_total(
 
 async def test_family_different_plans_per_row_totals(
     memberships_service,
-    management_service,
     db_pool,
     gym_id,
     stripe_client,
@@ -226,7 +224,7 @@ async def test_family_different_plans_per_row_totals(
     )
 
     try:
-        await management_service.link_account(
+        await memberships_service.link_account(
             child.member_id,
             parent.member_id,
         )

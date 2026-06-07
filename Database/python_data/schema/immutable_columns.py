@@ -324,6 +324,14 @@ MEMBER_CHARGES: frozenset[str] = frozenset(
         "kind",  # set at creation
         "charge_time",  # auto-generated timestamp
         "refunds_charge_id",  # set at creation for refund rows
+        # Value columns — append-only Stripe-gated table with no client UPDATE
+        # path, so every column is client-immutable. Each row is written once at
+        # record time (Stripe webhook or completed cash transaction), never edited.
+        "status",
+        "amount",
+        "currency",
+        "payment_method_type",
+        "card_last_four",
         # Stripe columns — always set by backend
         "stripe_charge_id",
         "stripe_refund_id",

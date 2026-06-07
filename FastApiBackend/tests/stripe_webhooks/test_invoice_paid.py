@@ -2,9 +2,12 @@
 
 Verifies that a successful subscription renewal:
   - upserts a ``member_invoices`` row to ``status='paid'``
+  - inserts the itemized ``member_invoice_line_items``
   - updates ``member_memberships.last_paid_date`` / ``next_due_date``
-  - inserts a ``member_charges`` row with
-    ``kind='payment', status='succeeded'``
+
+The succeeded ``member_charges`` row is NOT written here — a paid invoice's
+payment(s) arrive on the separate ``invoice_payment.paid`` event, covered by
+``test_invoice_payment_paid.py``.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -23,42 +26,9 @@ async def _fetch_invoice(db_pool, stripe_invoice_id: str) -> dict | None:
     async with db_pool.session() as session:
         result = await session.execute(
             text(
-                "SELECT status, total_amount, currency, member_id, "
-                "stripe_payment_intent_id "
+                "SELECT status, total_amount, currency, member_id "
                 "FROM member_invoices "
                 "WHERE stripe_invoice_id = :id"
-            ),
-            {"id": stripe_invoice_id},
-        )
-        row = result.mappings().fetchone()
-    return dict(row) if row else None
-
-
-async def _fetch_charge(db_pool, stripe_charge_id: str) -> dict | None:
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text(
-                "SELECT kind, status, amount, currency "
-                "FROM member_charges "
-                "WHERE stripe_charge_id = :id"
-            ),
-            {"id": stripe_charge_id},
-        )
-        row = result.mappings().fetchone()
-    return dict(row) if row else None
-
-
-async def _fetch_charge_for_invoice(db_pool, stripe_invoice_id: str) -> dict | None:
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text(
-                "SELECT kind, status, amount, currency, "
-                "payment_method_type, stripe_charge_id "
-                "FROM member_charges "
-                "WHERE invoice_id = ("
-                "  SELECT invoice_id FROM member_invoices "
-                "  WHERE stripe_invoice_id = :id"
-                ")"
             ),
             {"id": stripe_invoice_id},
         )
@@ -80,7 +50,23 @@ async def _fetch_membership_dates(db_pool, item_id) -> dict | None:
     return dict(row) if row else None
 
 
-async def test_invoice_paid_writes_invoice_charge_and_dates(
+async def _charges_for_invoice(db_pool, stripe_invoice_id: str) -> int:
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT COUNT(*) AS n FROM member_charges "
+                "WHERE invoice_id IN ("
+                "  SELECT invoice_id FROM member_invoices "
+                "  WHERE stripe_invoice_id = :id"
+                ")"
+            ),
+            {"id": stripe_invoice_id},
+        )
+        row = result.mappings().fetchone()
+    return int(row["n"])
+
+
+async def test_invoice_paid_writes_invoice_and_dates(
     stripe_webhooks_service,
     db_pool,
     stripe_account_id,
@@ -92,31 +78,24 @@ async def test_invoice_paid_writes_invoice_charge_and_dates(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=[webhook_fixture.stripe_item_id],
         amount_paid=5000,
-        stripe_charge_id="ch_test_paid_happy_1",
         paid_at=paid_at,
         period_end=period_end,
     )
 
     await stripe_webhooks_service.handle_event(event)
 
-    # Invoice upserted to paid
+    # Invoice upserted to paid.
     invoice = await _fetch_invoice(db_pool, event["data"]["object"]["id"])
     assert invoice is not None
     assert invoice["status"] == "paid"
     assert invoice["total_amount"] == 5000
     assert invoice["currency"] == "usd"
     assert str(invoice["member_id"]) == str(webhook_fixture.member_id)
-    assert invoice["stripe_payment_intent_id"] is not None
 
-    # Charge row inserted
-    charge = await _fetch_charge(db_pool, "ch_test_paid_happy_1")
-    assert charge is not None
-    assert charge["kind"] == "payment"
-    assert charge["status"] == "succeeded"
-    assert charge["amount"] == 5000
-    assert charge["currency"] == "usd"
+    # The charge is the invoice_payment.paid handler's job, not this one.
+    assert await _charges_for_invoice(db_pool, event["data"]["object"]["id"]) == 0
 
-    # Membership dates advanced
+    # Membership dates advanced.
     dates = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
     assert dates is not None
     assert dates["last_paid_date"] == datetime.fromtimestamp(paid_at, tz=UTC).date()
@@ -135,7 +114,6 @@ async def test_invoice_paid_raises_when_subscription_items_unresolved(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=["si_test_does_not_exist"],
         amount_paid=1000,
-        stripe_charge_id="ch_test_unknown_item_1",
     )
 
     with pytest.raises(SubscriptionItemPendingError):
@@ -144,10 +122,6 @@ async def test_invoice_paid_raises_when_subscription_items_unresolved(
     # No invoice row created (transaction rolled back).
     invoice = await _fetch_invoice(db_pool, event["data"]["object"]["id"])
     assert invoice is None
-
-    # And no charge row.
-    charge = await _fetch_charge(db_pool, "ch_test_unknown_item_1")
-    assert charge is None
 
     # Webhook event NOT recorded (transaction rolled back).
     async with db_pool.session() as session:
@@ -159,23 +133,21 @@ async def test_invoice_paid_raises_when_subscription_items_unresolved(
     assert int(row["n"]) == 0
 
 
-async def test_invoice_paid_zero_amount_no_charge_row(
+async def test_invoice_paid_zero_amount_records_invoice(
     stripe_webhooks_service,
     db_pool,
     stripe_account_id,
     webhook_fixture,
 ):
-    """100%-off trial invoices have amount_paid=0 and no charge id.
+    """A $0 invoice (100%-off trial) still records the invoice + advances dates.
 
-    We should still upsert the invoice and advance membership dates,
-    but NOT insert a charge row (the table constraint requires a
-    charge id for payment rows).
+    No ``invoice_payment.paid`` fires for a $0 invoice (no money moves), so
+    there is never a charge row for it — exactly right.
     """
     event = make_invoice_paid_event(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=[webhook_fixture.stripe_item_id],
         amount_paid=0,
-        stripe_charge_id=None,
     )
 
     await stripe_webhooks_service.handle_event(event)
@@ -185,22 +157,8 @@ async def test_invoice_paid_zero_amount_no_charge_row(
     assert invoice["status"] == "paid"
     assert invoice["total_amount"] == 0
 
-    # No charge row.
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text(
-                "SELECT COUNT(*) AS n FROM member_charges "
-                "WHERE invoice_id IN ("
-                "  SELECT invoice_id FROM member_invoices "
-                "  WHERE stripe_invoice_id = :id"
-                ")"
-            ),
-            {"id": event["data"]["object"]["id"]},
-        )
-        row = result.mappings().fetchone()
-    assert int(row["n"]) == 0
+    assert await _charges_for_invoice(db_pool, event["data"]["object"]["id"]) == 0
 
-    # Dates still advanced.
     dates = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
     assert dates["last_paid_date"] is not None
     assert dates["next_due_date"] is not None
@@ -217,14 +175,14 @@ async def test_invoice_paid_is_idempotent_on_repeat(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=[webhook_fixture.stripe_item_id],
         amount_paid=5000,
-        stripe_charge_id="ch_test_idempotent_1",
     )
 
     await stripe_webhooks_service.handle_event(event)
     await stripe_webhooks_service.handle_event(event)
     await stripe_webhooks_service.handle_event(event)
 
-    # Exactly one invoice, one charge, one event row, regardless of replays.
+    # Exactly one invoice and one event row, regardless of replays. No charge
+    # (invoice.paid does not record charges).
     async with db_pool.session() as session:
         result = await session.execute(
             text(
@@ -237,7 +195,7 @@ async def test_invoice_paid_is_idempotent_on_repeat(
         )
         row = result.mappings().fetchone()
     assert int(row["inv"]) == 1
-    assert int(row["chg"]) == 1
+    assert int(row["chg"]) == 0
     assert int(row["evt"]) == 1
 
 
@@ -245,8 +203,6 @@ async def test_invoice_paid_advances_two_different_period_ends(
     stripe_webhooks_service,
     db_pool,
     stripe_account_id,
-    stripe_client,
-    connect_opts,
     gym_id,
     webhook_fixture,
 ):
@@ -259,13 +215,11 @@ async def test_invoice_paid_advances_two_different_period_ends(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=[webhook_fixture.stripe_item_id],
         period_end=first_end,
-        stripe_charge_id="ch_test_advance_1",
     )
     evt_2 = make_invoice_paid_event(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=[webhook_fixture.stripe_item_id],
         period_end=second_end,
-        stripe_charge_id="ch_test_advance_2",
     )
 
     # next_due_date is stored GYM-LOCAL (the handler converts the Stripe
@@ -287,72 +241,7 @@ async def test_invoice_paid_advances_two_different_period_ends(
     assert dates_2["next_due_date"] - dates_1["next_due_date"] >= timedelta(days=28)
 
 
-async def test_invoice_paid_with_cash_metadata_inserts_cash_charge(
-    stripe_webhooks_service,
-    db_pool,
-    stripe_account_id,
-    webhook_fixture,
-):
-    """A cash-marked invoice (no charge id, metadata key set) must
-    upsert the invoice and insert a charge row with
-    ``payment_method_type='cash'`` and ``stripe_charge_id IS NULL``.
-    """
-    paid_at = int(datetime(2026, 4, 1, 12, 0, tzinfo=UTC).timestamp())
-    period_end = int(datetime(2026, 5, 1, 12, 0, tzinfo=UTC).timestamp())
-    event = make_invoice_paid_event(
-        stripe_account_id=stripe_account_id,
-        stripe_item_ids=[webhook_fixture.stripe_item_id],
-        amount_paid=5000,
-        stripe_charge_id=None,
-        paid_at=paid_at,
-        period_end=period_end,
-        metadata={"crm_paid_with_cash": "true"},
-    )
-
-    await stripe_webhooks_service.handle_event(event)
-
-    stripe_invoice_id = event["data"]["object"]["id"]
-
-    invoice = await _fetch_invoice(db_pool, stripe_invoice_id)
-    assert invoice is not None
-    assert invoice["status"] == "paid"
-    assert invoice["total_amount"] == 5000
-
-    charge = await _fetch_charge_for_invoice(db_pool, stripe_invoice_id)
-    assert charge is not None
-    assert charge["kind"] == "payment"
-    assert charge["status"] == "succeeded"
-    assert charge["amount"] == 5000
-    assert charge["currency"] == "usd"
-    assert charge["payment_method_type"] == "cash"
-    assert charge["stripe_charge_id"] is None
-
-    dates = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
-    assert dates is not None
-    assert dates["last_paid_date"] == datetime.fromtimestamp(paid_at, tz=UTC).date()
-    assert dates["next_due_date"] == datetime.fromtimestamp(period_end, tz=UTC).date()
-
-
-async def test_invoice_paid_no_charge_and_not_cash_raises(
-    stripe_webhooks_service,
-    stripe_account_id,
-    webhook_fixture,
-):
-    """An invoice with amount_paid > 0, no charge id, and no cash
-    metadata must raise — the cash branch is opt-in.
-    """
-    event = make_invoice_paid_event(
-        stripe_account_id=stripe_account_id,
-        stripe_item_ids=[webhook_fixture.stripe_item_id],
-        amount_paid=5000,
-        stripe_charge_id=None,
-    )
-
-    with pytest.raises(ValueError, match="no charge id"):
-        await stripe_webhooks_service.handle_event(event)
-
-
-async def test_invoice_paid_one_time_payment_writes_invoice_and_charge(
+async def test_invoice_paid_one_time_payment_records_invoice(
     stripe_webhooks_service,
     db_pool,
     stripe_account_id,
@@ -360,16 +249,15 @@ async def test_invoice_paid_one_time_payment_writes_invoice_and_charge(
     webhook_fixture,
 ):
     """A one-time-payment invoice (no subscription item, carries
-    ``crm_one_time_payment`` + ``member_id`` + ``gym_id`` in metadata)
-    must upsert the invoice + insert a charge row, WITHOUT touching
-    membership dates.
+    ``crm_one_time_payment`` + ``member_id`` + ``gym_id`` in root metadata)
+    records the invoice resolved from metadata, WITHOUT touching membership
+    dates. Its charge arrives on ``invoice_payment.paid``.
     """
     paid_at = int(datetime(2026, 4, 10, 12, 0, tzinfo=UTC).timestamp())
     event = make_invoice_paid_event(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=[],
         amount_paid=2500,
-        stripe_charge_id="ch_test_one_time_1",
         paid_at=paid_at,
         metadata={
             "crm_one_time_payment": "true",
@@ -386,61 +274,7 @@ async def test_invoice_paid_one_time_payment_writes_invoice_and_charge(
     assert invoice["total_amount"] == 2500
     assert str(invoice["member_id"]) == str(webhook_fixture.member_id)
 
-    charge = await _fetch_charge(db_pool, "ch_test_one_time_1")
-    assert charge is not None
-    assert charge["kind"] == "payment"
-    assert charge["status"] == "succeeded"
-    assert charge["amount"] == 2500
-
     # The one-time branch must NOT advance membership dates.
-    dates = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
-    assert dates is not None
-    assert dates["last_paid_date"] is None
-    assert dates["next_due_date"] is None
-
-
-async def test_invoice_paid_one_time_payment_cash(
-    stripe_webhooks_service,
-    db_pool,
-    stripe_account_id,
-    gym_id,
-    webhook_fixture,
-):
-    """A one-time cash payment writes a charge row with
-    ``payment_method_type='cash'`` and ``stripe_charge_id IS NULL``,
-    and still does not touch membership dates.
-    """
-    paid_at = int(datetime(2026, 4, 12, 12, 0, tzinfo=UTC).timestamp())
-    event = make_invoice_paid_event(
-        stripe_account_id=stripe_account_id,
-        stripe_item_ids=[],
-        amount_paid=1500,
-        stripe_charge_id=None,
-        paid_at=paid_at,
-        metadata={
-            "crm_one_time_payment": "true",
-            "crm_paid_with_cash": "true",
-            "member_id": str(webhook_fixture.member_id),
-            "gym_id": str(gym_id),
-        },
-    )
-
-    await stripe_webhooks_service.handle_event(event)
-
-    stripe_invoice_id = event["data"]["object"]["id"]
-    invoice = await _fetch_invoice(db_pool, stripe_invoice_id)
-    assert invoice is not None
-    assert invoice["status"] == "paid"
-    assert invoice["total_amount"] == 1500
-
-    charge = await _fetch_charge_for_invoice(db_pool, stripe_invoice_id)
-    assert charge is not None
-    assert charge["kind"] == "payment"
-    assert charge["status"] == "succeeded"
-    assert charge["amount"] == 1500
-    assert charge["payment_method_type"] == "cash"
-    assert charge["stripe_charge_id"] is None
-
     dates = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)
     assert dates is not None
     assert dates["last_paid_date"] is None

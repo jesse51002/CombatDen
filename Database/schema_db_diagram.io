@@ -529,12 +529,13 @@ Table member_invoice_applied_discounts {
   applied_discount_id uuid [primary key, default: `uuid_generate_v4()`]
   invoice_id uuid [not null]
   gym_id uuid [not null]
-  discount_id uuid [not null]
+  discount_id uuid [note: 'nullable; not resolved to a CRM discount']
   amount_off integer [not null, note: 'snapshot at invoice time; CHECK >= 0']
-  stripe_coupon_id varchar
+  stripe_coupon_id varchar [not null, note: 'the identifier; captured at invoice time']
 
   indexes {
     invoice_id
+    (invoice_id, stripe_coupon_id) [unique]
   }
 }
 
@@ -548,6 +549,7 @@ Table member_charges {
   amount integer [not null, note: 'signed: payment >= 0, refund <= 0']
   currency char(3) [not null, default: 'usd']
   payment_method_type varchar
+  card_last_four varchar [note: 'last 4 of the card, when on a card']
   stripe_charge_id varchar [unique, note: 'nullable']
   stripe_refund_id varchar [unique, note: 'nullable']
   refunds_charge_id uuid [note: 'nullable; self-FK to member_charges(charge_id)']
