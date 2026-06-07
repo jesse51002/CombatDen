@@ -86,11 +86,10 @@ async def _start_and_apply(memberships_service, db_pool, member, gym_id, plan, d
         idempotency_key=uuid4(),
     )
     item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
-    await memberships_service.apply_discounts(
+    await memberships_service.add_discounts(
         item_id=item_id,
         member_id=member.member_id,
-        add_preset_ids=[discount_id],
-        remove_applied_ids=[],
+        preset_ids=[discount_id],
         idempotency_key=uuid4(),
     )
     return item_id
@@ -144,11 +143,10 @@ async def test_remove_snapshot_scrubs_coupon_and_bills_full_next_cycle(
             stripe_client, profile.stripe_customer_id, connect_opts
         )
 
-        await memberships_service.apply_discounts(
+        await memberships_service.remove_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[],
-            remove_applied_ids=[applied_id],
+            applied_ids=[applied_id],
             idempotency_key=uuid4(),
         )
 

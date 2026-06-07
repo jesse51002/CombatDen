@@ -103,11 +103,10 @@ async def test_line_amount_vs_subtotal_with_discount(
             idempotency_key=uuid4(),
         )
         item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
-        await memberships_service.apply_discounts(
+        await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[discount.discount_id],
-            remove_applied_ids=[],
+            preset_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 

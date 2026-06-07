@@ -534,17 +534,23 @@ async def test_preview_applied_discounts_matches_renewal(
 
         # Apply first (writes the snapshot + syncs the coupon onto the sub),
         # then preview the membership's current discounted state.
-        await memberships_service.apply_discounts(
+        await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[discount.discount_id],
-            remove_applied_ids=[],
+            preset_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 
-        preview = await memberships_service.preview_apply_discounts(
+        # Preview the current discounted state — no further proposed change
+        # (empty add/remove), so it stages nothing and reflects what's applied.
+        # Preview the current discounted state — re-adding the already-
+        # applied discount stages nothing (skipped), so it reflects the live bill.
+        preview = await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
+            preset_ids=[discount.discount_id],
+            idempotency_key=uuid4(),
+            preview=True,
         )
         assert preview is not None
 

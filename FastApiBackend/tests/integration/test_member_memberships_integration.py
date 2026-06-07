@@ -300,15 +300,14 @@ class TestValidation:
         detail_text = r.json()["detail"][0]["msg"]
         assert "duplicate" in detail_text.lower()
 
-    def test_apply_discounts_empty_request_rejected(self, api):
-        """PUT /discounts with no adds and no removes is a 422 (nothing to do)."""
-        r = api.put(
-            f"{BASE}/discounts",
+    def test_add_discounts_empty_request_rejected(self, api):
+        """POST /discounts/add with no preset_ids is a 422 (nothing to add)."""
+        r = api.post(
+            f"{BASE}/discounts/add",
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "add_preset_ids": [],
-                "remove_applied_ids": [],
+                "preset_ids": [],
                 "idempotency_key": _IKEY,
             },
         )
@@ -455,18 +454,18 @@ class TestNotFound:
         assert r.status_code == 404, r.text
         assert "not found" in r.json()["detail"].lower()
 
-    def test_apply_discounts_nonexistent_item(self, api):
-        """PUT /discounts with nonexistent item_id returns 404.
+    def test_add_discounts_nonexistent_item(self, api):
+        """POST /discounts/add with nonexistent item_id returns 404.
 
-        A non-empty add list passes the schema's not-empty guard, so the
+        A non-empty preset list passes the schema's not-empty guard, so the
         membership lookup runs and returns 404.
         """
-        r = api.put(
-            f"{BASE}/discounts",
+        r = api.post(
+            f"{BASE}/discounts/add",
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "add_preset_ids": [_NULL_PLAN_ID],
+                "preset_ids": [_NULL_PLAN_ID],
                 "idempotency_key": _idempotency_key(),
             },
         )

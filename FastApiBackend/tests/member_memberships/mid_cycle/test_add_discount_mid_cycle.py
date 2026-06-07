@@ -127,11 +127,10 @@ async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
             stripe_client, profile.stripe_customer_id, connect_opts
         )
 
-        await memberships_service.apply_discounts(
+        await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[discount.discount_id],
-            remove_applied_ids=[],
+            preset_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 
@@ -207,11 +206,10 @@ async def test_once_discount_lands_once_then_consumed(
             stripe_client, profile.stripe_customer_id, connect_opts
         )
 
-        await memberships_service.apply_discounts(
+        await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            add_preset_ids=[discount.discount_id],
-            remove_applied_ids=[],
+            preset_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 
@@ -305,11 +303,10 @@ async def test_apply_is_idempotent_no_duplicate_snapshot(
         item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
 
         for _ in range(2):
-            await memberships_service.apply_discounts(
+            await memberships_service.add_discounts(
                 item_id=item_id,
                 member_id=member.member_id,
-                add_preset_ids=[discount.discount_id],
-                remove_applied_ids=[],
+                preset_ids=[discount.discount_id],
                 idempotency_key=uuid4(),
             )
 
