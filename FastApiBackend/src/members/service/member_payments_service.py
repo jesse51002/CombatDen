@@ -77,11 +77,8 @@ class MembersPaymentsService:
         ]
         applied = [
             BillingDiscountInfo(
-                discount_id=ad["discount_id"],
-                discount_name=ad["discount_name"],
-                discount_type=ad["discount_type"],
-                percentage_off=ad.get("percentage_off"),
-                dollar_off=ad.get("dollar_off"),
+                stripe_coupon_id=ad["stripe_coupon_id"],
+                amount_off=ad["amount_off"],
             )
             for ad in (row["applied_discounts"] or [])
         ]

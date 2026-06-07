@@ -105,20 +105,18 @@ class BillingPayingForMember(BillingLinkedAccount):
 
 
 class BillingDiscountInfo(BaseModel):
-    """A discount applied to a past invoice (payment-history line).
+    """A discount that was applied to a past invoice (payment-history line).
 
-    Used by ``BillingPaymentRecord.applied_discounts`` to name the
-    discounts on a historical charge. Currently-applied membership
-    discounts use the snapshot model ``MemberMembershipsAppliedDiscount``
-    on ``BillingMembershipInfo.discounts``.
+    Sourced from ``member_invoice_applied_discounts`` — the per-invoice audit
+    the ``invoice.paid`` webhook captures from Stripe. It is deliberately
+    coupon-only (the Stripe coupon id + the dollars it took off this invoice),
+    NOT linked back to a CRM discount. Currently-applied membership discounts
+    use the snapshot model ``MemberMembershipsAppliedDiscount`` on
+    ``BillingMembershipInfo.discounts``.
     """
 
-    discount_id: UUID
-    discount_name: str
-    discount_type: str
-    percentage_off: float | None = None
-    dollar_off: int | None = None
-    end_date: date | None = None
+    stripe_coupon_id: str
+    amount_off: int
 
 
 class BillingMembershipMemberInfo(BaseModel):
