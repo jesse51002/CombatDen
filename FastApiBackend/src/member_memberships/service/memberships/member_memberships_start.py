@@ -204,7 +204,10 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 )
                 raise
 
-        # ── Step 3: Set stripe_item_id ────────────────────────
+        # ── Step 3: Set stripe_item_id + mark the row live ────
+        # (one-time path only). update_stripe_item_id.sql also stamps
+        # stripe_sync_status='applied' so the one-time membership is visible
+        # through the filtered view (the recurring path's writeback does this).
         if stripe_item_id:
             set_item_sql = load_sql(
                 SQL_DIR / "payment_sync" / "update_stripe_item_id.sql",

@@ -19,7 +19,10 @@ from datetime import date, timedelta
 from api_creation.memberships import CurrentMembershipRecord
 from constants import UNIT_DAYS
 from generators.members import MemberPlan
-from schema.member_membership import MemberMembershipCreate
+from schema.member_membership import (
+    MemberMembershipCreate,
+    StripeSyncStatus,
+)
 from supabase import Client
 from utils import random_past_date
 
@@ -55,6 +58,11 @@ def create_history(
                     prorate=True,
                     total_price=h.total_price,
                     stripe_item_id=f"si_{uuid.uuid4().hex[:24]}",
+                    # Direct-inserted (not via the API), so stamp 'applied'
+                    # ourselves — the column defaults to 'not_added', which the
+                    # client-facing member_memberships view hides, so these
+                    # historical rows would otherwise be invisible in the CRM.
+                    stripe_sync_status=StripeSyncStatus.applied,
                 )
             )
 
