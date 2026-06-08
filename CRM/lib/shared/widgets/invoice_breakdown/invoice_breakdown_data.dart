@@ -2,10 +2,6 @@ import 'package:equatable/equatable.dart';
 
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
 
-// Re-exported so callers importing this data shape keep getting
-// InvoiceAttemptLine (it lives in its own file to keep this one lean).
-export 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
-
 /// One line on an invoice breakdown: a label and a signed
 /// amount in minor currency units (cents for USD).
 ///

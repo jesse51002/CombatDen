@@ -8,6 +8,7 @@ import 'package:crm/features/member_details/data/models/invoice_attempt.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/presentation/dialogs/refund_charge_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
