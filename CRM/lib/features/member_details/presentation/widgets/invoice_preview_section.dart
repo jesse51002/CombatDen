@@ -15,13 +15,22 @@ import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 ///
 /// Both halves render through the shared [InvoiceBreakdown] so
 /// the surface matches every other invoice view. The `due_now`
-/// half is the breakdown "charged today"; the `recurring` half
-/// is captioned "Then, each month" with a `/mo` total.
+/// half is the breakdown "charged today". The `recurring` half is
+/// captioned "Then, each month" with a `/mo` total — and when
+/// [loadCurrent] is supplied it renders **comparatively**
+/// (current monthly → previewed future monthly), so a start /
+/// change shows "now → future" not just the new figure.
 class InvoicePreviewSection extends StatefulWidget {
   /// Returns the preview, or `null` when the mutation has
   /// no billing impact (backend returns a null body).
   final Future<DueNowVsRecurringPreview?> Function()
       loadPreview;
+
+  /// Optional: the member's current recurring invoice. When given,
+  /// the recurring section is a current → new comparison. A failure
+  /// or null (e.g. a brand-new member with no subscription yet) just
+  /// shows the new amount with no "before".
+  final Future<PreviewInvoice?> Function()? loadCurrent;
 
   /// Re-fetches the preview whenever this key changes.
   final Object? refreshKey;
@@ -35,6 +44,7 @@ class InvoicePreviewSection extends StatefulWidget {
   const InvoicePreviewSection({
     super.key,
     required this.loadPreview,
+    this.loadCurrent,
     this.refreshKey,
     this.title = 'What will be charged today',
     this.emptyLabel = 'No charge today.',
@@ -45,14 +55,19 @@ class InvoicePreviewSection extends StatefulWidget {
       _InvoicePreviewSectionState();
 }
 
+typedef _PreviewData = ({
+  DueNowVsRecurringPreview? preview,
+  PreviewInvoice? current,
+});
+
 class _InvoicePreviewSectionState
     extends State<InvoicePreviewSection> {
-  late Future<DueNowVsRecurringPreview?> _future;
+  late Future<_PreviewData> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = widget.loadPreview();
+    _future = _load();
   }
 
   @override
@@ -62,9 +77,25 @@ class _InvoicePreviewSectionState
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshKey != widget.refreshKey) {
       setState(() {
-        _future = widget.loadPreview();
+        _future = _load();
       });
     }
+  }
+
+  Future<_PreviewData> _load() async {
+    final preview = await widget.loadPreview();
+    PreviewInvoice? current;
+    final loadCurrent = widget.loadCurrent;
+    if (loadCurrent != null) {
+      try {
+        current = await loadCurrent();
+      } catch (_) {
+        // No current invoice (e.g. a new member) — show the new amount
+        // with no "before". Not an error for the whole preview.
+        current = null;
+      }
+    }
+    return (preview: preview, current: current);
   }
 
   @override
@@ -92,6 +123,7 @@ class _InvoicePreviewSectionState
           _PreviewBody(
             future: _future,
             emptyLabel: widget.emptyLabel,
+            comparative: widget.loadCurrent != null,
           ),
         ],
       ),
@@ -100,17 +132,21 @@ class _InvoicePreviewSectionState
 }
 
 class _PreviewBody extends StatelessWidget {
-  final Future<DueNowVsRecurringPreview?> future;
+  final Future<_PreviewData> future;
   final String emptyLabel;
+
+  /// When true the recurring half is a current → new comparison.
+  final bool comparative;
 
   const _PreviewBody({
     required this.future,
     required this.emptyLabel,
+    required this.comparative,
   });
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DueNowVsRecurringPreview?>(
+    return FutureBuilder<_PreviewData>(
       future: future,
       builder: (context, snapshot) {
         if (snapshot.connectionState !=
@@ -131,7 +167,8 @@ class _PreviewBody extends StatelessWidget {
             ),
           );
         }
-        final preview = snapshot.data;
+        final data = snapshot.data;
+        final preview = data?.preview;
         final dueNow = preview?.dueNow;
         final recurring = preview?.recurring;
         if (dueNow == null && recurring == null) {
@@ -152,10 +189,15 @@ class _PreviewBody extends StatelessWidget {
               ),
             if (recurring != null)
               InvoiceBreakdown(
-                data: previewInvoiceBreakdown(
-                  recurring,
-                  amountSuffix: '/mo',
-                ),
+                data: comparative
+                    ? comparisonBreakdownFromPair(
+                        current: data?.current,
+                        next: recurring,
+                      )
+                    : previewInvoiceBreakdown(
+                        recurring,
+                        amountSuffix: '/mo',
+                      ),
                 headerCaption: 'Then, each month',
                 strongHeaderCaption: true,
                 headerMeta: recurring.nextPaymentAt == null
