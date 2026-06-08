@@ -119,11 +119,7 @@ class _PaymentHistorySectionState
             AppDataTableColumn(label: 'Date', minWidth: 110),
             AppDataTableColumn(label: '', minWidth: 92),
           ],
-          // A refund and the charge it refunds are one row: the charge
-          // carries the refunded status (and the refund shows as an
-          // attempt in its invoice), so the standalone refund is dropped.
           rows: _payments
-              .where((p) => !p.isRefund)
               .map((p) => _row(context, p))
               .toList(),
         ),

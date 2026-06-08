@@ -82,11 +82,6 @@ class PaymentRecord extends Equatable {
   /// Amount left after refunds (minor units).
   int get netAmount => amount - refundedAmount;
 
-  /// True when this record is itself a refund (not a charge). In the
-  /// history list these are folded into the charge they refund (which
-  /// already carries the refunded status), so they aren't shown separately.
-  bool get isRefund => kind == ChargeKind.refund;
-
   /// True when some — but not all — of the charge was refunded.
   bool get isPartiallyRefunded =>
       refundedAmount > 0 && refundedAmount < amount;
