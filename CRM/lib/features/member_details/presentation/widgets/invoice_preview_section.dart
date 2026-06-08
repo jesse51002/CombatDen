@@ -2,52 +2,54 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
-import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
-import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
+import 'package:crm/features/member_details/presentation/widgets/invoice_preview.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
-import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 
-/// Fetches a `*/preview` invoice and renders the due-now /
-/// recurring split as a titled card, handling the four
-/// render states (loading, error, empty, populated) so every
-/// preview-backed billing dialog gets the same behaviour
-/// without re-wiring the fetch.
+/// Fetches the preview invoices and renders the shared [InvoicePreview]
+/// inside a card, handling the loading / error / empty states.
 ///
-/// Both halves render through the shared [InvoiceBreakdown] so
-/// the surface matches every other invoice view. The `due_now`
-/// half is the breakdown "charged today". The `recurring` half is
-/// captioned "Then, each month" with a `/mo` total — and when
-/// [loadCurrent] is supplied it renders **comparatively**
-/// (current monthly → previewed future monthly), so a start /
-/// change shows "now → future" not just the new figure.
+/// The single fetch wrapper for every preview surface (membership start,
+/// discount add/remove, …): [loadPreview] supplies the due-now + recurring
+/// halves, and the optional [loadCurrent] supplies the recurring "before"
+/// for the comparison. Set [showDueNow] false where nothing extra is
+/// charged now (e.g. a discount change, whose due-now equals the recurring)
+/// so it isn't shown twice.
 class InvoicePreviewSection extends StatefulWidget {
-  /// Returns the preview, or `null` when the mutation has
-  /// no billing impact (backend returns a null body).
-  final Future<DueNowVsRecurringPreview?> Function()
-      loadPreview;
+  /// Returns the staged preview (due-now + recurring), or `null` when the
+  /// change has no billing impact (backend returns a null body).
+  final Future<DueNowVsRecurringPreview?> Function() loadPreview;
 
-  /// Optional: the member's current recurring invoice. When given,
-  /// the recurring section is a current → new comparison. A failure
-  /// or null (e.g. a brand-new member with no subscription yet) just
-  /// shows the new amount with no "before".
+  /// Optional: the member's current recurring invoice → the comparison's
+  /// "before". A failure or null (e.g. a brand-new member with no
+  /// subscription yet) just shows the new amount with no "before".
   final Future<PreviewInvoice?> Function()? loadCurrent;
 
-  /// Re-fetches the preview whenever this key changes.
+  /// Fallback current monthly (minor units) for the comparison when
+  /// [loadCurrent] returns null.
+  final int? recurringFallbackMonthly;
+
+  /// Whether to render the due-now section.
+  final bool showDueNow;
+
+  /// Re-fetches whenever this changes.
   final Object? refreshKey;
 
-  /// Heading shown above the breakdown.
-  final String title;
-
-  /// Copy shown when the mutation has no billing impact.
+  final String dueNowLabel;
+  final String recurringLabel;
   final String emptyLabel;
+  final String errorLabel;
 
   const InvoicePreviewSection({
     super.key,
     required this.loadPreview,
     this.loadCurrent,
+    this.recurringFallbackMonthly,
+    this.showDueNow = true,
     this.refreshKey,
-    this.title = 'What will be charged today',
+    this.dueNowLabel = 'What will be charged today',
+    this.recurringLabel = 'Then, each month',
     this.emptyLabel = 'No charge today.',
+    this.errorLabel = 'Could not load the charge preview.',
   });
 
   @override
@@ -100,8 +102,6 @@ class _InvoicePreviewSectionState
 
   @override
   Widget build(BuildContext context) {
-    // The title lives inside the card (above the breakdown), not as a
-    // separate heading outside it.
     return Container(
       padding: const EdgeInsets.all(
         DesignConstants.spacingMedium,
@@ -111,102 +111,43 @@ class _InvoicePreviewSectionState
         borderRadius: BorderRadius.circular(
           DesignConstants.radiusSmall,
         ),
-        border: Border.all(
-          color: DesignConstants.divider,
-        ),
+        border: Border.all(color: DesignConstants.divider),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          Text(widget.title, style: DesignConstants.h2),
-          _PreviewBody(
-            future: _future,
+      child: FutureBuilder<_PreviewData>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState !=
+              ConnectionState.done) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(
+                vertical: DesignConstants.spacingMedium,
+              ),
+              child: Center(child: AppSpinner()),
+            );
+          }
+          if (snapshot.hasError) {
+            return Text(
+              widget.errorLabel,
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.badRed,
+              ),
+            );
+          }
+          final data = snapshot.data;
+          final preview = data?.preview;
+          return InvoicePreview(
+            dueNow:
+                widget.showDueNow ? preview?.dueNow : null,
+            recurring: preview?.recurring,
+            recurringPrev: data?.current,
+            recurringFallbackMonthly:
+                widget.recurringFallbackMonthly,
+            dueNowLabel: widget.dueNowLabel,
+            recurringLabel: widget.recurringLabel,
             emptyLabel: widget.emptyLabel,
-            comparative: widget.loadCurrent != null,
-          ),
-        ],
+          );
+        },
       ),
-    );
-  }
-}
-
-class _PreviewBody extends StatelessWidget {
-  final Future<_PreviewData> future;
-  final String emptyLabel;
-
-  /// When true the recurring half is a current → new comparison.
-  final bool comparative;
-
-  const _PreviewBody({
-    required this.future,
-    required this.emptyLabel,
-    required this.comparative,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<_PreviewData>(
-      future: future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState !=
-            ConnectionState.done) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(
-              vertical: DesignConstants.spacingMedium,
-            ),
-            child: Center(child: AppSpinner()),
-          );
-        }
-        if (snapshot.hasError) {
-          return Text(
-            'Could not load the charge preview. You can '
-            'still start the membership.',
-            style: DesignConstants.pSmall.copyWith(
-              color: DesignConstants.badRed,
-            ),
-          );
-        }
-        final data = snapshot.data;
-        final preview = data?.preview;
-        final dueNow = preview?.dueNow;
-        final recurring = preview?.recurring;
-        if (dueNow == null && recurring == null) {
-          return Text(
-            emptyLabel,
-            style: DesignConstants.pSmall.copyWith(
-              color: DesignConstants.text2nd,
-            ),
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingLarge,
-          children: [
-            if (dueNow != null)
-              InvoiceBreakdown(
-                data: previewInvoiceBreakdown(dueNow),
-              ),
-            if (recurring != null)
-              InvoiceBreakdown(
-                data: comparative
-                    ? comparisonBreakdownFromPair(
-                        current: data?.current,
-                        next: recurring,
-                      )
-                    : previewInvoiceBreakdown(
-                        recurring,
-                        amountSuffix: '/mo',
-                      ),
-                headerCaption: 'Then, each month',
-                strongHeaderCaption: true,
-                headerMeta: recurring.nextPaymentAt == null
-                    ? null
-                    : formatDay(recurring.nextPaymentAt),
-              ),
-          ],
-        );
-      },
     );
   }
 }
