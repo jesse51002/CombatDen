@@ -13,7 +13,7 @@ class SweepResult(BaseModel):
 
     name: str
     processed: int = 0  # rows / members / objects examined
-    changed: int = 0  # acted on (deleted / cancelled / absorbed)
+    changed: int = 0  # acted on (deleted / cancelled / recorded)
     skipped: int = 0  # intentionally left (e.g. family lock held)
     errors: int = 0  # per-item failures that did not abort the sweep
 

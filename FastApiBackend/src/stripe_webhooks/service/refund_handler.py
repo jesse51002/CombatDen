@@ -48,9 +48,9 @@ class RefundHandler:
         event: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        await self.absorb(session, event["data"]["object"], gym_id)
+        await self.record(session, event["data"]["object"], gym_id)
 
-    async def absorb(
+    async def record(
         self,
         session: AsyncSession,
         refund: dict[str, Any],

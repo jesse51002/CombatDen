@@ -1,7 +1,7 @@
 -- Live recurring memberships across a paying parent's family (the parent plus
 -- accounts linked to it, same gym) that are still billing -- 'applied' and not
--- yet cancelled. The cancellation absorber marks these cancelled in the CRM when
--- Stripe reports the family's subscription gone/cancelled. 'not_added' rows are
+-- yet cancelled. PaymentSyncCancel marks these cancelled in the CRM when the
+-- sync finds the family's subscription gone/cancelled. 'not_added' rows are
 -- left to the orphan cleanup; reads the unfiltered base (service-role).
 SELECT mm.item_id, mm.member_id
 FROM member_memberships_unfiltered mm

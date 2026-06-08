@@ -50,9 +50,9 @@ class InvoicePaymentFailedHandler:
         event: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        await self.absorb(session, event["data"]["object"], gym_id)
+        await self.record(session, event["data"]["object"], gym_id)
 
-    async def absorb(
+    async def record(
         self,
         session: AsyncSession,
         invoice: dict[str, Any],

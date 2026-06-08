@@ -65,14 +65,14 @@ class InvoicePaymentPaidHandler:
         event: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        await self.absorb(
+        await self.record(
             session,
             event["data"]["object"],
             gym_id,
             stripe_account_id=event.get("account"),
         )
 
-    async def absorb(
+    async def record(
         self,
         session: AsyncSession,
         invoice_payment: dict[str, Any],

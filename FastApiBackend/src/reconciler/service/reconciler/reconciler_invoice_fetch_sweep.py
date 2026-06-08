@@ -1,8 +1,8 @@
 """InvoiceFetchSweep — backfill missed billing webhooks from Stripe.
 
 A missed-webhook backstop. Per gym Connect account it lists the last
-``RECONCILER_INVOICE_LOOKBACK_DAYS`` of Stripe activity and re-absorbs each
-object through the SAME handler ``absorb`` methods the webhook dispatcher uses --
+``RECONCILER_INVOICE_LOOKBACK_DAYS`` of Stripe activity and re-records each
+object through the SAME handler ``record`` methods the webhook dispatcher uses --
 but driving objects from list calls instead of events, so it cannot rely on the
 event-log dedup. Idempotency therefore comes from the DB layer: the invoice
 upsert (``stripe_invoice_id``), the succeeded-charge UNIQUE (``stripe_charge_id``),
@@ -13,7 +13,7 @@ For each invoice: a paid invoice records the bill (+ line items + next_due_date,
 which is what clears a falsely-overdue member) and then its succeeded payments
 record the charge rows; an open invoice that has been attempted records the
 failed-attempt charge. Refunds are listed per account and recorded as negative
-charges. Each object is absorbed in its own DB transaction so one bad object
+charges. Each object is recorded in its own DB transaction so one bad object
 cannot roll back the rest; ``SubscriptionItemPendingError`` /
 ``InvoiceNotYetRecordedError`` are caught per object and retried next sweep.
 """
@@ -59,7 +59,7 @@ PAYMENT_STATUS_PAID = "paid"
 
 
 class InvoiceFetchSweep:
-    """Re-absorb recent Stripe invoices / payments / refunds per gym."""
+    """Re-record recent Stripe invoices / payments / refunds per gym."""
 
     def __init__(
         self,
@@ -93,7 +93,7 @@ class InvoiceFetchSweep:
                 result,
             )
         logger.info(
-            "Invoice fetch: gyms=%d processed=%d absorbed=%d "
+            "Invoice fetch: gyms=%d processed=%d recorded=%d "
             "skipped=%d errors=%d",
             len(gyms),
             result.processed,
@@ -117,14 +117,14 @@ class InvoiceFetchSweep:
         cutoff: int,
         result: SweepResult,
     ) -> None:
-        """List + absorb one gym's recent invoices and refunds."""
+        """List + record one gym's recent invoices and refunds."""
         opts = PaymentsStripeClient.connect_opts_readonly(account_id)
         created = {"created": {"gte": cutoff}, "limit": RECONCILER_STRIPE_PAGE_SIZE}
 
         async for invoice in self._iter(
             self._stripe.v1.invoices.list_async, created, opts
         ):
-            await self._absorb_invoice(
+            await self._record_invoice(
                 invoice, gym_id, account_id, opts, result
             )
 
@@ -132,12 +132,12 @@ class InvoiceFetchSweep:
             self._stripe.v1.refunds.list_async, created, opts
         ):
             result.processed += 1
-            await self._run_absorb(
+            await self._run_record(
                 result,
-                lambda s, r=refund: self._refund.absorb(s, r, gym_id),
+                lambda s, r=refund: self._refund.record(s, r, gym_id),
             )
 
-    async def _absorb_invoice(
+    async def _record_invoice(
         self,
         invoice: Any,
         gym_id: UUID,
@@ -145,17 +145,17 @@ class InvoiceFetchSweep:
         opts: Any,
         result: SweepResult,
     ) -> None:
-        """Route one invoice to the bill / failed-attempt absorber."""
+        """Route one invoice to the bill / failed-attempt recorder."""
         status = invoice.get("status")
         if status == INVOICE_STATUS_PAID:
             result.processed += 1
-            await self._run_absorb(
+            await self._run_record(
                 result,
-                lambda s: self._invoice_paid.absorb(
+                lambda s: self._invoice_paid.record(
                     s, invoice, gym_id, stripe_account_id=account_id
                 ),
             )
-            await self._absorb_invoice_payments(
+            await self._record_invoice_payments(
                 invoice, gym_id, account_id, opts, result
             )
         elif (
@@ -163,14 +163,14 @@ class InvoiceFetchSweep:
             and int(invoice.get("attempt_count") or 0) > 0
         ):
             result.processed += 1
-            await self._run_absorb(
+            await self._run_record(
                 result,
-                lambda s: self._invoice_payment_failed.absorb(
+                lambda s: self._invoice_payment_failed.record(
                     s, invoice, gym_id
                 ),
             )
 
-    async def _absorb_invoice_payments(
+    async def _record_invoice_payments(
         self,
         invoice: Any,
         gym_id: UUID,
@@ -189,22 +189,22 @@ class InvoiceFetchSweep:
             if payment.get("status") != PAYMENT_STATUS_PAID:
                 continue
             result.processed += 1
-            await self._run_absorb(
+            await self._run_record(
                 result,
-                lambda s, p=payment: self._invoice_payment_paid.absorb(
+                lambda s, p=payment: self._invoice_payment_paid.record(
                     s, p, gym_id, stripe_account_id=account_id
                 ),
             )
 
-    async def _run_absorb(
+    async def _run_record(
         self,
         result: SweepResult,
-        absorb: Callable[[AsyncSession], Awaitable[None]],
+        record: Callable[[AsyncSession], Awaitable[None]],
     ) -> None:
-        """Run one absorb in its own transaction; count + isolate failures."""
+        """Run one record in its own transaction; count + isolate failures."""
         try:
             async with self._db_pool.session() as session, session.begin():
-                await absorb(session)
+                await record(session)
             result.changed += 1
         except (SubscriptionItemPendingError, InvoiceNotYetRecordedError):
             # Not yet resolvable (the bill/membership isn't recorded) -- the
@@ -212,7 +212,7 @@ class InvoiceFetchSweep:
             result.skipped += 1
         except Exception:
             logger.error(
-                "Invoice fetch: absorb failed; continuing",
+                "Invoice fetch: record failed; continuing",
                 exc_info=True,
             )
             result.errors += 1
