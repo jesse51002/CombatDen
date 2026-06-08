@@ -183,7 +183,6 @@ class _Loaded extends StatelessWidget {
                             member: member,
                             currentIndex: state
                                 .currentMembershipIndex,
-                            refreshToken: state.refreshToken,
                             onPageChanged: (i) => context
                                 .read<MemberDetailBloc>()
                                 .add(

@@ -1,41 +1,20 @@
 import 'package:equatable/equatable.dart';
 
-import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 
 /// One line on an invoice breakdown: a label and a signed
 /// amount in minor currency units (cents for USD).
-///
-/// Two optional fields turn a plain line into a before/after
-/// comparison line. When both are null (every plain surface)
-/// the line renders exactly as a single amount.
 class InvoiceLineItem extends Equatable {
   final String description;
-
-  /// In plain mode the single amount shown. In comparison mode the
-  /// **undiscounted (list) price**; the new net is [amount] +
-  /// [discountAmount].
   final int amount;
-
-  /// Optional aggregate discount on this line (signed, negative).
-  /// When set, the widget renders an indented muted "Discount" row
-  /// beneath the line.
-  final int? discountAmount;
-
-  /// Optional **prior net** for a before→after comparison. When set
-  /// (and ≠ the new net), the widget renders the line's net
-  /// old → new beneath the line.
-  final int? previousAmount;
 
   const InvoiceLineItem({
     required this.description,
     required this.amount,
-    this.discountAmount,
-    this.previousAmount,
   });
 
   @override
-  List<Object?> get props =>
-      [description, amount, discountAmount, previousAmount];
+  List<Object?> get props => [description, amount];
 }
 
 /// One applied-discount line on an invoice breakdown — a label
@@ -58,15 +37,48 @@ class InvoiceDiscount extends Equatable {
   List<Object?> get props => [label, amount];
 }
 
+/// One payment attempt against an invoice — a retry, the
+/// success, or a refund — as a presentation-only row.
+///
+/// A plain display shape so the shared widget never depends
+/// on a billing feature's charge model; the member-detail
+/// dialog adapts its richer model into this.
+class InvoiceAttemptLine extends Equatable {
+  /// How it was paid, e.g. "•••• 4242", "Cash", "Card".
+  final String method;
+
+  /// Formatted timestamp for the attempt.
+  final String timeLabel;
+
+  /// Signed amount in minor units (refunds are negative).
+  final int amount;
+
+  /// "Succeeded" / "Failed" / "Refunded" / …
+  final String statusLabel;
+  final InvoiceChipTone statusTone;
+
+  const InvoiceAttemptLine({
+    required this.method,
+    required this.timeLabel,
+    required this.amount,
+    required this.statusLabel,
+    required this.statusTone,
+  });
+
+  @override
+  List<Object?> get props =>
+      [method, timeLabel, amount, statusLabel, statusTone];
+}
+
 /// Normalised, presentation-only shape consumed by the
 /// shared [InvoiceBreakdown] widget.
 ///
-/// Callers (the member-detail billing dialogs) build one of
-/// these from whichever backend shape they hold — a preview, a
-/// historical payment, a finalized invoice, or a before/after
-/// comparison — so the widget has a single render path for all.
-/// Money is stored in minor units; formatting happens at render
-/// via `formatMinorUnits`.
+/// Callers (the member-detail billing dialogs in a later
+/// workflow) build one of these from whichever backend
+/// shape they hold — a preview, a historical payment, or a
+/// finalized invoice — so the widget has a single render
+/// path for all three. Money is stored in minor units;
+/// formatting happens at render via `formatMinorUnits`.
 class InvoiceBreakdownData extends Equatable {
   final List<InvoiceLineItem> lines;
 
@@ -84,26 +96,13 @@ class InvoiceBreakdownData extends Equatable {
   final String currency;
 
   /// When true the [total] row reads "Refunded" instead of
-  /// [totalLabel] — refunds render the same breakdown, relabeled.
+  /// "Total" — refunds render the same breakdown, relabeled.
   final bool isRefund;
 
   /// Amount refunded against this charge (minor units, >= 0).
   /// When non-zero a "Refunded" line and a "Net" line render
   /// below the total, so it's clear what was returned.
   final int refundedAmount;
-
-  /// Optional **prior total** for a before→after comparison. When
-  /// set, the total row renders old → new and a "Difference" row
-  /// appears below it.
-  final int? previousTotal;
-
-  /// Label for the total row, e.g. "Total" (default) or "Monthly"
-  /// for a recurring/comparison view. [isRefund] still wins.
-  final String totalLabel;
-
-  /// Optional suffix appended to the total + difference amounts in a
-  /// recurring view (e.g. "/mo"). Per-line rows carry no suffix.
-  final String? amountSuffix;
 
   const InvoiceBreakdownData({
     required this.lines,
@@ -114,9 +113,6 @@ class InvoiceBreakdownData extends Equatable {
     this.attempts = const [],
     this.isRefund = false,
     this.refundedAmount = 0,
-    this.previousTotal,
-    this.totalLabel = 'Total',
-    this.amountSuffix,
   });
 
   @override
@@ -129,8 +125,5 @@ class InvoiceBreakdownData extends Equatable {
         currency,
         isRefund,
         refundedAmount,
-        previousTotal,
-        totalLabel,
-        amountSuffix,
       ];
 }
