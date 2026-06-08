@@ -58,7 +58,19 @@ class CustomerSubscriptionDeletedHandler:
             )
             return
 
-        cancelled = await self._absorber.absorb(UUID(member_id_str))
+        try:
+            member_id = UUID(member_id_str)
+        except ValueError:
+            logger.warning(
+                "customer.subscription.deleted: subscription %s has a "
+                "malformed member_id %r in metadata (gym_id=%s); cannot absorb",
+                subscription.get("id"),
+                member_id_str,
+                gym_id,
+            )
+            return
+
+        cancelled = await self._absorber.absorb(member_id)
         logger.info(
             "customer.subscription.deleted: absorbed sub %s for member %s "
             "(gym_id=%s); %d membership(s) cancelled",
