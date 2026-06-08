@@ -157,6 +157,7 @@ class _PreviewBody extends StatelessWidget {
                   amountSuffix: '/mo',
                 ),
                 headerCaption: 'Then, each month',
+                strongHeaderCaption: true,
                 headerMeta: recurring.nextPaymentAt == null
                     ? null
                     : formatDay(recurring.nextPaymentAt),
