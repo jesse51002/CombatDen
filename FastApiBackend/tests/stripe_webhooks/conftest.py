@@ -12,12 +12,7 @@ from uuid import UUID
 import pytest
 from sqlalchemy import text
 
-from src.member_memberships.service.memberships.member_memberships_cancel_absorber import (
-    SubscriptionCancellationAbsorber,
-)
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
-from src.shared.billing_parent_resolver import BillingParentResolver
-from src.shared.gym_stripe_service import GymStripeService
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
@@ -270,16 +265,11 @@ def account_updated_handler() -> AccountUpdatedHandler:
 
 @pytest.fixture(scope="module")
 def customer_subscription_deleted_handler(
-    db_pool,
+    db_pool, stripe_client
 ) -> CustomerSubscriptionDeletedHandler:
-    absorber = SubscriptionCancellationAbsorber(
-        db_pool=db_pool,
-        parent_resolver=BillingParentResolver(
-            db_pool,
-            GymStripeService(db_pool),
-        ),
+    return CustomerSubscriptionDeletedHandler(
+        payment_sync_service=build_payment_sync_service(db_pool, stripe_client),
     )
-    return CustomerSubscriptionDeletedHandler(cancellation_absorber=absorber)
 
 
 @pytest.fixture(scope="module")

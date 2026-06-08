@@ -13,9 +13,6 @@ from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
 )
-from src.member_memberships.service.memberships.member_memberships_cancel_absorber import (
-    SubscriptionCancellationAbsorber,
-)
 from src.member_memberships.service.memberships.member_memberships_service import (
     MemberMembershipsService,
 )
@@ -219,16 +216,8 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
     )
     # Generic non-blocking TTL-lease lock (key-agnostic). Used by the scheduled
-    # reconciler's global sweep lock and the orphan-cleanup family check.
+    # reconciler's orphan-cleanup family check.
     resource_lock = providers.Factory(ResourceLock, db_pool=db_pool)
-    # CRM-only absorption of a Stripe-cancelled family sub. Shared by the
-    # reconciler status sweep (B) and the customer.subscription.deleted webhook,
-    # so it is defined here (before both the webhooks and reconciler blocks).
-    subscription_cancellation_absorber = providers.Factory(
-        SubscriptionCancellationAbsorber,
-        db_pool=db_pool,
-        parent_resolver=billing_parent_resolver,
-    )
     # The one concurrency lock: a TTL lease keyed on a member's paying parent,
     # so no two billing ops sync the same family at once. Used by the facade,
     # the webhook settle, and the bulk fan-out.
@@ -368,7 +357,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
     stripe_webhook_customer_subscription_deleted_handler = providers.Factory(
         CustomerSubscriptionDeletedHandler,
-        cancellation_absorber=subscription_cancellation_absorber,
+        payment_sync_service=payment_sync_service,
     )
     stripe_webhooks_service = providers.Factory(
         StripeWebhooksService,

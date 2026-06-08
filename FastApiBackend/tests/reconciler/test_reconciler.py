@@ -5,7 +5,6 @@ logic that needs no live Stripe subscription:
 
 - ``ResourceLock`` (generic non-blocking TTL lease)
 - ``OrphanCleanupSweep`` (lock-guarded delete of ``not_added`` rows)
-- ``SubscriptionCancellationAbsorber`` (CRM-only cancel + sub-id null; no Stripe)
 
 The Stripe-read path (``InvoiceFetchSweep``) needs a real subscription/test-clock
 fixture and is not covered here.
@@ -16,9 +15,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import text
 
 from src.core.config import PAYING_MEMBER_LOCK_PREFIX
-from src.member_memberships.service.memberships.member_memberships_cancel_absorber import (  # noqa: E501
-    SubscriptionCancellationAbsorber,
-)
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
@@ -43,11 +39,8 @@ async def _insert_membership(
     sync_status: str,
 ) -> UUID:
     """Insert a membership row directly and return its item_id."""
-    # start_date a week back: the absorber sets cancel_date from the gym-tz
-    # "today", which near UTC midnight can be the day before CURRENT_DATE (UTC);
-    # a past start_date keeps the daterange(start, cancel) trigger valid. (The
-    # real start path sets start_date from the same gym-tz date, so production is
-    # consistent — this only matters for a direct test insert.)
+    # start_date a week back keeps the daterange(start_date, cancel_date) trigger
+    # valid for any later cancel; harmless for the not_added orphan rows here.
     sql = """
         INSERT INTO member_memberships_unfiltered (
             member_id, gym_id, plan_id, price_id,
@@ -88,30 +81,6 @@ async def _membership_row(db_pool, item_id: UUID) -> dict | None:
         )
         row = result.mappings().fetchone()
     return dict(row) if row else None
-
-
-async def _sub_id(db_pool, member_id: UUID) -> str | None:
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text(
-                "SELECT stripe_sub_id_month FROM members WHERE member_id = :id"
-            ),
-            {"id": str(member_id)},
-        )
-        row = result.mappings().fetchone()
-    return row["stripe_sub_id_month"] if row else None
-
-
-async def _set_sub_id(db_pool, member_id: UUID, sub_id: str) -> None:
-    async with db_pool.session() as session:
-        await session.execute(
-            text(
-                "UPDATE members SET stripe_sub_id_month = :sub "
-                "WHERE member_id = :id"
-            ),
-            {"sub": sub_id, "id": str(member_id)},
-        )
-        await session.commit()
 
 
 # ── ResourceLock ───────────────────────────────────────────────
@@ -222,56 +191,3 @@ async def test_orphan_cleanup_skips_when_family_lock_held(
     )
     await sweep.run()
     assert await _membership_row(db_pool, item_id) is None
-
-
-# ── SubscriptionCancellationAbsorber (CRM-only) ────────────────
-
-
-async def test_absorber_cancels_family_and_nulls_sub_id(
-    db_pool, gym_id, created
-):
-    member = await created.member(gym_id)
-    plan = await created.plan(gym_id)
-    item_id = await _insert_membership(
-        db_pool,
-        member.member_id,
-        gym_id,
-        plan,
-        stripe_item_id=f"si_fake_{uuid4().hex[:12]}",
-        sync_status="applied",
-    )
-    await _set_sub_id(db_pool, member.member_id, f"sub_fake_{uuid4().hex[:12]}")
-
-    absorber = SubscriptionCancellationAbsorber(
-        db_pool, _parent_resolver(db_pool)
-    )
-    cancelled = await absorber.absorb(member.member_id)
-
-    assert cancelled == 1
-    row = await _membership_row(db_pool, item_id)
-    assert row is not None
-    assert row["cancel_date"] is not None
-    assert row["stripe_sync_status"] == "deleted"
-    # The dead sub id is cleared off the parent.
-    assert await _sub_id(db_pool, member.member_id) is None
-
-
-async def test_absorber_is_idempotent(db_pool, gym_id, created):
-    member = await created.member(gym_id)
-    plan = await created.plan(gym_id)
-    await _insert_membership(
-        db_pool,
-        member.member_id,
-        gym_id,
-        plan,
-        stripe_item_id=f"si_fake_{uuid4().hex[:12]}",
-        sync_status="applied",
-    )
-    await _set_sub_id(db_pool, member.member_id, f"sub_fake_{uuid4().hex[:12]}")
-
-    absorber = SubscriptionCancellationAbsorber(
-        db_pool, _parent_resolver(db_pool)
-    )
-    assert await absorber.absorb(member.member_id) == 1
-    # Second run: already cancelled -> nothing to cancel.
-    assert await absorber.absorb(member.member_id) == 0

@@ -2,18 +2,19 @@
 
 Stripe fires this when a subscription is canceled -- including when its dunning
 engine exhausts retries and cancels on its own schedule. The CRM's push sync
-never learns this (it only pushes), so without this handler a Stripe-side
-cancellation is only caught by the twice-daily reconciler sweep. This is the
-**prompt path**: it absorbs the cancellation into the CRM immediately, reusing
-the SAME ``SubscriptionCancellationAbsorber`` the reconciler poll uses -- CRM
-only: mark the family's live recurring memberships cancelled + null the parent's
-``stripe_sub_id_month``, with no Stripe calls (Stripe already cancelled).
+never learns this on its own (it only pushes), so without this handler a
+Stripe-side cancellation is caught only by the twice-daily reconciler sweep. This
+is the **prompt path**: it runs a payment sync for the member's family right away,
+and the sync, finding the subscription gone, records the cancellation in the CRM
+(cancels the family's live recurring memberships + nulls the parent's sub id).
 
 The member is read from the subscription's metadata (our sync stamps
-``member_id`` = the paying parent). Idempotent: the absorber is a no-op once the
-family is already cancelled, and the dispatcher's event-log dedup guards
-re-delivery. The absorber runs on its own DB pool (like the once-discount
-settle), so the unused ``session`` here is only the dispatcher's interface.
+``member_id`` = the paying parent). ``bulk_payment_sync`` locks the family, runs
+the sync, and swallows its own per-member failures, so a transient error never
+fails the webhook. Idempotent: re-running the sync on an already-cancelled family
+syncs to nothing, and the dispatcher's event-log dedup guards re-delivery. The
+unused ``session`` is only the dispatcher's interface — the sync owns its own DB
+pool + family lock.
 """
 
 import logging
@@ -22,8 +23,8 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.member_memberships.service.memberships.member_memberships_cancel_absorber import (
-    SubscriptionCancellationAbsorber,
+from src.member_memberships.service.payment_sync.payment_sync_service import (
+    PaymentSyncService,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,13 +33,10 @@ EVENT_TYPE = "customer.subscription.deleted"
 
 
 class CustomerSubscriptionDeletedHandler:
-    """Absorb a Stripe-cancelled subscription into the CRM (prompt path)."""
+    """Sync a family on a Stripe-cancelled subscription (prompt path)."""
 
-    def __init__(
-        self,
-        cancellation_absorber: SubscriptionCancellationAbsorber,
-    ) -> None:
-        self._cancellation_absorber = cancellation_absorber
+    def __init__(self, payment_sync_service: PaymentSyncService) -> None:
+        self._payment_sync = payment_sync_service
 
     async def handle(
         self,
@@ -52,7 +50,7 @@ class CustomerSubscriptionDeletedHandler:
         if not member_id_str:
             logger.warning(
                 "customer.subscription.deleted: subscription %s has no "
-                "member_id in metadata (gym_id=%s); cannot absorb",
+                "member_id in metadata (gym_id=%s); cannot sync",
                 subscription.get("id"),
                 gym_id,
             )
@@ -63,19 +61,17 @@ class CustomerSubscriptionDeletedHandler:
         except ValueError:
             logger.warning(
                 "customer.subscription.deleted: subscription %s has a "
-                "malformed member_id %r in metadata (gym_id=%s); cannot absorb",
+                "malformed member_id %r in metadata (gym_id=%s); cannot sync",
                 subscription.get("id"),
                 member_id_str,
                 gym_id,
             )
             return
 
-        cancelled = await self._cancellation_absorber.absorb(member_id)
+        await self._payment_sync.bulk_payment_sync([member_id])
         logger.info(
-            "customer.subscription.deleted: absorbed sub %s for member %s "
-            "(gym_id=%s); %d membership(s) cancelled",
-            subscription.get("id"),
+            "customer.subscription.deleted: synced family of member %s "
+            "(gym_id=%s) to record the cancellation",
             member_id_str,
             gym_id,
-            cancelled,
         )

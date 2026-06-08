@@ -1,13 +1,15 @@
 """Integration tests for the ``customer.subscription.deleted`` handler.
 
 The prompt path for Stripe-side cancellation: the handler reads ``member_id`` from
-the cancelled sub's metadata and calls the shared (CRM-only)
-``SubscriptionCancellationAbsorber``. Covers the metadata guards (missing /
-malformed member_id are acked, never 500) and the happy path (an active recurring
-membership is cancelled and the parent's ``stripe_sub_id_month`` is nulled).
+the cancelled sub's metadata and runs ``bulk_payment_sync`` for the family. The
+sync, finding the subscription gone, records the cancellation — that end-to-end
+behavior is covered by ``tests/member_memberships/test_payment_sync_cancel.py``
+against a real Connect account. Here we cover the handler's own job: the metadata
+guards (missing / malformed member_id are acked, never 500) and that a valid event
+hands the family to the sync.
 """
 
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from sqlalchemy import text
 
@@ -49,74 +51,38 @@ async def test_malformed_member_id_is_acked(
     assert await _event_recorded(db_pool, event["id"]) is True
 
 
-async def test_absorbs_cancellation(
-    stripe_webhooks_service, db_pool, stripe_account_id, gym_id, created
+async def test_deleted_sub_triggers_family_sync(
+    stripe_webhooks_service,
+    customer_subscription_deleted_handler,
+    db_pool,
+    stripe_account_id,
+    gym_id,
+    monkeypatch,
 ):
-    """A real cancelled sub → the member's membership is cancelled + sub id nulled."""
-    member = await created.member(gym_id)
-    plan = await created.plan(gym_id)
+    """A valid event hands the family (its member_id) to bulk_payment_sync.
 
-    # An applied recurring membership + a live sub id on the member. start_date a
-    # week back so the absorber's gym-tz cancel_date keeps daterange(start, cancel)
-    # valid regardless of the UTC boundary.
-    insert_sql = """
-        INSERT INTO member_memberships_unfiltered (
-            member_id, gym_id, plan_id, price_id,
-            start_date, stripe_item_id, total_price, stripe_sync_status
-        ) VALUES (
-            :member_id, :gym_id, :plan_id, :price_id,
-            CURRENT_DATE - 7, :stripe_item_id, 5000, 'applied'
-        )
-        RETURNING item_id
+    Spies on the sync so the assertion is about the handler's dispatch, not the
+    sync's cancel (covered elsewhere) — and so it doesn't need the webhook
+    fixtures' synthetic Connect account to be real.
     """
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text(insert_sql),
-            {
-                "member_id": str(member.member_id),
-                "gym_id": str(gym_id),
-                "plan_id": str(plan.plan_id),
-                "price_id": str(plan.price_id),
-                "stripe_item_id": f"si_fake_{uuid4().hex[:12]}",
-            },
-        )
-        item_id = UUID(str(result.mappings().fetchone()["item_id"]))
-        await session.execute(
-            text(
-                "UPDATE members SET stripe_sub_id_month = :sub "
-                "WHERE member_id = :id"
-            ),
-            {"sub": f"sub_fake_{uuid4().hex[:12]}", "id": str(member.member_id)},
-        )
-        await session.commit()
+    member_id = uuid4()
+    calls: list[list] = []
+
+    async def _spy(member_ids):
+        calls.append(member_ids)
+
+    # Same handler instance the dispatcher uses (both module-scoped fixtures), so
+    # this exercises the full dispatcher -> handler -> sync path + event logging.
+    monkeypatch.setattr(
+        customer_subscription_deleted_handler._payment_sync,
+        "bulk_payment_sync",
+        _spy,
+    )
 
     event = make_customer_subscription_deleted_event(
-        stripe_account_id=stripe_account_id,
-        member_id=str(member.member_id),
+        stripe_account_id=stripe_account_id, member_id=str(member_id)
     )
     await stripe_webhooks_service.handle_event(event)
 
-    async with db_pool.session() as session:
-        row = (
-            await session.execute(
-                text(
-                    "SELECT cancel_date, stripe_sync_status "
-                    "FROM member_memberships_unfiltered WHERE item_id = :id"
-                ),
-                {"id": str(item_id)},
-            )
-        ).mappings().fetchone()
-        sub_row = (
-            await session.execute(
-                text(
-                    "SELECT stripe_sub_id_month FROM members "
-                    "WHERE member_id = :id"
-                ),
-                {"id": str(member.member_id)},
-            )
-        ).mappings().fetchone()
-
-    assert row["cancel_date"] is not None
-    assert row["stripe_sync_status"] == "deleted"
-    assert sub_row["stripe_sub_id_month"] is None
+    assert calls == [[member_id]]
     assert await _event_recorded(db_pool, event["id"]) is True
