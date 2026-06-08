@@ -68,30 +68,32 @@ class _InvoicePreviewSectionState
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        Text(widget.title, style: DesignConstants.h3),
-        Container(
-          padding: const EdgeInsets.all(
-            DesignConstants.spacingMedium,
-          ),
-          decoration: BoxDecoration(
-            color: DesignConstants.backgroundColor,
-            borderRadius: BorderRadius.circular(
-              DesignConstants.radiusSmall,
-            ),
-            border: Border.all(
-              color: DesignConstants.divider,
-            ),
-          ),
-          child: _PreviewBody(
+    // The title lives inside the card (above the breakdown), not as a
+    // separate heading outside it.
+    return Container(
+      padding: const EdgeInsets.all(
+        DesignConstants.spacingMedium,
+      ),
+      decoration: BoxDecoration(
+        color: DesignConstants.backgroundColor,
+        borderRadius: BorderRadius.circular(
+          DesignConstants.radiusSmall,
+        ),
+        border: Border.all(
+          color: DesignConstants.divider,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          Text(widget.title, style: DesignConstants.h3),
+          _PreviewBody(
             future: _future,
             emptyLabel: widget.emptyLabel,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
