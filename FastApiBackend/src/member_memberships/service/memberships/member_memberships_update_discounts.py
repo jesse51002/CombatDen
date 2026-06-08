@@ -90,7 +90,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
             async def _stage() -> None:
                 staged.extend(
-                    await self._add_preset_snapshots(
+                    await self.add_preset_snapshots(
                         item_id=item_id,
                         member_id=member_id,
                         gym_id=gym_id,
@@ -102,7 +102,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
             return await staged_preview(
                 stage_fn=_stage,
-                cleanup_fn=lambda: self._delete_snapshots(member_id, staged),
+                cleanup_fn=lambda: self.delete_snapshots(member_id, staged),
                 preview_fn=lambda: (
                     self._payment_sync.preview_update_payments_recurring(
                         member_id,
@@ -112,7 +112,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
         # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
         await self._pre_sync_payments(member_id)
-        await self._add_preset_snapshots(
+        await self.add_preset_snapshots(
             item_id=item_id,
             member_id=member_id,
             gym_id=gym_id,
@@ -178,7 +178,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
         # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
         await self._pre_sync_payments(member_id)
-        await self._delete_snapshots(member_id, applied_ids)
+        await self.delete_snapshots(member_id, applied_ids)
         await self._payment_sync.update_payments_recurring(
             member_id,
             idempotency_key=idempotency_key,
@@ -207,7 +207,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         if not row["stripe_item_id"]:
             raise ValueError(f"Membership missing stripe_item_id for item_id={item_id}")
 
-    async def _delete_snapshots(
+    async def delete_snapshots(
         self,
         member_id: UUID,
         applied_discount_ids: list[UUID],
@@ -254,7 +254,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
                 )
             await session.commit()
 
-    async def _add_preset_snapshots(
+    async def add_preset_snapshots(
         self,
         item_id: UUID,
         member_id: UUID,

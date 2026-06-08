@@ -13,12 +13,14 @@ import pytest
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
+from tests.helpers.db_reads import get_applied_snapshots
 
 
 async def _read_one_time_row(db_pool, member_id, gym_id) -> dict:
     """Read the member's one-time membership row (unfiltered base)."""
     sql = """
-        SELECT stripe_item_id,
+        SELECT item_id,
+               stripe_item_id,
                stripe_one_time_invoice_id,
                stripe_sync_status::text AS status,
                total_price
@@ -79,3 +81,54 @@ async def test_one_time_start_charges_through_engine(
     )
     assert invoice.status == "paid"
     assert invoice.amount_paid == 5000
+
+
+@pytest.mark.timeout(180)
+async def test_one_time_start_with_preset_discount(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """A preset discount passed at start discounts the single invoice."""
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
+        gym_id,
+        plan_type="one_time",
+        price_cents=5000,
+        duration_amount=1,
+        duration_unit="month",
+    )
+    preset = await created.discount(
+        gym_id,
+        name="10% once",
+        percentage_off=10.0,
+        discount_mode="once",
+    )
+
+    await memberships_service.start(
+        member_id=member.member_id,
+        gym_id=gym_id,
+        plan_id=plan.plan_id,
+        price_id=plan.price_id,
+        idempotency_key=uuid4(),
+        preset_ids=[preset.discount_id],
+    )
+
+    # The single invoice is discounted at creation (5000 - 10% = 4500).
+    row = await _read_one_time_row(db_pool, member.member_id, gym_id)
+    assert row["status"] == "applied"
+    assert row["total_price"] == 4500
+    invoice = await stripe_client.client.v1.invoices.retrieve_async(
+        row["stripe_one_time_invoice_id"], options=connect_opts
+    )
+    assert invoice.status == "paid"
+    assert invoice.amount_paid == 4500
+
+    # The snapshot is applied with its resolved coupon written back.
+    snaps = await get_applied_snapshots(db_pool, row["item_id"])
+    assert len(snaps) == 1
+    assert snaps[0]["stripe_coupon_id"] is not None

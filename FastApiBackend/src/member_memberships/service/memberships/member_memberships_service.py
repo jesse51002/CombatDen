@@ -44,6 +44,12 @@ from src.payments.schema.payments_invoice_schema import (
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
+    from src.discounts.schema.discounts_schema import (
+        CustomDiscountValue,
+    )
+    from src.discounts.service.discounts.discounts_service import (
+        DiscountsService,
+    )
     from src.member_memberships.service.payment_sync.payment_sync_freeze import (
         PaymentSyncFreeze,
     )
@@ -78,6 +84,7 @@ class MemberMembershipsService:
         freeze_service: PaymentSyncFreeze,
         paying_lock: PayingMemberLock,
         payment_sync_one_time: PaymentSyncOneTime,
+        discounts_service: DiscountsService,
     ) -> None:
         # Every single-family lifecycle op is wrapped in the paying-parent
         # concurrency lock (held across its pre-sync + DB write + sync) so no two
@@ -97,14 +104,16 @@ class MemberMembershipsService:
             parent_resolver=parent_resolver,
             freeze_service=freeze_service,
         )
+        self._update_discounts = MemberMembershipsUpdateDiscounts(*deps)
         self._start = MemberMembershipsStart(
             *deps,
             payment_service=payment_service,
             parent_resolver=parent_resolver,
             payment_sync_one_time=payment_sync_one_time,
+            update_discounts=self._update_discounts,
+            discounts_service=discounts_service,
         )
         self._update_price = MemberMembershipsUpdatePrice(*deps)
-        self._update_discounts = MemberMembershipsUpdateDiscounts(*deps)
         self._mark_paid_cash = MemberMembershipsMarkPaidCash(
             *deps,
             payment_service=payment_service,
@@ -182,6 +191,8 @@ class MemberMembershipsService:
         idempotency_key: UUID,
         prorate: bool = True,
         paid_with_cash: bool = False,
+        preset_ids: list[UUID] | None = None,
+        custom_discounts: list[CustomDiscountValue] | None = None,
     ) -> None:
         """Start a new membership for a member."""
         async with self._paying_lock.lock([member_id]):
@@ -193,6 +204,8 @@ class MemberMembershipsService:
                 idempotency_key=idempotency_key,
                 prorate=prorate,
                 paid_with_cash=paid_with_cash,
+                preset_ids=preset_ids,
+                custom_discounts=custom_discounts,
             )
 
     async def preview_start(

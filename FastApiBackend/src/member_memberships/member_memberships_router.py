@@ -304,6 +304,8 @@ async def start_membership(
             idempotency_key=request.idempotency_key,
             prorate=request.prorate,
             paid_with_cash=request.paid_with_cash,
+            preset_ids=request.preset_ids,
+            custom_discounts=request.custom_discounts,
         )
     except ValueError as exc:
         error_msg = str(exc)

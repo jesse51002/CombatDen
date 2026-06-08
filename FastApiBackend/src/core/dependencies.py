@@ -257,6 +257,13 @@ class DependencyInjector(containers.DeclarativeContainer):
         parent_resolver=billing_parent_resolver,
     )
 
+    # ── Discounts ────────────────────────────────────────────────
+    # Presets are plain, coupon-free gym config: no Stripe, no payment sync.
+    discounts_service = providers.Factory(
+        DiscountsService,
+        db_pool=db_pool,
+    )
+
     # ── Member memberships ───────────────────────────────────────
     member_memberships_service = providers.Factory(
         MemberMembershipsService,
@@ -268,6 +275,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         freeze_service=payment_sync_freeze,
         paying_lock=paying_member_lock,
         payment_sync_one_time=payment_sync_one_time,
+        discounts_service=discounts_service,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────
@@ -298,12 +306,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         subscription_service=payments_subscription_service,
     )
 
-    # ── Discounts ────────────────────────────────────────────────
-    # Presets are plain, coupon-free gym config: no Stripe, no payment sync.
-    discounts_service = providers.Factory(
-        DiscountsService,
-        db_pool=db_pool,
-    )
 
     # ── Membership plans ─────────────────────────────────────────
     membership_plans_service = providers.Factory(

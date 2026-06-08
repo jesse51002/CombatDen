@@ -203,6 +203,7 @@ def build_member_memberships_service(
         payment_service=payment_svc,
         parent_resolver=parent_resolver,
     )
+    discounts_svc = DiscountsService(db_pool)
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -212,6 +213,7 @@ def build_member_memberships_service(
         freeze_service,
         paying_lock,
         one_time_svc,
+        discounts_svc,
     )
 
 

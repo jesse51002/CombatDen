@@ -8,11 +8,16 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
+from schema.gym_discount import DiscountType
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
+from src.discounts.schema.discounts_schema import (
+    CustomDiscountValue,
+    DiscountCreateRequest,
+)
 from src.member_memberships import SQL_DIR
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
@@ -35,6 +40,12 @@ from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
+    from src.discounts.service.discounts.discounts_service import (
+        DiscountsService,
+    )
+    from src.member_memberships.service.memberships.member_memberships_update_discounts import (  # noqa: E501
+        MemberMembershipsUpdateDiscounts,
+    )
     from src.member_memberships.service.payment_sync.payment_sync_one_time import (
         PaymentSyncOneTime,
     )
@@ -60,6 +71,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         payment_service: PaymentsStripePaymentService,
         parent_resolver: BillingParentResolver,
         payment_sync_one_time: PaymentSyncOneTime,
+        update_discounts: MemberMembershipsUpdateDiscounts,
+        discounts_service: DiscountsService,
     ) -> None:
         super().__init__(
             db_pool,
@@ -69,6 +82,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self._payment_service = payment_service
         self._parent_resolver = parent_resolver
         self._payment_sync_one_time = payment_sync_one_time
+        self._update_discounts = update_discounts
+        self._discounts = discounts_service
 
     async def start(
         self,
@@ -79,6 +94,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         idempotency_key: UUID,
         prorate: bool = True,
         paid_with_cash: bool = False,
+        preset_ids: list[UUID] | None = None,
+        custom_discounts: list[CustomDiscountValue] | None = None,
     ) -> None:
         """Start a new membership for a member.
 
@@ -87,8 +104,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         inserts the CRM row, syncs to Stripe, then sets the
         stripe_item_id on the CRM row. Memberships always begin
         on the day this method is called — future start dates
-        are not supported. The membership is created discount-free;
-        discounts are applied afterward via the apply path.
+        are not supported. Optional ``preset_ids`` / ``custom_discounts`` are
+        snapshotted before the first charge, so it is discounted at creation.
 
         Args:
             member_id: The member.
@@ -152,6 +169,34 @@ class MemberMembershipsStart(MemberMembershipsBase):
             total_price=plan_price["price"],
         )
 
+        # ── Discounts at creation (both paths) ────────────────
+        # Mint any inline customs, then snapshot all presets (preset + minted)
+        # BEFORE the engine call, so the first (one-time: only) invoice is
+        # discounted. The revert undoes snapshots + minted customs + the pending
+        # row together if the charge/sync then fails.
+        minted_ids = await self._mint_custom_discounts(
+            gym_id, custom_discounts or []
+        )
+        all_preset_ids = [*(preset_ids or []), *minted_ids]
+        applied_ids: list[UUID] = []
+        if all_preset_ids:
+            applied_ids = await self._update_discounts.add_preset_snapshots(
+                item_id=item_id,
+                member_id=member_id,
+                gym_id=gym_id,
+                preset_ids=all_preset_ids,
+                apply_date=start_date,
+            )
+
+        async def _revert() -> None:
+            if applied_ids:
+                await self._update_discounts.delete_snapshots(
+                    member_id, applied_ids
+                )
+            for discount_id in minted_ids:
+                await self._discounts.delete_discount(discount_id)
+            await self._delete_pending(str(item_id))
+
         # ── Step 2: charge / sync ─────────────────────────────
         # Both paths are DB-first + verified: the pending row inserted above is
         # visible to the engine, which pushes it to Stripe and writes its ids /
@@ -178,7 +223,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
             await sync_or_revert(
                 sync_fn=_sync_recurring,
-                revert_fn=lambda: self._delete_pending(str(item_id)),
+                revert_fn=_revert,
                 entity_name="member_membership",
                 crm_pk=str(item_id),
                 verify_fn=_verify_added,
@@ -202,7 +247,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
             await sync_or_revert(
                 sync_fn=_run_charge,
-                revert_fn=lambda: self._delete_pending(str(item_id)),
+                revert_fn=_revert,
                 entity_name="member_membership",
                 crm_pk=str(item_id),
                 verify_fn=_verify_charged,
@@ -427,6 +472,39 @@ class MemberMembershipsStart(MemberMembershipsBase):
             request,
             stripe_account_id,
         )
+
+    async def _mint_custom_discounts(
+        self,
+        gym_id: UUID,
+        custom_discounts: list[CustomDiscountValue],
+    ) -> list[UUID]:
+        """Mint each inline custom value as a ``custom`` discount; return ids.
+
+        The minted discounts are folded into the snapshot list; the start's
+        revert deletes them if the charge/sync then fails.
+        """
+        minted: list[UUID] = []
+        for value in custom_discounts:
+            name = (
+                f"Custom {value.percentage_off}% off"
+                if value.percentage_off is not None
+                else f"Custom ${value.dollar_off / 100:.2f} off"
+            )
+            response = await self._discounts.create_discount(
+                DiscountCreateRequest(
+                    gym_id=gym_id,
+                    discount_name=name,
+                    discount_type=DiscountType.custom,
+                    percentage_off=value.percentage_off,
+                    dollar_off=value.dollar_off,
+                    discount_mode=value.discount_mode,
+                    duration_amount=value.duration_amount,
+                    duration_unit=value.duration_unit,
+                    end_date=value.end_date,
+                )
+            )
+            minted.append(response.discount_id)
+        return minted
 
     @staticmethod
     def _calculate_end_date(
