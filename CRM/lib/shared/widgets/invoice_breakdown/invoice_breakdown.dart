@@ -234,9 +234,11 @@ class _Header extends StatelessWidget {
             if (meta != null)
               Text(
                 meta!,
-                style: DesignConstants.pSmall.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
+                style: strongCaption
+                    ? DesignConstants.h3
+                    : DesignConstants.pSmall.copyWith(
+                        color: DesignConstants.text2nd,
+                      ),
               ),
             if (statusLabel != null)
               InvoiceChip(
