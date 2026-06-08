@@ -197,11 +197,7 @@ class _PaymentHistorySectionState
       return '$base · Refunded';
     }
     if (payment.isPartiallyRefunded) {
-      final refunded = formatMinorUnits(
-        payment.refundedAmount,
-        currency: payment.currency,
-      );
-      return '$base · $refunded refunded';
+      return '$base · Partially refunded';
     }
     return base;
   }
