@@ -123,8 +123,9 @@ deliberate:
 - **`SubscriptionStatusSweep`** — over the active billing members
   (`reconciler_active_billing_members.sql` → distinct paying parents with an
   active recurring membership; carries `gym_id` + `stripe_sub_id_month`). Per
-  family: `PaymentsSubscriptionRetrieve.get_subscription`:
-  `PaymentsResourceNotFoundError` (not-found **or** `canceled`) → absorb (§4);
+  family: read the live sub status **explicitly** (a direct `subscriptions.retrieve`,
+  not the engine's raise-on-canceled `get_subscription`): `canceled` / not-found →
+  absorb (§4);
   `status in {past_due, unpaid}` → **record-only** (no membership change —
   "overdue" is date-derived from `next_due_date`, not Stripe-derived, and the
   failed-charge row comes from the invoice fetcher); `active`/other → no-op (the push sweep handles config
@@ -163,7 +164,8 @@ already-gone sub and would abort before recording. Idempotent (already-cancelled
 rows yield nothing to cancel; re-nulling the sub id is a no-op).
 
 **Two triggers share it:**
-- **The reconciler poll** (the status sweep) — on `PaymentsResourceNotFoundError`.
+- **The reconciler poll** (the status sweep) — when the live sub reads `canceled`
+  or not-found.
 - **The `customer.subscription.deleted` webhook** (the **prompt path**,
   `stripe_webhooks/service/customer_subscription_deleted_handler.py`) — reads
   `member_id` from the cancelled sub's `StripeSubscriptionMetadata` and calls the

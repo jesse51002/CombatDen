@@ -71,9 +71,6 @@ from src.payments.service.payments_stripe_price_service import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.payments.service.subscription.payments_subscription_retrieve import (
-    PaymentsSubscriptionRetrieve,
-)
 from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
@@ -405,17 +402,10 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         payment_sync_service=payment_sync_service,
     )
-    payments_subscription_retrieve = providers.Factory(
-        PaymentsSubscriptionRetrieve,
-        stripe_client=stripe_client,
-        members_service=payments_members_service,
-        price_service=payments_price_service,
-        discount_service=payments_discount_service,
-    )
     reconciler_subscription_status_sweep = providers.Factory(
         SubscriptionStatusSweep,
         db_pool=db_pool,
-        subscription_retrieve=payments_subscription_retrieve,
+        stripe_client=stripe_client,
         gym_stripe_service=gym_stripe_service,
         cancellation_absorber=subscription_cancellation_absorber,
     )

@@ -38,7 +38,7 @@ class CustomerSubscriptionDeletedHandler:
         self,
         cancellation_absorber: SubscriptionCancellationAbsorber,
     ) -> None:
-        self._absorber = cancellation_absorber
+        self._cancellation_absorber = cancellation_absorber
 
     async def handle(
         self,
@@ -70,7 +70,7 @@ class CustomerSubscriptionDeletedHandler:
             )
             return
 
-        cancelled = await self._absorber.absorb(member_id)
+        cancelled = await self._cancellation_absorber.absorb(member_id)
         logger.info(
             "customer.subscription.deleted: absorbed sub %s for member %s "
             "(gym_id=%s); %d membership(s) cancelled",

@@ -697,7 +697,8 @@ reconciler-wide lock — safety is the per-family
   single in-window failure records once). Refreshing `next_due_date` here is what
   clears a falsely-overdue member (overdue is date-derived, not Stripe-derived).
 - **`SubscriptionStatusSweep`** — the Stripe->CRM half. For each active billing
-  family it reads the live sub (`PaymentsSubscriptionRetrieve.get_subscription`):
+  family it reads the live sub status **explicitly** (a direct
+  `subscriptions.retrieve`, not the engine's raise-on-canceled `get_subscription`):
   `canceled` / not-found -> absorb via `SubscriptionCancellationAbsorber`;
   `past_due` / `unpaid` -> record-only (no membership change); `active` -> no-op.
 - **`OrphanCleanupSweep`** — deletes stranded `not_added` rows

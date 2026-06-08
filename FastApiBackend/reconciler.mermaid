@@ -29,7 +29,7 @@ flowchart TB
   absorber["♻️ SubscriptionCancellationAbsorber — CRM-only (NO Stripe call)<br/>family's live recurring → cancel_date + stripe_sync_status='deleted'<br/>+ null parent stripe_sub_id_month · idempotent<br/>NOT the blessed cancel() (its pre-sync would push to the already-gone sub)"]
   handlers["📨 webhook handlers (stripe_webhooks) — absorb(obj) seam<br/>invoice_paid · invoice_payment_paid · invoice_payment_failed · refund"]
   engine["⚙️ PaymentSyncService.bulk_payment_sync<br/>loop families · fresh key + per-family lock · update_payments_recurring"]
-  subret["🔎 PaymentsSubscriptionRetrieve.get_subscription<br/>live sub status (raises not-found / canceled)"]
+  subret["🔎 subscriptions.retrieve → status (read explicitly)<br/>canceled / not-found → gone · no reliance on a raise"]
 
   supabase["🗄️ Supabase (service-role) — reconciler_orphan_memberships<br/>reconciler_active_billing_members · gyms_with_connect · resource_locks<br/>cancel_date / 'deleted' writes · null stripe_sub_id_month · delete orphan"]
   stripe["💳 Stripe — gym Connect: list invoices / payments / refunds · retrieve subscription"]
