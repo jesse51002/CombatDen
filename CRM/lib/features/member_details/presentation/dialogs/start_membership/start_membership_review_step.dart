@@ -79,10 +79,6 @@ class StartMembershipReviewStep extends StatelessWidget {
                 '$prorate-$paidWithCash',
             loadPreview: () =>
                 repository.previewStartMembership(req),
-            // Recurring section compares the member's current monthly
-            // (now) to the previewed future monthly with this membership.
-            loadCurrent: () =>
-                repository.getUpcomingInvoice(req.memberId),
           ),
       ],
     );

@@ -35,10 +35,6 @@ class PreviewInvoice(BaseModel):
     total: int
     currency: str
     lines: list[PreviewInvoiceLine] = []
-    # Unix seconds: when the next recurring invoice is billed — the start of
-    # the billing period on the recurring (non-proration) lines (subscriptions
-    # bill in advance). None when the preview has no recurring line.
-    next_payment_date: int | None = None
 
 
 # ── Due-now vs Recurring Preview ────────────────────────────────

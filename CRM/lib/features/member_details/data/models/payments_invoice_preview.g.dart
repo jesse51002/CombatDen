@@ -30,7 +30,6 @@ PreviewInvoice _$PreviewInvoiceFromJson(Map<String, dynamic> json) =>
               )
               .toList() ??
           [],
-      nextPaymentDate: (json['next_payment_date'] as num?)?.toInt(),
     );
 
 DueNowVsRecurringPreview _$DueNowVsRecurringPreviewFromJson(
