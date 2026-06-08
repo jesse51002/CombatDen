@@ -669,6 +669,10 @@ directly.
 
 ## 10. The scheduled reconciler (built — the `reconciler` domain)
 
+> **Deep source of truth: the `reconciler-guide` skill + `reconciler.mermaid`.**
+> This section is the engine-side summary; that skill owns the sweep mechanics
+> (orchestrator, global lock, the four step-services, the absorber, the seam).
+
 A twice-daily sweep that runs the engine on a clock, independent of user activity,
 closing the "self-heals only when a member is touched" gap. It is **load-bearing**,
 not just a backstop, for two shipped discount features on **idle** members:

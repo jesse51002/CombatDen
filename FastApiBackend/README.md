@@ -52,6 +52,8 @@ see
 solid = a live runtime call, dashed = future / shared-code. Deep engine knowledge lives in the
 `sync-guide` skill.
 
+**For the scheduled reconciler in depth** — the twice-daily sweep flow (scheduler → global lock → D invoice-fetch → B status-absorb → A orphan-clean → C push), the shared CRM-only cancellation absorber, and the webhook `absorb` seam — see **[`reconciler.mermaid`](reconciler.mermaid)** (owned by the `reconciler-guide` skill).
+
 ---
 
 ## How a request flows
