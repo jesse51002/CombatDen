@@ -3,18 +3,25 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 
+part 'invoice_breakdown_rows.dart';
+
 /// Renders the cost "formula" for any invoice-shaped
-/// entity — a preview, a historical payment, or a
-/// finalized invoice — from a normalized
+/// entity — a preview, a historical payment, a finalized
+/// invoice, or a before/after comparison — from a normalized
 /// [InvoiceBreakdownData]. Background is transparent: the
 /// parent (a dialog body, a card) owns the surface.
 ///
-/// A reusable billing primitive. The member-detail billing
-/// dialogs (a later workflow) build the [data] from their
-/// own backend models and compose this widget.
+/// A reusable billing primitive. Each member-detail billing
+/// surface builds the [data] from its own backend model and
+/// composes this widget, so they all share one look. When the
+/// comparison fields on [data] (`previousAmount` per line,
+/// `previousTotal`) are absent it renders a plain invoice; when
+/// present it renders the before→after (old → new) treatment.
+/// The private row widgets live in `invoice_breakdown_rows.dart`.
 class InvoiceBreakdown extends StatelessWidget {
   final InvoiceBreakdownData data;
 
@@ -26,6 +33,11 @@ class InvoiceBreakdown extends StatelessWidget {
   final String? headerMeta;
   final String? statusLabel;
   final InvoiceChipTone statusTone;
+
+  /// When true, the header caption + meta render in the strong h2
+  /// section-title style, instead of the default muted style. Used for
+  /// the recurring "Then, each month" section.
+  final bool strongHeaderCaption;
 
   /// When non-null, a full-width destructive "Refund"
   /// button is rendered at the bottom. The parent confirms
@@ -40,12 +52,57 @@ class InvoiceBreakdown extends StatelessWidget {
     this.headerMeta,
     this.statusLabel,
     this.statusTone = InvoiceChipTone.neutral,
+    this.strongHeaderCaption = false,
     this.onRefundPressed,
     this.refundLabel = 'Refund',
   });
 
+  /// The rows a single line contributes: its (undiscounted in
+  /// comparison mode) amount, then — only in comparison mode — an
+  /// indented "Discount" row and the line's net old → new row.
+  List<Widget> _lineRows(InvoiceLineItem l) {
+    final rows = <Widget>[
+      _LineRow(
+        label: l.description,
+        amount: l.amount,
+        currency: data.currency,
+      ),
+    ];
+    final discount = l.discountAmount;
+    if (discount != null && discount != 0) {
+      rows.add(
+        _LineRow(
+          label: 'Discount',
+          amount: discount,
+          currency: data.currency,
+          muted: true,
+          indent: true,
+        ),
+      );
+    }
+    final prev = l.previousAmount;
+    if (prev != null) {
+      final newNet = l.amount + (l.discountAmount ?? 0);
+      if (prev != newNet) {
+        rows.add(
+          _LineRow(
+            label: 'Net',
+            amount: newNet,
+            previousAmount: prev,
+            currency: data.currency,
+            indent: true,
+          ),
+        );
+      }
+    }
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final prevTotal = data.previousTotal;
+    final showDifference =
+        prevTotal != null && data.total != prevTotal;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -57,14 +114,9 @@ class InvoiceBreakdown extends StatelessWidget {
             meta: headerMeta,
             statusLabel: statusLabel,
             statusTone: statusTone,
+            strongCaption: strongHeaderCaption,
           ),
-        ...data.lines.map(
-          (l) => _LineRow(
-            label: l.description,
-            amount: l.amount,
-            currency: data.currency,
-          ),
-        ),
+        ...data.lines.expand(_lineRows),
         ...data.appliedDiscounts.map(
           (d) => _LineRow(
             label: d.label,
@@ -86,11 +138,18 @@ class InvoiceBreakdown extends StatelessWidget {
           height: 1,
         ),
         _LineRow(
-          label: data.isRefund ? 'Refunded' : 'Total',
+          label: data.isRefund ? 'Refunded' : data.totalLabel,
           amount: data.total,
           currency: data.currency,
           emphasised: data.refundedAmount == 0,
+          previousAmount: data.previousTotal,
+          suffix: data.amountSuffix,
         ),
+        if (showDifference)
+          _DifferenceRow(
+            amount: data.total - prevTotal,
+            currency: data.currency,
+          ),
         if (data.refundedAmount > 0) ...[
           _LineRow(
             label: 'Refunded',
@@ -138,161 +197,6 @@ class InvoiceBreakdown extends StatelessWidget {
             textColor: DesignConstants.badRed,
             borderRadius: DesignConstants.radiusSmall,
           ),
-      ],
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  final String caption;
-  final String? meta;
-  final String? statusLabel;
-  final InvoiceChipTone statusTone;
-
-  const _Header({
-    required this.caption,
-    required this.statusTone,
-    this.meta,
-    this.statusLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          caption,
-          style: DesignConstants.h3.copyWith(
-            color: DesignConstants.text2nd,
-          ),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: DesignConstants.spacingSmall,
-          children: [
-            if (meta != null)
-              Text(
-                meta!,
-                style: DesignConstants.pSmall.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-              ),
-            if (statusLabel != null)
-              InvoiceChip(
-                label: statusLabel!,
-                tone: statusTone,
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _LineRow extends StatelessWidget {
-  final String label;
-  final int amount;
-  final String currency;
-  final bool emphasised;
-  final bool muted;
-  final bool indent;
-
-  const _LineRow({
-    required this.label,
-    required this.amount,
-    required this.currency,
-    this.emphasised = false,
-    this.muted = false,
-    this.indent = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final base =
-        emphasised ? DesignConstants.h2 : DesignConstants.p;
-    final color =
-        muted ? DesignConstants.text2nd : DesignConstants.text;
-    final style = base.copyWith(color: color);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: indent ? DesignConstants.spacingLarge : 0,
-            ),
-            child: Text(
-              label,
-              style: style,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ),
-        Text(
-          formatMinorUnits(amount, currency: currency),
-          style: style,
-        ),
-      ],
-    );
-  }
-}
-
-/// One payment attempt row: the method + time on the left, a
-/// status chip and the signed amount on the right.
-class _AttemptRow extends StatelessWidget {
-  final InvoiceAttemptLine attempt;
-  final String currency;
-
-  const _AttemptRow({
-    required this.attempt,
-    required this.currency,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        Flexible(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingTiny,
-            children: [
-              Text(
-                attempt.method,
-                style: DesignConstants.p,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                attempt.timeLabel,
-                style: DesignConstants.pSmall.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: DesignConstants.spacingSmall,
-          children: [
-            InvoiceChip(
-              label: attempt.statusLabel,
-              tone: attempt.statusTone,
-            ),
-            Text(
-              formatMinorUnits(attempt.amount, currency: currency),
-              style: DesignConstants.p,
-            ),
-          ],
-        ),
       ],
     );
   }
