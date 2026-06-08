@@ -6,8 +6,10 @@ memberships + null the parent's sub id — instead of recreating the sub (which
 would re-bill a member Stripe already let go). Two levels:
 
 - ``PaymentSyncCancel.cancel_dead_subscription`` — the CRM-only write, no Stripe.
-- ``update_payments_recurring`` — catches the subscription not-found surfaced by
-  the converge (gated on ``resource_type == subscription``) and runs the cancel.
+- ``update_payments_recurring`` AND ``preview_update_payments_recurring`` — both
+  catch the subscription not-found surfaced by the converge (gated on
+  ``resource_type == subscription``), record the cancellation, then **re-raise**
+  (the requested converge/preview could not happen against a gone sub).
 
 Run against the real local Supabase DB + real Stripe test Connect. The membership
 is inserted directly (no real sub); the family is pointed at a sub id Stripe does
@@ -16,11 +18,13 @@ not have, so the converge's ``update_subscription`` raises a real not-found.
 
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy import text
 
 from src.member_memberships.service.payment_sync.payment_sync_cancel import (
     PaymentSyncCancel,
 )
+from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.gym_stripe_service import GymStripeService
 from tests.helpers.service_factory import build_payment_sync_service
@@ -181,12 +185,44 @@ async def test_sync_cancels_family_when_subscription_gone(
         sync_status="applied",
     )
     # Point the family at a sub Stripe does not have: the converge's
-    # update_subscription retrieve raises not-found (resource_type=subscription),
-    # which the sync catches and records as a cancellation.
+    # update_subscription retrieve raises not-found (resource_type=subscription).
+    # The sync records the cancellation, then re-raises (the converge failed).
     await _set_sub_id(db_pool, member.member_id, f"sub_{uuid4().hex[:20]}")
 
     svc = build_payment_sync_service(db_pool, stripe_client)
-    await svc.update_payments_recurring(member.member_id, idempotency_key=uuid4())
+    with pytest.raises(PaymentsResourceNotFoundError):
+        await svc.update_payments_recurring(
+            member.member_id, idempotency_key=uuid4()
+        )
+
+    # The cancellation was still recorded before the raise.
+    row = await _membership_row(db_pool, item_id)
+    assert row is not None
+    assert row["cancel_date"] is not None
+    assert row["stripe_sync_status"] == "deleted"
+    assert await _sub_id(db_pool, member.member_id) is None
+
+
+async def test_preview_cancels_family_when_subscription_gone(
+    db_pool, stripe_client, gym_id, created
+):
+    member = await created.member(gym_id)
+    plan = await created.plan(gym_id)
+    item_id = await _insert_membership(
+        db_pool,
+        member.member_id,
+        gym_id,
+        plan,
+        stripe_item_id=f"si_fake_{uuid4().hex[:12]}",
+        sync_status="applied",
+    )
+    # Preview records a gone sub too (settled fact, like the once-settle that
+    # already writes during preview), then re-raises — no invoice to preview.
+    await _set_sub_id(db_pool, member.member_id, f"sub_{uuid4().hex[:20]}")
+
+    svc = build_payment_sync_service(db_pool, stripe_client)
+    with pytest.raises(PaymentsResourceNotFoundError):
+        await svc.preview_update_payments_recurring(member.member_id)
 
     row = await _membership_row(db_pool, item_id)
     assert row is not None
