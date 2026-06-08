@@ -48,13 +48,18 @@ async def _insert_membership(
     sync_status: str,
 ) -> UUID:
     """Insert a membership row directly and return its item_id."""
+    # start_date a week back: the absorber sets cancel_date from the gym-tz
+    # "today", which near UTC midnight can be the day before CURRENT_DATE (UTC);
+    # a past start_date keeps the daterange(start, cancel) trigger valid. (The
+    # real start path sets start_date from the same gym-tz date, so production is
+    # consistent — this only matters for a direct test insert.)
     sql = """
         INSERT INTO member_memberships_unfiltered (
             member_id, gym_id, plan_id, price_id,
             start_date, stripe_item_id, total_price, stripe_sync_status
         ) VALUES (
             :member_id, :gym_id, :plan_id, :price_id,
-            CURRENT_DATE, :stripe_item_id, :total_price,
+            CURRENT_DATE - 7, :stripe_item_id, :total_price,
             CAST(:sync_status AS stripe_sync_status)
         )
         RETURNING item_id
