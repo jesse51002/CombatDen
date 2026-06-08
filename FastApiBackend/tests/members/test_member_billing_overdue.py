@@ -183,6 +183,33 @@ def test_overview_reflects_overdue_without_price():
     assert overview == "Overdue for 1 Membership"
 
 
+def test_overview_linked_shows_own_total_with_payer_suffix():
+    """A linked account reads like a normal member's line — its OWN total +
+    count — with a '(Paid by <name>)' suffix instead of the parent's bill."""
+    grouper = MembersBillingGrouper()
+    parent_id = uuid4()
+
+    class _Bruce:
+        first_name = "Bruce"
+
+    class _Supp:
+        profiles_dict = {parent_id: _Bruce()}
+
+    overview, linked = grouper.build_membership_overview(
+        linked_to_id=parent_id,
+        monthly_total=7000,  # the CHILD's own sum, passed by the service
+        has_trial=False,
+        has_cancelled=False,
+        has_frozen=False,
+        has_overdue=False,
+        paying_count=1,
+        supplementary=_Supp(),
+    )
+
+    assert overview == "Paying $70/mo for 1 Membership (Paid by Bruce)"
+    assert linked == parent_id
+
+
 def test_price_summary_frozen_wins_over_overdue():
     # A frozen account pauses billing, so frozen takes precedence.
     grouper = MembersBillingGrouper()
