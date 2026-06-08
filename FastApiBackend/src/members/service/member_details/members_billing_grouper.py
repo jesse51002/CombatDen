@@ -69,7 +69,16 @@ class MembersBillingGrouper:
                 today,
             )
 
-            total_price = representative["total_price"] or 0
+            # Each row's total_price is now that membership's OWN post-discount
+            # share, so the plan-level total is the SUM across the plan's rows.
+            # Only active (billing) memberships count — a frozen membership is
+            # paused and a cancelled/ended one keeps a stale total_price, so
+            # including them would overstate what the plan currently bills.
+            total_price = sum(
+                row["total_price"] or 0
+                for row in rows
+                if row["membership_status"] == CrmMemberStatus.active
+            )
             all_discounts = self._collect_plan_discounts(rows)
 
             members = {

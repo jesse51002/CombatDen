@@ -114,6 +114,40 @@ def test_group_by_plan_keeps_active_when_not_past_due():
     assert grouped[0].paying_for[0].status == CrmMemberStatus.active
 
 
+def test_plan_total_sums_only_active_member_shares():
+    """Plan-level total_price = sum of the ACTIVE memberships' own shares;
+    frozen (paused) and cancelled (stale total_price) rows are excluded, and
+    each member keeps its own per-membership share in ``members``."""
+    grouper = MembersBillingGrouper()
+    plan_id = uuid4()
+    parent = _membership_row(
+        status="active", next_due=FUTURE, plan_id=plan_id, total_price=5000
+    )
+    child = _membership_row(
+        status="active", next_due=FUTURE, plan_id=plan_id, total_price=3000
+    )
+    frozen = _membership_row(
+        status="frozen", next_due=FUTURE, plan_id=plan_id, total_price=7777
+    )
+    cancelled = _membership_row(
+        status="cancelled", next_due=None, plan_id=plan_id, total_price=9999
+    )
+
+    grouped = grouper.group_by_plan(
+        [parent, child, frozen, cancelled],
+        _StubSupplementary(),
+        {},
+        parent["member_id"],
+        TODAY,
+    )
+
+    assert len(grouped) == 1
+    # 5000 + 3000 (active) only; frozen 7777 and cancelled 9999 excluded.
+    assert grouped[0].total_price == 8000
+    assert grouped[0].members[parent["member_id"]].total_price == 5000
+    assert grouped[0].members[child["member_id"]].total_price == 3000
+
+
 def test_overview_reflects_overdue_with_price():
     grouper = MembersBillingGrouper()
 
