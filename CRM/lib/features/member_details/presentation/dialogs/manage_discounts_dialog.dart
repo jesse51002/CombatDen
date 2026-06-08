@@ -14,7 +14,7 @@ import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/presentation/dialogs/manage_discounts_body.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
-import 'package:crm/features/member_details/presentation/widgets/discount_change_preview.dart';
+import 'package:crm/features/member_details/presentation/widgets/invoice_preview_section.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
@@ -234,15 +234,18 @@ class _ManageDiscountsDialogState
   }
 
   Widget _previewBody() {
-    return DiscountChangePreview(
+    // The shared preview viewer: a discount change has no due-now (nothing
+    // extra is charged today), so it shows only the recurring section as a
+    // current → new comparison.
+    return InvoicePreviewSection(
+      loadPreview: _loadPreview,
       loadCurrent: () =>
           _repository.getUpcomingInvoice(widget.coveredMemberId),
-      loadPreview: _loadPreview,
-      title: _isAddTab
-          ? 'Monthly with these discounts'
-          : 'Monthly after removing',
-      fallbackCurrentMonthly:
+      showDueNow: false,
+      recurringFallbackMonthly:
           widget.member.totalMonthlyRecurringPrice,
+      emptyLabel: 'No billing change.',
+      errorLabel: 'Could not load the preview.',
     );
   }
 }
