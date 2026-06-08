@@ -47,7 +47,7 @@ flowchart TB
       w_links["coupon links → set_applied_discount_coupon_id (stripe_coupon_id + 'applied') per row"]
       w_del["_mark_removed_deleted — cancelled rows gone from live sub → mark_membership_deleted ('deleted')"]
       w_subid["update_profile_sub_id — parent stripe_sub_id_month (None when cancelled)"]
-      w_prices["PriceWriteback.sync_parent_monthly_total — parent monthly total from Stripe upcoming invoice"]
+      w_prices["_sync_parent_monthly_total — parent monthly total from Stripe upcoming invoice (set_parent_monthly_total)"]
       w_rows --> w_memberprice
       w_memberprice --> w_links
       w_links --> w_del

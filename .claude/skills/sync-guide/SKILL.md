@@ -18,7 +18,7 @@ description: >-
   read-before-write live-coupon read), the coupon-link / once-consumption
   writebacks (set_applied_discount_coupon_id / mark_once_consumed), execute_sync
   (create/update/cancel, explicit proration_behavior) in payment_sync_stripe.py,
-  and the post-discount price writeback (price_writeback.py). Load this whenever
+  and the post-discount price writeback (in payment_sync_writeback.py). Load this whenever
   you touch the sync orchestration, the parent/family resolution, the builder,
   the discount math, the once-consumption settle, the deterministic coupon
   find-or-create, the price writeback, the preview dry-run, or the deferred
@@ -260,7 +260,7 @@ sequence is:
    the coupon links (+ `applied` on the applied-discount rows), `deleted` on
    cancelled rows confirmed gone from the live sub, the parent's sub id, each
    membership's own post-discount price onto `total_price`, and the parent's
-   monthly total (composing `PriceWriteback` for that last one).
+   monthly total from Stripe's upcoming invoice.
 
 Returns **`None`** — the sync writes everything it owns back to the DB; callers
 read the DB (the `applied` status) to confirm it landed, and use
@@ -608,15 +608,15 @@ No-op (returns the DB state) when there's no `stripe_sub_id`. **Idempotent**
 no-op) and it lets `PaymentsResourceNotFoundError` **propagate** — a missing sub
 when the CRM expects billing is an out-of-sync state that must surface.
 
-### Price writeback — two owners
+### Price writeback (both in `PaymentSyncWriteback`)
 
 `member_memberships.total_price` and `members.total_monthly_recurring_price` are
-written by two different owners after the sync:
+both written by `PaymentSyncWriteback` after the sync (via `PaymentSyncQueries`):
 
-| writeback | owner / SQL | target |
+| writeback | path / SQL | target |
 | --- | --- | --- |
-| each membership's **own** post-discount price (computed at build time by `PaymentSyncDiscounts`, threaded via `SyncParams.membership_post_discount_amounts`) | `PaymentSyncWriteback` → `set_membership_post_discount_prices.sql` | `member_memberships_unfiltered.total_price` |
-| the parent's full monthly recurring charge (from Stripe's upcoming invoice) | `PriceWriteback.sync_parent_monthly_total` → `sync_profile_monthly_total.sql` | `members.total_monthly_recurring_price` |
+| each membership's **own** post-discount price (computed at build time by `PaymentSyncDiscounts`, threaded via `SyncParams.membership_post_discount_amounts`) | `set_membership_post_discount_prices` → `set_membership_post_discount_prices.sql` | `member_memberships_unfiltered.total_price` |
+| the parent's full monthly recurring charge (from Stripe's upcoming invoice) | `_sync_parent_monthly_total` → `set_parent_monthly_total` → `sync_profile_monthly_total.sql` | `members.total_monthly_recurring_price` |
 
 `total_price` is the **per-membership share**, NOT a plan/family total — the CRM
 derives a plan total by summing the rows. It is keyed by `item_id` (so it is
@@ -626,7 +626,7 @@ from the Stripe invoice — it is the amount the discount math computed.
 `param::type`, and no colon-prefixed word even in comments) per the SQLAlchemy
 `text()` bind gotcha.
 
-`PriceWriteback.sync_parent_monthly_total` reads the **upcoming invoice**
+`PaymentSyncWriteback._sync_parent_monthly_total` reads the **upcoming invoice**
 (`fetch_upcoming_invoice`, payments-guide) and sums its recurring lines onto the
 parent's monthly total; when `stripe_sub_id` is `None` (fully cancelled) it zeroes
 that total. **Writeback failures are logged at ERROR and never re-raised** —
@@ -766,11 +766,12 @@ guard so an hourly sweep isn't pointless Stripe writes.
   `preview_update_payments_recurring`, `bulk_payment_sync`; injects `_parent` /
   `_freeze` / `_once_discounts` / `_builder`, builds `_stripe` / `_writeback`).
 - **Writeback:** `payment_sync_writeback.py` (`PaymentSyncWriteback.write` →
-  `_apply_membership_rows` / `_mark_removed_deleted`; per-row line id /
-  next_due_date / `applied`, coupon links + status, `deleted` on removed rows, sub
-  id, each membership's own post-discount price → `total_price`, and the parent
-  monthly total — composes `PriceWriteback` for that last one). Writeback SQL:
-  `apply_membership_sync.sql`, `set_membership_post_discount_prices.sql`,
+  `_apply_membership_rows` / `_sync_parent_monthly_total` / `_mark_removed_deleted`;
+  per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on
+  removed rows, sub id, each membership's own post-discount price → `total_price`,
+  and the parent monthly total from Stripe's upcoming invoice — all via
+  `PaymentSyncQueries`). Writeback SQL: `apply_membership_sync.sql`,
+  `set_membership_post_discount_prices.sql`, `sync_profile_monthly_total.sql`,
   `get_cancelled_recurring.sql`, `mark_membership_deleted.sql`.
 - **Shared parent resolver:** `src/shared/billing_parent_resolver.py`
   (`BillingParentResolver` — `resolve_parent`, `resolve`) + the `ParentProfile`
@@ -793,8 +794,8 @@ guard so an hourly sweep isn't pointless Stripe writes.
 - **Read/write queries:** `payment_sync_queries.py` (`PaymentSyncQueries` —
   `get_family_ids`, `get_active_memberships` (+ private `_get_discounts_by_item`),
   `get_unconsumed_once_discounts`, `apply_membership_sync`,
-  `set_membership_post_discount_prices`, `set_applied_discount_coupon_id`,
-  `mark_once_consumed`, `update_profile_sub_id`).
+  `set_membership_post_discount_prices`, `set_parent_monthly_total`,
+  `set_applied_discount_coupon_id`, `mark_once_consumed`, `update_profile_sub_id`).
 - **Coupons (policy only):** `payment_sync_coupons.py` (`PaymentSyncCoupons` —
   `coupon_id`, `find_or_create`, `_matches_value`, `_delete`,
   `_build_create_request`; the deterministic-id + validate-or-replace policy,
@@ -802,7 +803,6 @@ guard so an hourly sweep isn't pointless Stripe writes.
   SDK import).
 - **Stripe dispatch (create/update/cancel):** `payment_sync_stripe.py`
   (`PaymentSyncStripe` — `execute_sync`, `preview_execute_sync`, `_sync_bucket`).
-- **Parent monthly writeback:** `price_writeback.py` (`PriceWriteback.sync_parent_monthly_total` — Stripe upcoming-invoice sum → `members.total_monthly_recurring_price` only; per-membership `total_price` is written by `PaymentSyncWriteback`).
 - **Intermediate models:** `member_memberships/schema/payment_sync_schema.py`
   (`ActiveMembershipRow` (carries `discounts`), `AppliedDiscount`, `OnceDiscount`,
   `IntervalBucket`, `LineDiscountValue` (bounds + percent-XOR-dollar validators),

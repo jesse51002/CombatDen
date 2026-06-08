@@ -321,6 +321,28 @@ class PaymentSyncQueries:
             )
             await session.commit()
 
+    async def set_parent_monthly_total(
+        self,
+        member_id: UUID,
+        total_monthly_recurring_price: int,
+    ) -> None:
+        """Set total_monthly_recurring_price on the parent's members row.
+
+        Backend-managed column (service-role write); clamped at 0.
+        """
+        sql = load_sql(SYNC_SQL_DIR / "sync_profile_monthly_total.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {
+                    "member_id": str(member_id),
+                    "total_monthly_recurring_price": max(
+                        total_monthly_recurring_price, 0
+                    ),
+                },
+            )
+            await session.commit()
+
     async def get_cancelled_recurring(
         self,
         family_ids: list[UUID],
