@@ -28,6 +28,9 @@ from src.member_memberships.service.payment_sync.payment_sync_freeze import (
 from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
     PaymentSyncOnceDiscounts,
 )
+from src.member_memberships.service.payment_sync.payment_sync_one_time import (
+    PaymentSyncOneTime,
+)
 from src.member_memberships.service.payment_sync.payment_sync_service import (
     PaymentSyncService,
 )
@@ -180,7 +183,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         PaymentsStripePaymentService,
         stripe_client=stripe_client,
         members_service=payments_members_service,
-        price_service=payments_price_service,
     )
     payments_subscription_service = providers.Factory(
         PaymentsStripeSubscriptionService,
@@ -245,6 +247,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         builder=payment_sync_builder,
         paying_lock=paying_member_lock,
     )
+    # Standalone one-time charge service (reuses the discount engine; does not
+    # touch the recurring PaymentSyncService).
+    payment_sync_one_time = providers.Factory(
+        PaymentSyncOneTime,
+        db_pool=db_pool,
+        discounts=payment_sync_discounts,
+        payment_service=payments_payment_service,
+        parent_resolver=billing_parent_resolver,
+    )
 
     # ── Member memberships ───────────────────────────────────────
     member_memberships_service = providers.Factory(
@@ -256,6 +267,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         parent_resolver=billing_parent_resolver,
         freeze_service=payment_sync_freeze,
         paying_lock=paying_member_lock,
+        payment_sync_one_time=payment_sync_one_time,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────

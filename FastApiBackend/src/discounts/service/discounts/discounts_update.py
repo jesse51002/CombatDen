@@ -26,7 +26,7 @@ from src.discounts.schema.discounts_schema import (
     DiscountResponse,
     DiscountUpdateRequest,
     DiscountUpdateValues,
-    _validate_lifetime,
+    validate_lifetime,
 )
 from src.discounts.service.discounts.discounts_base import DiscountsBase
 from src.shared.column_guard import validate_mutable_columns
@@ -182,7 +182,7 @@ class DiscountsUpdate(DiscountsBase):
                 "Exactly one of percentage_off or dollar_off must be set",
             )
 
-        _validate_lifetime(
+        validate_lifetime(
             duration_amount=merged.get("duration_amount"),
             duration_unit=merged.get("duration_unit"),
             end_date=merged.get("end_date"),

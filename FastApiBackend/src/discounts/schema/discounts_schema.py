@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from schema.gym_discount import (
     DiscountDurationUnit,
     DiscountMode,
@@ -23,7 +23,7 @@ from schema.gym_discount import (
 import src.shared.db_schema_path  # noqa: F401
 
 
-def _validate_lifetime(
+def validate_lifetime(
     *,
     duration_amount: int | None,
     duration_unit: DiscountDurationUnit | None,
@@ -47,6 +47,37 @@ def _validate_lifetime(
         raise ValueError(
             "lifetime is a duration span OR an explicit end_date, never both",
         )
+
+
+class CustomDiscountValue(BaseModel):
+    """An inline custom discount value to mint + apply at membership creation.
+
+    Mirrors a ``gym_discount_values`` row — the ``gym_id``, name, and ``custom``
+    type are supplied by the membership flow that mints it. A percent XOR a fixed
+    dollar amount, the once/ongoing mode, and the ongoing lifetime spec (a
+    duration span XOR an explicit ``end_date``, never both; neither = forever).
+    """
+
+    percentage_off: float | None = Field(default=None, gt=0, le=100)
+    dollar_off: int | None = Field(default=None, gt=0)
+    discount_mode: DiscountMode
+    duration_amount: int | None = Field(default=None, gt=0)
+    duration_unit: DiscountDurationUnit | None = None
+    end_date: date | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> CustomDiscountValue:
+        """Value is percent XOR dollar; the lifetime spec is consistent."""
+        if (self.percentage_off is None) == (self.dollar_off is None):
+            raise ValueError(
+                "Exactly one of percentage_off or dollar_off must be set",
+            )
+        validate_lifetime(
+            duration_amount=self.duration_amount,
+            duration_unit=self.duration_unit,
+            end_date=self.end_date,
+        )
+        return self
 
 
 class DiscountCreateRequest(BaseModel):
@@ -100,7 +131,7 @@ class DiscountCreateRequest(BaseModel):
                 "Exactly one of percentage_off or dollar_off must be set",
             )
 
-        _validate_lifetime(
+        validate_lifetime(
             duration_amount=self.duration_amount,
             duration_unit=self.duration_unit,
             end_date=self.end_date,

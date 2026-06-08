@@ -56,7 +56,10 @@ class ActiveMembershipRow(BaseModel):
     price_id: UUID
     stripe_price_id: str
     stripe_item_id: str | None = None
-    duration_unit: DurationUnit
+    # Recurring rows always carry the plan's interval; a one-time row may leave it
+    # None (a one-time plan can have no duration). Carried as metadata only — the
+    # bucket interval is fixed monthly, so nothing in the build reads it.
+    duration_unit: DurationUnit | None = None
     discounts: list[AppliedDiscount] = []
 
 
@@ -149,3 +152,36 @@ class SyncParams(BaseModel):
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
     memberships: list[ActiveMembershipRow] = []
+
+
+class OneTimeInvoiceItem(BaseModel):
+    """One pending one-time membership as a line on the consolidated invoice.
+
+    Its index in ``OneTimeInvoicePlan.items`` matches the invoice line order
+    (``create_invoice_payment`` returns line ids in request order), so the
+    writeback maps each returned line id + amount back to this ``item_id``.
+    ``coupon_ids`` are the membership's item-level coupons, already ordered
+    dollar→percent by the resolver.
+    """
+
+    item_id: UUID
+    member_id: UUID
+    plan_id: UUID
+    stripe_price_id: str
+    coupon_ids: list[str] = []
+
+
+class OneTimeInvoicePlan(BaseModel):
+    """The desired one-time consolidated invoice + its discount writebacks.
+
+    The one-time counterpart of ``SyncParams``: an **ordered** list of invoice
+    lines (one per pending one-time membership), plus the ``applied_discount_id →
+    coupon_id`` links the writeback stamps, and the ``once``-mode applied-discount
+    ids to mark consumed (``end_date = today``). Built with **no DB writes**.
+    """
+
+    items: list[OneTimeInvoiceItem] = []
+    parent: ParentProfile
+    stripe_account_id: str
+    coupon_links: dict[UUID, str] = {}
+    once_consumed_ids: list[UUID] = []

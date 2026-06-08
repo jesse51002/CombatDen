@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from schema.gym_discount import DiscountType
 
 import src.shared.db_schema_path  # noqa: F401
+from src.discounts.schema.discounts_schema import CustomDiscountValue
 
 
 class MemberMembershipsCancelResponse(BaseModel):
@@ -35,9 +36,10 @@ class MemberMembershipsUnfreezeRequest(BaseModel):
 class MemberMembershipsStartRequest(BaseModel):
     """Start a new membership for a member.
 
-    Memberships are created discount-free — discounts are applied as
-    immutable snapshots afterward via the apply path (PUT /discounts), not
-    threaded in at creation.
+    Optional discounts-at-creation: ``preset_ids`` reference existing preset /
+    linked discounts; ``custom_discounts`` are inline values minted as ``custom``
+    discounts at start. Both are snapshotted **before** the first charge, so the
+    membership's first (and, for one-time, only) invoice is discounted.
     """
 
     member_id: UUID
@@ -47,6 +49,8 @@ class MemberMembershipsStartRequest(BaseModel):
     prorate: bool = True
     paid_with_cash: bool = False
     idempotency_key: UUID
+    preset_ids: list[UUID] = []
+    custom_discounts: list[CustomDiscountValue] = []
 
 
 class MemberMembershipsMarkPaidCashRequest(BaseModel):

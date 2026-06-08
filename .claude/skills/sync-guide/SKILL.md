@@ -65,7 +65,7 @@ This skill owns the **orchestration / mechanics** in
   touches the Stripe SDK directly** — coupon I/O is delegated to
   `PaymentsStripeDiscountService`, subscription/invoice I/O to the subscription
   service. A direct `stripe.*` / `.v1.*` call anywhere in the engine is a bug
-  (the anti-pattern `PaymentSyncCoupons` used to have).
+  (an anti-pattern this engine must never reintroduce).
 - **The membership lifecycle callers** (start / cancel / freeze / price-change /
   discount-change) → `memberships-guide`. They *trigger* the engine.
 - **Concurrency locking.** The engine owns **no** lock logic. The per-paying-parent
@@ -432,7 +432,7 @@ the price-grouped memberships (from the builder, §5) and returns a
 1. **Aggregate the line's values** (`_aggregate_line_values`, the math below) → at
    most one `once` value and one `ongoing` value, each a percent **or** a dollar.
 2. **Order dollar before percent**, then **find-or-create one coupon per value**
-   (`PaymentSyncCoupons.find_or_create`) on the gym's Connect account. The ordered
+   (`find_or_create_for_value`, the shared payments engine) on the gym's Connect account. The ordered
    coupons become `coupons_by_price[price_id]` —
    `[SubscriptionItemDiscount(coupon=cid) …]` — and Stripe applies them in attach
    order (dollar→percent).
@@ -475,19 +475,26 @@ the percentage-level compounding/averaging + the dollar sum. Each value carries 
 `applied_discount_id`s of the same-mode discounts that fed it (`contributing_ids`)
 — its writeback set. **No DB or Stripe calls** in the math.
 
-### `PaymentSyncCoupons` — deterministic ids, validate-or-replace, no registry table
+### The deterministic value→coupon engine (moved to the payments layer)
 
-`PaymentSyncCoupons` owns only the **id scheme + validate-or-replace policy**. It
-**never touches the Stripe SDK** — every coupon find / create / delete is
-delegated to **`PaymentsStripeDiscountService`** (the single payments-layer owner
-of Stripe coupon I/O). This is a hard rule for the whole engine: *no service under
-`payment_sync/` calls the Stripe SDK directly* — coupon I/O goes through the
-discount service, subscription/invoice I/O through the subscription service (§1).
+> **The id scheme + validate-or-replace policy MOVED out of `payment_sync/`** into
+> **`PaymentsStripeDiscountService.find_or_create_for_value`** (`payments-guide`
+> owns it now) because it is **shared** with one-time membership discounting.
+> `PaymentSyncDiscounts` resolves each line value by calling
+> `discount_service.find_or_create_for_value(PaymentsCouponValue(discount_mode,
+> percentage_off, dollar_off), account)`. The detail below describes that
+> payments-layer method (read `payments-guide` for the authoritative version).
+
+It owns only the **id scheme + validate-or-replace policy** and **never touches the
+Stripe SDK directly for the recurring path** — the hard engine rule still holds:
+*no service under `payment_sync/` calls the Stripe SDK directly* — coupon I/O +
+the deterministic find-or-create go through `PaymentsStripeDiscountService`,
+subscription/invoice I/O through the subscription service (§1).
 
 Coupons are **computed at sync, never pre-baked**. Each line value maps to one
 Stripe coupon by a **deterministic id** that is a pure function of the value:
 
-| value | coupon id (`PaymentSyncCoupons.coupon_id`) |
+| value | coupon id (`PaymentsStripeDiscountService.coupon_id_for_value`) |
 | --- | --- |
 | percent | `pct_<bps>_<mode>` where `bps = round(percentage_off * 100)` (basis points) |
 | dollar | `amt_<cents>_<mode>` where `cents = int(dollar_off or 0)` |
@@ -498,7 +505,7 @@ string up to 200 chars; if you omit it Stripe generates a random one). It is
 **not a UUID** and not Stripe-generated: it *is* the value signature, mirrored
 into `name` too. Because the id is a pure function of the value, **the same value
 always resolves to the same coupon** — that is what makes find-or-create
-**idempotent**: `find_or_create` calls `PaymentsStripeDiscountService.find_discount`
+**idempotent**: `find_or_create_for_value` calls `PaymentsStripeDiscountService.find_discount`
 (retrieve-by-id, returns `None` if absent) first; `create_discount` passes the
 deterministic id and is **itself idempotent** — a concurrent create of the same
 value collides on Stripe's side and the service catches it and returns the
@@ -509,7 +516,7 @@ member** on the gym's Connect account — **no coupon registry table** is needed
 **immutable** on Stripe, and the id only *names* the intended value — the coupon
 object under that id could have drifted (hand-edited in the dashboard, or written
 by older math). So when `find_discount` returns an existing coupon,
-`find_or_create` **validates** its stored `percentage_off` / `amount_off` **and**
+`find_or_create_for_value` **validates** its stored `percentage_off` / `amount_off` **and**
 `duration` against the value (`_matches_value`): a match is reused; a mismatch is
 **deleted** (`PaymentsStripeDiscountService.delete_discount`) and recreated with
 the correct value under the same id. This self-heals a corrupted coupon gym-wide —
@@ -772,11 +779,12 @@ guard so an hourly sweep isn't pointless Stripe writes.
   `get_family_ids`, `get_active_memberships` (+ private `_get_discounts_by_item`),
   `get_unconsumed_once_discounts`, `set_applied_discount_coupon_id`,
   `mark_once_consumed`, `update_profile_sub_id`).
-- **Coupons (policy only):** `payment_sync_coupons.py` (`PaymentSyncCoupons` —
-  `coupon_id`, `find_or_create`, `_matches_value`, `_delete`,
-  `_build_create_request`; the deterministic-id + validate-or-replace policy,
-  delegating all Stripe coupon I/O to `PaymentsStripeDiscountService` — no Stripe
-  SDK import).
+- **Coupon engine (moved to the payments layer):** the deterministic value→coupon
+  find-or-create (`coupon_id_for_value` / `find_or_create_for_value` /
+  `_matches_value` + the validate-or-replace policy) now lives in
+  `PaymentsStripeDiscountService` (`payments-guide`), shared with one-time
+  membership discounting; `PaymentSyncDiscounts` calls it with a
+  `PaymentsCouponValue`. (`payment_sync_coupons.py` is deleted.)
 - **Stripe dispatch (create/update/cancel):** `payment_sync_stripe.py`
   (`PaymentSyncStripe` — `execute_sync`, `preview_execute_sync`, `_sync_bucket`).
 - **Price writeback:** `price_writeback.py` (`PriceWriteback.sync_prices_from_stripe`).

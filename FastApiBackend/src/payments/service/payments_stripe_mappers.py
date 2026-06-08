@@ -31,7 +31,7 @@ def map_preview_invoice(
             lines.append(
                 PreviewInvoiceLine(
                     amount=line.amount,
-                    discounted_amount=_post_discount_amount(line),
+                    discounted_amount=post_discount_amount(line),
                     description=line.description,
                     stripe_price_id=_extract_price_id(line),
                     quantity=line.quantity,
@@ -63,7 +63,7 @@ def _extract_price_id(line: stripe.InvoiceLineItem) -> str | None:
     return None
 
 
-def _post_discount_amount(line: stripe.InvoiceLineItem) -> int:
+def post_discount_amount(line: stripe.InvoiceLineItem) -> int:
     """Return the post-discount amount for an invoice line item.
 
     Computed explicitly as ``subtotal - sum(discount_amounts)``

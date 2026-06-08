@@ -9,8 +9,8 @@ from src.member_memberships.schema.payment_sync_schema import (
     LineDiscountValue,
     ResolvedDiscounts,
 )
-from src.member_memberships.service.payment_sync.payment_sync_coupons import (
-    PaymentSyncCoupons,
+from src.payments.schema.payments_discount_schema import (
+    PaymentsCouponValue,
 )
 from src.payments.schema.payments_members_schema import (
     SubscriptionItemDiscount,
@@ -45,7 +45,7 @@ class PaymentSyncDiscounts:
         self,
         discount_service: PaymentsStripeDiscountService,
     ) -> None:
-        self._coupons = PaymentSyncCoupons(discount_service)
+        self._discounts = discount_service
 
     async def resolve(
         self,
@@ -78,8 +78,12 @@ class PaymentSyncDiscounts:
             )
             item_discounts: list[SubscriptionItemDiscount] = []
             for value in ordered_values:
-                coupon_id = await self._coupons.find_or_create(
-                    value,
+                coupon_id = await self._discounts.find_or_create_for_value(
+                    PaymentsCouponValue(
+                        discount_mode=value.discount_mode,
+                        percentage_off=value.percentage_off,
+                        dollar_off=value.dollar_off,
+                    ),
                     stripe_account_id,
                 )
                 item_discounts.append(

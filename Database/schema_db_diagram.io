@@ -454,6 +454,7 @@ Table member_memberships_unfiltered {
   last_paid_date date [note: 'gym-local']
   next_due_date date [note: 'gym-local']
   stripe_item_id varchar [note: 'immutable once set EXCEPT while migrating (price migration moves the line); never nulled (historical line record)']
+  stripe_one_time_invoice_id varchar [note: 'ONE-TIME only: the consolidated invoice (in_) this membership was billed on; stripe_item_id holds the per-membership LINE id, this holds the shared invoice id; NULL for recurring; immutable once set']
   prorate boolean [not null, default: true]
   total_price integer [not null, note: 'CHECK >= 0']
   stripe_sync_status stripe_sync_status [not null, default: 'not_added', note: 'not_added = pending; sync stamps applied/deleted; migrating = price migration ONLY (unlocks the stripe_item_id move); client view hides not_added/preview_*; orthogonal to lifecycle status view']

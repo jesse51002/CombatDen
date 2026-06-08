@@ -444,23 +444,49 @@ class InvoicePaidHandler:
         """Map each invoice Discount id (``di_``) to its Stripe coupon id.
 
         Retrieves the invoice with its Discount objects expanded (the webhook
-        payload sends only ``di_`` ids). Returns ``{}`` if nothing resolves.
+        payload sends only ``di_`` ids) — both **invoice-level** ``discounts``
+        and per-**line** ``discounts``. Item-level coupons (a consolidated
+        one-time invoice discounts each membership line independently) live on
+        the lines, not the invoice, so both must be read. Returns ``{}`` if
+        nothing resolves.
         """
         opts = PaymentsStripeClient.connect_opts_readonly(stripe_account_id)
         retrieved = await self._stripe.v1.invoices.retrieve_async(
             stripe_invoice_id,
-            params={"expand": ["discounts"]},
+            params={"expand": ["discounts", "lines.data.discounts"]},
             options=opts,
         )
         coupon_by_discount: dict[str, str] = {}
-        for discount in getattr(retrieved, "discounts", None) or []:
+        self._collect_coupons(
+            getattr(retrieved, "discounts", None),
+            coupon_by_discount,
+        )
+        lines = getattr(getattr(retrieved, "lines", None), "data", None) or []
+        for line in lines:
+            self._collect_coupons(
+                getattr(line, "discounts", None),
+                coupon_by_discount,
+            )
+        return coupon_by_discount
+
+    def _collect_coupons(
+        self,
+        discounts: Any,
+        coupon_by_discount: dict[str, str],
+    ) -> None:
+        """Add each expanded Discount's ``di_ → coupon`` into the map.
+
+        Skips bare (unexpanded) ``di_`` id strings — only an expanded Discount
+        object resolves to a coupon. Shared by the invoice-level and per-line
+        discount reads.
+        """
+        for discount in discounts or []:
             if isinstance(discount, str):
                 continue  # unexpanded id — can't resolve the coupon
             discount_id = getattr(discount, "id", None)
             coupon_id = self._discount_coupon_id(discount)
             if discount_id and coupon_id:
                 coupon_by_discount[discount_id] = coupon_id
-        return coupon_by_discount
 
     @staticmethod
     def _discount_coupon_id(discount: Any) -> str | None:

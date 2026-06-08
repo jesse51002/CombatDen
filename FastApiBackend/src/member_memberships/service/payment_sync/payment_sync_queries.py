@@ -114,7 +114,13 @@ class PaymentSyncQueries:
 
     @staticmethod
     def _parse_membership_row(row: dict) -> ActiveMembershipRow:
-        """Parse a raw DB row into an ActiveMembershipRow."""
+        """Parse a raw DB row into an ActiveMembershipRow.
+
+        ``duration_unit`` is null-safe: recurring plans always carry it, but a
+        one-time plan can have no duration (the one-time read selects the same
+        columns).
+        """
+        duration_unit = row["duration_unit"]
         return ActiveMembershipRow(
             item_id=UUID(str(row["item_id"])),
             member_id=UUID(str(row["member_id"])),
@@ -122,8 +128,55 @@ class PaymentSyncQueries:
             price_id=UUID(str(row["price_id"])),
             stripe_price_id=row["stripe_price_id"],
             stripe_item_id=row["stripe_item_id"],
-            duration_unit=DurationUnit(row["duration_unit"]),
+            duration_unit=(
+                DurationUnit(duration_unit) if duration_unit else None
+            ),
         )
+
+    async def get_active_one_time(
+        self,
+        family_ids: list[UUID],
+        today: date,
+        preview: bool = False,
+    ) -> list[ActiveMembershipRow]:
+        """Get the family's PENDING one-time memberships, each with its discounts.
+
+        The **real** path reads only ``not_added`` one-time rows — the
+        just-inserted, never-charged memberships this charge bills on the
+        consolidated invoice. A one-time membership is **terminal** (charged
+        once), so an already-``applied`` row is never re-read (that would
+        re-charge it). The **preview** path additionally reads ``preview_add`` (the
+        staged row a start preview cuts then rolls back). Reads the unfiltered
+        base (service-role) and reuses the family applied-discount read, attaching
+        each membership's discounts onto its row.
+        """
+        if not family_ids:
+            return []
+
+        statuses = [StripeSyncStatus.not_added.value]
+        if preview:
+            statuses.append(StripeSyncStatus.preview_add.value)
+
+        sql = load_sql(SYNC_SQL_DIR / "get_active_one_time.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "member_ids": [str(uid) for uid in family_ids],
+                    "statuses": statuses,
+                },
+            )
+            rows = result.mappings().fetchall()
+
+        memberships = [self._parse_membership_row(r) for r in rows]
+        discounts_by_item = await self._get_discounts_by_item(
+            family_ids,
+            today,
+            preview,
+        )
+        for membership in memberships:
+            membership.discounts = discounts_by_item.get(membership.item_id, [])
+        return memberships
 
     # ── Applied Discounts ───────────────────────────────────────
 
@@ -292,6 +345,36 @@ class PaymentSyncQueries:
                     "member_id": str(member_id),
                     "stripe_item_id": stripe_item_id,
                     "next_due_date": next_due_date,
+                },
+            )
+            await session.commit()
+
+    async def apply_one_time_membership_sync(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        stripe_item_id: str,
+        stripe_one_time_invoice_id: str,
+        total_price: int,
+    ) -> None:
+        """Stamp the one-time charge result onto one membership row (real path).
+
+        Writes the invoice line id + the consolidated invoice id + the
+        post-discount price paid + ``stripe_sync_status = 'applied'``. No
+        next_due_date — a one-time membership has no recurring cycle; both ids are
+        NULL→value on first charge (the immutable triggers allow that single
+        transition).
+        """
+        sql = load_sql(SYNC_SQL_DIR / "apply_one_time_membership_sync.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {
+                    "item_id": str(item_id),
+                    "member_id": str(member_id),
+                    "stripe_item_id": stripe_item_id,
+                    "stripe_one_time_invoice_id": stripe_one_time_invoice_id,
+                    "total_price": total_price,
                 },
             )
             await session.commit()

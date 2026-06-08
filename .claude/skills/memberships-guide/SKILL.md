@@ -250,6 +250,7 @@ flipped back to active. Starting again means INSERTing a new row.
 | `cancel_date` | set on cancel; **locks only once the membership is removed from Stripe (`stripe_sync_status = 'deleted'`)** — while the cancel is unconfirmed it stays clearable, which is how a failed cancel reverts (trigger) |
 | `last_paid_date` / `next_due_date` | mirrored from Stripe (gym-local dates) |
 | `stripe_item_id` | the Stripe subscription item / invoice id (immutable once set — **except while `migrating`**, so a price migration can move the line); never nulled on delete/cancel (historical invoice-line record) |
+| `stripe_one_time_invoice_id` | **one-time only:** the consolidated invoice id (`in_…`) a one-time membership is billed on; `NULL` for recurring. Immutable once set (trigger). |
 | `stripe_sync_status` | Stripe-sync confirmation enum (`not_added` default → `applied` / `deleted` / `migrating` / `preview_*`); `NOT NULL`. Drives the client view + the DB-first verify/revert |
 | `prorate` | whether the first/changed charge prorates |
 | `total_price` | cents, `CHECK total_price >= 0` |
@@ -262,6 +263,7 @@ flipped back to active. Starting again means INSERTing a new row.
 | `trg_prevent_plan_id_overwrite` | `plan_id` immutable after creation |
 | `trg_prevent_cancel_date_overwrite` | `cancel_date` locks only once `stripe_sync_status = 'deleted'` (membership removed from Stripe); clearable while unconfirmed, so a failed cancel reverts. Cancel never uses `migrating`. |
 | `trg_prevent_stripe_item_id_overwrite` | `stripe_item_id` immutable once set, **unless `stripe_sync_status = 'migrating'`** — reserved for the **price migration** (`update_price` moves the line then). `migrating` is price-migration-only. |
+| `trg_prevent_stripe_one_time_invoice_id_overwrite` | `stripe_one_time_invoice_id` immutable once set (no `migrating` exception — a one-time invoice is a terminal charge, not a line that moves) |
 | `trg_recurring_no_end_date` | a `recurring` plan's membership cannot have an `end_date` |
 | `trg_recurring_no_active_memberships` | inserting a recurring membership requires no other active/uncancelled membership on the same `(member, gym, plan)` |
 | `trg_recurring_no_overlapping_daterange` | recurring memberships on the same plan cannot have overlapping `[start, cancel)` date ranges |
@@ -274,7 +276,8 @@ pending + preview-staging rows stay hidden; `applied` / `deleted` / `migrating`
 show); it is Stripe-gated and service_role-write-only (INSERT/UPDATE revoked for
 `authenticated`).
 `MEMBER_MEMBERSHIPS` in `immutable_columns.py` freezes `item_id`, `member_id`,
-`gym_id`, `plan_id`, `created_at`, `stripe_item_id`, `price_id` for clients.
+`gym_id`, `plan_id`, `created_at`, `stripe_item_id`, `stripe_one_time_invoice_id`,
+`price_id` for clients.
 
 **Status derivation (`member_memberships_status` view).** Status is **not**
 stored — it is derived from date columns + the account freeze window, in priority

@@ -5,21 +5,27 @@ from stripe.params._invoice_create_params import InvoiceCreateParams
 from stripe.params._invoice_create_preview_params import (
     InvoiceCreatePreviewParams,
     InvoiceCreatePreviewParamsInvoiceItem,
+    InvoiceCreatePreviewParamsInvoiceItemDiscount,
 )
-from stripe.params._invoice_item_create_params import InvoiceItemCreateParams
+from stripe.params._invoice_item_create_params import (
+    InvoiceItemCreateParams,
+    InvoiceItemCreateParamsDiscount,
+)
 from stripe.params._invoice_list_params import InvoiceListParams
 from stripe.params._invoice_pay_params import InvoicePayParams
 from stripe.params._invoice_update_params import InvoiceUpdateParams
 from stripe.params._refund_create_params import RefundCreateParams
 
-from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.payments_exceptions import (
+    PaymentsResourceNotFoundError,
+    PaymentsStripeError,
+)
 from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_invoice_schema import (
     PreviewInvoice,
 )
 from src.payments.schema.payments_payment_schema import (
-    PaymentsInvoicePaymentByAmountRequest,
-    PaymentsInvoicePaymentByAmountResponse,
+    PaymentsInvoiceItemSpec,
     PaymentsInvoicePaymentCreateRequest,
     PaymentsInvoicePaymentPreviewRequest,
     PaymentsInvoicePaymentResponse,
@@ -27,12 +33,12 @@ from src.payments.schema.payments_payment_schema import (
     PaymentsRefundResponse,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
-from src.payments.service.payments_stripe_mappers import map_preview_invoice
+from src.payments.service.payments_stripe_mappers import (
+    map_preview_invoice,
+    post_discount_amount,
+)
 from src.payments.service.payments_stripe_members_service import (
     PaymentsStripeMembersService,
-)
-from src.payments.service.payments_stripe_price_service import (
-    PaymentsStripePriceService,
 )
 
 INVOICE_STATUS_OPEN = "open"
@@ -44,8 +50,10 @@ logger = logging.getLogger(__name__)
 class PaymentsStripePaymentService:
     """Stripe one-time payment operations.
 
-    Supports direct-amount charges via PaymentIntents and invoice
-    charges (price-based or ad-hoc-amount) via Invoices.
+    Invoice charges are **itemized**: one invoice with a list of items, each a
+    Stripe price or an ad-hoc amount, each with its own item-level discounts. A
+    single charge is just a one-item list. Plus PaymentIntent refunds and the
+    out-of-band pay of a subscription's open invoice.
 
     All methods accept ``stripe_account_id`` for Stripe Connect.
     """
@@ -54,108 +62,24 @@ class PaymentsStripePaymentService:
         self,
         stripe_client: PaymentsStripeClient,
         members_service: PaymentsStripeMembersService,
-        price_service: PaymentsStripePriceService,
     ) -> None:
         self._client = stripe_client
         self._stripe = stripe_client.client
         self._members = members_service
-        self._prices = price_service
 
-    # ── Price-Based Invoice Payments ─────────────────────────────
+    # ── Itemized Invoice Payments ────────────────────────────────
 
     async def create_invoice_payment(
         self,
         request: PaymentsInvoicePaymentCreateRequest,
         stripe_account_id: str,
     ) -> PaymentsInvoicePaymentResponse:
-        """Create and pay an invoice from a Stripe Price."""
-        read_opts = self._client.connect_opts_readonly(stripe_account_id)
-        base_key = request.idempotency_key
+        """Create and pay ONE invoice from a list of items.
 
-        await self._members.retrieve_customer(
-            request.stripe_customer_id,
-            read_opts,
-        )
-        await self._prices.validate_price_active(
-            request.stripe_price_id,
-            stripe_account_id,
-        )
-
-        metadata = request.metadata.model_copy(
-            update={"crm_paid_with_cash": True} if request.paid_out_of_band else {},
-        )
-
-        invoice = await self._stripe.v1.invoices.create_async(
-            params=InvoiceCreateParams(
-                customer=request.stripe_customer_id,
-                metadata=metadata.to_stripe_metadata(),
-                auto_advance=False,
-            ),
-            options=self._client.connect_opts(
-                stripe_account_id,
-                idempotency_key=f"{base_key}:invoice",
-            ),
-        )
-
-        await self._stripe.v1.invoice_items.create_async(
-            params=InvoiceItemCreateParams(
-                customer=request.stripe_customer_id,
-                invoice=invoice.id,
-                pricing={"price": request.stripe_price_id},
-            ),
-            options=self._client.connect_opts(
-                stripe_account_id,
-                idempotency_key=f"{base_key}:invoice_item",
-            ),
-        )
-
-        invoice = await self._stripe.v1.invoices.finalize_invoice_async(
-            invoice.id,
-            options=self._client.connect_opts(
-                stripe_account_id,
-                idempotency_key=f"{base_key}:finalize",
-            ),
-        )
-
-        # Zero-amount invoices are auto-marked as paid at finalization,
-        # so calling pay_async again raises "Invoice is already paid".
-        if invoice.status != "paid":
-            pay_params = InvoicePayParams()
-            if request.paid_out_of_band:
-                pay_params["paid_out_of_band"] = True
-            invoice = await self._stripe.v1.invoices.pay_async(
-                invoice.id,
-                params=pay_params,
-                options=self._client.connect_opts(
-                    stripe_account_id,
-                    idempotency_key=f"{base_key}:pay",
-                ),
-            )
-
-        return PaymentsInvoicePaymentResponse(
-            stripe_invoice_id=invoice.id,
-            stripe_customer_id=invoice.customer,
-            stripe_price_id=request.stripe_price_id,
-            amount_paid=invoice.amount_paid,
-            currency=invoice.currency,
-            status=invoice.status,
-            metadata=invoice.metadata.to_dict() if invoice.metadata else {},
-        )
-
-    # ── Ad-Hoc Amount Invoice Payments ───────────────────────────
-
-    async def create_invoice_payment_by_amount(
-        self,
-        request: PaymentsInvoicePaymentByAmountRequest,
-        stripe_account_id: str,
-    ) -> PaymentsInvoicePaymentByAmountResponse:
-        """Create and pay an invoice for an ad-hoc amount.
-
-        Unlike :meth:`create_invoice_payment`, no Stripe Price is used —
-        the amount is set directly on an InvoiceItem. Used for one-off
-        charges (late fees, pro-shop items, etc.). ``description`` is
-        applied both to the invoice and the invoice line item so it
-        appears as the line-item name on the Stripe invoice.
+        Each item becomes its own invoice line (a Stripe price or an ad-hoc
+        amount) with its own item-level discount coupons. The returned
+        ``line_item_ids`` are in the same order as ``request.items`` so a caller
+        can map each item to its Stripe line id.
         """
         read_opts = self._client.connect_opts_readonly(stripe_account_id)
         base_key = request.idempotency_key
@@ -172,7 +96,6 @@ class PaymentsStripePaymentService:
         invoice = await self._stripe.v1.invoices.create_async(
             params=InvoiceCreateParams(
                 customer=request.stripe_customer_id,
-                description=request.description,
                 metadata=metadata.to_stripe_metadata(),
                 auto_advance=False,
             ),
@@ -182,18 +105,10 @@ class PaymentsStripePaymentService:
             ),
         )
 
-        await self._stripe.v1.invoice_items.create_async(
-            params=InvoiceItemCreateParams(
-                customer=request.stripe_customer_id,
-                invoice=invoice.id,
-                amount=request.amount,
-                currency=request.currency,
-                description=request.description,
-            ),
-            options=self._client.connect_opts(
-                stripe_account_id,
-                idempotency_key=f"{base_key}:invoice_item",
-            ),
+        invoice_item_ids = await self._create_items(
+            request,
+            invoice.id,
+            stripe_account_id,
         )
 
         invoice = await self._stripe.v1.invoices.finalize_invoice_async(
@@ -204,6 +119,8 @@ class PaymentsStripePaymentService:
             ),
         )
 
+        # Zero-amount invoices are auto-marked paid at finalization, so paying
+        # again raises "Invoice is already paid".
         if invoice.status != "paid":
             pay_params = InvoicePayParams()
             if request.paid_out_of_band:
@@ -217,14 +134,86 @@ class PaymentsStripePaymentService:
                 ),
             )
 
-        return PaymentsInvoicePaymentByAmountResponse(
+        ordered_lines = self._order_lines(invoice, invoice_item_ids)
+        return PaymentsInvoicePaymentResponse(
             stripe_invoice_id=invoice.id,
             stripe_customer_id=invoice.customer,
             amount_paid=invoice.amount_paid,
             currency=invoice.currency,
             status=invoice.status,
+            line_item_ids=[line_id for line_id, _ in ordered_lines],
+            line_amounts=[amount for _, amount in ordered_lines],
             metadata=invoice.metadata.to_dict() if invoice.metadata else {},
         )
+
+    async def _create_items(
+        self,
+        request: PaymentsInvoicePaymentCreateRequest,
+        invoice_id: str,
+        stripe_account_id: str,
+    ) -> list[str]:
+        """Create one InvoiceItem per request item (price or amount, with
+        item-level discounts); return their ids in request order."""
+        base_key = request.idempotency_key
+        invoice_item_ids: list[str] = []
+        for index, item in enumerate(request.items):
+            params = InvoiceItemCreateParams(
+                customer=request.stripe_customer_id,
+                invoice=invoice_id,
+            )
+            if item.stripe_price_id is not None:
+                params["pricing"] = {"price": item.stripe_price_id}
+            else:
+                params["amount"] = item.amount
+                params["currency"] = request.currency
+            if item.description is not None:
+                params["description"] = item.description
+            if item.coupon_ids:
+                params["discounts"] = [
+                    InvoiceItemCreateParamsDiscount(coupon=coupon_id)
+                    for coupon_id in item.coupon_ids
+                ]
+            created = await self._stripe.v1.invoice_items.create_async(
+                params=params,
+                options=self._client.connect_opts(
+                    stripe_account_id,
+                    idempotency_key=f"{base_key}:invoice_item:{index}",
+                ),
+            )
+            invoice_item_ids.append(created.id)
+        return invoice_item_ids
+
+    @staticmethod
+    def _order_lines(
+        invoice: stripe.Invoice,
+        invoice_item_ids: list[str],
+    ) -> list[tuple[str, int]]:
+        """Map finalized invoice lines back to the InvoiceItems that created
+        them, returning ``(line id, post-discount amount)`` in
+        ``invoice_item_ids`` order.
+
+        Each line references its source InvoiceItem at
+        ``line.parent.invoice_item_details.invoice_item`` (dahlia); the amount is
+        the line's net (post item-level discount) charge in cents. Raises if an
+        item has no matching line (e.g. the default 10-line page truncated — an
+        itemized invoice we build is far smaller).
+        """
+        line_by_item: dict[str, stripe.InvoiceLineItem] = {}
+        for line in invoice.lines.data:
+            parent = getattr(line, "parent", None)
+            details = getattr(parent, "invoice_item_details", None)
+            invoice_item = getattr(details, "invoice_item", None)
+            if invoice_item:
+                line_by_item[invoice_item] = line
+        ordered: list[tuple[str, int]] = []
+        for invoice_item_id in invoice_item_ids:
+            line = line_by_item.get(invoice_item_id)
+            if line is None:
+                raise PaymentsStripeError(
+                    f"No invoice line found for invoice item {invoice_item_id}"
+                )
+            ordered.append((line.id, post_discount_amount(line)))
+        return ordered
 
     # ── Invoice Preview ───────────────────────────────────────────
 
@@ -233,35 +222,40 @@ class PaymentsStripePaymentService:
         request: PaymentsInvoicePaymentPreviewRequest,
         stripe_account_id: str,
     ) -> PreviewInvoice:
-        """Preview a one-time invoice charge without paying.
-
-        Stateless preview, but ``validate_price_active`` may
-        defensively reactivate an archived price.
-        """
+        """Preview an itemized invoice without paying."""
         opts = self._client.connect_opts_readonly(stripe_account_id)
 
         await self._members.retrieve_customer(
             request.stripe_customer_id,
             opts,
         )
-        await self._prices.validate_price_active(
-            request.stripe_price_id,
-            stripe_account_id,
-        )
 
         invoice = await self._stripe.v1.invoices.create_preview_async(
             params=InvoiceCreatePreviewParams(
                 customer=request.stripe_customer_id,
-                invoice_items=[
-                    InvoiceCreatePreviewParamsInvoiceItem(
-                        price=request.stripe_price_id,
-                        quantity=1,
-                    ),
-                ],
+                invoice_items=[self._preview_item(item) for item in request.items],
             ),
             options=opts,
         )
         return map_preview_invoice(invoice)
+
+    @staticmethod
+    def _preview_item(
+        item: PaymentsInvoiceItemSpec,
+    ) -> InvoiceCreatePreviewParamsInvoiceItem:
+        """Build one preview invoice-item (price or amount) with item-level
+        discounts."""
+        preview_item = InvoiceCreatePreviewParamsInvoiceItem(quantity=1)
+        if item.stripe_price_id is not None:
+            preview_item["price"] = item.stripe_price_id
+        else:
+            preview_item["amount"] = item.amount
+        if item.coupon_ids:
+            preview_item["discounts"] = [
+                InvoiceCreatePreviewParamsInvoiceItemDiscount(coupon=coupon_id)
+                for coupon_id in item.coupon_ids
+            ]
+        return preview_item
 
     # ── Refunds ──────────────────────────────────────────────────
 

@@ -47,6 +47,9 @@ if TYPE_CHECKING:
     from src.member_memberships.service.payment_sync.payment_sync_freeze import (
         PaymentSyncFreeze,
     )
+    from src.member_memberships.service.payment_sync.payment_sync_one_time import (
+        PaymentSyncOneTime,
+    )
     from src.member_memberships.service.payment_sync.payment_sync_service import (
         PaymentSyncService,
     )
@@ -74,6 +77,7 @@ class MemberMembershipsService:
         parent_resolver: BillingParentResolver,
         freeze_service: PaymentSyncFreeze,
         paying_lock: PayingMemberLock,
+        payment_sync_one_time: PaymentSyncOneTime,
     ) -> None:
         # Every single-family lifecycle op is wrapped in the paying-parent
         # concurrency lock (held across its pre-sync + DB write + sync) so no two
@@ -97,6 +101,7 @@ class MemberMembershipsService:
             *deps,
             payment_service=payment_service,
             parent_resolver=parent_resolver,
+            payment_sync_one_time=payment_sync_one_time,
         )
         self._update_price = MemberMembershipsUpdatePrice(*deps)
         self._update_discounts = MemberMembershipsUpdateDiscounts(*deps)

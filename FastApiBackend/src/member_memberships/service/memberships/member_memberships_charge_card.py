@@ -22,7 +22,8 @@ from src.payments.schema.metadata.stripe_ad_hoc_invoice_metadata import (
     StripeAdHocInvoiceMetadata,
 )
 from src.payments.schema.payments_payment_schema import (
-    PaymentsInvoicePaymentByAmountRequest,
+    PaymentsInvoiceItemSpec,
+    PaymentsInvoicePaymentCreateRequest,
 )
 from src.shared.database import DirectDatabasePool
 
@@ -93,16 +94,20 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
             gym_id=parent.gym_id,
         )
 
-        payment_request = PaymentsInvoicePaymentByAmountRequest(
+        payment_request = PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=parent.stripe_customer_id,
-            amount=request.amount_cents,
-            description=request.reason,
+            items=[
+                PaymentsInvoiceItemSpec(
+                    amount=request.amount_cents,
+                    description=request.reason,
+                )
+            ],
             metadata=metadata,
             paid_out_of_band=request.paid_cash,
             idempotency_key=str(request.idempotency_key),
         )
 
-        await self._payment_service.create_invoice_payment_by_amount(
+        await self._payment_service.create_invoice_payment(
             payment_request,
             stripe_account_id,
         )

@@ -17,22 +17,16 @@ from src.member_memberships import SQL_DIR
 from src.member_memberships.service.memberships.member_memberships_base import (
     MemberMembershipsBase,
 )
-from src.payments.payments_exceptions import StripeOrphanError
-from src.payments.schema.metadata.stripe_membership_one_time_metadata import (
-    StripeMembershipOneTimeMetadata,
-)
-from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
     PreviewInvoice,
 )
 from src.payments.schema.payments_payment_schema import (
-    PaymentsInvoicePaymentCreateRequest,
+    PaymentsInvoiceItemSpec,
     PaymentsInvoicePaymentPreviewRequest,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.db_first_helpers import (
-    cleanup_pending_row,
     staged_preview,
     sync_or_revert,
 )
@@ -41,6 +35,9 @@ from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
+    from src.member_memberships.service.payment_sync.payment_sync_one_time import (
+        PaymentSyncOneTime,
+    )
     from src.member_memberships.service.payment_sync.payment_sync_service import (
         PaymentSyncService,
     )
@@ -62,6 +59,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
         parent_resolver: BillingParentResolver,
+        payment_sync_one_time: PaymentSyncOneTime,
     ) -> None:
         super().__init__(
             db_pool,
@@ -70,6 +68,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         )
         self._payment_service = payment_service
         self._parent_resolver = parent_resolver
+        self._payment_sync_one_time = payment_sync_one_time
 
     async def start(
         self,
@@ -153,13 +152,11 @@ class MemberMembershipsStart(MemberMembershipsBase):
             total_price=plan_price["price"],
         )
 
-        # ── Step 2: Stripe ────────────────────────────────────
-        # Recurring is DB-first: the pending row inserted above is now visible to
-        # the sync, which adds it to Stripe and writes its line id / next_due_date
-        # / 'applied' status back itself — nothing to extract here. One-time still
-        # charges a single invoice and returns its id to stamp below.
-        stripe_item_id: str | None = None
-
+        # ── Step 2: charge / sync ─────────────────────────────
+        # Both paths are DB-first + verified: the pending row inserted above is
+        # visible to the engine, which pushes it to Stripe and writes its ids /
+        # 'applied' status back itself (recurring → the subscription sync;
+        # one-time → the consolidated invoice charge). Nothing to stamp here.
         if is_recurring:
             # Recurring is DB-first + verified: the sync adds the pending row to
             # Stripe and writes its line id / next_due_date / 'applied' status
@@ -187,47 +184,29 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 verify_fn=_verify_added,
             )
         else:
-            try:
-                stripe_item_id = await self._charge_one_time(
-                    stripe_customer_id=parent.stripe_customer_id,
-                    stripe_price_id=plan_price["stripe_price_id"],
-                    gym_id=parent.gym_id,
-                    member_id=member_id,
-                    plan_id=plan_id,
+            # One-time is DB-first + verified, like recurring: the pending row is
+            # visible to the one-time charge, which cuts a single invoice and
+            # writes its line id + stripe_one_time_invoice_id + total_price +
+            # 'applied' back itself. If the charge fails or the row is not stamped
+            # 'applied', the pending row is deleted so the DB stays in sync.
+            async def _run_charge() -> None:
+                await self._payment_sync_one_time.charge_one_time(
+                    member_id,
                     idempotency_key=idempotency_key,
                     paid_with_cash=paid_with_cash,
                 )
-            except Exception:
-                await cleanup_pending_row(
-                    delete_fn=lambda: self._delete_pending(str(item_id)),
-                    entity_name="member_membership",
-                    crm_pk=str(item_id),
-                )
-                raise
 
-        # ── Step 3: Set stripe_item_id + mark the row live ────
-        # (one-time path only). update_stripe_item_id.sql also stamps
-        # stripe_sync_status='applied' so the one-time membership is visible
-        # through the filtered view (the recurring path's writeback does this).
-        if stripe_item_id:
-            set_item_sql = load_sql(
-                SQL_DIR / "payment_sync" / "update_stripe_item_id.sql",
+            async def _verify_charged() -> bool:
+                status = await self._get_sync_status(item_id, member_id)
+                return status == StripeSyncStatus.applied
+
+            await sync_or_revert(
+                sync_fn=_run_charge,
+                revert_fn=lambda: self._delete_pending(str(item_id)),
+                entity_name="member_membership",
+                crm_pk=str(item_id),
+                verify_fn=_verify_charged,
             )
-            try:
-                await self._db_pool.execute_with_retry(
-                    set_item_sql,
-                    {
-                        "item_id": str(item_id),
-                        "member_id": str(member_id),
-                        "stripe_item_id": stripe_item_id,
-                    },
-                )
-            except Exception as exc:
-                raise StripeOrphanError(
-                    stripe_resource_type=StripeResourceType.subscription_item,
-                    stripe_id=stripe_item_id,
-                    crm_pk=str(item_id),
-                ) from exc
 
     async def preview(
         self,
@@ -442,50 +421,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(gym_id)
         request = PaymentsInvoicePaymentPreviewRequest(
             stripe_customer_id=stripe_customer_id,
-            stripe_price_id=stripe_price_id,
+            items=[PaymentsInvoiceItemSpec(stripe_price_id=stripe_price_id)],
         )
         return await self._payment_service.preview_invoice_payment(
             request,
             stripe_account_id,
         )
-
-    async def _charge_one_time(
-        self,
-        stripe_customer_id: str,
-        stripe_price_id: str,
-        gym_id: UUID,
-        member_id: UUID,
-        plan_id: UUID,
-        idempotency_key: UUID,
-        paid_with_cash: bool = False,
-    ) -> str:
-        """Create and pay a one-time invoice for a non-recurring plan.
-
-        Returns:
-            The Stripe invoice ID (stored as stripe_item_id).
-
-        Raises:
-            PaymentsResourceNotFoundError: If the customer or
-                price is not found in Stripe.
-        """
-        stripe_account_id = await self._gym_stripe.get_stripe_account_id(gym_id)
-        metadata = StripeMembershipOneTimeMetadata(
-            member_id=member_id,
-            gym_id=gym_id,
-            plan_id=plan_id,
-        )
-        request = PaymentsInvoicePaymentCreateRequest(
-            stripe_customer_id=stripe_customer_id,
-            stripe_price_id=stripe_price_id,
-            metadata=metadata,
-            paid_out_of_band=paid_with_cash,
-            idempotency_key=str(idempotency_key),
-        )
-        response = await self._payment_service.create_invoice_payment(
-            request,
-            stripe_account_id,
-        )
-        return response.stripe_invoice_id
 
     @staticmethod
     def _calculate_end_date(
