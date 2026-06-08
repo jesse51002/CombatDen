@@ -6,7 +6,8 @@ flowchart TB
   %% A THIRD thin entry, settle_once_discounts (the
   %% invoice.paid webhook), runs resolve → settle-once ONLY (no build/execute).
   %% build_sync_params DELEGATES coupon resolution to the separate PaymentSyncDiscounts
-  %% engine. The scheduled reconciler is a FUTURE EXTERNAL system, OUTSIDE the engine.
+  %% engine. The scheduled reconciler is a separate BUILT system (reconciler-guide)
+  %% that drives bulk_payment_sync; it is OUTSIDE this engine.
   %% Green = engine steps · lighter green = preview-only (read-only) steps · orange =
   %% external actors. Solid = live runtime call · dashed = future / delegation.
 
@@ -75,7 +76,7 @@ flowchart TB
     bulk --> entry_real
   end
 
-  reconciler["⏳ Scheduled reconciler — FUTURE external system, NOT built (outside the engine)<br/>sweeps idle members on a clock · drives bulk_payment_sync<br/>mid-cycle end_date expiry + once-consumption finalization · Stripe→CRM dunning absorption"]
+  reconciler["🧹 Scheduled reconciler — BUILT (its own reconciler domain; see reconciler-guide)<br/>twice-daily sweep · drives bulk_payment_sync (push) + Stripe→CRM cancellation absorption<br/>mid-cycle end_date expiry + once-consumption backstop on idle members"]
 
   webhook["📨 invoice.paid webhook handler (stripe_webhooks)<br/>after a subscription invoice is paid → settle_once_discounts(member_id)<br/>best-effort · own txn · stamps a consumed once's end_date promptly"]
 
@@ -84,18 +85,17 @@ flowchart TB
 
   triggers -->|"mutations → update / preview · plan reprice → bulk"| engine
   webhook -.->|"invoice.paid → settle_once_discounts"| engine
-  reconciler -.->|"future: scheduled sweep → bulk sync"| engine
+  reconciler -->|"scheduled sweep → bulk sync (step C)"| engine
   engine -->|"read/write: parent · family · memberships + discounts · once-candidates · coupon_id · sync status · sub id · totals"| supabase
   engine -->|"live coupons · find-or-create coupons · create / update / cancel sub · pause_collection · upcoming invoice"| stripe
 
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef prev fill:#eafff2,stroke:#2f8f53,color:#0c3a1f;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
-  classDef future fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f,stroke-dasharray:5 4;
   class triggers,webhook,entry_real,resolve,settle,execute,ret_real,bulk svc;
   class entry_prev,pexec,ret_prev prev;
   class supabase,stripe ext;
-  class reconciler future;
+  class reconciler svc;
   style engine fill:#f4f9f6,stroke:#2f8f53;
   style build_sp fill:#eafaf0,stroke:#2f8f53;
   style discounts fill:#eafaf0,stroke:#2f8f53;

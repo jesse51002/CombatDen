@@ -15,6 +15,9 @@ from src.core.config import (
 from src.member_memberships.service.payment_sync.payment_sync_builder import (
     PaymentSyncBuilder,
 )
+from src.member_memberships.service.payment_sync.payment_sync_cancel import (
+    PaymentSyncCancel,
+)
 from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
     PaymentSyncOnceDiscounts,
 )
@@ -25,12 +28,14 @@ from src.member_memberships.service.payment_sync.payment_sync_writeback import (
     PaymentSyncWriteback,
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
+from src.shared.billing_parent import ParentProfile
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 from src.shared.paying_member_lock import LockBusyError, PayingMemberLock
@@ -65,6 +70,7 @@ class PaymentSyncService:
         self._builder = builder
         self._paying_lock = paying_lock
         self._stripe = PaymentSyncStripe(subscription_service)
+        self._cancel = PaymentSyncCancel(db_pool)
         self._writeback = PaymentSyncWriteback(
             db_pool=db_pool,
             subscription_service=subscription_service,
@@ -102,35 +108,63 @@ class PaymentSyncService:
         """
         parent, stripe_account_id = await self._parent.resolve(member_id)
 
-        # ── Finalize once discounts in the DB (pre-sync) ──
-        # Stamps any `once` discount Stripe already invoiced, so the
-        # build below reads the settled DB and the convergence drops
-        # the consumed ones by their stamped end_date.
-        await self._once_discounts.sync_once_discounts(
-            parent,
-            stripe_account_id,
-        )
+        try:
+            # ── Finalize once discounts in the DB (pre-sync) ──
+            # Stamps any `once` discount Stripe already invoiced, so the
+            # build below reads the settled DB and the convergence drops
+            # the consumed ones by their stamped end_date.
+            await self._once_discounts.sync_once_discounts(
+                parent,
+                stripe_account_id,
+            )
 
-        # The build resolves the discount coupons onto the bucket and collects
-        # the applied-discount→coupon links (for both real and preview).
-        params = await self._builder.build_sync_params(
-            parent,
-            stripe_account_id,
-        )
+            # The build resolves the discount coupons onto the bucket and
+            # collects the applied-discount→coupon links (real + preview).
+            params = await self._builder.build_sync_params(
+                parent,
+                stripe_account_id,
+            )
 
-        sub_result = await self._stripe.execute_sync(
-            params.bucket,
-            parent,
-            stripe_account_id,
-            idempotency_key=idempotency_key,
-            pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
-            proration_behavior=proration_behavior,
-        )
+            sub_result = await self._stripe.execute_sync(
+                params.bucket,
+                parent,
+                stripe_account_id,
+                idempotency_key=idempotency_key,
+                pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
+                proration_behavior=proration_behavior,
+            )
+        except PaymentsResourceNotFoundError as exc:
+            await self._handle_lost_subscription(parent, exc)
+        else:
+            # ── Persist the full sync-owned state (real path only) ──
+            # Per-membership line id / next_due_date / 'applied' status, coupon
+            # links, 'deleted' stamping, sub id, and post-discount price totals.
+            await self._writeback.write(params, sub_result)
 
-        # ── Persist the full sync-owned state (real path only) ──
-        # Per-membership line id / next_due_date / 'applied' status, coupon
-        # links, 'deleted' stamping, sub id, and post-discount price totals.
-        await self._writeback.write(params, sub_result)
+    async def _handle_lost_subscription(
+        self,
+        parent: ParentProfile,
+        exc: PaymentsResourceNotFoundError,
+    ) -> None:
+        """Record a gone subscription as a cancellation, then re-raise.
+
+        Stripe reports the family's monthly subscription gone (canceled /
+        not-found) — surfaced by the once-settle live read or by
+        ``execute_sync``'s update/cancel of the existing sub. Record the
+        cancellation in the CRM — cancel the family's live recurring memberships
+        + null the parent's sub id — instead of recreating the sub (which would
+        re-bill a member Stripe already let go). Then **re-raise**: the requested
+        converge did not happen (the family was cancelled instead), so the caller
+        learns it failed and reverts / surfaces the error.
+
+        Gated: ONLY ``resource_type == subscription`` is a lost sub to cancel.
+        Any other not-found — an item-level drift, a missing price, a missing
+        coupon — re-raises untouched (a stale item id must never cancel a live
+        family).
+        """
+        if exc.resource_type == StripeResourceType.subscription:
+            await self._cancel.cancel_dead_subscription(parent)
+        raise exc
 
     async def preview_update_payments_recurring(
         self,
@@ -161,26 +195,33 @@ class PaymentSyncService:
         """
         parent, stripe_account_id = await self._parent.resolve(member_id)
 
-        # ── Finalize once discounts in the DB (pre-sync) ──
-        # Stamps any `once` discount Stripe already invoiced, so the
-        # build below reads the settled DB and the convergence drops
-        # the consumed ones by their stamped end_date.
-        await self._once_discounts.sync_once_discounts(
-            parent,
-            stripe_account_id,
-        )
+        try:
+            # ── Finalize once discounts in the DB (pre-sync) ──
+            # Stamps any `once` discount Stripe already invoiced, so the
+            # build below reads the settled DB and the convergence drops
+            # the consumed ones by their stamped end_date.
+            await self._once_discounts.sync_once_discounts(
+                parent,
+                stripe_account_id,
+            )
 
-        params = await self._builder.build_sync_params(
-            parent,
-            stripe_account_id,
-            preview=True,
-        )
-        return await self._stripe.preview_execute_sync(
-            params.bucket,
-            parent,
-            stripe_account_id,
-            proration_behavior,
-        )
+            params = await self._builder.build_sync_params(
+                parent,
+                stripe_account_id,
+                preview=True,
+            )
+            return await self._stripe.preview_execute_sync(
+                params.bucket,
+                parent,
+                stripe_account_id,
+                proration_behavior,
+            )
+        except PaymentsResourceNotFoundError as exc:
+            # Same settled-fact rule as the once-settle that runs above: a sub
+            # Stripe has cancelled is reality, not a hypothetical, so even a
+            # preview records the cancellation (then re-raises — there is no
+            # invoice to preview against a gone sub).
+            await self._handle_lost_subscription(parent, exc)
 
     async def bulk_payment_sync(
         self,

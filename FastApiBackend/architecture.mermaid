@@ -33,6 +33,8 @@ flowchart TB
     streak_service["ClassesStreakService"]
     stripe_webhooks_service["StripeWebhooksService"]
     waivers_service["WaiversService"]
+    reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>invoice-fetch → orphan-clean → push (the sync self-heals a gone sub)<br/>per-family lock guards mutations; no sweep-wide lock"]
+    resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     subgraph Payments["💳 Payments — Stripe core (router-less)"]
       direction TB
       p_client["PaymentsStripeClient"]
@@ -89,6 +91,11 @@ flowchart TB
     payment_sync_service --> Payments
     payment_sync_service --> billing_parent_resolver
     billing_parent_resolver --> gym_stripe_service
+    reconciler_service --> resource_lock
+    reconciler_service -->|"invoice-fetch: reuses handler record"| stripe_webhooks_service
+    reconciler_service -->|"push: bulk_payment_sync (billing none)"| payment_sync_service
+    reconciler_service --> billing_parent_resolver
+    stripe_webhooks_service -->|"customer.subscription.deleted → sync"| payment_sync_service
   end
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)<br/>member_membership_applied_discounts<br/>(applied-discount rows · sync writes back stripe_coupon_id + status)"]
   Stripe["Stripe — payments · Connect · webhooks"]
@@ -104,8 +111,8 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe ext;
   class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook route;
-  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,membership_plans_service,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service svc;
-  class payment_sync_service,billing_parent_resolver hub;
+  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,membership_plans_service,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,resource_lock svc;
+  class payment_sync_service,billing_parent_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;
   style Payments fill:#eafaf0,stroke:#2f8f53;
