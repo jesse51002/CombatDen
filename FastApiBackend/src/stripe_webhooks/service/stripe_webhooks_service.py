@@ -13,6 +13,9 @@ from src.stripe_webhooks import SQL_DIR
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
 )
+from src.stripe_webhooks.service.customer_subscription_deleted_handler import (
+    CustomerSubscriptionDeletedHandler,
+)
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
     InvoicePaidHandler,
@@ -38,6 +41,7 @@ EVENT_INVOICE_PAYMENT_FAILED = "invoice.payment_failed"
 EVENT_REFUND_CREATED = "refund.created"
 EVENT_REFUND_UPDATED = "refund.updated"
 EVENT_ACCOUNT_UPDATED = "account.updated"
+EVENT_CUSTOMER_SUBSCRIPTION_DELETED = "customer.subscription.deleted"
 
 
 class StripeWebhooksService:
@@ -58,6 +62,9 @@ class StripeWebhooksService:
         invoice_payment_failed_handler: InvoicePaymentFailedHandler,
         refund_handler: RefundHandler,
         account_updated_handler: AccountUpdatedHandler,
+        customer_subscription_deleted_handler: (
+            CustomerSubscriptionDeletedHandler
+        ),
     ) -> None:
         self._db_pool = db_pool
         self._event_log = event_log
@@ -66,6 +73,9 @@ class StripeWebhooksService:
         self._invoice_payment_failed = invoice_payment_failed_handler
         self._refund = refund_handler
         self._account_updated = account_updated_handler
+        self._customer_subscription_deleted = (
+            customer_subscription_deleted_handler
+        )
 
     async def handle_event(self, event: dict[str, Any]) -> None:
         """Dispatch a verified Stripe event.
@@ -184,5 +194,9 @@ class StripeWebhooksService:
             await self._refund.handle(session, event, gym_id)
         elif event_type == EVENT_ACCOUNT_UPDATED:
             await self._account_updated.handle(session, event, gym_id)
+        elif event_type == EVENT_CUSTOMER_SUBSCRIPTION_DELETED:
+            await self._customer_subscription_deleted.handle(
+                session, event, gym_id
+            )
         else:
             return

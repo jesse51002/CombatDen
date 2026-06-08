@@ -88,9 +88,6 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         today = gym_today(parent.timezone)
         freeze_end_date = today + relativedelta(months=freeze_months)
 
-        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
-        await self._pre_sync_payments(parent.member_id)
-
         # ── DB-first: write the freeze window, THEN converge Stripe ──
         await self._crm_freeze_profile(
             parent.member_id,
@@ -149,9 +146,6 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
 
         old_freeze_start = parent.freeze_start_date
         old_freeze_end = parent.freeze_end_date
-
-        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
-        await self._pre_sync_payments(parent.member_id)
 
         # ── DB-first: clear the freeze window, THEN converge Stripe ──
         await self._crm_unfreeze_profile(parent.member_id, parent.gym_id)

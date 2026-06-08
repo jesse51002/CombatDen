@@ -35,6 +35,11 @@ from tests.helpers.data_factory import (
 from tests.helpers.stripe_clock import create_test_clock, delete_test_clock
 from tests.seed_constants import SEEDED_GYM_ID
 
+# Never start the reconciler's APScheduler when a test boots the app via
+# ``with TestClient(app)`` (which runs the lifespan). The reconciler is exercised
+# directly in tests/reconciler/ by calling the services.
+settings.reconciler_enabled = False
+
 
 @pytest.fixture
 def fake_user_id() -> str:

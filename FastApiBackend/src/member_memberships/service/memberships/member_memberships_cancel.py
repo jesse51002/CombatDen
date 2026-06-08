@@ -69,9 +69,6 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
-        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
-        await self._pre_sync_payments(member_id)
-
         # ── DB-first: set cancel_date (status stays 'applied'), THEN converge ──
         cancel_date = await self._crm_cancel(
             item_id,
@@ -141,9 +138,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             stage_fn=lambda: self._set_sync_status(
                 item_id, member_id, StripeSyncStatus.preview_remove
             ),
-            cleanup_fn=lambda: self._set_sync_status(
-                item_id, member_id, StripeSyncStatus.applied
-            ),
+            cleanup_fn=lambda: self._set_sync_status(item_id, member_id, StripeSyncStatus.applied),
             preview_fn=lambda: self._payment_sync.preview_update_payments_recurring(
                 member_id,
                 proration_behavior="none",

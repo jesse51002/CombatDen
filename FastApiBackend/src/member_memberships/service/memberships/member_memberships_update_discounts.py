@@ -110,8 +110,6 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
                 ),
             )
 
-        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
-        await self._pre_sync_payments(member_id)
         await self._add_preset_snapshots(
             item_id=item_id,
             member_id=member_id,
@@ -176,8 +174,6 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
                 ),
             )
 
-        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
-        await self._pre_sync_payments(member_id)
         await self._delete_snapshots(member_id, applied_ids)
         await self._payment_sync.update_payments_recurring(
             member_id,
