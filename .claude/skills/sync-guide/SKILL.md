@@ -159,21 +159,27 @@ survives (the two discount cascades were removed in the discount refactor).
 Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
 `src/shared/db_first_helpers.py` encapsulates steps 2–3:
 
-0. **Pre-sync to a clean baseline** — call the sync once FIRST
-   (`_pre_sync_payments` on `MemberMembershipsBase`), with a **fresh** idempotency key
-   and default (no) proration, to converge the family's DB↔Stripe state **before
-   mutating**. This stops the op from building new desired state on top of a
-   drifted DB (e.g. a half-finished prior op left a pending/unsettled row). If it
-   raises, the op aborts before any DB change. **Previews skip this** — they're
-   read-only dry-runs and must not push real changes.
+0. **Pre-sync to a clean baseline — ONLY the prorating ops** (`start` and
+   `update_price`). Call the sync once FIRST (`_pre_sync_payments` on
+   `MemberMembershipsBase`), with a **fresh** idempotency key and default (no)
+   proration, to converge the family's DB↔Stripe state **before mutating**. It
+   exists for one reason: a prorating op (`always_invoice`) must not **bill for
+   drift** — an un-synced/pending item that converges in the same call would be
+   charged by accident. So it guards only the ops that can immediately invoice.
+   The non-billing ops (`cancel`, `freeze`/unfreeze, `update_discounts`) **do not
+   pre-sync** — they converge with proration `none`, so there is no
+   accidental-charge risk and the extra round-trip is pure cost. **Previews skip
+   it** too — read-only dry-runs must not push. If it raises, the op aborts before
+   any DB change.
 1. **Write the desired state to the DB** — insert the pending membership
    (`not_added`), set `cancel_date`, write the new `price_id`, write the freeze
    window, or set `account_linked_to_id`.
 2. **Call the param-less sync** (`update_payments_recurring`, or
    `PaymentSyncFreeze.sync_freeze_state` for freeze) — it re-derives the desired
    state from that DB write and converges Stripe, then writes back
-   `stripe_sync_status`. (Note: this means a mutating op runs **two** syncs —
-   the pre-sync converge, then this post-change converge.)
+   `stripe_sync_status`. (Note: a prorating op — start / update_price — thus runs
+   **two** syncs: the pre-sync converge, then this post-change converge; the
+   non-prorating ops run just this one.)
 3. **Verify the writeback landed, and revert the DB write if it did not** — so the
    DB never drifts out of sync with Stripe.
    `sync_or_revert(sync_fn, revert_fn, *, entity_name, crm_pk, verify_fn=None)`
