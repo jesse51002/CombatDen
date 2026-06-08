@@ -83,11 +83,9 @@ PAYING_MEMBER_LOCK_PREFIX: Final[str] = "paying_member_lock"
 BULK_SYNC_RETRY_DELAY_SECONDS: Final[int] = 10
 BULK_SYNC_MAX_RETRIES: Final[int] = 3
 
-# Scheduled reconciler — see src/reconciler/. The global sweep lock is a single
-# resource_locks key so multiple app instances can't run the sweep concurrently;
-# its TTL must exceed a full sweep's runtime (minutes), unlike the 60s family TTL.
-RECONCILER_SWEEP_LOCK_KEY: Final[str] = "reconciler_sweep"
-RECONCILER_SWEEP_LOCK_TTL_SECONDS: Final[int] = 1800
+# Scheduled reconciler — see src/reconciler/. No reconciler-wide lock: safety is
+# the per-paying-family PayingMemberLock every payment op already holds, so
+# concurrent sweeps are safe (they only repeat idempotent work).
 RECONCILER_INVOICE_LOOKBACK_DAYS: Final[int] = 2
 RECONCILER_STRIPE_PAGE_SIZE: Final[int] = 100
 

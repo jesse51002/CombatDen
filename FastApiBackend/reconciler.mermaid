@@ -1,8 +1,9 @@
 flowchart TB
   %% Scheduled reconciler — orchestration flow of ReconcilerService.run().
   %% Source of truth: src/reconciler/ (reconciler-guide skill).
-  %% APScheduler (app lifespan) fires run() twice daily; it takes ONE global
-  %% resource_locks lease, then runs four step-services in order D -> B -> A -> C.
+  %% APScheduler (app lifespan) fires run() twice daily, then runs four
+  %% step-services in order D -> B -> A -> C. No reconciler-wide lock — safety is
+  %% the per-family PayingMemberLock every payment op already holds.
   %% Every step reuses existing machinery: D drives the webhook handler absorb()
   %% seam, B reads live subs + the shared CRM-only absorber, A uses the per-family
   %% lock, C calls bulk_payment_sync. The same absorber backs the
@@ -12,14 +13,12 @@ flowchart TB
 
   sched["⏰ APScheduler — app lifespan, cron twice daily (UTC)<br/>fires ReconcilerService.run() · gated by settings.reconciler_enabled"]
 
-  subgraph recon["🧹 ReconcilerService.run — sweep orchestrator (global lock)"]
+  subgraph recon["🧹 ReconcilerService.run — sweep orchestrator"]
     direction TB
-    lock["0 · global sweep lock — ResourceLock.try_lock('reconciler_sweep')<br/>held by another instance? → ran=False, NO step runs · released on exit"]
     d["D · InvoiceFetchSweep — missed-webhook backstop<br/>per gym Connect acct: list ~2d invoices / payments / refunds<br/>→ reuse webhook handler absorb(obj) (the handle/absorb seam)<br/>paid → bill + succeeded charges · open+attempted → failed attempt · refunds<br/>idempotent: invoice upsert · charge/refund UNIQUE · failed synthetic key<br/>each object in its own txn · pending/not-recorded caught per object"]
     b["B · SubscriptionStatusSweep — Stripe→CRM absorption<br/>each active billing family: read live sub status<br/>canceled / not-found → absorb · past_due / unpaid → record-only · active → no-op"]
     a["A · OrphanCleanupSweep — delete stranded not_added rows<br/>per orphan: non-blocking try paying-family lock<br/>free → delete (stripe_item_id IS NULL guard) · held → skip (op in flight)"]
     c["C · PaymentPushSweep — CRM→Stripe converge<br/>distinct paying parents w/ active recurring → bulk_payment_sync<br/>proration none = billing none (no charge)"]
-    lock --> d
     d --> b
     b --> a
     a --> c
@@ -39,7 +38,7 @@ flowchart TB
   recon -->|"B: read live sub status"| subret
   recon -->|"B: absorb canceled / not-found"| absorber
   recon -->|"C: bulk push (billing none)"| engine
-  recon -->|"A: list + delete orphans · all sweeps take leases"| supabase
+  recon -->|"A: list + delete orphans (per-family lock check)"| supabase
   recon -->|"D: list recent activity per gym"| stripe
   webhook -->|"prompt: same absorber"| absorber
   absorber -->|"CRM-only cancel + null sub id"| supabase
@@ -53,5 +52,5 @@ flowchart TB
   classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
   class sched,absorber,webhook,handlers,engine,subret svc;
   class supabase,stripe ext;
-  class lock,d,b,a,c svc;
+  class d,b,a,c svc;
   style recon fill:#fdf0c8,stroke:#caab2f;

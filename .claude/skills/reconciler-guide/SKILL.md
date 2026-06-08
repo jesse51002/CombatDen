@@ -5,7 +5,7 @@ description: >-
   router-less `reconciler` domain in FastApiBackend/src/reconciler/ that runs the
   billing engine on a clock (twice daily, APScheduler in the app lifespan) so
   drift on IDLE members self-heals. Covers ReconcilerService (the thin
-  orchestrator behind a single global resource_locks sweep lock via ResourceLock),
+  orchestrator running the four step-services in order; the generic ResourceLock the orphan cleanup uses),
   the four modular step-services run in order D → B → A → C — InvoiceFetchSweep
   (missed-webhook backfill that reuses the webhook handler absorb() seam),
   SubscriptionStatusSweep (Stripe→CRM lifecycle absorption), OrphanCleanupSweep
@@ -15,11 +15,10 @@ description: >-
   webhook), the synthetic per-attempt failed-charge key, the conflict-resolution
   rule (config drift → CRM wins, lifecycle/dunning drift → Stripe wins / absorb,
   never re-bill), the generic ResourceLock, and the reconciler.mermaid flow.
-  Load this whenever you touch the reconciler sweep, the scheduler, the global
-  sweep lock, the cancellation absorber, the subscription-deleted webhook, the
+  Load this whenever you touch the reconciler sweep, the scheduler, the cancellation absorber, the subscription-deleted webhook, the
   invoice fetcher / the webhook handle→absorb seam, the synthetic failed-charge
   key, or ask how/when the reconciler runs. Trigger on "reconciler", "scheduled
-  sweep", "twice daily", "APScheduler", "ResourceLock", "sweep lock",
+  sweep", "twice daily", "APScheduler", "ResourceLock",
   "OrphanCleanupSweep", "SubscriptionStatusSweep", "PaymentPushSweep",
   "InvoiceFetchSweep", "SubscriptionCancellationAbsorber",
   "customer.subscription.deleted", "absorb", "synthetic charge key",
@@ -71,7 +70,7 @@ billing logic — every step reuses existing services.
 
 ---
 
-## 2. The orchestrator + scheduler + global lock
+## 2. The orchestrator + scheduler
 
 - **Scheduler** — `reconciler_scheduler.build_scheduler(container)` builds an
   `AsyncIOScheduler` (UTC) with one cron job (`settings.reconciler_cron_hours`,
@@ -79,22 +78,25 @@ billing logic — every step reuses existing services.
   **lifespan** (`src/main.py`) starts it (gated by `settings.reconciler_enabled`)
   and `shutdown(wait=False)` on stop. The root test conftest sets
   `reconciler_enabled=False` so booting the app in a test never starts it.
-- **Orchestrator** — `ReconcilerService.run() -> ReconcilerRunResult` takes a
-  single global lease (`ResourceLock.try_lock(RECONCILER_SWEEP_LOCK_KEY)`, TTL
-  `RECONCILER_SWEEP_LOCK_TTL_SECONDS` = 1800s, much larger than the 60s family
-  TTL because a full sweep runs minutes). If the lease is held → log + return
-  `ran=False`, **no step runs** (this is the cross-instance guard;
-  `max_instances` is only the in-process guard). Else it runs the four steps and
-  returns each one's `SweepResult` (`processed / changed / skipped / errors`).
-- **`ResourceLock`** (`src/shared/resource_lock.py`) is the generic,
-  key-agnostic, **non-blocking** TTL lease over the existing `resource_locks`
-  table (reusing `acquire_resource_lock.sql` / `release_resource_lock.sql`):
-  `acquire_once` (single-shot, True iff taken), `release` (token-fenced),
-  `try_lock` (context manager yielding the bool). It is the low-level counterpart
-  to `PayingMemberLock` (which stays on its own copy of the mechanics for the
-  critical billing path); both write the same table with compatible keys, so a
-  reconciler `try_lock` on a family key correctly contends with a blocking
-  `PayingMemberLock.lock` on that family.
+- **Orchestrator** — `ReconcilerService.run() -> ReconcilerRunResult` runs the
+  four steps in order and returns each one's `SweepResult`
+  (`processed / changed / skipped / errors`).
+- **No reconciler-wide lock.** Safety is the per-paying-family `PayingMemberLock`
+  that **every payment op already holds** (and that the orphan cleanup checks
+  before deleting, §3) — the reconciler never mutates a family Stripe state except
+  through `bulk_payment_sync` / the absorber, which are themselves family-locked or
+  idempotent. So two concurrent sweeps (e.g. two app instances) are **safe**: at
+  worst they repeat idempotent work; they cannot corrupt state. `max_instances=1`
+  is only the in-process guard against an overlapping cron tick.
+- **`ResourceLock`** (`src/shared/resource_lock.py`) is the generic, key-agnostic,
+  **non-blocking** TTL accessor over the existing `resource_locks` table (reusing
+  `acquire_resource_lock.sql` / `release_resource_lock.sql`): `acquire_once`,
+  `release` (token-fenced), `try_lock` (context manager yielding the bool). The
+  reconciler uses it for **one thing**: the orphan cleanup's non-blocking check of
+  the per-family `PayingMemberLock` key (§3). `PayingMemberLock` stays on its own
+  copy of the mechanics (the critical billing path); both write the same table
+  with compatible keys, so a `try_lock` on a family key correctly contends with a
+  blocking `PayingMemberLock.lock` on that family.
 
 ---
 
@@ -276,7 +278,6 @@ drift is already handled by B; this guard is purely a write-reduction.
   (registered in `stripe_webhooks_service.py`)
 - **The absorb seam:** `src/stripe_webhooks/service/{invoice_paid,invoice_payment_paid,invoice_payment_failed,refund}_handler.py`
 - **Config:** `src/core/config.py` (`reconciler_enabled`, `reconciler_cron_hours`,
-  `RECONCILER_SWEEP_LOCK_KEY`, `RECONCILER_SWEEP_LOCK_TTL_SECONDS`,
   `RECONCILER_INVOICE_LOOKBACK_DAYS`, `RECONCILER_STRIPE_PAGE_SIZE`)
 - **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`
 

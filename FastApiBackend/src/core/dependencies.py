@@ -434,7 +434,6 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
     reconciler_service = providers.Factory(
         ReconcilerService,
-        resource_lock=resource_lock,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
         payment_push_sweep=reconciler_payment_push_sweep,
         subscription_status_sweep=reconciler_subscription_status_sweep,

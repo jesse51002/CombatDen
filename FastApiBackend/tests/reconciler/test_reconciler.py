@@ -17,10 +17,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
-from src.core.config import (
-    PAYING_MEMBER_LOCK_PREFIX,
-    RECONCILER_SWEEP_LOCK_KEY,
-)
+from src.core.config import PAYING_MEMBER_LOCK_PREFIX
 from src.member_memberships.service.memberships.member_memberships_cancel_absorber import (  # noqa: E501
     SubscriptionCancellationAbsorber,
 )
@@ -280,23 +277,3 @@ async def test_absorber_is_idempotent(db_pool, gym_id, created):
     assert await absorber.absorb(member.member_id) == 1
     # Second run: already cancelled -> nothing to cancel.
     assert await absorber.absorb(member.member_id) == 0
-
-
-# ── ReconcilerService global lock ──────────────────────────────
-
-
-async def test_reconciler_skips_when_sweep_lock_held(db_pool):
-    """When the global sweep lease is held, run() returns ran=False and
-    executes no step-services."""
-    from src.core.dependencies import DependencyInjector
-
-    lock = ResourceLock(db_pool)
-    token = uuid4()
-    assert await lock.acquire_once(RECONCILER_SWEEP_LOCK_KEY, token) is True
-    try:
-        container = DependencyInjector()
-        result = await container.reconciler_service().run()
-        assert result.ran is False
-        assert result.sweeps == []
-    finally:
-        await lock.release(RECONCILER_SWEEP_LOCK_KEY, token)

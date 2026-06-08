@@ -21,5 +21,4 @@ class SweepResult(BaseModel):
 class ReconcilerRunResult(BaseModel):
     """The outcome of one full reconciler run."""
 
-    ran: bool  # False when the global sweep lock was held -> skipped
     sweeps: list[SweepResult] = Field(default_factory=list)

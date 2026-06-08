@@ -33,7 +33,7 @@ flowchart TB
     streak_service["ClassesStreakService"]
     stripe_webhooks_service["StripeWebhooksService"]
     waivers_service["WaiversService"]
-    reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>D invoice-fetch → B status-absorb → A orphan-clean → C push<br/>behind a global resource_locks sweep lock"]
+    reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>D invoice-fetch → B status-absorb → A orphan-clean → C push<br/>per-family lock guards mutations; no sweep-wide lock"]
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     cancel_absorber["SubscriptionCancellationAbsorber<br/>CRM-only: cancel family + null sub id (no Stripe)"]
     subgraph Payments["💳 Payments — Stripe core (router-less)"]

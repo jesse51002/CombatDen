@@ -17,8 +17,7 @@
 
 The scheduled reconciler itself is **shipped** — the `reconciler` domain: a
 twice-daily sweep (invoice-fetch backfill -> Stripe->CRM cancellation absorption ->
-orphan cleanup -> CRM->Stripe push) behind a global `resource_locks` sweep lock,
-started by APScheduler in the app lifespan. See `sync-guide` for the engine-side
+orphan cleanup -> CRM->Stripe push), started by APScheduler in the app lifespan. See `sync-guide` for the engine-side
 detail. Only one optimization was deliberately deferred:
 
 `PaymentSyncStripe.execute_sync` always issues a Stripe `update` for an existing
