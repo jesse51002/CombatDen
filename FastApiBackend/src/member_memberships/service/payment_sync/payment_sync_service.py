@@ -15,6 +15,9 @@ from src.core.config import (
 from src.member_memberships.service.payment_sync.payment_sync_builder import (
     PaymentSyncBuilder,
 )
+from src.member_memberships.service.payment_sync.payment_sync_cancel import (
+    PaymentSyncCancel,
+)
 from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
     PaymentSyncOnceDiscounts,
 )
@@ -25,6 +28,7 @@ from src.member_memberships.service.payment_sync.payment_sync_writeback import (
     PaymentSyncWriteback,
 )
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
+from src.payments.schema.payments_enums import StripeResourceType
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
@@ -65,6 +69,7 @@ class PaymentSyncService:
         self._builder = builder
         self._paying_lock = paying_lock
         self._stripe = PaymentSyncStripe(subscription_service)
+        self._cancel = PaymentSyncCancel(db_pool)
         self._writeback = PaymentSyncWriteback(
             db_pool=db_pool,
             subscription_service=subscription_service,
@@ -102,30 +107,43 @@ class PaymentSyncService:
         """
         parent, stripe_account_id = await self._parent.resolve(member_id)
 
-        # ── Finalize once discounts in the DB (pre-sync) ──
-        # Stamps any `once` discount Stripe already invoiced, so the
-        # build below reads the settled DB and the convergence drops
-        # the consumed ones by their stamped end_date.
-        await self._once_discounts.sync_once_discounts(
-            parent,
-            stripe_account_id,
-        )
+        try:
+            # ── Finalize once discounts in the DB (pre-sync) ──
+            # Stamps any `once` discount Stripe already invoiced, so the
+            # build below reads the settled DB and the convergence drops
+            # the consumed ones by their stamped end_date.
+            await self._once_discounts.sync_once_discounts(
+                parent,
+                stripe_account_id,
+            )
 
-        # The build resolves the discount coupons onto the bucket and collects
-        # the applied-discount→coupon links (for both real and preview).
-        params = await self._builder.build_sync_params(
-            parent,
-            stripe_account_id,
-        )
+            # The build resolves the discount coupons onto the bucket and
+            # collects the applied-discount→coupon links (real + preview).
+            params = await self._builder.build_sync_params(
+                parent,
+                stripe_account_id,
+            )
 
-        sub_result = await self._stripe.execute_sync(
-            params.bucket,
-            parent,
-            stripe_account_id,
-            idempotency_key=idempotency_key,
-            pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
-            proration_behavior=proration_behavior,
-        )
+            sub_result = await self._stripe.execute_sync(
+                params.bucket,
+                parent,
+                stripe_account_id,
+                idempotency_key=idempotency_key,
+                pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
+                proration_behavior=proration_behavior,
+            )
+        except PaymentsResourceNotFoundError as exc:
+            # Stripe reports the family's monthly subscription gone (canceled /
+            # not-found) — surfaced by the once-settle live read or by
+            # execute_sync's update/cancel of the existing sub. Do NOT recreate
+            # it (that would re-bill a member Stripe already let go): record the
+            # cancellation in the CRM and stop. ONLY the subscription itself
+            # being gone triggers this — an item-level drift, a missing price,
+            # or a missing coupon (any other resource_type) re-raises unchanged.
+            if exc.resource_type != StripeResourceType.subscription:
+                raise
+            await self._cancel.cancel_dead_subscription(parent)
+            return
 
         # ── Persist the full sync-owned state (real path only) ──
         # Per-membership line id / next_due_date / 'applied' status, coupon
