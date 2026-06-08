@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
+import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 
@@ -156,6 +157,9 @@ class _PreviewBody extends StatelessWidget {
                   amountSuffix: '/mo',
                 ),
                 headerCaption: 'Then, each month',
+                headerMeta: recurring.nextPaymentAt == null
+                    ? null
+                    : formatDay(recurring.nextPaymentAt),
               ),
           ],
         );
