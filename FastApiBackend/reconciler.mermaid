@@ -6,8 +6,9 @@ flowchart TB
   %% the per-family PayingMemberLock every payment op already holds.
   %% Every step reuses existing machinery: D drives the webhook handler absorb()
   %% seam, B reads live subs + the shared CRM-only absorber, A uses the per-family
-  %% lock, C calls bulk_payment_sync. The same absorber backs the
-  %% customer.subscription.deleted webhook (the prompt path).
+  %% lock, C calls bulk_payment_sync.
+  %% (The customer.subscription.deleted webhook is a SEPARATE prompt-path
+  %% feature that shares the absorber; it is not part of this sweep.)
   %% Green = reconciler step/service · yellow = the orchestrator (fan-out hub) ·
   %% orange = external actors. Solid = live runtime call.
 
@@ -25,7 +26,6 @@ flowchart TB
   end
 
   absorber["♻️ SubscriptionCancellationAbsorber — CRM-only (NO Stripe call)<br/>family's live recurring → cancel_date + stripe_sync_status='deleted'<br/>+ null parent stripe_sub_id_month · idempotent<br/>NOT the blessed cancel() (its pre-sync would push to the already-gone sub)"]
-  webhook["📨 customer.subscription.deleted webhook — the PROMPT path<br/>reads member_id from sub metadata → same absorber (event-log dedup)"]
   handlers["📨 webhook handlers (stripe_webhooks) — absorb(obj) seam<br/>invoice_paid · invoice_payment_paid · invoice_payment_failed · refund"]
   engine["⚙️ PaymentSyncService.bulk_payment_sync<br/>loop families · fresh key + per-family lock · update_payments_recurring"]
   subret["🔎 PaymentsSubscriptionRetrieve.get_subscription<br/>live sub status (raises not-found / canceled)"]
@@ -40,7 +40,6 @@ flowchart TB
   recon -->|"C: bulk push (billing none)"| engine
   recon -->|"A: list + delete orphans (per-family lock check)"| supabase
   recon -->|"D: list recent activity per gym"| stripe
-  webhook -->|"prompt: same absorber"| absorber
   absorber -->|"CRM-only cancel + null sub id"| supabase
   handlers -->|"upsert invoice / charge / refund rows"| supabase
   subret -->|"retrieve subscription"| stripe
@@ -50,7 +49,7 @@ flowchart TB
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
-  class sched,absorber,webhook,handlers,engine,subret svc;
+  class sched,absorber,handlers,engine,subret svc;
   class supabase,stripe ext;
   class d,b,a,c svc;
   style recon fill:#fdf0c8,stroke:#caab2f;
