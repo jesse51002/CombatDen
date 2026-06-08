@@ -6,11 +6,9 @@ logic that needs no live Stripe subscription:
 - ``ResourceLock`` (generic non-blocking TTL lease)
 - ``OrphanCleanupSweep`` (lock-guarded delete of ``not_added`` rows)
 - ``SubscriptionCancellationAbsorber`` (CRM-only cancel + sub-id null; no Stripe)
-- ``ReconcilerService`` global-lock skip
 
-The Stripe-read paths (``SubscriptionStatusSweep`` reading a live sub,
-``InvoiceFetchSweep``) need a real subscription/test-clock fixture and are not
-covered here.
+The Stripe-read path (``InvoiceFetchSweep``) needs a real subscription/test-clock
+fixture and is not covered here.
 """
 
 from uuid import UUID, uuid4

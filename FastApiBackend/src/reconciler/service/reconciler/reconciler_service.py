@@ -29,9 +29,6 @@ from src.reconciler.service.reconciler.reconciler_result import (
     ReconcilerRunResult,
     SweepResult,
 )
-from src.reconciler.service.reconciler.reconciler_subscription_status_sweep import (
-    SubscriptionStatusSweep,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -43,22 +40,21 @@ class ReconcilerService:
         self,
         orphan_cleanup_sweep: OrphanCleanupSweep,
         payment_push_sweep: PaymentPushSweep,
-        subscription_status_sweep: SubscriptionStatusSweep,
         invoice_fetch_sweep: InvoiceFetchSweep,
     ) -> None:
         self._orphan_cleanup_sweep = orphan_cleanup_sweep
         self._payment_push_sweep = payment_push_sweep
-        self._subscription_status_sweep = subscription_status_sweep
         self._invoice_fetch_sweep = invoice_fetch_sweep
 
     async def run(self) -> ReconcilerRunResult:
         """Run every step-service in order and return each one's ``SweepResult``."""
         logger.info("Reconciler sweep starting")
         sweeps: list[SweepResult] = []
-        # Run order: invoice-fetch (refresh dates/charges) -> subscription-status
-        # (absorb cancellations) -> orphan-cleanup -> payment-push (config drift).
+        # Run order: invoice-fetch (refresh dates/charges) -> orphan-cleanup ->
+        # payment-push (config drift). The push's sync now self-heals a dead sub
+        # natively (cancels the family + nulls the sub id), so there is no
+        # separate Stripe-status pass.
         sweeps.append(await self._invoice_fetch_sweep.run())
-        sweeps.append(await self._subscription_status_sweep.run())
         sweeps.append(await self._orphan_cleanup_sweep.run())
         sweeps.append(await self._payment_push_sweep.run())
         logger.info(

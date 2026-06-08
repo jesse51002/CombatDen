@@ -84,9 +84,6 @@ from src.reconciler.service.reconciler.reconciler_payment_push_sweep import (
 from src.reconciler.service.reconciler.reconciler_service import (
     ReconcilerService,
 )
-from src.reconciler.service.reconciler.reconciler_subscription_status_sweep import (
-    SubscriptionStatusSweep,
-)
 from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
 )
@@ -402,13 +399,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         payment_sync_service=payment_sync_service,
     )
-    reconciler_subscription_status_sweep = providers.Factory(
-        SubscriptionStatusSweep,
-        db_pool=db_pool,
-        stripe_client=stripe_client,
-        gym_stripe_service=gym_stripe_service,
-        cancellation_absorber=subscription_cancellation_absorber,
-    )
     reconciler_invoice_fetch_sweep = providers.Factory(
         InvoiceFetchSweep,
         db_pool=db_pool,
@@ -426,6 +416,5 @@ class DependencyInjector(containers.DeclarativeContainer):
         ReconcilerService,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
         payment_push_sweep=reconciler_payment_push_sweep,
-        subscription_status_sweep=reconciler_subscription_status_sweep,
         invoice_fetch_sweep=reconciler_invoice_fetch_sweep,
     )
