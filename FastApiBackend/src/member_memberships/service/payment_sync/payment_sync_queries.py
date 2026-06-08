@@ -298,26 +298,26 @@ class PaymentSyncQueries:
             )
             await session.commit()
 
-    async def set_member_post_discount_prices(
+    async def set_membership_post_discount_prices(
         self,
-        member_amounts: dict[UUID, int],
+        membership_amounts: dict[UUID, int],
     ) -> None:
         """Write each membership's own post-discount price onto total_price.
 
-        ``member_amounts`` maps ``item_id → cents`` (computed at build time by
+        ``membership_amounts`` maps ``item_id → cents`` (computed at build time by
         ``PaymentSyncDiscounts``). Real path only; a no-op when empty.
         """
-        if not member_amounts:
+        if not membership_amounts:
             return
         payload = [
             {"item_id": str(item_id), "amount": amount}
-            for item_id, amount in member_amounts.items()
+            for item_id, amount in membership_amounts.items()
         ]
-        sql = load_sql(SYNC_SQL_DIR / "set_member_post_discount_prices.sql")
+        sql = load_sql(SYNC_SQL_DIR / "set_membership_post_discount_prices.sql")
         async with self._db_pool.session() as session:
             await session.execute(
                 text(sql),
-                {"member_amounts": json.dumps(payload)},
+                {"membership_amounts": json.dumps(payload)},
             )
             await session.commit()
 

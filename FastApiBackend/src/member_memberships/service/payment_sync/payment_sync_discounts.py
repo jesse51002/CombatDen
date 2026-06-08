@@ -30,8 +30,8 @@ class DiscountApplicationKind(IntEnum):
 
 # Single source of truth for the order a line's discounts apply — percent
 # first, then dollar. Used by BOTH the Stripe coupon attach order (`resolve`)
-# and the per-member math: percent-first lands the percent on the uniform unit
-# base and leaves the dollar purely additive, so each member's own discounted
+# and the per-membership math: percent-first lands the percent on the uniform unit
+# base and leaves the dollar purely additive, so each membership's own discounted
 # price sums to the consolidated line total with no rescaling.
 DISCOUNT_APPLICATION_ORDER: tuple[DiscountApplicationKind, ...] = (
     DiscountApplicationKind.percent,
@@ -81,19 +81,19 @@ class PaymentSyncDiscounts:
         - ``links``: ``applied_discount_id → coupon_id`` for the real path to
           write back (a ``once`` value records its coupon — the consumption
           handle — on its rows; an ``ongoing`` value on its rows).
-        - ``member_amounts``: each membership's ``item_id`` → its own
+        - ``membership_amounts``: each membership's ``item_id`` → its own
           post-discount price (plan price with its ongoing discounts always, and
           its once discounts only once it is on Stripe), for **every** membership.
 
         ``coupons_by_price`` / ``links`` are empty when no line carries a
-        discount; ``member_amounts`` always covers every membership.
+        discount; ``membership_amounts`` always covers every membership.
         """
         coupons_by_price: dict[UUID, list[SubscriptionItemDiscount]] = {}
         links: dict[UUID, str] = {}
-        member_amounts: dict[UUID, int] = {}
+        membership_amounts: dict[UUID, int] = {}
         for price_id, memberships in groups.items():
             values, group_amounts = self._aggregate_line_values(memberships)
-            member_amounts.update(group_amounts)
+            membership_amounts.update(group_amounts)
             if not values:
                 continue
             # Percent (`percent_off`) before dollar (`amount_off`) so Stripe
@@ -114,7 +114,7 @@ class PaymentSyncDiscounts:
         return ResolvedDiscounts(
             coupons_by_price=coupons_by_price,
             links=links,
-            member_amounts=member_amounts,
+            membership_amounts=membership_amounts,
         )
 
     @staticmethod
@@ -122,7 +122,7 @@ class PaymentSyncDiscounts:
         """Sort key placing a value by ``DISCOUNT_APPLICATION_ORDER``.
 
         Percent values rank before dollar values, so the attach order Stripe
-        applies matches the per-member math (percent→dollar).
+        applies matches the per-membership math (percent→dollar).
         """
         kind = (
             DiscountApplicationKind.percent
@@ -157,7 +157,7 @@ class PaymentSyncDiscounts:
         and ``dollar_sum`` applied in ``DISCOUNT_APPLICATION_ORDER`` (percent
         then dollar): the percents compound (``_remaining_after_percents``), then
         the fixed dollars are subtracted. Floored at 0, rounded to integer cents.
-        Percent-first is what lets these per-member prices sum to the
+        Percent-first is what lets these per-membership prices sum to the
         consolidated line total with no rescaling.
         """
         price = float(base_price)
@@ -174,8 +174,8 @@ class PaymentSyncDiscounts:
     ) -> tuple[list[LineDiscountValue], dict[UUID, int]]:
         """Aggregate one consolidated line in one pass over its memberships.
 
-        Returns ``(line_values, member_amounts)`` from a **single** walk of each
-        membership's discounts, so the line coupons and the per-member figure can
+        Returns ``(line_values, membership_amounts)`` from a **single** walk of each
+        membership's discounts, so the line coupons and the per-membership figure can
         never disagree about a membership's discounts.
 
         ``line_values`` — at most one value per mode (``once`` / ``ongoing``,
@@ -188,7 +188,7 @@ class PaymentSyncDiscounts:
         ``contributing_ids`` (each discount is percent XOR dollar), so each
         value's resolved coupon is written back onto only its own rows.
 
-        ``member_amounts`` — ``item_id → that membership's own post-discount
+        ``membership_amounts`` — ``item_id → that membership's own post-discount
         price`` (``_post_discount_amount`` on its plan ``price``). It always
         counts the membership's **ongoing** discounts; it counts a ``once``
         discount only when the membership is **already on Stripe** (its
@@ -203,13 +203,13 @@ class PaymentSyncDiscounts:
         dollar_sum = {mode: 0 for mode in modes}
         percent_ids: dict[DiscountMode, list[UUID]] = {m: [] for m in modes}
         dollar_ids: dict[DiscountMode, list[UUID]] = {m: [] for m in modes}
-        member_amounts: dict[UUID, int] = {}
+        membership_amounts: dict[UUID, int] = {}
 
         for membership in memberships:
             mode_percents: dict[DiscountMode, list[float]] = {
                 m: [] for m in modes
             }
-            # The per-member figure counts ongoing discounts always; it counts a
+            # The per-membership figure counts ongoing discounts always; it counts a
             # once discount only when the membership is already on Stripe (its
             # once then applies to a future invoice). A not-yet-synced membership
             # (no stripe_item_id) excludes its once.
@@ -233,7 +233,7 @@ class PaymentSyncDiscounts:
                 effective_fraction[mode] += (
                     1 - self._remaining_after_percents(mode_percents[mode])
                 )
-            member_amounts[membership.item_id] = self._post_discount_amount(
+            membership_amounts[membership.item_id] = self._post_discount_amount(
                 membership.price, amount_percents, amount_dollars
             )
 
@@ -256,4 +256,4 @@ class PaymentSyncDiscounts:
                         contributing_ids=dollar_ids[mode],
                     )
                 )
-        return values, member_amounts
+        return values, membership_amounts

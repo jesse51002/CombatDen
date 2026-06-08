@@ -58,8 +58,8 @@ class PaymentSyncWriteback:
 
         # Per-membership OWN post-discount price → total_price (computed at
         # build time by PaymentSyncDiscounts, threaded through SyncParams).
-        await self._queries.set_member_post_discount_prices(
-            params.member_post_discount_amounts
+        await self._queries.set_membership_post_discount_prices(
+            params.membership_post_discount_amounts
         )
 
         # Coupon links + 'applied' on the contributing applied-discount rows.

@@ -18,6 +18,6 @@ FROM (
     SELECT
         (elem ->> 'item_id')::uuid AS item_id,
         (elem ->> 'amount')::int   AS amount
-    FROM jsonb_array_elements(CAST(:member_amounts AS jsonb)) AS elem
+    FROM jsonb_array_elements(CAST(:membership_amounts AS jsonb)) AS elem
 ) i
 WHERE mm.item_id = i.item_id

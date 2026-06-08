@@ -78,7 +78,7 @@ def _membership(
 
 def _aggregate(memberships: list[ActiveMembershipRow]):
     # _aggregate_line_values needs no Stripe; pass None for the discount service.
-    # It returns (line_values, member_amounts); these tests assert the values.
+    # It returns (line_values, membership_amounts); these tests assert the values.
     values, _ = PaymentSyncDiscounts(
         discount_service=None
     )._aggregate_line_values(memberships)
@@ -363,28 +363,28 @@ def test_member_amount_zero_price() -> None:
     assert _amount([_disc(percentage_off=10.0)], 0) == 0
 
 
-async def test_resolve_member_amounts_cover_all_memberships() -> None:
+async def test_resolve_membership_amounts_cover_all_memberships() -> None:
     """A 50%-off and a $20-off member on one $100 line each get their own
-    price in member_amounts; together they sum to the line total ($130)."""
+    price in membership_amounts; together they sum to the line total ($130)."""
     a = _membership([_disc(percentage_off=50.0)], 10000)
     b = _membership([_disc(dollar_off=2000)], 10000)
     resolved = await PaymentSyncDiscounts(_FakeDiscountService()).resolve(
         {uuid4(): [a, b]}, "acct_test"
     )
 
-    assert resolved.member_amounts == {a.item_id: 5000, b.item_id: 8000}
-    assert sum(resolved.member_amounts.values()) == 13000
+    assert resolved.membership_amounts == {a.item_id: 5000, b.item_id: 8000}
+    assert sum(resolved.membership_amounts.values()) == 13000
 
 
-async def test_resolve_member_amounts_include_undiscounted_line() -> None:
+async def test_resolve_membership_amounts_include_undiscounted_line() -> None:
     """A line with no discounts still reports each membership's plan price in
-    member_amounts (and creates no coupons)."""
+    membership_amounts (and creates no coupons)."""
     m = _membership([], 6000)
     resolved = await PaymentSyncDiscounts(_FakeDiscountService()).resolve(
         {uuid4(): [m]}, "acct_test"
     )
 
-    assert resolved.member_amounts == {m.item_id: 6000}
+    assert resolved.membership_amounts == {m.item_id: 6000}
     assert resolved.coupons_by_price == {}
 
 

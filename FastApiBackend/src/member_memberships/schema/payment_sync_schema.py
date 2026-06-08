@@ -133,7 +133,7 @@ class ResolvedDiscounts(BaseModel):
     writes these back (a ``once`` value records its coupon, the consumption
     handle, on its rows; an ``ongoing`` value on its rows).
 
-    ``member_amounts`` maps each active membership's ``item_id`` to its own
+    ``membership_amounts`` maps each active membership's ``item_id`` to its own
     post-discount price (minor units) — its plan price with its **ongoing**
     discounts always applied and its **once** discounts applied only once the
     membership is on Stripe (its ``stripe_item_id`` is set, so the once applies
@@ -144,7 +144,7 @@ class ResolvedDiscounts(BaseModel):
 
     coupons_by_price: dict[UUID, list[SubscriptionItemDiscount]] = {}
     links: dict[UUID, str] = {}
-    member_amounts: dict[UUID, int] = {}
+    membership_amounts: dict[UUID, int] = {}
 
 
 class SyncParams(BaseModel):
@@ -154,7 +154,7 @@ class SyncParams(BaseModel):
     ``PaymentSyncDiscounts``, for both real and preview, so preview reflects
     discounts). ``coupon_links`` is the resulting ``applied_discount_id →
     coupon_id`` map the **real** path writes back onto the applied-discount rows
-    (preview writes nothing). ``member_post_discount_amounts`` (``item_id →
+    (preview writes nothing). ``membership_post_discount_amounts`` (``item_id →
     cents``) is each membership's own post-discount price the **real** path
     writes onto its ``total_price`` (preview writes nothing).
     """
@@ -163,5 +163,5 @@ class SyncParams(BaseModel):
     parent: ParentProfile
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
-    member_post_discount_amounts: dict[UUID, int] = {}
+    membership_post_discount_amounts: dict[UUID, int] = {}
     memberships: list[ActiveMembershipRow] = []
