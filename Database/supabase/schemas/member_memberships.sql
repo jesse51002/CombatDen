@@ -33,6 +33,13 @@ CREATE TABLE member_memberships_unfiltered (
     next_due_date DATE,
     stripe_item_id VARCHAR,
     prorate BOOLEAN NOT NULL DEFAULT true,
+
+    -- This membership's OWN post-discount price (minor units): the plan price
+    -- minus THIS member's own discounts. Service_role writeback: computed at
+    -- sync by PaymentSyncDiscounts (ongoing discounts always; once discounts
+    -- only once the membership is on Stripe) and written per item_id. It is the
+    -- per-membership share, NOT a plan/family-level total — the CRM derives a
+    -- plan total by summing the rows.
     total_price INTEGER NOT NULL CHECK (total_price >= 0),
 
     -- Stripe-sync confirmation (service_role writeback). 'not_added' (default)

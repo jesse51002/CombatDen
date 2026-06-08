@@ -1,5 +1,6 @@
 """Database queries for the membership payment sync flow."""
 
+import json
 from collections import defaultdict
 from datetime import date
 from uuid import UUID
@@ -121,6 +122,7 @@ class PaymentSyncQueries:
             plan_id=UUID(str(row["plan_id"])),
             price_id=UUID(str(row["price_id"])),
             stripe_price_id=row["stripe_price_id"],
+            price=row["price"],
             stripe_item_id=row["stripe_item_id"],
             duration_unit=DurationUnit(row["duration_unit"]),
         )
@@ -292,6 +294,51 @@ class PaymentSyncQueries:
                     "member_id": str(member_id),
                     "stripe_item_id": stripe_item_id,
                     "next_due_date": next_due_date,
+                },
+            )
+            await session.commit()
+
+    async def set_membership_post_discount_prices(
+        self,
+        membership_amounts: dict[UUID, int],
+    ) -> None:
+        """Write each membership's own post-discount price onto total_price.
+
+        ``membership_amounts`` maps ``item_id → cents`` (computed at build time by
+        ``PaymentSyncDiscounts``). Real path only; a no-op when empty.
+        """
+        if not membership_amounts:
+            return
+        payload = [
+            {"item_id": str(item_id), "amount": amount}
+            for item_id, amount in membership_amounts.items()
+        ]
+        sql = load_sql(SYNC_SQL_DIR / "set_membership_post_discount_prices.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {"membership_amounts": json.dumps(payload)},
+            )
+            await session.commit()
+
+    async def set_parent_monthly_total(
+        self,
+        member_id: UUID,
+        total_monthly_recurring_price: int,
+    ) -> None:
+        """Set total_monthly_recurring_price on the parent's members row.
+
+        Backend-managed column (service-role write); clamped at 0.
+        """
+        sql = load_sql(SYNC_SQL_DIR / "sync_profile_monthly_total.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {
+                    "member_id": str(member_id),
+                    "total_monthly_recurring_price": max(
+                        total_monthly_recurring_price, 0
+                    ),
                 },
             )
             await session.commit()

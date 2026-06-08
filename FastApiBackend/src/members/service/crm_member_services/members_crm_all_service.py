@@ -213,6 +213,9 @@ class CrmAllViewService(CrmBaseViewService):
         """
         status = row["status"]
         plan_type = row.get("plan_type")
+        # total_price is this membership's OWN post-discount share (per-member),
+        # not a family/plan total — so a linked child's badge shows their own
+        # price, not the paying parent's whole bill.
         price = row.get("total_price", 0)
         duration_unit = row.get("duration_unit", "month")
         price_str = format_price(price, duration_unit)

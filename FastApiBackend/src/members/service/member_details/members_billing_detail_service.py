@@ -118,18 +118,34 @@ class MembersBillingDetailService:
         else:
             grouped = all_grouped
 
-        (
-            has_trial,
-            has_cancelled,
-            has_frozen,
-            has_overdue,
-            paying_count,
-        ) = self._scan_membership_flags(membership_rows, today)
-        monthly_total = parent_row["total_monthly_recurring_price"] or 0
+        # The overview reflects the QUERIED member: a linked child shows their
+        # OWN paying total + count (paid by the parent); a primary/solo account
+        # shows the family bill it actually pays.
+        if linked_to_id is not None:
+            own_rows = [
+                r for r in membership_rows if r["member_id"] == member_id
+            ]
+            (
+                has_trial,
+                has_cancelled,
+                has_frozen,
+                has_overdue,
+                paying_count,
+            ) = self._scan_membership_flags(own_rows, today)
+            overview_total = self._member_paying_total(own_rows)
+        else:
+            (
+                has_trial,
+                has_cancelled,
+                has_frozen,
+                has_overdue,
+                paying_count,
+            ) = self._scan_membership_flags(membership_rows, today)
+            overview_total = parent_row["total_monthly_recurring_price"] or 0
 
         overview, linked_to_account = self._grouper.build_membership_overview(
             linked_to_id,
-            monthly_total,
+            overview_total,
             has_trial,
             has_cancelled,
             has_frozen,
@@ -310,6 +326,20 @@ class MembersBillingDetailService:
                 paying_count += 1
 
         return has_trial, has_cancelled, has_frozen, has_overdue, paying_count
+
+    def _member_paying_total(self, rows: list) -> int:
+        """Sum total_price across the active recurring memberships in ``rows``.
+
+        Each membership's ``total_price`` is that member's own post-discount
+        share, so summing one member's active recurring rows yields their own
+        monthly recurring bill — used for a linked account's overview.
+        """
+        return sum(
+            row["total_price"] or 0
+            for row in rows
+            if row["plan_type"] == PlanType.recurring
+            and row["membership_status"] == MembershipDbStatus.active
+        )
 
     def _build_card_on_file(self, parent_row: dict) -> BillingCardOnFile | None:
         """Build the BillingCardOnFile for the paying account.

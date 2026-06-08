@@ -44,10 +44,13 @@ class AppliedDiscount(BaseModel):
 class ActiveMembershipRow(BaseModel):
     """One active recurring membership joined with plan + price info.
 
-    Carries its active discounts (``discounts``): the discount belongs to the
-    membership, so it rides the row rather than a parallel list. The sync groups
-    these rows by ``price_id`` into consolidated lines and reads each line's
-    discounts straight off its memberships.
+    Carries its plan ``price`` (the gross per-unit, in minor units) and its
+    active discounts (``discounts``): both belong to the membership, so they
+    ride the row rather than parallel lists. The sync groups these rows by
+    ``price_id`` into consolidated lines and reads each line's discounts straight
+    off its memberships; ``price`` feeds each membership's own post-discount
+    amount, derived in the same pass by
+    ``PaymentSyncDiscounts._aggregate_line_values``.
     """
 
     item_id: UUID
@@ -55,6 +58,7 @@ class ActiveMembershipRow(BaseModel):
     plan_id: UUID
     price_id: UUID
     stripe_price_id: str
+    price: int
     stripe_item_id: str | None = None
     duration_unit: DurationUnit
     discounts: list[AppliedDiscount] = []
@@ -123,15 +127,24 @@ class ResolvedDiscounts(BaseModel):
     """The discount service's resolved output for one sync.
 
     ``coupons_by_price`` maps each consolidated line's ``price_id`` to the
-    coupons to attach to its bucket item (dollar coupon first, then percent, so
-    Stripe sequences dollar→percent). ``links`` maps each contributing
+    coupons to attach to its bucket item (percent coupon first, then dollar, so
+    Stripe sequences percent→dollar). ``links`` maps each contributing
     ``applied_discount_id`` to the coupon it resolved to — the **real** path
     writes these back (a ``once`` value records its coupon, the consumption
     handle, on its rows; an ``ongoing`` value on its rows).
+
+    ``membership_amounts`` maps each active membership's ``item_id`` to its own
+    post-discount price (minor units) — its plan price with its **ongoing**
+    discounts always applied and its **once** discounts applied only once the
+    membership is on Stripe (its ``stripe_item_id`` is set, so the once applies
+    to a future invoice); a not-yet-synced membership excludes its once. It
+    covers **every** membership in the sync; the **real** path writes each onto
+    its membership row.
     """
 
     coupons_by_price: dict[UUID, list[SubscriptionItemDiscount]] = {}
     links: dict[UUID, str] = {}
+    membership_amounts: dict[UUID, int] = {}
 
 
 class SyncParams(BaseModel):
@@ -141,11 +154,14 @@ class SyncParams(BaseModel):
     ``PaymentSyncDiscounts``, for both real and preview, so preview reflects
     discounts). ``coupon_links`` is the resulting ``applied_discount_id →
     coupon_id`` map the **real** path writes back onto the applied-discount rows
-    (preview writes nothing).
+    (preview writes nothing). ``membership_post_discount_amounts`` (``item_id →
+    cents``) is each membership's own post-discount price the **real** path
+    writes onto its ``total_price`` (preview writes nothing).
     """
 
     bucket: IntervalBucket
     parent: ParentProfile
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
+    membership_post_discount_amounts: dict[UUID, int] = {}
     memberships: list[ActiveMembershipRow] = []

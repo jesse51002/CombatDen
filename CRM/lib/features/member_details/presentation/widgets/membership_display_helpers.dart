@@ -66,6 +66,37 @@ Widget costValue(int amount) {
   );
 }
 
+/// Cost with a discount breakdown: when [shelf] (the pre-discount
+/// price) exceeds [total] (the member's own after-discount price),
+/// stack shelf → discount → total so the gym owner can see how the
+/// number came about. Otherwise just the single bold total.
+Widget costBreakdownValue(int shelf, int total) {
+  if (shelf <= total) {
+    return costValue(total);
+  }
+  final discount = shelf - total;
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    spacing: DesignConstants.spacingTiny,
+    children: [
+      Text(
+        formatMinorUnits(shelf),
+        style: DesignConstants.pSmall.copyWith(
+          color: DesignConstants.text2nd,
+          decoration: TextDecoration.lineThrough,
+        ),
+      ),
+      Text(
+        '− ${formatMinorUnits(discount)} off',
+        style: DesignConstants.pSmall.copyWith(
+          color: DesignConstants.text2nd,
+        ),
+      ),
+      costValue(total),
+    ],
+  );
+}
+
 /// The duration row label — "Billing Cycle:" for recurring
 /// plans, "Duration:" otherwise.
 String durationLabel(String? planType) {

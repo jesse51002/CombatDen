@@ -150,15 +150,16 @@ async def test_line_amount_vs_subtotal_with_discount(
         post_discount = line.amount - sum(d.amount for d in das)
         assert post_discount == 4500
 
-        # And our mapper must return that value, not line.amount.
+        # The per-member writeback stores this member's OWN post-discount price
+        # (plan 5000 × 0.9 for the 10% ongoing discount = 4500).
         total_price = await _fetch_total_price(
             db_pool,
             member.member_id,
             plan.plan_id,
         )
         assert total_price == 4500, (
-            f"Writeback stored {total_price} for total_price — "
-            f"should be post-discount 4500 (line.amount is pre-discount!)"
+            f"Writeback stored {total_price} for total_price — should be this "
+            f"member's own post-discount price 4500"
         )
     finally:
         await delete_member_data(db_pool, member.member_id)

@@ -69,7 +69,16 @@ class MembersBillingGrouper:
                 today,
             )
 
-            total_price = representative["total_price"] or 0
+            # Each row's total_price is now that membership's OWN post-discount
+            # share, so the plan-level total is the SUM across the plan's rows.
+            # Only active (billing) memberships count — a frozen membership is
+            # paused and a cancelled/ended one keeps a stale total_price, so
+            # including them would overstate what the plan currently bills.
+            total_price = sum(
+                row["total_price"] or 0
+                for row in rows
+                if row["membership_status"] == CrmMemberStatus.active
+            )
             all_discounts = self._collect_plan_discounts(rows)
 
             members = {
@@ -145,14 +154,21 @@ class MembersBillingGrouper:
     ) -> tuple[str, UUID | None]:
         """Build the membership overview string and linked_to_account value.
 
+        The ``monthly_total`` / ``paying_count`` are the **queried member's**
+        scope: for a primary/solo account, the family bill it pays and the
+        family's active recurring count; for a linked account, that member's
+        OWN total and count (the same line a normal member gets, with a
+        ``(Paid by <name>)`` suffix appended).
+
         Args:
             linked_to_id: The parent account ID if the member is linked.
-            monthly_total: Parent's total_monthly_recurring_price in minor units.
-            has_trial: Whether any membership is a trial.
-            has_cancelled: Whether any membership is cancelled.
-            has_frozen: Whether any membership is frozen.
-            has_overdue: Whether any membership is overdue.
-            paying_count: Number of active recurring memberships.
+            monthly_total: The total to display (minor units) — the family bill
+                for a primary account, the member's own sum for a linked one.
+            has_trial: Whether any membership in scope is a trial.
+            has_cancelled: Whether any membership in scope is cancelled.
+            has_frozen: Whether any membership in scope is frozen.
+            has_overdue: Whether any membership in scope is overdue.
+            paying_count: Number of active recurring memberships in scope.
             supplementary: For profile lookups.
 
         Returns:
@@ -167,16 +183,18 @@ class MembersBillingGrouper:
             paying_count,
         )
 
-        if linked_to_id is None:
-            if paying_count > 0:
-                label = "Membership" if paying_count == 1 else "Memberships"
-                return f"{summary} for {paying_count} {label}", None
-            return summary, None
+        base = summary
+        if paying_count > 0:
+            label = "Membership" if paying_count == 1 else "Memberships"
+            base = f"{summary} for {paying_count} {label}"
 
+        if linked_to_id is None:
+            return base, None
+
+        # Linked account: the same line a normal member gets, plus who pays.
         primary = supplementary.profiles_dict.get(linked_to_id)
         name = primary.first_name if primary else "Primary"
-
-        return f"Account is paid for by {name} ({summary})", linked_to_id
+        return f"{base} (Paid by {name})", linked_to_id
 
     def _display_status(
         self,

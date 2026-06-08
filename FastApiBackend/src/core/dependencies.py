@@ -223,7 +223,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         subscription_service=payments_subscription_service,
     )
     # Owns the discount math + resolves each line's coupons (find-or-create,
-    # dollar→percent), for both real and preview. Coupon I/O is delegated to the
+    # percent→dollar), for both real and preview. Coupon I/O is delegated to the
     # payments discount service — the sync never touches the Stripe SDK directly.
     payment_sync_discounts = providers.Factory(
         PaymentSyncDiscounts,

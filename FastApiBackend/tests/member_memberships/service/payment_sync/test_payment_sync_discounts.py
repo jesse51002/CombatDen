@@ -8,7 +8,7 @@ Pure logic, no DB or Stripe. Exercises ``PaymentSyncDiscounts``:
   fractions are summed across the line then divided by the line quantity; fixed
   dollars are summed; ``once`` and ``ongoing`` never mix; percent vs dollar carry
   **disjoint** ``contributing_ids``.
-* ``resolve`` — orders dollar-before-percent, find-or-creates one coupon per
+* ``resolve`` — orders percent-before-dollar, find-or-creates one coupon per
   value (the Stripe I/O mocked), and records the ``applied_discount_id →
   coupon_id`` links.
 
@@ -54,15 +54,23 @@ def _disc(
     )
 
 
-def _membership(discounts: list[AppliedDiscount]) -> ActiveMembershipRow:
-    """An active membership on one shared line, carrying its discounts."""
+def _membership(
+    discounts: list[AppliedDiscount],
+    price: int = 10000,
+    stripe_item_id: str | None = "si_shared",
+) -> ActiveMembershipRow:
+    """An active membership on one shared line, carrying its discounts.
+
+    ``stripe_item_id`` None marks a brand-new (not-yet-synced) membership.
+    """
     return ActiveMembershipRow(
         item_id=uuid4(),
         member_id=uuid4(),
         plan_id=uuid4(),
         price_id=uuid4(),
         stripe_price_id="price_shared",
-        stripe_item_id="si_shared",
+        price=price,
+        stripe_item_id=stripe_item_id,
         duration_unit=DurationUnit.month,
         discounts=discounts,
     )
@@ -70,9 +78,11 @@ def _membership(discounts: list[AppliedDiscount]) -> ActiveMembershipRow:
 
 def _aggregate(memberships: list[ActiveMembershipRow]):
     # _aggregate_line_values needs no Stripe; pass None for the discount service.
-    return PaymentSyncDiscounts(discount_service=None)._aggregate_line_values(
-        memberships
-    )
+    # It returns (line_values, membership_amounts); these tests assert the values.
+    values, _ = PaymentSyncDiscounts(
+        discount_service=None
+    )._aggregate_line_values(memberships)
+    return values
 
 
 # ── single membership ───────────────────────────────────────────────
@@ -222,8 +232,8 @@ class _FakeDiscountService:
         return SimpleNamespace(stripe_coupon_id=request.coupon_id)
 
 
-async def test_resolve_orders_dollar_before_percent_and_links() -> None:
-    """One line with a percent + a dollar → dollar coupon first, then percent;
+async def test_resolve_orders_percent_before_dollar_and_links() -> None:
+    """One line with a percent + a dollar → percent coupon first, then dollar;
     links map each contributing id to its own coupon."""
     pct = _disc(discount_mode=DiscountMode.ongoing, percentage_off=10.0)
     amt = _disc(discount_mode=DiscountMode.ongoing, dollar_off=500)
@@ -235,7 +245,7 @@ async def test_resolve_orders_dollar_before_percent_and_links() -> None:
     )
 
     coupons = [d.coupon for d in resolved.coupons_by_price[price_id]]
-    assert coupons == ["amt_500_ongoing", "pct_1000_ongoing"]
+    assert coupons == ["pct_1000_ongoing", "amt_500_ongoing"]
     assert resolved.links[amt.applied_discount_id] == "amt_500_ongoing"
     assert resolved.links[pct.applied_discount_id] == "pct_1000_ongoing"
 
@@ -250,6 +260,132 @@ async def test_resolve_no_discounts_is_empty() -> None:
     assert resolved.coupons_by_price == {}
     assert resolved.links == {}
     assert fake.created == []
+
+
+# ── per-member price (_membership_post_discount + resolve amounts) ──
+
+
+def _amount(
+    discounts: list[AppliedDiscount],
+    price: int,
+    stripe_item_id: str | None = "si_shared",
+) -> int:
+    m = _membership(discounts, price, stripe_item_id=stripe_item_id)
+    _, amounts = PaymentSyncDiscounts(
+        discount_service=None
+    )._aggregate_line_values([m])
+    return amounts[m.item_id]
+
+
+def test_member_amount_percent() -> None:
+    assert _amount([_disc(percentage_off=50.0)], 10000) == 5000
+
+
+def test_member_amount_dollar() -> None:
+    assert _amount([_disc(dollar_off=2000)], 10000) == 8000
+
+
+def test_member_amount_percents_compound_within_member() -> None:
+    """30% then 20% compound multiplicatively: 10000 * 0.7 * 0.8 = 5600."""
+    assert (
+        _amount([_disc(percentage_off=30.0), _disc(percentage_off=20.0)], 10000)
+        == 5600
+    )
+
+
+def test_member_amount_applies_percent_before_dollar() -> None:
+    """Percent first then dollar: 10000 * 0.5 - 1000 = 4000 (not 4500)."""
+    assert (
+        _amount([_disc(percentage_off=50.0), _disc(dollar_off=1000)], 10000)
+        == 4000
+    )
+
+
+def test_member_amount_existing_membership_includes_once() -> None:
+    """An existing membership (already on Stripe, has a stripe_item_id) counts
+    its once discount — it applies to an upcoming invoice. Percent then dollar:
+    10000 * 0.5 - 1000 = 4000."""
+    amt = _amount(
+        [
+            _disc(discount_mode=DiscountMode.once, percentage_off=50.0),
+            _disc(discount_mode=DiscountMode.ongoing, dollar_off=1000),
+        ],
+        10000,
+        stripe_item_id="si_existing",
+    )
+    assert amt == 4000
+
+
+def test_member_amount_new_membership_excludes_once() -> None:
+    """A brand-new membership (no stripe_item_id yet) excludes its once discount
+    — only the ongoing $10 off applies (10000 - 1000 = 9000)."""
+    amt = _amount(
+        [
+            _disc(discount_mode=DiscountMode.once, percentage_off=50.0),
+            _disc(discount_mode=DiscountMode.ongoing, dollar_off=1000),
+        ],
+        10000,
+        stripe_item_id=None,
+    )
+    assert amt == 9000
+
+
+def test_member_amount_existing_once_only_applies() -> None:
+    """An existing membership whose only discount is a once applies it."""
+    amt = _amount(
+        [_disc(discount_mode=DiscountMode.once, percentage_off=50.0)],
+        10000,
+        stripe_item_id="si_existing",
+    )
+    assert amt == 5000
+
+
+def test_member_amount_new_membership_once_only_is_full_price() -> None:
+    """A brand-new membership with only a once discount keeps its full plan
+    price (the once is excluded until it is on Stripe)."""
+    amt = _amount(
+        [_disc(discount_mode=DiscountMode.once, percentage_off=50.0)],
+        10000,
+        stripe_item_id=None,
+    )
+    assert amt == 10000
+
+
+def test_member_amount_no_discount_is_plan_price() -> None:
+    assert _amount([], 7500) == 7500
+
+
+def test_member_amount_over_discounted_floored_to_zero() -> None:
+    assert _amount([_disc(dollar_off=20000)], 10000) == 0
+
+
+def test_member_amount_zero_price() -> None:
+    assert _amount([_disc(percentage_off=10.0)], 0) == 0
+
+
+async def test_resolve_membership_amounts_cover_all_memberships() -> None:
+    """A 50%-off and a $20-off member on one $100 line each get their own
+    price in membership_amounts; together they sum to the line total ($130)."""
+    a = _membership([_disc(percentage_off=50.0)], 10000)
+    b = _membership([_disc(dollar_off=2000)], 10000)
+    resolved = await PaymentSyncDiscounts(_FakeDiscountService()).resolve(
+        {uuid4(): [a, b]}, "acct_test"
+    )
+
+    assert resolved.membership_amounts == {a.item_id: 5000, b.item_id: 8000}
+    assert sum(resolved.membership_amounts.values()) == 13000
+
+
+async def test_resolve_membership_amounts_include_undiscounted_line() -> None:
+    """A line with no discounts still reports each membership's plan price in
+    membership_amounts (and creates no coupons)."""
+    m = _membership([], 6000)
+    resolved = await PaymentSyncDiscounts(_FakeDiscountService()).resolve(
+        {uuid4(): [m]}, "acct_test"
+    )
+
+    assert resolved.membership_amounts == {m.item_id: 6000}
+    assert resolved.coupons_by_price == {}
 
 
 # ── LineDiscountValue validators ────────────────────────────────────

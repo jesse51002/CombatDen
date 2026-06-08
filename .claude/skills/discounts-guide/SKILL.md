@@ -196,7 +196,9 @@ quantity `N`):
    as "already exists" — idempotent, one coupon per distinct value reused, **no
    coupon registry table.** `once` → a Stripe `once` coupon; `ongoing` → a Stripe
    `forever` coupon (the `end_date` cutoff is enforced by *us*, never by Stripe).
-3. **Order dollar before percent** on the line so Stripe sequences dollar→percent.
+3. **Order percent before dollar** on the line so Stripe sequences percent→dollar
+   (the `DISCOUNT_APPLICATION_ORDER` constant — percent-first lets each member's own
+   discounted price reconcile to the consolidated line total without rescaling).
 
 `resolve` returns a `ResolvedDiscounts` — the per-price coupon lists the builder
 attaches onto the bucket items, plus the `applied_discount_id → coupon_id` links.
