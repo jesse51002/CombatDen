@@ -30,9 +30,9 @@ class InvoiceBreakdown extends StatelessWidget {
   final String? statusLabel;
   final InvoiceChipTone statusTone;
 
-  /// When true, the header caption + meta render in the emphasised h2
-  /// style — same size/weight as the Total row — instead of the default
-  /// muted style. Used for the recurring "Then, each month" section.
+  /// When true, the header caption + meta render in the strong h2
+  /// section-title style, instead of the default muted style. Used for
+  /// the recurring "Then, each month" section.
   final bool strongHeaderCaption;
 
   /// When non-null, a full-width destructive "Refund"
@@ -281,8 +281,10 @@ class _LineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Total/Net rows are h2-sized but regular weight, so a strong h2
+    // section heading carries more weight than the total beneath it.
     final base =
-        emphasised ? DesignConstants.h2 : DesignConstants.p;
+        emphasised ? DesignConstants.h2Regular : DesignConstants.p;
     final color =
         muted ? DesignConstants.text2nd : DesignConstants.text;
     final style = base.copyWith(color: color);

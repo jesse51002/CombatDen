@@ -88,7 +88,7 @@ class _InvoicePreviewSectionState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingMedium,
         children: [
-          Text(widget.title, style: DesignConstants.h3),
+          Text(widget.title, style: DesignConstants.h2),
           _PreviewBody(
             future: _future,
             emptyLabel: widget.emptyLabel,
