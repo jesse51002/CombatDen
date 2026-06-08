@@ -30,9 +30,9 @@ class InvoiceBreakdown extends StatelessWidget {
   final String? statusLabel;
   final InvoiceChipTone statusTone;
 
-  /// When true, the header caption renders in the strong (ink) title
-  /// style — matching a section heading — instead of the default muted
-  /// style. Used for the recurring "Then, each month" section.
+  /// When true, the header caption + meta render in the emphasised h2
+  /// style — same size/weight as the Total row — instead of the default
+  /// muted style. Used for the recurring "Then, each month" section.
   final bool strongHeaderCaption;
 
   /// When non-null, a full-width destructive "Refund"
@@ -222,7 +222,7 @@ class _Header extends StatelessWidget {
         Text(
           caption,
           style: strongCaption
-              ? DesignConstants.h3
+              ? DesignConstants.h2
               : DesignConstants.h3.copyWith(
                   color: DesignConstants.text2nd,
                 ),
@@ -235,7 +235,7 @@ class _Header extends StatelessWidget {
               Text(
                 meta!,
                 style: strongCaption
-                    ? DesignConstants.h3
+                    ? DesignConstants.h2
                     : DesignConstants.pSmall.copyWith(
                         color: DesignConstants.text2nd,
                       ),
