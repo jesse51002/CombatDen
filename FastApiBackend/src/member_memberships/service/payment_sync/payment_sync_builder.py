@@ -97,6 +97,7 @@ class PaymentSyncBuilder:
             parent=parent,
             stripe_account_id=stripe_account_id,
             coupon_links=resolved.links,
+            member_post_discount_amounts=resolved.member_amounts,
             memberships=memberships,
         )
 

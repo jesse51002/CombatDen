@@ -1,5 +1,6 @@
 """Database queries for the membership payment sync flow."""
 
+import json
 from collections import defaultdict
 from datetime import date
 from uuid import UUID
@@ -294,6 +295,29 @@ class PaymentSyncQueries:
                     "stripe_item_id": stripe_item_id,
                     "next_due_date": next_due_date,
                 },
+            )
+            await session.commit()
+
+    async def set_member_post_discount_prices(
+        self,
+        member_amounts: dict[UUID, int],
+    ) -> None:
+        """Write each membership's own post-discount price onto total_price.
+
+        ``member_amounts`` maps ``item_id → cents`` (computed at build time by
+        ``PaymentSyncDiscounts``). Real path only; a no-op when empty.
+        """
+        if not member_amounts:
+            return
+        payload = [
+            {"item_id": str(item_id), "amount": amount}
+            for item_id, amount in member_amounts.items()
+        ]
+        sql = load_sql(SYNC_SQL_DIR / "set_member_post_discount_prices.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {"member_amounts": json.dumps(payload)},
             )
             await session.commit()
 

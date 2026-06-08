@@ -154,11 +154,14 @@ class SyncParams(BaseModel):
     ``PaymentSyncDiscounts``, for both real and preview, so preview reflects
     discounts). ``coupon_links`` is the resulting ``applied_discount_id →
     coupon_id`` map the **real** path writes back onto the applied-discount rows
-    (preview writes nothing).
+    (preview writes nothing). ``member_post_discount_amounts`` (``item_id →
+    cents``) is each membership's own post-discount price the **real** path
+    writes onto its ``total_price`` (preview writes nothing).
     """
 
     bucket: IntervalBucket
     parent: ParentProfile
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
+    member_post_discount_amounts: dict[UUID, int] = {}
     memberships: list[ActiveMembershipRow] = []
