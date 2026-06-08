@@ -16,9 +16,9 @@
 ## 1. Reconciler skip-if-equal guard (not built)
 
 The scheduled reconciler itself is **shipped** — the `reconciler` domain: a
-twice-daily sweep (invoice-fetch backfill -> Stripe->CRM cancellation absorption ->
-orphan cleanup -> CRM->Stripe push), started by APScheduler in the app lifespan. See `sync-guide` for the engine-side
-detail. Only one optimization was deliberately deferred:
+twice-daily sweep (invoice-fetch backfill -> orphan cleanup -> CRM->Stripe push),
+started by APScheduler in the app lifespan. See `reconciler-guide` / `sync-guide`
+for the detail. Only one optimization was deliberately deferred:
 
 `PaymentSyncStripe.execute_sync` always issues a Stripe `update` for an existing
 sub with items (it does not diff), so the push sweep writes to every active
@@ -27,8 +27,9 @@ but wasteful, and a proration risk if a future change makes the converge
 non-idempotent. The deferred work is a **compare-desired-vs-actual, skip-if-equal**
 guard on the scheduled push path: compare items / quantities, discounts, and
 price / cost, and skip the Stripe write when already in sync. (Subscription
-*status* drift is already handled — the status sweep reads the live sub and
-absorbs `canceled` / not-found into the CRM.)
+*status* drift is already handled — the sync cancels a gone sub natively
+(`PaymentSyncCancel`): `canceled` / not-found → cancel the family + null the sub
+id, never recreate.)
 
 ## 5. Post-discount amount PER MEMBERSHIP (not built)
 

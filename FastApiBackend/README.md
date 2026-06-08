@@ -52,7 +52,7 @@ see
 solid = a live runtime call, dashed = future / shared-code. Deep engine knowledge lives in the
 `sync-guide` skill.
 
-**For the scheduled reconciler in depth** — the twice-daily sweep flow (scheduler → D invoice-fetch → B status-absorb → A orphan-clean → C push), the shared CRM-only cancellation absorber, and the webhook `absorb` seam — see **[`reconciler.mermaid`](reconciler.mermaid)** (owned by the `reconciler-guide` skill).
+**For the scheduled reconciler in depth** — the twice-daily sweep flow (scheduler → invoice-fetch → orphan-clean → push, whose sync self-heals a gone subscription), and the webhook `record` seam — see **[`reconciler.mermaid`](reconciler.mermaid)** (owned by the `reconciler-guide` skill).
 
 ---
 
@@ -79,9 +79,9 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 | `discounts` | Coupon-free discount presets (plain gym config; coupons computed at sync, not on the preset) |
 | `member_memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount snapshots; coupons computed + written back at sync), previews, cash/card charge, link/unlink family accounts (pure DB change) |
 | `membership_plans` | Plan + price templates (Stripe products / prices) + migration |
-| `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB (invoices, charges, refunds, and `customer.subscription.deleted` → cancellation absorbed into the CRM) |
+| `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB (invoices, charges, refunds, and `customer.subscription.deleted` → triggers a family sync that cancels the gone subscription in the CRM) |
 | `payments` *(no router)* | Stripe service core (client, payment, price, members, membership, subscription, discount) injected into the billing domains |
-| `reconciler` *(no router)* | Twice-daily billing safety-net sweep (APScheduler in the lifespan): invoice-fetch backfill, Stripe→CRM cancellation absorption, `not_added` orphan cleanup, and the CRM→Stripe push (`bulk_payment_sync`). See the `sync-guide` skill |
+| `reconciler` *(no router)* | Twice-daily billing safety-net sweep (APScheduler in the lifespan): invoice-fetch backfill, `not_added` orphan cleanup, and the CRM→Stripe push (`bulk_payment_sync`, whose sync self-heals a gone subscription). See the `reconciler-guide` skill |
 
 ## Conventions (the load-bearing rules)
 
