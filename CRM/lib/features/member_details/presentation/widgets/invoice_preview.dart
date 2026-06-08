@@ -29,7 +29,6 @@ class InvoicePreview extends StatelessWidget {
   final int? recurringFallbackMonthly;
 
   final String dueNowLabel;
-  final String recurringLabel;
   final String emptyLabel;
 
   const InvoicePreview({
@@ -39,7 +38,6 @@ class InvoicePreview extends StatelessWidget {
     this.recurringPrev,
     this.recurringFallbackMonthly,
     this.dueNowLabel = 'What will be charged today',
-    this.recurringLabel = 'Then, each month',
     this.emptyLabel = 'No charge today.',
   });
 
@@ -77,7 +75,10 @@ class InvoicePreview extends StatelessWidget {
                     fallbackCurrentMonthly: recurringFallbackMonthly,
                   )
                 : previewInvoiceBreakdown(rec, amountSuffix: '/mo'),
-            headerCaption: recurringLabel,
+            // "Then, each month" reads as a sequence after a due-now
+            // charge; with no due-now it's just the monthly payment.
+            headerCaption:
+                due != null ? 'Then, each month' : 'Monthly Payment',
             strongHeaderCaption: true,
             headerMeta: rec.nextPaymentAt == null
                 ? null

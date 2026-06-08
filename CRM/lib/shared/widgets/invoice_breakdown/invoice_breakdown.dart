@@ -215,31 +215,37 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final captionStyle = strongCaption
+        ? DesignConstants.h2
+        : DesignConstants.h3.copyWith(
+            color: DesignConstants.text2nd,
+          );
+    // The meta matches a strong caption only when it stands alone; next to
+    // a status chip it stays a muted timestamp (a wide h2 date would
+    // overflow the header row).
+    final metaStrong = strongCaption && statusLabel == null;
+    final metaStyle = metaStrong
+        ? DesignConstants.h2
+        : DesignConstants.pSmall.copyWith(
+            color: DesignConstants.text2nd,
+          );
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
+      spacing: DesignConstants.spacingMedium,
       children: [
-        Text(
-          caption,
-          style: strongCaption
-              ? DesignConstants.h2
-              : DesignConstants.h3.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
+        Expanded(
+          child: Text(
+            caption,
+            style: captionStyle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         Row(
           mainAxisSize: MainAxisSize.min,
           spacing: DesignConstants.spacingSmall,
           children: [
-            if (meta != null)
-              Text(
-                meta!,
-                style: strongCaption
-                    ? DesignConstants.h2
-                    : DesignConstants.pSmall.copyWith(
-                        color: DesignConstants.text2nd,
-                      ),
-              ),
+            if (meta != null) Text(meta!, style: metaStyle),
             if (statusLabel != null)
               InvoiceChip(
                 label: statusLabel!,

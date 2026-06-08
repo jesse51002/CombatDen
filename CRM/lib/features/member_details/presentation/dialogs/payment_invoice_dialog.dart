@@ -158,6 +158,7 @@ class PaymentInvoiceDialog extends StatelessWidget {
         data: _data,
         headerCaption: _isRefund ? 'Refund' : 'Payment',
         headerMeta: formatDay(payment.chargeTime),
+        strongHeaderCaption: true,
         statusLabel: payment.status.displayLabel,
         statusTone: _statusTone,
         onRefundPressed:

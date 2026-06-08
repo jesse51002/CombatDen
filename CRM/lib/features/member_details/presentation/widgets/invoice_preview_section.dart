@@ -35,7 +35,6 @@ class InvoicePreviewSection extends StatefulWidget {
   final Object? refreshKey;
 
   final String dueNowLabel;
-  final String recurringLabel;
   final String emptyLabel;
   final String errorLabel;
 
@@ -47,7 +46,6 @@ class InvoicePreviewSection extends StatefulWidget {
     this.showDueNow = true,
     this.refreshKey,
     this.dueNowLabel = 'What will be charged today',
-    this.recurringLabel = 'Then, each month',
     this.emptyLabel = 'No charge today.',
     this.errorLabel = 'Could not load the charge preview.',
   });
@@ -143,7 +141,6 @@ class _InvoicePreviewSectionState
             recurringFallbackMonthly:
                 widget.recurringFallbackMonthly,
             dueNowLabel: widget.dueNowLabel,
-            recurringLabel: widget.recurringLabel,
             emptyLabel: widget.emptyLabel,
           );
         },
