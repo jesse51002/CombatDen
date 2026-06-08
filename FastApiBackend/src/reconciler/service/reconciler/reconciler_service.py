@@ -55,8 +55,8 @@ class ReconcilerService:
         """Run every step-service in order and return each one's ``SweepResult``."""
         logger.info("Reconciler sweep starting")
         sweeps: list[SweepResult] = []
-        # Order D -> B -> A -> C: refresh dates/charges first, then absorb
-        # cancellations, then clean orphans, then push config drift.
+        # Run order: invoice-fetch (refresh dates/charges) -> subscription-status
+        # (absorb cancellations) -> orphan-cleanup -> payment-push (config drift).
         sweeps.append(await self._invoice_fetch_sweep.run())
         sweeps.append(await self._subscription_status_sweep.run())
         sweeps.append(await self._orphan_cleanup_sweep.run())

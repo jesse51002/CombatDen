@@ -6,7 +6,7 @@ description: >-
   billing engine on a clock (twice daily, APScheduler in the app lifespan) so
   drift on IDLE members self-heals. Covers ReconcilerService (the thin
   orchestrator running the four step-services in order; the generic ResourceLock the orphan cleanup uses),
-  the four modular step-services run in order D → B → A → C — InvoiceFetchSweep
+  the four modular step-services run in order — InvoiceFetchSweep
   (missed-webhook backfill that reuses the webhook handler absorb() seam),
   SubscriptionStatusSweep (Stripe→CRM lifecycle absorption), OrphanCleanupSweep
   (lock-guarded delete of stranded not_added rows), PaymentPushSweep (CRM→Stripe
@@ -41,10 +41,10 @@ This skill is the deep domain knowledge for the **`reconciler` domain**
 mechanics**. It does **not** own:
 
 - **The payment-sync engine** (`update_payments_recurring`, `bulk_payment_sync`,
-  the builder/discount math/writeback) → `sync-guide`. The push step (C) *calls*
+  the builder/discount math/writeback) → `sync-guide`. The push sweep *calls*
   `bulk_payment_sync`; it does not redocument it.
 - **The Stripe webhook handlers** (invoice paid/payment/failed/refund) and the
-  Stripe primitives → `payments-guide`. The invoice fetcher (D) *reuses* their
+  Stripe primitives → `payments-guide`. The invoice fetcher *reuses* their
   `absorb()` methods; it does not redocument them.
 - **The membership lifecycle / cancel path** → `memberships-guide`. The absorber
   deliberately does **not** use the blessed `cancel()` (see §4).
@@ -61,7 +61,7 @@ discount features on idle members (both owned by `discounts-guide`):
 
 1. **Ongoing-discount `end_date` enforcement** — an ongoing discount drops off
    the line only the first time a sync runs on/after its cutoff; an idle member
-   triggers no sync, so the push sweep (C) is what runs it on schedule.
+   triggers no sync, so the push sweep is what runs it on schedule.
 2. **`once`-consumption finalization** — the `invoice.paid` webhook settles a
    consumed `once` promptly; the sweep is the backstop for a **missed** webhook.
 
@@ -100,41 +100,41 @@ billing logic — every step reuses existing services.
 
 ---
 
-## 3. The four step-services — order D → B → A → C
+## 3. The four step-services — run order
 
 Each step is its **own service**; the orchestrator is thin. The order is
 deliberate:
 
-1. **D · `InvoiceFetchSweep`** (§5) — refresh dates/charges first, so the
+1. **`InvoiceFetchSweep`** (§5) — refresh dates/charges first, so the
    date-derived "overdue" view is current before anything reads it.
-2. **B · `SubscriptionStatusSweep`** — cancel memberships whose Stripe sub is
+2. **`SubscriptionStatusSweep`** — cancel memberships whose Stripe sub is
    gone/canceled (now seeing D's fresh dates).
-3. **A · `OrphanCleanupSweep`** — remove `not_added` rows after B so a just-
+3. **`OrphanCleanupSweep`** — remove `not_added` rows after the status sweep so a just-
    cancelled row isn't re-examined.
-4. **C · `PaymentPushSweep`** — final CRM→Stripe converge over the now-clean set.
+4. **`PaymentPushSweep`** — final CRM→Stripe converge over the now-clean set.
 
-- **A `OrphanCleanupSweep`** — lists orphaned `not_added` rows
+- **`OrphanCleanupSweep`** — lists orphaned `not_added` rows
   (`stripe_item_id IS NULL`, from `reconciler_orphan_memberships.sql`). Per row:
   resolve the paying parent, **non-blocking** `ResourceLock.try_lock` on the
   family key `paying_member_lock:{parent}` → if free, delete (reusing the guarded
   `member_memberships_delete_pending.sql`) and count `changed`; if held, an op is
   in flight → `skipped`. The delete's own `stripe_item_id IS NULL` guard means a
   row confirmed in the gap is never removed.
-- **B `SubscriptionStatusSweep`** — over the active billing members
+- **`SubscriptionStatusSweep`** — over the active billing members
   (`reconciler_active_billing_members.sql` → distinct paying parents with an
   active recurring membership; carries `gym_id` + `stripe_sub_id_month`). Per
   family: `PaymentsSubscriptionRetrieve.get_subscription`:
   `PaymentsResourceNotFoundError` (not-found **or** `canceled`) → absorb (§4);
   `status in {past_due, unpaid}` → **record-only** (no membership change —
   "overdue" is date-derived from `next_due_date`, not Stripe-derived, and the
-  failed-charge row comes from D); `active`/other → no-op (C handles config
+  failed-charge row comes from the invoice fetcher); `active`/other → no-op (the push sweep handles config
   drift). Any other Stripe error is caught per member → `errors`, continue.
-- **C `PaymentPushSweep`** — lists the same paying parents and calls the existing
+- **`PaymentPushSweep`** — lists the same paying parents and calls the existing
   `PaymentSyncService.bulk_payment_sync(ids)` (proration `none` → **billing
   none**, no charge). This is the "touch on a clock". (`reconciler_active_billing_members.sql`
   is **dual-use**: C reads only `member_id`, B reads all three columns.)
 
-`SubscriptionStatusSweep` (B) and `PaymentPushSweep` (C) are **two separate
+`SubscriptionStatusSweep` and `PaymentPushSweep` are **two separate
 passes**, not a fused per-member pipeline: the absorber and `bulk_payment_sync`
 each already self-lock the family, so fusing would double-lock and fight the
 existing retry machinery.
@@ -163,7 +163,7 @@ already-gone sub and would abort before recording. Idempotent (already-cancelled
 rows yield nothing to cancel; re-nulling the sub id is a no-op).
 
 **Two triggers share it:**
-- **The reconciler poll** (B) — on `PaymentsResourceNotFoundError`.
+- **The reconciler poll** (the status sweep) — on `PaymentsResourceNotFoundError`.
 - **The `customer.subscription.deleted` webhook** (the **prompt path**,
   `stripe_webhooks/service/customer_subscription_deleted_handler.py`) — reads
   `member_id` from the cancelled sub's `StripeSubscriptionMetadata` and calls the
@@ -178,9 +178,9 @@ backstop regardless).
 
 ## 5. The invoice fetcher + the absorb seam + the synthetic failed-charge key
 
-**`InvoiceFetchSweep`** (D) is a missed-webhook backstop. Per gym Connect account
+**`InvoiceFetchSweep`** is a missed-webhook backstop. Per gym Connect account
 (`reconciler_gyms_with_connect.sql`) it lists the last
-`RECONCILER_INVOICE_LOOKBACK_DAYS` (=2) of invoices / payments / refunds (paginated)
+`RECONCILER_INVOICE_LOOKBACK_DAYS` of invoices / payments / refunds (paginated)
 and re-absorbs each through the SAME webhook handler logic — but driven by listed
 **objects** instead of events, so it **cannot** use the webhook event-log dedup.
 
@@ -214,11 +214,11 @@ real `ch_…` id.
 When the sweep finds Stripe ≠ CRM, the winner depends on the kind of difference:
 
 - **Config drift** (wrong items / quantities / discount / price) → **CRM wins**
-  → push to Stripe (step C; the CRM authored the config, nothing self-serves on
+  → push to Stripe (the push sweep; the CRM authored the config, nothing self-serves on
   Stripe's side).
 - **Lifecycle / outcome drift** (Stripe `canceled` / `past_due` / `unpaid` from
   dunning) → **Stripe wins** → **absorb into the CRM, never recreate or re-bill**
-  (step B + the webhook). Blindly converging here would resurrect a delinquent
+  (the status sweep + the webhook). Blindly converging here would resurrect a delinquent
   member's sub and fight Stripe's dunning. `canceled`/not-found → cancel via the
   absorber; `past_due`/`unpaid` → record-only.
 
@@ -253,7 +253,7 @@ When the sweep finds Stripe ≠ CRM, the winner depends on the kind of differenc
 ## 8. What is deferred (not built)
 
 The one deferred optimization (tracked in `PaymentRefactor.md` §1): a
-**compare-desired-vs-actual, skip-if-equal** guard on the push step (C). Today
+**compare-desired-vs-actual, skip-if-equal** guard on the push sweep. Today
 `execute_sync` issues a Stripe `update` for an in-sync sub every run — harmless
 at `proration_behavior="none"` (no charge), but wasteful. Subscription *status*
 drift is already handled by B; this guard is purely a write-reduction.
@@ -263,10 +263,10 @@ drift is already handled by B; this guard is purely a write-reduction.
 ## Key files (where the reconciler actually lives)
 
 - **Orchestrator:** `src/reconciler/service/reconciler/reconciler_service.py`
-- **Sweeps:** `reconciler_invoice_fetch_sweep.py` (D),
-  `reconciler_subscription_status_sweep.py` (B),
-  `reconciler_orphan_cleanup_sweep.py` (A),
-  `reconciler_payment_push_sweep.py` (C) — same folder
+- **Sweeps:** `reconciler_invoice_fetch_sweep.py`,
+  `reconciler_subscription_status_sweep.py`,
+  `reconciler_orphan_cleanup_sweep.py`,
+  `reconciler_payment_push_sweep.py` — same folder
 - **Result models:** `reconciler_result.py`
 - **Scheduler:** `src/reconciler/reconciler_scheduler.py` (+ lifespan in `src/main.py`)
 - **SQL:** `src/reconciler/sql/` (`reconciler_orphan_memberships.sql`,
@@ -283,8 +283,8 @@ drift is already handled by B; this guard is purely a write-reduction.
 
 ## Diagram
 
-`FastApiBackend/reconciler.mermaid` is the step-by-step flow (scheduler → global
-lock → D → B → A → C, with the absorber, the seam, and the external actors). Keep
+`FastApiBackend/reconciler.mermaid` is the step-by-step flow (scheduler → invoice-fetch → status → orphan-cleanup →
+push, with the absorber, the seam, and the external actors). Keep
 it in sync with this skill (same `mermaid-creation` rules: TB, sibling-only edges,
 fixed palette, `check_siblings.py` validation). The engine the push step calls is
 in `payment_sync.mermaid` / `sync-guide`; the whole-backend graph is

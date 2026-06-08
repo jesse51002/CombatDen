@@ -132,7 +132,7 @@ class InvoiceFetchSweep:
             self._stripe.v1.refunds.list_async, created, opts
         ):
             result.processed += 1
-            await self._absorb_in_txn(
+            await self._run_absorb(
                 result,
                 lambda s, r=refund: self._refund.absorb(s, r, gym_id),
             )
@@ -149,7 +149,7 @@ class InvoiceFetchSweep:
         status = invoice.get("status")
         if status == INVOICE_STATUS_PAID:
             result.processed += 1
-            await self._absorb_in_txn(
+            await self._run_absorb(
                 result,
                 lambda s: self._invoice_paid.absorb(
                     s, invoice, gym_id, stripe_account_id=account_id
@@ -163,7 +163,7 @@ class InvoiceFetchSweep:
             and int(invoice.get("attempt_count") or 0) > 0
         ):
             result.processed += 1
-            await self._absorb_in_txn(
+            await self._run_absorb(
                 result,
                 lambda s: self._invoice_payment_failed.absorb(
                     s, invoice, gym_id
@@ -189,14 +189,14 @@ class InvoiceFetchSweep:
             if payment.get("status") != PAYMENT_STATUS_PAID:
                 continue
             result.processed += 1
-            await self._absorb_in_txn(
+            await self._run_absorb(
                 result,
                 lambda s, p=payment: self._invoice_payment_paid.absorb(
                     s, p, gym_id, stripe_account_id=account_id
                 ),
             )
 
-    async def _absorb_in_txn(
+    async def _run_absorb(
         self,
         result: SweepResult,
         absorb: Callable[[AsyncSession], Awaitable[None]],

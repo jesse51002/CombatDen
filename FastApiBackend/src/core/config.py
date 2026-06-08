@@ -86,7 +86,7 @@ BULK_SYNC_MAX_RETRIES: Final[int] = 3
 # Scheduled reconciler — see src/reconciler/. No reconciler-wide lock: safety is
 # the per-paying-family PayingMemberLock every payment op already holds, so
 # concurrent sweeps are safe (they only repeat idempotent work).
-RECONCILER_INVOICE_LOOKBACK_DAYS: Final[int] = 2
+RECONCILER_INVOICE_LOOKBACK_DAYS: Final[int] = 1
 RECONCILER_STRIPE_PAGE_SIZE: Final[int] = 100
 
 

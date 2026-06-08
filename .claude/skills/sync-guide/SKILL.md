@@ -683,11 +683,12 @@ missed webhook).
 
 It lives in `src/reconciler/` (router-less), is started by APScheduler in the app
 lifespan, and is a thin orchestrator (`ReconcilerService.run`) that runs four step-services in
-order **D -> B -> A -> C** (no reconciler-wide lock — safety is the per-family
+order — invoice-fetch -> subscription-status -> orphan-cleanup -> push (no
+reconciler-wide lock — safety is the per-family
 `PayingMemberLock` every payment op already holds):
 
-- **D `InvoiceFetchSweep`** — missed-webhook backstop. Per gym Connect account it
-  lists the last ~2 days of invoices / payments / refunds and re-absorbs each
+- **`InvoiceFetchSweep`** — missed-webhook backstop. Per gym Connect account it
+  lists the configured lookback of invoices / payments / refunds and re-absorbs each
   through the SAME webhook handler `absorb(obj, ...)` methods (the `handle`/`absorb`
   seam), driven by listed objects instead of events. Idempotent at the DB layer
   (invoice upsert, succeeded-charge `stripe_charge_id` UNIQUE, refund
@@ -695,21 +696,21 @@ order **D -> B -> A -> C** (no reconciler-wide lock — safety is the per-family
   `failed_attempt:<invoice>:<attempt_count>`, shared by webhook + fetcher so a
   single in-window failure records once). Refreshing `next_due_date` here is what
   clears a falsely-overdue member (overdue is date-derived, not Stripe-derived).
-- **B `SubscriptionStatusSweep`** — the Stripe->CRM half. For each active billing
+- **`SubscriptionStatusSweep`** — the Stripe->CRM half. For each active billing
   family it reads the live sub (`PaymentsSubscriptionRetrieve.get_subscription`):
   `canceled` / not-found -> absorb via `SubscriptionCancellationAbsorber`;
   `past_due` / `unpaid` -> record-only (no membership change); `active` -> no-op.
-- **A `OrphanCleanupSweep`** — deletes stranded `not_added` rows
+- **`OrphanCleanupSweep`** — deletes stranded `not_added` rows
   (`stripe_item_id IS NULL`) only when that family's paying-member lock is free
   (non-blocking `try_lock`); a held lock means an op is in flight -> skip.
-- **C `PaymentPushSweep`** — the CRM->Stripe push. Lists distinct paying parents
+- **`PaymentPushSweep`** — the CRM->Stripe push. Lists distinct paying parents
   with an active recurring membership and calls the existing `bulk_payment_sync`
   (proration `none` -> no charge). The "touch on a clock" that enforces `end_date`
   and backstops a missed `once` settle.
 
 **Conflict-resolution rule (load-bearing).** Config drift -> **CRM wins** (the
-push, C). Lifecycle / outcome drift (Stripe `canceled` / dunning) -> **Stripe wins**
--> **absorb, never re-bill** (B). The absorber (`SubscriptionCancellationAbsorber`,
+push). Lifecycle / outcome drift (Stripe `canceled` / dunning) -> **Stripe wins**
+-> **absorb, never re-bill** (the status sweep). The absorber (`SubscriptionCancellationAbsorber`,
 in the member_memberships domain) is **CRM-only**: it marks the family's live
 recurring memberships cancelled (`cancel_date` + `stripe_sync_status='deleted'`) and
 nulls the parent's `stripe_sub_id_month`, with **no Stripe call** — it deliberately
