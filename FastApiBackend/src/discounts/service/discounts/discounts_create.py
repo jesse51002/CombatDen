@@ -11,7 +11,9 @@ no linked branch (linked/family discounts are per-plan pricing, not a discount).
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 
+from schema.gym_discount import DiscountType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +21,7 @@ from src.discounts import SQL_DIR
 from src.discounts.schema.discounts_schema import (
     DiscountCreateRequest,
     DiscountResponse,
+    DiscountValue,
 )
 from src.discounts.service.discounts.discounts_base import DiscountsBase
 from src.shared.sql_loader import load_sql
@@ -45,9 +48,40 @@ class DiscountsCreate(DiscountsBase):
             identity = await self._insert_identity(session, request)
             value = await self._insert_value(session, request, identity)
             await session.commit()
-        return DiscountResponse(**{**identity, **value})
+        return DiscountResponse.from_row({**identity, **value})
+
+    async def mint_custom_discounts(
+        self,
+        gym_id: UUID,
+        values: list[DiscountValue],
+    ) -> list[UUID]:
+        """Mint each inline custom value as a ``custom`` discount; return ids.
+
+        The one home for the ``DiscountValue`` → discount conversion
+        (auto-generated name + ``custom`` type). Callers fold the minted ids
+        into their snapshot list and delete the minted discounts on revert.
+        """
+        minted: list[UUID] = []
+        for value in values:
+            response = await self.create_discount(
+                DiscountCreateRequest(
+                    gym_id=gym_id,
+                    discount_name=self._custom_name(value),
+                    discount_type=DiscountType.custom,
+                    value=value,
+                )
+            )
+            minted.append(response.discount_id)
+        return minted
 
     # ── Private ────────────────────────────────────────────────
+
+    @staticmethod
+    def _custom_name(value: DiscountValue) -> str:
+        """Auto-generate a display name for an inline custom value."""
+        if value.percentage_off is not None:
+            return f"Custom {value.percentage_off}% off"
+        return f"Custom ${value.dollar_off / 100:.2f} off"
 
     @staticmethod
     async def _insert_identity(
@@ -71,18 +105,19 @@ class DiscountsCreate(DiscountsBase):
         identity: dict,
     ) -> dict:
         """Insert the first active gym_discount_values version."""
+        value = request.value
         sql = load_sql(SQL_DIR / "discount_values_insert.sql")
         params = {
             "discount_id": str(identity["discount_id"]),
             "gym_id": str(identity["gym_id"]),
-            "percentage_off": request.percentage_off,
-            "dollar_off": request.dollar_off,
-            "discount_mode": request.discount_mode.value,
-            "duration_amount": request.duration_amount,
+            "percentage_off": value.percentage_off,
+            "dollar_off": value.dollar_off,
+            "discount_mode": value.discount_mode.value,
+            "duration_amount": value.duration_amount,
             "duration_unit": (
-                request.duration_unit.value if request.duration_unit is not None else None
+                value.duration_unit.value if value.duration_unit is not None else None
             ),
-            "end_date": request.end_date,
+            "end_date": value.end_date,
         }
         result = await session.execute(text(sql), params)
         return dict(result.mappings().one())

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from schema.gym_discount import DiscountType
 
 import src.shared.db_schema_path  # noqa: F401
-from src.discounts.schema.discounts_schema import CustomDiscountValue
+from src.discounts.schema.discounts_schema import DiscountValue
 
 
 class MemberMembershipsCancelResponse(BaseModel):
@@ -36,7 +36,7 @@ class MemberMembershipsUnfreezeRequest(BaseModel):
 class MemberMembershipsStartRequest(BaseModel):
     """Start a new membership for a member.
 
-    Optional discounts-at-creation: ``preset_ids`` reference existing preset /
+    Optional discounts-at-creation: ``discount_ids`` reference existing preset /
     linked discounts; ``custom_discounts`` are inline values minted as ``custom``
     discounts at start. Both are snapshotted **before** the first charge, so the
     membership's first (and, for one-time, only) invoice is discounted.
@@ -49,8 +49,8 @@ class MemberMembershipsStartRequest(BaseModel):
     prorate: bool = True
     paid_with_cash: bool = False
     idempotency_key: UUID
-    preset_ids: list[UUID] = []
-    custom_discounts: list[CustomDiscountValue] = []
+    discount_ids: list[UUID] = []
+    custom_discounts: list[DiscountValue] = []
 
 
 class MemberMembershipsMarkPaidCashRequest(BaseModel):
@@ -98,25 +98,25 @@ class MemberMembershipsAddDiscountsRequest(BaseModel):
     """Add discount snapshots to a membership (or preview the addition).
 
     An explicit add of immutable snapshot rows — never a replace-set.
-    ``preset_ids`` references live discounts whose ACTIVE value version is frozen
-    onto a snapshot (any discount, including a ``linked`` family discount).
-    ``preview=True`` stages the adds as ``preview_add`` rows and returns the
-    resulting invoice preview without committing.
+    ``discount_ids`` references live discounts whose ACTIVE value version is
+    frozen onto a snapshot (any discount, including a ``linked`` family
+    discount). ``preview=True`` stages the adds as ``preview_add`` rows and
+    returns the resulting invoice preview without committing.
     """
 
     item_id: UUID
     member_id: UUID
-    preset_ids: list[UUID] = Field(default_factory=list)
+    discount_ids: list[UUID] = Field(default_factory=list)
     idempotency_key: UUID
     preview: bool = False
 
-    @field_validator("preset_ids")
+    @field_validator("discount_ids")
     @classmethod
-    def _validate_preset_ids(cls, value: list[UUID]) -> list[UUID]:
+    def _validate_discount_ids(cls, value: list[UUID]) -> list[UUID]:
         if not value:
-            raise ValueError("preset_ids must not be empty")
+            raise ValueError("discount_ids must not be empty")
         if len(value) != len(set(value)):
-            raise ValueError("preset_ids must not contain duplicates")
+            raise ValueError("discount_ids must not contain duplicates")
         return value
 
 

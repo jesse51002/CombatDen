@@ -304,7 +304,7 @@ async def start_membership(
             idempotency_key=request.idempotency_key,
             prorate=request.prorate,
             paid_with_cash=request.paid_with_cash,
-            preset_ids=request.preset_ids,
+            discount_ids=request.discount_ids,
             custom_discounts=request.custom_discounts,
         )
     except ValueError as exc:
@@ -635,7 +635,7 @@ async def add_membership_discounts(
         return await memberships_service.add_discounts(
             item_id=request.item_id,
             member_id=request.member_id,
-            preset_ids=request.preset_ids,
+            discount_ids=request.discount_ids,
             idempotency_key=request.idempotency_key,
             preview=request.preview,
         )

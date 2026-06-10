@@ -61,7 +61,7 @@ async def test_add_discount_preview_reflects_then_stages_nothing(
         preview = await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            preset_ids=[discount.discount_id],
+            discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
             preview=True,
         )
@@ -103,7 +103,7 @@ async def test_remove_discount_preview_reflects_then_reverts(
         await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            preset_ids=[discount.discount_id],
+            discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
         snaps = await get_applied_snapshots(db_pool, item_id)

@@ -27,7 +27,7 @@ from src.discounts.schema.discounts_schema import (
     DiscountCreateRequest,
     DiscountUpdateIdentity,
     DiscountUpdateRequest,
-    DiscountUpdateValues,
+    DiscountValue,
 )
 
 
@@ -56,17 +56,19 @@ async def test_create_percentage_discount(discounts_service, db_pool, gym_id, cr
             gym_id=gym_id,
             discount_name="20% Off",
             discount_type=DiscountType.preset,
-            percentage_off=20.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=20.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(resp.discount_id)
 
     assert resp.discount_id is not None
     assert resp.discount_name == "20% Off"
-    assert resp.percentage_off == 20.0
-    assert resp.dollar_off is None
-    assert resp.discount_mode == DiscountMode.ongoing
+    assert resp.value.percentage_off == 20.0
+    assert resp.value.dollar_off is None
+    assert resp.value.discount_mode == DiscountMode.ongoing
     assert resp.is_deleted is False
 
     row = await _row(db_pool, resp.discount_id)
@@ -81,17 +83,19 @@ async def test_create_dollar_once_discount(discounts_service, gym_id, created):
             gym_id=gym_id,
             discount_name="$10 Off",
             discount_type=DiscountType.preset,
-            dollar_off=1000,
-            discount_mode=DiscountMode.once,
+            value=DiscountValue(
+                dollar_off=1000,
+                discount_mode=DiscountMode.once,
+            ),
         ),
     )
     created.track_discount(resp.discount_id)
 
-    assert resp.dollar_off == 1000
-    assert resp.percentage_off is None
-    assert resp.discount_mode == DiscountMode.once
-    assert resp.end_date is None
-    assert resp.duration_amount is None
+    assert resp.value.dollar_off == 1000
+    assert resp.value.percentage_off is None
+    assert resp.value.discount_mode == DiscountMode.once
+    assert resp.value.end_date is None
+    assert resp.value.duration_amount is None
 
 
 async def test_create_ongoing_with_duration_span(discounts_service, gym_id, created):
@@ -101,26 +105,25 @@ async def test_create_ongoing_with_duration_span(discounts_service, gym_id, crea
             gym_id=gym_id,
             discount_name="3-month 15% Off",
             discount_type=DiscountType.preset,
-            percentage_off=15.0,
-            discount_mode=DiscountMode.ongoing,
-            duration_amount=3,
-            duration_unit=DiscountDurationUnit.month,
+            value=DiscountValue(
+                percentage_off=15.0,
+                discount_mode=DiscountMode.ongoing,
+                duration_amount=3,
+                duration_unit=DiscountDurationUnit.month,
+            ),
         ),
     )
     created.track_discount(resp.discount_id)
 
-    assert resp.duration_amount == 3
-    assert resp.duration_unit == DiscountDurationUnit.month
-    assert resp.end_date is None
+    assert resp.value.duration_amount == 3
+    assert resp.value.duration_unit == DiscountDurationUnit.month
+    assert resp.value.end_date is None
 
 
 async def test_create_rejects_span_and_end_date_together(discounts_service, gym_id):
     """The lifetime is a span XOR an explicit end_date — never both."""
     with pytest.raises(ValueError, match="never both"):
-        DiscountCreateRequest(
-            gym_id=gym_id,
-            discount_name="Bad Lifetime",
-            discount_type=DiscountType.preset,
+        DiscountValue(
             percentage_off=10.0,
             discount_mode=DiscountMode.ongoing,
             duration_amount=2,
@@ -135,15 +138,17 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
     The previous version's ``is_active`` flips, so ``_row`` (which joins the
     active version) reflects the new value while older applied snapshots stay
     pinned to their original ``value_id``. The request carries both an
-    ``identity`` (rename) and ``values`` (new version) sub-object.
+    ``identity`` (rename) and a complete ``value`` (new version).
     """
     created_resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
             discount_name="Old Name",
             discount_type=DiscountType.preset,
-            percentage_off=15.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=15.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
@@ -153,13 +158,16 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
             discount_id=created_resp.discount_id,
             gym_id=gym_id,
             identity=DiscountUpdateIdentity(discount_name="New Name"),
-            values=DiscountUpdateValues(percentage_off=25.0),
+            value=DiscountValue(
+                percentage_off=25.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
 
     assert resp.discount_id == created_resp.discount_id
     assert resp.discount_name == "New Name"
-    assert resp.percentage_off == 25.0
+    assert resp.value.percentage_off == 25.0
 
     row = await _row(db_pool, created_resp.discount_id)
     assert row["discount_name"] == "New Name"
@@ -169,7 +177,7 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
 async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
     """An identity-only update renames in place and mints NO new version.
 
-    With ``values`` omitted, the active ``value_id`` must be untouched — the
+    With ``value`` omitted, the active ``value_id`` must be untouched — the
     rename never reaches across to the versioned value rows.
     """
     created_resp = await discounts_service.create_discount(
@@ -177,8 +185,10 @@ async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
             gym_id=gym_id,
             discount_name="Before",
             discount_type=DiscountType.preset,
-            percentage_off=12.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=12.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
@@ -193,7 +203,7 @@ async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
     )
 
     assert resp.discount_name == "After"
-    assert resp.percentage_off == 12.0
+    assert resp.value.percentage_off == 12.0
 
     after = await _row(db_pool, created_resp.discount_id)
     assert after["discount_name"] == "After"
@@ -203,14 +213,16 @@ async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
 
 
 async def test_update_value_only(discounts_service, db_pool, gym_id, created):
-    """A values-only update mints a new version and preserves the name."""
+    """A value-only update mints a new version and preserves the name."""
     created_resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
             discount_name="Keep Name",
             discount_type=DiscountType.preset,
-            percentage_off=10.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=10.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
@@ -220,12 +232,15 @@ async def test_update_value_only(discounts_service, db_pool, gym_id, created):
         DiscountUpdateRequest(
             discount_id=created_resp.discount_id,
             gym_id=gym_id,
-            values=DiscountUpdateValues(percentage_off=30.0),
+            value=DiscountValue(
+                percentage_off=30.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
 
     assert resp.discount_name == "Keep Name"
-    assert resp.percentage_off == 30.0
+    assert resp.value.percentage_off == 30.0
 
     after = await _row(db_pool, created_resp.discount_id)
     assert after["discount_name"] == "Keep Name"
@@ -233,9 +248,9 @@ async def test_update_value_only(discounts_service, db_pool, gym_id, created):
     assert after["value_id"] != before["value_id"], "a value edit must mint a new active version"
 
 
-async def test_update_requires_identity_or_values(gym_id):
-    """The request must carry at least one of identity / values."""
-    with pytest.raises(ValueError, match="at least one of identity or values"):
+async def test_update_requires_identity_or_value(gym_id):
+    """The request must carry at least one of identity / value."""
+    with pytest.raises(ValueError, match="at least one of identity or value"):
         DiscountUpdateRequest(
             discount_id=uuid4(),
             gym_id=gym_id,
@@ -249,8 +264,10 @@ async def test_delete_discount_archives(discounts_service, db_pool, gym_id, crea
             gym_id=gym_id,
             discount_name="Archive Me",
             discount_type=DiscountType.preset,
-            percentage_off=5.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=5.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
@@ -281,8 +298,10 @@ async def test_archive_leaves_applied_snapshots_untouched(
             gym_id=gym_id,
             discount_name="Held Discount",
             discount_type=DiscountType.preset,
-            percentage_off=10.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=10.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)

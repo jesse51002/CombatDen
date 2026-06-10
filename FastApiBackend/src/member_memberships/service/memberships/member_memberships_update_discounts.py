@@ -13,7 +13,7 @@ stays pinned to the version it was applied at.
 - ``once`` snapshots leave end_date NULL until the sync stamps it on consumption.
 
 Any discount is applied this way by id, including a ``linked`` (family) discount:
-the membership/family flow passes the linked discount's id in ``add_preset_ids``
+the membership/family flow passes the linked discount's id in ``discount_ids``
 and it freezes a snapshot to that discount's active value like any other.
 
 After writing the snapshot rows the membership's subscription is re-synced so the
@@ -60,7 +60,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         self,
         item_id: UUID,
         member_id: UUID,
-        preset_ids: list[UUID],
+        discount_ids: list[UUID],
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
@@ -94,7 +94,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
                         item_id=item_id,
                         member_id=member_id,
                         gym_id=gym_id,
-                        preset_ids=preset_ids,
+                        discount_ids=discount_ids,
                         apply_date=apply_date,
                         sync_status=StripeSyncStatus.preview_add,
                     )
@@ -114,7 +114,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
             item_id=item_id,
             member_id=member_id,
             gym_id=gym_id,
-            preset_ids=preset_ids,
+            discount_ids=discount_ids,
             apply_date=apply_date,
         )
         await self._payment_sync.update_payments_recurring(
@@ -255,19 +255,19 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         item_id: UUID,
         member_id: UUID,
         gym_id: UUID,
-        preset_ids: list[UUID],
+        discount_ids: list[UUID],
         apply_date: date,
         sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
     ) -> list[UUID]:
-        """INSERT a snapshot per newly-desired regular preset; return their ids.
+        """INSERT a snapshot per newly-desired discount; return their ids.
 
-        A preset already applied to this membership is skipped (left frozen).
-        Each new snapshot references the preset's active value version and
+        A discount already applied to this membership is skipped (left frozen).
+        Each new snapshot references the discount's active value version and
         resolves its absolute end_date from that version's lifetime spec.
         ``sync_status`` is ``not_added`` for a real apply (the writeback stamps
         ``applied``) or ``preview_add`` for a dry-run preview.
         """
-        if not preset_ids:
+        if not discount_ids:
             return []
 
         already_applied = await self._existing_discount_ids(item_id, member_id)
@@ -275,10 +275,10 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
         inserted: list[UUID] = []
         async with self._db_pool.session() as session:
-            for preset_id in preset_ids:
-                if preset_id in already_applied:
+            for discount_id in discount_ids:
+                if discount_id in already_applied:
                     continue
-                value = await self._get_active_value(session, preset_id, gym_id)
+                value = await self._get_active_value(session, discount_id, gym_id)
                 end_date = self._resolve_end_date(value, apply_date)
                 result = await session.execute(
                     text(insert_sql),
@@ -313,23 +313,23 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
     @staticmethod
     async def _get_active_value(
         session: AsyncSession,
-        preset_id: UUID,
+        discount_id: UUID,
         gym_id: UUID,
     ) -> dict:
-        """Read a preset's active value version to freeze onto a snapshot.
+        """Read a discount's active value version to freeze onto a snapshot.
 
         Raises:
-            ValueError: If the preset is unknown, archived, or cross-gym.
+            ValueError: If the discount is unknown, archived, or cross-gym.
         """
         sql = load_sql(_APPLIED_SQL / "get_preset_for_apply.sql")
         result = await session.execute(
             text(sql),
-            {"discount_id": str(preset_id), "gym_id": str(gym_id)},
+            {"discount_id": str(discount_id), "gym_id": str(gym_id)},
         )
         row = result.mappings().fetchone()
         if not row:
             raise ValueError(
-                f"Discount preset not found for gym_id={gym_id}: {preset_id}",
+                f"Discount not found for gym_id={gym_id}: {discount_id}",
             )
         return dict(row)
 

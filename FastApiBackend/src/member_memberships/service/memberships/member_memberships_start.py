@@ -8,15 +8,13 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
-from schema.gym_discount import DiscountType
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import (
-    CustomDiscountValue,
-    DiscountCreateRequest,
+    DiscountValue,
 )
 from src.member_memberships import SQL_DIR
 from src.member_memberships.service.memberships.member_memberships_base import (
@@ -94,8 +92,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
         idempotency_key: UUID,
         prorate: bool = True,
         paid_with_cash: bool = False,
-        preset_ids: list[UUID] | None = None,
-        custom_discounts: list[CustomDiscountValue] | None = None,
+        discount_ids: list[UUID] | None = None,
+        custom_discounts: list[DiscountValue] | None = None,
     ) -> None:
         """Start a new membership for a member.
 
@@ -104,7 +102,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         inserts the CRM row, syncs to Stripe, then sets the
         stripe_item_id on the CRM row. Memberships always begin
         on the day this method is called — future start dates
-        are not supported. Optional ``preset_ids`` / ``custom_discounts`` are
+        are not supported. Optional ``discount_ids`` / ``custom_discounts`` are
         snapshotted before the first charge, so it is discounted at creation.
 
         Args:
@@ -174,17 +172,17 @@ class MemberMembershipsStart(MemberMembershipsBase):
         # BEFORE the engine call, so the first (one-time: only) invoice is
         # discounted. The revert undoes snapshots + minted customs + the pending
         # row together if the charge/sync then fails.
-        minted_ids = await self._mint_custom_discounts(
+        minted_ids = await self._discounts.mint_custom_discounts(
             gym_id, custom_discounts or []
         )
-        all_preset_ids = [*(preset_ids or []), *minted_ids]
+        all_discount_ids = [*(discount_ids or []), *minted_ids]
         applied_ids: list[UUID] = []
-        if all_preset_ids:
+        if all_discount_ids:
             applied_ids = await self._update_discounts.add_preset_snapshots(
                 item_id=item_id,
                 member_id=member_id,
                 gym_id=gym_id,
-                preset_ids=all_preset_ids,
+                discount_ids=all_discount_ids,
                 apply_date=start_date,
             )
 
@@ -472,39 +470,6 @@ class MemberMembershipsStart(MemberMembershipsBase):
             request,
             stripe_account_id,
         )
-
-    async def _mint_custom_discounts(
-        self,
-        gym_id: UUID,
-        custom_discounts: list[CustomDiscountValue],
-    ) -> list[UUID]:
-        """Mint each inline custom value as a ``custom`` discount; return ids.
-
-        The minted discounts are folded into the snapshot list; the start's
-        revert deletes them if the charge/sync then fails.
-        """
-        minted: list[UUID] = []
-        for value in custom_discounts:
-            name = (
-                f"Custom {value.percentage_off}% off"
-                if value.percentage_off is not None
-                else f"Custom ${value.dollar_off / 100:.2f} off"
-            )
-            response = await self._discounts.create_discount(
-                DiscountCreateRequest(
-                    gym_id=gym_id,
-                    discount_name=name,
-                    discount_type=DiscountType.custom,
-                    percentage_off=value.percentage_off,
-                    dollar_off=value.dollar_off,
-                    discount_mode=value.discount_mode,
-                    duration_amount=value.duration_amount,
-                    duration_unit=value.duration_unit,
-                    end_date=value.end_date,
-                )
-            )
-            minted.append(response.discount_id)
-        return minted
 
     @staticmethod
     def _calculate_end_date(

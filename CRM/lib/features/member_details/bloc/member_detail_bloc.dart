@@ -382,7 +382,7 @@ class MemberDetailBloc
           MemberMembershipsAddDiscountsRequest(
             itemId: event.itemId,
             memberId: event.memberId,
-            presetIds: event.presetIds,
+            discountIds: event.discountIds,
             idempotencyKey: const Uuid().v4(),
           ),
         );

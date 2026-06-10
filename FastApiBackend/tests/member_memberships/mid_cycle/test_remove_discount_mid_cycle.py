@@ -89,7 +89,7 @@ async def _start_and_apply(memberships_service, db_pool, member, gym_id, plan, d
     await memberships_service.add_discounts(
         item_id=item_id,
         member_id=member.member_id,
-        preset_ids=[discount_id],
+        discount_ids=[discount_id],
         idempotency_key=uuid4(),
     )
     return item_id

@@ -541,7 +541,7 @@ async def test_preview_applied_discounts_matches_renewal(
         await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            preset_ids=[discount.discount_id],
+            discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 
@@ -552,7 +552,7 @@ async def test_preview_applied_discounts_matches_renewal(
         preview = await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            preset_ids=[discount.discount_id],
+            discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
             preview=True,
         )

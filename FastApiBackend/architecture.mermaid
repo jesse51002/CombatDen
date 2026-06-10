@@ -85,6 +85,7 @@ flowchart TB
     member_memberships_service --> Payments
     member_memberships_service --> gym_stripe_service
     member_memberships_service --> billing_parent_resolver
+    member_memberships_service -->|"mint inline custom discounts at start"| discounts_service
     membership_plans_service --> gym_stripe_service
     membership_plans_service --> Payments
     membership_plans_service --> payment_sync_service

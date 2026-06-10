@@ -45,7 +45,7 @@ from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
     from src.discounts.schema.discounts_schema import (
-        CustomDiscountValue,
+        DiscountValue,
     )
     from src.discounts.service.discounts.discounts_service import (
         DiscountsService,
@@ -191,8 +191,8 @@ class MemberMembershipsService:
         idempotency_key: UUID,
         prorate: bool = True,
         paid_with_cash: bool = False,
-        preset_ids: list[UUID] | None = None,
-        custom_discounts: list[CustomDiscountValue] | None = None,
+        discount_ids: list[UUID] | None = None,
+        custom_discounts: list[DiscountValue] | None = None,
     ) -> None:
         """Start a new membership for a member."""
         async with self._paying_lock.lock([member_id]):
@@ -204,7 +204,7 @@ class MemberMembershipsService:
                 idempotency_key=idempotency_key,
                 prorate=prorate,
                 paid_with_cash=paid_with_cash,
-                preset_ids=preset_ids,
+                discount_ids=discount_ids,
                 custom_discounts=custom_discounts,
             )
 
@@ -290,7 +290,7 @@ class MemberMembershipsService:
         self,
         item_id: UUID,
         member_id: UUID,
-        preset_ids: list[UUID],
+        discount_ids: list[UUID],
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
@@ -299,7 +299,7 @@ class MemberMembershipsService:
             return await self._update_discounts.add_discounts(
                 item_id=item_id,
                 member_id=member_id,
-                preset_ids=preset_ids,
+                discount_ids=discount_ids,
                 idempotency_key=idempotency_key,
                 preview=preview,
             )

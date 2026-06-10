@@ -6,6 +6,12 @@ no Stripe coupon baked in. Each carries a lifetime spec — discount_mode
 span (duration_amount + duration_unit) OR an explicit end_date, never both;
 neither = forever. Coupons are computed at sync-time and written back onto the
 applied-discount snapshot, never on the preset.
+
+``DiscountValue`` is the single shared shape for a discount value version —
+everything that determines the discount (how much, the mode, how long it
+lasts). Create requests, update requests, responses, and the membership
+start's inline customs all carry one; there is no flat duplicate of these
+fields anywhere in the API.
 """
 
 from __future__ import annotations
@@ -49,13 +55,13 @@ def validate_lifetime(
         )
 
 
-class CustomDiscountValue(BaseModel):
-    """An inline custom discount value to mint + apply at membership creation.
+class DiscountValue(BaseModel):
+    """One discount value version — everything that determines the discount.
 
-    Mirrors a ``gym_discount_values`` row — the ``gym_id``, name, and ``custom``
-    type are supplied by the membership flow that mints it. A percent XOR a fixed
-    dollar amount, the once/ongoing mode, and the ongoing lifetime spec (a
-    duration span XOR an explicit ``end_date``, never both; neither = forever).
+    Mirrors a ``gym_discount_values`` row: how much (a percent XOR a fixed
+    dollar amount in cents), the once/ongoing mode, and how long it lasts
+    (a duration span XOR an explicit ``end_date``, never both; neither =
+    forever).
     """
 
     percentage_off: float | None = Field(default=None, gt=0, le=100)
@@ -66,7 +72,7 @@ class CustomDiscountValue(BaseModel):
     end_date: date | None = None
 
     @model_validator(mode="after")
-    def _validate(self) -> CustomDiscountValue:
+    def _validate(self) -> DiscountValue:
         """Value is percent XOR dollar; the lifetime spec is consistent."""
         if (self.percentage_off is None) == (self.dollar_off is None):
             raise ValueError(
@@ -81,17 +87,12 @@ class CustomDiscountValue(BaseModel):
 
 
 class DiscountCreateRequest(BaseModel):
-    """Create a coupon-free, regular-only gym discount preset."""
+    """Create a coupon-free gym discount: identity + its first value version."""
 
     gym_id: UUID
     discount_name: str
     discount_type: DiscountType
-    percentage_off: float | None = None
-    dollar_off: int | None = None
-    discount_mode: DiscountMode
-    duration_amount: int | None = None
-    duration_unit: DiscountDurationUnit | None = None
-    end_date: date | None = None
+    value: DiscountValue
 
     @field_validator("discount_name")
     @classmethod
@@ -100,50 +101,12 @@ class DiscountCreateRequest(BaseModel):
             raise ValueError("discount_name cannot be empty")
         return v
 
-    @field_validator("percentage_off")
-    @classmethod
-    def _check_percentage(cls, v: float | None) -> float | None:
-        if v is not None and (v <= 0 or v > 100):
-            raise ValueError("percentage_off must be in (0, 100]")
-        return v
-
-    @field_validator("dollar_off")
-    @classmethod
-    def _check_dollar(cls, v: int | None) -> int | None:
-        if v is not None and v <= 0:
-            raise ValueError("dollar_off must be > 0")
-        return v
-
-    @field_validator("duration_amount")
-    @classmethod
-    def _check_duration_amount(cls, v: int | None) -> int | None:
-        if v is not None and v <= 0:
-            raise ValueError("duration_amount must be > 0")
-        return v
-
-    @model_validator(mode="after")
-    def validate_fields(self) -> DiscountCreateRequest:
-        """Validate value exclusivity and the lifetime spec."""
-        has_pct = self.percentage_off is not None
-        has_amt = self.dollar_off is not None
-        if has_pct == has_amt:
-            raise ValueError(
-                "Exactly one of percentage_off or dollar_off must be set",
-            )
-
-        validate_lifetime(
-            duration_amount=self.duration_amount,
-            duration_unit=self.duration_unit,
-            end_date=self.end_date,
-        )
-        return self
-
 
 class DiscountUpdateIdentity(BaseModel):
     """Identity change → rename the gym_discounts row in place.
 
     The discount's IDENTITY (gym_discounts) holds only the editable name;
-    everything else is a versioned value (see DiscountUpdateValues).
+    everything else is a versioned value (see DiscountValue).
     """
 
     discount_name: str | None = None
@@ -156,64 +119,29 @@ class DiscountUpdateIdentity(BaseModel):
         return v
 
 
-class DiscountUpdateValues(BaseModel):
-    """Value/lifetime change → mint a new gym_discount_values version.
-
-    Every field here lands on a fresh, immutable value version (the prior
-    active one is deactivated). The model's shape is the partition: anything
-    on this sub-model routes to a new version, never to the identity row.
-    """
-
-    percentage_off: float | None = None
-    dollar_off: int | None = None
-    discount_mode: DiscountMode | None = None
-    duration_amount: int | None = None
-    duration_unit: DiscountDurationUnit | None = None
-    end_date: date | None = None
-
-    @field_validator("percentage_off")
-    @classmethod
-    def _check_percentage(cls, v: float | None) -> float | None:
-        if v is not None and (v <= 0 or v > 100):
-            raise ValueError("percentage_off must be in (0, 100]")
-        return v
-
-    @field_validator("dollar_off")
-    @classmethod
-    def _check_dollar(cls, v: int | None) -> int | None:
-        if v is not None and v <= 0:
-            raise ValueError("dollar_off must be > 0")
-        return v
-
-    @field_validator("duration_amount")
-    @classmethod
-    def _check_duration_amount(cls, v: int | None) -> int | None:
-        if v is not None and v <= 0:
-            raise ValueError("duration_amount must be > 0")
-        return v
-
-
 class DiscountUpdateRequest(BaseModel):
     """Update a regular discount preset (intent only).
 
     The request shape encodes the destination: `identity` renames the
-    gym_discounts row in place; `values` mints a new gym_discount_values
-    version. At least one must be present. Edits affect only future
-    applications; existing snapshot rows on
-    member_membership_applied_discounts are never touched.
+    gym_discounts row in place; `value` mints a new gym_discount_values
+    version from the COMPLETE spec sent — the client always sends the full
+    ``DiscountValue``, never a partial merge with the current version. At
+    least one must be present. Edits affect only future applications;
+    existing snapshot rows on member_membership_applied_discounts are never
+    touched.
     """
 
     discount_id: UUID
     gym_id: UUID
     identity: DiscountUpdateIdentity | None = None
-    values: DiscountUpdateValues | None = None
+    value: DiscountValue | None = None
 
     @model_validator(mode="after")
-    def _require_identity_or_values(self) -> DiscountUpdateRequest:
+    def _require_identity_or_value(self) -> DiscountUpdateRequest:
         """At least one destination must carry a change."""
-        if self.identity is None and self.values is None:
+        if self.identity is None and self.value is None:
             raise ValueError(
-                "at least one of identity or values must be provided",
+                "at least one of identity or value must be provided",
             )
         return self
 
@@ -222,8 +150,8 @@ class DiscountResponse(BaseModel):
     """Response after creating, updating, or fetching a discount.
 
     Combines the identity (gym_discounts) with its ACTIVE value version
-    (gym_discount_values). `value_id` is the active version tag; the
-    percent/dollar + lifetime come from that version.
+    (gym_discount_values). `value_id` is the active version tag; `value` is
+    that version's spec.
     """
 
     discount_id: UUID
@@ -231,11 +159,31 @@ class DiscountResponse(BaseModel):
     discount_name: str
     discount_type: DiscountType
     value_id: UUID
-    percentage_off: float | None = None
-    dollar_off: int | None = None
-    discount_mode: DiscountMode
-    duration_amount: int | None = None
-    duration_unit: DiscountDurationUnit | None = None
-    end_date: date | None = None
+    value: DiscountValue
     is_deleted: bool
     created_at: datetime
+
+    @classmethod
+    def from_row(cls, row: dict) -> DiscountResponse:
+        """Build the nested response from a flat identity+value DB row.
+
+        The one place the flat SQL row shape (gym_discounts joined to its
+        active gym_discount_values version) maps to the nested API shape.
+        """
+        return cls(
+            discount_id=row["discount_id"],
+            gym_id=row["gym_id"],
+            discount_name=row["discount_name"],
+            discount_type=row["discount_type"],
+            value_id=row["value_id"],
+            value=DiscountValue(
+                percentage_off=row.get("percentage_off"),
+                dollar_off=row.get("dollar_off"),
+                discount_mode=row["discount_mode"],
+                duration_amount=row.get("duration_amount"),
+                duration_unit=row.get("duration_unit"),
+                end_date=row.get("end_date"),
+            ),
+            is_deleted=row["is_deleted"],
+            created_at=row["created_at"],
+        )

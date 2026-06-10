@@ -115,7 +115,7 @@ async def test_one_time_start_with_preset_discount(
         plan_id=plan.plan_id,
         price_id=plan.price_id,
         idempotency_key=uuid4(),
-        preset_ids=[preset.discount_id],
+        discount_ids=[preset.discount_id],
     )
 
     # The single invoice is discounted at creation (5000 - 10% = 4500).

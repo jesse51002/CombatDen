@@ -89,7 +89,7 @@ async def test_billing_detail_surfaces_active_applied_discount(
         await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            preset_ids=[discount.discount_id],
+            discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 

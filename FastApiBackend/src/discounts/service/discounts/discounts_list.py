@@ -28,4 +28,4 @@ class DiscountsList(DiscountsBase):
             )
             rows = result.mappings().fetchall()
 
-        return [DiscountResponse(**dict(row)) for row in rows]
+        return [DiscountResponse.from_row(dict(row)) for row in rows]

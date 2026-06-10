@@ -130,7 +130,7 @@ async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
         await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            preset_ids=[discount.discount_id],
+            discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 
@@ -209,7 +209,7 @@ async def test_once_discount_lands_once_then_consumed(
         await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            preset_ids=[discount.discount_id],
+            discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 
@@ -306,7 +306,7 @@ async def test_apply_is_idempotent_no_duplicate_snapshot(
             await memberships_service.add_discounts(
                 item_id=item_id,
                 member_id=member.member_id,
-                preset_ids=[discount.discount_id],
+                discount_ids=[discount.discount_id],
                 idempotency_key=uuid4(),
             )
 

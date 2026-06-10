@@ -4,8 +4,9 @@ A discount has a stable IDENTITY (gym_discounts: name + type) and a chain of
 immutable VALUE versions (gym_discount_values). Editing splits accordingly:
 
 * renaming updates the identity row in place;
-* changing any value/lifetime field mints a NEW active version (deactivating the
-  prior one) — value rows are a permanent paper trail.
+* a value edit sends the COMPLETE new ``DiscountValue`` (never a partial merge)
+  and mints a NEW active version (deactivating the prior one) — value rows are
+  a permanent paper trail.
 
 Either way, edits affect only future applications — existing applied-discount
 snapshots reference the old version and are frozen. There is no Stripe coupon to
@@ -25,8 +26,7 @@ from src.discounts import SQL_DIR
 from src.discounts.schema.discounts_schema import (
     DiscountResponse,
     DiscountUpdateRequest,
-    DiscountUpdateValues,
-    validate_lifetime,
+    DiscountValue,
 )
 from src.discounts.service.discounts.discounts_base import DiscountsBase
 from src.shared.column_guard import validate_mutable_columns
@@ -42,13 +42,14 @@ class DiscountsUpdate(DiscountsBase):
         self,
         request: DiscountUpdateRequest,
     ) -> DiscountResponse:
-        """Apply a partial update; the request shape picks the destination.
+        """Apply an update; the request shape picks the destination.
 
-        `identity` renames the gym_discounts row in place; `values` mints a
-        new active gym_discount_values version. Either may be omitted.
+        `identity` renames the gym_discounts row in place; `value` mints a
+        new active gym_discount_values version from the complete spec sent.
+        Either may be omitted.
 
         Args:
-            request: Discount update request (identity and/or values).
+            request: Discount update request (identity and/or value).
 
         Returns:
             The updated discount (identity + active value version).
@@ -60,9 +61,8 @@ class DiscountsUpdate(DiscountsBase):
         existing = await self._get_discount(request.discount_id)
 
         identity_changes = self._collect_changes(request.identity) if request.identity else {}
-        value_changes = self._collect_changes(request.values) if request.values else {}
-        if not identity_changes and not value_changes:
-            return DiscountResponse(**existing)
+        if not identity_changes and request.value is None:
+            return DiscountResponse.from_row(existing)
 
         # The identity UPDATE is built dynamically from the changed columns,
         # so the guard does real work here (the value path is a static
@@ -80,29 +80,29 @@ class DiscountsUpdate(DiscountsBase):
                         identity_changes,
                     )
                 )
-            if value_changes:
+            if request.value is not None:
                 result.update(
                     await self._new_version(
                         session,
                         request.discount_id,
                         str(existing["gym_id"]),
-                        existing,
-                        value_changes,
+                        request.value,
                     )
                 )
             await session.commit()
 
-        return DiscountResponse(**result)
+        return DiscountResponse.from_row(result)
 
     # ── Private ────────────────────────────────────────────────
 
     @staticmethod
     def _collect_changes(model: BaseModel) -> dict[str, object]:
-        """Extract the non-None fields of an update sub-model.
+        """Extract the non-None fields of the identity sub-model.
 
-        Shared by `identity` and `values`: the sub-model's own field set is
-        the source of truth, so adding a future editable column is just a
-        model field — no change here.
+        The sub-model's own field set is the source of truth, so adding a
+        future editable identity column is just a model field — no change
+        here. (The value path takes a complete ``DiscountValue``, never a
+        field-by-field change set.)
         """
         return {
             field: value
@@ -138,14 +138,13 @@ class DiscountsUpdate(DiscountsBase):
         session: AsyncSession,
         discount_id: object,
         gym_id: str,
-        existing: dict,
-        value_changes: dict[str, object],
+        value: DiscountValue,
     ) -> dict:
-        """Deactivate the active value version and insert a new one."""
-        merged = {field: existing.get(field) for field in DiscountUpdateValues.model_fields}
-        merged.update(value_changes)
-        self._validate_merged_state(merged)
+        """Deactivate the active value version and insert the sent one.
 
+        The request carries the complete new spec (the model already
+        validated it) — nothing is merged from the prior version.
+        """
         deactivate_sql = load_sql(SQL_DIR / "discount_values_deactivate.sql")
         await session.execute(
             text(deactivate_sql),
@@ -156,34 +155,14 @@ class DiscountsUpdate(DiscountsBase):
         params = {
             "discount_id": str(discount_id),
             "gym_id": gym_id,
-            "percentage_off": merged["percentage_off"],
-            "dollar_off": merged["dollar_off"],
-            "discount_mode": str(merged["discount_mode"]),
-            "duration_amount": merged["duration_amount"],
+            "percentage_off": value.percentage_off,
+            "dollar_off": value.dollar_off,
+            "discount_mode": value.discount_mode.value,
+            "duration_amount": value.duration_amount,
             "duration_unit": (
-                str(merged["duration_unit"]) if merged["duration_unit"] is not None else None
+                value.duration_unit.value if value.duration_unit is not None else None
             ),
-            "end_date": merged["end_date"],
+            "end_date": value.end_date,
         }
         result = await session.execute(text(insert_sql), params)
         return dict(result.mappings().one())
-
-    @staticmethod
-    def _validate_merged_state(merged: dict) -> None:
-        """Validate the merged value state after applying changes.
-
-        Raises:
-            ValueError: If the merged value violates constraints.
-        """
-        has_pct = merged.get("percentage_off") is not None
-        has_amt = merged.get("dollar_off") is not None
-        if has_pct == has_amt:
-            raise ValueError(
-                "Exactly one of percentage_off or dollar_off must be set",
-            )
-
-        validate_lifetime(
-            duration_amount=merged.get("duration_amount"),
-            duration_unit=merged.get("duration_unit"),
-            end_date=merged.get("end_date"),
-        )

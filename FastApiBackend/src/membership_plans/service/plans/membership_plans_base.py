@@ -11,7 +11,10 @@ from schema.gym_discount import DiscountMode, DiscountType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
-from src.discounts.schema.discounts_schema import DiscountCreateRequest
+from src.discounts.schema.discounts_schema import (
+    DiscountCreateRequest,
+    DiscountValue,
+)
 from src.discounts.service.discounts.discounts_service import DiscountsService
 from src.membership_plans import SQL_DIR
 from src.membership_plans.membership_plans_schemas import (
@@ -78,9 +81,11 @@ class MembershipPlansBase:
                     gym_id=gym_id,
                     discount_name=f"Family member {tier}",
                     discount_type=DiscountType.linked,
-                    percentage_off=value.percentage_off,
-                    dollar_off=value.dollar_off,
-                    discount_mode=DiscountMode.ongoing,
+                    value=DiscountValue(
+                        percentage_off=value.percentage_off,
+                        dollar_off=value.dollar_off,
+                        discount_mode=DiscountMode.ongoing,
+                    ),
                 ),
             )
             ids.append(str(discount.discount_id))

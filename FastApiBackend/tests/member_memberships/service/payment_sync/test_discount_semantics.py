@@ -106,7 +106,7 @@ async def test_line_amount_vs_subtotal_with_discount(
         await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,
-            preset_ids=[discount.discount_id],
+            discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
 

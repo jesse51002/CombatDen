@@ -14,6 +14,7 @@ from src.discounts.schema.discounts_schema import (
     DiscountCreateRequest,
     DiscountResponse,
     DiscountUpdateRequest,
+    DiscountValue,
 )
 from src.discounts.service.discounts.discounts_create import DiscountsCreate
 from src.discounts.service.discounts.discounts_delete import DiscountsDelete
@@ -55,6 +56,14 @@ class DiscountsService:
     ) -> DiscountResponse:
         """Create a coupon-free discount preset."""
         return await self._create.create_discount(request)
+
+    async def mint_custom_discounts(
+        self,
+        gym_id: UUID,
+        values: list[DiscountValue],
+    ) -> list[UUID]:
+        """Mint inline custom values as ``custom`` discounts; return their ids."""
+        return await self._create.mint_custom_discounts(gym_id, values)
 
     # ── Update ─────────────────────────────────────────────────
 

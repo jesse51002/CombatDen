@@ -219,7 +219,7 @@ def _apply_discounts(api: GymApiClient, record: CurrentMembershipRecord) -> None
         json={
             "item_id": str(record.item_id),
             "member_id": str(record.member.member_id),
-            "preset_ids": [str(d) for d in current.discount_ids],
+            "discount_ids": [str(d) for d in current.discount_ids],
             "idempotency_key": str(uuid.uuid4()),
         },
     )

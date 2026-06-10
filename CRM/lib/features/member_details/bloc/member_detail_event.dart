@@ -171,22 +171,22 @@ class MarkPaidCashRequested extends MemberDetailEvent {
 }
 
 /// Commits adding applied-discount snapshots to a membership
-/// — the named [presetIds] (by discount id, any type incl. a
+/// — the named [discountIds] (by discount id, any type incl. a
 /// `linked` family discount) frozen at their active value
 /// version. A single-operation commit (the backend has no
 /// combined add+remove); preview happens repository-direct.
 class AddDiscountsRequested extends MemberDetailEvent {
   final String itemId;
   final String memberId;
-  final List<String> presetIds;
+  final List<String> discountIds;
   const AddDiscountsRequested({
     required this.itemId,
     required this.memberId,
-    required this.presetIds,
+    required this.discountIds,
   });
 
   @override
-  List<Object?> get props => [itemId, memberId, presetIds];
+  List<Object?> get props => [itemId, memberId, discountIds];
 }
 
 /// Commits removing applied-discount snapshots from a
