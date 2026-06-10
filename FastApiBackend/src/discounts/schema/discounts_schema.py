@@ -5,7 +5,7 @@ no Stripe coupon baked in. Each carries a lifetime spec — discount_mode
 (once | ongoing) PLUS, for an ongoing discount, an end set by EITHER a duration
 span (duration_amount + duration_unit) OR an explicit end_date, never both;
 neither = forever. Coupons are computed at sync-time and written back onto the
-applied-discount snapshot, never on the preset.
+applied-discount row, never on the preset.
 
 ``DiscountValue`` is the single shared shape for a discount value version —
 everything that determines the discount (how much, the mode, how long it
@@ -127,8 +127,8 @@ class DiscountUpdateRequest(BaseModel):
     version from the COMPLETE spec sent — the client always sends the full
     ``DiscountValue``, never a partial merge with the current version. At
     least one must be present. Edits affect only future applications;
-    existing snapshot rows on member_membership_applied_discounts are never
-    touched.
+    existing applied-discount rows on member_membership_applied_discounts are
+    never touched.
     """
 
     discount_id: UUID

@@ -1,13 +1,13 @@
 """Mid-cycle add-discount tests using Stripe Test Clocks.
 
-Exercises the snapshot add path (``POST /member_memberships/discounts/add`` ->
-``memberships_service.add_discounts``). Adding a regular discount INSERTs a
-frozen snapshot row and re-syncs; the sync computes the consolidated line's
+Exercises the applied-discount add path (``POST /member_memberships/discounts/add``
+-> ``memberships_service.add_discounts``). Adding a regular discount INSERTs an
+applied-discount row and re-syncs; the sync computes the consolidated line's
 coupon, attaches it, and writes the resolved stripe_coupon_id back. Editing or
 deleting the source preset never touches these rows.
 
-Requires a migrated local DB (the applied-discount snapshot table + the
-gym_discounts lifetime columns) and the shared Stripe test account.
+Requires a migrated local DB (the member_membership_applied_discounts table +
+the gym_discounts lifetime columns) and the shared Stripe test account.
 """
 
 from datetime import datetime, timedelta
@@ -18,7 +18,7 @@ import pytest
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
-    get_applied_snapshots,
+    get_applied_discounts,
     get_profile_stripe_ids,
 )
 from tests.helpers.stripe_assertions import (
@@ -86,7 +86,7 @@ def _line_coupon_ids(sub, stripe_price_id: str) -> set[str]:
 
 
 @pytest.mark.timeout(180)
-async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
+async def test_add_ongoing_discount_writes_applied_row_and_discounts_next_invoice(
     memberships_service,
     db_pool,
     gym_id,
@@ -94,9 +94,9 @@ async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
     connect_opts,
     created,
 ):
-    """Applying an ongoing percent discount INSERTs a snapshot, the sync
-    computes + attaches the coupon and writes its id back, and the next
-    cycle bills the discounted amount. No invoice is cut at edit time.
+    """Applying an ongoing percent discount INSERTs an applied-discount row,
+    the sync computes + attaches the coupon and writes its id back, and the
+    next cycle bills the discounted amount. No invoice is cut at edit time.
     """
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
@@ -134,8 +134,8 @@ async def test_add_ongoing_discount_writes_snapshot_and_discounts_next_invoice(
             idempotency_key=uuid4(),
         )
 
-        # A frozen snapshot was written, copying the preset intent + provenance.
-        snaps = await get_applied_snapshots(db_pool, item_id)
+        # An applied-discount row was written, copying the preset intent + provenance.
+        snaps = await get_applied_discounts(db_pool, item_id)
         assert len(snaps) == 1
         snap = snaps[0]
         assert snap["discount_type"] == "preset"
@@ -213,7 +213,7 @@ async def test_once_discount_lands_once_then_consumed(
             idempotency_key=uuid4(),
         )
 
-        snaps = await get_applied_snapshots(db_pool, item_id)
+        snaps = await get_applied_discounts(db_pool, item_id)
         assert len(snaps) == 1
         assert snaps[0]["discount_mode"] == "once"
         # Pending once: coupon resolved + written back, end_date still null.
@@ -234,8 +234,8 @@ async def test_once_discount_lands_once_then_consumed(
         )
 
         # The cycle AFTER the once is consumed re-syncs: the coupon is gone
-        # from the live sub, the snapshot's end_date is stamped, and the
-        # following invoice bills full price.
+        # from the live sub, the applied-discount row's end_date is stamped,
+        # and the following invoice bills full price.
         before2 = await snapshot_billing_state(
             stripe_client, profile.stripe_customer_id, connect_opts
         )
@@ -264,9 +264,9 @@ async def test_once_discount_lands_once_then_consumed(
             idempotency_key=uuid4(),
         )
 
-        snaps_after = await get_applied_snapshots(db_pool, item_id)
+        snaps_after = await get_applied_discounts(db_pool, item_id)
         assert snaps_after[0]["end_date"] is not None, (
-            "Consumed once snapshot should have its end_date stamped"
+            "Consumed once applied-discount row should have its end_date stamped"
         )
     finally:
         if member is not None:
@@ -275,7 +275,7 @@ async def test_once_discount_lands_once_then_consumed(
 
 
 @pytest.mark.timeout(180)
-async def test_apply_is_idempotent_no_duplicate_snapshot(
+async def test_apply_is_idempotent_no_duplicate_applied_row(
     memberships_service,
     db_pool,
     gym_id,
@@ -283,10 +283,10 @@ async def test_apply_is_idempotent_no_duplicate_snapshot(
     connect_opts,
     created,
 ):
-    """Applying the same preset twice leaves a single frozen snapshot.
+    """Applying the same preset twice leaves a single applied-discount row.
 
-    A snapshot already present and still desired is left frozen (never
-    re-resolved, never duplicated).
+    An applied-discount row already present and still desired is left frozen
+    (never re-resolved, never duplicated).
     """
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
@@ -310,9 +310,9 @@ async def test_apply_is_idempotent_no_duplicate_snapshot(
                 idempotency_key=uuid4(),
             )
 
-        snaps = await get_applied_snapshots(db_pool, item_id)
+        snaps = await get_applied_discounts(db_pool, item_id)
         assert len(snaps) == 1, (
-            f"Re-applying a preset must not duplicate the snapshot, got {len(snaps)}"
+            f"Re-applying a preset must not duplicate the applied-discount row, got {len(snaps)}"
         )
     finally:
         if member is not None:

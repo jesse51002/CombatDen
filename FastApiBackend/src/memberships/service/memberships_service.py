@@ -20,6 +20,9 @@ from src.memberships.service.memberships_cancel import (
 from src.memberships.service.memberships_charge_card import (
     MemberMembershipsChargeCard,
 )
+from src.memberships.service.memberships_discounts import (
+    MemberMembershipsDiscounts,
+)
 from src.memberships.service.memberships_freeze import (
     MemberMembershipsFreeze,
 )
@@ -31,9 +34,6 @@ from src.memberships.service.memberships_mark_paid_cash import (
 )
 from src.memberships.service.memberships_start import (
     MemberMembershipsStart,
-)
-from src.memberships.service.memberships_update_discounts import (
-    MemberMembershipsUpdateDiscounts,
 )
 from src.memberships.service.memberships_update_price import (
     MemberMembershipsUpdatePrice,
@@ -104,7 +104,7 @@ class MemberMembershipsService:
             parent_resolver=parent_resolver,
             freeze_service=freeze_service,
         )
-        self._update_discounts = MemberMembershipsUpdateDiscounts(*deps)
+        self._update_discounts = MemberMembershipsDiscounts(*deps)
         self._start = MemberMembershipsStart(
             *deps,
             payment_service=payment_service,
@@ -284,7 +284,7 @@ class MemberMembershipsService:
                 prorate=prorate,
             )
 
-    # ── Apply Discounts (add / remove snapshots) ───────────────
+    # ── Apply Discounts (add / remove applied-discount rows) ───────────────
 
     async def add_discounts(
         self,
@@ -294,7 +294,7 @@ class MemberMembershipsService:
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Add discount snapshots, or preview the addition (``preview=True``)."""
+        """Add applied-discount rows, or preview the addition (``preview=True``)."""
         async with self._paying_lock.lock([member_id]):
             return await self._update_discounts.add_discounts(
                 item_id=item_id,
@@ -312,7 +312,7 @@ class MemberMembershipsService:
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Remove discount snapshots, or preview the removal (``preview=True``)."""
+        """Remove applied-discount rows, or preview the removal (``preview=True``)."""
         async with self._paying_lock.lock([member_id]):
             return await self._update_discounts.remove_discounts(
                 item_id=item_id,

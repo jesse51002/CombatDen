@@ -41,8 +41,8 @@ if TYPE_CHECKING:
     from src.discounts.service.discounts_service import (
         DiscountsService,
     )
-    from src.memberships.service.memberships_update_discounts import (  # noqa: E501
-        MemberMembershipsUpdateDiscounts,
+    from src.memberships.service.memberships_discounts import (  # noqa: E501
+        MemberMembershipsDiscounts,
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
@@ -69,7 +69,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         payment_service: PaymentsStripePaymentService,
         parent_resolver: BillingParentResolver,
         payment_sync_one_time: PaymentSyncOneTime,
-        update_discounts: MemberMembershipsUpdateDiscounts,
+        update_discounts: MemberMembershipsDiscounts,
         discounts_service: DiscountsService,
     ) -> None:
         super().__init__(
@@ -103,7 +103,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         stripe_item_id on the CRM row. Memberships always begin
         on the day this method is called — future start dates
         are not supported. Optional ``discount_ids`` / ``custom_discounts`` are
-        snapshotted before the first charge, so it is discounted at creation.
+        applied before the first charge, so it is discounted at creation.
 
         Args:
             member_id: The member.
@@ -168,9 +168,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
         )
 
         # ── Discounts at creation (both paths) ────────────────
-        # Mint any inline customs, then snapshot all presets (preset + minted)
+        # Mint any inline customs, then apply all presets (preset + minted)
         # BEFORE the engine call, so the first (one-time: only) invoice is
-        # discounted. The revert undoes snapshots + minted customs + the pending
+        # discounted. The revert undoes applied rows + minted customs + the pending
         # row together if the charge/sync then fails.
         minted_ids = await self._discounts.mint_custom_discounts(
             gym_id, custom_discounts or []
@@ -178,7 +178,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         all_discount_ids = [*(discount_ids or []), *minted_ids]
         applied_ids: list[UUID] = []
         if all_discount_ids:
-            applied_ids = await self._update_discounts.add_preset_snapshots(
+            applied_ids = await self._update_discounts.add_applied_discounts(
                 item_id=item_id,
                 member_id=member_id,
                 gym_id=gym_id,
@@ -188,7 +188,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
         async def _revert() -> None:
             if applied_ids:
-                await self._update_discounts.delete_snapshots(
+                await self._update_discounts.delete_applied_discounts(
                     member_id, applied_ids
                 )
             for discount_id in minted_ids:

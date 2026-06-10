@@ -237,7 +237,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         subscription_service=payments_subscription_service,
     )
     # Pre-sync settle of the once-discount lifecycle (stamps consumed `once`
-    # snapshots); also the scheduled reconciler's core duty.
+    # applied-discount rows); also the scheduled reconciler's core duty.
     payment_sync_once_discounts = providers.Factory(
         PaymentSyncOnceDiscounts,
         db_pool=db_pool,

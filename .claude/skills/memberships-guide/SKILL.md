@@ -32,7 +32,7 @@ When the model changes, **update this skill in the same change** (it is a living
 document — see the bottom).
 
 Three sibling knowledge skills own the seams this doc only points at:
-`discounts-guide` owns the applied-discount snapshot model and linked/family
+`discounts-guide` owns the applied-discount model and linked/family
 discount semantics; `sync-guide` owns the payment sync engine every lifecycle op
 calls; `payments-guide` owns the Stripe primitives (Product/Price/invoice/
 customer/card). This doc stays inside plans + memberships and defers the rest.
@@ -329,7 +329,7 @@ preview) and lock **two** families inside the op, so the facade delegates them b
 | **freeze / unfreeze** (`freeze.py`) | **account-level** (not per-membership). `freeze` pauses Stripe billing and sets `freeze_start_date`/`freeze_end_date` on the parent `members` row (`member_memberships_freeze_profile.sql`); `unfreeze` resumes and clears them (`member_memberships_unfreeze_profile.sql`). Operates on the resolved parent account, so it covers all the account's memberships at once. |
 | **mark_paid_cash** (`mark_paid_cash.py`) | recurring-only; finds the subscription's open Stripe invoice and pays it **out of band** (no card charge). Stripe's `invoice.paid` webhook records the CRM invoice, and the `invoice_payment.paid` webhook records the cash charge (the InvoicePayment is `out_of_band`). Cash is a backup — future cycles still auto-charge the card. |
 | **charge_card** (`charge_card.py`) | ad-hoc, **outside any subscription**: create a one-off Stripe invoice for `amount_cents` + `reason`; `paid_cash=true` routes it out of band instead of charging the card. The `invoice.paid` + `invoice_payment.paid` webhooks persist the CRM invoice + charge rows. |
-| **add / remove discounts** (`update_discounts.py`) | **two separate ops**, `add_discounts(item_id, member_id, preset_ids, idempotency_key, preview=False)` and `remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`. Each writes/deletes applied-discount snapshot rows, then re-syncs so the sync resolves coupons. With `preview=True` it **stages** instead of committing — add inserts `preview_add` rows then deletes them; remove flips the rows to `preview_remove` then reverts to `applied` — runs the read-only preview build (which keeps `preview_add` in / drops `preview_remove`), and always cleans up. **The discount snapshot model is owned by `discounts-guide`** — defer the once/ongoing, value-version, coupon, and preview-staging details there. |
+| **add / remove discounts** (`memberships_discounts.py`) | **two separate ops**, `add_discounts(item_id, member_id, preset_ids, idempotency_key, preview=False)` and `remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`. Each writes/deletes applied-discount rows, then re-syncs so the sync resolves coupons. With `preview=True` it **stages** instead of committing — add inserts `preview_add` rows then deletes them; remove flips the rows to `preview_remove` then reverts to `applied` — runs the read-only preview build (which keeps `preview_add` in / drops `preview_remove`), and always cleans up. **The applied-discount model is owned by `discounts-guide`** — defer the once/ongoing, value-version, coupon, and preview-staging details there. |
 | **link / unlink** (`linked.py`) | `link_account(member_id, parent_member_id)` sets `members.account_linked_to_id` (and NULLs the child's stripe/card/freeze fields per the `linked_account_no_stripe` check); `unlink_account(member_id)` clears it; `check_link_account` is a read-only pre-flight. **Pure DB change — no Stripe sync, no preview.** Both require the member to have **zero active recurring memberships** (`_assert_no_active_recurring`), and the engine never recomputes discounts family-wide (`discounts-guide`), so adding/removing a membership-less family member can't change anyone's bill — there is nothing to sync or preview. Owns its **own** locking: locks **two** families (`[member_id, parent_member_id]` / `[member_id, old_parent_id]`); since `PayingMemberLock` is non-reentrant the facade delegates these **bare** (no `lock([member_id])` wrap). Self-contained — does **not** extend `MemberMembershipsBase`. |
 
 ---
@@ -395,7 +395,7 @@ preview) and lock **two** families inside the op, so the facade delegates them b
 | `POST /preview` | preview a start |
 | `POST /cancel/preview` | preview a cancel |
 | `POST /price/preview` | preview a price update |
-| `POST /discounts/add` | add discount snapshot(s) to the membership; `preview` bool in the body runs a dry-run instead of committing |
+| `POST /discounts/add` | add applied-discount row(s) to the membership; `preview` bool in the body runs a dry-run instead of committing |
 | `POST /discounts/remove` | remove applied discount(s); `preview` bool in the body runs a dry-run instead of committing |
 | `POST /mark-paid-cash` | pay the open invoice out of band (204) |
 | `POST /charge-card` | ad-hoc card/cash charge |
@@ -432,7 +432,7 @@ gate on access to that member rather than on gym-employee status).
   (`memberships_service.py` facade + `memberships_base`, `memberships_start`,
   `memberships_cancel`, `memberships_update_price`, `memberships_freeze`,
   `memberships_mark_paid_cash`, `memberships_charge_card`,
-  `memberships_update_discounts`); schemas in
+  `memberships_discounts`); schemas in
   `src/memberships/memberships_schema.py`; router
   `src/memberships/memberships_router.py`; SQL in `src/memberships/sql/`
   (`..._insert`, `..._get`, `..._get_plan_price`, `..._get_active_price`,
@@ -440,7 +440,7 @@ gate on access to that member rather than on gym-employee status).
   profile pair, `..._delete_pending`).
 - **Seams (do NOT duplicate):** the `src/sync/sql/`
   folder + the sync engine are owned by `sync-guide`; the
-  `src/memberships/sql/applied_discounts/` folder + the discount snapshot
+  `src/memberships/sql/applied_discounts/` folder + the applied-discount
   model are owned by `discounts-guide`; Stripe Product/Price/invoice/customer
   primitives are owned by `payments-guide`.
 - **Engine design rationale (prose):** the **`sync-guide`** skill (the

@@ -210,6 +210,9 @@ src/
 - **Every file inside a domain folder carries the domain name as a prefix.** The prefix makes the file's origin unambiguous when it appears in imports, tracebacks, or grep output.
 - Good: `memberships/memberships_router.py`, `sync/service/sync_builder.py`, `plans/plans_schema.py`
 - Bad: `memberships/router.py`, `sync/service/builder.py` (no prefix — ambiguous in isolation)
+- **A service file's primary class and its file name must stay consistent.** The file name is the class's role in the domain; renaming one means renaming the other in the same change.
+  - Good: `memberships_discounts.py` ↔ `MemberMembershipsDiscounts`, `sync_builder.py` ↔ `PaymentSyncBuilder`
+  - Bad: renaming the file without renaming the class, or vice versa — a drifted name silently misleads every reader and every grep.
 
 **Why Domain-Driven**
 - Clear boundaries between business domains

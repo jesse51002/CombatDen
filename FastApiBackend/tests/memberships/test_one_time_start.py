@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
-from tests.helpers.db_reads import get_applied_snapshots
+from tests.helpers.db_reads import get_applied_discounts
 
 
 async def _read_one_time_row(db_pool, member_id, gym_id) -> dict:
@@ -128,7 +128,7 @@ async def test_one_time_start_with_preset_discount(
     assert invoice.status == "paid"
     assert invoice.amount_paid == 4500
 
-    # The snapshot is applied with its resolved coupon written back.
-    snaps = await get_applied_snapshots(db_pool, row["item_id"])
+    # The applied-discount row has its resolved coupon written back.
+    snaps = await get_applied_discounts(db_pool, row["item_id"])
     assert len(snaps) == 1
     assert snaps[0]["stripe_coupon_id"] is not None

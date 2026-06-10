@@ -9,7 +9,7 @@ description: >-
   written back to Stripe. Load this whenever you touch
   anything discount-shaped: gym_discounts / gym_discount_values, the
   member_membership_applied_discounts rows, the apply/remove path
-  (MemberMembershipsUpdateDiscounts), the build-time coupon computation
+  (MemberMembershipsDiscounts), the build-time coupon computation
   (PaymentSyncDiscounts / PaymentSyncCoupons), the once/ongoing lifetime +
   end_date, the per-membership-sequential percent math, or the CRM discount UI.
   Trigger on "discount", "coupon", "discount version", "apply a discount",
@@ -252,11 +252,11 @@ shared by both paths; the coupon-id *writeback* is real-sync-only. Intentional.
 Adding and removing are **two separate operations**, `add_discounts(item_id,
 member_id, preset_ids, idempotency_key, preview=False)` and
 `remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`
-(`MemberMembershipsUpdateDiscounts`). Each takes a **`preview` bool**. A preview
+(`MemberMembershipsDiscounts`). Each takes a **`preview` bool**. A preview
 must reflect the *proposed* change (not the current bill) yet leave **no permanent
 state**, so it **stages** through the `stripe_sync_status` enum:
 
-- **`add_discounts(preview=True)`** inserts the snapshot rows as **`preview_add`**,
+- **`add_discounts(preview=True)`** inserts the applied-discount rows as **`preview_add`**,
   runs the read-only preview build, then **deletes** them.
 - **`remove_discounts(preview=True)`** flips the target rows from `applied` to
   **`preview_remove`**, runs the preview build, then **reverts** them to `applied`.
@@ -360,7 +360,7 @@ re-applied on later cycles; changing the count while pending re-divides correctl
   active version; update = rename hits identity, value-edit mints a new active
   version; delete = archive `is_deleted`).
 - **Apply/remove:**
-  `FastApiBackend/src/memberships/service/memberships_update_discounts.py`
+  `FastApiBackend/src/memberships/service/memberships_discounts.py`
   + its SQL in `.../sql/applied_discounts/` (apply references the active
   `value_id`; regular discounts only).
 - **Build-time coupons:** `payment_sync/payment_sync_discounts.py`

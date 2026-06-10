@@ -2,7 +2,7 @@
 
 The seed creates coupon-free discount presets: `POST /api/v1/discounts/` writes
 the identity row plus its active value version (coupons are computed at sync and
-written onto the applied snapshot, never on the preset). Each carries a lifetime
+written onto the applied-discount row, never on the preset). Each carries a lifetime
 spec — discount_mode (once | ongoing) plus, for ongoing, an end set by EITHER a
 duration span (duration_amount + duration_unit ∈ day/week/month) OR an explicit
 end_date — never both; neither = forever. The payload built here matches

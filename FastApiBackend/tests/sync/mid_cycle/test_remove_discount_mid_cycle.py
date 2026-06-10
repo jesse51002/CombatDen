@@ -1,16 +1,16 @@
 """Mid-cycle remove-discount tests using Stripe Test Clocks.
 
-Removing a discount is a DELETE of the membership's frozen snapshot row via
-``remove_discounts(applied_ids=[...])``. The re-sync then
-recomputes the line with the row gone, so the coupon leaves the Stripe item and
-the next cycle bills full price.
+Removing a discount is a DELETE of the membership's applied-discount row via
+``remove_discounts(applied_ids=[...])``. The re-sync then recomputes the line
+with the row gone, so the coupon leaves the Stripe item and the next cycle
+bills full price.
 
 Archiving the *source preset* is deliberately NOT a removal — predictability
 means a member's bill only changes via an explicit add/remove on their own
 membership. The archive-leaves-the-holder behavior is verified here too.
 
-Requires a migrated local DB (the applied-discount snapshot table) and the
-shared Stripe test account.
+Requires a migrated local DB (the member_membership_applied_discounts table)
+and the shared Stripe test account.
 """
 
 from datetime import datetime, timedelta
@@ -21,7 +21,7 @@ import pytest
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
-    get_applied_snapshots,
+    get_applied_discounts,
     get_profile_stripe_ids,
 )
 from tests.helpers.stripe_assertions import (
@@ -99,7 +99,7 @@ async def _start_and_apply(memberships_service, db_pool, member, gym_id, plan, d
 
 
 @pytest.mark.timeout(240)
-async def test_remove_snapshot_scrubs_coupon_and_bills_full_next_cycle(
+async def test_remove_applied_discount_scrubs_coupon_and_bills_full_next_cycle(
     memberships_service,
     db_pool,
     gym_id,
@@ -107,9 +107,9 @@ async def test_remove_snapshot_scrubs_coupon_and_bills_full_next_cycle(
     connect_opts,
     created,
 ):
-    """Removing a membership's applied-discount snapshot DELETEs the row,
-    scrubs the coupon off the Stripe item, and bills the next cycle at the
-    full price. No invoice is cut at edit time.
+    """Removing a membership's applied-discount row DELETEs it, scrubs the
+    coupon off the Stripe item, and bills the next cycle at the full price.
+    No invoice is cut at edit time.
     """
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
@@ -130,7 +130,7 @@ async def test_remove_snapshot_scrubs_coupon_and_bills_full_next_cycle(
         )
         profile = await get_profile_stripe_ids(db_pool, member.member_id, gym_id)
 
-        snaps = await get_applied_snapshots(db_pool, item_id)
+        snaps = await get_applied_discounts(db_pool, item_id)
         assert len(snaps) == 1
         applied_id = snaps[0]["applied_discount_id"]
         coupon_id = snaps[0]["stripe_coupon_id"]
@@ -150,8 +150,8 @@ async def test_remove_snapshot_scrubs_coupon_and_bills_full_next_cycle(
             idempotency_key=uuid4(),
         )
 
-        # Snapshot row is gone; coupon scrubbed; no edit-time charge.
-        assert await get_applied_snapshots(db_pool, item_id) == []
+        # Applied-discount row is gone; coupon scrubbed; no edit-time charge.
+        assert await get_applied_discounts(db_pool, item_id) == []
         sub = await fetch_subscription(stripe_client, profile.stripe_sub_id_month, connect_opts)
         assert _line_coupon_ids(sub, plan.stripe_price_id) == set()
         await assert_no_unexpected_charges(stripe_client, before, connect_opts)
@@ -185,8 +185,8 @@ async def test_archiving_preset_leaves_holder_bill_unchanged(
 
     Predictability guarantee: a member's bill only changes via an explicit
     add/remove on their own membership. After the preset is archived, the
-    holder keeps their snapshot, the coupon stays on the Stripe item, and the
-    next cycle still bills the discounted amount.
+    holder keeps their applied-discount row, the coupon stays on the Stripe
+    item, and the next cycle still bills the discounted amount.
     """
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
@@ -206,7 +206,7 @@ async def test_archiving_preset_leaves_holder_bill_unchanged(
             memberships_service, db_pool, member, gym_id, plan, discount.discount_id
         )
         profile = await get_profile_stripe_ids(db_pool, member.member_id, gym_id)
-        snap_coupon = (await get_applied_snapshots(db_pool, item_id))[0]["stripe_coupon_id"]
+        snap_coupon = (await get_applied_discounts(db_pool, item_id))[0]["stripe_coupon_id"]
         assert snap_coupon is not None
 
         before = await snapshot_billing_state(
@@ -216,8 +216,8 @@ async def test_archiving_preset_leaves_holder_bill_unchanged(
         # Archive the preset (soft-delete). Must not cascade.
         await discounts_service.delete_discount(discount.discount_id)
 
-        # Holder keeps their snapshot + coupon; no charge at archive time.
-        snaps = await get_applied_snapshots(db_pool, item_id)
+        # Holder keeps their applied-discount row + coupon; no charge at archive time.
+        snaps = await get_applied_discounts(db_pool, item_id)
         assert len(snaps) == 1
         sub = await fetch_subscription(stripe_client, profile.stripe_sub_id_month, connect_opts)
         assert snap_coupon in _line_coupon_ids(sub, plan.stripe_price_id)

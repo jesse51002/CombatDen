@@ -7,17 +7,17 @@ import 'package:crm/features/member_details/data/models/discount_type.dart';
 
 part 'discount_info.g.dart';
 
-/// One applied-discount snapshot frozen onto a single
+/// One applied-discount row frozen onto a single
 /// membership item.
 ///
 /// Mirrors the backend `MemberMembershipsAppliedDiscount`:
 /// every discount is item-scoped ([itemId]) and member-scoped
 /// ([memberId]), identified by [appliedDiscountId] (the handle
-/// the apply path removes by). The snapshot pins the membership
-/// to an immutable value version ([valueId]) of its owning
-/// discount ([discountId]); the name/value are resolved from
-/// that version. Applying = add a row, removing = delete one by
-/// [appliedDiscountId] — a snapshot is never edited.
+/// the apply path removes by). The applied-discount row pins
+/// the membership to an immutable value version ([valueId]) of
+/// its owning discount ([discountId]); the name/value are
+/// resolved from that version. Applying = add a row, removing
+/// = delete one by [appliedDiscountId] — a row is never edited.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
@@ -70,7 +70,7 @@ class DiscountInfo extends Equatable {
     return '';
   }
 
-  /// True when this snapshot is a family/linked discount.
+  /// True when this applied-discount row is a family/linked discount.
   bool get isLinked => discountType == DiscountType.linked;
 
   @override

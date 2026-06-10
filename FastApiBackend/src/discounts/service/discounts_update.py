@@ -9,7 +9,7 @@ immutable VALUE versions (gym_discount_values). Editing splits accordingly:
   a permanent paper trail.
 
 Either way, edits affect only future applications — existing applied-discount
-snapshots reference the old version and are frozen. There is no Stripe coupon to
+rows reference the old version and are frozen. There is no Stripe coupon to
 swap (coupons are computed at sync) and no membership cascade.
 """
 

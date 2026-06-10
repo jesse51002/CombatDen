@@ -10,7 +10,7 @@ __all__ = [
 
 
 class MemberMembershipAppliedDiscountCreate(SeedModel):
-    """Applied-discount snapshot: one discount frozen onto one membership
+    """Applied-discount row: one discount frozen onto one membership
     (item_id) at apply-time, referencing the immutable gym_discount_values
     version (value_id) it was applied at.
 

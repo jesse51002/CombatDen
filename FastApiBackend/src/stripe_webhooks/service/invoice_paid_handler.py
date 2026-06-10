@@ -403,7 +403,7 @@ class InvoicePaidHandler:
         *,
         stripe_account_id: str | None,
     ) -> None:
-        """Snapshot the invoice's discounts into ``member_invoice_applied_discounts``.
+        """Capture the invoice's discounts into ``member_invoice_applied_discounts``.
 
         The webhook payload carries discount *amounts* but only opaque ``di_``
         Discount ids — so we retrieve the invoice with the coupon expanded to map

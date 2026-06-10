@@ -9,7 +9,7 @@ import 'package:crm/shared/widgets/view_switcher.dart';
 
 /// The body of the manage-discounts dialog: a two-screen card.
 /// An **Add** screen lists the gym's not-yet-applied presets;
-/// a **Remove** screen lists the snapshots already applied to
+/// a **Remove** screen lists the applied-discount rows already applied to
 /// this member's line. Pure presentation — selection and the
 /// single combined apply/remove commit live in the dialog.
 class ManageDiscountsBody extends StatelessWidget {

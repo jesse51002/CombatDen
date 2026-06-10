@@ -21,9 +21,9 @@ def payment_sync_service(db_pool, stripe_client):
     """Expose PaymentSyncService for tests that need to
     trigger a standalone resync after state has already been set up.
 
-    Linked-discount recalculation is gone — the sync now reads frozen
-    applied-discount snapshots and computes each consolidated line's coupon
-    at sync-time.
+    Linked-discount recalculation is gone — the sync now reads the frozen
+    applied-discount rows and computes each consolidated line's coupon at
+    sync-time.
     """
     return build_payment_sync_service(db_pool, stripe_client)
 

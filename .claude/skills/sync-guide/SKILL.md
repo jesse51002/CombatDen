@@ -297,7 +297,7 @@ revert their pending write via `sync_or_revert` + propagate to their router;
 
 ---
 
-## 4. The read path — parent / family / memberships / snapshots
+## 4. The read path — parent / family / memberships / applied discounts
 
 ### Parent resolution is a shared service (`BillingParentResolver`)
 
@@ -352,7 +352,7 @@ The builder then **groups the memberships by `price_id`** into
 `PaymentSyncDiscounts.resolve` (§7 — returns a `ResolvedDiscounts`), and
 **assembles the bucket** (`_build_bucket`): one desired item per price group,
 quantity = number of memberships on the line, discounts = that price's resolved
-coupons. There is no separate flat "snapshots" list threaded alongside the
+coupons. There is no separate flat "applied discounts" list threaded alongside the
 bucket — discounts ride the membership rows and the coupons ride the bucket items.
 
 ### Desired state is the DB — no cancel filter, no add resolution
@@ -809,8 +809,8 @@ compare-desired-vs-actual **skip-if-equal** guard on the push path — today
   under swaps (the swap changes the coupon's value, never its end — the
   swap-invariance rationale is owned by `discounts-guide`).
 - **`PaymentSyncOnceDiscounts._current_coupon_ids` returns empty for a brand-new
-  sub** — so the pre-sync settle (§6) treats every `once` snapshot as pending on
-  first sync (correct: nothing's been invoiced yet). This live-coupon read lives
+  sub** — so the pre-sync settle (§6) treats every `once` applied-discount row as
+  pending on first sync (correct: nothing's been invoiced yet). This live-coupon read lives
   in the once-discount service now, not in the convergence.
 - **`bulk_payment_sync` swallows per-membership errors** —
   `PaymentsResourceNotFoundError` and any `Exception` are logged at ERROR and the

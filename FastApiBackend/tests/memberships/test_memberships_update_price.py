@@ -1,6 +1,6 @@
 """Integration tests for updating membership price tiers.
 
-Every test snapshots the customer's Stripe billing state before
+Every test captures the customer's Stripe billing state before
 calling ``update_price`` and asserts afterwards that:
 
 1. The Stripe subscription item now uses the new price id.

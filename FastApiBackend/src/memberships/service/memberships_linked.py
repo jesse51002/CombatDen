@@ -6,8 +6,8 @@ check); unlinking clears it. Both REQUIRE the target member to have zero active
 recurring memberships (``_assert_no_active_recurring``).
 
 These are **pure DB changes — no Stripe sync.** Because a member with no active
-recurring memberships contributes no membership line and no discount snapshot to
-the family, and the engine never recomputes discounts family-wide (each
+recurring memberships contributes no membership line and no applied-discount rows
+to the family, and the engine never recomputes discounts family-wide (each
 membership's bill is derived from that member's own memberships only — see the
 ``discounts-guide``), changing the link never changes anyone's bill. The
 no-active-recurring guard is exactly what keeps that true: the only case where a

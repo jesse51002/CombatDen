@@ -348,7 +348,7 @@ async def test_link_unlink_issues_no_charges(
 ):
     """Link + unlink must not create new invoices or proration items on
     the parent's Stripe subscription. The parent has an active recurring
-    plan; we snapshot the subscription around each operation and confirm
+    plan; we capture the subscription state around each operation and confirm
     its invoice identity is unchanged. (Link / unlink are pure DB changes —
     they never call Stripe — so this holds by construction.)
     """

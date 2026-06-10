@@ -8,8 +8,9 @@ part 'member_memberships_start_request.g.dart';
 ///
 /// Mirrors the reshaped `MemberMembershipsStartRequest`:
 /// memberships are created discount-free — discounts are
-/// applied as immutable snapshots afterward via the apply
-/// path (`PUT /discounts`), not threaded in at creation. The
+/// applied as immutable applied-discount rows afterward via
+/// the apply path (`PUT /discounts`), not threaded in at
+/// creation. The
 /// old `discount_ids` / `include_linked_discount` fields are
 /// gone.
 @JsonSerializable(

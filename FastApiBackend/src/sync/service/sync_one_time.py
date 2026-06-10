@@ -80,8 +80,8 @@ class PaymentSyncOneTime:
 
         Resolves the paying parent, builds the desired invoice (one line per
         pending one-time membership, item-level discounts), charges it once, and
-        writes back each membership's line id + invoice id + price + the discount
-        snapshots. A **no-op** when the family has no pending one-time memberships
+        writes back each membership's line id + invoice id + price + the applied
+        discounts. A **no-op** when the family has no pending one-time memberships
         (never cuts an empty invoice). Returns ``None`` — the caller reads the DB
         (the ``applied`` status) to confirm. One-time memberships are terminal, so
         re-running finds no ``not_added`` rows and charges nothing again.
@@ -238,9 +238,10 @@ class PaymentSyncOneTime:
         ↔ ``result.line_item_ids[i]`` / ``line_amounts[i]``): stamps the line id +
         invoice id + post-discount ``total_price`` + ``applied`` on each row. Then
         reuses the recurring coupon-link writeback (the resolved coupon onto each
-        contributing snapshot, marked ``applied``) and the once-consumption stamp
-        (``end_date = today`` on the once-mode snapshots — the one invoice is the
-        only charge). ``strict=True`` fails loud if Stripe returned a different
+        contributing applied-discount row, marked ``applied``) and the
+        once-consumption stamp (``end_date = today`` on the once-mode
+        applied-discount rows — the one invoice is the only charge).
+        ``strict=True`` fails loud if Stripe returned a different
         line count than we sent.
         """
         today = gym_today(plan.parent.timezone)

@@ -491,9 +491,9 @@ async def test_preview_applied_discounts_matches_renewal(
 ):
     """Applied-discount preview totals must equal the renewal invoice.
 
-    The apply path writes the frozen snapshot first and re-syncs (the sync
+    The apply path writes the applied-discount row first and re-syncs (the sync
     attaches the resolved coupon onto the live subscription). The preview then
-    reads the membership's CURRENT snapshot state, so a Stripe upcoming-invoice
+    reads the membership's CURRENT applied-discount state, so a Stripe upcoming-invoice
     read already reflects the attached coupon. Preview-vs-renewal drift here
     means the preview and real billing paths read different inputs — surface as
     a production bug per CLAUDE.md, do not loosen the assertion.
@@ -536,8 +536,8 @@ async def test_preview_applied_discounts_matches_renewal(
             gym_id,
         )
 
-        # Apply first (writes the snapshot + syncs the coupon onto the sub),
-        # then preview the membership's current discounted state.
+        # Apply first (writes the applied-discount row + syncs the coupon onto
+        # the sub), then preview the membership's current discounted state.
         await memberships_service.add_discounts(
             item_id=item_id,
             member_id=member.member_id,

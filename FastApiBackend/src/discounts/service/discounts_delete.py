@@ -2,8 +2,8 @@
 
 Archive only: flips is_deleted = true. There is no Stripe coupon to delete
 (coupons are computed at sync), no "strip from every membership" step, and no
-payment-sync cascade. Existing applied-discount snapshots keep their frozen
-copy of the discount, so a member's bill is untouched when a preset is archived.
+payment-sync cascade. Existing applied-discount rows keep their frozen copy of
+the discount, so a member's bill is untouched when a preset is archived.
 """
 
 from __future__ import annotations

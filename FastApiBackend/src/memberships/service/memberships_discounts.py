@@ -1,29 +1,34 @@
-"""Apply (add / remove) discount snapshots on an existing membership.
+"""Apply (add / remove) applied-discount rows on an existing membership.
 
-Applying a discount is an explicit add / remove of snapshot rows on
+Applying a discount is an explicit add / remove of applied-discount rows on
 member_membership_applied_discounts — never a replace-set, never an edit. Each
-snapshot freezes the membership to one immutable discount value version
+applied-discount row freezes the membership to one immutable discount value version
 (value_id); a later edit to the discount mints a NEW version, so the applied row
 stays pinned to the version it was applied at.
 
-- A regular preset newly desired -> INSERT a snapshot referencing the preset's
-  ACTIVE value version, with the absolute end_date resolved from that version's
-  lifetime spec. A preset already applied to this membership is skipped (left
-  frozen). A snapshot in the remove list -> DELETE.
-- ``once`` snapshots leave end_date NULL until the sync stamps it on consumption.
+- A regular preset newly desired -> INSERT an applied-discount row referencing the
+  preset's ACTIVE value version, with the absolute end_date resolved from that
+  version's lifetime spec. A preset already applied to this membership is skipped
+  (left frozen). An applied-discount row in the remove list -> DELETE.
+- ``once`` applied-discount rows leave end_date NULL until the sync stamps it on
+  consumption.
 
 Any discount is applied this way by id, including a ``linked`` (family) discount:
 the membership/family flow passes the linked discount's id in ``discount_ids``
-and it freezes a snapshot to that discount's active value like any other.
+and it freezes an applied-discount row to that discount's active value like any other.
 
-After writing the snapshot rows the membership's subscription is re-synced so the
-sync computes each consolidated line's coupon and writes the resolved
-stripe_coupon_id back onto the contributing snapshots. Stripe attach for ``once``
-discounts lives entirely in the sync: a just-applied ``once`` snapshot has a NULL
+After writing the applied-discount rows the membership's subscription is re-synced
+so the sync computes each consolidated line's coupon and writes the resolved
+stripe_coupon_id back onto the contributing applied-discount rows. Stripe attach for
+``once`` discounts lives entirely in the sync: a just-applied ``once`` row has a NULL
 stripe_coupon_id and NULL end_date; the first re-sync treats it as pending,
 find-or-creates its deterministic coupon, attaches it, and writes the coupon id
 back (the consumption handle). On a later cycle the coupon is absent from the
 live subscription, so the sync detects consumption and stamps end_date.
+
+DiscountsService never touches applied-discount rows — it owns only
+``gym_discounts`` / ``gym_discount_values``. ``mint_custom_discounts`` returns
+plain discount ids that the memberships side applies exactly like presets.
 """
 
 import logging
@@ -53,8 +58,8 @@ logger = logging.getLogger(__name__)
 _APPLIED_SQL = SQL_DIR / "applied_discounts"
 
 
-class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
-    """Add / remove applied-discount snapshots on a live membership."""
+class MemberMembershipsDiscounts(MemberMembershipsBase):
+    """Add / remove applied-discount rows on a live membership."""
 
     async def add_discounts(
         self,
@@ -64,13 +69,13 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Add a snapshot per named preset and re-sync — or preview the add.
+        """Add an applied-discount row per named preset and re-sync — or preview the add.
 
-        Inserts a snapshot for each newly-desired regular preset (skipping
-        presets already applied) referencing the preset's active value version,
-        then re-syncs Stripe so the sync resolves and writes back the coupon(s).
-        No mid-cycle invoice is cut — the next renewal is the first cycle to bill
-        the new total.
+        Inserts an applied-discount row for each newly-desired regular preset
+        (skipping presets already applied) referencing the preset's active value
+        version, then re-syncs Stripe so the sync resolves and writes back the
+        coupon(s). No mid-cycle invoice is cut — the next renewal is the first
+        cycle to bill the new total.
 
         ``preview=True`` stages the adds as ``preview_add`` rows, previews the
         resulting bill, and deletes them — nothing is committed. Returns the
@@ -90,7 +95,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
             async def _stage() -> None:
                 staged.extend(
-                    await self.add_preset_snapshots(
+                    await self.add_applied_discounts(
                         item_id=item_id,
                         member_id=member_id,
                         gym_id=gym_id,
@@ -102,7 +107,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
             return await staged_preview(
                 stage_fn=_stage,
-                cleanup_fn=lambda: self.delete_snapshots(member_id, staged),
+                cleanup_fn=lambda: self.delete_applied_discounts(member_id, staged),
                 preview_fn=lambda: (
                     self._payment_sync.preview_update_payments_recurring(
                         member_id,
@@ -110,7 +115,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
                 ),
             )
 
-        await self.add_preset_snapshots(
+        await self.add_applied_discounts(
             item_id=item_id,
             member_id=member_id,
             gym_id=gym_id,
@@ -131,10 +136,10 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Remove the named discount snapshots and re-sync — or preview it.
+        """Remove the named applied-discount rows and re-sync — or preview it.
 
-        Deletes the named snapshot rows then re-syncs Stripe so the consolidated
-        line drops the removed discount(s). No mid-cycle invoice is cut.
+        Deletes the named applied-discount rows then re-syncs Stripe so the
+        consolidated line drops the removed discount(s). No mid-cycle invoice is cut.
 
         ``preview=True`` stages the removal by flipping those rows to
         ``preview_remove`` (the preview build drops them), previews the bill,
@@ -155,12 +160,12 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
         if preview:
             async def _stage() -> None:
-                await self._set_snapshots_status(
+                await self._set_applied_discounts_status(
                     member_id, applied_ids, StripeSyncStatus.preview_remove,
                 )
 
             async def _cleanup() -> None:
-                await self._set_snapshots_status(
+                await self._set_applied_discounts_status(
                     member_id, applied_ids, StripeSyncStatus.applied,
                 )
 
@@ -174,7 +179,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
                 ),
             )
 
-        await self.delete_snapshots(member_id, applied_ids)
+        await self.delete_applied_discounts(member_id, applied_ids)
         await self._payment_sync.update_payments_recurring(
             member_id,
             idempotency_key=idempotency_key,
@@ -203,12 +208,12 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         if not row["stripe_item_id"]:
             raise ValueError(f"Membership missing stripe_item_id for item_id={item_id}")
 
-    async def delete_snapshots(
+    async def delete_applied_discounts(
         self,
         member_id: UUID,
         applied_discount_ids: list[UUID],
     ) -> None:
-        """DELETE the named snapshot rows (scoped to the owning member)."""
+        """DELETE the named applied-discount rows (scoped to the owning member)."""
         if not applied_discount_ids:
             return
         sql = load_sql(_APPLIED_SQL / "delete_applied_discount.sql")
@@ -223,16 +228,16 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
                 )
             await session.commit()
 
-    async def _set_snapshots_status(
+    async def _set_applied_discounts_status(
         self,
         member_id: UUID,
         applied_discount_ids: list[UUID],
         status: StripeSyncStatus,
     ) -> None:
-        """Stamp the Stripe-sync status on the named snapshot rows.
+        """Stamp the Stripe-sync status on the named applied-discount rows.
 
-        Used by the preview staging: flip the to-be-removed snapshots to
-        ``preview_remove`` and back to ``applied`` on cleanup. No-op for an
+        Used by the preview staging: flip the to-be-removed applied-discount rows
+        to ``preview_remove`` and back to ``applied`` on cleanup. No-op for an
         empty list.
         """
         if not applied_discount_ids:
@@ -250,7 +255,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
                 )
             await session.commit()
 
-    async def add_preset_snapshots(
+    async def add_applied_discounts(
         self,
         item_id: UUID,
         member_id: UUID,
@@ -259,11 +264,11 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         apply_date: date,
         sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
     ) -> list[UUID]:
-        """INSERT a snapshot per newly-desired discount; return their ids.
+        """INSERT an applied-discount row per newly-desired discount; return their ids.
 
         A discount already applied to this membership is skipped (left frozen).
-        Each new snapshot references the discount's active value version and
-        resolves its absolute end_date from that version's lifetime spec.
+        Each new applied-discount row references the discount's active value version
+        and resolves its absolute end_date from that version's lifetime spec.
         ``sync_status`` is ``not_added`` for a real apply (the writeback stamps
         ``applied``) or ``preview_add`` for a dry-run preview.
         """
@@ -316,7 +321,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
         discount_id: UUID,
         gym_id: UUID,
     ) -> dict:
-        """Read a discount's active value version to freeze onto a snapshot.
+        """Read a discount's active value version to freeze onto an applied-discount row.
 
         Raises:
             ValueError: If the discount is unknown, archived, or cross-gym.
@@ -335,7 +340,7 @@ class MemberMembershipsUpdateDiscounts(MemberMembershipsBase):
 
     @staticmethod
     def _resolve_end_date(value: dict, apply_date: date) -> date | None:
-        """Resolve a snapshot's absolute end_date from the value's lifetime.
+        """Resolve an applied-discount row's absolute end_date from the value's lifetime.
 
         ``once`` -> NULL (stamped by the sync on consumption). ``ongoing`` with a
         duration span -> apply_date + span. ``ongoing`` with an explicit end_date

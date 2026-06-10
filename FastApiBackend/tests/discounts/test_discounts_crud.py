@@ -3,13 +3,13 @@
 Presets are now plain gym config split across two tables: the IDENTITY
 (``gym_discounts``: name + type) and its versioned, immutable VALUE rows
 (``gym_discount_values``: percent/dollar + lifetime). Create/update/delete never
-touch Stripe (coupons are computed at sync and written back onto the applied
-snapshot). Editing a value mints a NEW active version; archiving (is_deleted =
-true) or editing a preset never reaches across to a member's frozen snapshot
-(which is pinned to a specific ``value_id``).
+touch Stripe (coupons are computed at sync and written back onto the applied-
+discount row). Editing a value mints a NEW active version; archiving
+(is_deleted = true) or editing a preset never reaches across to a member's
+frozen applied-discount row (which is pinned to a specific ``value_id``).
 
 Requires a migrated local DB (gym_discounts identity + gym_discount_values +
-the applied-discount snapshot table). No Stripe account is needed.
+the member_membership_applied_discounts table). No Stripe account is needed.
 """
 
 from datetime import date
@@ -136,8 +136,8 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
     """Update renames the identity and mints a new active value version.
 
     The previous version's ``is_active`` flips, so ``_row`` (which joins the
-    active version) reflects the new value while older applied snapshots stay
-    pinned to their original ``value_id``. The request carries both an
+    active version) reflects the new value while older applied-discount rows
+    stay pinned to their original ``value_id``. The request carries both an
     ``identity`` (rename) and a complete ``value`` (new version).
     """
     created_resp = await discounts_service.create_discount(
@@ -283,15 +283,15 @@ async def test_delete_discount_archives(discounts_service, db_pool, gym_id, crea
     assert row["is_deleted"] is True
 
 
-async def test_archive_leaves_applied_snapshots_untouched(
+async def test_archive_leaves_applied_discounts_untouched(
     discounts_service, db_pool, gym_id, created
 ):
-    """Archiving a preset does NOT delete a member's frozen snapshot.
+    """Archiving a preset does NOT delete a member's frozen applied-discount row.
 
     Predictability: editing/deleting a preset never reaches across to an
-    existing member's applied-discount snapshot — the holder keeps it. We
-    stand up a membership + a regular snapshot pinned to the preset's active
-    value version, then archive the preset and assert the snapshot is intact.
+    existing member's applied-discount row — the holder keeps it. We stand up
+    a membership + an applied-discount row pinned to the preset's active value
+    version, then archive the preset and assert the row is intact.
     """
     created_resp = await discounts_service.create_discount(
         DiscountCreateRequest(
@@ -308,7 +308,7 @@ async def test_archive_leaves_applied_snapshots_untouched(
 
     member_id = None
     try:
-        member_id, item_id, plan_id = await _seed_membership_with_snapshot(
+        member_id, item_id, plan_id = await _seed_membership_with_applied_discount(
             db_pool,
             gym_id,
             value_id=created_resp.value_id,
@@ -330,7 +330,7 @@ async def test_archive_leaves_applied_snapshots_untouched(
                 },
             )
             n = result.mappings().fetchone()["n"]
-        assert n == 1, "Archiving the preset must not remove the holder's snapshot"
+        assert n == 1, "Archiving the preset must not remove the holder's applied-discount row"
     finally:
         if member_id is not None:
             await _delete_seeded_membership(db_pool, member_id)
@@ -339,11 +339,12 @@ async def test_archive_leaves_applied_snapshots_untouched(
 # ── Local seed helpers (DB-only; no Stripe needed) ───────────────────
 
 
-async def _seed_membership_with_snapshot(db_pool, gym_id, value_id):
-    """Insert a member + membership + one applied-discount snapshot.
+async def _seed_membership_with_applied_discount(db_pool, gym_id, value_id):
+    """Insert a member + membership + one applied-discount row.
 
-    The snapshot is pinned to ``value_id`` (the discount's active version) —
-    the provenance/version tag in the new model. Returns (member, item, plan).
+    The applied-discount row is pinned to ``value_id`` (the discount's active
+    version) — the provenance/version tag in the new model. Returns
+    (member, item, plan).
     """
     async with db_pool.session() as session:
         member_row = await session.execute(

@@ -5,8 +5,8 @@ the live memberships' pseudo rows). Stripe IDs here are synthesized (in_*,
 ch_*, ...) — these rows are the CRM's billing past, not real Stripe invoices.
 
 Applied-discount history is no longer emitted here: memberships are seeded
-discount-free (discounts are explicit snapshot adds via FastApiBackend Phase 2),
-so there are no per-invoice discount snapshots to backfill yet.
+discount-free (discounts are explicit applied-discount adds via FastApiBackend Phase 2),
+so there are no per-invoice applied-discount rows to backfill yet.
 """
 
 from __future__ import annotations

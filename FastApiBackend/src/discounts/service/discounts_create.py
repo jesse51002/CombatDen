@@ -4,8 +4,12 @@ Creating a discount is two inserts in one transaction: the IDENTITY row
 (gym_discounts: name + type) and its first ACTIVE value version
 (gym_discount_values: percent/dollar + lifetime). No coupon is pre-baked — the
 sync computes each consolidated line's effective coupon at sync-time and writes
-the resolved stripe_coupon_id back onto the applied-discount snapshot. There is
-no linked branch (linked/family discounts are per-plan pricing, not a discount).
+the resolved stripe_coupon_id back onto the applied-discount row. There is no
+linked branch (linked/family discounts are per-plan pricing, not a discount).
+
+DiscountsService never touches applied-discount rows — it owns only
+``gym_discounts`` / ``gym_discount_values``. ``mint_custom_discounts`` returns
+plain discount ids that the memberships side applies exactly like presets.
 """
 
 from __future__ import annotations
@@ -59,7 +63,7 @@ class DiscountsCreate(DiscountsBase):
 
         The one home for the ``DiscountValue`` → discount conversion
         (auto-generated name + ``custom`` type). Callers fold the minted ids
-        into their snapshot list and delete the minted discounts on revert.
+        into the apply list and delete the minted discounts on revert.
         """
         minted: list[UUID] = []
         for value in values:

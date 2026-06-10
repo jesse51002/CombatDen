@@ -427,7 +427,7 @@ injects `payment_sync_service` into `InvoicePaidHandler` for this (the only hand
 that depends on the sync engine).
 
 > **Per-invoice discount audit.** After the invoice + line items are written,
-> `_capture_discounts` snapshots the invoice's discounts into
+> `_capture_discounts` captures the invoice's discounts into
 > `member_invoice_applied_discounts` (§7). The webhook payload carries only
 > opaque `di_` Discount ids, so it **retrieves the invoice** with
 > `expand=["discounts", "lines.data.discounts"]` to resolve each `di_ → coupon`
@@ -539,16 +539,16 @@ frozen historical label; `amount CHECK (>= 0)` is the line total; `quantity CHEC
 system-of-record. One row = one Stripe coupon that discounted an invoice, written
 by the `invoice.paid` capture (above): `stripe_coupon_id NOT NULL` (the
 identifier), `amount_off INTEGER CHECK (>= 0)` (the **dollars it took off this
-invoice**, snapshotted), and `discount_id` (**nullable, left NULL** — we
+invoice**, captured as-of-invoice), and `discount_id` (**nullable, left NULL** — we
 deliberately do **not** resolve back to a CRM `gym_discount`, since the
 value-signature coupon is shared across discounts; the FK is kept only for a
 possible future link). `UNIQUE (invoice_id, stripe_coupon_id)` makes the capture
 idempotent. **This is explicitly distinct from
-`member_membership_applied_discounts`** (the slim, versioned snapshot that pins a
-membership to a discount *value version* — owned by `discounts-guide`). This
-audit table records *what a specific invoice actually discounted (by coupon)*;
-that snapshot table records *what a membership is currently entitled to*. Do not
-conflate them.
+`member_membership_applied_discounts`** (the slim, versioned applied-discount row
+that pins a membership to a discount *value version* — owned by `discounts-guide`).
+This audit table records *what a specific invoice actually discounted (by coupon)*;
+the applied-discount table records *what a membership is currently entitled to*. Do
+not conflate them.
 
 **`stripe_webhook_events`** — the idempotency log. PK `event_id VARCHAR`;
 `gym_id`, `event_type`, `processed_at`. `REVOKE ALL … FROM authenticated`

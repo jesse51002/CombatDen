@@ -11,7 +11,7 @@ part 'invoice_applied_discount.g.dart';
 /// `invoice.paid` webhook captures from Stripe. It is deliberately
 /// **coupon-only**: the Stripe coupon id plus the dollars it took off
 /// this invoice, NOT linked back to a CRM discount. (Currently-applied
-/// membership discounts use the richer entitlement snapshot
+/// membership discounts use the richer applied-discount model
 /// `DiscountInfo` instead — distinct model, distinct purpose.)
 @JsonSerializable(
   fieldRename: FieldRename.snake,

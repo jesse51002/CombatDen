@@ -18,7 +18,7 @@ import pytest
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
-    get_applied_snapshots,
+    get_applied_discounts,
 )
 
 PLAN_CENTS = 5000
@@ -71,7 +71,7 @@ async def test_add_discount_preview_reflects_then_stages_nothing(
         assert preview.recurring.amount_due < PLAN_CENTS
 
         # Nothing persisted: the preview_add row was staged then deleted.
-        assert await get_applied_snapshots(db_pool, item_id) == []
+        assert await get_applied_discounts(db_pool, item_id) == []
     finally:
         await delete_member_data(db_pool, member.member_id)
 
@@ -106,7 +106,7 @@ async def test_remove_discount_preview_reflects_then_reverts(
             discount_ids=[discount.discount_id],
             idempotency_key=uuid4(),
         )
-        snaps = await get_applied_snapshots(db_pool, item_id)
+        snaps = await get_applied_discounts(db_pool, item_id)
         assert len(snaps) == 1
         applied_id = snaps[0]["applied_discount_id"]
 
@@ -122,7 +122,7 @@ async def test_remove_discount_preview_reflects_then_reverts(
         assert preview.recurring.amount_due == PLAN_CENTS
 
         # The row is still present and applied (the preview_remove was reverted).
-        snaps_after = await get_applied_snapshots(db_pool, item_id)
+        snaps_after = await get_applied_discounts(db_pool, item_id)
         assert len(snaps_after) == 1
         assert snaps_after[0]["applied_discount_id"] == applied_id
     finally:

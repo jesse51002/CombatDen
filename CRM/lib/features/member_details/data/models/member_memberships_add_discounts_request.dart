@@ -2,9 +2,10 @@ import 'package:equatable/equatable.dart';
 
 /// Body for `POST /api/v1/member_memberships/discounts/add`.
 ///
-/// Mirrors the backend `MemberMembershipsAddDiscountsRequest`: adds a frozen
-/// snapshot per named preset ([discountIds], by discount id — any type, including
-/// a `linked` family discount) at its active value version. When [preview] is
+/// Mirrors the backend `MemberMembershipsAddDiscountsRequest`: adds an
+/// applied-discount row per named preset ([discountIds], by discount id — any
+/// type, including a `linked` family discount) at its active value version.
+/// When [preview] is
 /// true the backend stages the add, returns the resulting invoice preview, and
 /// rolls back (nothing committed); otherwise it commits and re-syncs.
 class MemberMembershipsAddDiscountsRequest extends Equatable {

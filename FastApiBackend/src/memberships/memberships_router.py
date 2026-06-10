@@ -604,9 +604,9 @@ async def preview_update_membership_price(
 @member_memberships_router.post(
     "/discounts/add",
     response_model=DueNowVsRecurringPreview | None,
-    summary="Add a membership's discount snapshots (or preview)",
+    summary="Add applied-discount rows to a membership (or preview)",
     description=(
-        "Adds a frozen snapshot per regular preset and per entered linked "
+        "Adds an applied-discount row per regular preset and per entered linked "
         "discount, then re-syncs the Stripe subscription — no mid-cycle invoice "
         "is cut. A preset already applied is left frozen. With ``preview=true`` "
         "nothing is committed: the adds are staged as preview rows, the "
@@ -627,7 +627,7 @@ async def add_membership_discounts(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> DueNowVsRecurringPreview | None:
-    """Add discount snapshots on a membership, or preview the addition."""
+    """Add applied-discount rows to a membership, or preview the addition."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
@@ -671,12 +671,12 @@ async def add_membership_discounts(
 @member_memberships_router.post(
     "/discounts/remove",
     response_model=DueNowVsRecurringPreview | None,
-    summary="Remove a membership's discount snapshots (or preview)",
+    summary="Remove applied-discount rows from a membership (or preview)",
     description=(
-        "Removes the named snapshots, then re-syncs the Stripe subscription — "
-        "no mid-cycle invoice is cut. With ``preview=true`` nothing is "
-        "committed: the rows are staged as preview-removed, the resulting "
-        "invoice preview is returned, and the rows are restored."
+        "Removes the named applied-discount rows, then re-syncs the Stripe "
+        "subscription — no mid-cycle invoice is cut. With ``preview=true`` "
+        "nothing is committed: the rows are staged as preview-removed, the "
+        "resulting invoice preview is returned, and the rows are restored."
     ),
     responses={
         200: {"description": "Discounts removed, or preview returned"},
@@ -693,7 +693,7 @@ async def remove_membership_discounts(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> DueNowVsRecurringPreview | None:
-    """Remove discount snapshots from a membership, or preview the removal."""
+    """Remove applied-discount rows from a membership, or preview the removal."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 

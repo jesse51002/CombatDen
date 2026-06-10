@@ -2,7 +2,7 @@
 
 Presets are plain gym config now (coupon-free), so this base holds only the
 DB pool — no Stripe service. Coupons are computed at sync-time and live on the
-applied-discount snapshot, not the preset.
+applied-discount row, not the preset.
 """
 
 from __future__ import annotations

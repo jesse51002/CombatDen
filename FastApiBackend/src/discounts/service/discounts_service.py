@@ -3,7 +3,11 @@
 Delegates to focused sub-services while preserving the public API. Presets are
 plain, coupon-free gym config: no Stripe coupon, no payment-sync cascade on
 create/update/delete. Coupons are computed at sync-time and written back onto
-the applied-discount snapshot.
+the applied-discount row.
+
+DiscountsService never touches applied-discount rows — it owns only
+``gym_discounts`` / ``gym_discount_values``. ``mint_custom_discounts`` returns
+plain discount ids that the memberships side applies exactly like presets.
 """
 
 from __future__ import annotations

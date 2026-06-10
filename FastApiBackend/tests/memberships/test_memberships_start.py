@@ -2,8 +2,8 @@
 
 Every successful path fetches the Stripe resource it just created
 and asserts the price (and coupons, when applicable) match what the
-CRM row says. Failed paths snapshot the customer's Stripe billing
-state first and assert no invoices were generated.
+CRM row says. Failed paths capture the customer's Stripe billing state
+first and assert no invoices were generated.
 """
 
 from uuid import uuid4

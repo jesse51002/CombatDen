@@ -408,7 +408,7 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/discounts/add` — adds the
-  /// named preset snapshots. With `req.preview` true it returns the
+  /// named preset applied-discount rows. With `req.preview` true it returns the
   /// resulting [DueNowVsRecurringPreview] (nothing committed); else it
   /// commits, re-syncs, and returns null.
   Future<DueNowVsRecurringPreview?> addMembershipDiscounts(
@@ -425,7 +425,7 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/discounts/remove` — removes the
-  /// named applied-discount snapshots. With `req.preview` true it returns
+  /// named applied-discount rows. With `req.preview` true it returns
   /// the resulting [DueNowVsRecurringPreview] (nothing committed); else it
   /// commits, re-syncs, and returns null.
   Future<DueNowVsRecurringPreview?> removeMembershipDiscounts(
@@ -443,8 +443,8 @@ class MemberRepository {
 
   /// `POST /api/v1/member_memberships/discounts/preview` —
   /// previews the subscription for the membership's CURRENT
-  /// applied-discount snapshots (item-id keyed query params,
-  /// no body; apply itself mutates the snapshot rows first).
+  /// applied-discount rows (item-id keyed query params,
+  /// no body; apply itself writes the applied-discount rows first).
   Future<DueNowVsRecurringPreview?>
       previewMembershipDiscounts({
     required String itemId,

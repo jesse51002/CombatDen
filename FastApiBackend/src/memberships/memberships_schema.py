@@ -38,7 +38,7 @@ class MemberMembershipsStartRequest(BaseModel):
 
     Optional discounts-at-creation: ``discount_ids`` reference existing preset /
     linked discounts; ``custom_discounts`` are inline values minted as ``custom``
-    discounts at start. Both are snapshotted **before** the first charge, so the
+    discounts at start. Both are applied **before** the first charge, so the
     membership's first (and, for one-time, only) invoice is discounted.
     """
 
@@ -95,13 +95,13 @@ class MemberMembershipsUpdatePriceRequest(BaseModel):
 
 
 class MemberMembershipsAddDiscountsRequest(BaseModel):
-    """Add discount snapshots to a membership (or preview the addition).
+    """Add applied-discount rows to a membership (or preview the addition).
 
-    An explicit add of immutable snapshot rows — never a replace-set.
+    An explicit add of immutable applied-discount rows — never a replace-set.
     ``discount_ids`` references live discounts whose ACTIVE value version is
-    frozen onto a snapshot (any discount, including a ``linked`` family
-    discount). ``preview=True`` stages the adds as ``preview_add`` rows and
-    returns the resulting invoice preview without committing.
+    frozen onto an applied-discount row (any discount, including a ``linked``
+    family discount). ``preview=True`` stages the adds as ``preview_add`` rows
+    and returns the resulting invoice preview without committing.
     """
 
     item_id: UUID
@@ -121,11 +121,12 @@ class MemberMembershipsAddDiscountsRequest(BaseModel):
 
 
 class MemberMembershipsRemoveDiscountsRequest(BaseModel):
-    """Remove discount snapshots from a membership (or preview the removal).
+    """Remove applied-discount rows from a membership (or preview the removal).
 
-    ``applied_ids`` deletes existing snapshots by their ``applied_discount_id``.
-    ``preview=True`` stages the removal as ``preview_remove`` rows and returns
-    the resulting invoice preview without committing.
+    ``applied_ids`` deletes existing applied-discount rows by their
+    ``applied_discount_id``. ``preview=True`` stages the removal as
+    ``preview_remove`` rows and returns the resulting invoice preview without
+    committing.
     """
 
     item_id: UUID
@@ -162,11 +163,11 @@ class MembersBillingLinkCheckResponse(BaseModel):
 
 
 class MemberMembershipsAppliedDiscount(BaseModel):
-    """A single applied-discount snapshot returned to the client.
+    """A single applied-discount row returned to the client.
 
-    Joins the snapshot to its frozen value version (``value_id``) and owning
-    discount (``discount_id`` + name/type) so the CRM can show the discount and
-    the exact version it is pinned to.
+    Joins the applied-discount row to its frozen value version (``value_id``)
+    and owning discount (``discount_id`` + name/type) so the CRM can show the
+    discount and the exact version it is pinned to.
     """
 
     applied_discount_id: UUID

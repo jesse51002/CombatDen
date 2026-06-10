@@ -92,7 +92,7 @@ class BillingDiscountInfo(BaseModel):
     the ``invoice.paid`` webhook captures from Stripe. It is deliberately
     coupon-only (the Stripe coupon id + the dollars it took off this invoice),
     NOT linked back to a CRM discount. Currently-applied membership discounts
-    use the snapshot model ``MemberMembershipsAppliedDiscount`` on
+    use the applied-discount model ``MemberMembershipsAppliedDiscount`` on
     ``BillingMembershipInfo.discounts``.
     """
 

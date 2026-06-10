@@ -170,7 +170,7 @@ class MarkPaidCashRequested extends MemberDetailEvent {
   List<Object?> get props => [itemId, memberId];
 }
 
-/// Commits adding applied-discount snapshots to a membership
+/// Commits adding applied-discount rows to a membership
 /// — the named [discountIds] (by discount id, any type incl. a
 /// `linked` family discount) frozen at their active value
 /// version. A single-operation commit (the backend has no
@@ -189,8 +189,8 @@ class AddDiscountsRequested extends MemberDetailEvent {
   List<Object?> get props => [itemId, memberId, discountIds];
 }
 
-/// Commits removing applied-discount snapshots from a
-/// membership — the snapshots named by their
+/// Commits removing applied-discount rows from a
+/// membership — the rows named by their
 /// `applied_discount_id` ([appliedIds]). A single-operation
 /// commit; preview happens repository-direct.
 class RemoveDiscountsRequested extends MemberDetailEvent {
