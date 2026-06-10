@@ -65,7 +65,17 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 - When creating a git worktree, branch off the **local** branch (e.g. local `main`), NOT the remote (`origin/main`). The remote often lags behind local, so a worktree branched from it silently misses recent work.
 - If a worktree was created from the remote, run `git reset --hard main` in it before starting (safe while its branch has no commits), and verify expected recent files exist before building.
 
-## Workflows (multi-agent orchestration)
+## Meld diff review (root Makefile)
+When asked to spin up a diff / open a review of the current checkout (e.g. a worktree under `.claude/worktrees/`), use the root Makefile targets:
+- `make meld` — meld directory diff of the current working tree against the **root codebase checkout's** HEAD. Works from inside any worktree (resolves the root via `git rev-parse --git-common-dir`).
+- `make meld-origin` — same, but fetches and diffs against `origin/main`.
+- `make setup-meld` — one-time machine setup (Flatpak meld + global git difftool config). Only needed if meld isn't installed.
+- **Always run these in the background** (`run_in_background: true`) — the command blocks until the user closes the meld window; running it in the foreground stalls the session.
+- The diff is a launch-time snapshot of *which files differ* — auto-update is partial:
+  - **Edits to files already in the diff flow through live.** The right pane is symlinks to the real working-tree files, so further edits to those files show on refresh (Ctrl+R in meld) — no restart.
+  - **New files, deleted files, or files that were clean at launch do NOT appear.** git stages only the files that differed at launch; refreshing can't surface anything else. Close meld and rerun the target.
+  - Practical rhythm while an agent works in a worktree: refresh while it iterates on the same files; close-and-rerun once it has touched new ones.
+- If a meld window is already open, a second launch hands off to it and exits — git then deletes the staging dirs and the new diff shows empty. Close the open meld first, then rerun.
 - **Default workflow agents to Sonnet** (`model: 'sonnet'` on `agent()` calls, or the phase/run model override) unless a task genuinely needs Opus-level reasoning. Workflows fan out many agents at once; running them on Opus is far more expensive and **hits rate limits** fast (a 75-agent Opus fan-out got rate-limited mid-run). Sonnet has higher throughput and lower cost — the right default for fan-out work like data passes, conversions, broad reviews, and per-file edits. Reserve Opus for the few agents that actually need deep reasoning.
 - Keep concurrent fan-out reasonable; prefer Sonnet + batching over a huge Opus burst.
 
