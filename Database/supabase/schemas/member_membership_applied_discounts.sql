@@ -83,6 +83,43 @@ CREATE INDEX idx_member_membership_applied_discounts_member
 CREATE INDEX idx_member_membership_applied_discounts_value
     ON member_membership_applied_discounts_unfiltered (value_id);
 
+-- A `custom` discount is SINGLE-OWNER: applied to exactly one membership, once,
+-- ever. A second applied row referencing any value of a custom discount is
+-- rejected at the DB. Together with the single-value trigger on
+-- gym_discount_values this makes the custom lifecycle explicit
+-- (mint -> apply once -> archive on cleanup), so deleting a failed membership's
+-- minted customs is completely safe — no other member can hold them.
+CREATE FUNCTION prevent_custom_discount_reapplication()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_discount_id UUID;
+    v_discount_type VARCHAR;
+BEGIN
+    SELECT v.discount_id, d.discount_type
+      INTO v_discount_id, v_discount_type
+      FROM gym_discount_values_unfiltered v
+      JOIN gym_discounts_unfiltered d ON d.discount_id = v.discount_id
+     WHERE v.value_id = NEW.value_id;
+
+    IF v_discount_type = 'custom' AND EXISTS (
+        SELECT 1
+          FROM member_membership_applied_discounts_unfiltered a
+          JOIN gym_discount_values_unfiltered v2 ON v2.value_id = a.value_id
+         WHERE v2.discount_id = v_discount_id
+    ) THEN
+        RAISE EXCEPTION
+            'custom discount % is single-use and already applied to a membership',
+            v_discount_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_custom_discount_single_application
+    BEFORE INSERT ON member_membership_applied_discounts_unfiltered
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_custom_discount_reapplication();
+
 -- View: gate on BOTH the Stripe coupon id and the sync-status enum. A row with
 -- no `stripe_coupon_id` has no coupon resolved yet (not valid to surface), and
 -- the sync-status hides `not_added` (pending) and `preview_*` (dry-run staging),

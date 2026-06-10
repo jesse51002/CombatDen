@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 
 from pydantic import BaseModel
+from schema.gym_discount import DiscountType
 from schema.immutable_columns import GYM_DISCOUNTS
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,6 +60,15 @@ class DiscountsUpdate(DiscountsBase):
                 state is invalid.
         """
         existing = await self._get_discount(request.discount_id)
+
+        # A `custom` discount is one-shot (mint -> apply once -> archive) and
+        # single-owner, DB-enforced: it never gets a rename or a second value
+        # version. Reject the edit here for a clean error before the trigger.
+        if existing["discount_type"] == DiscountType.custom.value:
+            raise ValueError(
+                f"Custom discount {request.discount_id} is one-shot and "
+                f"cannot be edited (mint -> apply once -> archive)"
+            )
 
         identity_changes = self._collect_changes(request.identity) if request.identity else {}
         if not identity_changes and request.value is None:

@@ -22,6 +22,7 @@ from schema.gym_discount import (
     DiscountType,
 )
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from src.discounts.schema.discounts_schema import (
     DiscountCreateRequest,
@@ -29,6 +30,26 @@ from src.discounts.schema.discounts_schema import (
     DiscountUpdateRequest,
     DiscountValue,
 )
+from src.memberships.service.memberships_discounts import (
+    MemberMembershipsDiscounts,
+)
+
+
+async def _create_custom(discounts_service, gym_id, created, pct=10.0):
+    """Mint a `custom` discount the way a membership flow would."""
+    resp = await discounts_service.create_discount(
+        DiscountCreateRequest(
+            gym_id=gym_id,
+            discount_name=f"Custom {pct}% off",
+            discount_type=DiscountType.custom,
+            value=DiscountValue(
+                percentage_off=pct,
+                discount_mode=DiscountMode.once,
+            ),
+        ),
+    )
+    created.track_discount(resp.discount_id)
+    return resp
 
 
 async def _row(db_pool, discount_id):
@@ -434,3 +455,139 @@ async def _delete_seeded_membership(db_pool, member_id):
             {"id": str(member_id)},
         )
         await session.commit()
+
+
+# ── Custom discounts are one-shot + single-owner ─────────────────────
+
+
+async def test_update_rejects_custom_discount(discounts_service, gym_id, created):
+    """A custom discount is one-shot: any edit is rejected at the service.
+
+    Customs are mint -> apply once -> archive; a rename or a new value
+    version is never valid (the DB trigger enforces the value half too).
+    """
+    custom = await _create_custom(discounts_service, gym_id, created)
+
+    with pytest.raises(ValueError, match="one-shot"):
+        await discounts_service.update_discount(
+            DiscountUpdateRequest(
+                discount_id=custom.discount_id,
+                gym_id=gym_id,
+                value=DiscountValue(
+                    percentage_off=20.0,
+                    discount_mode=DiscountMode.once,
+                ),
+            ),
+        )
+
+
+async def test_apply_rejects_custom_outside_membership_flow(
+    discounts_service, db_pool, gym_id, created
+):
+    """The public add path never applies a custom discount.
+
+    Customs are minted by a membership flow (start/batch) and applied only by
+    it (``allow_custom=True``). The default path — what the /discounts/add API
+    reaches — rejects a custom id, so a minted custom can never be attached to
+    another membership.
+    """
+    preset = await discounts_service.create_discount(
+        DiscountCreateRequest(
+            gym_id=gym_id,
+            discount_name="Guard Preset",
+            discount_type=DiscountType.preset,
+            value=DiscountValue(
+                percentage_off=5.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
+        ),
+    )
+    created.track_discount(preset.discount_id)
+    custom = await _create_custom(discounts_service, gym_id, created)
+
+    member_id = None
+    try:
+        member_id, item_id, plan_id = await _seed_membership_with_applied_discount(
+            db_pool,
+            gym_id,
+            value_id=preset.value_id,
+        )
+        created.track_plan_db(plan_id)
+
+        # add_applied_discounts is pure DB, so the unused payment-sync /
+        # gym-stripe deps are stubbed with None for this guard test.
+        service = MemberMembershipsDiscounts(db_pool, None, None)
+        with pytest.raises(ValueError, match="single-use"):
+            await service.add_applied_discounts(
+                item_id=item_id,
+                member_id=member_id,
+                gym_id=gym_id,
+                discount_ids=[custom.discount_id],
+                apply_date=date.today(),
+            )
+    finally:
+        if member_id is not None:
+            await _delete_seeded_membership(db_pool, member_id)
+
+
+async def test_db_rejects_second_value_version_for_custom(
+    discounts_service, db_pool, gym_id, created
+):
+    """DB trigger: a custom discount can never get a second value version.
+
+    Requires migration 20260610120000_custom_discount_single_use.
+    """
+    custom = await _create_custom(discounts_service, gym_id, created)
+
+    async with db_pool.session() as session:
+        with pytest.raises(DBAPIError, match="one-shot"):
+            await session.execute(
+                text(
+                    "INSERT INTO gym_discount_values_unfiltered "
+                    "(discount_id, gym_id, percentage_off, discount_mode, "
+                    " is_active) "
+                    "VALUES (:d, :g, 20.0, 'once', false)"
+                ),
+                {"d": str(custom.discount_id), "g": str(gym_id)},
+            )
+
+
+async def test_db_rejects_second_application_for_custom(
+    discounts_service, db_pool, gym_id, created
+):
+    """DB trigger: a custom discount's value applies to at most ONE membership.
+
+    The first applied row (the membership flow's) inserts fine; any second row
+    referencing the custom's value dies at the DB — the boundary that makes
+    single-failure cleanup safe. Requires migration
+    20260610120000_custom_discount_single_use.
+    """
+    custom = await _create_custom(discounts_service, gym_id, created)
+
+    member_id = None
+    try:
+        member_id, item_id, plan_id = await _seed_membership_with_applied_discount(
+            db_pool,
+            gym_id,
+            value_id=custom.value_id,  # first application — allowed
+        )
+        created.track_plan_db(plan_id)
+
+        async with db_pool.session() as session:
+            with pytest.raises(DBAPIError, match="single-use"):
+                await session.execute(
+                    text(
+                        "INSERT INTO member_membership_applied_discounts_unfiltered "
+                        "(item_id, member_id, gym_id, value_id) "
+                        "VALUES (:item_id, :member_id, :gym_id, :value_id)"
+                    ),
+                    {
+                        "item_id": str(item_id),
+                        "member_id": str(member_id),
+                        "gym_id": str(gym_id),
+                        "value_id": str(custom.value_id),
+                    },
+                )
+    finally:
+        if member_id is not None:
+            await _delete_seeded_membership(db_pool, member_id)

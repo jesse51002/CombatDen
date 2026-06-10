@@ -160,6 +160,40 @@ membership's billing is determined from that member's own memberships only.
 
 ---
 
+## Custom discounts — minted at membership creation, one-shot, single-owner
+
+A `custom` discount is an **inline value minted by a membership flow** (the
+single start today; the family batch next): the start request carries
+`custom_discounts` (a list of `DiscountValue`s), and
+`DiscountsService.mint_custom_discounts(gym_id, values)` — the one home for the
+`DiscountValue` → discount conversion (auto-generated name like
+"Custom 10.0% off" + `custom` type) — creates one identity + one value version
+per entry and returns **plain discount ids**. The membership side then applies
+those ids exactly like presets (pinning the active value version).
+**DiscountsService never touches applied-discount rows** — it owns only
+`gym_discounts` / `gym_discount_values`.
+
+The custom lifecycle is **mint → apply once → archive**, and it is **explicit
+in the DB** (migration `20260610120000_custom_discount_single_use`):
+
+- `trg_custom_discount_single_value` (`gym_discount_values`) — a custom can
+  never get a second value version (no re-versioning).
+- `trg_custom_discount_single_application`
+  (`member_membership_applied_discounts`) — a custom's value can never be
+  applied to a second membership.
+
+Service guards mirror the triggers with clean errors: `update_discount`
+rejects a `custom` outright (no rename, no value edit), and the public apply
+path rejects custom ids (`add_applied_discounts` defaults
+`allow_custom=False`; only the membership flow that just minted the custom
+passes `allow_custom=True`). So `POST /member_memberships/discounts/add` can
+never attach someone's minted custom to another membership.
+
+**Why:** single-failure cleanup is completely safe. When a start (or one batch
+item) fails after minting, the revert deletes the applied rows, archives the
+minted customs, and deletes the pending membership — and the DB guarantees no
+other member can possibly hold those customs.
+
 ## 4. Coupons are computed at build, then written back (real path only)
 
 *This section is the discount-side summary. The full sync engine — the

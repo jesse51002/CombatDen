@@ -36,7 +36,7 @@ from datetime import date
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
-from schema.gym_discount import DiscountDurationUnit, DiscountMode
+from schema.gym_discount import DiscountDurationUnit, DiscountMode, DiscountType
 from schema.member_membership import StripeSyncStatus
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -263,6 +263,7 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
         discount_ids: list[UUID],
         apply_date: date,
         sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
+        allow_custom: bool = False,
     ) -> list[UUID]:
         """INSERT an applied-discount row per newly-desired discount; return their ids.
 
@@ -271,6 +272,11 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
         and resolves its absolute end_date from that version's lifetime spec.
         ``sync_status`` is ``not_added`` for a real apply (the writeback stamps
         ``applied``) or ``preview_add`` for a dry-run preview.
+
+        ``custom`` discounts are one-shot and single-owner (DB-enforced): only
+        the membership flow that just minted them applies them, by passing
+        ``allow_custom=True``. The default rejects a custom id, so the public
+        add path can never attach a minted custom to another membership.
         """
         if not discount_ids:
             return []
@@ -284,6 +290,14 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
                 if discount_id in already_applied:
                     continue
                 value = await self._get_active_value(session, discount_id, gym_id)
+                if (
+                    not allow_custom
+                    and value["discount_type"] == DiscountType.custom.value
+                ):
+                    raise ValueError(
+                        f"Custom discount {discount_id} is single-use and can "
+                        f"only be applied by the membership flow that minted it"
+                    )
                 end_date = self._resolve_end_date(value, apply_date)
                 result = await session.execute(
                     text(insert_sql),

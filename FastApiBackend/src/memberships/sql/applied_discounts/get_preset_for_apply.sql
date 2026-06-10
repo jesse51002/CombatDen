@@ -4,6 +4,7 @@
 -- so an applied row stays pinned to the value_id captured here.
 SELECT
     d.discount_id,
+    d.discount_type,
     v.value_id,
     v.discount_mode,
     v.duration_amount,

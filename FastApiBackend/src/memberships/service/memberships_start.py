@@ -184,6 +184,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 gym_id=gym_id,
                 discount_ids=all_discount_ids,
                 apply_date=start_date,
+                # The customs in this list were minted by THIS start — the one
+                # flow allowed to apply a custom (single-use, DB-enforced).
+                allow_custom=True,
             )
 
         async def _revert() -> None:
