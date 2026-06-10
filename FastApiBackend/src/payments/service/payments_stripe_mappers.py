@@ -48,7 +48,30 @@ def map_preview_invoice(
         total=invoice.total,
         currency=invoice.currency,
         lines=lines,
+        next_payment_date=_next_payment_date(invoice),
     )
+
+
+def _next_payment_date(invoice: stripe.Invoice) -> int | None:
+    """Unix seconds when the next recurring invoice is billed.
+
+    The **start** of the billing period on the recurring (non-proration)
+    lines. Subscriptions bill in advance, so a recurring line's
+    ``period.start`` is when that charge is issued — and it lines up with
+    the member's ``next_due_date`` (the prior period's ``current_period_end``
+    that the writeback stamps). Returns ``None`` when there is no recurring
+    line (e.g. a one-off preview).
+    """
+    starts: list[int] = []
+    if invoice.lines and invoice.lines.data:
+        for line in invoice.lines.data:
+            if _is_proration(line):
+                continue
+            period = getattr(line, "period", None)
+            start = getattr(period, "start", None) if period else None
+            if start:
+                starts.append(start)
+    return min(starts) if starts else None
 
 
 def _extract_price_id(line: stripe.InvoiceLineItem) -> str | None:

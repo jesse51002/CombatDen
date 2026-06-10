@@ -25,11 +25,16 @@ class MemberDetailGrid extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
 
+  /// Bumped by the bloc on every member mutation; threaded to the
+  /// Invoices card so it re-fetches after a discount / membership change.
+  final int refreshToken;
+
   const MemberDetailGrid({
     super.key,
     required this.member,
     required this.currentIndex,
     required this.onPageChanged,
+    required this.refreshToken,
   });
 
   /// The account's soonest upcoming billing date across its
@@ -76,6 +81,7 @@ class MemberDetailGrid extends StatelessWidget {
           nextDueDate: _nextDueDate,
           payerName: _payerName,
           payerPhotoUrl: _payerPhotoUrl,
+          refreshToken: refreshToken,
         ),
         PaymentHistorySection(
           memberId: member.memberId,
@@ -95,6 +101,7 @@ class _Grid extends StatelessWidget {
   final DateTime? nextDueDate;
   final String payerName;
   final String? payerPhotoUrl;
+  final int refreshToken;
 
   const _Grid({
     required this.member,
@@ -103,6 +110,7 @@ class _Grid extends StatelessWidget {
     required this.nextDueDate,
     required this.payerName,
     required this.payerPhotoUrl,
+    required this.refreshToken,
   });
 
   @override
@@ -124,6 +132,7 @@ class _Grid extends StatelessWidget {
           nextDueDate: nextDueDate,
           payerName: payerName,
           payerPhotoUrl: payerPhotoUrl,
+          refreshKey: refreshToken,
         );
         // Right column: the membership card fills the column down
         // to the (usually taller) left column's height, with the

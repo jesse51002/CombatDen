@@ -65,7 +65,27 @@ class InvoicePaymentPaidHandler:
         event: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        invoice_payment = event["data"]["object"]
+        await self.record(
+            session,
+            event["data"]["object"],
+            gym_id,
+            stripe_account_id=event.get("account"),
+        )
+
+    async def record(
+        self,
+        session: AsyncSession,
+        invoice_payment: dict[str, Any],
+        gym_id: UUID,
+        *,
+        stripe_account_id: str | None = None,
+    ) -> None:
+        """Record a succeeded payment (InvoicePayment object) as a charge.
+
+        The seam shared by the webhook dispatcher (``handle`` unwraps the event)
+        and the reconciler invoice fetcher (passes the listed InvoicePayment
+        directly). Idempotent via ``member_charges.stripe_charge_id`` UNIQUE.
+        """
         if invoice_payment.get("status") != PAYMENT_STATUS_PAID:
             return
 
@@ -86,7 +106,6 @@ class InvoicePaymentPaidHandler:
                 gym_id=str(gym_id),
             )
 
-        stripe_account_id = event.get("account")
         charge_id, payment_method_type, card_last_four = (
             await self._resolve_charge(invoice_payment, stripe_account_id)
         )

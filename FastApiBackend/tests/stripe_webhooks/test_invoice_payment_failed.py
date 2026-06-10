@@ -2,8 +2,9 @@
 
 Verifies that a failed renewal:
   - upserts a ``member_invoices`` row with ``status='open'``
-  - inserts a ``member_charges`` row with
-    ``kind='payment', status='failed'`` and null ``stripe_charge_id``
+  - inserts a ``member_charges`` row with ``kind='payment', status='failed'``
+    and a synthetic per-attempt ``stripe_charge_id``
+    (``failed_attempt:<invoice>:<attempt_count>``)
   - does NOT touch ``member_memberships.last_paid_date`` /
     ``next_due_date`` (Stripe handles dunning, not us)
 """
@@ -83,7 +84,7 @@ async def test_invoice_payment_failed_writes_failed_charge(
     assert invoice["total_amount"] == 5000
     assert str(invoice["member_id"]) == str(webhook_fixture.member_id)
 
-    # One failed charge row with null stripe_charge_id.
+    # One failed charge row with the synthetic per-attempt charge key.
     charges = await _fetch_failed_charges(db_pool, gym_id)
     assert len(charges) == 1
     charge = charges[0]
@@ -91,7 +92,8 @@ async def test_invoice_payment_failed_writes_failed_charge(
     assert charge["status"] == "failed"
     assert charge["amount"] == 5000
     assert charge["currency"] == "usd"
-    assert charge["stripe_charge_id"] is None
+    invoice_id = event["data"]["object"]["id"]
+    assert charge["stripe_charge_id"] == f"failed_attempt:{invoice_id}:1"
     assert str(charge["member_id"]) == str(webhook_fixture.member_id)
 
 
@@ -185,22 +187,25 @@ async def test_invoice_payment_failed_then_new_attempt_creates_separate_row(
     gym_id,
     webhook_fixture,
 ):
-    """Two distinct Stripe retry attempts (different event ids, same
+    """Two distinct Stripe retry attempts (different attempt_count, same
     invoice) should each produce a failed charge row — the CRM wants
-    to see every attempt."""
+    to see every attempt. The synthetic charge key is keyed on
+    (invoice, attempt_count), so distinct attempts don't collide."""
     evt_1 = make_invoice_payment_failed_event(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=[webhook_fixture.stripe_item_id],
         amount_due=5000,
         stripe_invoice_id="in_test_failed_retry",
+        attempt_count=1,
     )
     evt_2 = make_invoice_payment_failed_event(
         stripe_account_id=stripe_account_id,
         stripe_item_ids=[webhook_fixture.stripe_item_id],
         amount_due=5000,
         stripe_invoice_id="in_test_failed_retry",
+        attempt_count=2,
     )
-    # Different event ids; same invoice.
+    # Different event ids AND different attempt_count; same invoice.
     assert evt_1["id"] != evt_2["id"]
 
     await stripe_webhooks_service.handle_event(evt_1)

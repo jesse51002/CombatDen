@@ -1,19 +1,25 @@
-"""Integration tests for PriceWriteback plan-level totals.
+"""Integration tests for per-membership total_price + parent monthly total.
 
-These exercise the behavior that ``member_memberships.total_price``
-should hold the post-discount sum of every Stripe invoice line on
-the same ``plan_id``, scoped to the paying family (parent + linked
-children). Scenarios covered:
+These exercise the end-to-end sync writeback:
 
-1. Parent + linked child on the **same plan** → both rows converge
-   on the summed plan total (covers family scoping + per-plan
-   grouping when consolidation produces one sub-item with qty>1).
-2. Parent + linked child on **different plans** → each row stores
-   its own plan's line total; no cross-plan bleed.
-3. **Cross-family isolation** → another family on the same plan
-   is untouched after a mutation to the first family's subscription.
-4. **stripe_sub_id is None** (fully cancelled parent) → profile
-   monthly total is zeroed and no plan writes happen.
+* ``member_memberships.total_price`` holds each membership's OWN
+  post-discount price (its plan price minus its own discounts), written
+  per ``item_id`` — NOT a plan/family total fanned across rows.
+* ``members.total_monthly_recurring_price`` holds the paying parent's full
+  monthly recurring charge from Stripe's upcoming invoice.
+
+Scenarios covered:
+
+1. Parent + linked child on the **same plan** (consolidated qty=2 line) →
+   each row holds its own price, and they sum to the plan total the CRM
+   derives.
+2. Parent + linked child on **different plans** → each row stores its own
+   plan's price; no cross-plan bleed.
+3. **Cross-family isolation** → another family on the same plan is untouched
+   after a mutation to the first family's subscription (the per-member write
+   is keyed by ``item_id``).
+4. **stripe_sub_id is None** (fully cancelled parent) → profile monthly total
+   is zeroed.
 """
 
 from uuid import UUID, uuid4
@@ -84,7 +90,7 @@ async def _fetch_item_id(db_pool, member_id: UUID, plan_id: UUID) -> UUID:
 # ── Scenario 1: same plan, parent + child ──────────────────────
 
 
-async def test_family_same_plan_both_rows_sum_to_plan_total(
+async def test_family_same_plan_each_row_holds_own_price(
     memberships_service,
     db_pool,
     gym_id,
@@ -92,12 +98,12 @@ async def test_family_same_plan_both_rows_sum_to_plan_total(
     connect_opts,
     created,
 ):
-    """Parent + linked child on the same plan → both rows carry the
-    combined plan total (sum of both members' line contribution).
+    """Parent + linked child on the same plan → each row holds its OWN price
+    (not the family total).
 
-    With consolidation, Stripe sees one subscription item at qty=2,
-    and the upcoming invoice line total is 2 × price. Both
-    member_memberships rows should end up with that same summed value.
+    With consolidation Stripe sees one subscription item at qty=2, but each
+    member_memberships row stores that member's own 5000; the two rows sum to
+    the 10000 plan total the CRM derives.
     """
     pm_id = await created.payment_method()
     parent = await created.member(
@@ -160,12 +166,14 @@ async def test_family_same_plan_both_rows_sum_to_plan_total(
             child.member_id,
             plan.plan_id,
         )
-        assert parent_total == 10000, (
-            f"Parent row should converge on summed plan total 10000, got {parent_total}"
+        assert parent_total == 5000, (
+            f"Parent row should hold its own price 5000, got {parent_total}"
         )
-        assert child_total == 10000, (
-            f"Child row should converge on summed plan total 10000, got {child_total}"
+        assert child_total == 5000, (
+            f"Child row should hold its own price 5000, got {child_total}"
         )
+        # Each member's own price; together they sum to the plan total (10000).
+        assert parent_total + child_total == 10000
 
         # Profile monthly recurring total mirrors amount_due.
         parent_monthly = await _fetch_profile_monthly(db_pool, parent.member_id)

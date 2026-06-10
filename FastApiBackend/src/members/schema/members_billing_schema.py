@@ -103,11 +103,11 @@ class BillingDiscountInfo(BaseModel):
 class BillingMembershipMemberInfo(BaseModel):
     """Per-member membership details within a grouped plan.
 
-    ``base_cost`` and ``total_price`` are this member's own
-    ``member_memberships`` numbers (their pinned price and their
-    after-discount total), so the CRM can render the membership card
-    atomically for one covered member at a time rather than as a
-    family-wide aggregate.
+    ``base_cost`` and ``total_price`` are this membership's own
+    ``member_memberships`` numbers (its pinned price and its **own**
+    post-discount share — the plan price minus this member's own
+    discounts), so the CRM renders the membership card atomically for one
+    covered member at a time rather than as a family-wide aggregate.
     """
 
     item_id: UUID
@@ -119,7 +119,13 @@ class BillingMembershipMemberInfo(BaseModel):
 
 
 class BillingMembershipInfo(BaseModel):
-    """A grouped plan in the membership carousel."""
+    """A grouped plan in the membership carousel.
+
+    ``total_price`` here is the plan-level total — the **sum** of the active
+    memberships' own post-discount shares (each ``members[...].total_price``).
+    Per-member shares live in ``members``; use those for an individual covered
+    member, this for the whole plan.
+    """
 
     plan_id: UUID
     plan_name: str

@@ -1,14 +1,13 @@
 """Unified writeback: persist the full sync-owned state after Stripe converges."""
 
+import logging
 from uuid import UUID
 
 from src.member_memberships.schema.payment_sync_schema import SyncParams
 from src.member_memberships.service.payment_sync.payment_sync_queries import (
     PaymentSyncQueries,
 )
-from src.member_memberships.service.payment_sync.price_writeback import (
-    PriceWriteback,
-)
+from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionResponse,
 )
@@ -19,17 +18,20 @@ from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import stripe_ts_to_gym_date
 
+logger = logging.getLogger(__name__)
+
 
 class PaymentSyncWriteback:
     """Persists everything the sync owns, real path only, after convergence.
 
     Given the resolved ``SyncParams`` and the live subscription result it writes:
-    the per-membership Stripe line id / next_due_date / ``applied`` status, the
-    coupon links (+ ``applied`` on the applied-discount rows), the parent's
-    subscription id, ``deleted`` on cancelled rows confirmed gone, and the
-    post-discount price totals (delegated to ``PriceWriteback``). All writes go
-    through ``PaymentSyncQueries``; nothing here is preview-safe — call it only on
-    the real path.
+    the per-membership Stripe line id / next_due_date / ``applied`` status, each
+    membership's own post-discount price onto ``total_price``, the coupon links
+    (+ ``applied`` on the applied-discount rows), the parent's subscription id,
+    ``deleted`` on cancelled rows confirmed gone, and the parent's monthly
+    recurring total from Stripe's upcoming invoice. All writes go through
+    ``PaymentSyncQueries``; nothing here is preview-safe — call it only on the
+    real path.
     """
 
     def __init__(
@@ -38,10 +40,7 @@ class PaymentSyncWriteback:
         subscription_service: PaymentsStripeSubscriptionService,
     ) -> None:
         self._queries = PaymentSyncQueries(db_pool)
-        self._prices = PriceWriteback(
-            db_pool=db_pool,
-            subscription_service=subscription_service,
-        )
+        self._subscription_service = subscription_service
 
     async def write(
         self,
@@ -54,6 +53,12 @@ class PaymentSyncWriteback:
 
         # Per-membership: stamp the live line id + next_due_date + 'applied'.
         await self._apply_membership_rows(params, sub_result)
+
+        # Per-membership OWN post-discount price → total_price (computed at
+        # build time by PaymentSyncDiscounts, threaded through SyncParams).
+        await self._queries.set_membership_post_discount_prices(
+            params.membership_post_discount_amounts
+        )
 
         # Coupon links + 'applied' on the contributing applied-discount rows.
         for applied_discount_id, coupon_id in params.coupon_links.items():
@@ -68,13 +73,67 @@ class PaymentSyncWriteback:
         # Parent subscription id (or None when the sub was cancelled).
         await self._queries.update_profile_sub_id(parent.member_id, new_sub_id)
 
-        # Post-discount price totals (per-plan + parent monthly), delegated.
-        await self._prices.sync_prices_from_stripe(
-            parent_member_id=parent.member_id,
-            gym_id=parent.gym_id,
-            stripe_sub_id=new_sub_id,
-            stripe_account_id=params.stripe_account_id,
+        # Parent's monthly recurring total from Stripe's upcoming invoice.
+        await self._sync_parent_monthly_total(
+            parent,
+            new_sub_id,
+            params.stripe_account_id,
         )
+
+    async def _sync_parent_monthly_total(
+        self,
+        parent: ParentProfile,
+        stripe_sub_id: str | None,
+        stripe_account_id: str,
+    ) -> None:
+        """Write the parent's monthly recurring total from the upcoming invoice.
+
+        Sums the upcoming invoice's recurring lines (proration already filtered
+        out by the mapper) onto ``members.total_monthly_recurring_price``. When
+        ``stripe_sub_id`` is None (the sub was fully cancelled) the total is
+        zeroed. Any failure is logged at ERROR and never re-raised — Stripe is
+        authoritative and a later mutation / the reconciler re-corrects the
+        mirror.
+        """
+        amount = 0
+        if stripe_sub_id:
+            try:
+                upcoming = (
+                    await self._subscription_service.fetch_upcoming_invoice(
+                        stripe_sub_id,
+                        stripe_account_id,
+                    )
+                )
+            except PaymentsResourceNotFoundError:
+                logger.error(
+                    "Upcoming invoice not found for subscription %s; "
+                    "skipping monthly total writeback",
+                    stripe_sub_id,
+                    exc_info=True,
+                )
+                return
+            except Exception:
+                logger.error(
+                    "Failed to fetch upcoming invoice for subscription %s; "
+                    "skipping monthly total writeback",
+                    stripe_sub_id,
+                    exc_info=True,
+                )
+                return
+            amount = sum(
+                max(line.discounted_amount, 0) for line in upcoming.lines
+            )
+        try:
+            await self._queries.set_parent_monthly_total(
+                parent.member_id,
+                amount,
+            )
+        except Exception:
+            logger.error(
+                "Failed to update total_monthly_recurring_price on parent %s",
+                parent.member_id,
+                exc_info=True,
+            )
 
     async def _apply_membership_rows(
         self,

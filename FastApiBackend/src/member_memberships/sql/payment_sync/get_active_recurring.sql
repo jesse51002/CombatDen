@@ -13,6 +13,7 @@ SELECT
     mm.plan_id,
     mm.price_id,
     mpp.stripe_price_id,
+    mpp.price,
     mm.stripe_item_id,
     mp.duration_unit
 FROM member_memberships_unfiltered mm

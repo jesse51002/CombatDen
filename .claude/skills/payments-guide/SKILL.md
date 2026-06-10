@@ -41,7 +41,7 @@ changes, **update this skill in the same change** (it is a living document — s
 the bottom).
 
 This layer is a set of **primitives**, not a brain. It knows *how* to push a
-desired state to Stripe and *how* to absorb a Stripe event — it does **not**
+desired state to Stripe and *how* to record a Stripe event — it does **not**
 decide *what* the desired state should be. The engine that computes desired
 subscription state and the sync-time coupon set is owned by `sync-guide`; the
 discount system-of-record model is owned by `discounts-guide`; plan/membership
