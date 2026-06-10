@@ -5,9 +5,6 @@ from datetime import date
 from uuid import UUID
 
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
-from src.member_memberships.schema.member_memberships_schema import (
-    MemberMembershipsAppliedDiscount,
-)
 from src.members.schema.members_billing_schema import (
     BillingMembershipInfo,
     BillingMembershipMemberInfo,
@@ -21,6 +18,9 @@ from src.members.service.member_details.members_billing_supplementary import (
 )
 from src.members.service.members_status_mapping import (
     is_membership_overdue,
+)
+from src.memberships.memberships_schema import (
+    MemberMembershipsAppliedDiscount,
 )
 from src.shared.formatters import format_minor_units
 

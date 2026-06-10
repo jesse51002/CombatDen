@@ -27,10 +27,10 @@ from src.stripe_webhooks.stripe_webhooks_exceptions import (
 )
 
 if TYPE_CHECKING:
-    from src.member_memberships.service.payment_sync.payment_sync_service import (
+    from src.shared.paying_member_lock import PayingMemberLock
+    from src.sync.service.sync_service import (
         PaymentSyncService,
     )
-    from src.shared.paying_member_lock import PayingMemberLock
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 flowchart TB
   %% Payment-sync engine — orchestration flow of PaymentSyncService.
-  %% Source of truth: src/member_memberships/service/payment_sync/ (sync-guide skill).
+  %% Source of truth: src/sync/service/ (sync-guide skill).
   %% TWO main entry points (real + preview) SHARE resolve → settle → build_sync_params;
   %% they diverge on execute vs preview-execute and writeback (REAL-only).
   %% A THIRD thin entry, settle_once_discounts (the

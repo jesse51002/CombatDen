@@ -23,7 +23,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.member_memberships.service.payment_sync.payment_sync_service import (
+from src.sync.service.sync_service import (
     PaymentSyncService,
 )
 

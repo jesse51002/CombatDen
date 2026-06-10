@@ -63,7 +63,7 @@ Two kinds of "truth" are split deliberately:
 
 `src/payments/` is a **pure service layer: it has no router** (verified — there
 is no `*_router.py` under `src/payments/`). Its services are consumed by the
-sync engine (`member_memberships/service/payment_sync/`) and by the
+sync engine (`src/sync/service/`) and by the
 membership/members/plans services. The only HTTP surface this guide owns is the
 **inbound webhook endpoint** (`src/stripe_webhooks/`) plus the two members-router
 card endpoints that call these primitives (§9).

@@ -356,11 +356,11 @@ re-applied on later cycles; changing the count while pending re-divides correctl
   `immutable_columns.py` (`GYM_DISCOUNT_VALUES`,
   `MEMBER_MEMBERSHIP_APPLIED_DISCOUNTS`).
 - **Preset CRUD (versioned, coupon-free, no cascade):**
-  `FastApiBackend/src/discounts/service/discounts/` (create = identity + first
+  `FastApiBackend/src/discounts/service/` — `discounts_create.py`, `discounts_update.py`, `discounts_delete.py`, `discounts_list.py` (create = identity + first
   active version; update = rename hits identity, value-edit mints a new active
   version; delete = archive `is_deleted`).
 - **Apply/remove:**
-  `FastApiBackend/src/member_memberships/service/memberships/member_memberships_update_discounts.py`
+  `FastApiBackend/src/memberships/service/memberships_update_discounts.py`
   + its SQL in `.../sql/applied_discounts/` (apply references the active
   `value_id`; regular discounts only).
 - **Build-time coupons:** `payment_sync/payment_sync_discounts.py`

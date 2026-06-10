@@ -274,15 +274,15 @@ write-reduction.
   `reconciler_active_billing_members.sql`, `reconciler_gyms_with_connect.sql`)
 - **Shared lock:** `src/shared/resource_lock.py`
 - **Gone-sub cancel (in the sync, see `sync-guide`):**
-  `src/member_memberships/service/payment_sync/payment_sync_cancel.py`
-  (+ `member_memberships/sql/member_memberships_family_cancellable.sql`)
+  `src/sync/service/sync_cancel.py`
+  (+ `memberships/sql/member_memberships_family_cancellable.sql`)
 - **Prompt webhook:** `src/stripe_webhooks/service/customer_subscription_deleted_handler.py`
   (registered in `stripe_webhooks_service.py`)
 - **The record seam:** `src/stripe_webhooks/service/{invoice_paid,invoice_payment_paid,invoice_payment_failed,refund}_handler.py`
 - **Config:** `src/core/config.py` (`reconciler_enabled`, `reconciler_cron_hours`,
   `RECONCILER_INVOICE_LOOKBACK_DAYS`, `RECONCILER_STRIPE_PAGE_SIZE`)
 - **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`
-  (+ the gone-sub cancel in `tests/member_memberships/test_payment_sync_cancel.py`)
+  (+ the gone-sub cancel in `tests/memberships/test_payment_sync_cancel.py`)
 
 ## Diagram
 

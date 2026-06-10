@@ -10,33 +10,12 @@ Standalone module — no pytest imports, no fixture dependencies.
 
 from dataclasses import dataclass
 
-from src.discounts.service.discounts.discounts_service import DiscountsService
-from src.member_memberships.service.memberships.member_memberships_service import (
-    MemberMembershipsService,
-)
-from src.member_memberships.service.payment_sync.payment_sync_builder import (
-    PaymentSyncBuilder,
-)
-from src.member_memberships.service.payment_sync.payment_sync_discounts import (
-    PaymentSyncDiscounts,
-)
-from src.member_memberships.service.payment_sync.payment_sync_freeze import (
-    PaymentSyncFreeze,
-)
-from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
-    PaymentSyncOnceDiscounts,
-)
-from src.member_memberships.service.payment_sync.payment_sync_one_time import (
-    PaymentSyncOneTime,
-)
-from src.member_memberships.service.payment_sync.payment_sync_service import (
-    PaymentSyncService,
-)
+from src.discounts.service.discounts_service import DiscountsService
 from src.members.service.management.members_management_service import (
     MembersManagementService,
 )
-from src.membership_plans.service.plans.membership_plans_service import (
-    MembershipPlansService,
+from src.memberships.service.memberships_service import (
+    MemberMembershipsService,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
@@ -57,10 +36,31 @@ from src.payments.service.payments_stripe_price_service import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
+from src.plans.service.plans_service import (
+    MembershipPlansService,
+)
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.paying_member_lock import PayingMemberLock
+from src.sync.service.sync_builder import (
+    PaymentSyncBuilder,
+)
+from src.sync.service.sync_discounts import (
+    PaymentSyncDiscounts,
+)
+from src.sync.service.sync_freeze import (
+    PaymentSyncFreeze,
+)
+from src.sync.service.sync_once_discounts import (
+    PaymentSyncOnceDiscounts,
+)
+from src.sync.service.sync_one_time import (
+    PaymentSyncOneTime,
+)
+from src.sync.service.sync_service import (
+    PaymentSyncService,
+)
 
 # ── Payment services namespace ──────────────────────────────────
 

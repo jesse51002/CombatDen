@@ -8,31 +8,10 @@ from src.classes.service.classes_cycle_counts_service import (
 )
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.core.config import settings
-from src.discounts.service.discounts.discounts_service import DiscountsService
+from src.discounts.service.discounts_service import DiscountsService
 from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
-)
-from src.member_memberships.service.memberships.member_memberships_service import (
-    MemberMembershipsService,
-)
-from src.member_memberships.service.payment_sync.payment_sync_builder import (
-    PaymentSyncBuilder,
-)
-from src.member_memberships.service.payment_sync.payment_sync_discounts import (
-    PaymentSyncDiscounts,
-)
-from src.member_memberships.service.payment_sync.payment_sync_freeze import (
-    PaymentSyncFreeze,
-)
-from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
-    PaymentSyncOnceDiscounts,
-)
-from src.member_memberships.service.payment_sync.payment_sync_one_time import (
-    PaymentSyncOneTime,
-)
-from src.member_memberships.service.payment_sync.payment_sync_service import (
-    PaymentSyncService,
 )
 from src.members.service.crm_member_services.members_crm_members_list_service import (
     CrmMembersListService,
@@ -49,8 +28,8 @@ from src.members.service.member_details.members_billing_detail_service import (
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
-from src.membership_plans.service.plans.membership_plans_service import (
-    MembershipPlansService,
+from src.memberships.service.memberships_service import (
+    MemberMembershipsService,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
@@ -70,6 +49,9 @@ from src.payments.service.payments_stripe_price_service import (
 )
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
+)
+from src.plans.service.plans_service import (
+    MembershipPlansService,
 )
 from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
@@ -116,6 +98,24 @@ from src.stripe_webhooks.service.refund_handler import (
 from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
 )
+from src.sync.service.sync_builder import (
+    PaymentSyncBuilder,
+)
+from src.sync.service.sync_discounts import (
+    PaymentSyncDiscounts,
+)
+from src.sync.service.sync_freeze import (
+    PaymentSyncFreeze,
+)
+from src.sync.service.sync_once_discounts import (
+    PaymentSyncOnceDiscounts,
+)
+from src.sync.service.sync_one_time import (
+    PaymentSyncOneTime,
+)
+from src.sync.service.sync_service import (
+    PaymentSyncService,
+)
 from src.waivers.service.waivers.waivers_service import WaiversService
 
 
@@ -137,8 +137,8 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.waivers.waivers_router",
             # === CRM billing router modules (restored) ===
             "src.discounts.discounts_router",
-            "src.member_memberships.member_memberships_router",
-            "src.membership_plans.membership_plans_router",
+            "src.memberships.memberships_router",
+            "src.plans.plans_router",
             "src.stripe_webhooks.stripe_webhooks_router",
             # === end CRM billing router modules ===
         ],

@@ -14,7 +14,7 @@ from src.discounts.schema.discounts_schema import (
     DiscountResponse,
     DiscountUpdateRequest,
 )
-from src.discounts.service.discounts.discounts_service import DiscountsService
+from src.discounts.service.discounts_service import DiscountsService
 from src.shared.auth import Auth, security
 
 logger = logging.getLogger(__name__)
