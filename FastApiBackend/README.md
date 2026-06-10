@@ -77,7 +77,7 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 | `rewards` | Reward catalog + redemptions |
 | `waivers` | Versioned waiver documents (plain gym config) + read-only e-sign signature tracking (per-waiver roster + per-member status) |
 | `discounts` | Coupon-free discount presets (plain gym config; coupons computed at sync, not on the preset) |
-| `memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount snapshots; coupons computed + written back at sync), previews, cash/card charge, link/unlink family accounts (pure DB change) |
+| `memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount rows; coupons computed + written back at sync), previews, cash/card charge, link/unlink family accounts (pure DB change) |
 | `plans` | Plan + price templates (Stripe products / prices) + migration |
 | `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB (invoices, charges, refunds, and `customer.subscription.deleted` → triggers a family sync that cancels the gone subscription in the CRM) |
 | `sync` *(no router)* | Payment-sync engine: re-derives the family's desired Stripe subscription state from the DB on every membership mutation and converges Stripe onto it. Also owns the one-time invoice charge path. |
