@@ -7,7 +7,7 @@ invoice LINE id (``stripe_item_id``), the consolidated invoice id
 ``total_price``, and ``stripe_sync_status = 'applied'``.
 """
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
@@ -132,3 +132,53 @@ async def test_one_time_start_with_preset_discount(
     snaps = await get_applied_discounts(db_pool, row["item_id"])
     assert len(snaps) == 1
     assert snaps[0]["stripe_coupon_id"] is not None
+
+
+@pytest.mark.timeout(180)
+async def test_add_discounts_rejected_on_one_time_membership(
+    memberships_service,
+    db_pool,
+    gym_id,
+    created,
+):
+    """add_discounts on a one-time membership must be rejected with a clear error.
+
+    A one-time membership's single invoice is charged at creation; there is no
+    future invoice to discount, so calling add_discounts post-charge must raise
+    ValueError with the non-recurring message.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
+        gym_id,
+        plan_type="one_time",
+        price_cents=3000,
+        duration_amount=1,
+        duration_unit="month",
+    )
+
+    await memberships_service.start(
+        member_id=member.member_id,
+        gym_id=gym_id,
+        plan_id=plan.plan_id,
+        price_id=plan.price_id,
+        idempotency_key=uuid4(),
+    )
+
+    row = await _read_one_time_row(db_pool, member.member_id, gym_id)
+    item_id = UUID(str(row["item_id"]))
+
+    preset = await created.discount(
+        gym_id,
+        name="10% add-test",
+        percentage_off=10.0,
+        discount_mode="once",
+    )
+
+    with pytest.raises(ValueError, match="non-recurring"):
+        await memberships_service.add_discounts(
+            item_id=item_id,
+            member_id=member.member_id,
+            discount_ids=[preset.discount_id],
+            idempotency_key=uuid4(),
+        )

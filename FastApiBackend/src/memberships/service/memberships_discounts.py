@@ -38,6 +38,7 @@ from uuid import UUID
 from dateutil.relativedelta import relativedelta
 from schema.gym_discount import DiscountDurationUnit, DiscountMode, DiscountType
 from schema.member_membership import StripeSyncStatus
+from schema.membership_plan import PlanType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -204,6 +205,11 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
             raise ValueError(
                 f"Cannot apply discounts on ended membership: "
                 f"item_id={item_id}, member_id={member_id}"
+            )
+        if row["plan_type"] != PlanType.recurring:
+            raise ValueError(
+                f"Membership {item_id} is non-recurring: its single invoice is "
+                f"already charged, so discounts can only be applied at creation"
             )
         if not row["stripe_item_id"]:
             raise ValueError(f"Membership missing stripe_item_id for item_id={item_id}")
