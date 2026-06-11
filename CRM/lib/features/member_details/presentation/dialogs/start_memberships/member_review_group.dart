@@ -98,6 +98,15 @@ class _MembershipReviewTile extends StatelessWidget {
             _PlanTypeTag(
               label: plan.planType.displayLabel,
             ),
+            Text(
+              planAllowanceLabel(
+                plan,
+                count: draft.count,
+              ),
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
             if (draft.count > 1)
               Text(
                 '× ${draft.count}',

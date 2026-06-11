@@ -150,6 +150,10 @@ class _MembershipHeader extends StatelessWidget {
               Text(plan.planName, style: DesignConstants.h2),
               Text(
                 '${plan.planType.displayLabel} · '
+                '${planAllowanceLabel(
+                  plan,
+                  count: draft.count,
+                )} · '
                 'For $memberName',
                 style: DesignConstants.p.copyWith(
                   color: DesignConstants.text2nd,
