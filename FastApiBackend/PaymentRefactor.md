@@ -170,6 +170,40 @@ the scheduled reconciler, §1, needs in the Stripe→CRM direction.)
   the bucket is built, so two desired items could collide on `si_X`). The *current* behavior is worth
   verifying now too.
 
+## 11. Per-membership PAYMENT TYPE — cash vs card per item, not per request (not built)
+
+> One person frequently covers part of a cart for someone else: the payer's card
+> auto-charges their own memberships while one membership in the same request is
+> settled with cash someone handed over (or vice versa). Today that's impossible —
+> payment type is one flag for the whole request. Decided as definitely-needed
+> (2026-06-11) but deferred.
+
+### Current state — payment type is request-level
+`paid_with_cash` lives on `MemberMembershipsStartRequest` (locked when the op was
+designed: "payment method is request-level — the consolidated one-time invoice is
+ONE charge"). It flips the WHOLE one-time invoice to `paid_out_of_band` and the
+WHOLE recurring converge's first invoice to out-of-band. Mixed settlement within
+one request cannot be expressed.
+
+### What's needed — payment type on the ITEM
+A per-item payment-type field (`paid_with_cash` on `MemberMembershipsStartItem`,
+or a small enum if more types ever arrive), with the engine splitting by it:
+
+- **One-time/trial:** group the pending rows by payment type → **one consolidated
+  invoice PER type** (the card group charges normally; the cash group is
+  `paid_out_of_band`). The family-sweep read gains the payment-type dimension
+  (today `charge_one_time` sweeps ALL pending rows onto one invoice — it must not
+  mix types). `charge_count` / `multiple_charges` count the extra invoice.
+- **Recurring:** harder — the family's recurring memberships consolidate onto ONE
+  subscription with ONE first invoice, so cash-vs-card granularity inside a single
+  converge doesn't exist on Stripe. Likely resolution: the first-invoice
+  out-of-band flag stays converge-level, and mixed-settlement recurring waits for
+  (or composes with) §7's payer groups — a different payer group is a different
+  subscription, which is also naturally a different settlement.
+- **Composes with §7 (`paid_by_member_id`):** §7 answers WHOSE customer is billed;
+  this answers HOW that charge settles. "Someone covering the cost for someone"
+  often needs both — grandma pays cash for her grandkid's membership = the payer
+  group is grandma's (§7) and its settlement is cash (§11).
 
 --------------------------
 
