@@ -202,15 +202,13 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingBig,
         children: [
-          // When the card is height-bounded (expand), tall content (e.g. a
-          // membership carrying several discounts) scrolls instead of
-          // overflowing; the actions row stays pinned at the bottom.
-          if (widget.expand)
-            Expanded(
-              child: SingleChildScrollView(child: details),
-            )
-          else
-            details,
+          // In the wide grid the card is sized by the columns' intrinsic
+          // heights (member_detail_grid's IntrinsicHeight row), so the
+          // content always fits and the slack sits above the pinned
+          // actions row. NEVER make this scroll: every child must report
+          // exact intrinsics (Wrap under-reports — use IntrinsicWrap).
+          details,
+          if (widget.expand) const Spacer(),
           MembershipActionsRow(
             member: widget.member,
             currentMembership: membership,
