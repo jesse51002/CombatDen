@@ -9,12 +9,15 @@ from src.shared.gym_timezone import gym_today
 
 
 class ParentProfile(BaseModel):
-    """Paying parent's billing-profile fields.
+    """A payer's billing-profile fields.
 
-    The single-level account hierarchy resolves any family member to the
-    paying parent; this is that parent's billing surface (Stripe customer +
-    monthly subscription + freeze window). Shared because parent resolution is
-    needed across billing-touching services, not just the payment sync.
+    The billing surface of whoever pays (Stripe customer + monthly
+    subscription + freeze window). Hydrated two ways by
+    ``BillingParentResolver``: ``resolve_parent`` follows the single-level
+    account hierarchy to the FAMILY parent; ``resolve_payer`` looks up a
+    specific ``paid_by_member_id`` directly (a self-paying linked member's
+    own profile). Shared because payer resolution is needed across
+    billing-touching services, not just the payment sync.
     """
 
     member_id: UUID

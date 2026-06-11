@@ -14,9 +14,9 @@ member we:
      rewards-managed and immutable to the API, so the create endpoint won't
      accept it.
 
-Linked children POST with no card (they can hold none per the
-`linked_account_no_stripe` constraint); they still get a cardless Stripe
-customer, and the parent pays.
+Linked children POST with no card (the seed only creates parent-paid
+families — every child's memberships ride the parent's subscription); they
+still get a cardless Stripe customer, and the parent pays.
 
 Member creation has no per-family billing lock, so it runs concurrently across
 members (each member is independent). Linking children to parents and account
