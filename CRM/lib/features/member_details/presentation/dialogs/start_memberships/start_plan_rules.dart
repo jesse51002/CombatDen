@@ -33,6 +33,35 @@ List<MembershipInfo> membershipsForParticipant(
         .where((m) => m.members.containsKey(memberId))
         .toList();
 
+/// The participant's own status on a membership — their
+/// per-member roster status when present (a family plan's
+/// covered members each carry their own), falling back to
+/// the plan-level status.
+MembershipStatus participantStatus(
+  MembershipInfo membership,
+  String memberId,
+) =>
+    membership.payingForMemberFor(memberId)?.status ??
+    membership.status;
+
+/// Memberships the participant currently holds in a
+/// non-terminal state — the Plans step's "Already has"
+/// block input. Attribution is per member: a membership
+/// counts only when the participant is covered by it, and
+/// terminality follows their own status on it.
+List<MembershipInfo> currentMembershipsForParticipant(
+  List<MembershipInfo> all,
+  String memberId,
+) =>
+    membershipsForParticipant(all, memberId)
+        .where(
+          (m) => !const {
+            MembershipStatus.cancelled,
+            MembershipStatus.ended,
+          }.contains(participantStatus(m, memberId)),
+        )
+        .toList();
+
 /// planId → "already on this plan" for recurring/trial
 /// plans the participant already actively holds. One-time
 /// plans are excluded — repeat one-time purchases are

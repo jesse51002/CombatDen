@@ -3,16 +3,20 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/plan_count_stepper.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_already_has.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_labels.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// Step 3 (per member) — checkbox list of the gym's plans
-/// for the member currently being configured. Plans without
+/// for the member currently being configured, topped by a
+/// compact "Already has" block listing the non-terminal
+/// memberships the member currently holds. Plans without
 /// an active price are hidden; a checked one_time / trial
 /// plan grows a count stepper that multiplies the displayed
 /// class allowance. Plans the member already actively holds
@@ -22,6 +26,11 @@ class StartPlansStep extends StatelessWidget {
   final Future<List<MembershipPlanResponse>> plansFuture;
   final List<MembershipDraft> drafts;
   final Map<String, String> disabledPlanReasons;
+
+  /// The member's existing non-terminal memberships, from
+  /// the wizard's best-effort detail fetch — empty when the
+  /// fetch failed (the block just stays hidden).
+  final List<MembershipInfo> existingMemberships;
   final ValueChanged<MembershipPlanResponse> onToggle;
   final void Function(String planId, int count)
       onCountChanged;
@@ -32,6 +41,7 @@ class StartPlansStep extends StatelessWidget {
     required this.plansFuture,
     required this.drafts,
     required this.disabledPlanReasons,
+    required this.existingMemberships,
     required this.onToggle,
     required this.onCountChanged,
   });
@@ -53,6 +63,11 @@ class StartPlansStep extends StatelessWidget {
           'Memberships for ${member.name}',
           style: DesignConstants.h3,
         ),
+        if (existingMemberships.isNotEmpty)
+          StartAlreadyHas(
+            memberId: member.memberId,
+            memberships: existingMemberships,
+          ),
         FutureBuilder<List<MembershipPlanResponse>>(
           future: plansFuture,
           builder: (context, snapshot) {

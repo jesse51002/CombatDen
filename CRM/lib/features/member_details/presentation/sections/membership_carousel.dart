@@ -25,19 +25,11 @@ class MembershipCarousel extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
 
-  /// When true (wide grid, where the card is stretched to fill
-  /// the right column), the actions row pins to the card's
-  /// bottom edge and the slack collects above it. Must stay
-  /// false in the stacked layout, where height is unbounded and
-  /// a [Spacer] would have no constraints.
-  final bool expand;
-
   const MembershipCarousel({
     super.key,
     required this.member,
     required this.currentIndex,
     required this.onPageChanged,
-    this.expand = false,
   });
 
   @override
@@ -200,15 +192,17 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         spacing: DesignConstants.spacingBig,
         children: [
-          // In the wide grid the card is sized by the columns' intrinsic
-          // heights (member_detail_grid's IntrinsicHeight row), so the
-          // content always fits and the slack sits above the pinned
-          // actions row. NEVER make this scroll: every child must report
-          // exact intrinsics (Wrap under-reports — use IntrinsicWrap).
+          // In the wide grid this card is the right column's filler:
+          // BalancedColumns lays it at its natural size first (so the
+          // content always fits), then may re-lay it TIGHT and taller —
+          // the slack lands between the details and the bottom-pinned
+          // actions row (`spacing` stays the minimum gap; under the
+          // stacked layout's unbounded height spaceBetween is a no-op).
+          // NEVER make this card scroll.
           details,
-          if (widget.expand) const Spacer(),
           MembershipActionsRow(
             member: widget.member,
             currentMembership: membership,

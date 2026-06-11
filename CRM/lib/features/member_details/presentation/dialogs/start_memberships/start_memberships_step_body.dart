@@ -7,6 +7,7 @@ import 'package:crm/features/member_details/data/models/discount_value.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
@@ -42,6 +43,10 @@ class StartMembershipsStepBody extends StatelessWidget {
   final List<StartMembershipParticipant> configMembers;
   final Map<String, List<MembershipDraft>> draftsByMember;
   final Map<String, String> disabledPlanReasons;
+
+  /// The current member's existing non-terminal
+  /// memberships — the Plans step's "Already has" block.
+  final List<MembershipInfo> existingMemberships;
   final Future<List<MembershipPlanResponse>> plansFuture;
   final Future<List<DiscountResponse>> discountsFuture;
   final MemberMembershipsStartRequest? previewRequest;
@@ -88,6 +93,7 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.configMembers,
     required this.draftsByMember,
     required this.disabledPlanReasons,
+    required this.existingMemberships,
     required this.plansFuture,
     required this.discountsFuture,
     required this.previewRequest,
@@ -161,6 +167,7 @@ class StartMembershipsStepBody extends StatelessWidget {
           plansFuture: plansFuture,
           drafts: currentDrafts,
           disabledPlanReasons: disabledPlanReasons,
+          existingMemberships: existingMemberships,
           onToggle: onPlanToggle,
           onCountChanged: onPlanCountChanged,
         );

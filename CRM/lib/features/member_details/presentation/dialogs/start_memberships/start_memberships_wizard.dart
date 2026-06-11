@@ -13,6 +13,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
@@ -257,6 +258,20 @@ class _StartMembershipsWizardState
         detail.memberships,
         member.memberId,
       ),
+    );
+  }
+
+  /// The current member's existing non-terminal
+  /// memberships — the Plans step's "Already has" block.
+  /// Same best-effort detail fetch as the plan rules:
+  /// empty when the fetch failed.
+  List<MembershipInfo> get _existingMemberships {
+    final member = _currentMember;
+    final detail = _memberDetails[member?.memberId];
+    if (member == null || detail == null) return const [];
+    return rules.currentMembershipsForParticipant(
+      detail.memberships,
+      member.memberId,
     );
   }
 
@@ -658,6 +673,7 @@ class _StartMembershipsWizardState
             configMembers: _configMembers,
             draftsByMember: _drafts,
             disabledPlanReasons: _disabledPlanReasons,
+            existingMemberships: _existingMemberships,
             plansFuture: _plansFuture,
             discountsFuture: _discountsFuture,
             previewRequest: _previewRequest,
