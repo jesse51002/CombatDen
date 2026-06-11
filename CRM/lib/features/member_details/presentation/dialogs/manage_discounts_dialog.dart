@@ -136,7 +136,7 @@ class _ManageDiscountsDialogState
         MemberMembershipsAddDiscountsRequest(
           itemId: _itemId,
           memberId: widget.coveredMemberId,
-          presetIds: _toAdd.toList(),
+          discountIds: _toAdd.toList(),
           idempotencyKey: const Uuid().v4(),
           preview: true,
         ),
@@ -161,7 +161,7 @@ class _ManageDiscountsDialogState
         AddDiscountsRequested(
           itemId: _itemId,
           memberId: widget.coveredMemberId,
-          presetIds: _toAdd.toList(),
+          discountIds: _toAdd.toList(),
         ),
       );
     } else {

@@ -25,19 +25,11 @@ class MembershipCarousel extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
 
-  /// When true (wide grid, where the card is stretched to fill
-  /// the right column), the actions row pins to the card's
-  /// bottom edge and the slack collects above it. Must stay
-  /// false in the stacked layout, where height is unbounded and
-  /// a [Spacer] would have no constraints.
-  final bool expand;
-
   const MembershipCarousel({
     super.key,
     required this.member,
     required this.currentIndex,
     required this.onPageChanged,
-    this.expand = false,
   });
 
   @override
@@ -151,51 +143,66 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
         membership.isOnOutdatedPriceFor(selectedId) &&
         membership.currentActivePrice != null;
 
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        _CarouselHeader(
+          membership: membership,
+          currentIndex: index,
+          total: _memberships.length,
+          hasMultiple: hasMultiple,
+          onPrevious: index > 0
+              ? () => widget.onPageChanged(index - 1)
+              : null,
+          onNext: index < _memberships.length - 1
+              ? () => widget.onPageChanged(index + 1)
+              : null,
+        ),
+        if (showSelector)
+          FilterPills(
+            labels: [
+              for (final id in coveredIds)
+                _firstNameFor(membership, id),
+            ],
+            selectedIndex: coveredIds.indexOf(selectedId),
+            onSelected: (i) => setState(
+              () => _selectedMemberId = coveredIds[i],
+            ),
+          ),
+        MembershipDetailsTable(
+          membership: membership,
+          coveredMemberId: selectedId,
+        ),
+        if (showOutdated)
+          OutdatedPriceCard(
+            membership: membership,
+            coveredMemberId: selectedId,
+            coveredMemberName:
+                _fullNameFor(membership, selectedId),
+          ),
+        DiscountsSection(
+          member: widget.member,
+          membership: membership,
+          coveredMemberId: selectedId,
+        ),
+      ],
+    );
+
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         spacing: DesignConstants.spacingBig,
         children: [
-          _CarouselHeader(
-            membership: membership,
-            currentIndex: index,
-            total: _memberships.length,
-            hasMultiple: hasMultiple,
-            onPrevious: index > 0
-                ? () => widget.onPageChanged(index - 1)
-                : null,
-            onNext: index < _memberships.length - 1
-                ? () => widget.onPageChanged(index + 1)
-                : null,
-          ),
-          if (showSelector)
-            FilterPills(
-              labels: [
-                for (final id in coveredIds)
-                  _firstNameFor(membership, id),
-              ],
-              selectedIndex: coveredIds.indexOf(selectedId),
-              onSelected: (i) => setState(
-                () => _selectedMemberId = coveredIds[i],
-              ),
-            ),
-          MembershipDetailsTable(
-            membership: membership,
-            coveredMemberId: selectedId,
-          ),
-          if (showOutdated)
-            OutdatedPriceCard(
-              membership: membership,
-              coveredMemberId: selectedId,
-              coveredMemberName:
-                  _fullNameFor(membership, selectedId),
-            ),
-          DiscountsSection(
-            member: widget.member,
-            membership: membership,
-            coveredMemberId: selectedId,
-          ),
-          if (widget.expand) const Spacer(),
+          // In the wide grid this card is the right column's filler:
+          // BalancedColumns lays it at its natural size first (so the
+          // content always fits), then may re-lay it TIGHT and taller —
+          // the slack lands between the details and the bottom-pinned
+          // actions row (`spacing` stays the minimum gap; under the
+          // stacked layout's unbounded height spaceBetween is a no-op).
+          // NEVER make this card scroll.
+          details,
           MembershipActionsRow(
             member: widget.member,
             currentMembership: membership,

@@ -1,25 +1,21 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
-import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
-import 'package:crm/features/member_details/data/models/discount_mode.dart';
 import 'package:crm/features/member_details/data/models/discount_type.dart';
+import 'package:crm/features/member_details/data/models/discount_value.dart';
 
 part 'discount_response.g.dart';
 
 /// A gym-level, regular-only discount preset.
 ///
-/// Mirrors the reshaped `DiscountResponse` from
-/// `GET /api/v1/discounts/`: presets are coupon-free intent
-/// rows. Lifetime is [discountMode] (`once` / `ongoing`)
-/// plus EITHER a duration span ([durationAmount] +
-/// [durationUnit]) OR an explicit [endDate] — never both;
-/// neither means forever. The old Stripe coupon /
-/// linked-preset fields are gone (linked discounts are now
-/// snapshot-only and have no preset entity).
+/// Mirrors `DiscountResponse` from `GET /api/v1/discounts/`.
+/// The discount's value spec (amount, mode, lifetime) lives
+/// entirely in [value] — there are no flat top-level
+/// amount/mode/lifetime fields.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,
+  explicitToJson: true,
 )
 class DiscountResponse extends Equatable {
   final String discountId;
@@ -28,14 +24,7 @@ class DiscountResponse extends Equatable {
   @JsonKey(fromJson: DiscountType.fromJson)
   final DiscountType discountType;
   final String valueId;
-  final double? percentageOff;
-  final int? dollarOff;
-  @JsonKey(fromJson: DiscountMode.fromJson)
-  final DiscountMode discountMode;
-  final int? durationAmount;
-  @JsonKey(fromJson: _durationUnitOrNull)
-  final DiscountDurationUnit? durationUnit;
-  final DateTime? endDate;
+  final DiscountValue value;
   @JsonKey(defaultValue: false)
   final bool isDeleted;
   final DateTime createdAt;
@@ -46,12 +35,7 @@ class DiscountResponse extends Equatable {
     required this.discountName,
     required this.discountType,
     required this.valueId,
-    this.percentageOff,
-    this.dollarOff,
-    required this.discountMode,
-    this.durationAmount,
-    this.durationUnit,
-    this.endDate,
+    required this.value,
     this.isDeleted = false,
     required this.createdAt,
   });
@@ -61,22 +45,14 @@ class DiscountResponse extends Equatable {
   ) =>
       _$DiscountResponseFromJson(json);
 
-  static DiscountDurationUnit? _durationUnitOrNull(
-    Object? value,
-  ) =>
-      value == null
-          ? null
-          : DiscountDurationUnit.fromJson(value as String);
-
   /// Human-readable value — "20% off", "$10 off", else the
   /// preset name.
   String get displayLabel {
-    if (percentageOff != null) {
-      return '${percentageOff!.toStringAsFixed(0)}% off';
+    if (value.percentageOff != null) {
+      return '${value.percentageOff!.toStringAsFixed(0)}% off';
     }
-    if (dollarOff != null) {
-      final dollars = (dollarOff! / 100)
-          .toStringAsFixed(0);
+    if (value.dollarOff != null) {
+      final dollars = (value.dollarOff! / 100).toStringAsFixed(0);
       return '\$$dollars off';
     }
     return discountName;
@@ -89,12 +65,7 @@ class DiscountResponse extends Equatable {
         discountName,
         discountType,
         valueId,
-        percentageOff,
-        dollarOff,
-        discountMode,
-        durationAmount,
-        durationUnit,
-        endDate,
+        value,
         isDeleted,
         createdAt,
       ];

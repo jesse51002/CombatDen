@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_title.dart';
+import 'package:crm/shared/widgets/hairline.dart';
 
 /// Shared popup shell used for every dialog in the app.
 ///
@@ -10,11 +13,36 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog_title.dart';
 /// small-radius corners, max width, padding, title row,
 /// body slot, and an optional actions row with a primary
 /// + optional secondary button.
+///
+/// Two sizes share this one shell:
+/// - the default: a compact confirmation surface that
+///   hugs its content (max width
+///   [DesignConstants.dialogMaxWidth], body scrolls);
+/// - [expanded]: a workflow surface (multi-step wizards)
+///   pinned to a generous fraction of the viewport
+///   ([DesignConstants.dialogHeightFractionWide] tall,
+///   [maxWidth] wide). The title stays fixed on top, the
+///   actions sit on a fixed footer behind a hairline, and
+///   the body fills the space between and **owns its own
+///   scrolling**.
 class AppDialog extends StatelessWidget {
   final String title;
   final Widget body;
   final Widget? actions;
   final bool showCloseButton;
+
+  /// The dialog's width cap. Compact dialogs keep the
+  /// default; workflow surfaces pass
+  /// [DesignConstants.dialogMaxWidthWide].
+  final double maxWidth;
+
+  /// Workflow-surface mode: fixed viewport-fraction
+  /// height, fixed footer, body owns its scrolling.
+  final bool expanded;
+
+  /// Padding around the whole dialog content (title, body,
+  /// actions). Workflow surfaces pass a bigger inset.
+  final EdgeInsetsGeometry contentPadding;
 
   const AppDialog({
     super.key,
@@ -22,6 +50,11 @@ class AppDialog extends StatelessWidget {
     required this.body,
     this.actions,
     this.showCloseButton = true,
+    this.maxWidth = DesignConstants.dialogMaxWidth,
+    this.expanded = false,
+    this.contentPadding = const EdgeInsets.all(
+      DesignConstants.paddingSmall,
+    ),
   });
 
   /// Convenience builder that wires up a standard
@@ -71,6 +104,35 @@ class AppDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final content = Padding(
+      padding: contentPadding,
+      child: Column(
+        mainAxisSize: expanded
+            ? MainAxisSize.max
+            : MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          AppDialogTitle(
+            title: title,
+            showCloseButton: showCloseButton,
+          ),
+          if (expanded)
+            // Workflow surface: the body fills the fixed
+            // height and owns its own scrolling.
+            Expanded(child: body)
+          else
+            Flexible(
+              child: SingleChildScrollView(
+                child: body,
+              ),
+            ),
+          if (expanded && actions != null)
+            const Hairline(),
+          ?actions,
+        ],
+      ),
+    );
     return Dialog(
       backgroundColor: DesignConstants.popup,
       shape: RoundedRectangleBorder(
@@ -78,36 +140,34 @@ class AppDialog extends StatelessWidget {
           DesignConstants.radiusSmall,
         ),
       ),
-      insetPadding: const EdgeInsets.symmetric(
-        horizontal: DesignConstants.paddingSmall,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: expanded
+            ? DesignConstants.paddingBig
+            : DesignConstants.paddingSmall,
         vertical: DesignConstants.paddingBig,
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: Padding(
-          padding: const EdgeInsets.all(
-            DesignConstants.paddingSmall,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment:
-                CrossAxisAlignment.stretch,
-            spacing: DesignConstants.spacingLarge,
-            children: [
-              AppDialogTitle(
-                title: title,
-                showCloseButton: showCloseButton,
-              ),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: body,
-                ),
-              ),
-              ?actions,
-            ],
-          ),
-        ),
-      ),
+      child: expanded
+          ? SizedBox(
+              width: maxWidth,
+              height: _expandedHeight(context),
+              child: content,
+            )
+          : ConstrainedBox(
+              constraints:
+                  BoxConstraints(maxWidth: maxWidth),
+              child: content,
+            ),
+    );
+  }
+
+  /// The expanded dialog's fixed height: a generous
+  /// fraction of the viewport, never taller than what the
+  /// inset padding leaves available.
+  double _expandedHeight(BuildContext context) {
+    final viewport = MediaQuery.sizeOf(context).height;
+    return math.min(
+      viewport * DesignConstants.dialogHeightFractionWide,
+      viewport - DesignConstants.paddingBig * 2,
     );
   }
 }

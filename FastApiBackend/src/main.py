@@ -10,11 +10,11 @@ from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.discounts.discounts_router import discounts_router
 from src.gyms.gyms_router import gyms_router
-from src.member_memberships.member_memberships_router import (
+from src.members.members_router import members_router
+from src.memberships.memberships_router import (
     member_memberships_router,
 )
-from src.members.members_router import members_router
-from src.membership_plans.membership_plans_router import (
+from src.plans.plans_router import (
     membership_plans_router,
 )
 from src.ranks.ranks_router import ranks_router

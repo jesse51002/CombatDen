@@ -170,54 +170,82 @@ the scheduled reconciler, §1, needs in the Stripe→CRM direction.)
   the bucket is built, so two desired items could collide on `si_X`). The *current* behavior is worth
   verifying now too.
 
-## 9. Create a linked family's memberships in one call — multi-member, per-membership discounts at creation (not built)
+## 10. Multiple one-time purchases of the SAME plan at once (not built)
 
-`POST /api/v1/member_memberships/` (start) creates **one** membership for **one** member and accepts
-**no discounts** (payload: `member_id` / `gym_id` / `plan_id` / `price_id` / `prorate` /
-`idempotency_key`). Discounting is a **separate, after-the-fact** `POST .../discounts/add`. So a
-family is stood up by N sequential calls — start parent → link each child → start each child → add
-discounts per membership — and every membership's first invoice is undiscounted.
+> A member buying 2 punch-card packs of 5 in one cart, attending-twice-in-a-day
+> class purchases, etc. — and the same relaxation technically applies to trials.
+> Decided as definitely-needed (2026-06-11) but deferred.
 
-### Current state — sequential, post-hoc, undiscounted first invoice
-- **Single-member, single-call.** No way to create several memberships in one operation.
-- **Discounts are post-hoc.** Start cuts the proration / first invoice (`always_invoice`) **before**
-  any discount exists; `add_discounts` only pushes the coupon for the *next* cycle. A member who signs
-  up *with* a discount still gets an **undiscounted first charge**. The seed proves it: `_apply_discounts`
-  runs *after* `_start_one`, so a fresh seed produces **zero discounted invoices** and the per-invoice
-  discount audit (the `invoice.paid` capture) records nothing.
-- **Every start re-syncs the family.** A linked family rides **one consolidated Stripe subscription**
-  (the payer's), so each sequential start triggers its own family re-sync → N converges (and
-  potentially N proration invoices) for what is really one sign-up event.
+Today this is blocked at three layers, all service-side (the DB only forbids
+overlapping actives for RECURRING — the `trg_recurring_*` triggers):
 
-### What's needed — one batch op for a paying family
-A single operation that creates memberships for **multiple members at once**, constrained to **one
-paying family** (all paid by the same payer and linked to that payer), **each membership carrying its
-own discounts**, all **applied at creation before the first invoice**, in **one Stripe converge**:
-- **Request shape:** the payer + a list of memberships, each `{member_id, plan_id, price_id, prorate,
-  preset_ids}`. Members not yet linked to the payer are linked as part of the op.
-- **One build, one sync, one lock.** Link + insert all rows + apply each membership's discounts, then
-  run the family sync **once** under a single `PayingMemberLock` / idempotency key → one consolidated,
-  **per-membership-discounted** first invoice. Don't loop the single-create path (that re-creates the
-  N-converge + post-hoc-discount problems).
-- **Per-membership discounts on the consolidated line.** The aggregation already supports different
-  discounts per membership on a consolidated line (see `discounts-guide`); the batch just feeds each
-  membership's `preset_ids` into that same path. The discount must be on the sub **before** the
-  proration invoice is cut (a single converge), not start-then-resync.
-- Reuse the existing apply-discount machinery (`MemberMembershipsUpdateDiscounts` / preview-staging)
-  and the start/link lifecycle — this is orchestration + ordering, not a new discount engine.
-- Once it exists, the **seed builds each family in one call** (drop the sequential start → link →
-  start → `_apply_discounts` dance), so seeded members get genuinely discounted first invoices.
+1. The start request validator rejects duplicate `(member_id, price_id)` items —
+   two identical packs in one request never reach validation.
+2. `_check_no_existing` rejects starting ANY plan the member already has active —
+   broader than the DB rule; blocks buying a second pack while one is active.
+3. `_crm_insert` keys its returned ids by `(member_id, plan_id)` — two identical
+   rows would collide.
+
+The build (small, one piece):
+
+- Drop the request-level duplicate rejection; duplicates = multiple purchases.
+- Make `_check_no_existing` recurring-only (mirror the DB trigger semantics
+  exactly): duplicate RECURRING (member, plan) still rejected, in-request and
+  vs the DB; one-time/trial duplicates allowed.
+- Generate each row's `item_id` client-side (`uuid4` passed into the multi-row
+  insert — it is the PK) so identical rows are unambiguous and the
+  `(member_id, plan_id)` keying disappears; each item state carries its id
+  directly.
+- The engine already supports it: one-time groups are keyed by `item_id`
+  (singleton invoice lines, no one-item-per-price constraint), per-line
+  discounts unaffected.
+- Consequence to accept: accidental double-buys (and double-trials) become
+  possible — restrict per-plan if needed via a CRM-side rule later.
+- Tests: two identical packs in one request → ONE invoice, two identical-price
+  lines, distinct ids; second pack bought while the first is active.
+
+
+## 11. Per-membership PAYMENT TYPE — cash vs card per item, not per request (not built)
+
+> One person frequently covers part of a cart for someone else: the payer's card
+> auto-charges their own memberships while one membership in the same request is
+> settled with cash someone handed over (or vice versa). Today that's impossible —
+> payment type is one flag for the whole request. Decided as definitely-needed
+> (2026-06-11) but deferred.
+
+### Current state — payment type is request-level
+`paid_with_cash` lives on `MemberMembershipsStartRequest` (locked when the op was
+designed: "payment method is request-level — the consolidated one-time invoice is
+ONE charge"). It flips the WHOLE one-time invoice to `paid_out_of_band` and the
+WHOLE recurring converge's first invoice to out-of-band. Mixed settlement within
+one request cannot be expressed.
+
+### What's needed — payment type on the ITEM
+A per-item payment-type field (`paid_with_cash` on `MemberMembershipsStartItem`,
+or a small enum if more types ever arrive), with the engine splitting by it:
+
+- **One-time/trial:** group the pending rows by payment type → **one consolidated
+  invoice PER type** (the card group charges normally; the cash group is
+  `paid_out_of_band`). The family-sweep read gains the payment-type dimension
+  (today `charge_one_time` sweeps ALL pending rows onto one invoice — it must not
+  mix types). `charge_count` / `multiple_charges` count the extra invoice.
+- **Recurring:** harder — the family's recurring memberships consolidate onto ONE
+  subscription with ONE first invoice, so cash-vs-card granularity inside a single
+  converge doesn't exist on Stripe. Likely resolution: the first-invoice
+  out-of-band flag stays converge-level, and mixed-settlement recurring waits for
+  (or composes with) §7's payer groups — a different payer group is a different
+  subscription, which is also naturally a different settlement.
+- **Composes with §7 (`paid_by_member_id`):** §7 answers WHOSE customer is billed;
+  this answers HOW that charge settles. "Someone covering the cost for someone"
+  often needs both — grandma pays cash for her grandkid's membership = the payer
+  group is grandma's (§7) and its settlement is cash (§11).
 
 ### Open questions
-- **Validation:** all members in one gym; the payer has a card; no child already linked to a different
-  payer; the payer is (or becomes) the family root.
-- **Atomicity / partial failure:** all-or-nothing for the batch, or per-member best-effort? (The single
-  consolidated sync favors all-or-nothing.)
-- **Proration:** one consolidated proration invoice for the whole batch, discounted per line.
-- **Custom/linked discounts at create:** the add path takes `preset_ids`; creation may also want to
-  mint a custom value inline — presets only, or the full value shape?
-- **Relationship to the existing single-start + link + add endpoints:** does the batch op supersede
-  them or coexist (single create stays the simple path)?
+- Item-level bool vs enum (`card | cash`) — is anything beyond cash/card coming
+  (check, comp/free, external POS)?
+- Does the CRM's start screen pick payment type per row or per "who pays" group?
+- Preview: the 3-way split would gain a per-invoice settlement label.
+
 
 
 --------------------------

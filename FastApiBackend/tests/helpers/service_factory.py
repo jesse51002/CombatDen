@@ -10,30 +10,12 @@ Standalone module — no pytest imports, no fixture dependencies.
 
 from dataclasses import dataclass
 
-from src.discounts.service.discounts.discounts_service import DiscountsService
-from src.member_memberships.service.memberships.member_memberships_service import (
-    MemberMembershipsService,
-)
-from src.member_memberships.service.payment_sync.payment_sync_builder import (
-    PaymentSyncBuilder,
-)
-from src.member_memberships.service.payment_sync.payment_sync_discounts import (
-    PaymentSyncDiscounts,
-)
-from src.member_memberships.service.payment_sync.payment_sync_freeze import (
-    PaymentSyncFreeze,
-)
-from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
-    PaymentSyncOnceDiscounts,
-)
-from src.member_memberships.service.payment_sync.payment_sync_service import (
-    PaymentSyncService,
-)
+from src.discounts.service.discounts_service import DiscountsService
 from src.members.service.management.members_management_service import (
     MembersManagementService,
 )
-from src.membership_plans.service.plans.membership_plans_service import (
-    MembershipPlansService,
+from src.memberships.service.memberships_service import (
+    MemberMembershipsService,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
@@ -54,10 +36,31 @@ from src.payments.service.payments_stripe_price_service import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
+from src.plans.service.plans_service import (
+    MembershipPlansService,
+)
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.paying_member_lock import PayingMemberLock
+from src.sync.service.sync_builder import (
+    PaymentSyncBuilder,
+)
+from src.sync.service.sync_discounts import (
+    PaymentSyncDiscounts,
+)
+from src.sync.service.sync_freeze import (
+    PaymentSyncFreeze,
+)
+from src.sync.service.sync_once_discounts import (
+    PaymentSyncOnceDiscounts,
+)
+from src.sync.service.sync_one_time import (
+    PaymentSyncOneTime,
+)
+from src.sync.service.sync_service import (
+    PaymentSyncService,
+)
 
 # ── Payment services namespace ──────────────────────────────────
 
@@ -92,7 +95,7 @@ def build_payment_services(stripe_client: PaymentsStripeClient) -> PaymentServic
         price,
         discount,
     )
-    payment = PaymentsStripePaymentService(stripe_client, members, price)
+    payment = PaymentsStripePaymentService(stripe_client, members)
     return PaymentServices(
         price=price,
         membership=membership,
@@ -182,7 +185,6 @@ def build_member_memberships_service(
     payment_svc = PaymentsStripePaymentService(
         stripe_client,
         members_svc,
-        price_svc,
     )
     subscription_svc = PaymentsStripeSubscriptionService(
         stripe_client,
@@ -195,6 +197,13 @@ def build_member_memberships_service(
     freeze_service = PaymentSyncFreeze(subscription_svc)
     paying_lock = PayingMemberLock(db_pool, parent_resolver)
     sync_svc = build_payment_sync_service(db_pool, stripe_client)
+    one_time_svc = PaymentSyncOneTime(
+        db_pool,
+        discounts=PaymentSyncDiscounts(discount_svc),
+        payment_service=payment_svc,
+        parent_resolver=parent_resolver,
+    )
+    discounts_svc = DiscountsService(db_pool)
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -203,6 +212,8 @@ def build_member_memberships_service(
         parent_resolver,
         freeze_service,
         paying_lock,
+        one_time_svc,
+        discounts_svc,
     )
 
 

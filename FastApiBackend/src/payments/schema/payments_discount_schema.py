@@ -1,33 +1,31 @@
 from pydantic import BaseModel, model_validator
+from schema.gym_discount import DiscountMode
 
+import src.shared.db_schema_path  # noqa: F401
 from src.payments.schema.payments_enums import StripeCouponDuration
 
 
-class PaymentsDiscountCreateRequest(BaseModel):
-    """Create a Stripe Coupon with a caller-supplied deterministic id.
+class PaymentsCouponValue(BaseModel):
+    """The value a deterministic coupon encodes: a percent XOR dollar + mode.
 
-    The sync's value-derived coupons set their own id (``pct_<bps>_<mode>`` /
-    ``amt_<cents>_<mode>``) so find-or-create is idempotent. There is no CRM
-    back-reference metadata — these coupons are shared across every discount at a
-    given value, computed on the spot at sync.
+    The shared input to the payments coupon find-or-create
+    (``PaymentsStripeDiscountService.find_or_create_for_value``). Both the
+    recurring sync (per consolidated line) and one-time membership discounting
+    produce one of these per discount value; the deterministic coupon id is a
+    pure function of it (``pct_<bps>_<mode>`` / ``amt_<cents>_<mode>``).
     """
 
-    coupon_id: str
-    discount_name: str
+    discount_mode: DiscountMode
     percentage_off: float | None = None
-    amount_off: int | None = None
-    currency: str = "usd"
-    duration: StripeCouponDuration
-    duration_in_months: int | None = None
+    dollar_off: int | None = None
 
     @model_validator(mode="after")
-    def exactly_one_discount_value(self) -> PaymentsDiscountCreateRequest:
-        """Ensure exactly one of percentage_off or amount_off is set."""
-        has_pct = self.percentage_off is not None
-        has_amt = self.amount_off is not None
-        if has_pct == has_amt:
+    def _exactly_one_value(self) -> PaymentsCouponValue:
+        """A coupon value is percent XOR dollar — exactly one must be set."""
+        if (self.percentage_off is None) == (self.dollar_off is None):
             raise ValueError(
-                "Exactly one of percentage_off or amount_off must be set",
+                "PaymentsCouponValue must set exactly one of "
+                "percentage_off / dollar_off"
             )
         return self
 

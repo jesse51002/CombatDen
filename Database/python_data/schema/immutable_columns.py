@@ -267,6 +267,7 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "created_at",  # auto-generated timestamp
         # Stripe columns — always set by backend
         "stripe_item_id",
+        "stripe_one_time_invoice_id",  # one-time consolidated invoice id (writeback)
         "stripe_sync_status",  # sync writeback (Stripe-convergence confirmation)
         "price_id",
     }
@@ -274,7 +275,7 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
 
 MEMBER_MEMBERSHIP_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
     {
-        # Immutable snapshots: apply = INSERT, remove = DELETE, never an UPDATE
+        # Applied-discount rows: apply = INSERT, remove = DELETE, never an UPDATE
         # from a client. Every column is user-immutable. end_date and
         # stripe_coupon_id are outcome writebacks done only by the sync at
         # service_role.

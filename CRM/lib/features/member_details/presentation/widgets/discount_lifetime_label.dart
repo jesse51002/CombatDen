@@ -8,11 +8,11 @@ import 'package:crm/features/member_details/presentation/widgets/member_detail_f
 /// on one invoice; `ongoing` runs for a duration span, until
 /// an explicit end date, or forever when neither is set.
 String? discountLifetimeLabel(DiscountResponse d) {
-  if (d.discountMode == DiscountMode.once) return 'Once';
-  if (d.discountMode == DiscountMode.unknown) return null;
+  if (d.value.discountMode == DiscountMode.once) return 'Once';
+  if (d.value.discountMode == DiscountMode.unknown) return null;
 
-  final amount = d.durationAmount;
-  final unit = d.durationUnit;
+  final amount = d.value.durationAmount;
+  final unit = d.value.durationUnit;
   if (amount != null &&
       unit != null &&
       unit != DiscountDurationUnit.unknown) {
@@ -21,7 +21,7 @@ String? discountLifetimeLabel(DiscountResponse d) {
     return 'For $amount $plural';
   }
 
-  final end = d.endDate;
+  final end = d.value.endDate;
   if (end != null) return 'Until ${formatDay(end)}';
 
   return 'Forever';

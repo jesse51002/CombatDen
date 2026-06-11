@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 
+from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit, PlanType
 
 from src.payments.schema.metadata.stripe_customer_metadata import (
@@ -14,9 +15,8 @@ from src.payments.schema.metadata.stripe_subscription_metadata import (
     StripeSubscriptionMetadata,
 )
 from src.payments.schema.payments_discount_schema import (
-    PaymentsDiscountCreateRequest,
+    PaymentsCouponValue,
 )
-from src.payments.schema.payments_enums import StripeCouponDuration
 from src.payments.schema.payments_members_schema import (
     PaymentsCustomerCreateRequest,
     PaymentsSubscriptionCancelRequest,
@@ -153,17 +153,13 @@ async def test_create_subscription_with_discount(
     )
     price_id = await _setup_price(membership_service, stripe_account_id, created)
 
-    coupon_id = f"test_subdisc_{uuid4().hex[:12]}"
-    coupon = await discount_service.create_discount(
-        PaymentsDiscountCreateRequest(
-            coupon_id=coupon_id,
-            discount_name="Sub Discount",
-            percentage_off=20.0,
-            duration=StripeCouponDuration.forever,
+    coupon_id = await discount_service.find_or_create_for_value(
+        PaymentsCouponValue(
+            discount_mode=DiscountMode.ongoing, percentage_off=20.0
         ),
         stripe_account_id,
     )
-    created.track_coupon(coupon.stripe_coupon_id)
+    created.track_coupon(coupon_id)
 
     resp = await subscription_service.create_subscription(
         PaymentsSubscriptionCreateRequest(
@@ -173,7 +169,7 @@ async def test_create_subscription_with_discount(
                     stripe_price_id=price_id,
                     discounts=[
                         SubscriptionItemDiscount(
-                            coupon=coupon.stripe_coupon_id
+                            coupon=coupon_id
                         ),
                     ],
                 ),
@@ -196,7 +192,7 @@ async def test_create_subscription_with_discount(
         resp.stripe_subscription_id,
         stripe_account_id,
     )
-    assert coupon.stripe_coupon_id in refetched.items[0].discounts
+    assert coupon_id in refetched.items[0].discounts
 
 
 async def test_update_subscription_add_item(

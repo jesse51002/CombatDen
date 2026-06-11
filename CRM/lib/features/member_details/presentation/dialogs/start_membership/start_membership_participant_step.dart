@@ -29,6 +29,12 @@ class StartMembershipParticipantStep extends StatelessWidget {
   final String? title;
   final String? subtitle;
 
+  /// Which member id is the billable party. Defaults to
+  /// the viewed [member]; the Start Memberships wizard
+  /// overrides it when launched from a linked child's page
+  /// (the payer is then in `linkedAccounts`).
+  final String? payerMemberId;
+
   const StartMembershipParticipantStep({
     super.key,
     required this.member,
@@ -37,45 +43,53 @@ class StartMembershipParticipantStep extends StatelessWidget {
     this.disabledMemberIds = const {},
     this.title,
     this.subtitle,
+    this.payerMemberId,
   });
 
   @override
   Widget build(BuildContext context) {
+    final payerId = payerMemberId ?? member.memberId;
     final participants = <StartMembershipParticipant>[
       StartMembershipParticipant(
         memberId: member.memberId,
         name: member.fullName,
         photoUrl: member.photoUrl,
-        isPayer: true,
+        isPayer: member.memberId == payerId,
       ),
       ...member.linkedAccounts.map(
         (LinkedAccount a) => StartMembershipParticipant(
           memberId: a.memberId,
           name: a.fullName,
           photoUrl: a.photoUrl,
-          isPayer: false,
+          isPayer: a.memberId == payerId,
         ),
       ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
-        Text(
-          title ?? 'Who is this membership for?',
-          style: DesignConstants.h3,
-        ),
-        Text(
-          subtitle ??
-              '${member.fullName} remains the billable party — '
-                  'card charges still come off their account.',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text2nd,
-          ),
-        ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingSmall,
+          children: [
+            Text(
+              title ?? 'Who is this membership for?',
+              style: DesignConstants.h2,
+            ),
+            Text(
+              subtitle ??
+                  '${member.fullName} remains the billable party — '
+                      'card charges still come off their account.',
+              style: DesignConstants.p.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
           children: participants
               .map(
                 (p) => _ParticipantTile(
@@ -110,7 +124,7 @@ class _ParticipantTile extends StatelessWidget {
     final disabled = disabledReason != null;
     final content = Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingSmall,
       ),
       decoration: BoxDecoration(
         color: selected

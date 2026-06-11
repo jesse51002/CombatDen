@@ -71,6 +71,14 @@ class InvoicesSection extends StatefulWidget {
   /// reflects the new charge instead of the one loaded at first build.
   final Object? refreshKey;
 
+  /// Whether the card supplies its own top gap when it has an
+  /// invoice to show. The stacked layout keeps this on (its
+  /// parent column has no gap slot, so an absent invoice leaves
+  /// no dead strip); the wide grid turns it off because
+  /// `BalancedColumns` adds the row gap only when the card
+  /// actually renders.
+  final bool topGap;
+
   const InvoicesSection({
     super.key,
     required this.memberId,
@@ -79,6 +87,7 @@ class InvoicesSection extends StatefulWidget {
     this.nextDueDate,
     this.payerPhotoUrl,
     this.refreshKey,
+    this.topGap = true,
   });
 
   @override
@@ -152,6 +161,12 @@ class _InvoicesSectionState extends State<InvoicesSection> {
         if (data == null) return const SizedBox.shrink();
         final invoice = _pick(data);
         if (invoice == null) return const SizedBox.shrink();
+        final card = _InvoiceCard(
+          invoice: invoice,
+          payerName: widget.payerName,
+          payerPhotoUrl: widget.payerPhotoUrl,
+        );
+        if (!widget.topGap) return card;
         // Own top gap so the parent column needs no `spacing` —
         // that way an absent invoice leaves no dead strip and the
         // membership card fills the whole column.
@@ -159,11 +174,7 @@ class _InvoicesSectionState extends State<InvoicesSection> {
           padding: const EdgeInsets.only(
             top: DesignConstants.spacingBig,
           ),
-          child: _InvoiceCard(
-            invoice: invoice,
-            payerName: widget.payerName,
-            payerPhotoUrl: widget.payerPhotoUrl,
-          ),
+          child: card,
         );
       },
     );

@@ -8,7 +8,7 @@ class DiscountType(StrEnum):
     """Discount type.
 
     Presets (gym_discounts) are regular-only: preset | custom. `linked` is a
-    snapshot-only marker that lives on member_membership_applied_discounts (a
+    applied-discount-only marker that lives on member_membership_applied_discounts (a
     family discount has no preset entity), so it stays in this shared enum but
     is rejected by GymDiscountCreate below.
     """

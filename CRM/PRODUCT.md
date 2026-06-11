@@ -100,8 +100,8 @@ have running on their laptop.
    know. Don't reinvent normalized flows (tables, filters, detail views, settings); spend the
    creativity budget on identity and on making the retention data sing.
 6. **Models track the backend contract.** Model field names and types mirror what the
-   FastApiBackend returns (`../Database/openapi.json`), so the data layer and the UI stay in
-   lockstep with the API as it evolves.
+   FastApiBackend returns (Pydantic schemas in `../FastApiBackend/src/<domain>/<domain>_schema.py`),
+   so the data layer and the UI stay in lockstep with the API as it evolves.
 
 ## Accessibility & Inclusion
 
