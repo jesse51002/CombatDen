@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
+from dateutil.relativedelta import relativedelta
 from schema.member_membership import StripeSyncStatus
 from sqlalchemy import text
 
@@ -128,7 +129,130 @@ class MemberMembershipsBase:
             await session.execute(text(sql), params)
             await session.commit()
 
+    async def _get_plan_price(
+        self,
+        gym_id: UUID,
+        plan_id: UUID,
+        price_id: UUID,
+    ) -> dict:
+        """Validate plan+price exist and are usable.
+
+        Raises:
+            ValueError: If not found, plan deleted, or price inactive.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_get_plan_price.sql")
+        params = {
+            "gym_id": str(gym_id),
+            "plan_id": str(plan_id),
+            "price_id": str(price_id),
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            row = result.mappings().fetchone()
+
+        if not row:
+            raise ValueError(
+                f"Plan/price not found: plan_id={plan_id}, price_id={price_id}, gym_id={gym_id}"
+            )
+        if row["plan_is_deleted"]:
+            raise ValueError(f"Plan is deleted: plan_id={plan_id}")
+        if not row["price_is_active"]:
+            raise ValueError(f"Price is not active: price_id={price_id}")
+        return dict(row)
+
+    async def _check_no_existing(
+        self,
+        member_id: UUID,
+        gym_id: UUID,
+        plan_id: UUID,
+    ) -> None:
+        """Ensure no active/frozen membership exists for this plan.
+
+        Raises:
+            ValueError: If an active or frozen membership already exists.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_check_existing.sql")
+        params = {
+            "member_id": str(member_id),
+            "gym_id": str(gym_id),
+            "plan_id": str(plan_id),
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            exists = result.fetchone()
+
+        if exists:
+            raise ValueError(
+                f"Active membership already exists: "
+                f"member_id={member_id}, gym_id={gym_id}, "
+                f"plan_id={plan_id}"
+            )
+
+    async def _crm_insert(
+        self,
+        member_id: UUID,
+        gym_id: UUID,
+        plan_id: UUID,
+        price_id: UUID,
+        start_date: date,
+        end_date: date | None,
+        last_paid_date: date | None,
+        next_due_date: date | None,
+        stripe_item_id: str | None,
+        prorate: bool,
+        total_price: int,
+        sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
+    ) -> UUID:
+        """Insert a new membership row. Returns the generated item_id.
+
+        ``sync_status`` defaults to ``not_added`` (the real start's pending row);
+        the start preview inserts ``preview_add`` so the dry-run sees it but the
+        real path never bills it.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
+        params = {
+            "member_id": str(member_id),
+            "gym_id": str(gym_id),
+            "plan_id": str(plan_id),
+            "price_id": str(price_id),
+            "start_date": start_date,
+            "end_date": end_date,
+            "last_paid_date": last_paid_date,
+            "next_due_date": next_due_date,
+            "stripe_item_id": stripe_item_id,
+            "prorate": prorate,
+            "total_price": total_price,
+            "sync_status": sync_status.value,
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            row = result.mappings().one()
+            await session.commit()
+        return row["item_id"]
+
+    async def _delete_pending(self, item_id: str) -> None:
+        """Hard-delete a pending membership row (NULL stripe_item_id)."""
+        sql = load_sql(SQL_DIR / "member_memberships_delete_pending.sql")
+        async with self._db_pool.session() as session:
+            await session.execute(text(sql), {"item_id": item_id})
+            await session.commit()
+
     # ── Static Helpers ─────────────────────────────────────────
+
+    @staticmethod
+    def _calculate_end_date(
+        start: date,
+        duration_amount: int,
+        duration_unit: str,
+    ) -> date:
+        """Calculate membership end date from plan duration."""
+        if duration_unit == "week":
+            return start + relativedelta(weeks=duration_amount)
+        if duration_unit == "month":
+            return start + relativedelta(months=duration_amount)
+        if duration_unit == "year":
+            return start + relativedelta(years=duration_amount)
+        raise ValueError(f"Unknown duration_unit: {duration_unit}")
 
     @staticmethod
     def _extract_stripe_item_id(

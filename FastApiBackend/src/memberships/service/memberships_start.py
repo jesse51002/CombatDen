@@ -7,16 +7,13 @@ from datetime import date
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from dateutil.relativedelta import relativedelta
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
-from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import (
     DiscountValue,
 )
-from src.memberships import SQL_DIR
 from src.memberships.service.memberships_base import (
     MemberMembershipsBase,
 )
@@ -35,7 +32,6 @@ from src.shared.db_first_helpers import (
 )
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.gym_timezone import gym_today
-from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
     from src.discounts.service.discounts_service import (
@@ -347,115 +343,10 @@ class MemberMembershipsStart(MemberMembershipsBase):
         return DueNowVsRecurringPreview(due_now=one_time, recurring=None)
 
     # ── Private ────────────────────────────────────────────────
-
-    async def _get_plan_price(
-        self,
-        gym_id: UUID,
-        plan_id: UUID,
-        price_id: UUID,
-    ) -> dict:
-        """Validate plan+price exist and are usable.
-
-        Raises:
-            ValueError: If not found, plan deleted, or price inactive.
-        """
-        sql = load_sql(SQL_DIR / "member_memberships_get_plan_price.sql")
-        params = {
-            "gym_id": str(gym_id),
-            "plan_id": str(plan_id),
-            "price_id": str(price_id),
-        }
-        async with self._db_pool.session() as session:
-            result = await session.execute(text(sql), params)
-            row = result.mappings().fetchone()
-
-        if not row:
-            raise ValueError(
-                f"Plan/price not found: plan_id={plan_id}, price_id={price_id}, gym_id={gym_id}"
-            )
-        if row["plan_is_deleted"]:
-            raise ValueError(f"Plan is deleted: plan_id={plan_id}")
-        if not row["price_is_active"]:
-            raise ValueError(f"Price is not active: price_id={price_id}")
-        return dict(row)
-
-    async def _check_no_existing(
-        self,
-        member_id: UUID,
-        gym_id: UUID,
-        plan_id: UUID,
-    ) -> None:
-        """Ensure no active/frozen membership exists for this plan.
-
-        Raises:
-            ValueError: If an active or frozen membership already exists.
-        """
-        sql = load_sql(SQL_DIR / "member_memberships_check_existing.sql")
-        params = {
-            "member_id": str(member_id),
-            "gym_id": str(gym_id),
-            "plan_id": str(plan_id),
-        }
-        async with self._db_pool.session() as session:
-            result = await session.execute(text(sql), params)
-            exists = result.fetchone()
-
-        if exists:
-            raise ValueError(
-                f"Active membership already exists: "
-                f"member_id={member_id}, gym_id={gym_id}, "
-                f"plan_id={plan_id}"
-            )
-
-    async def _crm_insert(
-        self,
-        member_id: UUID,
-        gym_id: UUID,
-        plan_id: UUID,
-        price_id: UUID,
-        start_date: date,
-        end_date: date | None,
-        last_paid_date: date | None,
-        next_due_date: date | None,
-        stripe_item_id: str | None,
-        prorate: bool,
-        total_price: int,
-        sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
-    ) -> UUID:
-        """Insert a new membership row. Returns the generated item_id.
-
-        ``sync_status`` defaults to ``not_added`` (the real start's pending row);
-        the start preview inserts ``preview_add`` so the dry-run sees it but the
-        real path never bills it. Memberships are created discount-free —
-        discounts are applied afterward via the apply path.
-        """
-        sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
-        params = {
-            "member_id": str(member_id),
-            "gym_id": str(gym_id),
-            "plan_id": str(plan_id),
-            "price_id": str(price_id),
-            "start_date": start_date,
-            "end_date": end_date,
-            "last_paid_date": last_paid_date,
-            "next_due_date": next_due_date,
-            "stripe_item_id": stripe_item_id,
-            "prorate": prorate,
-            "total_price": total_price,
-            "sync_status": sync_status.value,
-        }
-        async with self._db_pool.session() as session:
-            result = await session.execute(text(sql), params)
-            row = result.mappings().one()
-            await session.commit()
-        return row["item_id"]
-
-    async def _delete_pending(self, item_id: str) -> None:
-        """Hard-delete a pending membership row (NULL stripe_item_id)."""
-        sql = load_sql(SQL_DIR / "member_memberships_delete_pending.sql")
-        async with self._db_pool.session() as session:
-            await session.execute(text(sql), {"item_id": item_id})
-            await session.commit()
+    #
+    # The row-level helpers (_get_plan_price / _check_no_existing /
+    # _crm_insert / _delete_pending / _calculate_end_date) live on
+    # MemberMembershipsBase — shared with the batch start.
 
     async def _preview_one_time(
         self,
@@ -474,17 +365,3 @@ class MemberMembershipsStart(MemberMembershipsBase):
             stripe_account_id,
         )
 
-    @staticmethod
-    def _calculate_end_date(
-        start: date,
-        duration_amount: int,
-        duration_unit: str,
-    ) -> date:
-        """Calculate membership end date from plan duration."""
-        if duration_unit == "week":
-            return start + relativedelta(weeks=duration_amount)
-        if duration_unit == "month":
-            return start + relativedelta(months=duration_amount)
-        if duration_unit == "year":
-            return start + relativedelta(years=duration_amount)
-        raise ValueError(f"Unknown duration_unit: {duration_unit}")
