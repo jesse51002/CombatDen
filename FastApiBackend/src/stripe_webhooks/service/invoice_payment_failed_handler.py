@@ -25,6 +25,14 @@ EVENT_TYPE = "invoice.payment_failed"
 CHARGE_KIND_PAYMENT = "payment"
 CHARGE_STATUS_FAILED = "failed"
 INVOICE_STATUS_OPEN = "open"
+# A failed attempt has no real Stripe charge id on the invoice payload, so we
+# store a deterministic SYNTHETIC key in stripe_charge_id keyed on the invoice +
+# its attempt number. This gives "one row per distinct attempt": the SAME attempt
+# seen twice (a webhook re-delivery OR the reconciler invoice fetcher re-listing
+# the same invoice) collides on the UNIQUE constraint and dedupes; a NEW attempt
+# (Stripe increments attempt_count) gets its own row. It never collides with a
+# real ``ch_...`` id (e.g. the later succeeded payment for the same invoice).
+FAILED_CHARGE_KEY_PREFIX = "failed_attempt"
 
 
 class InvoicePaymentFailedHandler:
@@ -42,7 +50,19 @@ class InvoicePaymentFailedHandler:
         event: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        invoice = event["data"]["object"]
+        await self.record(session, event["data"]["object"], gym_id)
+
+    async def record(
+        self,
+        session: AsyncSession,
+        invoice: dict[str, Any],
+        gym_id: UUID,
+    ) -> None:
+        """Record a failed payment attempt (invoice object) as a charge.
+
+        The seam shared by the webhook dispatcher (``handle`` unwraps the event)
+        and the reconciler invoice fetcher (passes the listed invoice directly).
+        """
         stripe_invoice_id = invoice.get("id")
         if not stripe_invoice_id:
             raise ValueError("invoice.payment_failed event is missing invoice id")
@@ -135,10 +155,15 @@ class InvoicePaymentFailedHandler:
         member_id: UUID,
         invoice_id: UUID,
     ) -> None:
-        # ``stripe_charge_id`` is nullable on failed rows so repeated
-        # retries of the same charge don't collide with the UNIQUE
-        # constraint; the outer event-log dedup prevents double
-        # inserts of the same Stripe event.
+        # Deterministic synthetic charge id (see FAILED_CHARGE_KEY_PREFIX):
+        # ``failed_attempt:<invoice_id>:<attempt_count>`` so the same attempt
+        # dedupes (webhook re-delivery or fetcher re-list) while a new attempt
+        # gets its own row. ``ON CONFLICT DO NOTHING`` makes the insert idempotent
+        # without relying on the event-log (which the fetcher does not use).
+        attempt_count = int(invoice.get("attempt_count") or 0)
+        synthetic_charge_id = (
+            f"{FAILED_CHARGE_KEY_PREFIX}:{invoice['id']}:{attempt_count}"
+        )
         insert_sql = load_sql(SQL_DIR / "member_charge_insert.sql")
         params = {
             "invoice_id": str(invoice_id),
@@ -152,7 +177,7 @@ class InvoicePaymentFailedHandler:
             # the method type / card last 4 aren't available here.
             "payment_method_type": None,
             "card_last_four": None,
-            "stripe_charge_id": None,
+            "stripe_charge_id": synthetic_charge_id,
             "stripe_refund_id": None,
             "refunds_charge_id": None,
             "charge_time": datetime.now(tz=UTC),

@@ -66,11 +66,12 @@ flowchart TB
   Plans -->|"1/7"| p_once["one_time ×1 · 14%<br/>Drop-In $25 (3 cls / 1 wk)"]
   Plans -->|"1/7"| p_trial["trial ×1 · 14%<br/>Free Trial $0 (5 cls / 2 wk)"]
 
-  %% ── Discounts ×10 — all regular presets (no linked/family discounts). The
-  %% facets (amount + duration + kind) co-occur, so they're stacked and
-  %% reconverge. Each live membership is given a random 0–3 of them at start
-  %% (applied-snapshot overlay).
-  Discounts["🏷️ Discounts ×10"]
+  %% ── Discounts ×10 — catalog is preset-only (no linked/family discounts).
+  %% Facets (amount + duration) co-occur, so they're stacked and reconverge.
+  %% Each live membership carries a random 0–3 preset ids at start; ~15% also
+  %% carry one inline custom_discounts one-shot (minted server-side at start,
+  %% separate from the catalog — the two are not mutually exclusive).
+  Discounts["🏷️ Discounts ×10<br/>all preset"]
   Discounts --> d_amt["amount (co-occurs)"]
   d_amt -->|"50%"| d_pct["percent 5–25%"]
   d_amt -->|"50%"| d_dollar["dollar $5–$50"]
@@ -80,16 +81,15 @@ flowchart TB
   d_dur["duration (co-occurs)"]
   d_dur -->|"50%"| d_once["once"]
   d_dur -->|"50%"| d_ongoing["ongoing<br/>½ time-bounded · ½ forever"]
-  d_once --> d_kind
-  d_ongoing --> d_kind
 
-  d_kind["kind (co-occurs)"]
-  d_kind -->|"75%"| d_preset["preset"]
-  d_kind -->|"25%"| d_custom["custom"]
-
-  Discounts -.->|"applied 0–3 / live membership"| d_applied["applied snapshots<br/>random subset per membership"]
+  Discounts -.->|"0–3 preset ids / live membership"| d_applied["applied snapshots<br/>preset discount_ids per item"]
+  Discounts -.->|"~15% of live memberships"| d_custom["custom_discounts one-shot<br/>inline at start · backend-minted"]
 
   %% ── Memberships · grouped live vs closed (one status each) ──
+  %% Live memberships are started via one batch POST per paying-parent family:
+  %% link each child first, then POST /member_memberships/ with all family
+  %% members' items (each carrying discount_ids + optional custom_discounts);
+  %% a failed result in the breakdown hard-fails the seed.
   Memberships["📄 Memberships · live ≈50 + closed ≈50–70"]
   Memberships --> ms_live["live ≈50"]
   Memberships --> ms_closed["closed ≈50–70"]
@@ -165,5 +165,5 @@ flowchart TB
   classDef dim  fill:#ffe6cc,stroke:#d98a3a,color:#4a2c08;
   classDef leaf fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
   class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History hub;
-  class m_life,m_frz,m_acc,d_amt,d_dur,d_kind,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
-  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_preset,d_custom,d_applied,ms_active,ms_trial,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;
+  class m_life,m_frz,m_acc,d_amt,d_dur,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
+  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;

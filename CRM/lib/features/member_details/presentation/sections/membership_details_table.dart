@@ -79,7 +79,8 @@ class MembershipDetailsTable extends StatelessWidget {
         ),
         (
           membershipLabel('Cost:'),
-          costValue(
+          costBreakdownValue(
+            membership.baseCostFor(coveredMemberId),
             membership.totalPriceFor(coveredMemberId),
           ),
         ),

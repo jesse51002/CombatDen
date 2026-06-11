@@ -19,10 +19,10 @@ Whenever the API surface or architecture changes — **a route or service added 
 
 One deep-dive diagram sits beside these: **`payment_sync.mermaid`** — the step-by-step orchestration flow of the payment-sync engine (`update_payments_recurring`), referenced from `README.md`. Its keep-in-sync owner is the **`sync-guide`** skill (update the diagram in the same change as the engine, per that skill); it follows the same `mermaid-creation` rules and validation.
 
-## ⚠️ Payment sync + member_memberships — critical billing infrastructure, human in the loop
+## ⚠️ Payment sync + memberships — critical billing infrastructure, human in the loop
 
-`src/member_memberships/` — and especially the payment-sync engine in
-`src/member_memberships/service/payment_sync/` — is **the most critical code in
+`src/memberships/` — and especially the payment-sync engine in
+`src/sync/` — is **the most critical code in
 this backend: it decides how real members are billed.** A mistake here mis-bills
 real customers, so it is edited under a stricter rule than the rest of the repo:
 
@@ -33,7 +33,7 @@ real customers, so it is edited under a stricter rule than the rest of the repo:
 - This overrides any instinct to batch related edits. Even when several changes
   are obviously connected, land and get each one reviewed on its own.
 - The deep domain knowledge for the engine lives in the **`sync-guide`** skill
-  (a living document) — read it before touching the engine, and update it in the
+  (a living document) — read it before touching `src/sync/`, and update it in the
   same change when the engine changes.
 
 ## Workflow
@@ -57,7 +57,7 @@ real customers, so it is edited under a stricter rule than the rest of the repo:
 
 **Don't test retired or non-existent routes**
 - When a route is removed or renamed, **delete its tests** — never keep a test that asserts the old path now returns 404/405. A "this route is gone" assertion has no behavioral value, silently rots as the router grows (a future unrelated route on that path flips it green or red for the wrong reason), and just adds noise. The same goes for asserting that a route which never existed is absent.
-- Test the routes that **exist** and their real behavior (status codes, payloads, auth). Coverage of the API surface comes from `Database/openapi.json` + the live router, not from negative existence checks.
+- Test the routes that **exist** and their real behavior (status codes, payloads, auth). Coverage of the API surface comes from the Pydantic schemas (`src/<domain>/<domain>_schema.py`) + the live router, not from negative existence checks.
 
 **Integration tests must clean up exactly what they create (the `created` fixture)**
 - Tests run against a **real shared local Supabase DB + a real shared Stripe test Connect account** — no transaction rollback, no ephemeral DB. Every test must delete exactly the rows/Stripe objects it created, and **never** the single seeded gym (`tests/seed_constants.py`) or any other shared/seed data.
@@ -206,11 +206,13 @@ src/
     └── ...
 ```
 
-**Domain-Prefixed File Names**
-- **All files within a domain folder must be prefixed with the domain name**
-- Good: `members/members_router.py`, `members/members_service.py`
-- Bad: `members/router.py`, `members/service.py`
-- This prevents confusion when multiple domain files are open in the editor (e.g., distinguishing `members_router.py` from `auth_router.py` in editor tabs)
+**File Naming Within a Domain**
+- **Every file inside a domain folder carries the domain name as a prefix.** The prefix makes the file's origin unambiguous when it appears in imports, tracebacks, or grep output.
+- Good: `memberships/memberships_router.py`, `sync/service/sync_builder.py`, `plans/plans_schema.py`
+- Bad: `memberships/router.py`, `sync/service/builder.py` (no prefix — ambiguous in isolation)
+- **A service file's primary class and its file name must stay consistent.** The file name is the class's role in the domain; renaming one means renaming the other in the same change.
+  - Good: `memberships_discounts.py` ↔ `MemberMembershipsDiscounts`, `sync_builder.py` ↔ `PaymentSyncBuilder`
+  - Bad: renaming the file without renaming the class, or vice versa — a drifted name silently misleads every reader and every grep.
 
 **Why Domain-Driven**
 - Clear boundaries between business domains
@@ -219,11 +221,14 @@ src/
 - Promotes separation of concerns
 
 **Service-Layer Organization**
-- When a service grows past one file, its pieces live in a **subfolder** under `service/` (e.g. `members/service/management/`, `member_memberships/service/payment_sync/`).
-- The orchestrator `*_service.py` **lives inside that subfolder, grouped with the code it orchestrates** — never floating one level above it.
-  - Good: `members/service/management/members_management_service.py` (sits with `members_management_create.py`, `_update.py`, …).
+- When a service grows past one file, its pieces live **flat in `service/`** — all sibling files, no sub-subfolder grouping. The facade is `service/<domain>_service.py`; helpers are `service/<domain>_start.py`, `service/<domain>_cancel.py`, etc.
+  - Good: `memberships/service/memberships_service.py` (facade), `memberships/service/memberships_start.py`, `memberships/service/memberships_cancel.py` — all flat in `service/`.
+  - Good: `sync/service/sync_service.py` (orchestrator), `sync/service/sync_builder.py`, `sync/service/sync_queries.py` — all flat in `service/`.
+  - Bad: `memberships/service/memberships/member_memberships_service.py` — a sub-subfolder for a single group.
+- The orchestrator / facade **lives inside `service/` as `<domain>_service.py`**, grouped with the files it orchestrates — never floating one level above.
+  - Legacy note: `members/service/management/members_management_service.py` predates the flat rule and uses a nested layout (`management/` subdir with `members_management_create.py`, `_update.py`, …). That layout is not wrong for that domain, but new domains use the flat layout described above.
   - Bad: `members/service/members_management_service.py` floating above a sibling `management/` folder.
-- A genuinely standalone service with no implementation subfolder stays as a single file at the `service/` top level — that's fine (e.g. a one-file `foo/service/foo_widget_service.py` that orchestrates nothing else). Today every service happens to live in an implementation subfolder, but a future single-file service belongs flat at `service/`, not buried in a one-member subdir.
+- A genuinely standalone service with no peers stays as a single file at the `service/` top level — fine (a future one-file service belongs flat at `service/`, not buried in a one-member subdir).
 - **Don't add a nesting level for a single group.** If a folder would only ever hold one related set, keep those files flat in `service/` instead of burying them (e.g. webhook handlers live directly in `stripe_webhooks/service/`, not in a `handlers/` subdir).
 - No bare module-level helper functions in a service file — fold them into the service class as private methods (see *Code Complexity & Nesting → No loose module-level functions in a service file*).
 

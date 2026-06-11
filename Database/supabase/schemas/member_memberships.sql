@@ -32,7 +32,20 @@ CREATE TABLE member_memberships_unfiltered (
     last_paid_date DATE,
     next_due_date DATE,
     stripe_item_id VARCHAR,
+    -- ONE-TIME memberships only: the consolidated invoice (in_…) this membership
+    -- was billed on. stripe_item_id holds the per-membership invoice LINE id
+    -- (distinct per membership sharing one invoice); this holds the shared invoice
+    -- id so the membership still points back to its invoice. NULL for recurring
+    -- (no single invoice). Service-role writeback, immutable once set.
+    stripe_one_time_invoice_id VARCHAR,
     prorate BOOLEAN NOT NULL DEFAULT true,
+
+    -- This membership's OWN post-discount price (minor units): the plan price
+    -- minus THIS member's own discounts. Service_role writeback: computed at
+    -- sync by PaymentSyncDiscounts (ongoing discounts always; once discounts
+    -- only once the membership is on Stripe) and written per item_id. It is the
+    -- per-membership share, NOT a plan/family-level total — the CRM derives a
+    -- plan total by summing the rows.
     total_price INTEGER NOT NULL CHECK (total_price >= 0),
 
     -- Stripe-sync confirmation (service_role writeback). 'not_added' (default)
@@ -131,6 +144,26 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_prevent_stripe_item_id_overwrite
     BEFORE UPDATE OF stripe_item_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_stripe_item_id_overwrite();
+
+-- Trigger: stripe_one_time_invoice_id is immutable once set. Stamped once when a
+-- one-time membership's consolidated invoice is created; never migrated (unlike
+-- stripe_item_id there is no 'migrating' exception — a one-time invoice is a
+-- terminal charge, not a line that moves between Stripe items).
+CREATE OR REPLACE FUNCTION prevent_stripe_one_time_invoice_id_overwrite()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.stripe_one_time_invoice_id IS NOT NULL
+       AND NEW.stripe_one_time_invoice_id IS DISTINCT FROM OLD.stripe_one_time_invoice_id THEN
+        RAISE EXCEPTION 'stripe_one_time_invoice_id cannot be changed once set'
+            USING CONSTRAINT = 'stripe_one_time_invoice_id_immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_prevent_stripe_one_time_invoice_id_overwrite
+    BEFORE UPDATE OF stripe_one_time_invoice_id ON member_memberships_unfiltered
+    FOR EACH ROW EXECUTE FUNCTION prevent_stripe_one_time_invoice_id_overwrite();
 
 -- Trigger: recurring plans cannot have an end_date
 CREATE OR REPLACE FUNCTION check_recurring_no_end_date()

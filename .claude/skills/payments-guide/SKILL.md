@@ -41,7 +41,7 @@ changes, **update this skill in the same change** (it is a living document — s
 the bottom).
 
 This layer is a set of **primitives**, not a brain. It knows *how* to push a
-desired state to Stripe and *how* to absorb a Stripe event — it does **not**
+desired state to Stripe and *how* to record a Stripe event — it does **not**
 decide *what* the desired state should be. The engine that computes desired
 subscription state and the sync-time coupon set is owned by `sync-guide`; the
 discount system-of-record model is owned by `discounts-guide`; plan/membership
@@ -63,7 +63,7 @@ Two kinds of "truth" are split deliberately:
 
 `src/payments/` is a **pure service layer: it has no router** (verified — there
 is no `*_router.py` under `src/payments/`). Its services are consumed by the
-sync engine (`member_memberships/service/payment_sync/`) and by the
+sync engine (`src/sync/service/`) and by the
 membership/members/plans services. The only HTTP surface this guide owns is the
 **inbound webhook endpoint** (`src/stripe_webhooks/`) plus the two members-router
 card endpoints that call these primitives (§9).
@@ -117,7 +117,7 @@ an inbound event can be correlated back to CRM rows. All models subclass
 | `StripeProductMetadata` | membership product create/update | `plan_id`, `gym_id` |
 | `StripePriceMetadata` | price create | `crm_price_id`, `plan_id`, `gym_id` |
 | `StripeSubscriptionMetadata` | sub create/update/freeze/migration | `member_id`, `gym_id`, `crm_paid_with_cash` (default `False`) |
-| `StripeMembershipOneTimeMetadata` | one-time membership invoice | `member_id`, `gym_id`, `plan_id`, `crm_one_time_payment=True`, `type="membership_one_time"`, `crm_paid_with_cash` |
+| `StripeMembershipOneTimeMetadata` | one-time membership invoice (invoice-level) | `member_id` (bill owner / payer), `gym_id`, `plan_id` (**optional** — `None` on a consolidated multi-plan invoice), `crm_one_time_payment=True`, `type="membership_one_time"`, `crm_paid_with_cash` |
 | `StripeAdHocInvoiceMetadata` | ad-hoc charge-card invoice | `member_id`, `gym_id`, `crm_one_time_payment=True`, `crm_paid_with_cash` |
 
 The metadata is the **write-side guard**; the webhook is a pure reader and pulls
@@ -175,14 +175,26 @@ but Stripe rejects attaching an archived price to a subscription, so they flip i
 back to active because the DB says it's current.
 
 **`PaymentsStripePaymentService`** (`payments_stripe_payment_service.py`) —
-one-time charges, all money-moving (per-step idempotency keys
-`{base}:invoice`/`:invoice_item`/`:finalize`/`:pay`):
+**itemized** invoice charges, all money-moving (per-step idempotency keys
+`{base}:invoice`/`:invoice_item:{i}`/`:finalize`/`:pay`):
 
-- `create_invoice_payment` — invoice from a **Stripe Price**.
-- `create_invoice_payment_by_amount` — **ad-hoc amount** invoice (no Price; late
-  fees, pro-shop). `description` lands on both invoice and line item.
-- `preview_invoice_payment` — dry-run preview (may defensively reactivate an
-  archived price).
+- `create_invoice_payment` / `preview_invoice_payment` — **itemized**: ONE invoice
+  from a **list of items** (`PaymentsInvoiceItemSpec`), each a **Stripe price XOR
+  an ad-hoc amount** (late fees, pro-shop — exactly one set, model-validated) plus
+  its own **item-level** discount coupons (`InvoiceItem.discounts`, not
+  invoice-level — so each line is discounted independently). A single charge is
+  just a one-item list. The create response carries **`line_item_ids` AND
+  `line_amounts`** in **request order** (each line mapped from its
+  `parent.invoice_item_details.invoice_item`), so a caller maps each item → its
+  Stripe line id (e.g. a membership → `stripe_item_id`) **and** its
+  **post-discount** charged amount in cents (e.g. a membership's `total_price`) —
+  no client math. The create request also takes an optional **invoice-level
+  `description`** (the header line on the hosted invoice/receipt) — **distinct**
+  from each item's per-line `description` (charge_card passes its `reason` here).
+  Invoice-level `metadata` is any `BaseStripeMetadata` (membership-one-time or
+  ad-hoc); a consolidated multi-plan invoice's
+  `StripeMembershipOneTimeMetadata.plan_id` is `None`. **No price-active check** —
+  prices are never deactivated.
 - `refund_payment` — refund a PaymentIntent (full or partial).
 - `pay_open_subscription_invoice_out_of_band` — find the subscription's single
   open invoice, stamp `crm_paid_with_cash="true"` on it, and `invoices.pay` with
@@ -192,25 +204,40 @@ one-time charges, all money-moving (per-step idempotency keys
   sub-item lookup; only the cash flag rides on the invoice itself.)
 
 **`PaymentsStripeDiscountService`** (`payments_stripe_discount_service.py`) — the
-**single owner of low-level Stripe Coupon I/O**: `find_discount(coupon_id,
-account)` (retrieve-or-`None`, the non-raising lookup), `create_discount` (creates
-under a **caller-supplied deterministic `coupon_id`**; idempotent — a create race
-on the same id returns the existing coupon), `delete_discount`, and
+**single owner of Stripe Coupon I/O AND the deterministic value→coupon
+find-or-create**. Low-level I/O: `find_discount(coupon_id, account)`
+(retrieve-or-`None`, the non-raising lookup), `delete_discount`,
 `retrieve_discount` (raises; used by the subscription coupon-validation path).
-Coupons carry **no CRM back-reference metadata** — a value-coupon is shared across
-every discount at that value, so there is nothing to back-reference. The
-**deterministic id scheme + validate-or-replace policy** (the
-value signature `pct_<bps>_<mode>` / `amt_<cents>_<mode>`) lives in
-`PaymentSyncCoupons` (`sync-guide`), which **delegates all coupon I/O here** — no
-service outside this payments layer touches the Stripe SDK. The
+Coupon **creation has no public raw path** — it is the private
+`_create_coupon(coupon_id, value)` owned by `find_or_create_for_value` (a coupon's
+value *is* its deterministic id, so a coupon is only ever made through the
+find-or-create; idempotent — a create race on the same id returns the existing
+coupon). Coupons carry **no CRM
+back-reference metadata** — a value-coupon is shared across every discount at that
+value. The **deterministic-id + validate-or-replace policy** lives here too, in
+**`find_or_create_for_value(PaymentsCouponValue, account) -> coupon_id`** (+ the
+static `coupon_id_for_value`): the id is the value signature
+`pct_<bps>_<mode>` / `amt_<cents>_<mode>` (`<mode>` = the `DiscountMode` value
+`once`/`ongoing`; `bps = round(percentage_off*100)`, `cents = int(dollar_off)`),
+so the same value always resolves to one shared coupon. An existing coupon is
+**validated** against the value (`_matches_value` on amount + duration — Stripe
+coupons are immutable) and a mismatch is **deleted + recreated** under the same
+id. `<mode>` → Stripe duration via `once`→`once`, `ongoing`→`forever` (the
+arbitrary `end_date` cutoff is enforced in the read, not by Stripe). **This is
+shared infrastructure** — `PaymentSyncDiscounts.resolve` (`sync-guide`) calls it
+for **both** the recurring sync **and** the one-time engine `PaymentSyncOneTime`
+(which feeds it per-membership groups for the one-time invoice), one value→coupon
+mechanism; nothing under `src/sync/` reimplements it. The
 `StripeCouponDuration` enum (`once` / `repeating` / `forever`) lives in
 `schema/payments_enums.py`.
 
 **`payments_stripe_mappers.py`** — a class-less concern module (free functions by
 design): the **single** preview mapper `map_preview_invoice` plus the line-item
-helpers (`_post_discount_amount` computes `subtotal − Σ discount_amounts` itself
-rather than trusting `line.amount`; `_extract_subscription_item_id` /
-`_is_proration` handle legacy vs. `parent`-nested Stripe shapes). It maps **any**
+helpers. **`post_discount_amount(line)` is public** (no underscore — the payment
+service imports it to compute each itemized line's post-discount charged amount
+for `line_amounts`); it computes `subtotal − Σ discount_amounts` itself rather
+than trusting `line.amount`. `_extract_subscription_item_id` / `_is_proration`
+(private) handle legacy vs. `parent`-nested Stripe shapes. It maps **any**
 `create_preview` result (the proposed-change previews **and** the existing-sub
 upcoming invoice — there is no separate `map_upcoming_invoice`) to one
 **`PreviewInvoice`** of **`PreviewInvoiceLine`**, returning **every** line; a
@@ -219,8 +246,23 @@ consumer wanting only the steady-state recurring view filters on `is_proration`
 `PaymentsSubscriptionUpcoming.fetch_upcoming`). Each line carries Stripe's **raw
 `amount`** (`line.amount` — *pre*-discount on a subscription preview, not
 repurposed) **and** the computed post-discount **`discounted_amount`**
-(`_post_discount_amount`), so a consumer reads the net directly with no client
-math. The one finalized-invoice model `PaymentsInvoiceResponse` (§7) is separate
+(`post_discount_amount`), so a consumer reads the net directly with no client
+math.
+
+> **The mapper stays generic; the one-time preview filters its own lines.**
+> `preview_invoice_payment` runs `invoices.create_preview` at the **customer
+> level**, so for a payer with a live subscription Stripe previews the customer's
+> *next* invoice — the staged ad-hoc invoice items **plus** the subscription's
+> upcoming recurring lines — and the mapper (correctly) returns all of them. Its
+> **sole** caller, `PaymentSyncOneTime.preview_one_time` (`sync-guide`), is a
+> one-time-purchase preview, so it post-filters to **only** the pure
+> invoice-item lines (those with `stripe_subscription_item_id is None` **and**
+> `is_proration is False`) and **recomputes** `subtotal` / `total` /
+> `amount_due` from the kept lines before returning. The filter lives in that
+> caller, not here — the mapper is shared with the subscription/upcoming previews
+> and must keep returning every line.
+
+The one finalized-invoice model `PaymentsInvoiceResponse` (§7) is separate
 and unchanged.
 
 ---
@@ -237,14 +279,45 @@ shared deps and the static/instance helpers.
 
 | facade method | delegate (file) | does |
 | --- | --- | --- |
-| `create_subscription` / `preview_create_subscription` | `PaymentsSubscriptionCreate` (`_create`) | new sub (flexible billing mode), monthly/weekday anchor, optional first-invoice out-of-band |
-| `update_subscription` / `preview_update_subscription` | `PaymentsSubscriptionUpdate` (`_update`) | reconcile a sub to a desired item/discount set |
+| `create_subscription` / `preview_create_subscription` | `PaymentsSubscriptionCreate` (`_create`) | new sub (flexible billing mode), monthly/weekday anchor, first charge verified synchronously (card → `error_if_incomplete`; cash → `default_incomplete` + first-invoice out-of-band) |
+| `update_subscription` / `preview_update_subscription` | `PaymentsSubscriptionUpdate` (`_update`) | reconcile a sub to a desired item/discount set; card path sends `error_if_incomplete` so a declined proration 402s + rolls back |
 | `cancel_subscription` | `PaymentsSubscriptionCancel` (`_cancel`) | cancel now or at period end; no-op if already `canceled` |
 | `freeze_subscription` / `unfreeze_subscription` | `PaymentsSubscriptionFreeze` (`_freeze`) | `pause_collection` (`behavior="void"`, optional `resumes_at`) / resume with `billing_cycle_anchor="unchanged"` |
 | `migrate_subscriptions_to_price` | `PaymentsSubscriptionMigration` (`_migration`) | sequential price migration across subs |
 | `fetch_upcoming_invoice` | `PaymentsSubscriptionUpcoming` (`_upcoming`) | next-invoice preview via `invoices.create_preview(subscription=…)` |
 | `get_subscription` | `PaymentsSubscriptionRetrieve` (`_retrieve`) | **read current items + discounts** (the sync's read primitive) |
 | `get_subscription_item` | `PaymentsSubscriptionItem` (`_item`) | retrieve one sub-item (validates its parent isn't canceled) |
+
+### Synchronous first-charge — `payment_behavior` (card vs. cash)
+
+The at-the-desk charge a create / add produces is **verified synchronously**, so
+a declining card **fails the operation** rather than reporting success while
+Stripe silently dunns. The split is keyed on `pay_first_invoice_out_of_band`
+(the cash flag the sync threads through, §sync-guide):
+
+- **Create, card path** (`pay_first_invoice_out_of_band` False) →
+  `payment_behavior="error_if_incomplete"`: Stripe 402s the create when the
+  first invoice can't be paid and creates **no subscription** (verified: a
+  declined create leaves zero subs + zero invoices on the customer). A
+  `$0`/no-immediate-charge first invoice has nothing to collect, so it's a no-op
+  there.
+- **Create, cash path** (`pay_first_invoice_out_of_band` +
+  `proration_behavior="always_invoice"`) → `payment_behavior="default_incomplete"`
+  + the existing `_pay_first_invoice_out_of_band` (mark the open first invoice
+  paid out of band, no card charge). Unchanged.
+- **Update, card path** (`pay_first_invoice_out_of_band` False) →
+  `payment_behavior="error_if_incomplete"`: a proration charge the card can't
+  cover 402s the update, and Stripe **rolls the item change back** (verified: the
+  live sub keeps exactly its prior items) — so an add fails + reverts instead of
+  leaving the member added behind an open unpaid proration invoice. The cash path
+  (`pay_first_invoice_out_of_band` True) is **excluded**: its open proration
+  invoice is settled later via `mark_paid_cash`, so it must not error. A
+  `proration_behavior="none"` update generates no invoice → no-op.
+
+Only the monthly **renewals** after the first charge stay asynchronous (Stripe
+dunning → the `invoice.payment_failed` webhook). The preview paths don't read
+`payment_behavior` (they call `invoices.create_preview`), so setting it is inert
+for previews.
 
 ### `get_subscription` — the read-current-coupons primitive
 
@@ -408,10 +481,13 @@ injects `payment_sync_service` into `InvoicePaidHandler` for this (the only hand
 that depends on the sync engine).
 
 > **Per-invoice discount audit.** After the invoice + line items are written,
-> `_capture_discounts` snapshots the invoice's discounts into
+> `_capture_discounts` captures the invoice's discounts into
 > `member_invoice_applied_discounts` (§7). The webhook payload carries only
 > opaque `di_` Discount ids, so it **retrieves the invoice** with
-> `expand=["discounts.coupon"]` to resolve each `di_ → coupon`, then stores
+> `expand=["discounts", "lines.data.discounts"]` to resolve each `di_ → coupon`
+> from **both** the invoice-level discounts **and each line's** discounts
+> (item-level coupons — a consolidated one-time invoice discounts each membership
+> line independently — live on the lines, not the invoice), then stores
 > `{amount_off, stripe_coupon_id}` per discount — **coupon-only, not linked to a
 > CRM discount** (the value-signature coupon is shared across discounts, so the
 > link is ambiguous; we deliberately don't resolve it). It is **SAVEPOINT-isolated
@@ -517,16 +593,16 @@ frozen historical label; `amount CHECK (>= 0)` is the line total; `quantity CHEC
 system-of-record. One row = one Stripe coupon that discounted an invoice, written
 by the `invoice.paid` capture (above): `stripe_coupon_id NOT NULL` (the
 identifier), `amount_off INTEGER CHECK (>= 0)` (the **dollars it took off this
-invoice**, snapshotted), and `discount_id` (**nullable, left NULL** — we
+invoice**, captured as-of-invoice), and `discount_id` (**nullable, left NULL** — we
 deliberately do **not** resolve back to a CRM `gym_discount`, since the
 value-signature coupon is shared across discounts; the FK is kept only for a
 possible future link). `UNIQUE (invoice_id, stripe_coupon_id)` makes the capture
 idempotent. **This is explicitly distinct from
-`member_membership_applied_discounts`** (the slim, versioned snapshot that pins a
-membership to a discount *value version* — owned by `discounts-guide`). This
-audit table records *what a specific invoice actually discounted (by coupon)*;
-that snapshot table records *what a membership is currently entitled to*. Do not
-conflate them.
+`member_membership_applied_discounts`** (the slim, versioned applied-discount row
+that pins a membership to a discount *value version* — owned by `discounts-guide`).
+This audit table records *what a specific invoice actually discounted (by coupon)*;
+the applied-discount table records *what a membership is currently entitled to*. Do
+not conflate them.
 
 **`stripe_webhook_events`** — the idempotency log. PK `event_id VARCHAR`;
 `gym_id`, `event_type`, `processed_at`. `REVOKE ALL … FROM authenticated`

@@ -10,14 +10,15 @@ from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.discounts.discounts_router import discounts_router
 from src.gyms.gyms_router import gyms_router
-from src.member_memberships.member_memberships_router import (
+from src.members.members_router import members_router
+from src.memberships.memberships_router import (
     member_memberships_router,
 )
-from src.members.members_router import members_router
-from src.membership_plans.membership_plans_router import (
+from src.plans.plans_router import (
     membership_plans_router,
 )
 from src.ranks.ranks_router import ranks_router
+from src.reconciler.reconciler_scheduler import build_scheduler
 from src.rewards.rewards_router import rewards_router
 from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
 from src.waivers.waivers_router import waivers_router
@@ -26,8 +27,16 @@ from src.waivers.waivers_router import waivers_router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown."""
-    yield
-    await app.container.db_pool().engine.dispose()
+    scheduler = None
+    if settings.reconciler_enabled:
+        scheduler = build_scheduler(app.container)
+        scheduler.start()
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+        await app.container.db_pool().engine.dispose()
 
 
 def create_app() -> FastAPI:

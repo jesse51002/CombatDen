@@ -8,28 +8,10 @@ from src.classes.service.classes_cycle_counts_service import (
 )
 from src.classes.service.classes_streak_service import ClassesStreakService
 from src.core.config import settings
-from src.discounts.service.discounts.discounts_service import DiscountsService
+from src.discounts.service.discounts_service import DiscountsService
 from src.gyms.service.gyms_service import GymsService
 from src.gyms.service.gyms_stripe_connect_service import (
     GymsStripeConnectService,
-)
-from src.member_memberships.service.memberships.member_memberships_service import (
-    MemberMembershipsService,
-)
-from src.member_memberships.service.payment_sync.payment_sync_builder import (
-    PaymentSyncBuilder,
-)
-from src.member_memberships.service.payment_sync.payment_sync_discounts import (
-    PaymentSyncDiscounts,
-)
-from src.member_memberships.service.payment_sync.payment_sync_freeze import (
-    PaymentSyncFreeze,
-)
-from src.member_memberships.service.payment_sync.payment_sync_once_discounts import (
-    PaymentSyncOnceDiscounts,
-)
-from src.member_memberships.service.payment_sync.payment_sync_service import (
-    PaymentSyncService,
 )
 from src.members.service.crm_member_services.members_crm_members_list_service import (
     CrmMembersListService,
@@ -46,8 +28,8 @@ from src.members.service.member_details.members_billing_detail_service import (
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
-from src.membership_plans.service.plans.membership_plans_service import (
-    MembershipPlansService,
+from src.memberships.service.memberships_service import (
+    MemberMembershipsService,
 )
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_discount_service import (
@@ -68,7 +50,22 @@ from src.payments.service.payments_stripe_price_service import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
+from src.plans.service.plans_service import (
+    MembershipPlansService,
+)
 from src.ranks.service.ranks_service import RanksService
+from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
+    InvoiceFetchSweep,
+)
+from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
+    OrphanCleanupSweep,
+)
+from src.reconciler.service.reconciler.reconciler_payment_push_sweep import (
+    PaymentPushSweep,
+)
+from src.reconciler.service.reconciler.reconciler_service import (
+    ReconcilerService,
+)
 from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
 )
@@ -78,8 +75,12 @@ from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.paying_member_lock import PayingMemberLock
+from src.shared.resource_lock import ResourceLock
 from src.stripe_webhooks.service.account_updated_handler import (
     AccountUpdatedHandler,
+)
+from src.stripe_webhooks.service.customer_subscription_deleted_handler import (
+    CustomerSubscriptionDeletedHandler,
 )
 from src.stripe_webhooks.service.event_log import StripeWebhookEventLog
 from src.stripe_webhooks.service.invoice_paid_handler import (
@@ -96,6 +97,24 @@ from src.stripe_webhooks.service.refund_handler import (
 )
 from src.stripe_webhooks.service.stripe_webhooks_service import (
     StripeWebhooksService,
+)
+from src.sync.service.sync_builder import (
+    PaymentSyncBuilder,
+)
+from src.sync.service.sync_discounts import (
+    PaymentSyncDiscounts,
+)
+from src.sync.service.sync_freeze import (
+    PaymentSyncFreeze,
+)
+from src.sync.service.sync_once_discounts import (
+    PaymentSyncOnceDiscounts,
+)
+from src.sync.service.sync_one_time import (
+    PaymentSyncOneTime,
+)
+from src.sync.service.sync_service import (
+    PaymentSyncService,
 )
 from src.waivers.service.waivers.waivers_service import WaiversService
 
@@ -118,8 +137,8 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.waivers.waivers_router",
             # === CRM billing router modules (restored) ===
             "src.discounts.discounts_router",
-            "src.member_memberships.member_memberships_router",
-            "src.membership_plans.membership_plans_router",
+            "src.memberships.memberships_router",
+            "src.plans.plans_router",
             "src.stripe_webhooks.stripe_webhooks_router",
             # === end CRM billing router modules ===
         ],
@@ -180,7 +199,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         PaymentsStripePaymentService,
         stripe_client=stripe_client,
         members_service=payments_members_service,
-        price_service=payments_price_service,
     )
     payments_subscription_service = providers.Factory(
         PaymentsStripeSubscriptionService,
@@ -199,6 +217,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         gym_stripe_service=gym_stripe_service,
     )
+    # Generic non-blocking TTL-lease lock (key-agnostic). Used by the scheduled
+    # reconciler's orphan-cleanup family check.
+    resource_lock = providers.Factory(ResourceLock, db_pool=db_pool)
     # The one concurrency lock: a TTL lease keyed on a member's paying parent,
     # so no two billing ops sync the same family at once. Used by the facade,
     # the webhook settle, and the bulk fan-out.
@@ -216,14 +237,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         subscription_service=payments_subscription_service,
     )
     # Pre-sync settle of the once-discount lifecycle (stamps consumed `once`
-    # snapshots); also the scheduled reconciler's core duty.
+    # applied-discount rows); also the scheduled reconciler's core duty.
     payment_sync_once_discounts = providers.Factory(
         PaymentSyncOnceDiscounts,
         db_pool=db_pool,
         subscription_service=payments_subscription_service,
     )
     # Owns the discount math + resolves each line's coupons (find-or-create,
-    # dollar→percent), for both real and preview. Coupon I/O is delegated to the
+    # percent→dollar), for both real and preview. Coupon I/O is delegated to the
     # payments discount service — the sync never touches the Stripe SDK directly.
     payment_sync_discounts = providers.Factory(
         PaymentSyncDiscounts,
@@ -245,6 +266,22 @@ class DependencyInjector(containers.DeclarativeContainer):
         builder=payment_sync_builder,
         paying_lock=paying_member_lock,
     )
+    # Standalone one-time charge service (reuses the discount engine; does not
+    # touch the recurring PaymentSyncService).
+    payment_sync_one_time = providers.Factory(
+        PaymentSyncOneTime,
+        db_pool=db_pool,
+        discounts=payment_sync_discounts,
+        payment_service=payments_payment_service,
+        parent_resolver=billing_parent_resolver,
+    )
+
+    # ── Discounts ────────────────────────────────────────────────
+    # Presets are plain, coupon-free gym config: no Stripe, no payment sync.
+    discounts_service = providers.Factory(
+        DiscountsService,
+        db_pool=db_pool,
+    )
 
     # ── Member memberships ───────────────────────────────────────
     member_memberships_service = providers.Factory(
@@ -256,6 +293,8 @@ class DependencyInjector(containers.DeclarativeContainer):
         parent_resolver=billing_parent_resolver,
         freeze_service=payment_sync_freeze,
         paying_lock=paying_member_lock,
+        payment_sync_one_time=payment_sync_one_time,
+        discounts_service=discounts_service,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────
@@ -286,12 +325,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         subscription_service=payments_subscription_service,
     )
 
-    # ── Discounts ────────────────────────────────────────────────
-    # Presets are plain, coupon-free gym config: no Stripe, no payment sync.
-    discounts_service = providers.Factory(
-        DiscountsService,
-        db_pool=db_pool,
-    )
 
     # ── Membership plans ─────────────────────────────────────────
     membership_plans_service = providers.Factory(
@@ -336,6 +369,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_webhook_account_updated_handler = providers.Factory(
         AccountUpdatedHandler,
     )
+    stripe_webhook_customer_subscription_deleted_handler = providers.Factory(
+        CustomerSubscriptionDeletedHandler,
+        payment_sync_service=payment_sync_service,
+    )
     stripe_webhooks_service = providers.Factory(
         StripeWebhooksService,
         db_pool=db_pool,
@@ -345,5 +382,42 @@ class DependencyInjector(containers.DeclarativeContainer):
         invoice_payment_failed_handler=stripe_webhook_invoice_payment_failed_handler,
         refund_handler=stripe_webhook_refund_handler,
         account_updated_handler=stripe_webhook_account_updated_handler,
+        customer_subscription_deleted_handler=(
+            stripe_webhook_customer_subscription_deleted_handler
+        ),
     )
     # === end CRM billing DI providers ===
+
+    # ── Scheduled reconciler ─────────────────────────────────────
+    # Thin orchestrator behind the global sweep lock. Step-services are
+    # injected here as they are added (D -> B -> A -> C).
+    reconciler_orphan_cleanup_sweep = providers.Factory(
+        OrphanCleanupSweep,
+        db_pool=db_pool,
+        parent_resolver=billing_parent_resolver,
+        resource_lock=resource_lock,
+    )
+    reconciler_payment_push_sweep = providers.Factory(
+        PaymentPushSweep,
+        db_pool=db_pool,
+        payment_sync_service=payment_sync_service,
+    )
+    reconciler_invoice_fetch_sweep = providers.Factory(
+        InvoiceFetchSweep,
+        db_pool=db_pool,
+        stripe_client=stripe_client,
+        invoice_paid_handler=stripe_webhook_invoice_paid_handler,
+        invoice_payment_paid_handler=(
+            stripe_webhook_invoice_payment_paid_handler
+        ),
+        invoice_payment_failed_handler=(
+            stripe_webhook_invoice_payment_failed_handler
+        ),
+        refund_handler=stripe_webhook_refund_handler,
+    )
+    reconciler_service = providers.Factory(
+        ReconcilerService,
+        orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
+        payment_push_sweep=reconciler_payment_push_sweep,
+        invoice_fetch_sweep=reconciler_invoice_fetch_sweep,
+    )

@@ -102,12 +102,24 @@ class UnlinkParentRequested extends MemberDetailEvent {
 
 // ----- Membership mutations -----
 
-class StartMembershipRequested extends MemberDetailEvent {
+/// Fire the one start-memberships POST (the wizard's PAY).
+/// The outcome lands on the loaded state as `startResult`
+/// (the per-membership breakdown) or `startError` (an HTTP
+/// 400 validation / transport failure) — the wizard's
+/// results step renders whichever arrives.
+class StartMembershipsRequested extends MemberDetailEvent {
   final MemberMembershipsStartRequest request;
-  const StartMembershipRequested(this.request);
+  const StartMembershipsRequested(this.request);
 
   @override
   List<Object?> get props => [request];
+}
+
+/// Clears the start-memberships outcome (result + error)
+/// when the wizard closes, so a later wizard run opens
+/// clean.
+class StartMembershipsCleared extends MemberDetailEvent {
+  const StartMembershipsCleared();
 }
 
 class CancelMembershipRequested extends MemberDetailEvent {
@@ -170,27 +182,27 @@ class MarkPaidCashRequested extends MemberDetailEvent {
   List<Object?> get props => [itemId, memberId];
 }
 
-/// Commits adding applied-discount snapshots to a membership
-/// — the named [presetIds] (by discount id, any type incl. a
+/// Commits adding applied-discount rows to a membership
+/// — the named [discountIds] (by discount id, any type incl. a
 /// `linked` family discount) frozen at their active value
 /// version. A single-operation commit (the backend has no
 /// combined add+remove); preview happens repository-direct.
 class AddDiscountsRequested extends MemberDetailEvent {
   final String itemId;
   final String memberId;
-  final List<String> presetIds;
+  final List<String> discountIds;
   const AddDiscountsRequested({
     required this.itemId,
     required this.memberId,
-    required this.presetIds,
+    required this.discountIds,
   });
 
   @override
-  List<Object?> get props => [itemId, memberId, presetIds];
+  List<Object?> get props => [itemId, memberId, discountIds];
 }
 
-/// Commits removing applied-discount snapshots from a
-/// membership — the snapshots named by their
+/// Commits removing applied-discount rows from a
+/// membership — the rows named by their
 /// `applied_discount_id` ([appliedIds]). A single-operation
 /// commit; preview happens repository-direct.
 class RemoveDiscountsRequested extends MemberDetailEvent {

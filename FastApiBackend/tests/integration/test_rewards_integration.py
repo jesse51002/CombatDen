@@ -284,7 +284,8 @@ class TestGetReward:
         """GET /api/v1/rewards/not-a-uuid returns 422 (path param validation)."""
         response = api.get(f"{REWARDS_BASE}not-a-uuid")
         assert response.status_code == 422, (
-            f"Expected 422 for invalid UUID path param, got {response.status_code}: {response.text}"
+            f"Expected 422 for invalid UUID path param, "
+            f"got {response.status_code}: {response.text}"
         )
 
     def test_get_reward_requires_auth(self, a_reward_id: str) -> None:

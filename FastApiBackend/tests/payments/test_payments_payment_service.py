@@ -21,6 +21,7 @@ from src.payments.schema.payments_membership_schema import (
     PaymentsMembershipPriceItem,
 )
 from src.payments.schema.payments_payment_schema import (
+    PaymentsInvoiceItemSpec,
     PaymentsInvoicePaymentCreateRequest,
     PaymentsInvoicePaymentPreviewRequest,
     PaymentsRefundRequest,
@@ -92,7 +93,7 @@ async def _paid_invoice_pi(
     resp = await payment_service.create_invoice_payment(
         PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=customer_id,
-            stripe_price_id=price_id,
+            items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
             idempotency_key=str(uuid4()),
             metadata=StripeMembershipOneTimeMetadata(
                 member_id=uuid4(),
@@ -133,7 +134,7 @@ async def test_create_invoice_payment(
     resp = await payment_service.create_invoice_payment(
         PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=customer_id,
-            stripe_price_id=price_id,
+            items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
             idempotency_key=str(uuid4()),
             metadata=StripeMembershipOneTimeMetadata(
                 member_id=uuid4(),
@@ -183,7 +184,7 @@ async def test_create_invoice_payment_zero_amount(
     resp = await payment_service.create_invoice_payment(
         PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=customer_id,
-            stripe_price_id=price_id,
+            items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
             idempotency_key=str(uuid4()),
             metadata=StripeMembershipOneTimeMetadata(
                 member_id=uuid4(),
@@ -228,7 +229,7 @@ async def test_preview_invoice_payment(
     resp = await payment_service.preview_invoice_payment(
         PaymentsInvoicePaymentPreviewRequest(
             stripe_customer_id=customer_id,
-            stripe_price_id=price_id,
+            items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
         ),
         stripe_account_id,
     )

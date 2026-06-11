@@ -35,6 +35,11 @@ from tests.helpers.data_factory import (
 from tests.helpers.stripe_clock import create_test_clock, delete_test_clock
 from tests.seed_constants import SEEDED_GYM_ID
 
+# Never start the reconciler's APScheduler when a test boots the app via
+# ``with TestClient(app)`` (which runs the lifespan). The reconciler is exercised
+# directly in tests/reconciler/ by calling the services.
+settings.reconciler_enabled = False
+
 
 @pytest.fixture
 def fake_user_id() -> str:
@@ -294,6 +299,9 @@ class CreatedResources:
     connect_opts: stripe.RequestOptions
     members: list[UUID] = field(default_factory=list)
     plan_db_ids: list[UUID] = field(default_factory=list)
+    # plan_id -> (stripe_product_id, stripe_price_id); archived only after
+    # the plan's DB row deletes successfully (see cleanup).
+    plan_stripe_ids: dict[UUID, tuple[str, str]] = field(default_factory=dict)
     discounts: list[UUID] = field(default_factory=list)
     clocks: list[str] = field(default_factory=list)
     stripe_customers: list[str] = field(default_factory=list)
@@ -319,8 +327,12 @@ class CreatedResources:
             self.db_pool, self.stripe_client, gym_id, self.connect_opts, **kwargs
         )
         self.plan_db_ids.append(plan.plan_id)
-        self.stripe_products.append(plan.stripe_product_id)
-        self.stripe_prices.append(plan.stripe_price_id)
+        # Plan-owned Stripe ids are archived ONLY once the DB row actually
+        # deletes (see cleanup) — never flat-track them here.
+        self.plan_stripe_ids[plan.plan_id] = (
+            plan.stripe_product_id,
+            plan.stripe_price_id,
+        )
         return plan
 
     async def discount(self, gym_id: UUID, **kwargs) -> TestDiscount:
@@ -387,7 +399,29 @@ class CreatedResources:
         for member_id in self.members:
             await _safe(cleanup.delete_member_data(self.db_pool, member_id))
         for plan_id in self.plan_db_ids:
-            await _safe(cleanup.delete_plan_data(self.db_pool, plan_id))
+            deleted = await _safe_ok(
+                cleanup.delete_plan_data(self.db_pool, plan_id)
+            )
+            stripe_ids = self.plan_stripe_ids.get(plan_id)
+            if stripe_ids is None:
+                continue
+            if deleted:
+                product_id, price_id = stripe_ids
+                self.stripe_prices.append(price_id)
+                self.stripe_products.append(product_id)
+            else:
+                # The DB row is stuck (e.g. a leftover membership FK) —
+                # leave its Stripe price/product ACTIVE so the live-looking
+                # plan stays usable instead of becoming a phantom that 500s
+                # every start/preview ("price specified is inactive").
+                import logging
+
+                logging.getLogger(__name__).error(
+                    "teardown: plan %s DB delete failed — leaving its "
+                    "Stripe price/product active to avoid a live-DB/"
+                    "archived-Stripe mismatch",
+                    plan_id,
+                )
         for discount_id in self.discounts:
             await _safe(cleanup.delete_discount_preset(self.db_pool, discount_id))
 
@@ -417,6 +451,18 @@ class CreatedResources:
                     self.stripe_client, product_id, self.connect_opts
                 )
             )
+
+
+async def _safe_ok(coro) -> bool:
+    """Like ``_safe``, but reports whether the step actually succeeded."""
+    try:
+        await coro
+        return True
+    except Exception as exc:  # noqa: BLE001 — teardown must never fail a test
+        import logging
+
+        logging.getLogger(__name__).warning("Test cleanup step failed: %s", exc)
+        return False
 
 
 async def _safe(coro) -> None:

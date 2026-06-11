@@ -22,7 +22,16 @@ from src.payments.service.subscription.payments_subscription_base import (
 
 
 class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
-    """Update existing Stripe subscriptions."""
+    """Update existing Stripe subscriptions.
+
+    On the **card path** (``pay_first_invoice_out_of_band`` is False) the update
+    is sent with ``payment_behavior='error_if_incomplete'``: a proration charge
+    that the card can't cover 402s the update and is rolled back, so a decline
+    fails the op rather than silently adding the member behind an open unpaid
+    proration invoice. The **cash path** is excluded — its proration invoice is
+    settled out of band later — and a ``proration_behavior='none'`` update
+    generates no invoice, so the behavior is a no-op there.
+    """
 
     async def _build_update_params(
         self,
@@ -65,6 +74,20 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
             proration_behavior=request.proration_behavior,
         )
         update_params["metadata"] = request.metadata.to_stripe_metadata()
+
+        if not request.pay_first_invoice_out_of_band:
+            # Card path: a proration that prorate-bills now (or an
+            # always_invoice update) generates an invoice that auto-collects
+            # silently today. error_if_incomplete makes Stripe 402 the update
+            # if that proration charge can't be paid — and roll the item
+            # changes back — so a decline fails the op instead of leaving the
+            # member added but unpaid. A cash family
+            # (``pay_first_invoice_out_of_band``) is excluded: their card may
+            # be missing or failing on purpose and their open proration invoice
+            # is settled later out of band (mark_paid_cash), so it must NOT
+            # error here. A proration_behavior='none' update generates no
+            # invoice, so this is a no-op there.
+            update_params["payment_behavior"] = "error_if_incomplete"
 
         return update_params, sub, opts
 

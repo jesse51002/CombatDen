@@ -6,7 +6,7 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/presentation/dialogs/charge_card_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/coming_soon_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/edit_member_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_wizard.dart';
 import 'package:crm/features/member_details/presentation/dialogs/unlink_payment_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/update_card_dialog.dart';
 import 'package:crm/features/member_details/presentation/sections/linked_accounts_section.dart';
@@ -34,7 +34,10 @@ class ProfileHeaderSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         spacing: DesignConstants.spacingLarge,
         children: [
-          _ProfileInfo(member: member),
+          _ProfileInfo(
+            member: member,
+            onLinkedAccountTap: onLinkedAccountTap,
+          ),
           LinkedAccountsSection(
             member: member,
             onLinkedAccountTap: onLinkedAccountTap,
@@ -47,8 +50,12 @@ class ProfileHeaderSection extends StatelessWidget {
 
 class _ProfileInfo extends StatelessWidget {
   final MemberDetailResponse member;
+  final ValueChanged<String>? onLinkedAccountTap;
 
-  const _ProfileInfo({required this.member});
+  const _ProfileInfo({
+    required this.member,
+    this.onLinkedAccountTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +87,10 @@ class _ProfileInfo extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         _MembershipLabelRow(member: member),
-        _ActionButtonsRow(member: member),
+        _ActionButtonsRow(
+          member: member,
+          onViewMember: onLinkedAccountTap,
+        ),
       ],
     );
   }
@@ -154,7 +164,15 @@ class _PaidBadge extends StatelessWidget {
 class _ActionButtonsRow extends StatelessWidget {
   final MemberDetailResponse member;
 
-  const _ActionButtonsRow({required this.member});
+  /// Navigates to another member's detail page — used by
+  /// the start-memberships results step's "view member"
+  /// affordance.
+  final ValueChanged<String>? onViewMember;
+
+  const _ActionButtonsRow({
+    required this.member,
+    this.onViewMember,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -207,9 +225,10 @@ class _ActionButtonsRow extends StatelessWidget {
         ),
         _ActionButton(
           label: 'Start Membership',
-          onPressed: () => StartMembershipDialog.show(
+          onPressed: () => StartMembershipsWizard.show(
             context: context,
             member: member,
+            onViewMember: onViewMember,
           ),
         ),
         _ActionButton(

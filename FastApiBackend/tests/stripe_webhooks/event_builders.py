@@ -159,8 +159,14 @@ def make_invoice_payment_failed_event(
     currency: str = "usd",
     stripe_invoice_id: str | None = None,
     event_id: str | None = None,
+    attempt_count: int = 1,
 ) -> dict[str, Any]:
-    """Build an ``invoice.payment_failed`` event payload (dahlia shape)."""
+    """Build an ``invoice.payment_failed`` event payload (dahlia shape).
+
+    ``attempt_count`` is Stripe's per-invoice attempt counter; the failed-charge
+    row is keyed on (invoice id, attempt_count), so distinct attempts produce
+    distinct rows while a re-delivered/re-swept same attempt dedupes.
+    """
     now = int(time.time())
     stripe_invoice_id = stripe_invoice_id or f"in_test_{uuid.uuid4().hex[:16]}"
     subscription_id = f"sub_test_{uuid.uuid4().hex[:16]}"
@@ -193,7 +199,7 @@ def make_invoice_payment_failed_event(
         "amount_paid": 0,
         "total": amount_due,
         "currency": currency,
-        "attempt_count": 1,
+        "attempt_count": attempt_count,
         "customer": f"cus_test_{uuid.uuid4().hex[:16]}",
         "created": now,
         "lines": {"data": lines, "object": "list"},
@@ -284,4 +290,43 @@ def make_account_updated_event(
         "account": stripe_account_id,
         "created": now,
         "data": {"object": account},
+    }
+
+
+def make_customer_subscription_deleted_event(
+    *,
+    stripe_account_id: str,
+    member_id: str | None,
+    gym_id: str | None = None,
+    stripe_subscription_id: str | None = None,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a ``customer.subscription.deleted`` event payload.
+
+    ``member_id`` is the value stamped in the sub's metadata by the sync
+    (the paying parent). Pass ``None`` to omit it (missing-metadata case) or a
+    non-UUID string to exercise the malformed-member-id guard.
+    """
+    now = int(time.time())
+    stripe_subscription_id = (
+        stripe_subscription_id or f"sub_test_{uuid.uuid4().hex[:16]}"
+    )
+    metadata: dict[str, str] = {}
+    if member_id is not None:
+        metadata["member_id"] = member_id
+    if gym_id is not None:
+        metadata["gym_id"] = gym_id
+    subscription = {
+        "id": stripe_subscription_id,
+        "object": "subscription",
+        "status": "canceled",
+        "metadata": metadata,
+        "created": now,
+    }
+    return {
+        "id": event_id or _evt_id("evt_test_subdel"),
+        "type": "customer.subscription.deleted",
+        "account": stripe_account_id,
+        "created": now,
+        "data": {"object": subscription},
     }

@@ -1,7 +1,7 @@
 """Integration tests for the ``invoice.paid`` discount-audit capture.
 
 The handler retrieves the invoice with the coupon expanded (the webhook sends
-only opaque ``di_`` ids) and snapshots ``{amount_off, stripe_coupon_id}`` per
+only opaque ``di_`` ids) and captures ``{amount_off, stripe_coupon_id}`` per
 discount into ``member_invoice_applied_discounts`` — no CRM-discount link. The
 capture is best-effort (a SAVEPOINT), so a capture failure never rolls back the
 invoice.

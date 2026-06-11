@@ -65,10 +65,22 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 - When creating a git worktree, branch off the **local** branch (e.g. local `main`), NOT the remote (`origin/main`). The remote often lags behind local, so a worktree branched from it silently misses recent work.
 - If a worktree was created from the remote, run `git reset --hard main` in it before starting (safe while its branch has no commits), and verify expected recent files exist before building.
 
-## Workflows (multi-agent orchestration)
-- **Default workflow agents to Sonnet** (`model: 'sonnet'` on `agent()` calls, or the phase/run model override) unless a task genuinely needs Opus-level reasoning. Workflows fan out many agents at once; running them on Opus is far more expensive and **hits rate limits** fast (a 75-agent Opus fan-out got rate-limited mid-run). Sonnet has higher throughput and lower cost — the right default for fan-out work like data passes, conversions, broad reviews, and per-file edits. Reserve Opus for the few agents that actually need deep reasoning.
+## Meld diff review (root Makefile)
+When asked to spin up a diff / open a review of the current checkout (e.g. a worktree under `.claude/worktrees/`), use the root Makefile targets:
+- `make meld` — meld directory diff of the current working tree against the **root codebase checkout's** HEAD. Works from inside any worktree (resolves the root via `git rev-parse --git-common-dir`).
+- `make meld-origin` — same, but fetches and diffs against `origin/main`.
+- `make meld-branch` — same, but fetches and diffs against the CURRENT branch's remote version (`origin/<branch>`) — i.e. everything local that origin doesn't have yet.
+- `make setup-meld` — one-time machine setup (Flatpak meld + global git difftool config). Only needed if meld isn't installed.
+- **Always run these in the background** (`run_in_background: true`) — the command blocks until the user closes the meld window; running it in the foreground stalls the session.
+- **Untracked files are invisible to git diff** — git only diffs tracked content. Every meld target therefore depends on `make meld-intent`, which `git add -N`s (intent-to-add: path registered, NO content staged) all untracked files so they appear as new-vs-empty in the diff — **excluding `.claude/worktrees/` checkouts and `.venv` symlinks** (never to be committed).
+- The diff is a launch-time snapshot of *which files differ* — auto-update is partial:
+  - **Edits to files already in the diff flow through live.** The right pane is symlinks to the real working-tree files, so further edits to those files show on refresh (Ctrl+R in meld) — no restart.
+  - **Files created/deleted/clean-at-launch do NOT appear** (and a file created AFTER launch isn't intent-added yet). git stages only the files that differed at launch; refreshing can't surface anything else. Close meld and rerun the target.
+  - Practical rhythm while an agent works in a worktree: refresh while it iterates on the same files; close-and-rerun once it has touched new ones.
+- **ALWAYS kill any previous meld before launching a new one** — a second launch hands off to the open window and exits, git deletes the staging dirs, and the new diff shows empty. Before every `make meld` / `make meld-origin`, run the kill first (`flatpak kill org.gnome.meld 2>/dev/null; pkill -f meld 2>/dev/null; true`), then launch in the background. This is a hard rule, not a recovery step.
+- **Default workflow/sub-agents to Sonnet with 1M context** (`model: 'sonnet[1m]'` on `agent()` calls / subagent launches, or the phase/run model override; plain `'sonnet'` only where the harness rejects the `[1m]` variant) unless a task genuinely needs Opus-level reasoning. Workflows fan out many agents at once; running them on Opus is far more expensive and **hits rate limits** fast (a 75-agent Opus fan-out got rate-limited mid-run). Sonnet has higher throughput and lower cost, and the 1M-context variant keeps large rename/review/data passes from compacting mid-task — the right default for fan-out work like data passes, conversions, broad reviews, and per-file edits. Reserve Opus for the few agents that actually need deep reasoning.
 - Keep concurrent fan-out reasonable; prefer Sonnet + batching over a huge Opus burst.
 
 ## Calling the FastApi Backend
-- The authoritative request/response contract lives in `Database/openapi.json` (a regenerated OpenAPI dump).
-- Before writing or modifying any code that calls a backend endpoint (seed scripts, tests, other services), read the matching request schema in `Database/openapi.json` and include every field listed under `required`.
+- The authoritative request/response contract is the backend's Pydantic schemas in `FastApiBackend/src/<domain>/<domain>_schema.py`. Before writing or modifying any code that calls a backend endpoint (seed scripts, tests, other services), read the matching schema there and include every field listed under `required`.
+- `Database/openapi.json` is an **optional, gitignored** local convenience dump. It is never committed, never expected to exist, and must never be flagged as missing or stale. To regenerate it locally from a running backend: `curl localhost:8000/openapi.json > Database/openapi.json`.

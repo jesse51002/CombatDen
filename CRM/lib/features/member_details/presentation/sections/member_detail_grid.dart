@@ -11,6 +11,7 @@ import 'package:crm/features/member_details/presentation/sections/payment_histor
 import 'package:crm/features/member_details/presentation/sections/personal_info_section.dart';
 import 'package:crm/features/member_details/presentation/sections/rank_section.dart';
 import 'package:crm/features/member_details/presentation/sections/retention_section.dart';
+import 'package:crm/shared/widgets/balanced_columns.dart';
 
 /// Responsive body of the member detail screen.
 ///
@@ -25,11 +26,16 @@ class MemberDetailGrid extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
 
+  /// Bumped by the bloc on every member mutation; threaded to the
+  /// Invoices card so it re-fetches after a discount / membership change.
+  final int refreshToken;
+
   const MemberDetailGrid({
     super.key,
     required this.member,
     required this.currentIndex,
     required this.onPageChanged,
+    required this.refreshToken,
   });
 
   /// The account's soonest upcoming billing date across its
@@ -76,6 +82,7 @@ class MemberDetailGrid extends StatelessWidget {
           nextDueDate: _nextDueDate,
           payerName: _payerName,
           payerPhotoUrl: _payerPhotoUrl,
+          refreshToken: refreshToken,
         ),
         PaymentHistorySection(
           memberId: member.memberId,
@@ -95,6 +102,7 @@ class _Grid extends StatelessWidget {
   final DateTime? nextDueDate;
   final String payerName;
   final String? payerPhotoUrl;
+  final int refreshToken;
 
   const _Grid({
     required this.member,
@@ -103,6 +111,7 @@ class _Grid extends StatelessWidget {
     required this.nextDueDate,
     required this.payerName,
     required this.payerPhotoUrl,
+    required this.refreshToken,
   });
 
   @override
@@ -111,12 +120,25 @@ class _Grid extends StatelessWidget {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >=
             AppConstants.breakpointTablet;
-        final left = _LeftColumn(member: member, expand: wide);
+        final leftChildren = <Widget>[
+          PersonalInfoSection(
+            personalInfo: member.personalInfo,
+          ),
+          MemberWaiversSection(
+            memberId: member.memberId,
+            gymId: member.gymId,
+          ),
+          if (member.rank != null)
+            RankSection(rank: member.rank!),
+          RetentionSection(
+            retention: member.retention,
+            rewards: member.recentlyRedeemedRewards,
+          ),
+        ];
         final carousel = MembershipCarousel(
           member: member,
           currentIndex: currentIndex,
           onPageChanged: onPageChanged,
-          expand: wide,
         );
         final invoices = InvoicesSection(
           memberId: member.memberId,
@@ -124,80 +146,43 @@ class _Grid extends StatelessWidget {
           nextDueDate: nextDueDate,
           payerName: payerName,
           payerPhotoUrl: payerPhotoUrl,
-        );
-        // Right column: the membership card fills the column down
-        // to the (usually taller) left column's height, with the
-        // Invoices card (at most one invoice, may be absent) at
-        // the bottom. No column `spacing` here: when there is no
-        // invoice the Invoices section collapses to nothing and
-        // the membership must fill the WHOLE column (a column gap
-        // would leave a dead strip below it). The Invoices card
-        // supplies its own top gap when it is actually present.
-        final right = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (wide) Expanded(child: carousel) else carousel,
-            invoices,
-          ],
+          refreshKey: refreshToken,
+          // In the wide grid BalancedColumns inserts the row
+          // gap only when the card actually renders.
+          topGap: !wide,
         );
         if (!wide) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: DesignConstants.spacingBig,
-            children: [left, right],
+            children: [
+              ...leftChildren,
+              // No gap slot between the carousel and the
+              // Invoices card: when there is no invoice the
+              // Invoices section collapses to nothing (a
+              // column gap would leave a dead strip); it
+              // supplies its own top gap when present.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [carousel, invoices],
+              ),
+            ],
           );
         }
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: DesignConstants.spacingBig,
-            children: [
-              Expanded(child: left),
-              Expanded(child: right),
-            ],
-          ),
+        // Wide: BalancedColumns lays every card at its natural
+        // size, then hands the height deficit of the shorter
+        // column to its filler card — the retention card on the
+        // left, the membership carousel on the right (so the
+        // Invoices card stays pinned at the bottom).
+        return BalancedColumns(
+          left: leftChildren,
+          right: [carousel, invoices],
+          fillerIndexLeft: leftChildren.length - 1,
+          fillerIndexRight: 0,
+          columnSpacing: DesignConstants.spacingBig,
+          rowSpacing: DesignConstants.spacingBig,
         );
       },
-    );
-  }
-}
-
-/// Left grid column: personal info, rank, and retention,
-/// stacked. In the wide grid the retention card fills the column
-/// (content stays at the top, slack at the bottom) so the two
-/// columns bottom-align.
-class _LeftColumn extends StatelessWidget {
-  final MemberDetailResponse member;
-
-  /// When true (wide grid), the retention card stretches to fill
-  /// the column. Must stay false in the stacked layout, where
-  /// height is unbounded and an [Expanded] would have no
-  /// constraints.
-  final bool expand;
-
-  const _LeftColumn({required this.member, this.expand = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final retention = RetentionSection(
-      retention: member.retention,
-      rewards: member.recentlyRedeemedRewards,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        PersonalInfoSection(
-          personalInfo: member.personalInfo,
-        ),
-        MemberWaiversSection(
-          memberId: member.memberId,
-          gymId: member.gymId,
-        ),
-        if (member.rank != null)
-          RankSection(rank: member.rank!),
-        if (expand) Expanded(child: retention) else retention,
-      ],
     );
   }
 }

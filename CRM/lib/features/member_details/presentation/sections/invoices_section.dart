@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
-import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/coming_soon_dialog.dart';
+import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
 /// Stripe invoice status that counts as outstanding/open.
@@ -32,11 +34,17 @@ class _PickedInvoice {
   final String currency;
   final DateTime? date;
 
+  /// The upcoming preview (carries line items) when this is the
+  /// upcoming invoice; null for an open/overdue invoice, which the
+  /// list endpoint surfaces as an amount only.
+  final PreviewInvoice? preview;
+
   const _PickedInvoice({
     required this.overdue,
     required this.amount,
     required this.currency,
     required this.date,
+    this.preview,
   });
 }
 
@@ -58,6 +66,19 @@ class InvoicesSection extends StatefulWidget {
   final String payerName;
   final String? payerPhotoUrl;
 
+  /// Re-fetches the invoices whenever this changes — bump it after a
+  /// billing mutation (discount or membership add/remove) so the card
+  /// reflects the new charge instead of the one loaded at first build.
+  final Object? refreshKey;
+
+  /// Whether the card supplies its own top gap when it has an
+  /// invoice to show. The stacked layout keeps this on (its
+  /// parent column has no gap slot, so an absent invoice leaves
+  /// no dead strip); the wide grid turns it off because
+  /// `BalancedColumns` adds the row gap only when the card
+  /// actually renders.
+  final bool topGap;
+
   const InvoicesSection({
     super.key,
     required this.memberId,
@@ -65,6 +86,8 @@ class InvoicesSection extends StatefulWidget {
     required this.payerName,
     this.nextDueDate,
     this.payerPhotoUrl,
+    this.refreshKey,
+    this.topGap = true,
   });
 
   @override
@@ -73,12 +96,22 @@ class InvoicesSection extends StatefulWidget {
 }
 
 class _InvoicesSectionState extends State<InvoicesSection> {
-  late final Future<_InvoicesData> _future;
+  late Future<_InvoicesData> _future;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant InvoicesSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshKey != widget.refreshKey) {
+      setState(() {
+        _future = _load();
+      });
+    }
   }
 
   Future<_InvoicesData> _load() async {
@@ -113,6 +146,7 @@ class _InvoicesSectionState extends State<InvoicesSection> {
         amount: upcoming.amountDue,
         currency: upcoming.currency,
         date: widget.nextDueDate,
+        preview: upcoming,
       );
     }
     return null;
@@ -127,6 +161,12 @@ class _InvoicesSectionState extends State<InvoicesSection> {
         if (data == null) return const SizedBox.shrink();
         final invoice = _pick(data);
         if (invoice == null) return const SizedBox.shrink();
+        final card = _InvoiceCard(
+          invoice: invoice,
+          payerName: widget.payerName,
+          payerPhotoUrl: widget.payerPhotoUrl,
+        );
+        if (!widget.topGap) return card;
         // Own top gap so the parent column needs no `spacing` —
         // that way an absent invoice leaves no dead strip and the
         // membership card fills the whole column.
@@ -134,11 +174,7 @@ class _InvoicesSectionState extends State<InvoicesSection> {
           padding: const EdgeInsets.only(
             top: DesignConstants.spacingBig,
           ),
-          child: _InvoiceCard(
-            invoice: invoice,
-            payerName: widget.payerName,
-            payerPhotoUrl: widget.payerPhotoUrl,
-          ),
+          child: card,
         );
       },
     );
@@ -158,6 +194,19 @@ class _InvoiceCard extends StatelessWidget {
     required this.payerName,
     required this.payerPhotoUrl,
   });
+
+  /// The money this card shows, through the shared breakdown widget.
+  /// An upcoming invoice carries line items; an open/overdue one is
+  /// surfaced as an amount-only total.
+  InvoiceBreakdownData get _money {
+    final preview = invoice.preview;
+    if (preview != null) return previewInvoiceBreakdown(preview);
+    return InvoiceBreakdownData(
+      lines: const [],
+      total: invoice.amount,
+      currency: invoice.currency,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -219,17 +268,9 @@ class _InvoiceCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                formatMinorUnits(
-                  invoice.amount,
-                  currency: invoice.currency,
-                ),
-                style: DesignConstants.h2.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
             ],
           ),
+          InvoiceBreakdown(data: _money),
           AppOutlineButton(
             fullWidth: true,
             text: 'Mark paid with cash',

@@ -10,11 +10,11 @@ from schema.member_charge import ChargeKind, ChargeStatus
 from schema.member_invoice_line_item import LineItemType
 from schema.membership_plan import PlanType
 
-from src.member_memberships.schema.member_memberships_schema import (
-    MemberMembershipsAppliedDiscount,
-)
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
+)
+from src.memberships.memberships_schema import (
+    MemberMembershipsAppliedDiscount,
 )
 
 # ── Management Request / Response ────────────────────────────────
@@ -92,7 +92,7 @@ class BillingDiscountInfo(BaseModel):
     the ``invoice.paid`` webhook captures from Stripe. It is deliberately
     coupon-only (the Stripe coupon id + the dollars it took off this invoice),
     NOT linked back to a CRM discount. Currently-applied membership discounts
-    use the snapshot model ``MemberMembershipsAppliedDiscount`` on
+    use the applied-discount model ``MemberMembershipsAppliedDiscount`` on
     ``BillingMembershipInfo.discounts``.
     """
 
@@ -103,11 +103,11 @@ class BillingDiscountInfo(BaseModel):
 class BillingMembershipMemberInfo(BaseModel):
     """Per-member membership details within a grouped plan.
 
-    ``base_cost`` and ``total_price`` are this member's own
-    ``member_memberships`` numbers (their pinned price and their
-    after-discount total), so the CRM can render the membership card
-    atomically for one covered member at a time rather than as a
-    family-wide aggregate.
+    ``base_cost`` and ``total_price`` are this membership's own
+    ``member_memberships`` numbers (its pinned price and its **own**
+    post-discount share — the plan price minus this member's own
+    discounts), so the CRM renders the membership card atomically for one
+    covered member at a time rather than as a family-wide aggregate.
     """
 
     item_id: UUID
@@ -119,7 +119,13 @@ class BillingMembershipMemberInfo(BaseModel):
 
 
 class BillingMembershipInfo(BaseModel):
-    """A grouped plan in the membership carousel."""
+    """A grouped plan in the membership carousel.
+
+    ``total_price`` here is the plan-level total — the **sum** of the active
+    memberships' own post-discount shares (each ``members[...].total_price``).
+    Per-member shares live in ``members``; use those for an individual covered
+    member, this for the whole plan.
+    """
 
     plan_id: UUID
     plan_name: str

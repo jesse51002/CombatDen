@@ -1,16 +1,20 @@
 flowchart TB
   %% Payment-sync engine — orchestration flow of PaymentSyncService.
-  %% Source of truth: src/member_memberships/service/payment_sync/ (sync-guide skill).
+  %% SCOPE: the RECURRING engine (update_payments_recurring) ONLY. One-time / trial
+  %% billing is the SEPARATE PaymentSyncOneTime engine (a one-shot consolidated
+  %% invoice, NOT a converge) — see sync-guide §12; it is not drawn here.
+  %% Source of truth: src/sync/service/ (sync-guide skill).
   %% TWO main entry points (real + preview) SHARE resolve → settle → build_sync_params;
   %% they diverge on execute vs preview-execute and writeback (REAL-only).
   %% A THIRD thin entry, settle_once_discounts (the
   %% invoice.paid webhook), runs resolve → settle-once ONLY (no build/execute).
   %% build_sync_params DELEGATES coupon resolution to the separate PaymentSyncDiscounts
-  %% engine. The scheduled reconciler is a FUTURE EXTERNAL system, OUTSIDE the engine.
+  %% engine. The scheduled reconciler is a separate BUILT system (reconciler-guide)
+  %% that drives bulk_payment_sync; it is OUTSIDE this engine.
   %% Green = engine steps · lighter green = preview-only (read-only) steps · orange =
   %% external actors. Solid = live runtime call · dashed = future / delegation.
 
-  triggers["🔔 Triggers — lifecycle callers (DB-first + verify/revert)<br/>start · cancel · price swap · apply/remove discounts · link/unlink<br/>each: pre-sync → write DB → THIS sync → verify stripe_sync_status → revert if not<br/>explicit freeze/unfreeze → PaymentSyncFreeze directly · plan reprice → bulk"]
+  triggers["🔔 Triggers — lifecycle callers (DB-first + verify/revert)<br/>start (RECURRING group only — one-time/trial group → PaymentSyncOneTime, §12)<br/>· cancel · price swap · apply/remove discounts · link/unlink<br/>each: pre-sync → write DB → THIS sync → verify stripe_sync_status → revert if not<br/>explicit freeze/unfreeze → PaymentSyncFreeze directly · plan reprice → bulk"]
 
   subgraph engine["⚙️ PaymentSyncService — the sync engine"]
     direction TB
@@ -43,11 +47,13 @@ flowchart TB
     subgraph writeback["5 · PaymentSyncWriteback.write(params, sub_result) — REAL ONLY"]
       direction TB
       w_rows["_apply_membership_rows — map live items by stripe_price_id → each row:<br/>apply_membership_sync = stripe_item_id + next_due_date (gym-local) + 'applied'"]
+      w_memberprice["set_member_post_discount_prices — each membership's OWN post-discount<br/>price → total_price (per item_id; build-time amounts from member_amounts)"]
       w_links["coupon links → set_applied_discount_coupon_id (stripe_coupon_id + 'applied') per row"]
       w_del["_mark_removed_deleted — cancelled rows gone from live sub → mark_membership_deleted ('deleted')"]
       w_subid["update_profile_sub_id — parent stripe_sub_id_month (None when cancelled)"]
-      w_prices["PriceWriteback.sync_prices_from_stripe — post-discount per-plan + parent monthly totals"]
-      w_rows --> w_links
+      w_prices["_sync_parent_monthly_total — parent monthly total from Stripe upcoming invoice (set_parent_monthly_total)"]
+      w_rows --> w_memberprice
+      w_memberprice --> w_links
       w_links --> w_del
       w_del --> w_subid
       w_subid --> w_prices
@@ -73,27 +79,26 @@ flowchart TB
     bulk --> entry_real
   end
 
-  reconciler["⏳ Scheduled reconciler — FUTURE external system, NOT built (outside the engine)<br/>sweeps idle members on a clock · drives bulk_payment_sync<br/>mid-cycle end_date expiry + once-consumption finalization · Stripe→CRM dunning absorption"]
+  reconciler["🧹 Scheduled reconciler — BUILT (its own reconciler domain; see reconciler-guide)<br/>twice-daily sweep · drives bulk_payment_sync (push) + Stripe→CRM cancellation absorption<br/>mid-cycle end_date expiry + once-consumption backstop on idle members"]
 
   webhook["📨 invoice.paid webhook handler (stripe_webhooks)<br/>after a subscription invoice is paid → settle_once_discounts(member_id)<br/>best-effort · own txn · stamps a consumed once's end_date promptly"]
 
-  supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_parent · get_family_ids · get_active_recurring (+ applied discounts)<br/>get_unconsumed_once_discounts · mark_once_consumed<br/>apply_membership_sync · mark_membership_deleted · set_applied_discount_coupon_id<br/>update_profile_sub_ids · sync_prices_by_plan · sync_profile_monthly_total"]
+  supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_parent · get_family_ids · get_active_recurring (+ applied discounts)<br/>get_unconsumed_once_discounts · mark_once_consumed<br/>apply_membership_sync · mark_membership_deleted · set_applied_discount_coupon_id<br/>update_profile_sub_ids · set_member_post_discount_prices · sync_profile_monthly_total"]
   stripe["💳 Stripe — gym Connect account<br/>get_subscription (live coupons for once-settle)<br/>create / update / cancel subscription · pause_collection<br/>coupons via PaymentsStripeDiscountService (find-or-create) · upcoming invoice (preview)"]
 
   triggers -->|"mutations → update / preview · plan reprice → bulk"| engine
   webhook -.->|"invoice.paid → settle_once_discounts"| engine
-  reconciler -.->|"future: scheduled sweep → bulk sync"| engine
+  reconciler -->|"scheduled sweep → bulk sync (step C)"| engine
   engine -->|"read/write: parent · family · memberships + discounts · once-candidates · coupon_id · sync status · sub id · totals"| supabase
   engine -->|"live coupons · find-or-create coupons · create / update / cancel sub · pause_collection · upcoming invoice"| stripe
 
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef prev fill:#eafff2,stroke:#2f8f53,color:#0c3a1f;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
-  classDef future fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f,stroke-dasharray:5 4;
   class triggers,webhook,entry_real,resolve,settle,execute,ret_real,bulk svc;
   class entry_prev,pexec,ret_prev prev;
   class supabase,stripe ext;
-  class reconciler future;
+  class reconciler svc;
   style engine fill:#f4f9f6,stroke:#2f8f53;
   style build_sp fill:#eafaf0,stroke:#2f8f53;
   style discounts fill:#eafaf0,stroke:#2f8f53;

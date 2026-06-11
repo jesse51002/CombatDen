@@ -28,7 +28,7 @@ ENDPOINT = "/api/v1/discounts/"
 # A UUID that exists in no gym — used to verify cross-gym guard.
 _OTHER_GYM_ID = "00000000-0000-0000-0000-000000000001"
 
-# DiscountType values surfaced by presets (regular-only; linked is snapshot-only).
+# DiscountType values surfaced by presets (regular-only; linked is applied-only).
 _VALID_DISCOUNT_TYPES = {"preset", "custom"}
 
 # DiscountMode values from the OpenAPI contract.

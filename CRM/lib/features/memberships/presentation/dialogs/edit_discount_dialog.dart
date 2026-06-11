@@ -6,6 +6,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
 import 'package:crm/features/member_details/data/models/discount_mode.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
+import 'package:crm/features/member_details/data/models/discount_value.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_bloc.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_event.dart';
 import 'package:crm/features/memberships/data/models/discount_create_request.dart';
@@ -74,25 +75,26 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
     final d = widget.discount;
     if (d != null) {
       _nameController.text = d.discountName;
-      if (d.dollarOff != null) {
+      final v = d.value;
+      if (v.dollarOff != null) {
         _kind = _AmountKind.dollar;
-        _amountController.text = (d.dollarOff! / 100).toStringAsFixed(2);
-      } else if (d.percentageOff != null) {
+        _amountController.text = (v.dollarOff! / 100).toStringAsFixed(2);
+      } else if (v.percentageOff != null) {
         _kind = _AmountKind.percentage;
-        _amountController.text = d.percentageOff!.toStringAsFixed(0);
+        _amountController.text = v.percentageOff!.toStringAsFixed(0);
       }
-      _mode = d.discountMode == DiscountMode.unknown
+      _mode = v.discountMode == DiscountMode.unknown
           ? DiscountMode.once
-          : d.discountMode;
-      _durationUnit = d.durationUnit == null ||
-              d.durationUnit == DiscountDurationUnit.unknown
+          : v.discountMode;
+      _durationUnit = v.durationUnit == null ||
+              v.durationUnit == DiscountDurationUnit.unknown
           ? DiscountDurationUnit.month
-          : d.durationUnit!;
-      _durationController.text = (d.durationAmount ?? 1).toString();
-      if (d.endDate != null) {
+          : v.durationUnit!;
+      _durationController.text = (v.durationAmount ?? 1).toString();
+      if (v.endDate != null) {
         _lifetime = _LifetimeKind.untilDate;
-        _endDate = d.endDate;
-      } else if (d.durationAmount != null) {
+        _endDate = v.endDate;
+      } else if (v.durationAmount != null) {
         _lifetime = _LifetimeKind.duration;
       } else {
         _lifetime = _LifetimeKind.forever;
@@ -193,15 +195,13 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
     );
   }
 
-  void _save() {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    final name = _nameController.text.trim();
-    final amount = _amount;
-    if (amount == null) return;
-
+  /// Builds a [DiscountValue] from the current form state.
+  DiscountValue _buildValue() {
+    final amount = _amount!;
     final percentageOff = _kind == _AmountKind.percentage ? amount : null;
     final dollarOff =
         _kind == _AmountKind.dollar ? (amount * 100).round() : null;
+
     int? durationAmount;
     DiscountDurationUnit? durationUnit;
     DateTime? endDate;
@@ -211,42 +211,51 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
           durationAmount = int.tryParse(_durationController.text.trim());
           durationUnit = _durationUnit;
         case _LifetimeKind.untilDate:
-          if (_endDate == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Pick an end date.')),
-            );
-            return;
-          }
           endDate = _endDate;
         case _LifetimeKind.forever:
           break;
       }
     }
 
+    return DiscountValue(
+      percentageOff: percentageOff,
+      dollarOff: dollarOff,
+      discountMode: _mode,
+      durationAmount: durationAmount,
+      durationUnit: durationUnit,
+      endDate: endDate,
+    );
+  }
+
+  void _save() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final name = _nameController.text.trim();
+    if (_amount == null) return;
+
+    // For `untilDate` lifetime, require a date to be picked.
+    if (_isOngoing &&
+        _lifetime == _LifetimeKind.untilDate &&
+        _endDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pick an end date.')),
+      );
+      return;
+    }
+
+    final discountValue = _buildValue();
+
     if (_isEdit) {
       widget.bloc.add(DiscountUpdated(DiscountUpdateRequest(
         discountId: widget.discount!.discountId,
         gymId: widget.gymId,
         identity: DiscountUpdateIdentity(discountName: name),
-        values: DiscountUpdateValues(
-          percentageOff: percentageOff,
-          dollarOff: dollarOff,
-          discountMode: _mode,
-          durationAmount: durationAmount,
-          durationUnit: durationUnit,
-          endDate: endDate,
-        ),
+        value: discountValue,
       )));
     } else {
       widget.bloc.add(DiscountCreated(DiscountCreateRequest(
         gymId: widget.gymId,
         discountName: name,
-        percentageOff: percentageOff,
-        dollarOff: dollarOff,
-        discountMode: _mode,
-        durationAmount: durationAmount,
-        durationUnit: durationUnit,
-        endDate: endDate,
+        value: discountValue,
       )));
     }
     ScaffoldMessenger.of(context).showSnackBar(

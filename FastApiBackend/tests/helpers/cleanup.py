@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Tables in FK-safe deletion order (children before parents).
 # ``member_charges`` cascades from ``member_invoices`` but is listed
 # explicitly for defensive cleanup if a charge ever outlives its invoice.
-# ``member_membership_applied_discounts_unfiltered`` (frozen discount snapshots)
+# ``member_membership_applied_discounts_unfiltered`` (applied-discount rows)
 # FK both the membership (item_id) and the member, so it is deleted first.
 _GYM_TABLES = (
     "stripe_webhook_events",
@@ -44,9 +44,9 @@ async def delete_all_gym_data(db_pool: DirectDatabasePool, gym_id: UUID) -> None
 
     Does NOT delete the gym row itself — caller handles that.
 
-    Linked discounts dissolved into snapshot rows on
+    Linked discounts dissolved into applied-discount rows on
     ``member_membership_applied_discounts`` (no preset entity, no
-    ``linked_discount_num`` ordering trigger), so the snapshot table is just
+    ``linked_discount_num`` ordering trigger), so the applied-discounts table is
     deleted first like any other child. ``account_linked_to_id`` (the
     family-billing self-link) is cleared before the members delete so the
     self-FK doesn't block.
@@ -69,14 +69,14 @@ async def delete_member_data(
     db_pool: DirectDatabasePool,
     member_id: UUID,
 ) -> None:
-    """Delete a single member, their billing rows, applied-discount snapshots,
+    """Delete a single member, their billing rows, applied-discount rows,
     and their memberships, in FK-safe order.
 
     ``member_charges`` / ``member_invoices`` are written by the Stripe webhook
     mirror (e.g. an out-of-band cash invoice's ``invoice.paid`` lands in the
     shared local DB), so they can legitimately reference a test member and must
     be removed before the member row — charges FK invoices, so charges go first.
-    The frozen snapshot rows FK both the membership and the member, so they are
+    The applied-discount rows FK both the membership and the member, so they are
     removed before the memberships and the member row.
     """
     async with db_pool.session() as session:
@@ -149,7 +149,7 @@ async def delete_discount_preset(
     wants the rows physically gone so they do not accumulate under the
     seeded gym across runs. The versioned values live on
     ``gym_discount_values`` and FK the identity, so they are deleted first.
-    Applied snapshots reference ``value_id`` — delete the member's data
+    Applied-discount rows reference ``value_id`` — delete the member's data
     (``delete_member_data``) BEFORE the discount so those FK refs are gone.
     This hard DELETE is intentional and confined to the test suite.
     """

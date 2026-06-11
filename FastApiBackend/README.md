@@ -15,7 +15,7 @@ read/write REST API over the shared Supabase Postgres, authenticated with Supaba
 ```mermaid
 flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
-  FB["⚙️ FastApiBackend — CRM / billing API<br/>10 domains · 69 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · member_memberships · membership_plans · stripe_webhooks"]
+  FB["⚙️ FastApiBackend — CRM / billing API<br/>10 domains · 69 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · memberships · plans · stripe_webhooks<br/>+ payments · sync · reconciler (router-less; reconciler = twice-daily billing sweep)"]
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)"]
   Stripe["Stripe — payments · Connect · webhooks"]
   CRM -->|"authenticated REST · WIP"| FB
@@ -52,6 +52,8 @@ see
 solid = a live runtime call, dashed = future / shared-code. Deep engine knowledge lives in the
 `sync-guide` skill.
 
+**For the scheduled reconciler in depth** — the twice-daily sweep flow (scheduler → invoice-fetch → orphan-clean → push, whose sync self-heals a gone subscription), and the webhook `record` seam — see **[`reconciler.mermaid`](reconciler.mermaid)** (owned by the `reconciler-guide` skill).
+
 ---
 
 ## How a request flows
@@ -75,10 +77,12 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 | `rewards` | Reward catalog + redemptions |
 | `waivers` | Versioned waiver documents (plain gym config) + read-only e-sign signature tracking (per-waiver roster + per-member status) |
 | `discounts` | Coupon-free discount presets (plain gym config; coupons computed at sync, not on the preset) |
-| `member_memberships` | Member ↔ plan subscriptions: freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount snapshots; coupons computed + written back at sync), previews, cash/card charge, link/unlink family accounts (pure DB change) |
-| `membership_plans` | Plan + price templates (Stripe products / prices) + migration |
-| `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB |
+| `memberships` | Member ↔ plan subscriptions: one list-based **start** (a payer's family in one call, discounts applied at creation, ≤2 charges — one consolidated one-time invoice + one recurring converge — per-membership breakdown out), freeze/unfreeze, price changes, apply/remove discounts (add/remove immutable applied-discount rows; coupons computed + written back at sync; one-time/trial = creation-only), previews (start = 3-way `one_time / due_now / recurring`), cash/card charge, link/unlink family accounts (pure DB change) |
+| `plans` | Plan + price templates (Stripe products / prices) + migration |
+| `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB (invoices, charges, refunds, and `customer.subscription.deleted` → triggers a family sync that cancels the gone subscription in the CRM) |
+| `sync` *(no router)* | Payment-sync engine: re-derives the family's desired Stripe subscription state from the DB on every membership mutation and converges Stripe onto it. Also owns the one-time invoice charge path. |
 | `payments` *(no router)* | Stripe service core (client, payment, price, members, membership, subscription, discount) injected into the billing domains |
+| `reconciler` *(no router)* | Twice-daily billing safety-net sweep (APScheduler in the lifespan): invoice-fetch backfill, `not_added` orphan cleanup, and the CRM→Stripe push (`bulk_payment_sync`, whose sync self-heals a gone subscription). See the `reconciler-guide` skill |
 
 ## Conventions (the load-bearing rules)
 
@@ -86,7 +90,7 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 - **Auth is Supabase JWT, not custom.** `shared/auth.py` validates tokens via the Supabase JWKS; routes depend on it through DI. Don't roll your own auth.
 - **Dependency injection via `dependency-injector`.** `core/dependencies.py` is the container that wires every service + `Auth` + the DB pool; routers receive them through `Provide[...]`. (`architecture.mermaid` is generated from this wiring.)
 - **Reuse Database enums/schemas.** `shared/db_schema_path.py` puts `../Database/python_data/schema` on `sys.path`; import enums with `from schema.<module> import <Enum>` instead of redefining them.
-- **`openapi.json` is the contract.** The app's schema is dumped to `../Database/openapi.json`; clients (the CRM, seed scripts, tests) build against it — read the `required` fields before calling an endpoint.
+- **The Pydantic schemas are the contract.** Clients (the CRM, seed scripts, tests) build against `src/<domain>/<domain>_schema.py` — read the `required` fields there before calling an endpoint. `../Database/openapi.json` is an optional gitignored local dump (never committed; regenerate with `curl localhost:8000/openapi.json` when useful).
 - **Stripe-gated tables are `service_role`-write-only** (enforced by RLS in `../Database`); those writes go through this backend, never the `authenticated` client.
 
 See `CLAUDE.md` in this directory for the full coding standards.
@@ -102,5 +106,5 @@ poetry run uvicorn src.main:app --reload   # docs at /docs when APP_DEBUG=true
 ## Cross-system
 
 - **Caller:** the **CRM** (`../CRM`) — authenticated `dio` client, **WIP**.
-- **Data:** the shared **Supabase Postgres** (read/write) + the **`../Database`** package (enum mirrors + `openapi.json`).
+- **Data:** the shared **Supabase Postgres** (read/write) + the **`../Database`** package (enum mirrors in `python_data/schema/`).
 - **External:** **Stripe** (payments, Connect, webhooks) and **Supabase Auth** (JWT/JWKS).

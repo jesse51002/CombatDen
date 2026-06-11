@@ -67,18 +67,32 @@ class PreviewInvoice extends Equatable {
   @JsonKey(defaultValue: [])
   final List<PreviewInvoiceLine> lines;
 
+  /// Unix seconds: when the next full invoice is issued (the recurring
+  /// lines' billing-period end). Null for a one-off with no recurring line.
+  final int? nextPaymentDate;
+
   const PreviewInvoice({
     required this.amountDue,
     required this.subtotal,
     required this.total,
     required this.currency,
     this.lines = const [],
+    this.nextPaymentDate,
   });
 
   factory PreviewInvoice.fromJson(
     Map<String, dynamic> json,
   ) =>
       _$PreviewInvoiceFromJson(json);
+
+  /// [nextPaymentDate] as a UTC [DateTime] (display in local time), or
+  /// null when there is no recurring line.
+  DateTime? get nextPaymentAt => nextPaymentDate == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(
+          nextPaymentDate! * 1000,
+          isUtc: true,
+        );
 
   @override
   List<Object?> get props => [
@@ -87,6 +101,7 @@ class PreviewInvoice extends Equatable {
         total,
         currency,
         lines,
+        nextPaymentDate,
       ];
 }
 

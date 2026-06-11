@@ -75,6 +75,37 @@ CREATE UNIQUE INDEX idx_max_one_active_discount_value_per_discount
 CREATE INDEX idx_gym_discount_values_discount
     ON gym_discount_values_unfiltered (discount_id);
 
+-- A `custom` discount is ONE-SHOT: minted by a membership flow for exactly one
+-- membership, so it has exactly ONE value version, forever. Re-versioning a
+-- custom (a value edit) is rejected at the DB. Together with the
+-- single-application trigger on member_membership_applied_discounts this makes
+-- the custom lifecycle explicit (mint -> apply once -> archive), so cleaning up
+-- a failed membership's minted customs can never touch another holder. Presets
+-- and linked discounts version freely.
+CREATE FUNCTION prevent_custom_discount_second_value()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM gym_discounts_unfiltered d
+        WHERE d.discount_id = NEW.discount_id
+          AND d.discount_type = 'custom'
+    ) AND EXISTS (
+        SELECT 1 FROM gym_discount_values_unfiltered v
+        WHERE v.discount_id = NEW.discount_id
+    ) THEN
+        RAISE EXCEPTION
+            'custom discount % is one-shot: it already has its single value version',
+            NEW.discount_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_custom_discount_single_value
+    BEFORE INSERT ON gym_discount_values_unfiltered
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_custom_discount_second_value();
+
 -- View: passthrough of the base table (plain gym config, no Stripe gate).
 CREATE VIEW gym_discount_values
 WITH (security_invoker = true)

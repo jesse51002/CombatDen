@@ -1,1 +1,0 @@
-"""Member memberships service package."""

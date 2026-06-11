@@ -5,9 +5,6 @@ from datetime import date
 from uuid import UUID
 
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
-from src.member_memberships.schema.member_memberships_schema import (
-    MemberMembershipsAppliedDiscount,
-)
 from src.members.schema.members_billing_schema import (
     BillingMembershipInfo,
     BillingMembershipMemberInfo,
@@ -21,6 +18,9 @@ from src.members.service.member_details.members_billing_supplementary import (
 )
 from src.members.service.members_status_mapping import (
     is_membership_overdue,
+)
+from src.memberships.memberships_schema import (
+    MemberMembershipsAppliedDiscount,
 )
 from src.shared.formatters import format_minor_units
 
@@ -69,7 +69,16 @@ class MembersBillingGrouper:
                 today,
             )
 
-            total_price = representative["total_price"] or 0
+            # Each row's total_price is now that membership's OWN post-discount
+            # share, so the plan-level total is the SUM across the plan's rows.
+            # Only active (billing) memberships count — a frozen membership is
+            # paused and a cancelled/ended one keeps a stale total_price, so
+            # including them would overstate what the plan currently bills.
+            total_price = sum(
+                row["total_price"] or 0
+                for row in rows
+                if row["membership_status"] == CrmMemberStatus.active
+            )
             all_discounts = self._collect_plan_discounts(rows)
 
             members = {
@@ -145,14 +154,21 @@ class MembersBillingGrouper:
     ) -> tuple[str, UUID | None]:
         """Build the membership overview string and linked_to_account value.
 
+        The ``monthly_total`` / ``paying_count`` are the **queried member's**
+        scope: for a primary/solo account, the family bill it pays and the
+        family's active recurring count; for a linked account, that member's
+        OWN total and count (the same line a normal member gets, with a
+        ``(Paid by <name>)`` suffix appended).
+
         Args:
             linked_to_id: The parent account ID if the member is linked.
-            monthly_total: Parent's total_monthly_recurring_price in minor units.
-            has_trial: Whether any membership is a trial.
-            has_cancelled: Whether any membership is cancelled.
-            has_frozen: Whether any membership is frozen.
-            has_overdue: Whether any membership is overdue.
-            paying_count: Number of active recurring memberships.
+            monthly_total: The total to display (minor units) — the family bill
+                for a primary account, the member's own sum for a linked one.
+            has_trial: Whether any membership in scope is a trial.
+            has_cancelled: Whether any membership in scope is cancelled.
+            has_frozen: Whether any membership in scope is frozen.
+            has_overdue: Whether any membership in scope is overdue.
+            paying_count: Number of active recurring memberships in scope.
             supplementary: For profile lookups.
 
         Returns:
@@ -167,16 +183,18 @@ class MembersBillingGrouper:
             paying_count,
         )
 
-        if linked_to_id is None:
-            if paying_count > 0:
-                label = "Membership" if paying_count == 1 else "Memberships"
-                return f"{summary} for {paying_count} {label}", None
-            return summary, None
+        base = summary
+        if paying_count > 0:
+            label = "Membership" if paying_count == 1 else "Memberships"
+            base = f"{summary} for {paying_count} {label}"
 
+        if linked_to_id is None:
+            return base, None
+
+        # Linked account: the same line a normal member gets, plus who pays.
         primary = supplementary.profiles_dict.get(linked_to_id)
         name = primary.first_name if primary else "Primary"
-
-        return f"Account is paid for by {name} ({summary})", linked_to_id
+        return f"{base} (Paid by {name})", linked_to_id
 
     def _display_status(
         self,
@@ -255,20 +273,20 @@ class MembersBillingGrouper:
         self,
         rows: list,
     ) -> list[MemberMembershipsAppliedDiscount]:
-        """Collect every active applied-discount snapshot across a plan's rows.
+        """Collect every active applied-discount row across a plan's rows.
 
         Each row carries an ``applied_discounts`` JSONB list built by
-        ``member_details.sql`` from the membership's applied-discount
-        snapshots (already filtered to currently-active ones), each
-        resolved to its pinned value version. Snapshots are item-scoped, so
-        they are NOT de-duplicated — the CRM groups them under each covered
-        member by ``item_id`` and removes one by ``applied_discount_id``.
+        ``member_details.sql`` from the membership's applied-discount rows
+        (already filtered to currently-active ones), each resolved to its
+        pinned value version. Applied-discount rows are item-scoped, so they
+        are NOT de-duplicated — the CRM groups them under each covered member
+        by ``item_id`` and removes one by ``applied_discount_id``.
 
         Args:
             rows: Membership rows sharing the same plan.
 
         Returns:
-            One MemberMembershipsAppliedDiscount per active snapshot.
+            One MemberMembershipsAppliedDiscount per active applied-discount row.
         """
         discounts: list[MemberMembershipsAppliedDiscount] = []
         for row in rows:

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
 /// A wrapping row of compact, single-select filter pills. Lighter than
 /// [ViewSwitcher] (which is for top-level views) — sized for many
@@ -19,7 +20,9 @@ class FilterPills extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
+    // IntrinsicWrap, not Wrap: pills sit inside IntrinsicHeight-driven
+    // layouts (member-detail grid) and must report run-aware height.
+    return IntrinsicWrap(
       spacing: DesignConstants.spacingSmall,
       runSpacing: DesignConstants.spacingSmall,
       children: [

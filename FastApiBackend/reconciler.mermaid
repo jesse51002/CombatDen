@@ -1,0 +1,47 @@
+flowchart TB
+  %% Scheduled reconciler — orchestration flow of ReconcilerService.run().
+  %% Source of truth: src/reconciler/ (reconciler-guide skill).
+  %% APScheduler (app lifespan) fires run() twice daily, then runs the three
+  %% step-services in order: invoice-fetch -> orphan-cleanup -> payment-push.
+  %% No reconciler-wide lock — safety is the per-family PayingMemberLock every
+  %% payment op already holds.
+  %% Each step reuses existing machinery: the fetcher drives the webhook handler
+  %% record() seam, the orphan cleanup checks the per-family lock, the push sweep
+  %% calls bulk sync — whose sync now self-heals a gone subscription natively
+  %% (cancels the family + nulls the sub id), so there is no separate status pass.
+  %% Green = reconciler step/service · yellow = the orchestrator (fan-out hub) ·
+  %% orange = external actors. Solid = live runtime call.
+
+  sched["⏰ APScheduler — app lifespan, cron twice daily (UTC)<br/>fires ReconcilerService.run() · gated by settings.reconciler_enabled"]
+
+  subgraph recon["🧹 ReconcilerService.run — sweep orchestrator"]
+    direction TB
+    fetch["InvoiceFetchSweep — missed-webhook backstop<br/>per gym Connect acct: list invoices / payments / refunds in the configured lookback<br/>→ reuse webhook handler record(obj) (the handle/record seam)<br/>paid → bill + succeeded charges · open+attempted → failed attempt · refunds<br/>idempotent: invoice upsert · charge/refund UNIQUE · failed synthetic key<br/>each object in its own txn · pending/not-recorded caught per object"]
+    orphan["OrphanCleanupSweep — delete stranded not_added rows<br/>per orphan: non-blocking try paying-family lock<br/>free → delete (stripe_item_id IS NULL guard) · held → skip (op in flight)"]
+    push["PaymentPushSweep — CRM→Stripe converge<br/>distinct paying parents w/ active recurring → bulk_payment_sync<br/>proration none = billing none (no charge)<br/>the sync self-heals a gone sub: cancel the family + null the sub id"]
+    fetch --> orphan
+    orphan --> push
+  end
+
+  handlers["📨 webhook handlers (stripe_webhooks) — record(obj) seam<br/>invoice_paid · invoice_payment_paid · invoice_payment_failed · refund"]
+  engine["⚙️ PaymentSyncService.bulk_payment_sync<br/>loop families · fresh key + per-family lock · update_payments_recurring<br/>a gone sub → cancel the family + null the sub id (Stripe→CRM), never recreate"]
+
+  supabase["🗄️ Supabase (service-role) — reconciler_orphan_memberships<br/>reconciler_active_billing_members · gyms_with_connect · resource_locks<br/>cancel_date / 'deleted' writes · null stripe_sub_id_month · delete orphan"]
+  stripe["💳 Stripe — gym Connect: list invoices / payments / refunds · retrieve / update / cancel subscription"]
+
+  sched -->|"twice daily"| recon
+  recon -->|"invoice-fetch: reuse handler record on listed objects"| handlers
+  recon -->|"push: bulk_payment_sync (billing none)"| engine
+  recon -->|"orphan-cleanup: list + delete orphans (per-family lock check)"| supabase
+  recon -->|"invoice-fetch: list recent activity per gym"| stripe
+  handlers -->|"upsert invoice / charge / refund rows"| supabase
+  engine -->|"read desired state · write back · cancel a gone sub"| supabase
+  engine -->|"create / update / cancel subscription"| stripe
+
+  classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
+  classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
+  classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
+  class sched,handlers,engine svc;
+  class supabase,stripe ext;
+  class fetch,orphan,push svc;
+  style recon fill:#fdf0c8,stroke:#caab2f;
