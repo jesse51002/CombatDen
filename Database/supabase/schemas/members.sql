@@ -49,20 +49,11 @@ CREATE TABLE members (
             (freeze_start_date IS NULL AND freeze_end_date IS NULL)
             OR (freeze_start_date IS NOT NULL AND freeze_end_date IS NOT NULL)
         ),
-    CONSTRAINT linked_account_no_stripe
-        CHECK (
-            account_linked_to_id IS NULL
-            OR (
-                stripe_sub_id_month IS NULL
-                AND freeze_start_date IS NULL
-                AND freeze_end_date IS NULL
-                AND payment_type IS NULL
-                AND card_brand IS NULL
-                AND card_last_four IS NULL
-                AND card_exp_month IS NULL
-                AND card_exp_year IS NULL
-            )
-        ),
+    -- NOTE: a linked member MAY carry their own billing state. Billing is
+    -- per PAYER (member_memberships.paid_by_member_id): a self-paying linked
+    -- member legitimately holds their own stripe_sub_id_month, payment
+    -- method/card columns, and freeze window. account_linked_to_id is the
+    -- authorization layer only (who may pay for whom), never a billing gate.
     CONSTRAINT fk_member_linked_account
         FOREIGN KEY (account_linked_to_id, gym_id)
         REFERENCES members (member_id, gym_id)
