@@ -142,16 +142,18 @@ class PaymentSyncQueries:
         today: date,
         preview: bool = False,
     ) -> list[ActiveMembershipRow]:
-        """Get the family's PENDING one-time memberships, each with its discounts.
+        """Get the family's PENDING non-recurring memberships + their discounts.
 
-        The **real** path reads only ``not_added`` one-time rows — the
-        just-inserted, never-charged memberships this charge bills on the
-        consolidated invoice. A one-time membership is **terminal** (charged
-        once), so an already-``applied`` row is never re-read (that would
-        re-charge it). The **preview** path additionally reads ``preview_add`` (the
+        Covers BOTH ``one_time`` and ``trial`` plans — a trial bills
+        identically as a $0 line on the same consolidated invoice. The
+        **real** path reads only ``not_added`` rows — the just-inserted,
+        never-charged memberships this charge bills on the consolidated
+        invoice. A non-recurring membership is **terminal** (charged once),
+        so an already-``applied`` row is never re-read (that would re-charge
+        it). The **preview** path additionally reads ``preview_add`` (the
         staged row a start preview cuts then rolls back). Reads the unfiltered
-        base (service-role) and reuses the family applied-discount read, attaching
-        each membership's discounts onto its row.
+        base (service-role) and reuses the family applied-discount read,
+        attaching each membership's discounts onto its row.
         """
         if not family_ids:
             return []
