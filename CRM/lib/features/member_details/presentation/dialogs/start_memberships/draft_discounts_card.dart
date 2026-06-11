@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_value_form.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/added_discount_chip.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/discount_picker_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_labels.dart';
-import 'package:crm/features/member_details/presentation/widgets/discount_lifetime_label.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
-import 'package:crm/shared/widgets/discount_grid.dart';
 
-/// One membership's discount controls on the discounts
-/// step: the gym's preset multi-pick plus the inline custom
-/// value form (one-shot customs minted server-side).
-class DraftDiscountsCard extends StatefulWidget {
+/// One membership card on the deals step: the membership
+/// front and center (plan name, price, who it's for), the
+/// discounts already added as a compact removable grid, and
+/// the "Add discount" button that opens the picker. The
+/// step grows with ADDED discounts, never with the gym's
+/// catalog size.
+class DraftDiscountsCard extends StatelessWidget {
   final MembershipDraft draft;
+  final String memberName;
   final List<DiscountResponse> presets;
   final ValueChanged<String> onPresetToggle;
   final ValueChanged<DiscountValue> onCustomAdded;
@@ -24,24 +27,43 @@ class DraftDiscountsCard extends StatefulWidget {
   const DraftDiscountsCard({
     super.key,
     required this.draft,
+    required this.memberName,
     required this.presets,
     required this.onPresetToggle,
     required this.onCustomAdded,
     required this.onCustomRemoved,
   });
 
-  @override
-  State<DraftDiscountsCard> createState() =>
-      _DraftDiscountsCardState();
-}
+  Future<void> _openPicker(BuildContext context) async {
+    final result = await DiscountPickerDialog.show(
+      context: context,
+      planName: draft.plan.planName,
+      presets: presets,
+      addedPresetIds: draft.discountIds,
+    );
+    if (result == null) return;
+    final presetId = result.presetId;
+    final custom = result.custom;
+    if (presetId != null) {
+      onPresetToggle(presetId);
+    } else if (custom != null) {
+      onCustomAdded(custom);
+    }
+  }
 
-class _DraftDiscountsCardState
-    extends State<DraftDiscountsCard> {
-  bool _showCustomForm = false;
+  String _presetLabel(String discountId) {
+    for (final d in presets) {
+      if (d.discountId == discountId) {
+        return '${d.discountName} · ${d.displayLabel}';
+      }
+    }
+    return 'Preset discount';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final draft = widget.draft;
+    final hasDiscounts = draft.discountIds.isNotEmpty ||
+        draft.customDiscounts.isNotEmpty;
     return Container(
       padding: const EdgeInsets.all(
         DesignConstants.spacingMedium,
@@ -57,122 +79,87 @@ class _DraftDiscountsCardState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingMedium,
         children: [
-          Text(
-            draft.plan.planName,
-            style: DesignConstants.h3,
+          _MembershipHeader(
+            draft: draft,
+            memberName: memberName,
           ),
-          if (widget.presets.isNotEmpty)
-            DiscountGrid(
-              discounts: widget.presets
-                  .map(
-                    (d) => DiscountOption(
-                      id: d.discountId,
-                      name: d.discountName,
-                      valueLabel: d.displayLabel,
-                      durationLabel:
-                          discountLifetimeLabel(d),
-                    ),
-                  )
-                  .toList(),
-              selectedIds: draft.discountIds,
-              onToggle: (d) =>
-                  widget.onPresetToggle(d.id),
-            )
-          else
-            Text(
-              'This gym has no discount presets.',
-              style: DesignConstants.pSmall.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            ),
-          if (draft.customDiscounts.isNotEmpty)
-            Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.stretch,
+          if (hasDiscounts)
+            Wrap(
               spacing: DesignConstants.spacingSmall,
+              runSpacing: DesignConstants.spacingSmall,
               children: [
+                for (final id in draft.discountIds)
+                  AddedDiscountChip(
+                    label: _presetLabel(id),
+                    onRemove: () => onPresetToggle(id),
+                  ),
                 for (var i = 0;
                     i < draft.customDiscounts.length;
                     i++)
-                  _CustomDiscountRow(
-                    value: draft.customDiscounts[i],
-                    onRemove: () =>
-                        widget.onCustomRemoved(i),
+                  AddedDiscountChip(
+                    label: 'Custom · '
+                        '${discountValueAmountLabel(
+                      draft.customDiscounts[i],
+                    )} · '
+                        '${discountValueLifetimeLabel(
+                      draft.customDiscounts[i],
+                    )}',
+                    onRemove: () => onCustomRemoved(i),
                   ),
               ],
             ),
-          if (_showCustomForm)
-            CustomDiscountValueForm(
-              onAdd: (value) {
-                widget.onCustomAdded(value);
-                setState(
-                  () => _showCustomForm = false,
-                );
-              },
-              onCancel: () => setState(
-                () => _showCustomForm = false,
-              ),
-            )
-          else
-            AppOutlineButton(
-              text: 'Add a custom discount',
-              borderRadius: DesignConstants.radiusSmall,
-              onPressed: () => setState(
-                () => _showCustomForm = true,
-              ),
-            ),
+          AppOutlineButton(
+            text: 'Add discount',
+            borderRadius: DesignConstants.radiusSmall,
+            onPressed: () => _openPicker(context),
+          ),
         ],
       ),
     );
   }
 }
 
-class _CustomDiscountRow extends StatelessWidget {
-  final DiscountValue value;
-  final VoidCallback onRemove;
+/// The membership itself, front and center: plan name, the
+/// member it's for, and the plan's price.
+class _MembershipHeader extends StatelessWidget {
+  final MembershipDraft draft;
+  final String memberName;
 
-  const _CustomDiscountRow({
-    required this.value,
-    required this.onRemove,
+  const _MembershipHeader({
+    required this.draft,
+    required this.memberName,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(
-        DesignConstants.spacingSmall,
-      ),
-      decoration: BoxDecoration(
-        color: DesignConstants.primaryColor10,
-        borderRadius: BorderRadius.circular(
-          DesignConstants.radiusSmall,
+    final plan = draft.plan;
+    return Row(
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingTiny,
+            children: [
+              Text(plan.planName, style: DesignConstants.h3),
+              Text(
+                '${plan.planType.displayLabel} · '
+                'For $memberName',
+                style: DesignConstants.pSmall.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      child: Row(
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          Expanded(
-            child: Text(
-              'Custom · '
-              '${discountValueAmountLabel(value)} · '
-              '${discountValueLifetimeLabel(value)}',
-              style: DesignConstants.pSmall,
-            ),
+        Text(
+          formatMinorUnits(
+            plan.activePrice!.price,
+            currency: 'USD',
           ),
-          InkWell(
-            onTap: onRemove,
-            borderRadius: BorderRadius.circular(
-              DesignConstants.radiusSmall,
-            ),
-            child: Icon(
-              Symbols.close_sharp,
-              weight: DesignConstants.iconWeight,
-              size: DesignConstants.iconSizeSmall,
-              color: DesignConstants.text2nd,
-            ),
-          ),
-        ],
-      ),
+          style: DesignConstants.h2,
+        ),
+      ],
     );
   }
 }

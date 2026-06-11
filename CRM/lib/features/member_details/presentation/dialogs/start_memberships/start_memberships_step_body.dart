@@ -21,6 +21,7 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plans_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_preview_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_results_step.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_review_step.dart';
 
 /// The scrollable body of the Start Memberships wizard: the
 /// step indicator, the persistent payer/current-member
@@ -35,6 +36,11 @@ class StartMembershipsStepBody extends StatelessWidget {
   final StartMembershipParticipant? currentMember;
   final Set<String> selectedMemberIds;
   final List<MembershipDraft> currentDrafts;
+
+  /// Selected members in family order + every member's
+  /// configured drafts — the review step's summary input.
+  final List<StartMembershipParticipant> configMembers;
+  final Map<String, List<MembershipDraft>> draftsByMember;
   final Map<String, String> disabledPlanReasons;
   final Future<List<MembershipPlanResponse>> plansFuture;
   final Future<List<DiscountResponse>> discountsFuture;
@@ -79,6 +85,8 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.currentMember,
     required this.selectedMemberIds,
     required this.currentDrafts,
+    required this.configMembers,
+    required this.draftsByMember,
     required this.disabledPlanReasons,
     required this.plansFuture,
     required this.discountsFuture,
@@ -164,6 +172,12 @@ class StartMembershipsStepBody extends StatelessWidget {
           onPresetToggle: onPresetToggle,
           onCustomAdded: onCustomAdded,
           onCustomRemoved: onCustomRemoved,
+        );
+      case StartMembershipsStep.review:
+        return StartReviewStep(
+          members: configMembers,
+          draftsByMember: draftsByMember,
+          discountsFuture: discountsFuture,
         );
       case StartMembershipsStep.preview:
         final req = previewRequest;

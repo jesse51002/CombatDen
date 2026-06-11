@@ -33,12 +33,14 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 /// 3. per member: pick plans (count stepper on one_time /
 ///    trial),
 /// 4. per member: discounts per membership (presets +
-///    inline customs),
-/// 5. the server-side three-way preview (navigation only),
-/// 6. payment (card on file / REAL cash toggle) — PAY is
+///    inline customs via the picker),
+/// 5. review — who's getting what (pure content, no
+///    prices),
+/// 6. the server-side charge preview (navigation only),
+/// 7. payment (card on file / REAL cash toggle) — PAY is
 ///    the single trigger that sends
 ///    `POST /api/v1/member_memberships/`,
-/// 7. the per-membership created/failed breakdown.
+/// 8. the per-membership created/failed breakdown.
 ///
 /// A single member buying one plan is the same path with
 /// the payer pre-selected and one loop iteration — no
@@ -316,8 +318,10 @@ class _StartMembershipsWizardState
             _memberIndex++;
             _step = StartMembershipsStep.plans;
           } else {
-            _enterPreview();
+            _step = StartMembershipsStep.review;
           }
+        case StartMembershipsStep.review:
+          _enterPreview();
         case StartMembershipsStep.preview:
           // Confirm = navigation only; PAY fires the one
           // mutation on the payment step.
@@ -346,9 +350,11 @@ class _StartMembershipsWizardState
           }
         case StartMembershipsStep.discounts:
           _step = StartMembershipsStep.plans;
-        case StartMembershipsStep.preview:
+        case StartMembershipsStep.review:
           _memberIndex = _configMembers.length - 1;
           _step = StartMembershipsStep.discounts;
+        case StartMembershipsStep.preview:
+          _step = StartMembershipsStep.review;
         case StartMembershipsStep.payment:
           _enterPreview();
       }
@@ -574,6 +580,7 @@ class _StartMembershipsWizardState
       case StartMembershipsStep.plans:
         return _currentDrafts.isNotEmpty;
       case StartMembershipsStep.discounts:
+      case StartMembershipsStep.review:
         return true;
       case StartMembershipsStep.preview:
         return _previewRequest != null;
@@ -600,7 +607,9 @@ class _StartMembershipsWizardState
       case StartMembershipsStep.discounts:
         return _memberIndex + 1 < _configMembers.length
             ? 'Next member'
-            : 'Preview';
+            : 'Review';
+      case StartMembershipsStep.review:
+        return 'Preview charges';
       case StartMembershipsStep.preview:
         return 'Continue to payment';
       case StartMembershipsStep.payment:
@@ -646,6 +655,8 @@ class _StartMembershipsWizardState
             currentMember: _currentMember,
             selectedMemberIds: _selectedMemberIds,
             currentDrafts: _currentDrafts,
+            configMembers: _configMembers,
+            draftsByMember: _drafts,
             disabledPlanReasons: _disabledPlanReasons,
             plansFuture: _plansFuture,
             discountsFuture: _discountsFuture,

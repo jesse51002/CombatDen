@@ -9,13 +9,15 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// Step 4 (per member) — the member's selected memberships
-/// listed together, each with its own discount controls:
-/// preset multi-pick (→ the item's `discount_ids`) and an
-/// inline custom value (→ the item's `custom_discounts`).
-/// Customs can never be referenced by id, so only `preset`
-/// presets are offered (`linked` family discounts are
-/// plan-managed; the backend applies them by reference).
+/// Step 4 (per member) — one prominent card per selected
+/// membership; each card carries an "Add discount" button
+/// that opens the picker (presets → the item's
+/// `discount_ids`, inline customs → `custom_discounts`)
+/// and renders the added discounts as a compact removable
+/// grid. Customs can never be referenced by id, so only
+/// `preset` presets are offered (`linked` family discounts
+/// are plan-managed; the backend applies them by
+/// reference).
 class StartDiscountsStep extends StatelessWidget {
   final StartMembershipParticipant member;
   final List<MembershipDraft> drafts;
@@ -80,6 +82,7 @@ class StartDiscountsStep extends StatelessWidget {
                   .map(
                     (draft) => DraftDiscountsCard(
                       draft: draft,
+                      memberName: member.name,
                       presets: presets,
                       onPresetToggle: (id) =>
                           onPresetToggle(

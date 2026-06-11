@@ -10,7 +10,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// Step 7 — the per-membership breakdown. A 201 is NOT
+/// Step 8 — the per-membership breakdown. A 201 is NOT
 /// success/fail: each membership reports created (✓) or
 /// failed (✗ + the error). Failure granularity is the
 /// charge group, so a mixed cart can half-succeed; the

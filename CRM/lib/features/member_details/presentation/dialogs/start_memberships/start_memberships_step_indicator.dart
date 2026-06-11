@@ -3,7 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step.dart';
 
-/// Horizontal progress bar across the wizard's seven steps.
+/// Horizontal progress bar across the wizard's three
+/// top-level groups (Select payer · Select memberships ·
+/// Confirmation). Completed groups read done (green), the
+/// active group is emphasised, and its bar splits into one
+/// mini-segment per substep so progress within the group
+/// stays visible without eight flat labels.
 class StartMembershipsStepIndicator
     extends StatelessWidget {
   final StartMembershipsStep step;
@@ -15,66 +20,106 @@ class StartMembershipsStepIndicator
 
   @override
   Widget build(BuildContext context) {
-    final index =
-        StartMembershipsStep.values.indexOf(step);
+    final groups = StartMembershipsStepGroup.values;
+    final activeIndex = groups.indexOf(step.group);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       spacing: DesignConstants.spacingSmall,
-      children: List.generate(
-        StartMembershipsStep.values.length,
-        (i) {
-          final active = i == index;
-          final done = i < index;
-          final color = active
-              ? DesignConstants.primaryColor
-              : done
-                  ? DesignConstants.goodGreen
-                  : DesignConstants.text3rd;
-          return Expanded(
-            child: Column(
-              spacing: DesignConstants.spacingTiny,
-              children: [
-                Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius:
-                        BorderRadius.circular(2),
-                  ),
-                ),
-                Text(
-                  _label(StartMembershipsStep.values[i]),
-                  style:
-                      DesignConstants.pSmall.copyWith(
-                    color: color,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+      children: [
+        for (var i = 0; i < groups.length; i++)
+          Expanded(
+            child: _GroupSegment(
+              number: i + 1,
+              group: groups[i],
+              done: i < activeIndex,
+              active: i == activeIndex,
+              substepIndex: i == activeIndex
+                  ? step.substepIndex
+                  : 0,
             ),
-          );
-        },
-      ),
+          ),
+      ],
     );
   }
+}
 
-  String _label(StartMembershipsStep s) {
-    switch (s) {
-      case StartMembershipsStep.payer:
-        return 'Payer';
-      case StartMembershipsStep.members:
-        return 'Who';
-      case StartMembershipsStep.plans:
-        return 'Plans';
-      case StartMembershipsStep.discounts:
-        return 'Deals';
-      case StartMembershipsStep.preview:
-        return 'Preview';
-      case StartMembershipsStep.payment:
-        return 'Pay';
-      case StartMembershipsStep.results:
-        return 'Done';
-    }
+/// One indicator segment: the group's progress bar with its
+/// numbered title beneath. The active group's bar renders
+/// one mini-bar per substep (reached = filled); done and
+/// upcoming groups keep a single solid bar.
+class _GroupSegment extends StatelessWidget {
+  final int number;
+  final StartMembershipsStepGroup group;
+  final bool done;
+  final bool active;
+  final int substepIndex;
+
+  const _GroupSegment({
+    required this.number,
+    required this.group,
+    required this.done,
+    required this.active,
+    required this.substepIndex,
+  });
+
+  Color get _color => active
+      ? DesignConstants.primaryColor
+      : done
+          ? DesignConstants.goodGreen
+          : DesignConstants.text3rd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      spacing: DesignConstants.spacingTiny,
+      children: [
+        if (active && group.substepCount > 1)
+          Row(
+            spacing: DesignConstants.spacingTiny,
+            children: [
+              for (var i = 0;
+                  i < group.substepCount;
+                  i++)
+                Expanded(
+                  child: _Bar(
+                    color: i <= substepIndex
+                        ? _color
+                        : DesignConstants.text3rd,
+                  ),
+                ),
+            ],
+          )
+        else
+          _Bar(color: _color),
+        Text(
+          '$number · ${group.title}',
+          style: DesignConstants.pSmall.copyWith(
+            color: _color,
+            fontWeight:
+                active ? FontWeight.w600 : null,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+/// The indicator's 4px rounded bar primitive.
+class _Bar extends StatelessWidget {
+  final Color color;
+
+  const _Bar({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 4,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
   }
 }

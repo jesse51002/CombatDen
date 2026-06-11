@@ -6,7 +6,7 @@ import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/card_wallet_section.dart';
 
-/// Step 6 — settlement. Card on file (the wallet UI is a
+/// Step 7 — settlement. Card on file (the wallet UI is a
 /// known placeholder — see [CardWalletSection]) vs the REAL
 /// cash toggle (`paid_with_cash`: the one-time invoice
 /// settles out-of-band, the recurring first invoice is
