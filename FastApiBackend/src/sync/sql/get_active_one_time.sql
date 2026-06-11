@@ -9,7 +9,7 @@
 -- One-time is TERMINAL: the real path reads only 'not_added' rows (the just-
 -- inserted, never-charged ones). An already-'applied' row has been charged and
 -- must NEVER be re-read (re-reading would re-charge it), so unlike the recurring
--- read there is no 'applied'/'migrating' inclusion. The PREVIEW path also reads
+-- read there is no 'applied' inclusion. The PREVIEW path also reads
 -- 'preview_add' (the staged row a start preview cuts then rolls back) via
 -- :statuses. A one-time plan may have no duration, so duration_unit can be NULL.
 SELECT

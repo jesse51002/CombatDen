@@ -24,8 +24,7 @@ class StripeSyncStatus(StrEnum):
     lifecycle MembershipDbStatus: `not_added` = pending (the row is asking the
     sync to add it); the sync (writeback) stamps `applied` once Stripe confirms
     and `deleted` on removal; `preview_add`/`preview_remove` are reserved for
-    preview-staging; `migrating` (memberships only) marks a migration requested
-    but not yet completed. Shared by member_memberships and
+    preview-staging. Shared by member_memberships and
     member_membership_applied_discounts.
     """
 
@@ -34,7 +33,6 @@ class StripeSyncStatus(StrEnum):
     deleted = "deleted"
     preview_add = "preview_add"
     preview_remove = "preview_remove"
-    migrating = "migrating"
 
 
 class MemberMembershipCreate(SeedModel):

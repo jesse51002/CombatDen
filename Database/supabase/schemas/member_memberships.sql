@@ -5,15 +5,12 @@
 -- here because member_memberships is the earliest-loaded table that uses it.
 -- `applied`/`deleted` are stamped by the sync (the writeback) once Stripe
 -- confirms; `preview_add`/`preview_remove` are reserved for preview-staging.
--- `migrating` (memberships only) marks that a migration was requested but has
--- not completed yet.
 CREATE TYPE stripe_sync_status AS ENUM (
     'not_added',
     'applied',
     'deleted',
     'preview_add',
-    'preview_remove',
-    'migrating'
+    'preview_remove'
 );
 
 -- Memberships are append-only: once created, a membership can only be
@@ -161,9 +158,8 @@ CREATE TRIGGER trg_prevent_stripe_item_id_overwrite
     FOR EACH ROW EXECUTE FUNCTION prevent_stripe_item_id_overwrite();
 
 -- Trigger: stripe_one_time_invoice_id is immutable once set. Stamped once when a
--- one-time membership's consolidated invoice is created; never migrated (unlike
--- stripe_item_id there is no 'migrating' exception — a one-time invoice is a
--- terminal charge, not a line that moves between Stripe items).
+-- one-time membership's consolidated invoice is created — a one-time invoice is
+-- a terminal charge, not a line that moves between Stripe items.
 CREATE OR REPLACE FUNCTION prevent_stripe_one_time_invoice_id_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -335,7 +331,7 @@ CREATE TRIGGER trg_recurring_chronological_start_date
 -- View: gate on BOTH the Stripe id and the sync-status enum. A row with no
 -- `stripe_item_id` was never put on Stripe (not valid to surface), and the
 -- sync-status hides `not_added` (pending) and `preview_*` (dry-run staging), so
--- the client only sees real synced rows (applied / deleted / migrating). The two
+-- the client only sees real synced rows (applied / deleted). The two
 -- conditions are kept in lockstep with the `hide_incomplete_stripe_records` RLS
 -- policy (`access_rules/member_memberships.sql`) so the view and RLS can't drift.
 -- `member_memberships_status` reads this view, so cancelled (`deleted`) rows —
