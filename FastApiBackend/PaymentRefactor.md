@@ -226,6 +226,41 @@ own discounts**, all **applied at creation before the first invoice**, in **one 
 
 # Later
 
+## 10. Multiple one-time purchases of the SAME plan at once (not built)
+
+> A member buying 2 punch-card packs of 5 in one cart, attending-twice-in-a-day
+> class purchases, etc. — and the same relaxation technically applies to trials.
+> Decided as definitely-needed (2026-06-11) but deferred.
+
+Today this is blocked at three layers, all service-side (the DB only forbids
+overlapping actives for RECURRING — the `trg_recurring_*` triggers):
+
+1. The start request validator rejects duplicate `(member_id, price_id)` items —
+   two identical packs in one request never reach validation.
+2. `_check_no_existing` rejects starting ANY plan the member already has active —
+   broader than the DB rule; blocks buying a second pack while one is active.
+3. `_crm_insert` keys its returned ids by `(member_id, plan_id)` — two identical
+   rows would collide.
+
+The build (small, one piece):
+
+- Drop the request-level duplicate rejection; duplicates = multiple purchases.
+- Make `_check_no_existing` recurring-only (mirror the DB trigger semantics
+  exactly): duplicate RECURRING (member, plan) still rejected, in-request and
+  vs the DB; one-time/trial duplicates allowed.
+- Generate each row's `item_id` client-side (`uuid4` passed into the multi-row
+  insert — it is the PK) so identical rows are unambiguous and the
+  `(member_id, plan_id)` keying disappears; each item state carries its id
+  directly.
+- The engine already supports it: one-time groups are keyed by `item_id`
+  (singleton invoice lines, no one-item-per-price constraint), per-line
+  discounts unaffected.
+- Consequence to accept: accidental double-buys (and double-trials) become
+  possible — restrict per-plan if needed via a CRM-side rule later.
+- Tests: two identical packs in one request → ONE invoice, two identical-price
+  lines, distinct ids; second pack bought while the first is active.
+
+
 ## 2. Multi-interval recurring — weekly / yearly (not built)
 
 > Recurring is **monthly-only** today; weekly and yearly are needed. The blocker
