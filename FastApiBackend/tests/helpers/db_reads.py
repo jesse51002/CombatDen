@@ -7,6 +7,8 @@ read-only — mutating helpers live in ``data_factory.py``.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -141,3 +143,29 @@ async def get_membership_stripe_price_id(
     if row is None or row["stripe_price_id"] is None:
         raise AssertionError(f"No stripe_price_id for membership item_id={item_id}")
     return row["stripe_price_id"]
+
+
+async def await_task_terminal(
+    db_pool: DirectDatabasePool,
+    task_id: UUID,
+    timeout_seconds: float = 120.0,
+) -> str:
+    """Poll a background task (the CRM's contract) until completed/failed.
+
+    Returns the terminal status string. Raises if the task does not reach a
+    terminal state within ``timeout_seconds``.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text("SELECT status::text FROM tasks WHERE task_id = :t"),
+                {"t": str(task_id)},
+            )
+            status = result.scalar_one()
+        if status in ("completed", "failed"):
+            return status
+        await asyncio.sleep(1)
+    raise AssertionError(
+        f"Task {task_id} not terminal after {timeout_seconds}s"
+    )

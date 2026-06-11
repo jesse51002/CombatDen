@@ -97,6 +97,32 @@ class MemberMembershipsBase:
             row = result.fetchone()
         return StripeSyncStatus(row[0]) if row else None
 
+    async def _get_active_price_for_plan(
+        self,
+        gym_id: UUID,
+        plan_id: UUID,
+    ) -> dict:
+        """Fetch the plan's currently active price row.
+
+        Shared by the reprice request validation and the reprice executor —
+        both target the plan's single ``is_active = true`` price.
+
+        Raises:
+            ValueError: If no active price exists for the plan.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_get_active_price.sql")
+        params = {
+            "gym_id": str(gym_id),
+            "plan_id": str(plan_id),
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            row = result.mappings().fetchone()
+
+        if not row:
+            raise ValueError(f"No active price for plan: plan_id={plan_id}, gym_id={gym_id}")
+        return dict(row)
+
     async def _pre_sync_payments(self, member_id: UUID) -> None:
         """Converge the family to a clean DB↔Stripe baseline BEFORE mutating.
 

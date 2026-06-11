@@ -250,6 +250,7 @@ class MemberMembershipsRepriceExecutor(MemberMembershipsBase):
                 "old_item_id": str(item.old_item_id),
                 "new_item_id": str(new_item_id),
                 "gym_today": today,
+                "sync_status": StripeSyncStatus.not_added.value,
             },
         )
 

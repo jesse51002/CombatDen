@@ -195,18 +195,31 @@ class MemberMembershipsChargeCardRequest(BaseModel):
 
 
 class MemberMembershipsUpdatePriceRequest(BaseModel):
-    """Upgrade a membership to its plan's currently active price.
+    """Reprice a membership onto its plan's currently active price.
 
-    The target price is not caller-supplied: the service
-    always moves the membership onto the plan's single
-    ``is_active = true`` price. If the membership is already
-    there the call is a CRM no-op but still re-syncs Stripe.
+    The target price is not caller-supplied: the reprice always moves the
+    membership onto the plan's single ``is_active = true`` price. The
+    endpoint validates, creates a tracked ``membership_reprice`` task, and
+    returns its task_id (202) — a membership already on the active price is
+    rejected (no no-op tasks). The task executor mints its own Stripe
+    idempotency keys per attempt; ``idempotency_key`` is accepted for client
+    compatibility but unused by the task flow.
     """
 
     item_id: UUID
     member_id: UUID
     prorate: bool = False
     idempotency_key: UUID
+
+
+class MemberMembershipsUpdatePriceResponse(BaseModel):
+    """The reprice was accepted as a tracked background task.
+
+    Poll ``GET /api/v1/tasks/{task_id}`` until the task is terminal; the
+    item carries the old→new membership row linkage and any error.
+    """
+
+    task_id: UUID
 
 
 class MemberMembershipsAddDiscountsRequest(BaseModel):

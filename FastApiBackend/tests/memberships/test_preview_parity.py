@@ -30,6 +30,7 @@ from src.memberships.memberships_schema import (
 from src.plans.plans_schema import MembershipPlanPriceRequest
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
+    await_task_terminal,
     get_active_membership_item_id,
     get_profile_stripe_ids,
 )
@@ -303,12 +304,12 @@ async def test_preview_update_price_prorate_true_matches_invoice(
         )
         assert preview is not None
 
-        await memberships_service.update_price(
+        task_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=True,
         )
+        assert await await_task_terminal(db_pool, task_id) == "completed"
 
         invoice = await assert_immediate_prorated_invoice(
             stripe_client,
@@ -392,12 +393,12 @@ async def test_preview_update_price_prorate_false_matches_renewal(
         )
         assert preview is not None
 
-        await memberships_service.update_price(
+        task_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=False,
         )
+        assert await await_task_terminal(db_pool, task_id) == "completed"
 
         # Snapshot AFTER the swap so the renewal invoice is what we
         # advance into.

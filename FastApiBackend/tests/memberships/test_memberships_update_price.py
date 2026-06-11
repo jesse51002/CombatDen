@@ -1,13 +1,23 @@
-"""Integration tests for updating membership price tiers.
+"""Integration tests for the task-based membership reprice.
 
-Every test captures the customer's Stripe billing state before
-calling ``update_price`` and asserts afterwards that:
+A reprice is APPEND-ONLY: ``update_price`` validates, creates a
+``membership_reprice`` task (one item), fires it in the background, and
+returns the task_id. The executor cancels the old row effective today,
+inserts a successor at the plan's active price, and the sync converges
+Stripe. The tests poll the task to terminal (the CRM's contract) and then
+assert:
 
-1. The Stripe subscription item now uses the new price id.
-2. No surprise invoice was created (``prorate=False`` path).
-3. Failed validation paths don't mutate Stripe at all.
+1. The old row is cancelled + ``deleted``, its ``price_id`` untouched
+   (trigger-immutable), and the successor row is ``applied`` on the new
+   price with a fresh Stripe line.
+2. The Stripe subscription carries the new price; the old price is gone.
+3. No surprise invoice was created (``prorate=False`` path).
+4. Failed validation creates NO task and mutates nothing — including the
+   no-op case (already on the active price).
 """
 
+import asyncio
+import time
 from uuid import UUID, uuid4
 
 import pytest
@@ -26,6 +36,8 @@ from tests.helpers.stripe_assertions import (
     fetch_subscription,
     snapshot_billing_state,
 )
+
+_TASK_TIMEOUT_SECONDS = 120
 
 
 async def _start_and_get_item_id(memberships_service, db_pool, member, gym_id, plan):
@@ -54,15 +66,57 @@ async def _start_and_get_item_id(memberships_service, db_pool, member, gym_id, p
     return UUID(str(row["item_id"]))
 
 
-def _find_item_by_price(sub, stripe_price_id: str):
-    """Return the subscription item whose price matches ``stripe_price_id``."""
-    for idx, item in enumerate(sub.items.data):
-        if item.price.id == stripe_price_id:
-            return idx, item
+async def _await_task_terminal(db_pool, task_id: UUID) -> str:
+    """Poll the task (the CRM's contract) until completed/failed."""
+    deadline = time.monotonic() + _TASK_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text("SELECT status::text FROM tasks WHERE task_id = :t"),
+                {"t": str(task_id)},
+            )
+            status = result.scalar_one()
+        if status in ("completed", "failed"):
+            return status
+        await asyncio.sleep(1)
     raise AssertionError(
-        f"No item on subscription {sub.id} uses price {stripe_price_id}; "
-        f"items={[i.price.id for i in sub.items.data]}"
+        f"Task {task_id} not terminal after {_TASK_TIMEOUT_SECONDS}s"
     )
+
+
+async def _get_task_item(db_pool, task_id: UUID) -> dict:
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT status::text AS status, attempt_count, "
+                "error_message, old_item_id, new_item_id "
+                "FROM task_items WHERE task_id = :t"
+            ),
+            {"t": str(task_id)},
+        )
+        return dict(result.mappings().one())
+
+
+async def _get_membership_row(db_pool, item_id: UUID) -> dict:
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT price_id, total_price, cancel_date, stripe_item_id, "
+                "stripe_sync_status::text AS status "
+                "FROM member_memberships_unfiltered WHERE item_id = :item_id"
+            ),
+            {"item_id": str(item_id)},
+        )
+        return dict(result.mappings().one())
+
+
+async def _count_tasks(db_pool, gym_id) -> int:
+    async with db_pool.session() as session:
+        result = await session.execute(
+            text("SELECT count(*) FROM tasks WHERE gym_id = :g"),
+            {"g": str(gym_id)},
+        )
+        return int(result.scalar_one())
 
 
 async def test_update_price_tier(
@@ -92,6 +146,7 @@ async def test_update_price_tier(
             gym_id,
         )
         assert profile.stripe_sub_id_month is not None
+        old_row_before = await _get_membership_row(db_pool, item_id)
 
         # Use the production service to create a second price tier
         new_price = await plans_service.set_price(
@@ -108,26 +163,36 @@ async def test_update_price_tier(
             connect_opts,
         )
 
-        await memberships_service.update_price(
+        task_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=False,
         )
 
-        async with db_pool.session() as session:
-            result = await session.execute(
-                text(
-                    "SELECT price_id, total_price "
-                    "FROM member_memberships_unfiltered "
-                    "WHERE item_id = :item_id"
-                ),
-                {"item_id": str(item_id)},
-            )
-            row = result.mappings().fetchone()
+        status = await _await_task_terminal(db_pool, task_id)
+        item = await _get_task_item(db_pool, task_id)
+        assert status == "completed", (
+            f"reprice task failed: {item['error_message']}"
+        )
+        assert item["status"] == "completed"
+        assert UUID(str(item["old_item_id"])) == item_id
+        new_item_id = UUID(str(item["new_item_id"]))
+        assert new_item_id != item_id
 
-        assert UUID(str(row["price_id"])) == new_price.price_id
-        assert row["total_price"] == 8000
+        # Old row: cancelled + deleted, identity untouched (append-only).
+        old_row = await _get_membership_row(db_pool, item_id)
+        assert old_row["cancel_date"] is not None
+        assert old_row["status"] == "deleted"
+        assert old_row["price_id"] == old_row_before["price_id"]
+        assert old_row["stripe_item_id"] == old_row_before["stripe_item_id"]
+
+        # Successor row: applied on the new price, with its OWN line.
+        new_row = await _get_membership_row(db_pool, new_item_id)
+        assert UUID(str(new_row["price_id"])) == new_price.price_id
+        assert new_row["total_price"] == 8000
+        assert new_row["status"] == "applied"
+        assert new_row["stripe_item_id"] is not None
+        assert new_row["stripe_item_id"] != old_row["stripe_item_id"]
 
         # Stripe side: the subscription must now carry the new price
         # id on exactly one item, and no new invoice may have been
@@ -137,17 +202,25 @@ async def test_update_price_tier(
             profile.stripe_sub_id_month,
             connect_opts,
         )
-        idx, _ = _find_item_by_price(sub, new_price.stripe_price_id)
+        new_price_items = [
+            (idx, item_)
+            for idx, item_ in enumerate(sub.items.data)
+            if item_.price.id == new_price.stripe_price_id
+        ]
+        assert len(new_price_items) == 1, (
+            f"Expected exactly one item on {new_price.stripe_price_id}; "
+            f"items={[i.price.id for i in sub.items.data]}"
+        )
         assert_subscription_item_price(
             sub,
             new_price.stripe_price_id,
-            index=idx,
+            index=new_price_items[0][0],
         )
         # Old price must be gone.
-        remaining_prices = {item.price.id for item in sub.items.data}
+        remaining_prices = {item_.price.id for item_ in sub.items.data}
         assert plan.stripe_price_id not in remaining_prices, (
             f"Old price {plan.stripe_price_id} still on subscription "
-            f"{profile.stripe_sub_id_month} after update"
+            f"{profile.stripe_sub_id_month} after reprice"
         )
 
         await assert_no_unexpected_charges(
@@ -159,7 +232,7 @@ async def test_update_price_tier(
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_update_cancelled_raises(
+async def test_update_cancelled_raises_no_task(
     memberships_service,
     db_pool,
     gym_id,
@@ -187,21 +260,76 @@ async def test_update_cancelled_raises(
 
         await memberships_service.cancel(item_id, member.member_id, idempotency_key=uuid4())
 
-        # Snapshot after cancel — the failed update_price below must
-        # not create any invoice or leave a partially-mutated Stripe
-        # subscription item behind.
+        # Snapshot after cancel — the rejected reprice below must not
+        # create any invoice, any task, or any membership row.
         before = await snapshot_billing_state(
             stripe_client,
             profile.stripe_customer_id,
             connect_opts,
         )
+        tasks_before = await _count_tasks(db_pool, gym_id)
 
-        with pytest.raises((ValueError, Exception)):
+        with pytest.raises(ValueError):
             await memberships_service.update_price(
                 item_id=item_id,
                 member_id=member.member_id,
-                idempotency_key=uuid4(),
             )
+
+        assert await _count_tasks(db_pool, gym_id) == tasks_before
+
+        await assert_no_unexpected_charges(
+            stripe_client,
+            before,
+            connect_opts,
+        )
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+async def test_update_price_noop_rejected_no_task(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """Already on the plan's active price → 400-style rejection, NO task."""
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
+
+    try:
+        item_id = await _start_and_get_item_id(
+            memberships_service,
+            db_pool,
+            member,
+            gym_id,
+            plan,
+        )
+        profile = await get_profile_stripe_ids(
+            db_pool,
+            member.member_id,
+            gym_id,
+        )
+        before = await snapshot_billing_state(
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
+        )
+        tasks_before = await _count_tasks(db_pool, gym_id)
+
+        with pytest.raises(ValueError, match="already on"):
+            await memberships_service.update_price(
+                item_id=item_id,
+                member_id=member.member_id,
+                prorate=True,
+            )
+
+        assert await _count_tasks(db_pool, gym_id) == tasks_before
+        row = await _get_membership_row(db_pool, item_id)
+        assert row["status"] == "applied"
+        assert row["cancel_date"] is None
 
         await assert_no_unexpected_charges(
             stripe_client,

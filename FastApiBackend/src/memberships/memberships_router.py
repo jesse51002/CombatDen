@@ -21,6 +21,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsStartResponse,
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
+    MemberMembershipsUpdatePriceResponse,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -30,6 +31,7 @@ from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
 from src.shared.auth import Auth, security
+from src.tasks.tasks_exceptions import MembershipInTaskError
 
 logger = logging.getLogger(__name__)
 
@@ -336,19 +338,24 @@ async def start_membership(
 
 @member_memberships_router.put(
     "/price",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Upgrade membership to the plan's current price",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=MemberMembershipsUpdatePriceResponse,
+    summary="Reprice membership to the plan's current price",
     description=(
-        "Moves a membership onto its plan's currently active "
-        "price. Swaps the old price for the active one in "
-        "Stripe, then updates the CRM row. If the membership "
-        "is already on the active price, no CRM update occurs "
-        "but Stripe is still re-synced defensively."
+        "Requests moving a membership onto its plan's currently active "
+        "price. The reprice runs as a tracked background task "
+        "(cancel-old-row + insert-successor + Stripe converge); this "
+        "returns the task_id immediately — poll GET /api/v1/tasks/{task_id} "
+        "until terminal. A membership already on the active price is "
+        "rejected (400); a membership already inside an unfinished task is "
+        "rejected (409)."
     ),
     responses={
-        204: {"description": "Price updated successfully"},
+        202: {"description": "Reprice accepted; poll the returned task"},
+        400: {"description": "Invalid request (incl. already on the price)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {"description": "Membership is inside an unfinished task"},
     },
 )
 @inject
@@ -359,8 +366,8 @@ async def update_membership_price(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> None:
-    """Upgrade a membership to its plan's currently active price.
+) -> MemberMembershipsUpdatePriceResponse:
+    """Request a reprice onto the plan's active price (202 + task_id).
 
     Args:
         request: Update price request with prorate flag.
@@ -372,12 +379,17 @@ async def update_membership_price(
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        await memberships_service.update_price(
+        task_id = await memberships_service.update_price(
             item_id=request.item_id,
             member_id=request.member_id,
-            idempotency_key=request.idempotency_key,
             prorate=request.prorate,
         )
+        return MemberMembershipsUpdatePriceResponse(task_id=task_id)
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():

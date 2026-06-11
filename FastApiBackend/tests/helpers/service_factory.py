@@ -10,9 +10,14 @@ Standalone module — no pytest imports, no fixture dependencies.
 
 from dataclasses import dataclass
 
+from schema.task import TaskType
+
 from src.discounts.service.discounts_service import DiscountsService
 from src.members.service.management.members_management_service import (
     MembersManagementService,
+)
+from src.memberships.service.memberships_reprice_executor import (
+    MemberMembershipsRepriceExecutor,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -61,6 +66,8 @@ from src.sync.service.sync_one_time import (
 from src.sync.service.sync_service import (
     PaymentSyncService,
 )
+from src.tasks.service.tasks_executor import TasksExecutor
+from src.tasks.service.tasks_service import TasksService
 
 # ── Payment services namespace ──────────────────────────────────
 
@@ -204,6 +211,8 @@ def build_member_memberships_service(
         parent_resolver=parent_resolver,
     )
     discounts_svc = DiscountsService(db_pool)
+    tasks_svc = TasksService(db_pool)
+    tasks_executor = build_tasks_executor(db_pool, stripe_client)
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -214,6 +223,32 @@ def build_member_memberships_service(
         paying_lock,
         one_time_svc,
         discounts_svc,
+        tasks_svc,
+        tasks_executor,
+    )
+
+
+def build_tasks_executor(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> TasksExecutor:
+    """Build the tasks executor with the reprice handler registered.
+
+    Mirrors ``src/core/dependencies.py`` (tasks_executor).
+    """
+    gym_stripe_svc = GymStripeService(db_pool)
+    parent_resolver = BillingParentResolver(db_pool, gym_stripe_svc)
+    paying_lock = PayingMemberLock(db_pool, parent_resolver)
+    sync_svc = build_payment_sync_service(db_pool, stripe_client)
+    reprice_executor = MemberMembershipsRepriceExecutor(
+        db_pool=db_pool,
+        payment_sync_service=sync_svc,
+        gym_stripe_service=gym_stripe_svc,
+        paying_lock=paying_lock,
+    )
+    return TasksExecutor(
+        db_pool,
+        handlers={TaskType.membership_reprice: reprice_executor},
     )
 
 

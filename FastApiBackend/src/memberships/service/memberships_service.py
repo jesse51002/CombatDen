@@ -71,6 +71,8 @@ if TYPE_CHECKING:
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
+    from src.tasks.service.tasks_executor import TasksExecutor
+    from src.tasks.service.tasks_service import TasksService
 
 
 class MemberMembershipsService:
@@ -91,6 +93,8 @@ class MemberMembershipsService:
         paying_lock: PayingMemberLock,
         payment_sync_one_time: PaymentSyncOneTime,
         discounts_service: DiscountsService,
+        tasks_service: TasksService,
+        tasks_executor: TasksExecutor,
     ) -> None:
         # Every single-family lifecycle op is wrapped in the paying-parent
         # concurrency lock (held across its pre-sync + DB write + sync) so no two
@@ -131,7 +135,11 @@ class MemberMembershipsService:
             discounts_service=discounts_service,
             validation=self._start_validation,
         )
-        self._update_price = MemberMembershipsUpdatePrice(*deps)
+        self._update_price = MemberMembershipsUpdatePrice(
+            *deps,
+            tasks_service=tasks_service,
+            tasks_executor=tasks_executor,
+        )
         self._mark_paid_cash = MemberMembershipsMarkPaidCash(
             *deps,
             payment_service=payment_service,
@@ -258,17 +266,19 @@ class MemberMembershipsService:
         self,
         item_id: UUID,
         member_id: UUID,
-        idempotency_key: UUID,
         prorate: bool = False,
-    ) -> None:
-        """Upgrade a membership to its plan's currently active price."""
-        async with self._paying_lock.lock([member_id]):
-            await self._update_price.update_price(
-                item_id=item_id,
-                member_id=member_id,
-                idempotency_key=idempotency_key,
-                prorate=prorate,
-            )
+    ) -> UUID:
+        """Request a reprice onto the plan's active price; returns task_id.
+
+        NO lock wrap: this only validates and creates the tracked
+        ``membership_reprice`` task (fired in the background) — the task
+        executor takes the family lock itself when it runs.
+        """
+        return await self._update_price.request_update_price(
+            item_id=item_id,
+            member_id=member_id,
+            prorate=prorate,
+        )
 
     async def preview_update_price(
         self,

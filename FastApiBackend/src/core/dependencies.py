@@ -325,6 +325,8 @@ class DependencyInjector(containers.DeclarativeContainer):
         paying_lock=paying_member_lock,
         payment_sync_one_time=payment_sync_one_time,
         discounts_service=discounts_service,
+        tasks_service=tasks_service,
+        tasks_executor=tasks_executor,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────

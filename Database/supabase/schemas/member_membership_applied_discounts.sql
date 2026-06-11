@@ -101,6 +101,13 @@ DECLARE
     v_discount_type VARCHAR;
     v_today DATE;
 BEGIN
+    -- Preview-staged copies are transient hypotheticals (deleted in the
+    -- preview's cleanup, never billed) — they skip the gate AND never block
+    -- a real application.
+    IF NEW.stripe_sync_status = 'preview_add' THEN
+        RETURN NEW;
+    END IF;
+
     SELECT v.discount_id, d.discount_type
       INTO v_discount_id, v_discount_type
       FROM gym_discount_values_unfiltered v
@@ -119,6 +126,7 @@ BEGIN
               JOIN member_memberships_unfiltered mm
                 ON mm.item_id = a.item_id
              WHERE v2.discount_id = v_discount_id
+               AND a.stripe_sync_status <> 'preview_add'
                AND (a.end_date IS NULL OR a.end_date > v_today)
                AND (mm.cancel_date IS NULL OR mm.cancel_date > v_today)
         ) THEN
