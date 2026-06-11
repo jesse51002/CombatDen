@@ -1,26 +1,38 @@
-"""Start each member's current membership via the backend, grouped by family.
+"""Start each family's current memberships via the backend, one call per family.
 
-POST /api/v1/member_memberships/ creates the row in member_memberships AND a
-real Stripe subscription, writing the real stripe_item_id back before
-returning. The endpoint requires the member to already have a Stripe customer
-+ card on file (created in api_creation/members via PUT /card), so we only
-start memberships for members that were carded (i.e. not linked children).
+POST /api/v1/member_memberships/ starts EVERY membership in the request for a
+paying account's family in ONE call: the body carries the payer plus a list of
+per-member items ({member_id, price_id, discount_ids, custom_discounts}), and
+each membership's discounts land before the first charge. Each item creates a
+row in member_memberships AND its Stripe subscription item, writing the real
+stripe_item_id back. The endpoint requires every member to already have a Stripe
+customer + card on file (created in api_creation/members via PUT /card) and to
+already be LINKED to the payer (the start never links), so we keep the link
+step and only ever start carded members.
 
-The endpoint returns no row body, so we read the row back from
-member_memberships_unfiltered to pick up the server-generated item_id +
-stripe_item_id for downstream generators (invoices, pseudo-current rows).
+The endpoint returns a per-membership breakdown ({member_id, plan_id, status,
+item_id, error}) but no full row body, so for each created membership we read
+the row back from member_memberships_unfiltered to pick up the server-generated
+stripe_item_id / price_id / total_price for downstream generators (invoices,
+pseudo-current rows).
+
+A failed charge group comes back as ``failed`` RESULTS, not an HTTP error, so we
+check every result's status and hard-fail loudly with the full breakdown if any
+membership did not come back ``created``.
 
 Concurrency model — grouped by PAYING-PARENT FAMILY:
   The backend serializes billing ops per paying-parent family via a
-  non-reentrant lock with a short acquire timeout, and a membership sync can
+  non-reentrant lock with a short acquire timeout, and a membership start can
   take many seconds. So the unit of parallelism is the *family*: each family
-  runs its whole sequence sequentially on one worker (start the parent, link +
-  start each child, freeze, apply discounts), and ``run_concurrent`` runs
-  several families at once. Families have disjoint lock keys, so they never
-  contend; siblings within a family stay serial, so the lock never 409s.
+  runs its whole sequence sequentially on one worker (link each child, start the
+  whole family in one request, freeze, cancel any cancel-at-start memberships),
+  and ``run_concurrent`` runs several families at once. Families have disjoint
+  lock keys, so they never contend; the single start per family means the lock
+  is acquired once for the whole family, so it never 409s.
 
-Idempotent: if the member already has a live (not-cancelled, not-ended)
-membership, we reuse it (same plan) or cancel + recreate (reconcile path).
+Idempotent: if a member already has a live (not-cancelled, not-ended)
+membership, we reuse it (same plan) or cancel + recreate (reconcile path) before
+building the family's start request.
 """
 
 from __future__ import annotations
@@ -38,7 +50,7 @@ from api_creation.upsert import (
 )
 from concurrency import run_concurrent
 from constants import SEED_WORKERS
-from generators.members import CurrentMembership, MemberPlan
+from generators.members import MemberPlan
 from supabase import Client
 
 
@@ -76,64 +88,34 @@ def _record_from_row(member: MemberPlan, row: dict) -> CurrentMembershipRecord:
     )
 
 
-def _post_current(
+def _resolve_member(
     api: GymApiClient,
     client: Client,
     gym_id: uuid.UUID,
     member: MemberPlan,
-    current: CurrentMembership,
-) -> CurrentMembershipRecord:
-    payload: dict = {
-        "member_id": str(member.member_id),
-        "gym_id": str(gym_id),
-        "plan_id": str(current.plan.plan_id),
-        "price_id": str(current.plan.price_id),
-        "prorate": current.prorate,
-        "idempotency_key": str(uuid.uuid4()),
-    }
+) -> tuple[MemberPlan | None, CurrentMembershipRecord | None]:
+    """Decide what to do with one member's desired membership before the start.
 
-    api.post("/api/v1/member_memberships/", json=payload)
+    Returns ``(to_start, existing_record)`` where exactly one is non-None (or
+    both None if the member has no current plan):
 
-    # No-body response — read the row back so downstream generators get the
-    # real item_id + stripe_item_id.
-    resp = (
-        client.table("member_memberships_unfiltered")
-        .select("item_id,stripe_item_id,plan_id,price_id,total_price")
-        .eq("member_id", str(member.member_id))
-        .eq("gym_id", str(gym_id))
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if not resp.data:
-        raise RuntimeError(
-            f"member_memberships row not found after start for member_id={member.member_id}"
-        )
-    return _record_from_row(member, resp.data[0])
+    - ``(member, None)`` — needs a fresh start: include it in the family's start
+      request.
+    - ``(None, record)`` — already live on the same plan: reuse it, no API call.
 
-
-def _start_one(
-    api: GymApiClient,
-    client: Client,
-    gym_id: uuid.UUID,
-    member: MemberPlan,
-) -> CurrentMembershipRecord | None:
-    """Start one member's live membership (or reuse / reconcile an existing one).
-
-    Returns the record, or None if the member has no current plan. A child's
-    membership rides the parent's subscription, so the parent must already be
-    started and the child already linked before this is called for the child.
+    On a plan mismatch we cancel the old subscription here (reconcile path), then
+    return the member to be started fresh.
     """
     current = member.current
     if current is None or member.member_id is None:
-        return None
+        return None, None
 
     existing = find_live_membership(client, member.member_id, gym_id)
     if existing is not None:
         same_plan = uuid.UUID(existing["plan_id"]) == current.plan.plan_id
         if same_plan:
-            return _record_from_row(member, existing)
-        # Mismatch — cancel the old subscription, then create fresh.
+            return None, _record_from_row(member, existing)
+        # Mismatch — cancel the old subscription, then start fresh below.
         progress.log(
             f"    reconciling membership for {member.member_id}: "
             f"plan_id {existing['plan_id']} -> {current.plan.plan_id}"
@@ -147,20 +129,110 @@ def _start_one(
             },
         )
 
-    record = _post_current(api, client, gym_id, member, current)
+    return member, None
 
-    # A few members cancel right after signup (shows as cancelled in CRM).
-    if current.cancel_after_start:
-        api.delete(
-            "/api/v1/member_memberships/",
-            params={
-                "item_id": str(record.item_id),
-                "member_id": str(member.member_id),
-                "idempotency_key": str(uuid.uuid4()),
-            },
+
+def _start_item(member: MemberPlan) -> dict:
+    """One ``memberships`` item in the family start request.
+
+    The plan is derived server-side from ``price_id`` (a price belongs to exactly
+    one plan), so the item carries no plan_id. ``discount_ids`` are the pre-drawn
+    preset / linked discounts chosen in the sequential build phase
+    (generators.members._assign_discounts) and applied before the first charge.
+    """
+    current = member.current
+    assert current is not None and member.member_id is not None
+    return {
+        "member_id": str(member.member_id),
+        "price_id": str(current.plan.price_id),
+        "discount_ids": [str(d) for d in current.discount_ids],
+    }
+
+
+def _read_back_record(
+    client: Client,
+    gym_id: uuid.UUID,
+    member: MemberPlan,
+    item_id: uuid.UUID,
+) -> CurrentMembershipRecord:
+    """Read a just-started membership row back to build its downstream record.
+
+    The start breakdown returns item_id + plan_id but not the stripe_item_id /
+    price_id / total_price the invoice + pseudo-current generators need, so we
+    fetch the row by its server-generated ``item_id``.
+    """
+    resp = (
+        client.table("member_memberships_unfiltered")
+        .select("item_id,stripe_item_id,plan_id,price_id,total_price")
+        .eq("item_id", str(item_id))
+        .eq("gym_id", str(gym_id))
+        .limit(1)
+        .execute()
+    )
+    if not resp.data:
+        raise RuntimeError(
+            "member_memberships row not found after start for "
+            f"item_id={item_id} member_id={member.member_id}"
+        )
+    return _record_from_row(member, resp.data[0])
+
+
+def _start_family(
+    api: GymApiClient,
+    client: Client,
+    gym_id: uuid.UUID,
+    payer: MemberPlan,
+    to_start: list[MemberPlan],
+) -> list[CurrentMembershipRecord]:
+    """Start every ``to_start`` member's membership in ONE request, validate, read back.
+
+    Sends a single POST covering the whole family (payer's own items included),
+    hard-fails loudly if any result is not ``created`` (a failed charge group
+    surfaces as failed results, not an HTTP error), then reads each created row
+    back and applies any cancel-at-start cancellations.
+    """
+    if not to_start:
+        return []
+
+    by_member = {str(m.member_id): m for m in to_start}
+    payload: dict = {
+        "payer_member_id": str(payer.member_id),
+        "gym_id": str(gym_id),
+        "idempotency_key": str(uuid.uuid4()),
+        "memberships": [_start_item(m) for m in to_start],
+    }
+    response = api.post("/api/v1/member_memberships/", json=payload)
+    results = (response or {}).get("results", [])
+
+    failed = [r for r in results if r.get("status") != "created"]
+    if failed:
+        raise RuntimeError(
+            "membership start returned failed results for "
+            f"payer_member_id={payer.member_id} gym_id={gym_id}: {results}"
+        )
+    if len(results) != len(to_start):
+        raise RuntimeError(
+            "membership start result count mismatch for "
+            f"payer_member_id={payer.member_id}: sent {len(to_start)}, "
+            f"got {len(results)}: {results}"
         )
 
-    return record
+    records: list[CurrentMembershipRecord] = []
+    for result in results:
+        member = by_member[result["member_id"]]
+        item_id = uuid.UUID(result["item_id"])
+        records.append(_read_back_record(client, gym_id, member, item_id))
+        # A few members cancel right after signup (shows as cancelled in CRM).
+        if member.current is not None and member.current.cancel_after_start:
+            api.delete(
+                "/api/v1/member_memberships/",
+                params={
+                    "item_id": str(item_id),
+                    "member_id": str(member.member_id),
+                    "idempotency_key": str(uuid.uuid4()),
+                },
+            )
+    return records
 
 
 def _link_child(
@@ -168,10 +240,12 @@ def _link_child(
     child: MemberPlan,
     parent: MemberPlan,
 ) -> bool:
-    """Link a child to its paying parent. Runs after the parent membership is
-    started (the link endpoint requires the parent to have an active recurring
-    subscription) and before the child's own membership is started (so the
-    child's item rides the parent's subscription). Returns False if unresolved.
+    """Link a child to its paying parent. Runs BEFORE the family's start request
+    (the start never links, and a child's membership rides the parent's
+    subscription, so the link must already exist). The link endpoint is a pure DB
+    relationship change — it only requires the child to have no active recurring
+    membership and the parent to exist; it does NOT require the parent to be
+    billing yet. Returns False if unresolved.
     """
     if child.member_id is None or parent.member_id is None:
         return False
@@ -186,9 +260,12 @@ def _apply_freeze(client: Client, member: MemberPlan) -> None:
     """Set the account-level freeze window directly (root accounts only).
 
     Runs after the family's memberships are started (the backend rejects
-    starting a membership on a frozen account) and before discounts are applied
-    (so the discount re-sync pushes pause_collection). Children never carry a
-    freeze — they inherit the parent's window through the status view.
+    starting a membership on a frozen account). This is a direct DB write of the
+    freeze window only — it does NOT push pause_collection to Stripe (the
+    recurring sync leaves pause_collection to the explicit freeze/unfreeze
+    action), so the window only drives the CRM's derived `frozen` status via
+    the member_memberships_status view. Children never carry a freeze — they
+    inherit the parent's window through the status view.
     """
     if member.account_freeze_start is None or member.member_id is None:
         return
@@ -201,28 +278,6 @@ def _apply_freeze(client: Client, member: MemberPlan) -> None:
         "freeze_end_date": member.account_freeze_end.isoformat(),
     }
     diff_update(client, "members", "member_id", str(member.member_id), expected, existing)
-
-
-def _apply_discounts(api: GymApiClient, record: CurrentMembershipRecord) -> None:
-    """Apply this membership's pre-drawn discounts (re-syncs Stripe).
-
-    The 0-DISCOUNTS_PER_MEMBERSHIP_MAX distinct discount ids were chosen in the
-    sequential build phase (generators.members._assign_discounts) and stashed on
-    the CurrentMembership, so the concurrent pipeline only does I/O here. Sent in
-    ONE add call so the membership re-syncs once for the whole set.
-    """
-    current = record.member.current
-    if current is None or not current.discount_ids:
-        return
-    api.post(
-        "/api/v1/member_memberships/discounts/add",
-        json={
-            "item_id": str(record.item_id),
-            "member_id": str(record.member.member_id),
-            "discount_ids": [str(d) for d in current.discount_ids],
-            "idempotency_key": str(uuid.uuid4()),
-        },
-    )
 
 
 def build_families(members: list[MemberPlan]) -> list[Family]:
@@ -250,32 +305,35 @@ def process_family(
     gym_id: uuid.UUID,
     family: Family,
 ) -> list[CurrentMembershipRecord]:
-    """Run one family's full membership lifecycle sequentially.
+    """Run one family's membership creation sequentially.
 
-    Order matters and mirrors the pre-concurrency pipeline: start the paying
-    parent first (children ride its subscription), then for each child link it
-    and start its membership, then freeze the account (root only), then apply
-    every membership's discounts. All ops here touch a single family, so the
-    per-parent lock never contends; ``run_concurrent`` runs several families at
-    once.
+    Order matters: link each child to the payer first (the start never links,
+    and a child's item rides the payer's subscription), then start the WHOLE
+    family in ONE request (the payer's own membership plus every linked child's,
+    each item carrying its pre-drawn discounts, applied before the first charge),
+    then freeze the account (root only). Members already live on the same plan
+    are reused without an API call; a plan mismatch is reconciled (cancel old)
+    before the start. All ops here touch a single family, so the per-parent lock
+    never contends; ``run_concurrent`` runs several families at once.
     """
+    # Children must be linked before the start (the start never links, and the
+    # link endpoint requires the payer to be resolvable as their parent).
+    linked_children = [
+        child for child in family.children if _link_child(api, child, family.root)
+    ]
+
     records: list[CurrentMembershipRecord] = []
+    to_start: list[MemberPlan] = []
+    for member in [family.root, *linked_children]:
+        member_to_start, existing = _resolve_member(api, client, gym_id, member)
+        if existing is not None:
+            records.append(existing)
+        if member_to_start is not None:
+            to_start.append(member_to_start)
 
-    root_record = _start_one(api, client, gym_id, family.root)
-    if root_record is not None:
-        records.append(root_record)
-
-    for child in family.children:
-        if not _link_child(api, child, family.root):
-            continue
-        child_record = _start_one(api, client, gym_id, child)
-        if child_record is not None:
-            records.append(child_record)
+    records.extend(_start_family(api, client, gym_id, family.root, to_start))
 
     _apply_freeze(client, family.root)
-
-    for record in records:
-        _apply_discounts(api, record)
 
     return records
 

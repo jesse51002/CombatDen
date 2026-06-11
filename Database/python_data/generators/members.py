@@ -51,11 +51,11 @@ class CurrentMembership:
     """A live membership to start via the backend (real Stripe subscription).
 
     ``discount_ids`` is a pre-drawn set (0-DISCOUNTS_PER_MEMBERSHIP_MAX distinct
-    regular discounts) applied to this membership right after it is started, via
-    the backend apply path (POST /member_memberships/discounts/add). The draw
-    happens in the sequential build phase (``_assign_discounts``) so the random
-    choices stay deterministic and the concurrent creation pipeline only does
-    I/O.
+    regular discounts) sent as this membership's item in the family's single
+    start request (POST /member_memberships/), so the discounts land before the
+    first charge — no separate add call. The draw happens in the sequential build
+    phase (``_assign_discounts``) so the random choices stay deterministic and
+    the concurrent creation pipeline only does I/O.
     """
 
     plan: PlanRecord

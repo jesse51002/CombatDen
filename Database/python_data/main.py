@@ -142,10 +142,11 @@ def seed() -> None:
                 progress.log(f"  {len(history_rows)} historical rows")
 
             # Live memberships, concurrent BY FAMILY: each paying-parent family
-            # runs its sequence on one worker (start parent -> link + start each
-            # child -> freeze -> apply that membership's random discounts), and
-            # several families run at once. Families have disjoint per-parent
-            # lock keys, so concurrency never contends the billing lock.
+            # runs its sequence on one worker (link each child -> start the whole
+            # family in ONE request, each membership carrying its random discounts
+            # applied before the first charge -> freeze), and several families run
+            # at once. Families have disjoint per-parent lock keys, so concurrency
+            # never contends the billing lock.
             progress.log("Starting live memberships + discounts via API...")
             current_records = api_memberships.create_memberships(
                 api, client, gym_id, member_plans
