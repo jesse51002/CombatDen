@@ -7,7 +7,6 @@ single value→coupon mechanism shared by the recurring sync and one-time
 membership discounting.
 """
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from schema.gym_discount import DiscountMode
@@ -44,7 +43,6 @@ def _service() -> PaymentsStripeDiscountService:
     """A discount service with its Stripe I/O methods mocked."""
     svc = PaymentsStripeDiscountService(AsyncMock())
     svc.find_discount = AsyncMock()
-    svc.create_discount = AsyncMock()
     svc.delete_discount = AsyncMock()
     return svc
 
@@ -173,7 +171,6 @@ async def test_find_or_create_reuses_matching_coupon() -> None:
 
     assert result == "pct_1000_ongoing"
     svc.delete_discount.assert_not_awaited()
-    svc.create_discount.assert_not_awaited()
 
 
 async def test_find_or_create_replaces_mismatched_coupon() -> None:
@@ -185,15 +182,13 @@ async def test_find_or_create_replaces_mismatched_coupon() -> None:
     svc.find_discount.return_value = _coupon_resp(
         duration=StripeCouponDuration.forever, percentage_off=99.0
     )
-    svc.create_discount.return_value = SimpleNamespace(
-        stripe_coupon_id="pct_1000_ongoing"
-    )
+    svc._create_coupon = AsyncMock(return_value="pct_1000_ongoing")
 
     result = await svc.find_or_create_for_value(value, "acct_test")
 
     assert result == "pct_1000_ongoing"
     svc.delete_discount.assert_awaited_once()
-    svc.create_discount.assert_awaited_once()
+    svc._create_coupon.assert_awaited_once()
 
 
 async def test_find_or_create_creates_when_absent() -> None:
@@ -201,12 +196,10 @@ async def test_find_or_create_creates_when_absent() -> None:
     value = PaymentsCouponValue(discount_mode=DiscountMode.once, dollar_off=500)
     svc = _service()
     svc.find_discount.return_value = None
-    svc.create_discount.return_value = SimpleNamespace(
-        stripe_coupon_id="amt_500_once"
-    )
+    svc._create_coupon = AsyncMock(return_value="amt_500_once")
 
     result = await svc.find_or_create_for_value(value, "acct_test")
 
     assert result == "amt_500_once"
     svc.delete_discount.assert_not_awaited()
-    svc.create_discount.assert_awaited_once()
+    svc._create_coupon.assert_awaited_once()

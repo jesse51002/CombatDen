@@ -24,6 +24,10 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.stripe_assertions import snapshot_billing_state
 
@@ -48,12 +52,18 @@ async def test_start_one_time_with_cash(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
-            paid_with_cash=True,
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                paid_with_cash=True,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         async with db_pool.session() as session:
@@ -61,7 +71,7 @@ async def test_start_one_time_with_cash(
                 (
                     await session.execute(
                         text(
-                            "SELECT stripe_item_id FROM member_memberships "
+                            "SELECT stripe_one_time_invoice_id FROM member_memberships "
                             "WHERE member_id = :id AND plan_id = :plan_id"
                         ),
                         {
@@ -75,7 +85,7 @@ async def test_start_one_time_with_cash(
             )
 
         assert row is not None
-        stripe_invoice_id = row["stripe_item_id"]
+        stripe_invoice_id = row["stripe_one_time_invoice_id"]
         assert stripe_invoice_id is not None
 
         invoice = await stripe_client.client.v1.invoices.retrieve_async(
@@ -112,12 +122,18 @@ async def test_start_recurring_with_cash(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
-            paid_with_cash=True,
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                paid_with_cash=True,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         async with db_pool.session() as session:
@@ -207,11 +223,17 @@ async def test_mark_paid_cash_pays_open_invoice(
     try:
         # Normal recurring start — first invoice pays via the card.
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         async with db_pool.session() as session:
