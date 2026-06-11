@@ -3,7 +3,9 @@ import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
@@ -257,27 +259,35 @@ class MemberRepository {
 
   // ----- Member memberships -----
 
-  /// `POST /api/v1/member_memberships/`.
-  Future<void> startMembership(
+  /// `POST /api/v1/member_memberships/` — start a payer's
+  /// family memberships in one request. Returns the
+  /// per-membership created/failed breakdown (a 201 is NOT
+  /// success/fail — inspect each result).
+  Future<MemberMembershipsStartResponse> startMemberships(
     MemberMembershipsStartRequest req,
   ) async {
-    await _apiClient.post(
+    final response = await _apiClient.post(
       '/api/v1/member_memberships/',
       data: req.toJson(),
     );
+    return MemberMembershipsStartResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
-  /// `POST /api/v1/member_memberships/preview`.
-  Future<DueNowVsRecurringPreview?>
-      previewStartMembership(
+  /// `POST /api/v1/member_memberships/preview` — stage the
+  /// same start request (discounts included) and return the
+  /// three-way one-time / due-now / recurring split without
+  /// committing anything.
+  Future<MemberMembershipsStartPreview>
+      previewStartMemberships(
     MemberMembershipsStartRequest req,
   ) async {
     final response = await _apiClient.post(
       '/api/v1/member_memberships/preview',
       data: req.toJson(),
     );
-    if (response.data == null) return null;
-    return DueNowVsRecurringPreview.fromJson(
+    return MemberMembershipsStartPreview.fromJson(
       response.data as Map<String, dynamic>,
     );
   }

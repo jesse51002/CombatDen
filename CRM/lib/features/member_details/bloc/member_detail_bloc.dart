@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
@@ -33,7 +34,10 @@ class MemberDetailBloc
     on<LinkParentRequested>(_onLinkParent);
     on<UnlinkParentRequested>(_onUnlinkParent);
 
-    on<StartMembershipRequested>(_onStartMembership);
+    on<StartMembershipsRequested>(_onStartMemberships);
+    on<StartMembershipsCleared>(
+      _onStartMembershipsCleared,
+    );
     on<CancelMembershipRequested>(_onCancelMembership);
     on<UpdatePriceRequested>(_onUpdatePrice);
     on<FreezeAccountRequested>(_onFreezeAccount);
@@ -249,28 +253,58 @@ class MemberDetailBloc
 
   // ----- Membership mutations -----
 
-  Future<void> _onStartMembership(
-    StartMembershipRequested event,
+  /// The wizard's one mutation. Unlike [_runMutation] the
+  /// outcome must reach the wizard's results step, so the
+  /// breakdown (or the failure message) lands on the state
+  /// as `startResult` / `startError` instead of
+  /// `actionError` — the screen-level error dialog must not
+  /// swallow it while the wizard is open. The member detail
+  /// is refreshed even on a partial failure: some
+  /// memberships may have been created.
+  Future<void> _onStartMemberships(
+    StartMembershipsRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
-    final before = state;
-    final oldCount = before is MemberDetailLoaded
-        ? before.member.memberships.length
-        : 0;
-    await _runMutation(
-      actionLabel: 'Start membership',
-      emit: emit,
-      action: () =>
-          _repository.startMembership(event.request),
-    );
-    final after = state;
-    if (after is MemberDetailLoaded &&
-        after.member.memberships.length > oldCount) {
-      emit(after.copyWith(
-        currentMembershipIndex:
-            after.member.memberships.length - 1,
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isStartingMemberships: true,
+      clearStartOutcome: true,
+    ));
+    try {
+      final result =
+          await _repository.startMemberships(event.request);
+      final refreshed = await _repository.getMemberDetail(
+        s.member.memberId,
+      );
+      emit(s.copyWith(
+        member: refreshed,
+        isStartingMemberships: false,
+        startResult: result,
+        refreshToken: s.refreshToken + 1,
+      ));
+    } catch (e, stackTrace) {
+      log(
+        'Start memberships failed',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      emit(s.copyWith(
+        isStartingMemberships: false,
+        startError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
       ));
     }
+  }
+
+  void _onStartMembershipsCleared(
+    StartMembershipsCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearStartOutcome: true));
   }
 
   Future<void> _onCancelMembership(

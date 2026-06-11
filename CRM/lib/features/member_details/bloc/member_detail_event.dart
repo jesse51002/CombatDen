@@ -102,12 +102,24 @@ class UnlinkParentRequested extends MemberDetailEvent {
 
 // ----- Membership mutations -----
 
-class StartMembershipRequested extends MemberDetailEvent {
+/// Fire the one start-memberships POST (the wizard's PAY).
+/// The outcome lands on the loaded state as `startResult`
+/// (the per-membership breakdown) or `startError` (an HTTP
+/// 400 validation / transport failure) — the wizard's
+/// results step renders whichever arrives.
+class StartMembershipsRequested extends MemberDetailEvent {
   final MemberMembershipsStartRequest request;
-  const StartMembershipRequested(this.request);
+  const StartMembershipsRequested(this.request);
 
   @override
   List<Object?> get props => [request];
+}
+
+/// Clears the start-memberships outcome (result + error)
+/// when the wizard closes, so a later wizard run opens
+/// clean.
+class StartMembershipsCleared extends MemberDetailEvent {
+  const StartMembershipsCleared();
 }
 
 class CancelMembershipRequested extends MemberDetailEvent {

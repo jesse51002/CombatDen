@@ -1,60 +1,61 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
+
 part 'member_memberships_start_request.g.dart';
 
 /// Body for `POST /api/v1/member_memberships/` and its
 /// `/preview` counterpart.
 ///
-/// Mirrors the reshaped `MemberMembershipsStartRequest`:
-/// memberships are created discount-free — discounts are
-/// applied as immutable applied-discount rows afterward via
-/// the apply path (`PUT /discounts`), not threaded in at
-/// creation. The
-/// old `discount_ids` / `include_linked_discount` fields are
-/// gone.
+/// Mirrors the list-based backend
+/// `MemberMembershipsStartRequest`: one request starts a
+/// payer's family memberships together. The payer
+/// ([payerMemberId]) is identity-only — it need not appear
+/// in [memberships]; every non-payer member must ALREADY be
+/// linked to the payer. [prorate] applies to the recurring
+/// converge only; [paidWithCash] is request-level. The
+/// single [idempotencyKey] dedups both charge groups at
+/// Stripe on a client retry.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createFactory: false,
-  includeIfNull: false,
+  explicitToJson: true,
 )
 class MemberMembershipsStartRequest extends Equatable {
-  final String memberId;
+  final String payerMemberId;
   final String gymId;
-  final String planId;
-  final String priceId;
   final bool prorate;
   final bool paidWithCash;
   final String idempotencyKey;
+  final List<MemberMembershipsStartItem> memberships;
 
   const MemberMembershipsStartRequest({
-    required this.memberId,
+    required this.payerMemberId,
     required this.gymId,
-    required this.planId,
-    required this.priceId,
     required this.idempotencyKey,
+    required this.memberships,
     this.prorate = true,
     this.paidWithCash = false,
   });
 
   MemberMembershipsStartRequest copyWith({
-    String? memberId,
+    String? payerMemberId,
     String? gymId,
-    String? planId,
-    String? priceId,
     bool? prorate,
     bool? paidWithCash,
     String? idempotencyKey,
+    List<MemberMembershipsStartItem>? memberships,
   }) {
     return MemberMembershipsStartRequest(
-      memberId: memberId ?? this.memberId,
+      payerMemberId:
+          payerMemberId ?? this.payerMemberId,
       gymId: gymId ?? this.gymId,
-      planId: planId ?? this.planId,
-      priceId: priceId ?? this.priceId,
       prorate: prorate ?? this.prorate,
       paidWithCash: paidWithCash ?? this.paidWithCash,
       idempotencyKey:
           idempotencyKey ?? this.idempotencyKey,
+      memberships: memberships ?? this.memberships,
     );
   }
 
@@ -63,12 +64,11 @@ class MemberMembershipsStartRequest extends Equatable {
 
   @override
   List<Object?> get props => [
-        memberId,
+        payerMemberId,
         gymId,
-        planId,
-        priceId,
         prorate,
         paidWithCash,
         idempotencyKey,
+        memberships,
       ];
 }
