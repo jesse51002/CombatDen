@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 
@@ -35,6 +36,22 @@ class MemberDetailLoaded extends MemberDetailState {
   final bool isMutating;
   final String? actionError;
 
+  /// True while the wizard's start-memberships POST is in
+  /// flight. Separate from [isMutating] so the wizard's
+  /// results step owns its own loading treatment.
+  final bool isStartingMemberships;
+
+  /// The last start-memberships breakdown (per-membership
+  /// created/failed). Rendered by the wizard's results
+  /// step; cleared via [StartMembershipsCleared].
+  final MemberMembershipsStartResponse? startResult;
+
+  /// The last start-memberships failure (HTTP 400 message
+  /// or transport error). Kept off [actionError] so the
+  /// screen-level error dialog doesn't swallow it while
+  /// the wizard is open.
+  final String? startError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -50,6 +67,9 @@ class MemberDetailLoaded extends MemberDetailState {
     this.currentMembershipIndex = 0,
     this.isMutating = false,
     this.actionError,
+    this.isStartingMemberships = false,
+    this.startResult,
+    this.startError,
     this.refreshToken = 0,
   });
 
@@ -71,6 +91,10 @@ class MemberDetailLoaded extends MemberDetailState {
     bool? isMutating,
     String? actionError,
     bool clearActionError = false,
+    bool? isStartingMemberships,
+    MemberMembershipsStartResponse? startResult,
+    String? startError,
+    bool clearStartOutcome = false,
     int? refreshToken,
   }) {
     return MemberDetailLoaded(
@@ -85,6 +109,14 @@ class MemberDetailLoaded extends MemberDetailState {
       actionError: clearActionError
           ? null
           : (actionError ?? this.actionError),
+      isStartingMemberships: isStartingMemberships ??
+          this.isStartingMemberships,
+      startResult: clearStartOutcome
+          ? null
+          : (startResult ?? this.startResult),
+      startError: clearStartOutcome
+          ? null
+          : (startError ?? this.startError),
       refreshToken: refreshToken ?? this.refreshToken,
     );
   }
@@ -98,6 +130,9 @@ class MemberDetailLoaded extends MemberDetailState {
         currentMembershipIndex,
         isMutating,
         actionError,
+        isStartingMemberships,
+        startResult,
+        startError,
         refreshToken,
       ];
 }

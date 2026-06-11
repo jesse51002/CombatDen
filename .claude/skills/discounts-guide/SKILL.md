@@ -9,8 +9,8 @@ description: >-
   written back to Stripe. Load this whenever you touch
   anything discount-shaped: gym_discounts / gym_discount_values, the
   member_membership_applied_discounts rows, the apply/remove path
-  (MemberMembershipsUpdateDiscounts), the build-time coupon computation
-  (PaymentSyncDiscounts / PaymentSyncCoupons), the once/ongoing lifetime +
+  (MemberMembershipsDiscounts), the build-time coupon computation
+  (PaymentSyncDiscounts), the once/ongoing lifetime +
   end_date, the per-membership-sequential percent math, or the CRM discount UI.
   Trigger on "discount", "coupon", "discount version", "apply a discount",
   "once vs ongoing", "end_date", "percent off / dollar off", "why did this
@@ -146,8 +146,9 @@ value mints a new active version on the same discount, so the stored id stays
 stable.
 
 **Applying** a linked discount is the same as any discount: the membership/family
-flow passes its id to `add_discounts` (`preset_ids`), which pins an applied-discount
-row to the discount's **active** value version. Editing the linked discount mints a new
+flow passes its id in `discount_ids` (to the start op at creation, or to
+`add_discounts` post-creation), which pins an applied-discount row to the
+discount's **active** value version. Editing the linked discount mints a new
 version, so future family applications get it — like a regular discount. The
 `linked` tag keeps it out of the regular per-membership discount picker (which
 lists only `preset`); family billing via `members.account_linked_to_id` is
@@ -160,6 +161,54 @@ membership's billing is determined from that member's own memberships only.
 
 ---
 
+## Custom discounts — minted at membership creation, one-shot, single-owner
+
+A `custom` discount is an **inline value minted by the start op** (the one
+list-based membership-create flow — `memberships-guide`): each item in the start
+request carries `custom_discounts` (a list of `DiscountValue`s), and
+`DiscountsService.mint_custom_discounts(gym_id, values)` — the one home for the
+`DiscountValue` → discount conversion (auto-generated name like
+"Custom 10.0% off" + `custom` type) — creates one identity + one value version
+per entry and returns **plain discount ids**. The start then applies those ids
+(alongside the item's `discount_ids`) exactly like presets, pinning the active
+value version, **at creation, before the charge** — so the first (one-time: the
+only) invoice is discounted.
+**DiscountsService never touches applied-discount rows** — it owns only
+`gym_discounts` / `gym_discount_values`.
+
+The custom lifecycle is **mint → apply once → archive**, and it is **explicit
+in the DB** (migration `20260610120000_custom_discount_single_use`):
+
+- `trg_custom_discount_single_value` (`gym_discount_values`) — a custom can
+  never get a second value version (no re-versioning).
+- `trg_custom_discount_single_application`
+  (`member_membership_applied_discounts`) — a custom's value can never be
+  applied to a second membership.
+
+Service guards mirror the triggers with clean errors: `update_discount`
+rejects a `custom` outright (no rename, no value edit), and the public apply
+path rejects custom ids (`add_applied_discounts` defaults
+`allow_custom=False`; only the membership flow that just minted the custom
+passes `allow_custom=True`). So `POST /member_memberships/discounts/add` can
+never attach someone's minted custom to another membership.
+
+**Why:** single-failure cleanup is completely safe. When a start fails after
+minting, the revert deletes the applied rows, archives the minted customs, and
+deletes the pending membership — and the DB guarantees no other member can
+possibly hold those customs.
+
+### One-time / trial discounts are creation-only
+
+A non-recurring (`one_time` / `trial`) membership's discounts can **only** be
+applied at **creation**, by the start op (its `discount_ids` + inline
+`custom_discounts`, applied before the one consolidated invoice). The
+post-creation `add_discounts` path **rejects a non-recurring membership** outright
+(`MemberMembershipsDiscounts._validate_apply` raises "its single invoice is
+already charged, so discounts can only be applied at creation") — there is no
+later invoice to discount, and the one-time charge is terminal. So a one-time /
+trial membership's discount set is fixed at start; only **recurring** memberships
+take post-creation add/remove (§4).
+
 ## 4. Coupons are computed at build, then written back (real path only)
 
 *This section is the discount-side summary. The full sync engine — the
@@ -170,7 +219,7 @@ in `payments-guide`.*
 
 Discounts store **intent**; **no Stripe coupon is pre-baked**. Coupons are
 resolved at **build time** by `PaymentSyncDiscounts.resolve`
-(`payment_sync/payment_sync_discounts.py`), which the builder calls while
+(`src/sync/service/sync_discounts.py`), which the builder calls while
 assembling the desired subscription bucket — for **both** the real sync and
 preview, so preview reflects discounts. The build reads each family's active
 memberships **each carrying its applied discounts**
@@ -186,16 +235,17 @@ quantity `N`):
    dollars sum. (Math detail below.)
 2. **Find-or-create the coupon** on the gym's Connect account using a
    **deterministic per-account coupon ID** from the value signature
-   (`PaymentSyncCoupons.coupon_id`): `pct_<bps>_<mode>` (bps = basis points =
-   `round(percentage_off * 100)`) or `amt_<cents>_<mode>`. `PaymentSyncCoupons`
+   (`PaymentsStripeDiscountService.coupon_id_for_value`): `pct_<bps>_<mode>` (bps = basis points =
+   `round(percentage_off * 100)`) or `amt_<cents>_<mode>`. `PaymentsStripeDiscountService`
    owns the id scheme + a **validate-or-replace** check (delete + recreate if the
    live Stripe coupon's value/duration drifts from the computed value — Stripe
-   coupons are immutable), and **delegates all Stripe coupon I/O** (find / create
-   / delete) to `PaymentsStripeDiscountService` — the engine holds **no direct
-   Stripe SDK**. Creation passes the id, so a repeat/race collides and is treated
-   as "already exists" — idempotent, one coupon per distinct value reused, **no
-   coupon registry table.** `once` → a Stripe `once` coupon; `ongoing` → a Stripe
-   `forever` coupon (the `end_date` cutoff is enforced by *us*, never by Stripe).
+   coupons are immutable); `PaymentSyncDiscounts` calls it via
+   `find_or_create_for_value(PaymentsCouponValue(...), account)` — the engine holds
+   **no direct Stripe SDK**. Creation passes the id, so a repeat/race collides and
+   is treated as "already exists" — idempotent, one coupon per distinct value
+   reused, **no coupon registry table.** `once` → a Stripe `once` coupon;
+   `ongoing` → a Stripe `forever` coupon (the `end_date` cutoff is enforced by
+   *us*, never by Stripe).
 3. **Order percent before dollar** on the line so Stripe sequences percent→dollar
    (the `DISCOUNT_APPLICATION_ORDER` constant — percent-first lets each member's own
    discounted price reconcile to the consolidated line total without rescaling).
@@ -250,13 +300,13 @@ shared by both paths; the coupon-id *writeback* is real-sync-only. Intentional.
 ### Previewing an add or remove — staged, then always cleaned up
 
 Adding and removing are **two separate operations**, `add_discounts(item_id,
-member_id, preset_ids, idempotency_key, preview=False)` and
+member_id, discount_ids, idempotency_key, preview=False)` and
 `remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`
-(`MemberMembershipsUpdateDiscounts`). Each takes a **`preview` bool**. A preview
+(`MemberMembershipsDiscounts`). Each takes a **`preview` bool**. A preview
 must reflect the *proposed* change (not the current bill) yet leave **no permanent
 state**, so it **stages** through the `stripe_sync_status` enum:
 
-- **`add_discounts(preview=True)`** inserts the snapshot rows as **`preview_add`**,
+- **`add_discounts(preview=True)`** inserts the applied-discount rows as **`preview_add`**,
   runs the read-only preview build, then **deletes** them.
 - **`remove_discounts(preview=True)`** flips the target rows from `applied` to
   **`preview_remove`**, runs the preview build, then **reverts** them to `applied`.
@@ -356,21 +406,20 @@ re-applied on later cycles; changing the count while pending re-divides correctl
   `immutable_columns.py` (`GYM_DISCOUNT_VALUES`,
   `MEMBER_MEMBERSHIP_APPLIED_DISCOUNTS`).
 - **Preset CRUD (versioned, coupon-free, no cascade):**
-  `FastApiBackend/src/discounts/service/discounts/` (create = identity + first
+  `FastApiBackend/src/discounts/service/` — `discounts_create.py`, `discounts_update.py`, `discounts_delete.py`, `discounts_list.py` (create = identity + first
   active version; update = rename hits identity, value-edit mints a new active
   version; delete = archive `is_deleted`).
 - **Apply/remove:**
-  `FastApiBackend/src/member_memberships/service/memberships/member_memberships_update_discounts.py`
+  `FastApiBackend/src/memberships/service/memberships_discounts.py`
   + its SQL in `.../sql/applied_discounts/` (apply references the active
   `value_id`; regular discounts only).
-- **Build-time coupons:** `payment_sync/payment_sync_discounts.py`
+- **Build-time coupons:** `FastApiBackend/src/sync/service/sync_discounts.py`
   (`PaymentSyncDiscounts` — the discount math `_aggregate_line_values` + `resolve`
-  → `ResolvedDiscounts`), `payment_sync_coupons.py` (`PaymentSyncCoupons` — the
-  deterministic-id scheme + validate-or-replace, delegating Stripe I/O to
-  `PaymentsStripeDiscountService`). The `once` settle is
-  `payment_sync_once_discounts.py` (`PaymentSyncOnceDiscounts`); the coupon-id +
-  `applied`/`deleted` writeback is `payment_sync_writeback.py`
-  (`PaymentSyncWriteback`). Orchestrated by `payment_sync_service.py`
+  → `ResolvedDiscounts`; calls `PaymentsStripeDiscountService.find_or_create_for_value`
+  for the deterministic-id scheme + validate-or-replace). The `once` settle is
+  `sync_once_discounts.py` (`PaymentSyncOnceDiscounts`); the coupon-id +
+  `applied`/`deleted` writeback is `sync_writeback.py`
+  (`PaymentSyncWriteback`). Orchestrated by `sync_service.py`
   (`PaymentSyncService`).
 - **CRM member billing-detail read:**
   `FastApiBackend/src/members/sql/member_details/member_details.sql` aggregates

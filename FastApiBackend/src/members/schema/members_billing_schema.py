@@ -10,11 +10,11 @@ from schema.member_charge import ChargeKind, ChargeStatus
 from schema.member_invoice_line_item import LineItemType
 from schema.membership_plan import PlanType
 
-from src.member_memberships.schema.member_memberships_schema import (
-    MemberMembershipsAppliedDiscount,
-)
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
+)
+from src.memberships.memberships_schema import (
+    MemberMembershipsAppliedDiscount,
 )
 
 # ── Management Request / Response ────────────────────────────────
@@ -92,7 +92,7 @@ class BillingDiscountInfo(BaseModel):
     the ``invoice.paid`` webhook captures from Stripe. It is deliberately
     coupon-only (the Stripe coupon id + the dollars it took off this invoice),
     NOT linked back to a CRM discount. Currently-applied membership discounts
-    use the snapshot model ``MemberMembershipsAppliedDiscount`` on
+    use the applied-discount model ``MemberMembershipsAppliedDiscount`` on
     ``BillingMembershipInfo.discounts``.
     """
 

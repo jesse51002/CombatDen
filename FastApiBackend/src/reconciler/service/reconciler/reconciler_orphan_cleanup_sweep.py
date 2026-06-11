@@ -15,7 +15,7 @@ from uuid import UUID
 from sqlalchemy import text
 
 from src.core.config import PAYING_MEMBER_LOCK_PREFIX
-from src.member_memberships import SQL_DIR as MEMBER_MEMBERSHIPS_SQL_DIR
+from src.memberships import SQL_DIR as MEMBERSHIPS_SQL_DIR
 from src.reconciler import SQL_DIR
 from src.reconciler.service.reconciler.reconciler_result import SweepResult
 from src.shared.billing_parent_resolver import BillingParentResolver
@@ -91,6 +91,9 @@ class OrphanCleanupSweep:
     async def _delete_orphan(self, item_id: UUID) -> None:
         """Hard-delete one pending row (reuses the guarded delete SQL)."""
         sql = load_sql(
-            MEMBER_MEMBERSHIPS_SQL_DIR / "member_memberships_delete_pending.sql",
+            MEMBERSHIPS_SQL_DIR / "member_memberships_delete_pending.sql",
         )
-        await self._db_pool.execute_with_retry(sql, {"item_id": str(item_id)})
+        await self._db_pool.execute_with_retry(
+            sql,
+            {"item_ids": [str(item_id)]},
+        )

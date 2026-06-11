@@ -270,6 +270,16 @@ class DesignConstants {
   // whether the title wraps to one line or two.
   static const double rewardCardTitleHeight = 42;
 
+  // Dialog sizing. The default dialog is a compact confirmation surface;
+  // the "wide" variant is a full workflow surface (multi-step wizards) that
+  // takes a generous fraction of the viewport — see AppDialog.expanded.
+  // Inside a wide dialog the step content keeps a readable measure
+  // (dialogContentMaxWidth) centered in the surface.
+  static const double dialogMaxWidth = 480.0;
+  static const double dialogMaxWidthWide = 1100.0;
+  static const double dialogHeightFractionWide = 0.88;
+  static const double dialogContentMaxWidth = 760.0;
+
   // Geist — the landing page's typeface (LandingPage/hifi/ds.jsx `sans`).
   static final TextStyle baseFont = GoogleFonts.geist(
     fontFeatures: const [FontFeature.tabularFigures()],
@@ -328,6 +338,10 @@ class DesignConstants {
   static TextStyle get pSmall => p.copyWith(fontSize: 11);
 
   static TextStyle get pSmallBold => pSmall.copyWith(fontWeight: FontWeight.w700);
+
+  static TextStyle get pSemibold => p.copyWith(fontWeight: FontWeight.w600);
+  static TextStyle get pSmallSemibold =>
+      pSmall.copyWith(fontWeight: FontWeight.w600);
 
   // Landing top-nav text: wordmark + nav links (chrome.jsx GWNav).
   static TextStyle get navWordmark => baseFont.copyWith(

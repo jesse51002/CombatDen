@@ -91,14 +91,14 @@ async def get_active_membership_item_id(
     return rows[0]["item_id"]
 
 
-async def get_applied_snapshots(
+async def get_applied_discounts(
     db_pool: DirectDatabasePool,
     item_id: UUID,
 ) -> list[dict]:
-    """Return the frozen applied-discount snapshot rows for a membership.
+    """Return the applied-discount rows for a membership.
 
     Reads the UNFILTERED base table (not the stripe-gated view) so a
-    just-applied snapshot is visible before the sync writes its coupon back.
+    just-applied row is visible before the sync writes its coupon back.
     Ordered by created_at for stable assertions.
     """
     sql = (

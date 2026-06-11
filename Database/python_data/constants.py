@@ -34,6 +34,10 @@ DISCOUNTS_PER_GYM = 10
 # At membership creation each live membership is given a random number of
 # distinct discounts from the gym's catalog, uniformly in [0, this] inclusive.
 DISCOUNTS_PER_MEMBERSHIP_MAX = 3
+# Probability that a live membership also receives one inline custom discount
+# (a one-shot DiscountValue minted at start, applied before the first charge).
+# Keep this modest so they're visible but not dominant.
+CUSTOM_DISCOUNT_PROBABILITY = 0.15
 OVERDUE_MEMBERS_PER_GYM = 2
 REWARDS_PER_GYM = 4
 EXTRA_EMPLOYEES_PER_GYM = 2

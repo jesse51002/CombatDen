@@ -310,11 +310,11 @@ async def create_discount(
     transaction — the IDENTITY row (``gym_discounts``: name + type) and its first
     ACTIVE value version (``gym_discount_values``: percent/dollar + lifetime).
     No Stripe coupon is pre-baked — the sync computes each consolidated line's
-    coupon and writes the resolved id back onto the applied snapshot. The
+    coupon and writes the resolved id back onto the applied-discount row. The
     lifetime spec is ``discount_mode`` (once/ongoing) plus either a duration span
     (duration_amount + duration_unit) or an explicit end_date — never both;
-    ``discount_mode`` defaults to ``ongoing`` with no end (forever). Applied
-    snapshots reference the returned ``value_id``.
+    ``discount_mode`` defaults to ``ongoing`` with no end (forever). Applied-
+    discount rows reference the returned ``value_id``.
     """
     discount_type = "preset"
 

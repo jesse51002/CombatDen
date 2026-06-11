@@ -14,7 +14,7 @@ from src.discounts.schema.discounts_schema import (
     DiscountResponse,
     DiscountUpdateRequest,
 )
-from src.discounts.service.discounts.discounts_service import DiscountsService
+from src.discounts.service.discounts_service import DiscountsService
 from src.shared.auth import Auth, security
 
 logger = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ async def create_discount(
     summary="Update a discount preset",
     description=(
         "Edits a gym discount preset's intent and lifetime spec. Edits affect "
-        "only future applications; existing applied-discount snapshots are "
+        "only future applications; existing applied-discount rows are "
         "untouched."
     ),
     responses={
@@ -197,7 +197,7 @@ async def update_discount(
     summary="Archive a discount preset",
     description=(
         "Archives a discount preset (soft-delete). Existing applied-discount "
-        "snapshots keep their frozen copy, so member bills are unchanged."
+        "rows keep their frozen copy, so member bills are unchanged."
     ),
     responses={
         204: {"description": "Discount archived successfully"},

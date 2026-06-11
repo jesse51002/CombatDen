@@ -9,14 +9,13 @@ part of 'member_memberships_start_request.dart';
 Map<String, dynamic> _$MemberMembershipsStartRequestToJson(
   MemberMembershipsStartRequest instance,
 ) => <String, dynamic>{
-  'stringify': ?instance.stringify,
+  'stringify': instance.stringify,
   'hash_code': instance.hashCode,
-  'member_id': instance.memberId,
+  'payer_member_id': instance.payerMemberId,
   'gym_id': instance.gymId,
-  'plan_id': instance.planId,
-  'price_id': instance.priceId,
   'prorate': instance.prorate,
   'paid_with_cash': instance.paidWithCash,
   'idempotency_key': instance.idempotencyKey,
+  'memberships': instance.memberships.map((e) => e.toJson()).toList(),
   'props': instance.props,
 };

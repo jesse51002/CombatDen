@@ -195,7 +195,7 @@ do not bake in assumptions that only colour and text vary.
 
 - **Mock data is co-located with its feature**: `lib/features/<feature>/data/mock_<thing>.dart`.
 - Use top-level `const` lists or simple factory functions returning realistic, varied data. Don't make every member named "John Doe" — give the demo screens enough texture to actually evaluate the design.
-- **Models are plain Dart classes.** No `fromJson`/`toJson` yet. Field names and types must match what the real API will eventually return (see `../Database/openapi.json` when it's relevant) so the swap to real repositories is mechanical.
+- **Models are plain Dart classes.** No `fromJson`/`toJson` yet. Field names and types must match what the real API will eventually return (see Pydantic schemas in `../FastApiBackend/src/<domain>/<domain>_schema.py` when relevant) so the swap to real repositories is mechanical.
 - **No callbacks for "save" / "submit" actions.** Buttons can be no-ops or `print` for now. Don't pretend the prototype has logic.
 - **No real loading/error/empty states wired to conditions that can't fire yet.** If a screen needs to demo those states, drive them from a hardcoded enum at the top of the screen file so they're easy to flip during a demo:
   ```dart

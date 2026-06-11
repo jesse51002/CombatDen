@@ -21,13 +21,13 @@ from uuid import UUID
 
 from sqlalchemy import text
 
-from src.member_memberships.service.payment_sync.payment_sync_service import (
-    PaymentSyncService,
-)
 from src.reconciler import SQL_DIR
 from src.reconciler.service.reconciler.reconciler_result import SweepResult
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
+from src.sync.service.sync_service import (
+    PaymentSyncService,
+)
 
 logger = logging.getLogger(__name__)
 

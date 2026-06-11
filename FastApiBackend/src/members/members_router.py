@@ -9,13 +9,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
-from src.member_memberships.schema.member_memberships_schema import (
-    MembersBillingLinkCheckResponse,
-    MembersBillingLinkRequest,
-)
-from src.member_memberships.service.memberships.member_memberships_service import (
-    MemberMembershipsService,
-)
 from src.members.schema.members_billing_schema import (
     BillingPaymentRecord,
     MemberBillingDetailResponse,
@@ -46,6 +39,13 @@ from src.members.service.member_details.members_billing_detail_service import (
 )
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
+)
+from src.memberships.memberships_schema import (
+    MembersBillingLinkCheckResponse,
+    MembersBillingLinkRequest,
+)
+from src.memberships.service.memberships_service import (
+    MemberMembershipsService,
 )
 from src.payments.payments_exceptions import PaymentsStripeError
 from src.payments.schema.payments_invoice_schema import (

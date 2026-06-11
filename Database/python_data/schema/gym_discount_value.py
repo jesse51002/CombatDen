@@ -18,7 +18,7 @@ class GymDiscountValueCreate(SeedModel):
 
     A gym_discounts identity owns one or more value versions. Editing a
     discount's value inserts a NEW active version (is_active=True) and
-    deactivates the old one — a permanent paper trail. Applied snapshots
+    deactivates the old one — a permanent paper trail. Applied-discount rows
     reference value_id, freezing a member's discount to the exact version.
 
     Lifetime spec: discount_mode (once | ongoing) plus, for ongoing, an end set

@@ -3,13 +3,13 @@
 Presets are now plain gym config split across two tables: the IDENTITY
 (``gym_discounts``: name + type) and its versioned, immutable VALUE rows
 (``gym_discount_values``: percent/dollar + lifetime). Create/update/delete never
-touch Stripe (coupons are computed at sync and written back onto the applied
-snapshot). Editing a value mints a NEW active version; archiving (is_deleted =
-true) or editing a preset never reaches across to a member's frozen snapshot
-(which is pinned to a specific ``value_id``).
+touch Stripe (coupons are computed at sync and written back onto the applied-
+discount row). Editing a value mints a NEW active version; archiving
+(is_deleted = true) or editing a preset never reaches across to a member's
+frozen applied-discount row (which is pinned to a specific ``value_id``).
 
 Requires a migrated local DB (gym_discounts identity + gym_discount_values +
-the applied-discount snapshot table). No Stripe account is needed.
+the member_membership_applied_discounts table). No Stripe account is needed.
 """
 
 from datetime import date
@@ -22,13 +22,31 @@ from schema.gym_discount import (
     DiscountType,
 )
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from src.discounts.schema.discounts_schema import (
     DiscountCreateRequest,
     DiscountUpdateIdentity,
     DiscountUpdateRequest,
-    DiscountUpdateValues,
+    DiscountValue,
 )
+from src.memberships.service.memberships_discounts import (
+    MemberMembershipsDiscounts,
+)
+
+
+async def _create_custom(discounts_service, gym_id, created, pct=10.0):
+    """Mint a `custom` discount the way the membership start flow does.
+
+    The public create rejects `custom` (one-shot inline values only), so the
+    helper uses the real mint path and returns the minted discount_id.
+    """
+    [discount_id] = await discounts_service.mint_custom_discounts(
+        gym_id,
+        [DiscountValue(percentage_off=pct, discount_mode=DiscountMode.once)],
+    )
+    created.track_discount(discount_id)
+    return discount_id
 
 
 async def _row(db_pool, discount_id):
@@ -56,17 +74,19 @@ async def test_create_percentage_discount(discounts_service, db_pool, gym_id, cr
             gym_id=gym_id,
             discount_name="20% Off",
             discount_type=DiscountType.preset,
-            percentage_off=20.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=20.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(resp.discount_id)
 
     assert resp.discount_id is not None
     assert resp.discount_name == "20% Off"
-    assert resp.percentage_off == 20.0
-    assert resp.dollar_off is None
-    assert resp.discount_mode == DiscountMode.ongoing
+    assert resp.value.percentage_off == 20.0
+    assert resp.value.dollar_off is None
+    assert resp.value.discount_mode == DiscountMode.ongoing
     assert resp.is_deleted is False
 
     row = await _row(db_pool, resp.discount_id)
@@ -81,17 +101,19 @@ async def test_create_dollar_once_discount(discounts_service, gym_id, created):
             gym_id=gym_id,
             discount_name="$10 Off",
             discount_type=DiscountType.preset,
-            dollar_off=1000,
-            discount_mode=DiscountMode.once,
+            value=DiscountValue(
+                dollar_off=1000,
+                discount_mode=DiscountMode.once,
+            ),
         ),
     )
     created.track_discount(resp.discount_id)
 
-    assert resp.dollar_off == 1000
-    assert resp.percentage_off is None
-    assert resp.discount_mode == DiscountMode.once
-    assert resp.end_date is None
-    assert resp.duration_amount is None
+    assert resp.value.dollar_off == 1000
+    assert resp.value.percentage_off is None
+    assert resp.value.discount_mode == DiscountMode.once
+    assert resp.value.end_date is None
+    assert resp.value.duration_amount is None
 
 
 async def test_create_ongoing_with_duration_span(discounts_service, gym_id, created):
@@ -101,26 +123,25 @@ async def test_create_ongoing_with_duration_span(discounts_service, gym_id, crea
             gym_id=gym_id,
             discount_name="3-month 15% Off",
             discount_type=DiscountType.preset,
-            percentage_off=15.0,
-            discount_mode=DiscountMode.ongoing,
-            duration_amount=3,
-            duration_unit=DiscountDurationUnit.month,
+            value=DiscountValue(
+                percentage_off=15.0,
+                discount_mode=DiscountMode.ongoing,
+                duration_amount=3,
+                duration_unit=DiscountDurationUnit.month,
+            ),
         ),
     )
     created.track_discount(resp.discount_id)
 
-    assert resp.duration_amount == 3
-    assert resp.duration_unit == DiscountDurationUnit.month
-    assert resp.end_date is None
+    assert resp.value.duration_amount == 3
+    assert resp.value.duration_unit == DiscountDurationUnit.month
+    assert resp.value.end_date is None
 
 
 async def test_create_rejects_span_and_end_date_together(discounts_service, gym_id):
     """The lifetime is a span XOR an explicit end_date — never both."""
     with pytest.raises(ValueError, match="never both"):
-        DiscountCreateRequest(
-            gym_id=gym_id,
-            discount_name="Bad Lifetime",
-            discount_type=DiscountType.preset,
+        DiscountValue(
             percentage_off=10.0,
             discount_mode=DiscountMode.ongoing,
             duration_amount=2,
@@ -133,17 +154,19 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
     """Update renames the identity and mints a new active value version.
 
     The previous version's ``is_active`` flips, so ``_row`` (which joins the
-    active version) reflects the new value while older applied snapshots stay
-    pinned to their original ``value_id``. The request carries both an
-    ``identity`` (rename) and ``values`` (new version) sub-object.
+    active version) reflects the new value while older applied-discount rows
+    stay pinned to their original ``value_id``. The request carries both an
+    ``identity`` (rename) and a complete ``value`` (new version).
     """
     created_resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
             discount_name="Old Name",
             discount_type=DiscountType.preset,
-            percentage_off=15.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=15.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
@@ -153,13 +176,16 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
             discount_id=created_resp.discount_id,
             gym_id=gym_id,
             identity=DiscountUpdateIdentity(discount_name="New Name"),
-            values=DiscountUpdateValues(percentage_off=25.0),
+            value=DiscountValue(
+                percentage_off=25.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
 
     assert resp.discount_id == created_resp.discount_id
     assert resp.discount_name == "New Name"
-    assert resp.percentage_off == 25.0
+    assert resp.value.percentage_off == 25.0
 
     row = await _row(db_pool, created_resp.discount_id)
     assert row["discount_name"] == "New Name"
@@ -169,7 +195,7 @@ async def test_update_discount_edits_intent_only(discounts_service, db_pool, gym
 async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
     """An identity-only update renames in place and mints NO new version.
 
-    With ``values`` omitted, the active ``value_id`` must be untouched — the
+    With ``value`` omitted, the active ``value_id`` must be untouched — the
     rename never reaches across to the versioned value rows.
     """
     created_resp = await discounts_service.create_discount(
@@ -177,8 +203,10 @@ async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
             gym_id=gym_id,
             discount_name="Before",
             discount_type=DiscountType.preset,
-            percentage_off=12.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=12.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
@@ -193,7 +221,7 @@ async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
     )
 
     assert resp.discount_name == "After"
-    assert resp.percentage_off == 12.0
+    assert resp.value.percentage_off == 12.0
 
     after = await _row(db_pool, created_resp.discount_id)
     assert after["discount_name"] == "After"
@@ -203,14 +231,16 @@ async def test_update_rename_only(discounts_service, db_pool, gym_id, created):
 
 
 async def test_update_value_only(discounts_service, db_pool, gym_id, created):
-    """A values-only update mints a new version and preserves the name."""
+    """A value-only update mints a new version and preserves the name."""
     created_resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
             discount_name="Keep Name",
             discount_type=DiscountType.preset,
-            percentage_off=10.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=10.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
@@ -220,12 +250,15 @@ async def test_update_value_only(discounts_service, db_pool, gym_id, created):
         DiscountUpdateRequest(
             discount_id=created_resp.discount_id,
             gym_id=gym_id,
-            values=DiscountUpdateValues(percentage_off=30.0),
+            value=DiscountValue(
+                percentage_off=30.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
 
     assert resp.discount_name == "Keep Name"
-    assert resp.percentage_off == 30.0
+    assert resp.value.percentage_off == 30.0
 
     after = await _row(db_pool, created_resp.discount_id)
     assert after["discount_name"] == "Keep Name"
@@ -233,9 +266,9 @@ async def test_update_value_only(discounts_service, db_pool, gym_id, created):
     assert after["value_id"] != before["value_id"], "a value edit must mint a new active version"
 
 
-async def test_update_requires_identity_or_values(gym_id):
-    """The request must carry at least one of identity / values."""
-    with pytest.raises(ValueError, match="at least one of identity or values"):
+async def test_update_requires_identity_or_value(gym_id):
+    """The request must carry at least one of identity / value."""
+    with pytest.raises(ValueError, match="at least one of identity or value"):
         DiscountUpdateRequest(
             discount_id=uuid4(),
             gym_id=gym_id,
@@ -249,8 +282,10 @@ async def test_delete_discount_archives(discounts_service, db_pool, gym_id, crea
             gym_id=gym_id,
             discount_name="Archive Me",
             discount_type=DiscountType.preset,
-            percentage_off=5.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=5.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
@@ -266,30 +301,32 @@ async def test_delete_discount_archives(discounts_service, db_pool, gym_id, crea
     assert row["is_deleted"] is True
 
 
-async def test_archive_leaves_applied_snapshots_untouched(
+async def test_archive_leaves_applied_discounts_untouched(
     discounts_service, db_pool, gym_id, created
 ):
-    """Archiving a preset does NOT delete a member's frozen snapshot.
+    """Archiving a preset does NOT delete a member's frozen applied-discount row.
 
     Predictability: editing/deleting a preset never reaches across to an
-    existing member's applied-discount snapshot — the holder keeps it. We
-    stand up a membership + a regular snapshot pinned to the preset's active
-    value version, then archive the preset and assert the snapshot is intact.
+    existing member's applied-discount row — the holder keeps it. We stand up
+    a membership + an applied-discount row pinned to the preset's active value
+    version, then archive the preset and assert the row is intact.
     """
     created_resp = await discounts_service.create_discount(
         DiscountCreateRequest(
             gym_id=gym_id,
             discount_name="Held Discount",
             discount_type=DiscountType.preset,
-            percentage_off=10.0,
-            discount_mode=DiscountMode.ongoing,
+            value=DiscountValue(
+                percentage_off=10.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
         ),
     )
     created.track_discount(created_resp.discount_id)
 
     member_id = None
     try:
-        member_id, item_id, plan_id = await _seed_membership_with_snapshot(
+        member_id, item_id, plan_id = await _seed_membership_with_applied_discount(
             db_pool,
             gym_id,
             value_id=created_resp.value_id,
@@ -311,7 +348,7 @@ async def test_archive_leaves_applied_snapshots_untouched(
                 },
             )
             n = result.mappings().fetchone()["n"]
-        assert n == 1, "Archiving the preset must not remove the holder's snapshot"
+        assert n == 1, "Archiving the preset must not remove the holder's applied-discount row"
     finally:
         if member_id is not None:
             await _delete_seeded_membership(db_pool, member_id)
@@ -320,11 +357,12 @@ async def test_archive_leaves_applied_snapshots_untouched(
 # ── Local seed helpers (DB-only; no Stripe needed) ───────────────────
 
 
-async def _seed_membership_with_snapshot(db_pool, gym_id, value_id):
-    """Insert a member + membership + one applied-discount snapshot.
+async def _seed_membership_with_applied_discount(db_pool, gym_id, value_id):
+    """Insert a member + membership + one applied-discount row.
 
-    The snapshot is pinned to ``value_id`` (the discount's active version) —
-    the provenance/version tag in the new model. Returns (member, item, plan).
+    The applied-discount row is pinned to ``value_id`` (the discount's active
+    version) — the provenance/version tag in the new model. Returns
+    (member, item, plan).
     """
     async with db_pool.session() as session:
         member_row = await session.execute(
@@ -414,3 +452,162 @@ async def _delete_seeded_membership(db_pool, member_id):
             {"id": str(member_id)},
         )
         await session.commit()
+
+
+# ── Custom discounts are one-shot + single-owner ─────────────────────
+
+
+async def test_create_rejects_custom_discount(discounts_service, gym_id):
+    """The public create NEVER makes a `custom` discount.
+
+    Customs are one-shot inline values minted only by the membership start
+    flow (mint_custom_discounts) — a catalog entry of type `custom` is
+    rejected at the service, so no API caller (CRM, seed) can create one.
+    """
+    with pytest.raises(ValueError, match="cannot be created directly"):
+        await discounts_service.create_discount(
+            DiscountCreateRequest(
+                gym_id=gym_id,
+                discount_name="Sneaky custom",
+                discount_type=DiscountType.custom,
+                value=DiscountValue(
+                    percentage_off=10.0,
+                    discount_mode=DiscountMode.once,
+                ),
+            ),
+        )
+
+
+
+async def test_update_rejects_custom_discount(discounts_service, gym_id, created):
+    """A custom discount is one-shot: any edit is rejected at the service.
+
+    Customs are mint -> apply once -> archive; a rename or a new value
+    version is never valid (the DB trigger enforces the value half too).
+    """
+    custom_id = await _create_custom(discounts_service, gym_id, created)
+
+    with pytest.raises(ValueError, match="one-shot"):
+        await discounts_service.update_discount(
+            DiscountUpdateRequest(
+                discount_id=custom_id,
+                gym_id=gym_id,
+                value=DiscountValue(
+                    percentage_off=20.0,
+                    discount_mode=DiscountMode.once,
+                ),
+            ),
+        )
+
+
+async def test_apply_rejects_custom_outside_membership_flow(
+    discounts_service, db_pool, gym_id, created
+):
+    """The public add path never applies a custom discount.
+
+    Customs are minted by a membership flow (start/batch) and applied only by
+    it (``allow_custom=True``). The default path — what the /discounts/add API
+    reaches — rejects a custom id, so a minted custom can never be attached to
+    another membership.
+    """
+    preset = await discounts_service.create_discount(
+        DiscountCreateRequest(
+            gym_id=gym_id,
+            discount_name="Guard Preset",
+            discount_type=DiscountType.preset,
+            value=DiscountValue(
+                percentage_off=5.0,
+                discount_mode=DiscountMode.ongoing,
+            ),
+        ),
+    )
+    created.track_discount(preset.discount_id)
+    custom_id = await _create_custom(discounts_service, gym_id, created)
+
+    member_id = None
+    try:
+        member_id, item_id, plan_id = await _seed_membership_with_applied_discount(
+            db_pool,
+            gym_id,
+            value_id=preset.value_id,
+        )
+        created.track_plan_db(plan_id)
+
+        # add_applied_discounts is pure DB, so the unused payment-sync /
+        # gym-stripe deps are stubbed with None for this guard test.
+        service = MemberMembershipsDiscounts(db_pool, None, None)
+        with pytest.raises(ValueError, match="single-use"):
+            await service.add_applied_discounts(
+                item_id=item_id,
+                member_id=member_id,
+                gym_id=gym_id,
+                discount_ids=[custom_id],
+                apply_date=date.today(),
+            )
+    finally:
+        if member_id is not None:
+            await _delete_seeded_membership(db_pool, member_id)
+
+
+async def test_db_rejects_second_value_version_for_custom(
+    discounts_service, db_pool, gym_id, created
+):
+    """DB trigger: a custom discount can never get a second value version.
+
+    Requires migration 20260610120000_custom_discount_single_use.
+    """
+    custom_id = await _create_custom(discounts_service, gym_id, created)
+
+    async with db_pool.session() as session:
+        with pytest.raises(DBAPIError, match="one-shot"):
+            await session.execute(
+                text(
+                    "INSERT INTO gym_discount_values_unfiltered "
+                    "(discount_id, gym_id, percentage_off, discount_mode, "
+                    " is_active) "
+                    "VALUES (:d, :g, 20.0, 'once', false)"
+                ),
+                {"d": str(custom_id), "g": str(gym_id)},
+            )
+
+
+async def test_db_rejects_second_application_for_custom(
+    discounts_service, db_pool, gym_id, created
+):
+    """DB trigger: a custom discount's value applies to at most ONE membership.
+
+    The first applied row (the membership flow's) inserts fine; any second row
+    referencing the custom's value dies at the DB — the boundary that makes
+    single-failure cleanup safe. Requires migration
+    20260610120000_custom_discount_single_use.
+    """
+    custom_id = await _create_custom(discounts_service, gym_id, created)
+    custom_value_id = (await _row(db_pool, custom_id))["value_id"]
+
+    member_id = None
+    try:
+        member_id, item_id, plan_id = await _seed_membership_with_applied_discount(
+            db_pool,
+            gym_id,
+            value_id=custom_value_id,  # first application — allowed
+        )
+        created.track_plan_db(plan_id)
+
+        async with db_pool.session() as session:
+            with pytest.raises(DBAPIError, match="single-use"):
+                await session.execute(
+                    text(
+                        "INSERT INTO member_membership_applied_discounts_unfiltered "
+                        "(item_id, member_id, gym_id, value_id) "
+                        "VALUES (:item_id, :member_id, :gym_id, :value_id)"
+                    ),
+                    {
+                        "item_id": str(item_id),
+                        "member_id": str(member_id),
+                        "gym_id": str(gym_id),
+                        "value_id": str(custom_value_id),
+                    },
+                )
+    finally:
+        if member_id is not None:
+            await _delete_seeded_membership(db_pool, member_id)

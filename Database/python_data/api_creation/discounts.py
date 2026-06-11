@@ -1,12 +1,13 @@
-"""Create gym discounts (preset | custom) via the backend.
+"""Create gym discounts (preset catalog) via the backend.
 
 The seed creates coupon-free discount presets: `POST /api/v1/discounts/` writes
 the identity row plus its active value version (coupons are computed at sync and
-written onto the applied snapshot, never on the preset). Each carries a lifetime
+written onto the applied-discount row, never on the preset). Each carries a lifetime
 spec — discount_mode (once | ongoing) plus, for ongoing, an end set by EITHER a
 duration span (duration_amount + duration_unit ∈ day/week/month) OR an explicit
 end_date — never both; neither = forever. The payload built here matches
-DiscountCreateRequest in FastApiBackend (verified against Database/openapi.json).
+DiscountCreateRequest in FastApiBackend (a nested ``value`` DiscountValue object;
+verify against Database/openapi.json).
 """
 
 from __future__ import annotations
@@ -52,16 +53,17 @@ DISCOUNT_NAMES = [
 
 
 def _parse_record(resp: dict) -> DiscountRecord:
+    value = resp["value"]
     return DiscountRecord(
         discount_id=uuid.UUID(resp["discount_id"]),
         discount_name=resp["discount_name"],
         discount_type=resp["discount_type"],
-        percentage_off=resp.get("percentage_off"),
-        dollar_off=resp.get("dollar_off"),
-        discount_mode=resp["discount_mode"],
-        duration_amount=resp.get("duration_amount"),
-        duration_unit=resp.get("duration_unit"),
-        end_date=resp.get("end_date"),
+        percentage_off=value.get("percentage_off"),
+        dollar_off=value.get("dollar_off"),
+        discount_mode=value["discount_mode"],
+        duration_amount=value.get("duration_amount"),
+        duration_unit=value.get("duration_unit"),
+        end_date=value.get("end_date"),
     )
 
 
@@ -82,7 +84,9 @@ def create_regular(
     for n, name in enumerate(names, start=1):
         progress.item(n, total, name)
         use_pct = random.choice([True, False])
-        discount_type = random.choices(["preset", "custom"], weights=[75, 25])[0]
+        # Catalog discounts are preset-only: `custom` is one-shot/single-owner,
+        # minted ONLY inline at membership start (the create API rejects it).
+        discount_type = "preset"
         discount_mode = random.choice(["once", "ongoing"])
         pct_off = round(random.uniform(5, 25), 1)
         dollar_off = random.randint(500, 5000)
@@ -98,19 +102,20 @@ def create_regular(
             records.append(existing)
             continue
 
+        value: dict = {"discount_mode": discount_mode}
+        if use_pct:
+            value["percentage_off"] = pct_off
+        else:
+            value["dollar_off"] = dollar_off
+        if duration_amount is not None:
+            value["duration_amount"] = duration_amount
+            value["duration_unit"] = duration_unit
         payload: dict = {
             "gym_id": str(gym_id),
             "discount_name": name,
             "discount_type": discount_type,
-            "discount_mode": discount_mode,
+            "value": value,
         }
-        if use_pct:
-            payload["percentage_off"] = pct_off
-        else:
-            payload["dollar_off"] = dollar_off
-        if duration_amount is not None:
-            payload["duration_amount"] = duration_amount
-            payload["duration_unit"] = duration_unit
 
         resp = api.post("/api/v1/discounts/", json=payload)
         assert resp is not None

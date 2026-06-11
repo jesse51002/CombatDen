@@ -73,13 +73,13 @@ String discountAmountLabel(DiscountResponse discount) =>
 /// "End Date / Length" column: an absolute end date, a duration
 /// span, or the once/ongoing mode.
 String discountLengthLabel(DiscountResponse discount) {
-  if (discount.endDate != null) {
-    return DateFormat('MMM d, y').format(discount.endDate!);
+  if (discount.value.endDate != null) {
+    return DateFormat('MMM d, y').format(discount.value.endDate!);
   }
-  final amount = discount.durationAmount;
-  final unit = discount.durationUnit?.displayLabel.toLowerCase();
+  final amount = discount.value.durationAmount;
+  final unit = discount.value.durationUnit?.displayLabel.toLowerCase();
   if (amount != null && unit != null) {
     return amount == 1 ? '1 $unit' : '$amount ${unit}s';
   }
-  return discount.discountMode.displayLabel;
+  return discount.value.discountMode.displayLabel;
 }

@@ -196,7 +196,7 @@ class TestUnauthenticated:
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "preset_ids": [_NULL_PLAN_ID],
+                "discount_ids": [_NULL_PLAN_ID],
                 "idempotency_key": _IKEY,
             },
         )
@@ -289,15 +289,15 @@ class TestValidation:
         missing_fields = {err["loc"][-1] for err in detail if err["type"] == "missing"}
         assert "plan_id" in missing_fields
 
-    def test_apply_preset_ids_duplicates_rejected(self, api):
-        """POST /discounts/add rejects duplicate UUIDs in preset_ids."""
+    def test_apply_discount_ids_duplicates_rejected(self, api):
+        """POST /discounts/add rejects duplicate UUIDs in discount_ids."""
         dup_id = str(uuid4())
         r = api.post(
             f"{BASE}/discounts/add",
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "preset_ids": [dup_id, dup_id],
+                "discount_ids": [dup_id, dup_id],
                 "idempotency_key": _IKEY,
             },
         )
@@ -306,13 +306,13 @@ class TestValidation:
         assert "duplicate" in detail_text.lower()
 
     def test_add_discounts_empty_request_rejected(self, api):
-        """POST /discounts/add with no preset_ids is a 422 (nothing to add)."""
+        """POST /discounts/add with no discount_ids is a 422 (nothing to add)."""
         r = api.post(
             f"{BASE}/discounts/add",
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "preset_ids": [],
+                "discount_ids": [],
                 "idempotency_key": _IKEY,
             },
         )
@@ -470,7 +470,7 @@ class TestNotFound:
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "preset_ids": [_NULL_PLAN_ID],
+                "discount_ids": [_NULL_PLAN_ID],
                 "idempotency_key": _idempotency_key(),
             },
         )
@@ -568,7 +568,7 @@ class TestPreviewPaths:
             json={
                 "item_id": _NULL_ITEM_ID,
                 "member_id": MEMBER_ID,
-                "preset_ids": [_NULL_PLAN_ID],
+                "discount_ids": [_NULL_PLAN_ID],
                 "idempotency_key": _IKEY,
                 "preview": True,
             },
@@ -582,7 +582,7 @@ class TestPreviewPaths:
             f"{BASE}/discounts/add",
             json={
                 "item_id": _NULL_ITEM_ID,
-                "preset_ids": [_NULL_PLAN_ID],
+                "discount_ids": [_NULL_PLAN_ID],
                 "idempotency_key": _IKEY,
                 "preview": True,
             },

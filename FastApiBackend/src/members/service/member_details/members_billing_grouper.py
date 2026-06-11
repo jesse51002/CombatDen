@@ -5,9 +5,6 @@ from datetime import date
 from uuid import UUID
 
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
-from src.member_memberships.schema.member_memberships_schema import (
-    MemberMembershipsAppliedDiscount,
-)
 from src.members.schema.members_billing_schema import (
     BillingMembershipInfo,
     BillingMembershipMemberInfo,
@@ -21,6 +18,9 @@ from src.members.service.member_details.members_billing_supplementary import (
 )
 from src.members.service.members_status_mapping import (
     is_membership_overdue,
+)
+from src.memberships.memberships_schema import (
+    MemberMembershipsAppliedDiscount,
 )
 from src.shared.formatters import format_minor_units
 
@@ -273,20 +273,20 @@ class MembersBillingGrouper:
         self,
         rows: list,
     ) -> list[MemberMembershipsAppliedDiscount]:
-        """Collect every active applied-discount snapshot across a plan's rows.
+        """Collect every active applied-discount row across a plan's rows.
 
         Each row carries an ``applied_discounts`` JSONB list built by
-        ``member_details.sql`` from the membership's applied-discount
-        snapshots (already filtered to currently-active ones), each
-        resolved to its pinned value version. Snapshots are item-scoped, so
-        they are NOT de-duplicated — the CRM groups them under each covered
-        member by ``item_id`` and removes one by ``applied_discount_id``.
+        ``member_details.sql`` from the membership's applied-discount rows
+        (already filtered to currently-active ones), each resolved to its
+        pinned value version. Applied-discount rows are item-scoped, so they
+        are NOT de-duplicated — the CRM groups them under each covered member
+        by ``item_id`` and removes one by ``applied_discount_id``.
 
         Args:
             rows: Membership rows sharing the same plan.
 
         Returns:
-            One MemberMembershipsAppliedDiscount per active snapshot.
+            One MemberMembershipsAppliedDiscount per active applied-discount row.
         """
         discounts: list[MemberMembershipsAppliedDiscount] = []
         for row in rows:
