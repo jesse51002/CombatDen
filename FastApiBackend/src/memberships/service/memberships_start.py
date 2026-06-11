@@ -153,8 +153,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
             StripeOrphanError: If Stripe succeeds but the DB
                 update fails after retries.
         """
-        plan_prices = await self._get_plan_prices(gym_id, [(plan_id, price_id)])
-        plan_price = plan_prices[(plan_id, price_id)]
+        plan_price = (await self._get_plan_prices(gym_id, [price_id]))[price_id]
+        if plan_price["plan_id"] != plan_id:
+            raise ValueError(
+                f"Plan/price not found: plan_id={plan_id}, "
+                f"price_id={price_id}, gym_id={gym_id}"
+            )
         await self._check_no_existing(member_id, gym_id, [plan_id])
 
         parent = await self._parent_resolver.resolve_parent(member_id)
@@ -318,8 +322,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
         Raises:
             ValueError: Same conditions as ``start``.
         """
-        plan_prices = await self._get_plan_prices(gym_id, [(plan_id, price_id)])
-        plan_price = plan_prices[(plan_id, price_id)]
+        plan_price = (await self._get_plan_prices(gym_id, [price_id]))[price_id]
+        if plan_price["plan_id"] != plan_id:
+            raise ValueError(
+                f"Plan/price not found: plan_id={plan_id}, "
+                f"price_id={price_id}, gym_id={gym_id}"
+            )
         await self._check_no_existing(member_id, gym_id, [plan_id])
 
         parent = await self._parent_resolver.resolve_parent(member_id)
@@ -408,12 +416,13 @@ class MemberMembershipsStart(MemberMembershipsBase):
     async def _validate_request(
         self,
         request: MemberMembershipsBatchStartRequest,
-    ) -> tuple[ParentProfile, dict[tuple[UUID, UUID], dict]]:
+    ) -> tuple[ParentProfile, dict[UUID, dict]]:
         """Run every up-front check; return the payer + plan/price rows.
 
         Returns:
             The resolved payer profile and the validated plan/price row per
-            ``(plan_id, price_id)`` pair — downstream phases reuse them
+            ``price_id`` (a price belongs to exactly one plan, so the row
+            carries the derived ``plan_id``) — downstream phases reuse them
             (timezone, price, plan_type, duration) without re-reading.
 
         Raises:
@@ -422,12 +431,10 @@ class MemberMembershipsStart(MemberMembershipsBase):
         parent = await self._resolve_payer(request)
         await self._check_links(request)
 
-        pairs = list({
-            (item.plan_id, item.price_id) for item in request.memberships
-        })
-        plan_prices = await self._get_plan_prices(request.gym_id, pairs)
-        for plan_id, price_id in pairs:
-            if not plan_prices[(plan_id, price_id)]["stripe_price_id"]:
+        price_ids = list({item.price_id for item in request.memberships})
+        plan_prices = await self._get_plan_prices(request.gym_id, price_ids)
+        for price_id in price_ids:
+            if not plan_prices[price_id]["stripe_price_id"]:
                 raise ValueError(
                     f"Plan price {price_id} missing stripe_price_id",
                 )
@@ -435,7 +442,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         plans_by_member: dict[UUID, list[UUID]] = {}
         for item in request.memberships:
             plans_by_member.setdefault(item.member_id, []).append(
-                item.plan_id,
+                plan_prices[item.price_id]["plan_id"],
             )
         for member_id, plan_ids in plans_by_member.items():
             await self._check_no_existing(
@@ -606,9 +613,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
         states = [
             _StartItemState(
                 member_id=item.member_id,
-                plan_id=item.plan_id,
+                plan_id=plan_prices[item.price_id]["plan_id"],
                 plan_type=PlanType(
-                    plan_prices[(item.plan_id, item.price_id)]["plan_type"],
+                    plan_prices[item.price_id]["plan_type"],
                 ),
             )
             for item in request.memberships
@@ -658,7 +665,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self,
         request: MemberMembershipsBatchStartRequest,
         parent: ParentProfile,
-        plan_prices: dict[tuple[UUID, UUID], dict],
+        plan_prices: dict[UUID, dict],
         states: list[_StartItemState],
     ) -> None:
         """Phase B (pure DB): pending rows + minted customs + discounts.
@@ -672,7 +679,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
         rows = []
         for item in request.memberships:
-            plan_price = plan_prices[(item.plan_id, item.price_id)]
+            plan_price = plan_prices[item.price_id]
             end_date: date | None = None
             is_recurring = (
                 PlanType(plan_price["plan_type"]) == PlanType.recurring
@@ -690,7 +697,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
             rows.append({
                 "member_id": item.member_id,
                 "gym_id": request.gym_id,
-                "plan_id": item.plan_id,
+                "plan_id": plan_price["plan_id"],
                 "price_id": item.price_id,
                 "start_date": start_date,
                 "end_date": end_date,

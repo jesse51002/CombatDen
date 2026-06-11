@@ -57,17 +57,17 @@ class MemberMembershipsStartRequest(BaseModel):
 
 
 class MemberMembershipsBatchStartItem(BaseModel):
-    """One membership to create inside a batch start.
+    """One membership to create inside a start request.
 
-    Per-membership discounts-at-creation, exactly like the single start:
-    ``discount_ids`` reference existing preset / linked discounts;
-    ``custom_discounts`` are inline values minted as ``custom`` discounts.
-    Both land before the charge, so the first (one-time: only) invoice is
-    discounted.
+    ``price_id`` alone identifies what is bought — a price belongs to
+    exactly one plan, so the plan is derived server-side from the price row
+    (no redundant plan field to mismatch). ``discount_ids`` reference
+    existing preset / linked discounts; ``custom_discounts`` are inline
+    values minted as ``custom`` discounts. Both land before the charge, so
+    the first (one-time: only) invoice is discounted.
     """
 
     member_id: UUID
-    plan_id: UUID
     price_id: UUID
     discount_ids: list[UUID] = []
     custom_discounts: list[DiscountValue] = []
@@ -103,10 +103,10 @@ class MemberMembershipsBatchStartRequest(BaseModel):
     ) -> list[MemberMembershipsBatchStartItem]:
         if not value:
             raise ValueError("memberships must not be empty")
-        pairs = [(item.member_id, item.plan_id) for item in value]
+        pairs = [(item.member_id, item.price_id) for item in value]
         if len(pairs) != len(set(pairs)):
             raise ValueError(
-                "memberships must not contain duplicate (member_id, plan_id) pairs",
+                "memberships must not contain duplicate (member_id, price_id) pairs",
             )
         return value
 

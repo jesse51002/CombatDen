@@ -132,38 +132,45 @@ class MemberMembershipsBase:
     async def _get_plan_prices(
         self,
         gym_id: UUID,
-        pairs: list[tuple[UUID, UUID]],
-    ) -> dict[tuple[UUID, UUID], dict]:
-        """Validate every (plan_id, price_id) pair is usable, in one read.
+        price_ids: list[UUID],
+    ) -> dict[UUID, dict]:
+        """Validate every price id is usable, in one read.
+
+        A price belongs to exactly one plan, so the price id alone
+        determines the joined plan/price row; the row carries its
+        (UUID-normalized) ``plan_id``.
 
         Returns:
-            The joined plan/price row per requested pair.
+            The joined plan/price row per requested price_id.
 
         Raises:
-            ValueError: If any pair is not found, its plan deleted, or its
-                price inactive (first offending pair).
+            ValueError: If any price is not found, its plan deleted, or the
+                price inactive (first offending price).
         """
         sql = load_sql(SQL_DIR / "member_memberships_get_plan_prices.sql")
         params = {
             "gym_id": str(gym_id),
-            "price_ids": [str(price_id) for _, price_id in pairs],
+            "price_ids": [str(price_id) for price_id in price_ids],
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
-            rows = {
-                (UUID(str(r["plan_id"])), UUID(str(r["price_id"]))): dict(r)
-                for r in result.mappings()
-            }
+            rows: dict[UUID, dict] = {}
+            for mapping in result.mappings():
+                row = dict(mapping)
+                row["plan_id"] = UUID(str(row["plan_id"]))
+                rows[UUID(str(row["price_id"]))] = row
 
-        for plan_id, price_id in pairs:
-            row = rows.get((plan_id, price_id))
+        for price_id in price_ids:
+            row = rows.get(price_id)
             if not row:
                 raise ValueError(
-                    f"Plan/price not found: plan_id={plan_id}, "
-                    f"price_id={price_id}, gym_id={gym_id}"
+                    f"Plan/price not found: price_id={price_id}, "
+                    f"gym_id={gym_id}"
                 )
             if row["plan_is_deleted"]:
-                raise ValueError(f"Plan is deleted: plan_id={plan_id}")
+                raise ValueError(
+                    f"Plan is deleted: plan_id={row['plan_id']}",
+                )
             if not row["price_is_active"]:
                 raise ValueError(f"Price is not active: price_id={price_id}")
         return rows
