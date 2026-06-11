@@ -147,6 +147,11 @@ class _StartMembershipsWizardState
         isPayer: true,
       );
       _payerDetail = viewed;
+      // The payer's own page already carries their detail, but the
+      // linked children's details still need fetching — without this
+      // the children's "Already has" block and already-on-plan guard
+      // silently have no data in the payer-launched flow.
+      _loadFamilyDetails(viewed);
     } else {
       final parents = viewed.linkedAccounts
           .where((a) => a.memberId == parentId);
