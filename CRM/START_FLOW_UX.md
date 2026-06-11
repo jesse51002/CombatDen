@@ -120,6 +120,28 @@ request containing only the failed items (new idempotency key).
 }
 ```
 
+## Placeholder / no-op convention (build rule)
+
+Every placeholder or deliberately-inert piece of THIS flow's frontend code
+must carry a comment at its code site marking it as a **known todo**, naming
+what unlocks it, and saying the comment is to be **deleted when the real
+feature is implemented**. Applies (at least) to:
+
+- the **count stepper** submit cap (unlocks with `PaymentRefactor.md` §10 —
+  duplicates become multiple purchases),
+- the **card wallet** fake data + "Add new" (unlocks with the pre-launch
+  multi-payment-method backend),
+- the **grayed-out payer options** in step 1 (unlock with
+  `PaymentRefactor.md` §7 — per-membership payers).
+
+Example shape:
+
+```dart
+// TODO(known placeholder): fake card list — real multi-card wallet ships
+// with the pre-launch payment-methods backend. DELETE this comment (and the
+// fake data) when implemented.
+```
+
 ## Backend constraints the UI must respect
 - Payer must be top-level (not linked to anyone) — enforce at step 1.
 - Every non-payer member must already be linked to the payer — enforce at step 2.
