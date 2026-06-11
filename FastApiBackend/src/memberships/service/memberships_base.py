@@ -129,112 +129,134 @@ class MemberMembershipsBase:
             await session.execute(text(sql), params)
             await session.commit()
 
-    async def _get_plan_price(
+    async def _get_plan_prices(
         self,
         gym_id: UUID,
-        plan_id: UUID,
-        price_id: UUID,
-    ) -> dict:
-        """Validate plan+price exist and are usable.
+        pairs: list[tuple[UUID, UUID]],
+    ) -> dict[tuple[UUID, UUID], dict]:
+        """Validate every (plan_id, price_id) pair is usable, in one read.
+
+        Returns:
+            The joined plan/price row per requested pair.
 
         Raises:
-            ValueError: If not found, plan deleted, or price inactive.
+            ValueError: If any pair is not found, its plan deleted, or its
+                price inactive (first offending pair).
         """
-        sql = load_sql(SQL_DIR / "member_memberships_get_plan_price.sql")
+        sql = load_sql(SQL_DIR / "member_memberships_get_plan_prices.sql")
         params = {
             "gym_id": str(gym_id),
-            "plan_id": str(plan_id),
-            "price_id": str(price_id),
+            "price_ids": [str(price_id) for _, price_id in pairs],
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
-            row = result.mappings().fetchone()
+            rows = {
+                (UUID(str(r["plan_id"])), UUID(str(r["price_id"]))): dict(r)
+                for r in result.mappings()
+            }
 
-        if not row:
-            raise ValueError(
-                f"Plan/price not found: plan_id={plan_id}, price_id={price_id}, gym_id={gym_id}"
-            )
-        if row["plan_is_deleted"]:
-            raise ValueError(f"Plan is deleted: plan_id={plan_id}")
-        if not row["price_is_active"]:
-            raise ValueError(f"Price is not active: price_id={price_id}")
-        return dict(row)
+        for plan_id, price_id in pairs:
+            row = rows.get((plan_id, price_id))
+            if not row:
+                raise ValueError(
+                    f"Plan/price not found: plan_id={plan_id}, "
+                    f"price_id={price_id}, gym_id={gym_id}"
+                )
+            if row["plan_is_deleted"]:
+                raise ValueError(f"Plan is deleted: plan_id={plan_id}")
+            if not row["price_is_active"]:
+                raise ValueError(f"Price is not active: price_id={price_id}")
+        return rows
 
     async def _check_no_existing(
         self,
         member_id: UUID,
         gym_id: UUID,
-        plan_id: UUID,
+        plan_ids: list[UUID],
     ) -> None:
-        """Ensure no active/frozen membership exists for this plan.
+        """Ensure ONE member has no active/frozen membership on these plans.
+
+        The check is inherently per-member: one member_id, batched only
+        across that member's requested plan ids.
 
         Raises:
-            ValueError: If an active or frozen membership already exists.
+            ValueError: If an active or frozen membership already exists on
+                any of the plans.
         """
         sql = load_sql(SQL_DIR / "member_memberships_check_existing.sql")
         params = {
             "member_id": str(member_id),
             "gym_id": str(gym_id),
-            "plan_id": str(plan_id),
+            "plan_ids": [str(plan_id) for plan_id in plan_ids],
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
-            exists = result.fetchone()
+            existing = {UUID(str(r[0])) for r in result.fetchall()}
 
-        if exists:
-            raise ValueError(
-                f"Active membership already exists: "
-                f"member_id={member_id}, gym_id={gym_id}, "
-                f"plan_id={plan_id}"
-            )
+        for plan_id in plan_ids:
+            if plan_id in existing:
+                raise ValueError(
+                    f"Active membership already exists: "
+                    f"member_id={member_id}, gym_id={gym_id}, "
+                    f"plan_id={plan_id}"
+                )
 
     async def _crm_insert(
         self,
-        member_id: UUID,
-        gym_id: UUID,
-        plan_id: UUID,
-        price_id: UUID,
-        start_date: date,
-        end_date: date | None,
-        last_paid_date: date | None,
-        next_due_date: date | None,
-        stripe_item_id: str | None,
-        prorate: bool,
-        total_price: int,
-        sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
-    ) -> UUID:
-        """Insert a new membership row. Returns the generated item_id.
+        rows: list[dict],
+    ) -> dict[tuple[UUID, UUID], UUID]:
+        """Insert membership rows in ONE multi-row statement.
 
-        ``sync_status`` defaults to ``not_added`` (the real start's pending row);
-        the start preview inserts ``preview_add`` so the dry-run sees it but the
-        real path never bills it.
+        Each row dict carries: member_id, gym_id, plan_id, price_id,
+        start_date, end_date, last_paid_date, next_due_date, stripe_item_id,
+        prorate, total_price, and optionally sync_status (default
+        ``not_added`` — the real start's pending row; the start preview
+        passes ``preview_add`` so the dry-run sees it but the real path
+        never bills it). All rows appear atomically, or none.
+
+        Returns:
+            The generated item_id per (member_id, plan_id) — unique within
+            a request (the request validator rejects duplicates).
         """
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
-            "member_id": str(member_id),
-            "gym_id": str(gym_id),
-            "plan_id": str(plan_id),
-            "price_id": str(price_id),
-            "start_date": start_date,
-            "end_date": end_date,
-            "last_paid_date": last_paid_date,
-            "next_due_date": next_due_date,
-            "stripe_item_id": stripe_item_id,
-            "prorate": prorate,
-            "total_price": total_price,
-            "sync_status": sync_status.value,
+            "member_ids": [str(r["member_id"]) for r in rows],
+            "gym_ids": [str(r["gym_id"]) for r in rows],
+            "plan_ids": [str(r["plan_id"]) for r in rows],
+            "price_ids": [str(r["price_id"]) for r in rows],
+            "start_dates": [r["start_date"] for r in rows],
+            "end_dates": [r["end_date"] for r in rows],
+            "last_paid_dates": [r["last_paid_date"] for r in rows],
+            "next_due_dates": [r["next_due_date"] for r in rows],
+            "stripe_item_ids": [r["stripe_item_id"] for r in rows],
+            "prorates": [r["prorate"] for r in rows],
+            "total_prices": [r["total_price"] for r in rows],
+            "sync_statuses": [
+                r.get("sync_status", StripeSyncStatus.not_added).value
+                for r in rows
+            ],
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
-            row = result.mappings().one()
+            ids = {
+                (UUID(str(r["member_id"])), UUID(str(r["plan_id"]))): UUID(
+                    str(r["item_id"]),
+                )
+                for r in result.mappings()
+            }
             await session.commit()
-        return row["item_id"]
+        return ids
 
-    async def _delete_pending(self, item_id: str) -> None:
-        """Hard-delete a pending membership row (NULL stripe_item_id)."""
+    async def _delete_pending(self, item_ids: list[UUID]) -> None:
+        """Hard-delete pending membership rows (NULL stripe_item_id)."""
+        if not item_ids:
+            return
         sql = load_sql(SQL_DIR / "member_memberships_delete_pending.sql")
         async with self._db_pool.session() as session:
-            await session.execute(text(sql), {"item_id": item_id})
+            await session.execute(
+                text(sql),
+                {"item_ids": [str(item_id) for item_id in item_ids]},
+            )
             await session.commit()
 
     # ── Static Helpers ─────────────────────────────────────────

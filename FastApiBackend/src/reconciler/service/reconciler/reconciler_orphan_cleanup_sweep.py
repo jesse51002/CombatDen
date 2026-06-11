@@ -93,4 +93,7 @@ class OrphanCleanupSweep:
         sql = load_sql(
             MEMBERSHIPS_SQL_DIR / "member_memberships_delete_pending.sql",
         )
-        await self._db_pool.execute_with_retry(sql, {"item_id": str(item_id)})
+        await self._db_pool.execute_with_retry(
+            sql,
+            {"item_ids": [str(item_id)]},
+        )

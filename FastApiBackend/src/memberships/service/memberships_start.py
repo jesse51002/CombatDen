@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from schema.gym_discount import DiscountType
 from schema.member_membership import StripeSyncStatus
@@ -19,6 +20,9 @@ from src.discounts.schema.discounts_schema import (
 from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsBatchStartRequest,
+    MemberMembershipsBatchStartResponse,
+    MemberMembershipsBatchStartResultItem,
+    MemberMembershipsBatchStartStatus,
 )
 from src.memberships.service.memberships_base import (
     MemberMembershipsBase,
@@ -60,6 +64,28 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+
+# The two charge groups derive their Stripe idempotency keys from the
+# request's single key, so a client retry of the same request dedups BOTH
+# charges at Stripe.
+ONE_TIME_KEY_NAME = "one_time"
+RECURRING_KEY_NAME = "recurring"
+
+
+@dataclass
+class _StartItemState:
+    """Per-item working state across the start phases (internal only)."""
+
+    member_id: UUID
+    plan_id: UUID
+    plan_type: PlanType
+    item_id: UUID | None = None
+    applied_ids: list[UUID] = field(default_factory=list)
+    minted_ids: list[UUID] = field(default_factory=list)
+    status: MemberMembershipsBatchStartStatus = (
+        MemberMembershipsBatchStartStatus.created
+    )
+    error: str | None = None
 
 
 class MemberMembershipsStart(MemberMembershipsBase):
@@ -127,8 +153,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
             StripeOrphanError: If Stripe succeeds but the DB
                 update fails after retries.
         """
-        plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
-        await self._check_no_existing(member_id, gym_id, plan_id)
+        plan_prices = await self._get_plan_prices(gym_id, [(plan_id, price_id)])
+        plan_price = plan_prices[(plan_id, price_id)]
+        await self._check_no_existing(member_id, gym_id, [plan_id])
 
         parent = await self._parent_resolver.resolve_parent(member_id)
         if parent.is_frozen:
@@ -157,19 +184,22 @@ class MemberMembershipsStart(MemberMembershipsBase):
             await self._pre_sync_payments(member_id)
 
         # ── Step 1: DB insert (NULL stripe_item_id) ───────────
-        item_id = await self._crm_insert(
-            member_id=member_id,
-            gym_id=gym_id,
-            plan_id=plan_id,
-            price_id=price_id,
-            start_date=start_date,
-            end_date=end_date,
-            last_paid_date=start_date,
-            next_due_date=None,
-            stripe_item_id=None,
-            prorate=prorate,
-            total_price=plan_price["price"],
-        )
+        inserted = await self._crm_insert([
+            {
+                "member_id": member_id,
+                "gym_id": gym_id,
+                "plan_id": plan_id,
+                "price_id": price_id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "last_paid_date": start_date,
+                "next_due_date": None,
+                "stripe_item_id": None,
+                "prorate": prorate,
+                "total_price": plan_price["price"],
+            },
+        ])
+        item_id = inserted[(member_id, plan_id)]
 
         # ── Discounts at creation (both paths) ────────────────
         # Mint any inline customs, then apply all presets (preset + minted)
@@ -200,7 +230,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 )
             for discount_id in minted_ids:
                 await self._discounts.delete_discount(discount_id)
-            await self._delete_pending(str(item_id))
+            await self._delete_pending([item_id])
 
         # ── Step 2: charge / sync ─────────────────────────────
         # Both paths are DB-first + verified: the pending row inserted above is
@@ -288,8 +318,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
         Raises:
             ValueError: Same conditions as ``start``.
         """
-        plan_price = await self._get_plan_price(gym_id, plan_id, price_id)
-        await self._check_no_existing(member_id, gym_id, plan_id)
+        plan_prices = await self._get_plan_prices(gym_id, [(plan_id, price_id)])
+        plan_price = plan_prices[(plan_id, price_id)]
+        await self._check_no_existing(member_id, gym_id, [plan_id])
 
         parent = await self._parent_resolver.resolve_parent(member_id)
         if parent.is_frozen:
@@ -311,25 +342,26 @@ class MemberMembershipsStart(MemberMembershipsBase):
             staged: list[UUID] = []
 
             async def _stage() -> None:
-                item_id = await self._crm_insert(
-                    member_id=member_id,
-                    gym_id=gym_id,
-                    plan_id=plan_id,
-                    price_id=price_id,
-                    start_date=start_date,
-                    end_date=None,
-                    last_paid_date=start_date,
-                    next_due_date=None,
-                    stripe_item_id=None,
-                    prorate=prorate,
-                    total_price=plan_price["price"],
-                    sync_status=StripeSyncStatus.preview_add,
-                )
-                staged.append(item_id)
+                inserted = await self._crm_insert([
+                    {
+                        "member_id": member_id,
+                        "gym_id": gym_id,
+                        "plan_id": plan_id,
+                        "price_id": price_id,
+                        "start_date": start_date,
+                        "end_date": None,
+                        "last_paid_date": start_date,
+                        "next_due_date": None,
+                        "stripe_item_id": None,
+                        "prorate": prorate,
+                        "total_price": plan_price["price"],
+                        "sync_status": StripeSyncStatus.preview_add,
+                    },
+                ])
+                staged.append(inserted[(member_id, plan_id)])
 
             async def _cleanup() -> None:
-                if staged:
-                    await self._delete_pending(str(staged[0]))
+                await self._delete_pending(staged)
 
             return await staged_preview(
                 stage_fn=_stage,
@@ -376,36 +408,42 @@ class MemberMembershipsStart(MemberMembershipsBase):
     async def _validate_request(
         self,
         request: MemberMembershipsBatchStartRequest,
-    ) -> dict[tuple[UUID, UUID], dict]:
-        """Run every up-front check; return each item's plan/price row.
+    ) -> tuple[ParentProfile, dict[tuple[UUID, UUID], dict]]:
+        """Run every up-front check; return the payer + plan/price rows.
 
         Returns:
-            The validated plan/price row per ``(member_id, plan_id)`` —
-            downstream phases reuse them (price, plan_type, duration)
-            without re-reading.
+            The resolved payer profile and the validated plan/price row per
+            ``(plan_id, price_id)`` pair — downstream phases reuse them
+            (timezone, price, plan_type, duration) without re-reading.
 
         Raises:
             ValueError: On the first failed check.
         """
-        await self._resolve_payer(request)
+        parent = await self._resolve_payer(request)
         await self._check_links(request)
 
-        plan_prices: dict[tuple[UUID, UUID], dict] = {}
-        for item in request.memberships:
-            plan_price = await self._get_plan_price(
-                request.gym_id, item.plan_id, item.price_id,
-            )
-            if not plan_price["stripe_price_id"]:
+        pairs = list({
+            (item.plan_id, item.price_id) for item in request.memberships
+        })
+        plan_prices = await self._get_plan_prices(request.gym_id, pairs)
+        for plan_id, price_id in pairs:
+            if not plan_prices[(plan_id, price_id)]["stripe_price_id"]:
                 raise ValueError(
-                    f"Plan price {item.price_id} missing stripe_price_id",
+                    f"Plan price {price_id} missing stripe_price_id",
                 )
-            await self._check_no_existing(
-                item.member_id, request.gym_id, item.plan_id,
+
+        plans_by_member: dict[UUID, list[UUID]] = {}
+        for item in request.memberships:
+            plans_by_member.setdefault(item.member_id, []).append(
+                item.plan_id,
             )
-            plan_prices[(item.member_id, item.plan_id)] = plan_price
+        for member_id, plan_ids in plans_by_member.items():
+            await self._check_no_existing(
+                member_id, request.gym_id, plan_ids,
+            )
 
         await self._check_discounts(request)
-        return plan_prices
+        return parent, plan_prices
 
     async def _resolve_payer(
         self,
@@ -543,6 +581,275 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     f"are single-use inline values (custom_discounts), never "
                     f"referenced by id",
                 )
+
+    # ── List-start Phases B–D (private machinery) ──────────────
+    #
+    # Unreachable until the public ``start`` swaps to the list signature.
+    # B = pure DB (one multi-row insert + per-item discounts; any failure
+    # undoes everything — nothing billed). C = the one one-time invoice
+    # charge. D = the one recurring converge. Failure granularity is the
+    # charge group (locked): a group's members share its fate, a failed
+    # group never touches the other group's billed rows, and a successful
+    # charge is NEVER un-billed.
+
+    async def _start_all(
+        self,
+        request: MemberMembershipsBatchStartRequest,
+    ) -> MemberMembershipsBatchStartResponse:
+        """Run the start end-to-end: validate, insert, charge, converge.
+
+        Raises:
+            ValueError: If Phase A validation fails (nothing written).
+        """
+        parent, plan_prices = await self._validate_request(request)
+
+        states = [
+            _StartItemState(
+                member_id=item.member_id,
+                plan_id=item.plan_id,
+                plan_type=PlanType(
+                    plan_prices[(item.plan_id, item.price_id)]["plan_type"],
+                ),
+            )
+            for item in request.memberships
+        ]
+        one_time = [
+            s for s in states if s.plan_type != PlanType.recurring
+        ]
+        recurring = [
+            s for s in states if s.plan_type == PlanType.recurring
+        ]
+
+        # Pre-sync only when a recurring converge will run: converge the
+        # payer's family to a clean DB↔Stripe baseline BEFORE inserting.
+        if recurring:
+            await self._pre_sync_payments(request.payer_member_id)
+
+        await self._insert_all(request, parent, plan_prices, states)
+
+        if one_time:
+            await self._charge_one_time_group(request, one_time)
+        if recurring:
+            await self._converge_recurring_group(request, recurring)
+
+        charge_count = (1 if one_time else 0) + (1 if recurring else 0)
+        return MemberMembershipsBatchStartResponse(
+            results=[
+                MemberMembershipsBatchStartResultItem(
+                    member_id=s.member_id,
+                    plan_id=s.plan_id,
+                    plan_type=s.plan_type,
+                    status=s.status,
+                    item_id=(
+                        s.item_id
+                        if s.status
+                        == MemberMembershipsBatchStartStatus.created
+                        else None
+                    ),
+                    error=s.error,
+                )
+                for s in states
+            ],
+            charge_count=charge_count,
+            multiple_charges=charge_count > 1,
+        )
+
+    async def _insert_all(
+        self,
+        request: MemberMembershipsBatchStartRequest,
+        parent: ParentProfile,
+        plan_prices: dict[tuple[UUID, UUID], dict],
+        states: list[_StartItemState],
+    ) -> None:
+        """Phase B (pure DB): pending rows + minted customs + discounts.
+
+        All membership rows land in ONE multi-row insert; each item's inline
+        customs are minted and its discounts applied before any charge. Any
+        failure here undoes everything inserted so far and re-raises —
+        nothing has been billed yet.
+        """
+        start_date = gym_today(parent.timezone)
+
+        rows = []
+        for item in request.memberships:
+            plan_price = plan_prices[(item.plan_id, item.price_id)]
+            end_date: date | None = None
+            is_recurring = (
+                PlanType(plan_price["plan_type"]) == PlanType.recurring
+            )
+            if (
+                not is_recurring
+                and plan_price["duration_amount"]
+                and plan_price["duration_unit"]
+            ):
+                end_date = self._calculate_end_date(
+                    start_date,
+                    plan_price["duration_amount"],
+                    plan_price["duration_unit"],
+                )
+            rows.append({
+                "member_id": item.member_id,
+                "gym_id": request.gym_id,
+                "plan_id": item.plan_id,
+                "price_id": item.price_id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "last_paid_date": start_date,
+                "next_due_date": None,
+                "stripe_item_id": None,
+                "prorate": request.prorate,
+                "total_price": plan_price["price"],
+            })
+
+        inserted = await self._crm_insert(rows)
+        for state in states:
+            state.item_id = inserted[(state.member_id, state.plan_id)]
+
+        try:
+            for item, state in zip(
+                request.memberships, states, strict=True,
+            ):
+                state.minted_ids = await self._discounts.mint_custom_discounts(
+                    request.gym_id, item.custom_discounts,
+                )
+                all_discount_ids = [*item.discount_ids, *state.minted_ids]
+                if all_discount_ids:
+                    state.applied_ids = (
+                        await self._update_discounts.add_applied_discounts(
+                            item_id=state.item_id,
+                            member_id=item.member_id,
+                            gym_id=request.gym_id,
+                            discount_ids=all_discount_ids,
+                            apply_date=start_date,
+                            # Minted by THIS start — the one flow allowed to
+                            # apply a custom (single-use, DB-enforced).
+                            allow_custom=True,
+                        )
+                    )
+        except Exception:
+            await self._cleanup_states(states)
+            raise
+
+    async def _charge_one_time_group(
+        self,
+        request: MemberMembershipsBatchStartRequest,
+        group: list[_StartItemState],
+    ) -> None:
+        """Phase C: ONE consolidated invoice sweeps the pending one-time rows.
+
+        The group shares the invoice's fate: an exception means nothing was
+        billed (per-step Stripe idempotency) → the whole group fails and is
+        cleaned up. After a successful charge an unconfirmed writeback marks
+        the row failed but KEEPS it — its line is billed; never un-bill.
+        """
+        try:
+            await self._payment_sync_one_time.charge_one_time(
+                request.payer_member_id,
+                idempotency_key=uuid5(
+                    request.idempotency_key, ONE_TIME_KEY_NAME,
+                ),
+                paid_with_cash=request.paid_with_cash,
+            )
+        except Exception as exc:
+            await self._fail_group(
+                group, f"one-time invoice failed: {exc}", cleanup=True,
+            )
+            return
+        await self._verify_group(group, keep_unverified=True)
+
+    async def _converge_recurring_group(
+        self,
+        request: MemberMembershipsBatchStartRequest,
+        group: list[_StartItemState],
+    ) -> None:
+        """Phase D: ONE recurring converge adds the pending recurring rows.
+
+        An exception fails and cleans the whole group (the engine re-derives
+        from the DB, so removing the pending rows is the revert). A row whose
+        writeback is unconfirmed is reverted too — the next converge or the
+        scheduled reconciler self-heals the Stripe side.
+        """
+        try:
+            await self._payment_sync.update_payments_recurring(
+                request.payer_member_id,
+                idempotency_key=uuid5(
+                    request.idempotency_key, RECURRING_KEY_NAME,
+                ),
+                pay_first_invoice_out_of_band=request.paid_with_cash,
+                proration_behavior=(
+                    "always_invoice" if request.prorate else "none"
+                ),
+            )
+        except Exception as exc:
+            await self._fail_group(
+                group, f"recurring sync failed: {exc}", cleanup=True,
+            )
+            return
+        await self._verify_group(group, keep_unverified=False)
+
+    async def _verify_group(
+        self,
+        group: list[_StartItemState],
+        keep_unverified: bool,
+    ) -> None:
+        """Verify each row's writeback flipped it to ``applied``.
+
+        ``keep_unverified=True`` (one-time): the charge succeeded, so an
+        unconfirmed row is marked failed but kept — its invoice line is
+        already billed and is never un-billed. ``False`` (recurring): the
+        row is reverted; the reconciler / next converge heals Stripe.
+        """
+        for state in group:
+            status = await self._get_sync_status(
+                state.item_id, state.member_id,
+            )
+            if status == StripeSyncStatus.applied:
+                continue
+            state.status = MemberMembershipsBatchStartStatus.failed
+            if keep_unverified:
+                state.error = (
+                    "charge succeeded but the sync writeback was not "
+                    "confirmed — row kept (billed lines are never "
+                    "un-billed); needs reconciliation"
+                )
+            else:
+                state.error = "sync writeback not confirmed — row reverted"
+                await self._cleanup_states([state])
+
+    async def _fail_group(
+        self,
+        group: list[_StartItemState],
+        error: str,
+        cleanup: bool,
+    ) -> None:
+        """Mark every state in the group failed; optionally clean its rows."""
+        for state in group:
+            state.status = MemberMembershipsBatchStartStatus.failed
+            state.error = error
+        if cleanup:
+            await self._cleanup_states(group)
+
+    async def _cleanup_states(
+        self,
+        states: list[_StartItemState],
+    ) -> None:
+        """Undo un-billed items: applied rows → minted customs → pending rows.
+
+        FK order matters (applied discounts RESTRICT on the membership row).
+        Only ever called for rows whose charge group did NOT bill.
+        """
+        for state in states:
+            if state.applied_ids:
+                await self._update_discounts.delete_applied_discounts(
+                    state.member_id, state.applied_ids,
+                )
+                state.applied_ids = []
+            for discount_id in state.minted_ids:
+                await self._discounts.delete_discount(discount_id)
+            state.minted_ids = []
+        await self._delete_pending(
+            [s.item_id for s in states if s.item_id is not None],
+        )
 
     async def _preview_one_time(
         self,
