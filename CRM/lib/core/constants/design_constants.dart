@@ -339,6 +339,10 @@ class DesignConstants {
 
   static TextStyle get pSmallBold => pSmall.copyWith(fontWeight: FontWeight.w700);
 
+  static TextStyle get pSemibold => p.copyWith(fontWeight: FontWeight.w600);
+  static TextStyle get pSmallSemibold =>
+      pSmall.copyWith(fontWeight: FontWeight.w600);
+
   // Landing top-nav text: wordmark + nav links (chrome.jsx GWNav).
   static TextStyle get navWordmark => baseFont.copyWith(
         fontWeight: FontWeight.w600,

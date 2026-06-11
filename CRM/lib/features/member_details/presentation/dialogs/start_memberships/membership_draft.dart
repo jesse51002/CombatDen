@@ -48,6 +48,29 @@ class MembershipDraft {
     );
   }
 
+  /// This draft with [discountId] toggled in or out of
+  /// the preset picks.
+  MembershipDraft withPresetToggled(String discountId) {
+    final ids = Set<String>.from(discountIds);
+    if (!ids.remove(discountId)) {
+      ids.add(discountId);
+    }
+    return copyWith(discountIds: ids);
+  }
+
+  /// This draft with [value] appended to the customs.
+  MembershipDraft withCustomAdded(DiscountValue value) =>
+      copyWith(
+        customDiscounts: [...customDiscounts, value],
+      );
+
+  /// This draft with the custom at [index] removed.
+  MembershipDraft withCustomRemovedAt(int index) {
+    final customs = List.of(customDiscounts)
+      ..removeAt(index);
+    return copyWith(customDiscounts: customs);
+  }
+
   /// Whether any discount (preset or custom) is added.
   bool get hasDiscounts =>
       discountIds.isNotEmpty || customDiscounts.isNotEmpty;

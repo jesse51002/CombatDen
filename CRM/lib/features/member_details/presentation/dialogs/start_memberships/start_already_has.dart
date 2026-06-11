@@ -44,9 +44,8 @@ class StartAlreadyHas extends StatelessWidget {
         children: [
           Text(
             'Already has',
-            style: DesignConstants.pSmall.copyWith(
+            style: DesignConstants.pSmallBold.copyWith(
               color: DesignConstants.text2nd,
-              fontWeight: FontWeight.w700,
             ),
           ),
           for (final m in memberships)

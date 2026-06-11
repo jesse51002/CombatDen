@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
-import 'package:crm/features/member_details/data/models/discount_value.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
@@ -66,14 +65,14 @@ class StartMembershipsStepBody extends StatelessWidget {
   final ValueChanged<String> onMemberToggle;
   final VoidCallback onLinkFirst;
   final ValueChanged<MembershipPlanResponse> onPlanToggle;
-  final void Function(String planId, int count)
-      onPlanCountChanged;
-  final void Function(String planId, String discountId)
-      onPresetToggle;
-  final void Function(String planId, DiscountValue value)
-      onCustomAdded;
-  final void Function(String planId, int index)
-      onCustomRemoved;
+
+  /// Applies [change] to the current member's draft for
+  /// [planId] — the per-step dispatch (count stepper,
+  /// preset toggles, customs) composes its transform here.
+  final void Function(
+    String planId,
+    MembershipDraft Function(MembershipDraft) change,
+  ) onDraftChanged;
   final ValueChanged<MemberMembershipsStartPreview>
       onPreviewLoaded;
   final ValueChanged<bool> onProrateChanged;
@@ -111,10 +110,7 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.onMemberToggle,
     required this.onLinkFirst,
     required this.onPlanToggle,
-    required this.onPlanCountChanged,
-    required this.onPresetToggle,
-    required this.onCustomAdded,
-    required this.onCustomRemoved,
+    required this.onDraftChanged,
     required this.onPreviewLoaded,
     required this.onProrateChanged,
     required this.onPaidWithCashChanged,
@@ -187,16 +183,32 @@ class StartMembershipsStepBody extends StatelessWidget {
           disabledPlanReasons: disabledPlanReasons,
           existingMemberships: existingMemberships,
           onToggle: onPlanToggle,
-          onCountChanged: onPlanCountChanged,
+          onCountChanged: (planId, count) =>
+              onDraftChanged(
+            planId,
+            (d) => d.copyWith(count: count),
+          ),
         );
       case StartMembershipsStep.discounts:
         return StartDiscountsStep(
           member: currentMember ?? payer,
           drafts: currentDrafts,
           discountsFuture: discountsFuture,
-          onPresetToggle: onPresetToggle,
-          onCustomAdded: onCustomAdded,
-          onCustomRemoved: onCustomRemoved,
+          onPresetToggle: (planId, discountId) =>
+              onDraftChanged(
+            planId,
+            (d) => d.withPresetToggled(discountId),
+          ),
+          onCustomAdded: (planId, value) =>
+              onDraftChanged(
+            planId,
+            (d) => d.withCustomAdded(value),
+          ),
+          onCustomRemoved: (planId, index) =>
+              onDraftChanged(
+            planId,
+            (d) => d.withCustomRemovedAt(index),
+          ),
         );
       case StartMembershipsStep.review:
         return StartReviewStep(

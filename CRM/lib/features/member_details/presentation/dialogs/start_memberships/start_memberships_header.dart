@@ -105,9 +105,9 @@ class _HeaderLine extends StatelessWidget {
                 TextSpan(text: '$label: '),
                 TextSpan(
                   text: name,
-                  style: DesignConstants.p.copyWith(
+                  style:
+                      DesignConstants.pSemibold.copyWith(
                     color: DesignConstants.text,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 if (suffix != null)

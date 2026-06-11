@@ -10,24 +10,20 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
-import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
-import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
-import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_footer.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step_body.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plan_rules.dart'
-    as rules;
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_wizard_helpers.dart';
 import 'package:crm/features/member_details/presentation/dialogs/update_card_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
 /// The Start Memberships wizard — one request per run:
 /// 1. who pays (only the top-level paying account),
@@ -218,109 +214,33 @@ class _StartMembershipsWizardState
     }
   }
 
-  // ----- Derived -----
+  // ----- Derived (free functions in the helpers) -----
 
-  /// Selected members in stable family order (payer first).
-  List<StartMembershipParticipant> get _configMembers {
-    final detail = _payerDetail;
-    final all = <StartMembershipParticipant>[
-      _payer,
-      if (detail != null)
-        ...detail.linkedAccounts.map(
-          (a) => StartMembershipParticipant(
-            memberId: a.memberId,
-            name: a.fullName,
-            photoUrl: a.photoUrl,
-            isPayer: false,
-          ),
-        ),
-    ];
-    return all
-        .where(
-          (p) =>
-              _selectedMemberIds.contains(p.memberId),
-        )
-        .toList();
-  }
+  List<StartMembershipParticipant> get _configMembers =>
+      configMembersFor(
+        payer: _payer,
+        payerDetail: _payerDetail,
+        selectedMemberIds: _selectedMemberIds,
+      );
 
-  StartMembershipParticipant? get _currentMember {
-    final members = _configMembers;
-    if (members.isEmpty) return null;
-    final i = _memberIndex < members.length
-        ? _memberIndex
-        : members.length - 1;
-    return members[i];
-  }
+  StartMembershipParticipant? get _currentMember =>
+      currentMemberOf(_configMembers, _memberIndex);
 
   List<MembershipDraft> get _currentDrafts =>
       _drafts[_currentMember?.memberId] ?? const [];
 
-  Map<String, String> get _disabledPlanReasons {
-    final member = _currentMember;
-    final detail = _memberDetails[member?.memberId];
-    if (member == null || detail == null) return const {};
-    return rules.disabledPlanReasons(
-      rules.membershipsForParticipant(
-        detail.memberships,
-        member.memberId,
-      ),
-    );
-  }
-
-  /// The current member's existing non-terminal
-  /// memberships — the Plans step's "Already has" block.
-  /// Same best-effort detail fetch as the plan rules:
-  /// empty when the fetch failed.
-  List<MembershipInfo> get _existingMemberships {
-    final member = _currentMember;
-    final detail = _memberDetails[member?.memberId];
-    if (member == null || detail == null) return const [];
-    return rules.currentMembershipsForParticipant(
-      detail.memberships,
-      member.memberId,
-    );
-  }
-
-  bool get _hasRecurring => _configMembers.any(
-        (m) => (_drafts[m.memberId] ?? const [])
-            .any(
-              (d) =>
-                  d.plan.planType == PlanType.recurring,
-            ),
-      );
-
-  Map<String, String> get _memberNames => {
-        for (final m in _configMembers)
-          m.memberId: m.name,
-      };
-
-  Map<String, String> get _planNames => {
-        for (final list in _drafts.values)
-          for (final d in list)
-            d.plan.planId: d.plan.planName,
-      };
-
   MemberMembershipsStartRequest? _buildRequest(
     String idempotencyKey,
-  ) {
-    final items = <MemberMembershipsStartItem>[];
-    for (final m in _configMembers) {
-      for (final d
-          in _drafts[m.memberId] ?? const <MembershipDraft>[]) {
-        final item = d.toItem(m.memberId);
-        if (item != null) items.add(item);
-      }
-    }
-    if (items.isEmpty) return null;
-    return MemberMembershipsStartRequest(
-      payerMemberId: _payer.memberId,
-      gymId: widget.member.gymId,
-      idempotencyKey: idempotencyKey,
-      prorate: _prorate,
-      paidWithCash: _paidWithCash,
-      memberships: items,
-    );
-  }
+  ) =>
+      buildStartRequest(
+        idempotencyKey: idempotencyKey,
+        payerMemberId: _payer.memberId,
+        gymId: widget.member.gymId,
+        prorate: _prorate,
+        paidWithCash: _paidWithCash,
+        configMembers: _configMembers,
+        drafts: _drafts,
+      );
 
   // ----- Step transitions -----
 
@@ -408,15 +328,7 @@ class _StartMembershipsWizardState
     if (s is! MemberDetailLoaded) return;
     final result = s.startResult;
     if (result == null) return;
-    final items = <MemberMembershipsStartItem>[];
-    for (final f in result.failed) {
-      for (final d
-          in _drafts[f.memberId] ?? const <MembershipDraft>[]) {
-        if (d.plan.planId != f.planId) continue;
-        final item = d.toItem(f.memberId);
-        if (item != null) items.add(item);
-      }
-    }
+    final items = retryItemsFor(result.failed, _drafts);
     if (items.isEmpty) return;
     _bloc.add(StartMembershipsRequested(
       MemberMembershipsStartRequest(
@@ -481,18 +393,10 @@ class _StartMembershipsWizardState
     final memberId = _currentMember?.memberId;
     if (memberId == null) return;
     setState(() {
-      final list = List<MembershipDraft>.from(
+      _drafts[memberId] = draftsWithPlanToggled(
         _drafts[memberId] ?? const [],
+        plan,
       );
-      final i = list.indexWhere(
-        (d) => d.plan.planId == plan.planId,
-      );
-      if (i >= 0) {
-        list.removeAt(i);
-      } else {
-        list.add(MembershipDraft(plan: plan));
-      }
-      _drafts[memberId] = list;
     });
   }
 
@@ -619,38 +523,6 @@ class _StartMembershipsWizardState
         s.isStartingMemberships;
   }
 
-  String get _primaryLabel {
-    switch (_step) {
-      case StartMembershipsStep.payer:
-      case StartMembershipsStep.members:
-      case StartMembershipsStep.plans:
-        return 'Next';
-      case StartMembershipsStep.discounts:
-        return _memberIndex + 1 < _configMembers.length
-            ? 'Next member'
-            : 'Review';
-      case StartMembershipsStep.review:
-        return 'Preview charges';
-      case StartMembershipsStep.preview:
-        return 'Continue to payment';
-      case StartMembershipsStep.payment:
-        return 'Pay';
-      case StartMembershipsStep.results:
-        return 'Done';
-    }
-  }
-
-  void _onPrimary() {
-    switch (_step) {
-      case StartMembershipsStep.payment:
-        _onPay();
-      case StartMembershipsStep.results:
-        Navigator.of(context).pop();
-      default:
-        _next();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     // Rebuild the footer while the start POST is in
@@ -661,10 +533,6 @@ class _StartMembershipsWizardState
       buildWhen: (prev, curr) =>
           _step == StartMembershipsStep.results,
       builder: (context, _) {
-        final atFirst =
-            _step == StartMembershipsStep.payer;
-        final atResults =
-            _step == StartMembershipsStep.results;
         return AppDialog(
           title: 'Start memberships',
           // A workflow surface, not a confirmation box:
@@ -687,54 +555,33 @@ class _StartMembershipsWizardState
             currentDrafts: _currentDrafts,
             configMembers: _configMembers,
             draftsByMember: _drafts,
-            disabledPlanReasons: _disabledPlanReasons,
-            existingMemberships: _existingMemberships,
+            disabledPlanReasons: disabledPlanReasonsFor(
+              _currentMember,
+              _memberDetails,
+            ),
+            existingMemberships: existingMembershipsFor(
+              _currentMember,
+              _memberDetails,
+            ),
             plansFuture: _plansFuture,
             discountsFuture: _discountsFuture,
             previewRequest: _previewRequest,
             preview: _preview,
             prorate: _prorate,
             paidWithCash: _paidWithCash,
-            hasRecurring: _hasRecurring,
+            hasRecurring: hasRecurringDrafts(
+              _configMembers,
+              _drafts,
+            ),
             payerCardOnFile: _payerDetail?.cardOnFile,
-            memberNames: _memberNames,
-            planNames: _planNames,
+            memberNames: memberNamesOf(_configMembers),
+            planNames: planNamesOf(_drafts),
             onPayerSelected: (p) =>
                 setState(() => _payer = p),
             onMemberToggle: _onMemberToggle,
             onLinkFirst: _onLinkFirst,
             onPlanToggle: _onPlanToggle,
-            onPlanCountChanged: (planId, count) =>
-                _updateDraft(
-              planId,
-              (d) => d.copyWith(count: count),
-            ),
-            onPresetToggle: (planId, discountId) =>
-                _updateDraft(planId, (d) {
-              final ids = Set<String>.from(d.discountIds);
-              if (!ids.remove(discountId)) {
-                ids.add(discountId);
-              }
-              return d.copyWith(discountIds: ids);
-            }),
-            onCustomAdded: (planId, value) =>
-                _updateDraft(
-              planId,
-              (d) => d.copyWith(
-                customDiscounts: [
-                  ...d.customDiscounts,
-                  value,
-                ],
-              ),
-            ),
-            onCustomRemoved: (planId, index) =>
-                _updateDraft(planId, (d) {
-              final customs = List.of(d.customDiscounts)
-                ..removeAt(index);
-              return d.copyWith(
-                customDiscounts: customs,
-              );
-            }),
+            onDraftChanged: _updateDraft,
             onPreviewLoaded: (p) =>
                 setState(() => _preview = p),
             onProrateChanged: _onProrateChanged,
@@ -748,17 +595,15 @@ class _StartMembershipsWizardState
                   _step = StartMembershipsStep.payment,
             ),
           ),
-          actions: AppDialogActions(
-            primaryLabel: _primaryLabel,
-            isLoading: atResults && _isStarting,
-            primaryOnPressed:
-                _canAdvance ? _onPrimary : null,
-            secondaryLabel: atResults
-                ? null
-                : (atFirst ? 'Cancel' : 'Back'),
-            secondaryOnPressed: atFirst
-                ? () => Navigator.of(context).pop()
-                : _back,
+          actions: StartMembershipsFooter(
+            step: _step,
+            hasNextMember: _memberIndex + 1 <
+                _configMembers.length,
+            canAdvance: _canAdvance,
+            isStarting: _isStarting,
+            onNext: _next,
+            onPay: _onPay,
+            onBack: _back,
           ),
         );
       },

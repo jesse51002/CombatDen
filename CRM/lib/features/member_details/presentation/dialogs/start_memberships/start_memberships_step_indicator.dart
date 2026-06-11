@@ -93,11 +93,11 @@ class _GroupSegment extends StatelessWidget {
           _Bar(color: _color),
         Text(
           '$number · ${group.title}',
-          style: DesignConstants.pSmall.copyWith(
-            color: _color,
-            fontWeight:
-                active ? FontWeight.w600 : null,
-          ),
+          style: active
+              ? DesignConstants.pSmallSemibold
+                  .copyWith(color: _color)
+              : DesignConstants.pSmall
+                  .copyWith(color: _color),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
