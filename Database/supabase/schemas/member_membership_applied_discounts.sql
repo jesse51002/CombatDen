@@ -83,17 +83,23 @@ CREATE INDEX idx_member_membership_applied_discounts_member
 CREATE INDEX idx_member_membership_applied_discounts_value
     ON member_membership_applied_discounts_unfiltered (value_id);
 
--- A `custom` discount is SINGLE-OWNER: applied to exactly one membership, once,
--- ever. A second applied row referencing any value of a custom discount is
--- rejected at the DB. Together with the single-value trigger on
--- gym_discount_values this makes the custom lifecycle explicit
--- (mint -> apply once -> archive on cleanup), so deleting a failed membership's
--- minted customs is completely safe — no other member can hold them.
+-- A `custom` discount is SINGLE-OWNER: applied to at most one LIVE membership
+-- at a time. A second applied row referencing any value of a custom discount
+-- is rejected at the DB while an existing application is still live — not
+-- ended (end_date unset or in the future) AND its membership not yet cancelled
+-- (cancel_date unset or in the future). This keeps the reprice carry-over
+-- legal: the reprice task cancels the old membership effective today, then
+-- copies its live applications onto the successor row — the old application no
+-- longer counts as live, while applying the same custom to a second live
+-- membership still fails. Together with the single-value trigger on
+-- gym_discount_values this keeps the custom lifecycle explicit (mint -> apply
+-- -> follow the membership's successor chain -> archive on cleanup).
 CREATE FUNCTION prevent_custom_discount_reapplication()
 RETURNS TRIGGER AS $$
 DECLARE
     v_discount_id UUID;
     v_discount_type VARCHAR;
+    v_today DATE;
 BEGIN
     SELECT v.discount_id, d.discount_type
       INTO v_discount_id, v_discount_type
@@ -101,15 +107,25 @@ BEGIN
       JOIN gym_discounts_unfiltered d ON d.discount_id = v.discount_id
      WHERE v.value_id = NEW.value_id;
 
-    IF v_discount_type = 'custom' AND EXISTS (
-        SELECT 1
-          FROM member_membership_applied_discounts_unfiltered a
-          JOIN gym_discount_values_unfiltered v2 ON v2.value_id = a.value_id
-         WHERE v2.discount_id = v_discount_id
-    ) THEN
-        RAISE EXCEPTION
-            'custom discount % is single-use and already applied to a membership',
-            v_discount_id;
+    IF v_discount_type = 'custom' THEN
+        SELECT (now() AT TIME ZONE g.timezone)::date INTO v_today
+        FROM gyms g WHERE g.gym_id = NEW.gym_id;
+
+        IF EXISTS (
+            SELECT 1
+              FROM member_membership_applied_discounts_unfiltered a
+              JOIN gym_discount_values_unfiltered v2
+                ON v2.value_id = a.value_id
+              JOIN member_memberships_unfiltered mm
+                ON mm.item_id = a.item_id
+             WHERE v2.discount_id = v_discount_id
+               AND (a.end_date IS NULL OR a.end_date > v_today)
+               AND (mm.cancel_date IS NULL OR mm.cancel_date > v_today)
+        ) THEN
+            RAISE EXCEPTION
+                'custom discount % is single-use and already applied to a live membership',
+                v_discount_id;
+        END IF;
     END IF;
     RETURN NEW;
 END;

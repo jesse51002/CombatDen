@@ -266,10 +266,10 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "plan_id",  # immutable (trigger: trg_prevent_plan_id_overwrite)
         "created_at",  # auto-generated timestamp
         # Stripe columns — always set by backend
-        "stripe_item_id",
+        "stripe_item_id",  # immutable once set (trigger, no exceptions)
         "stripe_one_time_invoice_id",  # one-time consolidated invoice id (writeback)
         "stripe_sync_status",  # sync writeback (Stripe-convergence confirmation)
-        "price_id",
+        "price_id",  # immutable (trigger: trg_prevent_price_id_overwrite); reprice = new row
     }
 )
 
