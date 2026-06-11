@@ -94,6 +94,11 @@ async def cancel_membership(
     try:
         cancel_date = await memberships_service.cancel(item_id, member_id, idempotency_key)
         return MemberMembershipsCancelResponse(cancel_date=cancel_date)
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -643,6 +648,11 @@ async def add_membership_discounts(
             idempotency_key=request.idempotency_key,
             preview=request.preview,
         )
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -709,6 +719,11 @@ async def remove_membership_discounts(
             idempotency_key=request.idempotency_key,
             preview=request.preview,
         )
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -776,6 +791,11 @@ async def mark_membership_paid_cash(
             member_id=request.member_id,
             idempotency_key=request.idempotency_key,
         )
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():

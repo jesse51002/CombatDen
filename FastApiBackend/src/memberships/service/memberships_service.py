@@ -103,6 +103,13 @@ class MemberMembershipsService:
         # them bare — PayingMemberLock is non-reentrant, and a nested same-family
         # acquire here would deadlock to LockBusyError.
         self._paying_lock = paying_lock
+        # The in-task guard: every ITEM-targeted op rejects a membership row
+        # referenced by an unfinished task (the family lock only serializes
+        # in-flight attempts; a task awaiting retry holds no lock, so the
+        # guard is what protects its desired state between attempts).
+        # Member-level ops (charge_card, freeze, link) are not item-targeted
+        # and stay unguarded.
+        self._tasks = tasks_service
         deps = (
             db_pool,
             payment_sync_service,
@@ -166,7 +173,12 @@ class MemberMembershipsService:
 
         Returns the resolved ``cancel_date`` — the date through
         which the membership remains active.
+
+        Raises:
+            MembershipInTaskError: If the membership is inside an
+                unfinished task.
         """
+        await self._tasks.assert_memberships_not_in_task([item_id])
         async with self._paying_lock.lock([member_id]):
             return await self._cancel.cancel(
                 item_id, member_id, idempotency_key,
@@ -244,7 +256,13 @@ class MemberMembershipsService:
         member_id: UUID,
         idempotency_key: UUID,
     ) -> None:
-        """Mark a recurring membership's open Stripe invoice as paid via cash."""
+        """Mark a recurring membership's open Stripe invoice as paid via cash.
+
+        Raises:
+            MembershipInTaskError: If the membership is inside an
+                unfinished task.
+        """
+        await self._tasks.assert_memberships_not_in_task([item_id])
         async with self._paying_lock.lock([member_id]):
             await self._mark_paid_cash.mark_paid_cash(
                 item_id, member_id, idempotency_key,
@@ -304,7 +322,14 @@ class MemberMembershipsService:
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Add applied-discount rows, or preview the addition (``preview=True``)."""
+        """Add applied-discount rows, or preview the addition (``preview=True``).
+
+        Raises:
+            MembershipInTaskError: If the membership is inside an
+                unfinished task (previews included — there is nothing
+                actionable to preview on a mid-task membership).
+        """
+        await self._tasks.assert_memberships_not_in_task([item_id])
         async with self._paying_lock.lock([member_id]):
             return await self._update_discounts.add_discounts(
                 item_id=item_id,
@@ -322,7 +347,13 @@ class MemberMembershipsService:
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Remove applied-discount rows, or preview the removal (``preview=True``)."""
+        """Remove applied-discount rows, or preview the removal (``preview=True``).
+
+        Raises:
+            MembershipInTaskError: If the membership is inside an
+                unfinished task (previews included).
+        """
+        await self._tasks.assert_memberships_not_in_task([item_id])
         async with self._paying_lock.lock([member_id]):
             return await self._update_discounts.remove_discounts(
                 item_id=item_id,
