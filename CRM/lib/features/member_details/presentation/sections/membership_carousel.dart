@@ -151,51 +151,66 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
         membership.isOnOutdatedPriceFor(selectedId) &&
         membership.currentActivePrice != null;
 
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        _CarouselHeader(
+          membership: membership,
+          currentIndex: index,
+          total: _memberships.length,
+          hasMultiple: hasMultiple,
+          onPrevious: index > 0
+              ? () => widget.onPageChanged(index - 1)
+              : null,
+          onNext: index < _memberships.length - 1
+              ? () => widget.onPageChanged(index + 1)
+              : null,
+        ),
+        if (showSelector)
+          FilterPills(
+            labels: [
+              for (final id in coveredIds)
+                _firstNameFor(membership, id),
+            ],
+            selectedIndex: coveredIds.indexOf(selectedId),
+            onSelected: (i) => setState(
+              () => _selectedMemberId = coveredIds[i],
+            ),
+          ),
+        MembershipDetailsTable(
+          membership: membership,
+          coveredMemberId: selectedId,
+        ),
+        if (showOutdated)
+          OutdatedPriceCard(
+            membership: membership,
+            coveredMemberId: selectedId,
+            coveredMemberName:
+                _fullNameFor(membership, selectedId),
+          ),
+        DiscountsSection(
+          member: widget.member,
+          membership: membership,
+          coveredMemberId: selectedId,
+        ),
+      ],
+    );
+
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingBig,
         children: [
-          _CarouselHeader(
-            membership: membership,
-            currentIndex: index,
-            total: _memberships.length,
-            hasMultiple: hasMultiple,
-            onPrevious: index > 0
-                ? () => widget.onPageChanged(index - 1)
-                : null,
-            onNext: index < _memberships.length - 1
-                ? () => widget.onPageChanged(index + 1)
-                : null,
-          ),
-          if (showSelector)
-            FilterPills(
-              labels: [
-                for (final id in coveredIds)
-                  _firstNameFor(membership, id),
-              ],
-              selectedIndex: coveredIds.indexOf(selectedId),
-              onSelected: (i) => setState(
-                () => _selectedMemberId = coveredIds[i],
-              ),
-            ),
-          MembershipDetailsTable(
-            membership: membership,
-            coveredMemberId: selectedId,
-          ),
-          if (showOutdated)
-            OutdatedPriceCard(
-              membership: membership,
-              coveredMemberId: selectedId,
-              coveredMemberName:
-                  _fullNameFor(membership, selectedId),
-            ),
-          DiscountsSection(
-            member: widget.member,
-            membership: membership,
-            coveredMemberId: selectedId,
-          ),
-          if (widget.expand) const Spacer(),
+          // When the card is height-bounded (expand), tall content (e.g. a
+          // membership carrying several discounts) scrolls instead of
+          // overflowing; the actions row stays pinned at the bottom.
+          if (widget.expand)
+            Expanded(
+              child: SingleChildScrollView(child: details),
+            )
+          else
+            details,
           MembershipActionsRow(
             member: widget.member,
             currentMembership: membership,
