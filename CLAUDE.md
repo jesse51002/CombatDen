@@ -69,6 +69,7 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 When asked to spin up a diff / open a review of the current checkout (e.g. a worktree under `.claude/worktrees/`), use the root Makefile targets:
 - `make meld` — meld directory diff of the current working tree against the **root codebase checkout's** HEAD. Works from inside any worktree (resolves the root via `git rev-parse --git-common-dir`).
 - `make meld-origin` — same, but fetches and diffs against `origin/main`.
+- `make meld-branch` — same, but fetches and diffs against the CURRENT branch's remote version (`origin/<branch>`) — i.e. everything local that origin doesn't have yet.
 - `make setup-meld` — one-time machine setup (Flatpak meld + global git difftool config). Only needed if meld isn't installed.
 - **Always run these in the background** (`run_in_background: true`) — the command blocks until the user closes the meld window; running it in the foreground stalls the session.
 - The diff is a launch-time snapshot of *which files differ* — auto-update is partial:

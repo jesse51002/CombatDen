@@ -2,7 +2,7 @@
 # staging dirs must live somewhere under $HOME.
 MELD_TMP = $$HOME/.cache/git-difftool
 
-.PHONY: setup-meld meld meld-origin
+.PHONY: setup-meld meld meld-origin meld-branch
 
 setup-meld:
 	flatpak install -y flathub org.gnome.meld
@@ -23,3 +23,12 @@ meld-origin:
 	git fetch origin main
 	@mkdir -p "$(MELD_TMP)"; \
 	TMPDIR="$(MELD_TMP)" git difftool -d origin/main
+
+# Diff this checkout's working tree against the CURRENT branch's remote
+# version (fetches first) — i.e. everything local that origin doesn't have yet.
+meld-branch:
+	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \
+	git fetch origin "$$branch"; \
+	echo "Diffing against origin/$$branch"; \
+	mkdir -p "$(MELD_TMP)"; \
+	TMPDIR="$(MELD_TMP)" git difftool -d "origin/$$branch"
