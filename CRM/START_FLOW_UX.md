@@ -101,6 +101,14 @@ text). When `multiple_charges` is true, say plainly that two separate charges
 were made. For a failed group, offer "retry the failed memberships" = a NEW
 request containing only the failed items (new idempotency key).
 
+**Copy caution — recurring "created" means converged, not PAID.** For a
+RECURRING membership, payment success is asynchronous by design (Stripe's
+dunning model): a declining card still yields `created` — the subscription
+exists with an open first invoice, and recovery/overdue surfaces through the
+webhooks + billing views. So the results screen says the membership was
+*created/started*, never "payment received". (A ONE-TIME membership's
+`created` DOES mean its invoice settled — its charge is synchronous.)
+
 ## Request mapping (one request per wizard run)
 
 ```json
