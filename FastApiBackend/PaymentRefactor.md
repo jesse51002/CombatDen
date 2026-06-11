@@ -220,12 +220,6 @@ own discounts**, all **applied at creation before the first invoice**, in **one 
   them or coexist (single create stays the simple path)?
 
 
---------------------------
-
-
-
-# Later
-
 ## 10. Multiple one-time purchases of the SAME plan at once (not built)
 
 > A member buying 2 punch-card packs of 5 in one cart, attending-twice-in-a-day
@@ -260,6 +254,13 @@ The build (small, one piece):
 - Tests: two identical packs in one request → ONE invoice, two identical-price
   lines, distinct ids; second pack bought while the first is active.
 
+
+
+--------------------------
+
+
+
+# Later
 
 ## 2. Multi-interval recurring — weekly / yearly (not built)
 
