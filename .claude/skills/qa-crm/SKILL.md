@@ -192,6 +192,23 @@ per agent on its own port — only set that up if the user explicitly wants it.
 
 ## Keep this skill current
 
+## Driving CanvasKit dialogs (wizards, pickers)
+
+CanvasKit renders to a canvas, so DOM clicks can't reach dialog content
+directly — but the semantics tree can be driven:
+
+1. **Enable Flutter semantics** once per page load: JS-click the
+   `flt-semantics-placeholder` element.
+2. **Drive rows/buttons** via synthetic `MouseEvent`/`PointerEvent`
+   dispatched on the matching `flt-semantics` node (`$B js`). `$B fill`
+   works on semantics inputs.
+3. **CTAs missing from the semantics tree** (some primary buttons):
+   derive coordinates from a sibling semantics node's bounding rect and
+   coordinate-click.
+4. **Dev-server wedge**: after a browser restart, DDC may load every
+   script but never run `main()` (stale DWDS debug session) — restart
+   `flutter run`, then reload the page once.
+
 This is a living document (see `CLAUDE.md`). When a route is added/renamed, the
 auto-login account changes, a new gotcha bites, or the page list grows, update
 this file in the same change — a stale runbook sends the next QA pass to a dead

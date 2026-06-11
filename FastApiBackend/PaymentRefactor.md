@@ -170,56 +170,6 @@ the scheduled reconciler, §1, needs in the Stripe→CRM direction.)
   the bucket is built, so two desired items could collide on `si_X`). The *current* behavior is worth
   verifying now too.
 
-## 9. Create a linked family's memberships in one call — multi-member, per-membership discounts at creation (not built)
-
-`POST /api/v1/member_memberships/` (start) creates **one** membership for **one** member and accepts
-**no discounts** (payload: `member_id` / `gym_id` / `plan_id` / `price_id` / `prorate` /
-`idempotency_key`). Discounting is a **separate, after-the-fact** `POST .../discounts/add`. So a
-family is stood up by N sequential calls — start parent → link each child → start each child → add
-discounts per membership — and every membership's first invoice is undiscounted.
-
-### Current state — sequential, post-hoc, undiscounted first invoice
-- **Single-member, single-call.** No way to create several memberships in one operation.
-- **Discounts are post-hoc.** Start cuts the proration / first invoice (`always_invoice`) **before**
-  any discount exists; `add_discounts` only pushes the coupon for the *next* cycle. A member who signs
-  up *with* a discount still gets an **undiscounted first charge**. The seed proves it: `_apply_discounts`
-  runs *after* `_start_one`, so a fresh seed produces **zero discounted invoices** and the per-invoice
-  discount audit (the `invoice.paid` capture) records nothing.
-- **Every start re-syncs the family.** A linked family rides **one consolidated Stripe subscription**
-  (the payer's), so each sequential start triggers its own family re-sync → N converges (and
-  potentially N proration invoices) for what is really one sign-up event.
-
-### What's needed — one batch op for a paying family
-A single operation that creates memberships for **multiple members at once**, constrained to **one
-paying family** (all paid by the same payer and linked to that payer), **each membership carrying its
-own discounts**, all **applied at creation before the first invoice**, in **one Stripe converge**:
-- **Request shape:** the payer + a list of memberships, each `{member_id, plan_id, price_id, prorate,
-  preset_ids}`. Members not yet linked to the payer are linked as part of the op.
-- **One build, one sync, one lock.** Link + insert all rows + apply each membership's discounts, then
-  run the family sync **once** under a single `PayingMemberLock` / idempotency key → one consolidated,
-  **per-membership-discounted** first invoice. Don't loop the single-create path (that re-creates the
-  N-converge + post-hoc-discount problems).
-- **Per-membership discounts on the consolidated line.** The aggregation already supports different
-  discounts per membership on a consolidated line (see `discounts-guide`); the batch just feeds each
-  membership's `preset_ids` into that same path. The discount must be on the sub **before** the
-  proration invoice is cut (a single converge), not start-then-resync.
-- Reuse the existing apply-discount machinery (`MemberMembershipsUpdateDiscounts` / preview-staging)
-  and the start/link lifecycle — this is orchestration + ordering, not a new discount engine.
-- Once it exists, the **seed builds each family in one call** (drop the sequential start → link →
-  start → `_apply_discounts` dance), so seeded members get genuinely discounted first invoices.
-
-### Open questions
-- **Validation:** all members in one gym; the payer has a card; no child already linked to a different
-  payer; the payer is (or becomes) the family root.
-- **Atomicity / partial failure:** all-or-nothing for the batch, or per-member best-effort? (The single
-  consolidated sync favors all-or-nothing.)
-- **Proration:** one consolidated proration invoice for the whole batch, discounted per line.
-- **Custom/linked discounts at create:** the add path takes `preset_ids`; creation may also want to
-  mint a custom value inline — presets only, or the full value shape?
-- **Relationship to the existing single-start + link + add endpoints:** does the batch op supersede
-  them or coexist (single create stays the simple path)?
-
-
 ## 10. Multiple one-time purchases of the SAME plan at once (not built)
 
 > A member buying 2 punch-card packs of 5 in one cart, attending-twice-in-a-day
