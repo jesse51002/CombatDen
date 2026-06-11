@@ -247,7 +247,22 @@ consumer wanting only the steady-state recurring view filters on `is_proration`
 `amount`** (`line.amount` — *pre*-discount on a subscription preview, not
 repurposed) **and** the computed post-discount **`discounted_amount`**
 (`post_discount_amount`), so a consumer reads the net directly with no client
-math. The one finalized-invoice model `PaymentsInvoiceResponse` (§7) is separate
+math.
+
+> **The mapper stays generic; the one-time preview filters its own lines.**
+> `preview_invoice_payment` runs `invoices.create_preview` at the **customer
+> level**, so for a payer with a live subscription Stripe previews the customer's
+> *next* invoice — the staged ad-hoc invoice items **plus** the subscription's
+> upcoming recurring lines — and the mapper (correctly) returns all of them. Its
+> **sole** caller, `PaymentSyncOneTime.preview_one_time` (`sync-guide`), is a
+> one-time-purchase preview, so it post-filters to **only** the pure
+> invoice-item lines (those with `stripe_subscription_item_id is None` **and**
+> `is_proration is False`) and **recomputes** `subtotal` / `total` /
+> `amount_due` from the kept lines before returning. The filter lives in that
+> caller, not here — the mapper is shared with the subscription/upcoming previews
+> and must keep returning every line.
+
+The one finalized-invoice model `PaymentsInvoiceResponse` (§7) is separate
 and unchanged.
 
 ---

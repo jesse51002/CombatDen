@@ -246,7 +246,7 @@ async def test_preview_start_one_time(
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_preview_start_no_prorate_due_now_equals_recurring(
+async def test_preview_start_no_prorate_due_now_is_none(
     memberships_service,
     db_pool,
     gym_id,
@@ -254,11 +254,14 @@ async def test_preview_start_no_prorate_due_now_equals_recurring(
     connect_opts,
     created,
 ):
-    """prorate=False: due-now and recurring are the same preview.
+    """prorate=False start preview: due_now is None, recurring present.
 
-    When not prorating, nothing extra is charged now, so the immediate
-    and steady-state previews are identical — the split returns the same
-    thing twice. Deterministic regardless of the billing anchor date.
+    When not prorating, nothing extra is charged now. The engine's split
+    reuses the steady-state recurring figure as ``due_now`` ("same thing
+    twice"), but that amount is NOT actually due now — so the START preview
+    suppresses it and reports ``due_now=None`` while ``recurring`` carries the
+    full cycle. (The shared engine split / cancel / update_price previews keep
+    the reuse; only the start preview overrides it.)
     """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
@@ -287,9 +290,10 @@ async def test_preview_start_no_prorate_due_now_equals_recurring(
         )
 
         _assert_valid_split(preview)
-        assert preview.due_now is not None
+        assert preview.due_now is None, (
+            "prorate=False start preview must report due_now=None"
+        )
         assert preview.recurring is not None
-        assert preview.due_now.amount_due == preview.recurring.amount_due
         assert preview.recurring.amount_due == plan.price_cents, (
             f"recurring.amount_due={preview.recurring.amount_due} != "
             f"plan price_cents={plan.price_cents}"

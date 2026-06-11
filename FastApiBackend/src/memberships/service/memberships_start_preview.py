@@ -10,8 +10,10 @@ can never bill; the per-family lock (held by the facade) keeps a concurrent
 real sync from observing it.
 
 The response is the three-way split: ``one_time`` (the consolidated
-one-time invoice), ``due_now`` (the recurring proration charged now),
-``recurring`` (the steady-state per-cycle invoice).
+one-time invoice), ``due_now`` (the recurring proration charged now, only
+when ``prorate=True`` — ``None`` otherwise, since a non-prorating start
+charges nothing extra now), ``recurring`` (the steady-state per-cycle
+invoice).
 """
 
 from __future__ import annotations
@@ -136,9 +138,17 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
         finally:
             await self._cleanup(states)
 
+        # With ``prorate=False`` the engine charges nothing extra now, so its
+        # ``due_now`` just reuses the steady-state recurring figure ("same
+        # thing twice"). That recurring amount is NOT due now, so surfacing it
+        # as ``due_now`` here would mislead — the start preview reports
+        # ``due_now=None`` for a non-prorating start.
+        due_now = (
+            split.due_now if (split and request.prorate) else None
+        )
         return MemberMembershipsStartPreviewResponse(
             one_time=one_time,
-            due_now=split.due_now if split else None,
+            due_now=due_now,
             recurring=split.recurring if split else None,
         )
 

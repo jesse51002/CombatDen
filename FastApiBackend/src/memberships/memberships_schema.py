@@ -154,10 +154,13 @@ class MemberMembershipsStartPreviewResponse(BaseModel):
     """The start preview's three-way invoice split.
 
     ``one_time`` — the consolidated one-time invoice (all one-time
-    memberships, one charge). ``due_now`` — the recurring proration invoice
-    charged immediately (``prorate=True``). ``recurring`` — the steady-state
-    recurring invoice each cycle going forward. Each is ``None`` when the
-    request has no memberships in that group.
+    memberships, one charge), the one-time lines ONLY (the payer's live
+    subscription lines are stripped). ``due_now`` — the recurring proration
+    invoice charged immediately; present ONLY when ``prorate=True`` and
+    ``None`` otherwise (a non-prorating start charges nothing extra now).
+    ``recurring`` — the steady-state recurring invoice each cycle going
+    forward. Each is ``None`` when the request has no memberships in that
+    group.
     """
 
     one_time: PreviewInvoice | None = None

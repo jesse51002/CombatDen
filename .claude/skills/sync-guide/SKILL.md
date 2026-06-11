@@ -747,7 +747,11 @@ Stripe preview) up to twice:
   figure can't come from it).
 - **`due_now`** ← `_run_preview(..., "always_invoice")` when the caller prorates;
   otherwise `due_now` **reuses the `recurring` result** ("same thing twice") — a
-  non-prorating change charges nothing extra now.
+  non-prorating change charges nothing extra now. (The **start preview** consumes
+  this split but suppresses that reused `due_now`: it returns `due_now=None` when
+  `request.prorate` is false, since the reused recurring figure is not actually due
+  now — owned by `memberships-guide`. The shared engine split, cancel, and
+  update_price previews keep the reuse semantics.)
 
 So it's **one** Stripe preview call for a `none` surface, **two** for a prorating
 one. Returns `None` for a pure cancellation / no-op (empty bucket — no upcoming

@@ -352,7 +352,20 @@ charged now when `prorate=True`) and **`recurring`** (the steady-state per-cycle
 invoice) — the latter two unpacked from `preview_update_payments_recurring`'s
 `DueNowVsRecurringPreview`. Each is `None` when the request has no membership in
 that group. (Cancel / update_price previews deliberately keep the two-way
-`DueNowVsRecurringPreview`.)
+`DueNowVsRecurringPreview`.) Two rules shape what it returns:
+
+- **`due_now` is absent (`None`) when `request.prorate` is false.** With no
+  proration the engine's split reuses the steady-state recurring figure as
+  `due_now`; that amount is **not** actually due now, so the start preview
+  suppresses it. Scoped to the start preview only — the shared engine split,
+  cancel, and update_price previews keep the reuse.
+- **The `one_time` half contains only the one-time lines.**
+  `PaymentSyncOneTime.preview_one_time` previews at the customer level, so for
+  a payer with a live subscription Stripe mixes the subscription's upcoming
+  recurring lines in with the staged one-time items. That caller strips the
+  subscription-derived lines (`stripe_subscription_item_id` set /
+  `is_proration`) and recomputes the totals from the kept one-time lines
+  (engine detail owned by `sync-guide` / `payments-guide`).
 
 ---
 

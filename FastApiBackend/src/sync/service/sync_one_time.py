@@ -103,6 +103,13 @@ class PaymentSyncOneTime:
         first; this reads that staged state (``preview=True``), resolves the
         coupons (idempotent gym-wide find-or-create), and returns the discounted
         invoice preview. ``None`` when nothing is staged. Writes nothing back.
+
+        Stripe's ``invoices.create_preview`` previews the customer's NEXT
+        invoice, so for a payer with a live subscription it returns the staged
+        ad-hoc invoice-item lines AND the subscription's upcoming recurring
+        lines. This preview is the ONE-TIME purchase only, so the
+        subscription-derived lines are stripped (``_one_time_only``) and the
+        totals recomputed from the kept lines before returning.
         """
         parent, stripe_account_id = await self._parent.resolve(member_id)
         plan = await self._build_plan(parent, stripe_account_id, preview=True)
@@ -112,9 +119,40 @@ class PaymentSyncOneTime:
             stripe_customer_id=parent.stripe_customer_id,
             items=self._to_item_specs(plan),
         )
-        return await self._payments.preview_invoice_payment(
+        preview = await self._payments.preview_invoice_payment(
             request,
             stripe_account_id,
+        )
+        return self._one_time_only(preview)
+
+    @staticmethod
+    def _one_time_only(preview: PreviewInvoice) -> PreviewInvoice:
+        """Keep only the staged one-time invoice-item lines; recompute totals.
+
+        A subscription-derived line carries a ``stripe_subscription_item_id``
+        and/or the ``is_proration`` flag; a pure invoice-item (one-time) line
+        carries neither. The customer-level preview mixes the live
+        subscription's upcoming lines in with the staged invoice items, so this
+        drops the subscription lines and rebuilds ``subtotal`` / ``total`` /
+        ``amount_due`` from the kept ones — the discounted one-time sum the CRM
+        renders. ``next_payment_date`` is dropped (it described the recurring
+        cycle, which is no longer part of this preview).
+        """
+        kept = [
+            line
+            for line in preview.lines
+            if line.stripe_subscription_item_id is None
+            and not line.is_proration
+        ]
+        subtotal = sum(line.amount for line in kept)
+        total = sum(line.discounted_amount for line in kept)
+        return PreviewInvoice(
+            amount_due=total,
+            subtotal=subtotal,
+            total=total,
+            currency=preview.currency,
+            lines=kept,
+            next_payment_date=None,
         )
 
     async def _build_plan(
