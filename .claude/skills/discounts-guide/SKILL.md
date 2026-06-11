@@ -10,7 +10,7 @@ description: >-
   anything discount-shaped: gym_discounts / gym_discount_values, the
   member_membership_applied_discounts rows, the apply/remove path
   (MemberMembershipsDiscounts), the build-time coupon computation
-  (PaymentSyncDiscounts / PaymentSyncCoupons), the once/ongoing lifetime +
+  (PaymentSyncDiscounts), the once/ongoing lifetime +
   end_date, the per-membership-sequential percent math, or the CRM discount UI.
   Trigger on "discount", "coupon", "discount version", "apply a discount",
   "once vs ongoing", "end_date", "percent off / dollar off", "why did this
@@ -219,7 +219,7 @@ in `payments-guide`.*
 
 Discounts store **intent**; **no Stripe coupon is pre-baked**. Coupons are
 resolved at **build time** by `PaymentSyncDiscounts.resolve`
-(`payment_sync/payment_sync_discounts.py`), which the builder calls while
+(`src/sync/service/sync_discounts.py`), which the builder calls while
 assembling the desired subscription bucket — for **both** the real sync and
 preview, so preview reflects discounts. The build reads each family's active
 memberships **each carrying its applied discounts**
@@ -235,16 +235,17 @@ quantity `N`):
    dollars sum. (Math detail below.)
 2. **Find-or-create the coupon** on the gym's Connect account using a
    **deterministic per-account coupon ID** from the value signature
-   (`PaymentSyncCoupons.coupon_id`): `pct_<bps>_<mode>` (bps = basis points =
-   `round(percentage_off * 100)`) or `amt_<cents>_<mode>`. `PaymentSyncCoupons`
+   (`PaymentsStripeDiscountService.coupon_id_for_value`): `pct_<bps>_<mode>` (bps = basis points =
+   `round(percentage_off * 100)`) or `amt_<cents>_<mode>`. `PaymentsStripeDiscountService`
    owns the id scheme + a **validate-or-replace** check (delete + recreate if the
    live Stripe coupon's value/duration drifts from the computed value — Stripe
-   coupons are immutable), and **delegates all Stripe coupon I/O** (find / create
-   / delete) to `PaymentsStripeDiscountService` — the engine holds **no direct
-   Stripe SDK**. Creation passes the id, so a repeat/race collides and is treated
-   as "already exists" — idempotent, one coupon per distinct value reused, **no
-   coupon registry table.** `once` → a Stripe `once` coupon; `ongoing` → a Stripe
-   `forever` coupon (the `end_date` cutoff is enforced by *us*, never by Stripe).
+   coupons are immutable); `PaymentSyncDiscounts` calls it via
+   `find_or_create_for_value(PaymentsCouponValue(...), account)` — the engine holds
+   **no direct Stripe SDK**. Creation passes the id, so a repeat/race collides and
+   is treated as "already exists" — idempotent, one coupon per distinct value
+   reused, **no coupon registry table.** `once` → a Stripe `once` coupon;
+   `ongoing` → a Stripe `forever` coupon (the `end_date` cutoff is enforced by
+   *us*, never by Stripe).
 3. **Order percent before dollar** on the line so Stripe sequences percent→dollar
    (the `DISCOUNT_APPLICATION_ORDER` constant — percent-first lets each member's own
    discounted price reconcile to the consolidated line total without rescaling).
@@ -412,14 +413,13 @@ re-applied on later cycles; changing the count while pending re-divides correctl
   `FastApiBackend/src/memberships/service/memberships_discounts.py`
   + its SQL in `.../sql/applied_discounts/` (apply references the active
   `value_id`; regular discounts only).
-- **Build-time coupons:** `payment_sync/payment_sync_discounts.py`
+- **Build-time coupons:** `FastApiBackend/src/sync/service/sync_discounts.py`
   (`PaymentSyncDiscounts` — the discount math `_aggregate_line_values` + `resolve`
-  → `ResolvedDiscounts`), `payment_sync_coupons.py` (`PaymentSyncCoupons` — the
-  deterministic-id scheme + validate-or-replace, delegating Stripe I/O to
-  `PaymentsStripeDiscountService`). The `once` settle is
-  `payment_sync_once_discounts.py` (`PaymentSyncOnceDiscounts`); the coupon-id +
-  `applied`/`deleted` writeback is `payment_sync_writeback.py`
-  (`PaymentSyncWriteback`). Orchestrated by `payment_sync_service.py`
+  → `ResolvedDiscounts`; calls `PaymentsStripeDiscountService.find_or_create_for_value`
+  for the deterministic-id scheme + validate-or-replace). The `once` settle is
+  `sync_once_discounts.py` (`PaymentSyncOnceDiscounts`); the coupon-id +
+  `applied`/`deleted` writeback is `sync_writeback.py`
+  (`PaymentSyncWriteback`). Orchestrated by `sync_service.py`
   (`PaymentSyncService`).
 - **CRM member billing-detail read:**
   `FastApiBackend/src/members/sql/member_details/member_details.sql` aggregates
