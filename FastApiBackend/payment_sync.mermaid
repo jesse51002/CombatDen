@@ -1,5 +1,8 @@
 flowchart TB
   %% Payment-sync engine — orchestration flow of PaymentSyncService.
+  %% SCOPE: the RECURRING engine (update_payments_recurring) ONLY. One-time / trial
+  %% billing is the SEPARATE PaymentSyncOneTime engine (a one-shot consolidated
+  %% invoice, NOT a converge) — see sync-guide §12; it is not drawn here.
   %% Source of truth: src/sync/service/ (sync-guide skill).
   %% TWO main entry points (real + preview) SHARE resolve → settle → build_sync_params;
   %% they diverge on execute vs preview-execute and writeback (REAL-only).
@@ -11,7 +14,7 @@ flowchart TB
   %% Green = engine steps · lighter green = preview-only (read-only) steps · orange =
   %% external actors. Solid = live runtime call · dashed = future / delegation.
 
-  triggers["🔔 Triggers — lifecycle callers (DB-first + verify/revert)<br/>start · cancel · price swap · apply/remove discounts · link/unlink<br/>each: pre-sync → write DB → THIS sync → verify stripe_sync_status → revert if not<br/>explicit freeze/unfreeze → PaymentSyncFreeze directly · plan reprice → bulk"]
+  triggers["🔔 Triggers — lifecycle callers (DB-first + verify/revert)<br/>start (RECURRING group only — one-time/trial group → PaymentSyncOneTime, §12)<br/>· cancel · price swap · apply/remove discounts · link/unlink<br/>each: pre-sync → write DB → THIS sync → verify stripe_sync_status → revert if not<br/>explicit freeze/unfreeze → PaymentSyncFreeze directly · plan reprice → bulk"]
 
   subgraph engine["⚙️ PaymentSyncService — the sync engine"]
     direction TB

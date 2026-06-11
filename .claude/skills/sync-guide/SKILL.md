@@ -18,15 +18,20 @@ description: >-
   read-before-write live-coupon read), the coupon-link / once-consumption
   writebacks (set_applied_discount_coupon_id / mark_once_consumed), execute_sync
   (create/update/cancel, explicit proration_behavior) in stripe.py,
-  and the post-discount price writeback (in writeback.py). Load this whenever
+  the post-discount price writeback (in writeback.py), and the standalone
+  one-time engine PaymentSyncOneTime (charge_one_time / preview_one_time — a
+  one-shot consolidated invoice for the family's pending one_time/trial
+  memberships, reusing the read queries + PaymentSyncDiscounts.resolve, the start
+  op's non-recurring billing path). Load this whenever
   you touch the sync orchestration, the parent/family resolution, the builder,
   the discount math, the once-consumption settle, the deterministic coupon
-  find-or-create, the price writeback, the preview dry-run, or the scheduled
-  reconciler. Trigger on "payment sync",
+  find-or-create, the price writeback, the preview dry-run, the one-time charge,
+  or the scheduled reconciler. Trigger on "payment sync",
   "update_payments_recurring", "re-derive desired state", "converge Stripe",
   "group by price", "resolve_parent", "family ids", "discounts ride the
   membership", "aggregate_line_values", "once discounts", "read before write",
   "execute_sync", "price writeback", "preview sync", "bulk sync", "reconciler",
+  "one-time charge", "charge_one_time", "trial billing",
   "why did this re-sync", or any change to the payment_sync engine.
 ---
 
@@ -117,6 +122,11 @@ parent resolution inject the shared `BillingParentResolver` directly — not via
 | `settle_once_discounts(member_id)` | a thin wrapper: resolve parent → `PaymentSyncOnceDiscounts.sync_once_discounts` — stamp a consumed `once` discount's `end_date` promptly, on its own, with no full sync (§6) | the `invoice.paid` webhook (`payments-guide`), best-effort |
 | `bulk_payment_sync(member_ids)` | loop members, fresh `uuid4()` idempotency key each, call `update_payments_recurring` | reprice fan-out; the scheduled reconciler (§10) |
 
+The **one-time** billing entry points — `charge_one_time(member_id,
+idempotency_key, paid_with_cash)` and `preview_one_time(member_id)` — are **not**
+on `PaymentSyncService`. They live on the **separate** `PaymentSyncOneTime`
+service (§12), which the start op calls for non-recurring memberships.
+
 **There are no imperative `add_ids` / `cancel_ids` inputs.** The desired state is
 derived purely from the DB on every call — `update_payments_recurring` takes only
 a `member_id` (any family member), an idempotency key, the out-of-band-first-
@@ -133,24 +143,35 @@ converges Stripe to it.)
 
 | caller | trigger |
 | --- | --- |
-| `start.py` | new membership |
-| `cancel.py` | cancel a membership |
-| `update_price.py` | mid-cycle price swap |
-| `update_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
+| `memberships_start.py` | a new membership's **recurring** group (its one-time group goes to `PaymentSyncOneTime` instead — §12) |
+| `memberships_cancel.py` | cancel a membership |
+| `memberships_update_price.py` | mid-cycle price swap |
+| `memberships_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
 
 These callers all live in `src/memberships/service/`.
 (Link / unlink is **not** a sync caller — it is a pure DB change that never
 touches Stripe; see `memberships-guide`.)
 
+**The start op calls BOTH billing engines.** `memberships_start.py` is one
+list-based op that creates N memberships for a payer's family in a single call
+(a single membership = a one-item list). It splits the items by plan type and
+bills **at most two charges**: the **one-time** group (every `one_time` /
+`trial` membership) through the standalone **`PaymentSyncOneTime`** engine (§12 —
+a one-shot consolidated invoice, **not** a converge), and the **recurring**
+group through `update_payments_recurring` here. The start preview mirrors this —
+`PaymentSyncOneTime.preview_one_time` for the one-time group +
+`preview_update_payments_recurring` here for the recurring group — into a
+three-way `one_time / due_now / recurring` split (`memberships-guide`).
+
 **Freeze / unfreeze no longer flows through the main sync.** The explicit freeze
 action writes the freeze window to the DB, then calls the standalone
 **`PaymentSyncFreeze`** service directly (§8); the main sync only does a
 *maintenance re-apply* of the parent's already-resolved freeze window (step 2 of
-§3). The freeze caller (`freeze.py`) injects
+§3). The freeze caller (`memberships_freeze.py`) injects
 `BillingParentResolver` + `PaymentSyncFreeze`, writes the freeze window first,
 re-resolves the parent (so it carries the window), then converges Stripe.
 
-Plus **plan reprice**: `plans/service/price.py`
+Plus **plan reprice**: `plans/service/plans_price.py`
 fans out via `bulk_payment_sync` — the one *deliberate* bulk price migration that
 survives (the two discount cascades were removed in the discount refactor).
 
@@ -278,7 +299,7 @@ inside a `try`: if Stripe reports the family's monthly sub **gone** —
 status or a not-found id, surfaced by the step-2 once-settle live read or by
 step-4 `execute_sync`'s update/cancel of the existing sub) — the engine must
 **not** recreate it (that would re-bill a member Stripe already let go).
-`_handle_lost_subscription` runs `PaymentSyncCancel` (`cancel.py`,
+`_handle_lost_subscription` runs `PaymentSyncCancel` (`sync_cancel.py`,
 **CRM-only, no Stripe call**): mark every live recurring membership across the
 family cancelled (`cancel_date` + `stripe_sync_status='deleted'`, via
 `member_memberships_family_cancellable.sql` + the cancel / mark-deleted / sub-id
@@ -820,6 +841,83 @@ compare-desired-vs-actual **skip-if-equal** guard on the push path — today
 
 ---
 
+## 12. The one-time engine (`PaymentSyncOneTime`) — a one-shot charge, not a converge
+
+`PaymentSyncOneTime` (`sync_one_time.py`) is the **one-time counterpart** of
+`PaymentSyncService`: it charges a family's PENDING non-recurring memberships on
+**one consolidated invoice**. It is **standalone** — it does **not** call,
+extend, or mutate `PaymentSyncService`. It **reuses** only the recurring engine's
+shared pieces: the read queries (`PaymentSyncQueries`) and
+`PaymentSyncDiscounts.resolve` (the discount math, **unchanged**). DI deps:
+`db_pool`, `PaymentSyncDiscounts`, `PaymentsStripePaymentService`,
+`BillingParentResolver`.
+
+The deep difference from the recurring engine: a one-time membership is
+**terminal** — billed by exactly **one** invoice line, **once**. There is no
+re-derive-and-converge loop and no self-heal, because there is nothing to keep
+converging. This is why it is a separate service, not a mode of the reconciler.
+
+### `charge_one_time(member_id, idempotency_key, paid_with_cash=False) -> None`
+
+The real path. Resolves the paying parent, builds the desired invoice, charges
+it once, writes back. **A no-op when the family has no pending one-time
+memberships** (never cuts an empty invoice). Returns `None` — the caller reads
+the DB (`applied`) to confirm. Re-running finds no `not_added` rows and charges
+nothing again (terminal).
+
+1. **Read the family's PENDING non-recurring memberships** (`_build_plan` ->
+   `PaymentSyncQueries.get_active_one_time(family_ids, today, preview=False)`,
+   `get_active_one_time.sql`). The read covers **both `one_time` AND `trial`**
+   plans — a trial bills identically as a **$0 line** on the same consolidated
+   invoice and gets the same writeback + `applied` confirmation. **Terminal
+   semantics in SQL:** the real path reads **only `not_added`** rows (the
+   just-inserted, never-charged ones). An already-`applied` row is **never
+   re-read** — re-reading would re-charge it — so, unlike the recurring read,
+   there is **no `applied` / `migrating` inclusion**. Reads the unfiltered base
+   (service-role), reusing the same family applied-discount read so each
+   membership carries its discounts.
+2. **Group ONE-per-membership** (`_group_per_membership`, keyed by `item_id`).
+   A Stripe **invoice** has no one-item-per-price constraint like a subscription,
+   so each membership is its **own** invoice line (its own line id + its own
+   item-level discount). There is **no consolidation and no /quantity averaging**
+   — a singleton group makes `PaymentSyncDiscounts.resolve`'s /quantity a no-op
+   (**/1**), so each membership keeps its exact discount and `resolve` is reused
+   unchanged.
+3. **Resolve coupons** — `PaymentSyncDiscounts.resolve(groups, stripe_account_id)`
+   (the same idempotent gym-wide find-or-create as recurring). Each membership's
+   `coupons_by_price.get(item_id, [])` becomes its line's item-level coupons.
+4. **Execute ONE consolidated invoice** (`_execute` ->
+   `PaymentsStripePaymentService.create_invoice_payment`) on the **payer's**
+   customer: invoice-level metadata = payer + gym
+   (`StripeMembershipOneTimeMetadata`); one item per membership (price +
+   item-level coupons); `paid_out_of_band = paid_with_cash`. The response's
+   `line_item_ids` / `line_amounts` come back in `plan.items` order.
+5. **Write back per row** (`_writeback`, mapping `plan.items[i]` <->
+   `result.line_item_ids[i]` / `line_amounts[i]` by order, `strict=True` so a
+   line-count mismatch fails loud) — `PaymentSyncQueries.apply_one_time_membership_sync`
+   (`apply_one_time_membership_sync.sql`) stamps, **per membership**:
+   `stripe_item_id` = the invoice **LINE** id, `stripe_one_time_invoice_id` = the
+   **shared** invoice id, `total_price` = the **post-discount** line amount, and
+   `stripe_sync_status = 'applied'`. Then it **reuses** the recurring writebacks:
+   the coupon-link writeback (`set_applied_discount_coupon_id` per
+   `plan.coupon_links`) and the `once`-consumption stamp (`mark_once_consumed`,
+   `end_date = today`, on the once-mode applied-discount rows — the one invoice is
+   the only charge). **No** `next_due_date`, **no** freeze, **no** mark-deleted —
+   none apply to a terminal one-time line.
+
+### `preview_one_time(member_id) -> PreviewInvoice | None`
+
+The dry-run. The caller (the start preview) stages the previewed membership(s) as
+`preview_add` first; `preview_one_time` reads that staged state
+(`get_active_one_time(..., preview=True)`, which additionally reads `preview_add`),
+resolves the coupons (idempotent gym-wide find-or-create), and returns the
+**discounted** invoice preview via `preview_invoice_payment`. `None` when nothing
+is staged. **Writes nothing back** (no line-id / coupon-link / once-consumption
+writeback) — symmetric with the recurring preview's "resolve coupons, skip the
+convergence writeback" boundary.
+
+---
+
 ## Key files (where the engine actually lives)
 
 - **Orchestrator:**
@@ -849,10 +947,17 @@ compare-desired-vs-actual **skip-if-equal** guard on the push path — today
 - **Builder service:** `builder.py` (`PaymentSyncBuilder` —
   `build_sync_params` → `_group_by_price` / `_build_bucket`; reads the DB, groups
   by price, delegates to the discount service, assembles the bucket).
-- **Discount service:** `discounts.py` (`PaymentSyncDiscounts` —
-  `resolve` → `_aggregate_line_values`; owns the discount math + coupon
-  find-or-create, returns `ResolvedDiscounts`; the date-lifetime filter lives in
-  the read, not here).
+- **Discount service:** `sync_discounts.py` (`PaymentSyncDiscounts` —
+  `resolve(groups, stripe_account_id)` → `_aggregate_line_values`; owns the
+  discount math + calls the coupon engine, returns `ResolvedDiscounts`; the
+  date-lifetime filter lives in the read, not here). Reused **unchanged** by the
+  one-time engine.
+- **One-time engine:** `sync_one_time.py` (`PaymentSyncOneTime` —
+  `charge_one_time` / `preview_one_time`, with `_build_plan` /
+  `_group_per_membership` / `_execute` / `_writeback`; §12). Standalone one-shot
+  invoice charge that reuses `PaymentSyncQueries` + `PaymentSyncDiscounts.resolve`
+  and never touches `PaymentSyncService`. Models `OneTimeInvoiceItem` /
+  `OneTimeInvoicePlan` live in `sync_schema.py`.
 - **Read/write queries:** `queries.py` (`PaymentSyncQueries` —
   `get_family_ids`, `get_active_memberships` (+ private `_get_discounts_by_item`),
   `get_unconsumed_once_discounts`, `apply_membership_sync`,
@@ -874,7 +979,11 @@ compare-desired-vs-actual **skip-if-equal** guard on the push path — today
   `src/shared/billing_parent.py`.
 - **SQL (`src/shared/sql/`):** `resolve_parent.sql`. **SQL
   (`src/sync/sql/`):** `get_family_ids.sql`,
-  `get_active_recurring.sql`, `set_membership_post_discount_prices.sql`,
+  `get_active_recurring.sql`, `get_active_one_time.sql` (the one-time read — both
+  `one_time` + `trial`, terminal `not_added`-only on the real path),
+  `apply_one_time_membership_sync.sql` (the one-time per-row writeback: line id +
+  `stripe_one_time_invoice_id` + post-discount price + `applied`),
+  `set_membership_post_discount_prices.sql`,
   `sync_profile_monthly_total.sql`, `update_profile_sub_ids.sql`,
   `update_stripe_item_id.sql`. **SQL (`src/memberships/sql/applied_discounts/`):** the
   applied-discount read `get_applied_discounts_by_member.sql`, the once-candidate

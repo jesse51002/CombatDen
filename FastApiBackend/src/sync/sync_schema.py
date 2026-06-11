@@ -177,7 +177,7 @@ class OneTimeInvoiceItem(BaseModel):
     (``create_invoice_payment`` returns line ids in request order), so the
     writeback maps each returned line id + amount back to this ``item_id``.
     ``coupon_ids`` are the membership's item-level coupons, already ordered
-    dollar→percent by the resolver.
+    percent→dollar by the resolver (``DISCOUNT_APPLICATION_ORDER``).
     """
 
     item_id: UUID

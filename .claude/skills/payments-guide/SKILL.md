@@ -179,16 +179,22 @@ back to active because the DB says it's current.
 `{base}:invoice`/`:invoice_item:{i}`/`:finalize`/`:pay`):
 
 - `create_invoice_payment` / `preview_invoice_payment` — **itemized**: ONE invoice
-  from a **list of items**, each a **Stripe price XOR an ad-hoc amount** (late
-  fees, pro-shop) plus its own **item-level** discount coupons
-  (`InvoiceItem.discounts`, not invoice-level — so each line is discounted
-  independently). A single charge is just a one-item list. Returns
-  `line_item_ids` in **request order** (mapped from each finalized line's
-  `parent.invoice_item_details.invoice_item`) so a caller maps each item → its
-  Stripe line id (e.g. a membership → `stripe_item_id`). Invoice-level `metadata`
-  is any `BaseStripeMetadata` (membership-one-time or ad-hoc); a consolidated
-  multi-plan invoice's `StripeMembershipOneTimeMetadata.plan_id` is `None`. **No
-  price-active check** — prices are never deactivated.
+  from a **list of items** (`PaymentsInvoiceItemSpec`), each a **Stripe price XOR
+  an ad-hoc amount** (late fees, pro-shop — exactly one set, model-validated) plus
+  its own **item-level** discount coupons (`InvoiceItem.discounts`, not
+  invoice-level — so each line is discounted independently). A single charge is
+  just a one-item list. The create response carries **`line_item_ids` AND
+  `line_amounts`** in **request order** (each line mapped from its
+  `parent.invoice_item_details.invoice_item`), so a caller maps each item → its
+  Stripe line id (e.g. a membership → `stripe_item_id`) **and** its
+  **post-discount** charged amount in cents (e.g. a membership's `total_price`) —
+  no client math. The create request also takes an optional **invoice-level
+  `description`** (the header line on the hosted invoice/receipt) — **distinct**
+  from each item's per-line `description` (charge_card passes its `reason` here).
+  Invoice-level `metadata` is any `BaseStripeMetadata` (membership-one-time or
+  ad-hoc); a consolidated multi-plan invoice's
+  `StripeMembershipOneTimeMetadata.plan_id` is `None`. **No price-active check** —
+  prices are never deactivated.
 - `refund_payment` — refund a PaymentIntent (full or partial).
 - `pay_open_subscription_invoice_out_of_band` — find the subscription's single
   open invoice, stamp `crm_paid_with_cash="true"` on it, and `invoices.pay` with
@@ -218,18 +224,20 @@ so the same value always resolves to one shared coupon. An existing coupon is
 coupons are immutable) and a mismatch is **deleted + recreated** under the same
 id. `<mode>` → Stripe duration via `once`→`once`, `ongoing`→`forever` (the
 arbitrary `end_date` cutoff is enforced in the read, not by Stripe). **This is
-shared infrastructure** — both the recurring sync (`PaymentSyncDiscounts`,
-`sync-guide`) and one-time membership discounting
-(`OneTimeMembershipDiscountService`) resolve a discount value into a coupon
-through here; nothing under `payment_sync/` reimplements it. The
+shared infrastructure** — `PaymentSyncDiscounts.resolve` (`sync-guide`) calls it
+for **both** the recurring sync **and** the one-time engine `PaymentSyncOneTime`
+(which feeds it per-membership groups for the one-time invoice), one value→coupon
+mechanism; nothing under `src/sync/` reimplements it. The
 `StripeCouponDuration` enum (`once` / `repeating` / `forever`) lives in
 `schema/payments_enums.py`.
 
 **`payments_stripe_mappers.py`** — a class-less concern module (free functions by
 design): the **single** preview mapper `map_preview_invoice` plus the line-item
-helpers (`_post_discount_amount` computes `subtotal − Σ discount_amounts` itself
-rather than trusting `line.amount`; `_extract_subscription_item_id` /
-`_is_proration` handle legacy vs. `parent`-nested Stripe shapes). It maps **any**
+helpers. **`post_discount_amount(line)` is public** (no underscore — the payment
+service imports it to compute each itemized line's post-discount charged amount
+for `line_amounts`); it computes `subtotal − Σ discount_amounts` itself rather
+than trusting `line.amount`. `_extract_subscription_item_id` / `_is_proration`
+(private) handle legacy vs. `parent`-nested Stripe shapes. It maps **any**
 `create_preview` result (the proposed-change previews **and** the existing-sub
 upcoming invoice — there is no separate `map_upcoming_invoice`) to one
 **`PreviewInvoice`** of **`PreviewInvoiceLine`**, returning **every** line; a
@@ -238,7 +246,7 @@ consumer wanting only the steady-state recurring view filters on `is_proration`
 `PaymentsSubscriptionUpcoming.fetch_upcoming`). Each line carries Stripe's **raw
 `amount`** (`line.amount` — *pre*-discount on a subscription preview, not
 repurposed) **and** the computed post-discount **`discounted_amount`**
-(`_post_discount_amount`), so a consumer reads the net directly with no client
+(`post_discount_amount`), so a consumer reads the net directly with no client
 math. The one finalized-invoice model `PaymentsInvoiceResponse` (§7) is separate
 and unchanged.
 

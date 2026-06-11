@@ -146,8 +146,9 @@ value mints a new active version on the same discount, so the stored id stays
 stable.
 
 **Applying** a linked discount is the same as any discount: the membership/family
-flow passes its id to `add_discounts` (`preset_ids`), which pins an applied-discount
-row to the discount's **active** value version. Editing the linked discount mints a new
+flow passes its id in `discount_ids` (to the start op at creation, or to
+`add_discounts` post-creation), which pins an applied-discount row to the
+discount's **active** value version. Editing the linked discount mints a new
 version, so future family applications get it — like a regular discount. The
 `linked` tag keeps it out of the regular per-membership discount picker (which
 lists only `preset`); family billing via `members.account_linked_to_id` is
@@ -162,14 +163,16 @@ membership's billing is determined from that member's own memberships only.
 
 ## Custom discounts — minted at membership creation, one-shot, single-owner
 
-A `custom` discount is an **inline value minted by a membership flow** (the
-single start today; the family batch next): the start request carries
-`custom_discounts` (a list of `DiscountValue`s), and
+A `custom` discount is an **inline value minted by the start op** (the one
+list-based membership-create flow — `memberships-guide`): each item in the start
+request carries `custom_discounts` (a list of `DiscountValue`s), and
 `DiscountsService.mint_custom_discounts(gym_id, values)` — the one home for the
 `DiscountValue` → discount conversion (auto-generated name like
 "Custom 10.0% off" + `custom` type) — creates one identity + one value version
-per entry and returns **plain discount ids**. The membership side then applies
-those ids exactly like presets (pinning the active value version).
+per entry and returns **plain discount ids**. The start then applies those ids
+(alongside the item's `discount_ids`) exactly like presets, pinning the active
+value version, **at creation, before the charge** — so the first (one-time: the
+only) invoice is discounted.
 **DiscountsService never touches applied-discount rows** — it owns only
 `gym_discounts` / `gym_discount_values`.
 
@@ -189,10 +192,22 @@ path rejects custom ids (`add_applied_discounts` defaults
 passes `allow_custom=True`). So `POST /member_memberships/discounts/add` can
 never attach someone's minted custom to another membership.
 
-**Why:** single-failure cleanup is completely safe. When a start (or one batch
-item) fails after minting, the revert deletes the applied rows, archives the
-minted customs, and deletes the pending membership — and the DB guarantees no
-other member can possibly hold those customs.
+**Why:** single-failure cleanup is completely safe. When a start fails after
+minting, the revert deletes the applied rows, archives the minted customs, and
+deletes the pending membership — and the DB guarantees no other member can
+possibly hold those customs.
+
+### One-time / trial discounts are creation-only
+
+A non-recurring (`one_time` / `trial`) membership's discounts can **only** be
+applied at **creation**, by the start op (its `discount_ids` + inline
+`custom_discounts`, applied before the one consolidated invoice). The
+post-creation `add_discounts` path **rejects a non-recurring membership** outright
+(`MemberMembershipsDiscounts._validate_apply` raises "its single invoice is
+already charged, so discounts can only be applied at creation") — there is no
+later invoice to discount, and the one-time charge is terminal. So a one-time /
+trial membership's discount set is fixed at start; only **recurring** memberships
+take post-creation add/remove (§4).
 
 ## 4. Coupons are computed at build, then written back (real path only)
 
@@ -284,7 +299,7 @@ shared by both paths; the coupon-id *writeback* is real-sync-only. Intentional.
 ### Previewing an add or remove — staged, then always cleaned up
 
 Adding and removing are **two separate operations**, `add_discounts(item_id,
-member_id, preset_ids, idempotency_key, preview=False)` and
+member_id, discount_ids, idempotency_key, preview=False)` and
 `remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`
 (`MemberMembershipsDiscounts`). Each takes a **`preview` bool**. A preview
 must reflect the *proposed* change (not the current bill) yet leave **no permanent

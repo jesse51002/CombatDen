@@ -130,7 +130,7 @@ class PaymentSyncOneTime:
         them one-per-membership so the **unchanged** ``PaymentSyncDiscounts.resolve``
         runs ÷1 (no averaging — each membership keeps its exact discount), and
         assembles the ordered ``OneTimeInvoicePlan`` (one item per membership,
-        item-level coupons dollar→percent) plus the ``applied_discount_id →
+        item-level coupons percent→dollar) plus the ``applied_discount_id →
         coupon_id`` links and the ``once``-mode ids to mark consumed. No DB writes
         (coupon find-or-create is an idempotent gym-wide Stripe op).
         """

@@ -61,6 +61,11 @@ upgrade (`update_price`) or a bulk plan migration. This is the same
 "editing a template never silently re-bills holders" predictability guarantee
 `discounts-guide` describes for discount versions.
 
+**Creating memberships is a single list-based op.** One `start` call takes a
+payer + a **list** of memberships and creates them all for the payer's family at
+once (a single membership = a one-item list — there is no separate "single
+start"); see §6. The membership *instance* below is still one row each.
+
 ---
 
 ## 2. `membership_plans` — the identity table
@@ -323,7 +328,7 @@ preview) and lock **two** families inside the op, so the facade delegates them b
 
 | op (file) | what it does |
 | --- | --- |
-| **start** (`memberships_start.py`) | validate plan+price usable + no existing active/frozen membership on the plan + account not frozen. **Discounts at creation:** `discount_ids` (existing preset/linked discounts) and `custom_discounts` (inline `DiscountValue`s minted as one-shot `custom` discounts via `DiscountsService.mint_custom_discounts`) are applied as applied-discount rows BEFORE the charge — so the first (one-time: the only) invoice is discounted; the start is the one flow allowed to apply a custom (`allow_custom=True`; customs are single-use, DB-enforced — `discounts-guide`). Then DB-first insert (NULL `stripe_item_id`, `not_added`) and the engine call: recurring → `update_payments_recurring` (writeback stamps `stripe_item_id` + next_due_date + `applied`); one-time → `PaymentSyncOneTime.charge_one_time` (ONE consolidated invoice, one line per membership with item-level coupons; writeback stamps `stripe_item_id` = invoice LINE id + `stripe_one_time_invoice_id` + post-discount `total_price` + `applied`). Cleanup-on-failure reverts in FK-safe order: applied rows → minted customs (archive) → pending row. |
+| **start** (`memberships_start.py`, `MemberMembershipsStart.start(request)`) | **ONE list-based op:** a payer + a list of N membership items (each `member_id` + `price_id` + its `discount_ids` + inline `custom_discounts`); a single membership is just a one-item list. The op **never links** — every non-payer item member must ALREADY be linked to the payer (validation rejects otherwise with a "link them first" error), which is what lets the whole request run under the payer's single family lock (the facade locks payer + all item members). **Phase A** validates everything up-front in the shared `MemberMembershipsStartValidation` (payer is top-level/in-gym/unfrozen → links → plan/price rows → per-member no-existing → discounts live & not `custom`); any failure rejects with nothing written or billed. **Phase B (pure DB):** one multi-row pending insert (NULL `stripe_item_id`, `not_added`) + per-item minted customs + applied discounts — **discounts at creation**, so the first (one-time: the only) invoice is discounted; the start is the one flow allowed to apply a custom (`allow_custom=True`, single-use DB-enforced — `discounts-guide`); any failure undoes everything (nothing billed). **At most two charges:** **Phase C** = ONE consolidated one-time invoice for the `one_time`/`trial` group via `PaymentSyncOneTime.charge_one_time` (one line per membership, item-level coupons; a **trial is a $0 line** on the same invoice; writeback stamps `stripe_item_id` = invoice LINE id + `stripe_one_time_invoice_id` + post-discount `total_price` + `applied`); **Phase D** = ONE recurring converge for the recurring group via `update_payments_recurring` (writeback stamps `stripe_item_id` + next_due_date + `applied`). Idempotency sub-keys are `uuid5(request_key, PlanType.<group>.value)`, so a client retry dedups BOTH charges at Stripe. **Failure granularity is the charge group** (same-group items share fate); a charge failure is **data, not an exception** — it surfaces in the per-membership breakdown `MemberMembershipsStartResponse` (`results[]` with per-item `status`/`item_id`/`error`, `charge_count`, `multiple_charges`), and a **successfully billed one-time row is NEVER un-billed** (kept + flagged for reconciliation if its writeback was unconfirmed). |
 | **cancel** (`cancel.py`) | recurring-only; idempotent if already cancelled. **DB-first:** set `cancel_date = GREATEST(next_due_date, gym-today)` (status stays `applied`, `member_memberships_cancel.sql`) — the membership stays active through the paid period — then sync (drops the line, stamps `deleted`); verify it flipped to `deleted`, else revert by clearing `cancel_date` (`member_memberships_uncancel.sql`, allowed because the membership isn't `deleted` yet). `stripe_item_id` kept intact. Returns the resolved `cancel_date`. |
 | **update_price** (`update_price.py`) | the **opt-in price upgrade** — moves the membership onto the plan's single `is_active` price (`member_memberships_get_active_price.sql`); caller never picks the target. **DB-first:** write the new `price_id`/`total_price` + stage `migrating` (`member_memberships_update_price.sql`), then sync (the writeback moves the line to the new price's item — allowed because `migrating`), verify it flipped to `applied`, else revert to the old price. If already on the active price the CRM row is left alone but Stripe is re-synced defensively. Applied discounts stay pinned on the same `item_id` across the swap. |
 | **freeze / unfreeze** (`freeze.py`) | **account-level** (not per-membership). `freeze` pauses Stripe billing and sets `freeze_start_date`/`freeze_end_date` on the parent `members` row (`member_memberships_freeze_profile.sql`); `unfreeze` resumes and clears them (`member_memberships_unfreeze_profile.sql`). Operates on the resolved parent account, so it covers all the account's memberships at once. |
@@ -331,6 +336,23 @@ preview) and lock **two** families inside the op, so the facade delegates them b
 | **charge_card** (`charge_card.py`) | ad-hoc, **outside any subscription**: create a one-off Stripe invoice for `amount_cents` + `reason`; `paid_cash=true` routes it out of band instead of charging the card. The `invoice.paid` + `invoice_payment.paid` webhooks persist the CRM invoice + charge rows. |
 | **add / remove discounts** (`memberships_discounts.py`) | **two separate ops**, `add_discounts(item_id, member_id, discount_ids, idempotency_key, preview=False)` (rejects `custom` ids — customs are creation-only, single-use) and `remove_discounts(item_id, member_id, applied_ids, idempotency_key, preview=False)`. Each writes/deletes applied-discount rows, then re-syncs so the sync resolves coupons. With `preview=True` it **stages** instead of committing — add inserts `preview_add` rows then deletes them; remove flips the rows to `preview_remove` then reverts to `applied` — runs the read-only preview build (which keeps `preview_add` in / drops `preview_remove`), and always cleans up. **The applied-discount model is owned by `discounts-guide`** — defer the once/ongoing, value-version, coupon, and preview-staging details there. |
 | **link / unlink** (`linked.py`) | `link_account(member_id, parent_member_id)` sets `members.account_linked_to_id` (and NULLs the child's stripe/card/freeze fields per the `linked_account_no_stripe` check); `unlink_account(member_id)` clears it; `check_link_account` is a read-only pre-flight. **Pure DB change — no Stripe sync, no preview.** Both require the member to have **zero active recurring memberships** (`_assert_no_active_recurring`), and the engine never recomputes discounts family-wide (`discounts-guide`), so adding/removing a membership-less family member can't change anyone's bill — there is nothing to sync or preview. Owns its **own** locking: locks **two** families (`[member_id, parent_member_id]` / `[member_id, old_parent_id]`); since `PayingMemberLock` is non-reentrant the facade delegates these **bare** (no `lock([member_id])` wrap). Self-contained — does **not** extend `MemberMembershipsBase`. |
+
+**The start preview is its own three-way split** (`MemberMembershipsStartPreview`,
+`memberships_start_preview.py`) — unlike the other ops' two-way
+`DueNowVsRecurringPreview`. It runs the **identical** Phase-A validation as the
+real start, **stages** every item exactly as the real start would — pending rows
+as `preview_add` + their applied-discount rows (inline customs minted, then
+archived again in cleanup) — runs the two engine previews against that staged,
+**discounted** state, and **always** undoes the staging in a `finally` (the real
+path excludes `preview_add`, and the held family lock keeps a concurrent real
+sync from observing it). The response `MemberMembershipsStartPreviewResponse` is a
+three-way split: **`one_time`** (the consolidated one-time invoice, from
+`PaymentSyncOneTime.preview_one_time`), **`due_now`** (the recurring proration
+charged now when `prorate=True`) and **`recurring`** (the steady-state per-cycle
+invoice) — the latter two unpacked from `preview_update_payments_recurring`'s
+`DueNowVsRecurringPreview`. Each is `None` when the request has no membership in
+that group. (Cancel / update_price previews deliberately keep the two-way
+`DueNowVsRecurringPreview`.)
 
 ---
 
@@ -368,7 +390,7 @@ preview) and lock **two** families inside the op, so the facade delegates them b
 
 ## 8. Endpoints
 
-**Plans** — `router.py`, prefix `/api/v1/membership_plans`:
+**Plans** — `plans_router.py`, prefix `/api/v1/membership_plans`:
 
 | method + path | does |
 | --- | --- |
@@ -382,17 +404,17 @@ preview) and lock **two** families inside the op, so the facade delegates them b
 | `POST /migrate` | **not implemented yet** — returns 501 (stubbed pending the migration work; the `migrate_members` service method still exists) |
 | `POST /migrate-all` | **not implemented yet** — returns 501 (stubbed pending the migration work; the `migrate_all_members` service method still exists) |
 
-**Memberships** — `router.py`, prefix
+**Memberships** — `memberships_router.py`, prefix
 `/api/v1/member_memberships`:
 
 | method + path | does |
 | --- | --- |
 | `DELETE /` | cancel a membership |
-| `POST /` | start a membership (201) |
+| `POST /` | start the payer's family memberships in one call — list of items in, per-membership breakdown out (`MemberMembershipsStartResponse`); ≤2 charges (201) |
 | `POST /freeze` | freeze the account (204) |
 | `POST /unfreeze` | unfreeze the account (204) |
 | `PUT /price` | upgrade to the plan's active price (204) |
-| `POST /preview` | preview a start |
+| `POST /preview` | preview a start — three-way `one_time / due_now / recurring` split (staged, discounted) |
 | `POST /cancel/preview` | preview a cancel |
 | `POST /price/preview` | preview a price update |
 | `POST /discounts/add` | add applied-discount row(s) to the membership; `preview` bool in the body runs a dry-run instead of committing |
@@ -400,10 +422,11 @@ preview) and lock **two** families inside the op, so the facade delegates them b
 | `POST /mark-paid-cash` | pay the open invoice out of band (204) |
 | `POST /charge-card` | ad-hoc card/cash charge |
 
-Plan endpoints (`router.py`) call `verify_gym_employee` before
-acting; membership endpoints (`router.py`) call
-`verify_can_view_member` (the membership routes are all member-scoped, so they
-gate on access to that member rather than on gym-employee status).
+Plan endpoints (`plans_router.py`) call `verify_gym_employee` before
+acting; membership endpoints (`memberships_router.py`) call
+`verify_can_view_member` (on the payer + every item member for start/preview; on
+the member for member-scoped ops) — the membership routes are all member-scoped,
+so they gate on access to those members rather than on gym-employee status).
 
 ---
 
@@ -429,15 +452,22 @@ gate on access to that member rather than on gym-employee status).
   `..._get_affected_members`, `..._list_prices`, the `..._delete_pending` pair).
 - **Membership service:**
   `FastApiBackend/src/memberships/service/`
-  (`memberships_service.py` facade + `memberships_base`, `memberships_start`,
-  `memberships_cancel`, `memberships_update_price`, `memberships_freeze`,
+  (`memberships_service.py` facade + `memberships_base`, `memberships_start`
+  (`MemberMembershipsStart.start` — the list op), `memberships_start_validation`
+  (the shared Phase-A `MemberMembershipsStartValidation`),
+  `memberships_start_preview` (`MemberMembershipsStartPreview` — the staged 3-way
+  preview), `memberships_cancel`, `memberships_update_price`, `memberships_freeze`,
   `memberships_mark_paid_cash`, `memberships_charge_card`,
-  `memberships_discounts`); schemas in
-  `src/memberships/memberships_schema.py`; router
+  `memberships_discounts`, `memberships_linked`); schemas in
+  `src/memberships/memberships_schema.py` (`MemberMembershipsStartRequest` /
+  `...StartItem` / `...StartResponse` / `...StartResultItem` /
+  `...StartPreviewResponse` + the internal `...StartItemState`); router
   `src/memberships/memberships_router.py`; SQL in `src/memberships/sql/`
-  (`..._insert`, `..._get`, `..._get_plan_price`, `..._get_active_price`,
-  `..._check_existing`, `..._cancel`, `..._update_price`, the freeze/unfreeze
-  profile pair, `..._delete_pending`).
+  (`..._insert`, `..._get`, `..._get_plan_prices`, `..._get_active_price`,
+  `..._check_existing`, `..._cancel`, `..._update_price`,
+  `..._start_account_links`, `..._start_discounts_check`, the freeze/unfreeze
+  profile pair, `..._delete_pending`). The one-time charge engine the start calls
+  (`PaymentSyncOneTime`) lives in `src/sync/` — owned by `sync-guide`.
 - **Seams (do NOT duplicate):** the `src/sync/sql/`
   folder + the sync engine are owned by `sync-guide`; the
   `src/memberships/sql/applied_discounts/` folder + the applied-discount
