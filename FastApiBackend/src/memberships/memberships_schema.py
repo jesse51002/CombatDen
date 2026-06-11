@@ -1,13 +1,16 @@
 """Request schemas for member membership lifecycle operations."""
 
 from datetime import date
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 from schema.gym_discount import DiscountType
+from schema.membership_plan import PlanType
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import DiscountValue
+from src.payments.schema.payments_invoice_schema import PreviewInvoice
 
 
 class MemberMembershipsCancelResponse(BaseModel):
@@ -51,6 +54,114 @@ class MemberMembershipsStartRequest(BaseModel):
     idempotency_key: UUID
     discount_ids: list[UUID] = []
     custom_discounts: list[DiscountValue] = []
+
+
+class MemberMembershipsBatchStartItem(BaseModel):
+    """One membership to create inside a batch start.
+
+    Per-membership discounts-at-creation, exactly like the single start:
+    ``discount_ids`` reference existing preset / linked discounts;
+    ``custom_discounts`` are inline values minted as ``custom`` discounts.
+    Both land before the charge, so the first (one-time: only) invoice is
+    discounted.
+    """
+
+    member_id: UUID
+    plan_id: UUID
+    price_id: UUID
+    discount_ids: list[UUID] = []
+    custom_discounts: list[DiscountValue] = []
+
+
+class MemberMembershipsBatchStartRequest(BaseModel):
+    """Start a linked family's memberships in one call.
+
+    The payer (``payer_member_id``) is identity-only — it need not appear in
+    ``memberships``. Every non-payer member must ALREADY be linked to this
+    payer (linking is a separate, prior operation; the batch never links).
+    ``prorate`` applies to the recurring converge only; ``paid_with_cash``
+    is batch-level (the consolidated one-time invoice is one charge). The
+    single ``idempotency_key`` deterministically derives one sub-key per
+    charge group (one-time invoice / recurring converge), so a client retry
+    of the same request dedups both charges at Stripe.
+    """
+
+    payer_member_id: UUID
+    gym_id: UUID
+    prorate: bool = True
+    paid_with_cash: bool = False
+    idempotency_key: UUID
+    memberships: list[MemberMembershipsBatchStartItem] = Field(
+        default_factory=list,
+    )
+
+    @field_validator("memberships")
+    @classmethod
+    def _validate_memberships(
+        cls,
+        value: list[MemberMembershipsBatchStartItem],
+    ) -> list[MemberMembershipsBatchStartItem]:
+        if not value:
+            raise ValueError("memberships must not be empty")
+        pairs = [(item.member_id, item.plan_id) for item in value]
+        if len(pairs) != len(set(pairs)):
+            raise ValueError(
+                "memberships must not contain duplicate (member_id, plan_id) pairs",
+            )
+        return value
+
+
+class MemberMembershipsBatchStartStatus(StrEnum):
+    """Outcome of one membership inside a batch start."""
+
+    created = "created"
+    failed = "failed"
+
+
+class MemberMembershipsBatchStartResultItem(BaseModel):
+    """Per-membership outcome in the batch start breakdown.
+
+    ``item_id`` is set when ``status = created``; ``error`` carries the
+    failure reason when ``status = failed``. Failure granularity is the
+    charge group (the one-time invoice / the recurring converge), so
+    same-group items share fate.
+    """
+
+    member_id: UUID
+    plan_id: UUID
+    plan_type: PlanType
+    status: MemberMembershipsBatchStartStatus
+    item_id: UUID | None = None
+    error: str | None = None
+
+
+class MemberMembershipsBatchStartResponse(BaseModel):
+    """Response after a batch start: the per-membership breakdown.
+
+    ``charge_count`` = (1 if any one-time membership) + (1 if any recurring
+    membership); ``multiple_charges`` flags the mixed case so the CRM can
+    tell the gym owner two separate charges occurred. Invoice figures are
+    NOT returned here — the batch preview owns those.
+    """
+
+    results: list[MemberMembershipsBatchStartResultItem]
+    charge_count: int
+    multiple_charges: bool
+
+
+class MemberMembershipsBatchInvoices(BaseModel):
+    """The batch preview's three-way invoice split.
+
+    ``one_time`` — the consolidated one-time invoice (all one-time
+    memberships, one charge). ``due_now`` — the recurring proration invoice
+    charged immediately (``prorate=True``). ``recurring`` — the steady-state
+    recurring invoice each cycle going forward. Each is ``None`` when the
+    batch has no memberships in that group.
+    """
+
+    one_time: PreviewInvoice | None = None
+    due_now: PreviewInvoice | None = None
+    recurring: PreviewInvoice | None = None
 
 
 class MemberMembershipsMarkPaidCashRequest(BaseModel):
