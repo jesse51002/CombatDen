@@ -65,12 +65,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The two charge groups derive their Stripe idempotency keys from the
-# request's single key, so a client retry of the same request dedups BOTH
-# charges at Stripe.
-ONE_TIME_KEY_NAME = "one_time"
-RECURRING_KEY_NAME = "recurring"
-
 
 @dataclass
 class _StartItemState:
@@ -752,8 +746,11 @@ class MemberMembershipsStart(MemberMembershipsBase):
         try:
             await self._payment_sync_one_time.charge_one_time(
                 request.payer_member_id,
+                # Each charge group's key derives from the request's single
+                # key (named by its PlanType group), so a client retry of
+                # the same request dedups BOTH charges at Stripe.
                 idempotency_key=uuid5(
-                    request.idempotency_key, ONE_TIME_KEY_NAME,
+                    request.idempotency_key, PlanType.one_time.value,
                 ),
                 paid_with_cash=request.paid_with_cash,
             )
@@ -780,7 +777,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
             await self._payment_sync.update_payments_recurring(
                 request.payer_member_id,
                 idempotency_key=uuid5(
-                    request.idempotency_key, RECURRING_KEY_NAME,
+                    request.idempotency_key, PlanType.recurring.value,
                 ),
                 pay_first_invoice_out_of_band=request.paid_with_cash,
                 proration_behavior=(
