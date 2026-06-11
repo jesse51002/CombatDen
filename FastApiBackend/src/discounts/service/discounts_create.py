@@ -39,15 +39,30 @@ class DiscountsCreate(DiscountsBase):
     async def create_discount(
         self,
         request: DiscountCreateRequest,
+        allow_custom: bool = False,
     ) -> DiscountResponse:
         """Insert the identity row + first active value version, return both.
 
         Args:
             request: Discount creation data (identity + value/lifetime).
+            allow_custom: ``custom`` discounts exist only as one-shot,
+                single-owner values minted by the membership start flow
+                (inline ``custom_discounts`` → ``mint_custom_discounts``,
+                the one caller passing ``True``). The public create rejects
+                them — a custom is never a catalog entry.
 
         Returns:
             The created discount (identity merged with its active value).
+
+        Raises:
+            ValueError: If ``discount_type`` is ``custom`` on the public
+                path.
         """
+        if not allow_custom and request.discount_type == DiscountType.custom:
+            raise ValueError(
+                "custom discounts are minted by the membership start flow "
+                "(inline custom_discounts) — they cannot be created directly",
+            )
         async with self._db_pool.session() as session:
             identity = await self._insert_identity(session, request)
             value = await self._insert_value(session, request, identity)
@@ -73,7 +88,8 @@ class DiscountsCreate(DiscountsBase):
                     discount_name=self._custom_name(value),
                     discount_type=DiscountType.custom,
                     value=value,
-                )
+                ),
+                allow_custom=True,
             )
             minted.append(response.discount_id)
         return minted

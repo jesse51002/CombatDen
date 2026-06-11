@@ -1,4 +1,4 @@
-"""Create gym discounts (preset | custom) via the backend.
+"""Create gym discounts (preset catalog) via the backend.
 
 The seed creates coupon-free discount presets: `POST /api/v1/discounts/` writes
 the identity row plus its active value version (coupons are computed at sync and
@@ -84,7 +84,9 @@ def create_regular(
     for n, name in enumerate(names, start=1):
         progress.item(n, total, name)
         use_pct = random.choice([True, False])
-        discount_type = random.choices(["preset", "custom"], weights=[75, 25])[0]
+        # Catalog discounts are preset-only: `custom` is one-shot/single-owner,
+        # minted ONLY inline at membership start (the create API rejects it).
+        discount_type = "preset"
         discount_mode = random.choice(["once", "ongoing"])
         pct_off = round(random.uniform(5, 25), 1)
         dollar_off = random.randint(500, 5000)

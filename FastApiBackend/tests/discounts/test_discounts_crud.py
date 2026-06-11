@@ -36,20 +36,17 @@ from src.memberships.service.memberships_discounts import (
 
 
 async def _create_custom(discounts_service, gym_id, created, pct=10.0):
-    """Mint a `custom` discount the way a membership flow would."""
-    resp = await discounts_service.create_discount(
-        DiscountCreateRequest(
-            gym_id=gym_id,
-            discount_name=f"Custom {pct}% off",
-            discount_type=DiscountType.custom,
-            value=DiscountValue(
-                percentage_off=pct,
-                discount_mode=DiscountMode.once,
-            ),
-        ),
+    """Mint a `custom` discount the way the membership start flow does.
+
+    The public create rejects `custom` (one-shot inline values only), so the
+    helper uses the real mint path and returns the minted discount_id.
+    """
+    [discount_id] = await discounts_service.mint_custom_discounts(
+        gym_id,
+        [DiscountValue(percentage_off=pct, discount_mode=DiscountMode.once)],
     )
-    created.track_discount(resp.discount_id)
-    return resp
+    created.track_discount(discount_id)
+    return discount_id
 
 
 async def _row(db_pool, discount_id):
@@ -460,18 +457,40 @@ async def _delete_seeded_membership(db_pool, member_id):
 # ── Custom discounts are one-shot + single-owner ─────────────────────
 
 
+async def test_create_rejects_custom_discount(discounts_service, gym_id):
+    """The public create NEVER makes a `custom` discount.
+
+    Customs are one-shot inline values minted only by the membership start
+    flow (mint_custom_discounts) — a catalog entry of type `custom` is
+    rejected at the service, so no API caller (CRM, seed) can create one.
+    """
+    with pytest.raises(ValueError, match="cannot be created directly"):
+        await discounts_service.create_discount(
+            DiscountCreateRequest(
+                gym_id=gym_id,
+                discount_name="Sneaky custom",
+                discount_type=DiscountType.custom,
+                value=DiscountValue(
+                    percentage_off=10.0,
+                    discount_mode=DiscountMode.once,
+                ),
+            ),
+        )
+
+
+
 async def test_update_rejects_custom_discount(discounts_service, gym_id, created):
     """A custom discount is one-shot: any edit is rejected at the service.
 
     Customs are mint -> apply once -> archive; a rename or a new value
     version is never valid (the DB trigger enforces the value half too).
     """
-    custom = await _create_custom(discounts_service, gym_id, created)
+    custom_id = await _create_custom(discounts_service, gym_id, created)
 
     with pytest.raises(ValueError, match="one-shot"):
         await discounts_service.update_discount(
             DiscountUpdateRequest(
-                discount_id=custom.discount_id,
+                discount_id=custom_id,
                 gym_id=gym_id,
                 value=DiscountValue(
                     percentage_off=20.0,
@@ -503,7 +522,7 @@ async def test_apply_rejects_custom_outside_membership_flow(
         ),
     )
     created.track_discount(preset.discount_id)
-    custom = await _create_custom(discounts_service, gym_id, created)
+    custom_id = await _create_custom(discounts_service, gym_id, created)
 
     member_id = None
     try:
@@ -522,7 +541,7 @@ async def test_apply_rejects_custom_outside_membership_flow(
                 item_id=item_id,
                 member_id=member_id,
                 gym_id=gym_id,
-                discount_ids=[custom.discount_id],
+                discount_ids=[custom_id],
                 apply_date=date.today(),
             )
     finally:
@@ -537,7 +556,7 @@ async def test_db_rejects_second_value_version_for_custom(
 
     Requires migration 20260610120000_custom_discount_single_use.
     """
-    custom = await _create_custom(discounts_service, gym_id, created)
+    custom_id = await _create_custom(discounts_service, gym_id, created)
 
     async with db_pool.session() as session:
         with pytest.raises(DBAPIError, match="one-shot"):
@@ -548,7 +567,7 @@ async def test_db_rejects_second_value_version_for_custom(
                     " is_active) "
                     "VALUES (:d, :g, 20.0, 'once', false)"
                 ),
-                {"d": str(custom.discount_id), "g": str(gym_id)},
+                {"d": str(custom_id), "g": str(gym_id)},
             )
 
 
@@ -562,14 +581,15 @@ async def test_db_rejects_second_application_for_custom(
     single-failure cleanup safe. Requires migration
     20260610120000_custom_discount_single_use.
     """
-    custom = await _create_custom(discounts_service, gym_id, created)
+    custom_id = await _create_custom(discounts_service, gym_id, created)
+    custom_value_id = (await _row(db_pool, custom_id))["value_id"]
 
     member_id = None
     try:
         member_id, item_id, plan_id = await _seed_membership_with_applied_discount(
             db_pool,
             gym_id,
-            value_id=custom.value_id,  # first application — allowed
+            value_id=custom_value_id,  # first application — allowed
         )
         created.track_plan_db(plan_id)
 
@@ -585,7 +605,7 @@ async def test_db_rejects_second_application_for_custom(
                         "item_id": str(item_id),
                         "member_id": str(member_id),
                         "gym_id": str(gym_id),
-                        "value_id": str(custom.value_id),
+                        "value_id": str(custom_value_id),
                     },
                 )
     finally:
