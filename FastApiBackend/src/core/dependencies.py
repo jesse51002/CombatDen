@@ -1,5 +1,7 @@
 from dependency_injector import containers, providers
+from schema.task import TaskType
 
+import src.shared.db_schema_path  # noqa: F401
 from src.classes.service.checkin.classes_checkin_service import (
     ClassesCheckinService,
 )
@@ -27,6 +29,9 @@ from src.members.service.member_details.members_billing_detail_service import (
 )
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
+)
+from src.memberships.service.memberships_reprice_executor import (
+    MemberMembershipsRepriceExecutor,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -291,10 +296,21 @@ class DependencyInjector(containers.DeclarativeContainer):
     # acyclic: domain facades depend on TasksService to create/read tasks,
     # while TasksExecutor depends on the domains' per-type item handlers.
     tasks_service = providers.Factory(TasksService, db_pool=db_pool)
+    # The membership_reprice item handler (append-only reprice: cancel old
+    # row + insert successor in one txn, then the convergent sync).
+    memberships_reprice_executor = providers.Factory(
+        MemberMembershipsRepriceExecutor,
+        db_pool=db_pool,
+        payment_sync_service=payment_sync_service,
+        gym_stripe_service=gym_stripe_service,
+        paying_lock=paying_member_lock,
+    )
     tasks_executor = providers.Factory(
         TasksExecutor,
         db_pool=db_pool,
-        handlers=providers.Dict(),
+        handlers=providers.Dict({
+            TaskType.membership_reprice: memberships_reprice_executor,
+        }),
     )
 
     # ── Member memberships ───────────────────────────────────────
