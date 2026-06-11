@@ -12,6 +12,9 @@ from uuid import UUID
 
 from src.memberships.memberships_schema import (
     MemberMembershipsChargeCardRequest,
+    MemberMembershipsStartPreviewResponse,
+    MemberMembershipsStartRequest,
+    MemberMembershipsStartResponse,
     MembersBillingLinkCheckResponse,
 )
 from src.memberships.service.memberships_cancel import (
@@ -35,6 +38,12 @@ from src.memberships.service.memberships_mark_paid_cash import (
 from src.memberships.service.memberships_start import (
     MemberMembershipsStart,
 )
+from src.memberships.service.memberships_start_preview import (
+    MemberMembershipsStartPreview,
+)
+from src.memberships.service.memberships_start_validation import (
+    MemberMembershipsStartValidation,
+)
 from src.memberships.service.memberships_update_price import (
     MemberMembershipsUpdatePrice,
 )
@@ -44,9 +53,6 @@ from src.payments.schema.payments_invoice_schema import (
 from src.shared.database import DirectDatabasePool
 
 if TYPE_CHECKING:
-    from src.discounts.schema.discounts_schema import (
-        DiscountValue,
-    )
     from src.discounts.service.discounts_service import (
         DiscountsService,
     )
@@ -105,13 +111,25 @@ class MemberMembershipsService:
             freeze_service=freeze_service,
         )
         self._update_discounts = MemberMembershipsDiscounts(*deps)
+        # Start + its preview share ONE validation instance so they can
+        # never drift on what a valid request is.
+        self._start_validation = MemberMembershipsStartValidation(
+            *deps,
+            parent_resolver=parent_resolver,
+        )
         self._start = MemberMembershipsStart(
             *deps,
-            payment_service=payment_service,
-            parent_resolver=parent_resolver,
             payment_sync_one_time=payment_sync_one_time,
             update_discounts=self._update_discounts,
             discounts_service=discounts_service,
+            validation=self._start_validation,
+        )
+        self._start_preview = MemberMembershipsStartPreview(
+            *deps,
+            payment_sync_one_time=payment_sync_one_time,
+            update_discounts=self._update_discounts,
+            discounts_service=discounts_service,
+            validation=self._start_validation,
         )
         self._update_price = MemberMembershipsUpdatePrice(*deps)
         self._mark_paid_cash = MemberMembershipsMarkPaidCash(
@@ -184,49 +202,31 @@ class MemberMembershipsService:
 
     async def start(
         self,
-        member_id: UUID,
-        gym_id: UUID,
-        plan_id: UUID,
-        price_id: UUID,
-        idempotency_key: UUID,
-        prorate: bool = True,
-        paid_with_cash: bool = False,
-        discount_ids: list[UUID] | None = None,
-        custom_discounts: list[DiscountValue] | None = None,
-    ) -> None:
-        """Start a new membership for a member."""
-        async with self._paying_lock.lock([member_id]):
-            await self._start.start(
-                member_id=member_id,
-                gym_id=gym_id,
-                plan_id=plan_id,
-                price_id=price_id,
-                idempotency_key=idempotency_key,
-                prorate=prorate,
-                paid_with_cash=paid_with_cash,
-                discount_ids=discount_ids,
-                custom_discounts=custom_discounts,
-            )
+        request: MemberMembershipsStartRequest,
+    ) -> MemberMembershipsStartResponse:
+        """Start the request's memberships (one call, one family, ≤2 charges).
+
+        Locks the payer plus every member in the request — linked members
+        resolve to the payer's family key (the lock dedupes), and locking
+        the members too keeps the link-state validation race-free against a
+        concurrent link/unlink.
+        """
+        member_ids = [request.payer_member_id] + [
+            item.member_id for item in request.memberships
+        ]
+        async with self._paying_lock.lock(member_ids):
+            return await self._start.start(request)
 
     async def preview_start(
         self,
-        member_id: UUID,
-        gym_id: UUID,
-        plan_id: UUID,
-        price_id: UUID,
-        prorate: bool = True,
-        paid_with_cash: bool = False,
-    ) -> DueNowVsRecurringPreview | None:
-        """Preview what starting a membership would charge."""
-        async with self._paying_lock.lock([member_id]):
-            return await self._start.preview(
-                member_id=member_id,
-                gym_id=gym_id,
-                plan_id=plan_id,
-                price_id=price_id,
-                prorate=prorate,
-                paid_with_cash=paid_with_cash,
-            )
+        request: MemberMembershipsStartRequest,
+    ) -> MemberMembershipsStartPreviewResponse:
+        """Preview what starting the request's memberships would charge."""
+        member_ids = [request.payer_member_id] + [
+            item.member_id for item in request.memberships
+        ]
+        async with self._paying_lock.lock(member_ids):
+            return await self._start_preview.preview(request)
 
     # ── Mark Paid (Cash) ───────────────────────────────────────
 

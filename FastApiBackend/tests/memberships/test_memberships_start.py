@@ -11,6 +11,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
@@ -65,11 +69,17 @@ async def test_start_recurring_membership(
         )
 
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         # Verify DB row exists with stripe_item_id set
@@ -139,11 +149,17 @@ async def test_start_one_time_membership(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         async with db_pool.session() as session:
@@ -198,11 +214,17 @@ async def test_start_zero_dollar_one_time_membership(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         async with db_pool.session() as session:
@@ -261,11 +283,17 @@ async def test_start_zero_dollar_recurring_membership(
         )
 
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         async with db_pool.session() as session:
@@ -336,11 +364,17 @@ async def test_start_validates_plan_price(
 
         with pytest.raises((ValueError, Exception)):
             await memberships_service.start(
-                member_id=member.member_id,
-                gym_id=gym_id,
-                plan_id=uuid4(),
-                price_id=uuid4(),
-                idempotency_key=uuid4(),
+                MemberMembershipsStartRequest(
+                    payer_member_id=member.member_id,
+                    gym_id=gym_id,
+                    idempotency_key=uuid4(),
+                    memberships=[
+                        MemberMembershipsStartItem(
+                            member_id=member.member_id,
+                            price_id=uuid4(),
+                        ),
+                    ],
+                )
             )
 
         await assert_no_unexpected_charges(
@@ -366,11 +400,17 @@ async def test_start_duplicate_raises(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         # Snapshot after the first successful start — the duplicate
@@ -383,11 +423,17 @@ async def test_start_duplicate_raises(
 
         with pytest.raises((ValueError, Exception)):
             await memberships_service.start(
-                member_id=member.member_id,
-                gym_id=gym_id,
-                plan_id=plan.plan_id,
-                price_id=plan.price_id,
-                idempotency_key=uuid4(),
+                MemberMembershipsStartRequest(
+                    payer_member_id=member.member_id,
+                    gym_id=gym_id,
+                    idempotency_key=uuid4(),
+                    memberships=[
+                        MemberMembershipsStartItem(
+                            member_id=member.member_id,
+                            price_id=plan.price_id,
+                        ),
+                    ],
+                )
             )
 
         await assert_no_unexpected_charges(
@@ -420,18 +466,30 @@ async def test_start_two_different_recurring_plans(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan_a.plan_id,
-            price_id=plan_a.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan_a.price_id,
+                    ),
+                ],
+            )
         )
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan_b.plan_id,
-            price_id=plan_b.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan_b.price_id,
+                    ),
+                ],
+            )
         )
 
         async with db_pool.session() as session:
@@ -480,12 +538,18 @@ async def test_start_recurring_prorate_false_no_immediate_invoice(
         )
 
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
-            prorate=False,
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                prorate=False,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         profile = await get_profile_stripe_ids(
@@ -539,13 +603,19 @@ async def test_start_recurring_cash_prorate_true_pays_out_of_band(
         )
 
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
-            prorate=True,
-            paid_with_cash=True,
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                prorate=True,
+                paid_with_cash=True,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         profile = await get_profile_stripe_ids(
@@ -605,13 +675,19 @@ async def test_start_recurring_cash_prorate_false_no_invoice(
         )
 
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
-            prorate=False,
-            paid_with_cash=True,
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                prorate=False,
+                paid_with_cash=True,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         profile = await get_profile_stripe_ids(

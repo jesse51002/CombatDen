@@ -24,6 +24,10 @@ from src.classes.service.classes_streak_service import ClassesStreakService
 from src.members.service.member_details.members_billing_detail_service import (
     MembersBillingDetailService,
 )
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
@@ -37,11 +41,17 @@ CLOCK_START = datetime(2026, 1, 15, 0, 0, 0)
 async def _start_membership(memberships_service, member, gym_id, plan):
     """Start a recurring membership with no discounts attached."""
     await memberships_service.start(
-        member_id=member.member_id,
-        gym_id=gym_id,
-        plan_id=plan.plan_id,
-        price_id=plan.price_id,
-        idempotency_key=uuid4(),
+        MemberMembershipsStartRequest(
+            payer_member_id=member.member_id,
+            gym_id=gym_id,
+            idempotency_key=uuid4(),
+            memberships=[
+                MemberMembershipsStartItem(
+                    member_id=member.member_id,
+                    price_id=plan.price_id,
+                ),
+            ],
+        )
     )
 
 

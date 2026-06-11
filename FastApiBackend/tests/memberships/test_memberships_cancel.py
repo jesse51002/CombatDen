@@ -11,6 +11,10 @@ import pytest
 import stripe
 from sqlalchemy import text
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
@@ -29,11 +33,17 @@ async def _start_and_get_item_id(
 ):
     """Start a membership and return the item_id."""
     await memberships_service.start(
-        member_id=member.member_id,
-        gym_id=gym_id,
-        plan_id=plan.plan_id,
-        price_id=plan.price_id,
-        idempotency_key=uuid4(),
+        MemberMembershipsStartRequest(
+            payer_member_id=member.member_id,
+            gym_id=gym_id,
+            idempotency_key=uuid4(),
+            memberships=[
+                MemberMembershipsStartItem(
+                    member_id=member.member_id,
+                    price_id=plan.price_id,
+                ),
+            ],
+        )
     )
     async with db_pool.session() as session:
         result = await session.execute(
@@ -213,11 +223,17 @@ async def test_cancel_one_time_raises(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         async with db_pool.session() as session:

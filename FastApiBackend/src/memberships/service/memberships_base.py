@@ -9,10 +9,14 @@ from uuid import UUID, uuid4
 
 from dateutil.relativedelta import relativedelta
 from schema.member_membership import StripeSyncStatus
+from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartRequest,
+)
 from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionResponse,
 )
@@ -253,6 +257,52 @@ class MemberMembershipsBase:
             }
             await session.commit()
         return ids
+
+    def _build_pending_rows(
+        self,
+        request: MemberMembershipsStartRequest,
+        plan_prices: dict[UUID, dict],
+        start_date: date,
+        sync_status: StripeSyncStatus = StripeSyncStatus.not_added,
+    ) -> list[dict]:
+        """Build the start op's membership insert rows, one per item.
+
+        Shared by the real start (``not_added``) and the staged preview
+        (``preview_add``) so the two stage IDENTICAL rows. A non-recurring
+        plan with a duration gets its absolute ``end_date`` resolved here.
+        """
+        rows: list[dict] = []
+        for item in request.memberships:
+            plan_price = plan_prices[item.price_id]
+            end_date: date | None = None
+            is_recurring = (
+                PlanType(plan_price["plan_type"]) == PlanType.recurring
+            )
+            if (
+                not is_recurring
+                and plan_price["duration_amount"]
+                and plan_price["duration_unit"]
+            ):
+                end_date = self._calculate_end_date(
+                    start_date,
+                    plan_price["duration_amount"],
+                    plan_price["duration_unit"],
+                )
+            rows.append({
+                "member_id": item.member_id,
+                "gym_id": request.gym_id,
+                "plan_id": plan_price["plan_id"],
+                "price_id": item.price_id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "last_paid_date": start_date,
+                "next_due_date": None,
+                "stripe_item_id": None,
+                "prorate": request.prorate,
+                "total_price": plan_price["price"],
+                "sync_status": sync_status,
+            })
+        return rows
 
     async def _delete_pending(self, item_ids: list[UUID]) -> None:
         """Hard-delete pending membership rows (NULL stripe_item_id)."""

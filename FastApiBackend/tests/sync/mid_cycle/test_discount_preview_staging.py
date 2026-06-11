@@ -15,6 +15,10 @@ from uuid import uuid4
 
 import pytest
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
@@ -26,11 +30,17 @@ PLAN_CENTS = 5000
 
 async def _start_recurring(memberships_service, db_pool, member, gym_id, plan):
     await memberships_service.start(
-        member_id=member.member_id,
-        gym_id=gym_id,
-        plan_id=plan.plan_id,
-        price_id=plan.price_id,
-        idempotency_key=uuid4(),
+        MemberMembershipsStartRequest(
+            payer_member_id=member.member_id,
+            gym_id=gym_id,
+            idempotency_key=uuid4(),
+            memberships=[
+                MemberMembershipsStartItem(
+                    member_id=member.member_id,
+                    price_id=plan.price_id,
+                ),
+            ],
+        )
     )
     return await get_active_membership_item_id(db_pool, member.member_id, gym_id)
 

@@ -13,6 +13,10 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import text
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from src.plans.plans_schema import MembershipPlanPriceRequest
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
@@ -26,11 +30,17 @@ from tests.helpers.stripe_assertions import (
 
 async def _start_and_get_item_id(memberships_service, db_pool, member, gym_id, plan):
     await memberships_service.start(
-        member_id=member.member_id,
-        gym_id=gym_id,
-        plan_id=plan.plan_id,
-        price_id=plan.price_id,
-        idempotency_key=uuid4(),
+        MemberMembershipsStartRequest(
+            payer_member_id=member.member_id,
+            gym_id=gym_id,
+            idempotency_key=uuid4(),
+            memberships=[
+                MemberMembershipsStartItem(
+                    member_id=member.member_id,
+                    price_id=plan.price_id,
+                ),
+            ],
+        )
     )
     async with db_pool.session() as session:
         result = await session.execute(

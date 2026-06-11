@@ -5,6 +5,10 @@ from uuid import uuid4
 import pytest
 
 from src.members.schema.members_schema import MemberCreateRequest
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 
 # ── Happy path ──────────────────────────────────────────────────
@@ -176,11 +180,17 @@ async def test_check_active_recurring_blocked(
 
     try:
         await memberships_service.start(
-            member_id=child.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=child.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         result = await memberships_service.check_link_account(

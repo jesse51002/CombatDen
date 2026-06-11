@@ -13,6 +13,10 @@ import pytest
 from sqlalchemy import text
 
 from src.members.schema.members_schema import MemberCreateRequest
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -208,11 +212,17 @@ async def test_link_with_active_recurring_raises(
 
     try:
         await memberships_service.start(
-            member_id=child.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=child.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         with pytest.raises(ValueError, match="active recurring"):
@@ -315,11 +325,17 @@ async def test_unlink_with_active_recurring_raises(
         # subscription.
         await memberships_service.link_account(child.member_id, parent.member_id)
         await memberships_service.start(
-            member_id=child.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=parent.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         with pytest.raises(ValueError, match="active recurring"):
@@ -366,11 +382,17 @@ async def test_link_unlink_issues_no_charges(
         # Parent starts their own recurring membership — this creates
         # the Stripe subscription we'll be watching.
         await memberships_service.start(
-            member_id=parent.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=parent.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=parent.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         sub_id = await _fetch_parent_sub_id(db_pool, parent.member_id)

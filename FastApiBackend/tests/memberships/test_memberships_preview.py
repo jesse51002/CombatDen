@@ -17,6 +17,11 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import text
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartPreviewResponse,
+    MemberMembershipsStartRequest,
+)
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
     PreviewInvoice,
@@ -53,11 +58,17 @@ async def _start_and_get_item_id(
     plan,
 ):
     await memberships_service.start(
-        member_id=member.member_id,
-        gym_id=gym_id,
-        plan_id=plan.plan_id,
-        price_id=plan.price_id,
-        idempotency_key=uuid4(),
+        MemberMembershipsStartRequest(
+            payer_member_id=member.member_id,
+            gym_id=gym_id,
+            idempotency_key=uuid4(),
+            memberships=[
+                MemberMembershipsStartItem(
+                    member_id=member.member_id,
+                    price_id=plan.price_id,
+                ),
+            ],
+        )
     )
     async with db_pool.session() as session:
         result = await session.execute(
@@ -80,13 +91,28 @@ def _assert_valid_preview(preview) -> None:
     assert preview.total >= 0
 
 
-def _assert_valid_split(preview) -> None:
-    """Shape checks for a due-now / recurring split preview.
+def _assert_valid_due_now_split(preview) -> None:
+    """Shape checks for a cancel / update_price preview (the 2-way split).
 
-    Both halves are ordinary invoice previews (or ``None``): ``due_now``
-    is the immediate charge, ``recurring`` the steady-state cycle.
+    Those ops keep the ``DueNowVsRecurringPreview`` shape — only the START
+    preview moved to the 3-way ``MemberMembershipsStartPreviewResponse``.
     """
     assert isinstance(preview, DueNowVsRecurringPreview)
+    if preview.due_now is not None:
+        _assert_valid_preview(preview.due_now)
+    if preview.recurring is not None:
+        _assert_valid_preview(preview.recurring)
+
+
+def _assert_valid_split(preview) -> None:
+    """Shape checks for a start preview response.
+
+    Three halves: ``one_time`` (consolidated one-time invoice), ``due_now``
+    (immediate recurring proration), ``recurring`` (steady-state cycle).
+    """
+    assert isinstance(preview, MemberMembershipsStartPreviewResponse)
+    if preview.one_time is not None:
+        _assert_valid_preview(preview.one_time)
     if preview.due_now is not None:
         _assert_valid_preview(preview.due_now)
     if preview.recurring is not None:
@@ -116,10 +142,17 @@ async def test_preview_start_recurring(
         )
 
         preview = await memberships_service.preview_start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         _assert_valid_split(preview)
@@ -180,19 +213,27 @@ async def test_preview_start_one_time(
         )
 
         preview = await memberships_service.preview_start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         _assert_valid_split(preview)
         # A one-time purchase is entirely due now; nothing recurs.
-        assert preview.due_now.amount_due == plan.price_cents, (
-            f"one-time due_now.amount_due={preview.due_now.amount_due} != "
+        assert preview.one_time.amount_due == plan.price_cents, (
+            f"one-time one_time.amount_due={preview.one_time.amount_due} != "
             f"plan price_cents={plan.price_cents}"
         )
         assert preview.recurring is None
+        assert preview.due_now is None
 
         assert await _count_memberships(db_pool, member.member_id) == 0
 
@@ -231,11 +272,18 @@ async def test_preview_start_no_prorate_due_now_equals_recurring(
         )
 
         preview = await memberships_service.preview_start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            prorate=False,
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                prorate=False,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         _assert_valid_split(preview)
@@ -278,10 +326,17 @@ async def test_preview_start_validates_plan_price(
 
         with pytest.raises((ValueError, Exception)):
             await memberships_service.preview_start(
-                member_id=member.member_id,
-                gym_id=gym_id,
-                plan_id=uuid4(),
-                price_id=uuid4(),
+                MemberMembershipsStartRequest(
+                    payer_member_id=member.member_id,
+                    gym_id=gym_id,
+                    idempotency_key=uuid4(),
+                    memberships=[
+                        MemberMembershipsStartItem(
+                            member_id=member.member_id,
+                            price_id=uuid4(),
+                        ),
+                    ],
+                )
             )
 
         assert await _count_memberships(db_pool, member.member_id) == 0
@@ -308,11 +363,17 @@ async def test_preview_start_duplicate_raises(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         before = await snapshot_billing_state(
@@ -323,10 +384,17 @@ async def test_preview_start_duplicate_raises(
 
         with pytest.raises((ValueError, Exception)):
             await memberships_service.preview_start(
-                member_id=member.member_id,
-                gym_id=gym_id,
-                plan_id=plan.plan_id,
-                price_id=plan.price_id,
+                MemberMembershipsStartRequest(
+                    payer_member_id=member.member_id,
+                    gym_id=gym_id,
+                    idempotency_key=uuid4(),
+                    memberships=[
+                        MemberMembershipsStartItem(
+                            member_id=member.member_id,
+                            price_id=plan.price_id,
+                        ),
+                    ],
+                )
             )
 
         # Only the original membership row exists — preview didn't
@@ -519,7 +587,7 @@ async def test_preview_update_price(
             prorate=False,
         )
 
-        _assert_valid_split(preview)
+        _assert_valid_due_now_split(preview)
 
         # CRM price_id must still be the ORIGINAL — preview does no writes.
         async with db_pool.session() as session:

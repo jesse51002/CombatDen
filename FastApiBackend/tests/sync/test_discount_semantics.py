@@ -23,6 +23,10 @@ from stripe.params._invoice_create_preview_params import (
     InvoiceCreatePreviewParams,
 )
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.data_factory import (
     create_discount,
@@ -96,11 +100,17 @@ async def test_line_amount_vs_subtotal_with_discount(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
         item_id = await get_active_membership_item_id(db_pool, member.member_id, gym_id)
         await memberships_service.add_discounts(
@@ -214,18 +224,30 @@ async def test_line_amount_is_total_for_quantity_not_per_unit(
             parent.member_id,
         )
         await memberships_service.start(
-            member_id=parent.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=parent.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=parent.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
         await memberships_service.start(
-            member_id=child.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=parent.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         profile = await get_profile_stripe_ids(

@@ -36,27 +36,7 @@ class MemberMembershipsUnfreezeRequest(BaseModel):
     idempotency_key: UUID
 
 
-class MemberMembershipsStartRequest(BaseModel):
-    """Start a new membership for a member.
-
-    Optional discounts-at-creation: ``discount_ids`` reference existing preset /
-    linked discounts; ``custom_discounts`` are inline values minted as ``custom``
-    discounts at start. Both are applied **before** the first charge, so the
-    membership's first (and, for one-time, only) invoice is discounted.
-    """
-
-    member_id: UUID
-    gym_id: UUID
-    plan_id: UUID
-    price_id: UUID
-    prorate: bool = True
-    paid_with_cash: bool = False
-    idempotency_key: UUID
-    discount_ids: list[UUID] = []
-    custom_discounts: list[DiscountValue] = []
-
-
-class MemberMembershipsBatchStartItem(BaseModel):
+class MemberMembershipsStartItem(BaseModel):
     """One membership to create inside a start request.
 
     ``price_id`` alone identifies what is bought — a price belongs to
@@ -73,14 +53,14 @@ class MemberMembershipsBatchStartItem(BaseModel):
     custom_discounts: list[DiscountValue] = []
 
 
-class MemberMembershipsBatchStartRequest(BaseModel):
+class MemberMembershipsStartRequest(BaseModel):
     """Start a linked family's memberships in one call.
 
     The payer (``payer_member_id``) is identity-only — it need not appear in
     ``memberships``. Every non-payer member must ALREADY be linked to this
-    payer (linking is a separate, prior operation; the batch never links).
+    payer (linking is a separate, prior operation; the start op never links).
     ``prorate`` applies to the recurring converge only; ``paid_with_cash``
-    is batch-level (the consolidated one-time invoice is one charge). The
+    is request-level (the consolidated one-time invoice is one charge). The
     single ``idempotency_key`` deterministically derives one sub-key per
     charge group (one-time invoice / recurring converge), so a client retry
     of the same request dedups both charges at Stripe.
@@ -91,7 +71,7 @@ class MemberMembershipsBatchStartRequest(BaseModel):
     prorate: bool = True
     paid_with_cash: bool = False
     idempotency_key: UUID
-    memberships: list[MemberMembershipsBatchStartItem] = Field(
+    memberships: list[MemberMembershipsStartItem] = Field(
         default_factory=list,
     )
 
@@ -99,8 +79,8 @@ class MemberMembershipsBatchStartRequest(BaseModel):
     @classmethod
     def _validate_memberships(
         cls,
-        value: list[MemberMembershipsBatchStartItem],
-    ) -> list[MemberMembershipsBatchStartItem]:
+        value: list[MemberMembershipsStartItem],
+    ) -> list[MemberMembershipsStartItem]:
         if not value:
             raise ValueError("memberships must not be empty")
         pairs = [(item.member_id, item.price_id) for item in value]
@@ -111,15 +91,15 @@ class MemberMembershipsBatchStartRequest(BaseModel):
         return value
 
 
-class MemberMembershipsBatchStartStatus(StrEnum):
-    """Outcome of one membership inside a batch start."""
+class MemberMembershipsStartStatus(StrEnum):
+    """Outcome of one membership inside a start request."""
 
     created = "created"
     failed = "failed"
 
 
-class MemberMembershipsBatchStartResultItem(BaseModel):
-    """Per-membership outcome in the batch start breakdown.
+class MemberMembershipsStartResultItem(BaseModel):
+    """Per-membership outcome in the start breakdown.
 
     ``item_id`` is set when ``status = created``; ``error`` carries the
     failure reason when ``status = failed``. Failure granularity is the
@@ -130,21 +110,21 @@ class MemberMembershipsBatchStartResultItem(BaseModel):
     member_id: UUID
     plan_id: UUID
     plan_type: PlanType
-    status: MemberMembershipsBatchStartStatus
+    status: MemberMembershipsStartStatus
     item_id: UUID | None = None
     error: str | None = None
 
 
-class MemberMembershipsBatchStartResponse(BaseModel):
-    """Response after a batch start: the per-membership breakdown.
+class MemberMembershipsStartResponse(BaseModel):
+    """Response after a start: the per-membership breakdown.
 
     ``charge_count`` = (1 if any one-time membership) + (1 if any recurring
     membership); ``multiple_charges`` flags the mixed case so the CRM can
     tell the gym owner two separate charges occurred. Invoice figures are
-    NOT returned here — the batch preview owns those.
+    NOT returned here — the start preview owns those.
     """
 
-    results: list[MemberMembershipsBatchStartResultItem]
+    results: list[MemberMembershipsStartResultItem]
     charge_count: int
     multiple_charges: bool
 
@@ -164,20 +144,20 @@ class MemberMembershipsStartItemState(BaseModel):
     item_id: UUID | None = None
     applied_ids: list[UUID] = Field(default_factory=list)
     minted_ids: list[UUID] = Field(default_factory=list)
-    status: MemberMembershipsBatchStartStatus = (
-        MemberMembershipsBatchStartStatus.created
+    status: MemberMembershipsStartStatus = (
+        MemberMembershipsStartStatus.created
     )
     error: str | None = None
 
 
-class MemberMembershipsBatchInvoices(BaseModel):
-    """The batch preview's three-way invoice split.
+class MemberMembershipsStartPreviewResponse(BaseModel):
+    """The start preview's three-way invoice split.
 
     ``one_time`` — the consolidated one-time invoice (all one-time
     memberships, one charge). ``due_now`` — the recurring proration invoice
     charged immediately (``prorate=True``). ``recurring`` — the steady-state
     recurring invoice each cycle going forward. Each is ``None`` when the
-    batch has no memberships in that group.
+    request has no memberships in that group.
     """
 
     one_time: PreviewInvoice | None = None

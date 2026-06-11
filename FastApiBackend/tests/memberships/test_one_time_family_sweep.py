@@ -79,21 +79,25 @@ async def _insert_pending_one_time(
     start_date,
     total_price: int,
 ) -> UUID:
-    """Insert a pending (``not_added``) one-time membership row like ``start``."""
+    """Insert a pending (``not_added``) one-time membership row like ``start``.
+
+    The insert SQL is the multi-row (array-bound) form; this helper passes
+    one-element arrays.
+    """
     sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
     params = {
-        "member_id": str(member_id),
-        "gym_id": str(gym_id),
-        "plan_id": str(plan_id),
-        "price_id": str(price_id),
-        "start_date": start_date,
-        "end_date": None,
-        "last_paid_date": start_date,
-        "next_due_date": None,
-        "stripe_item_id": None,
-        "prorate": True,
-        "total_price": total_price,
-        "sync_status": StripeSyncStatus.not_added.value,
+        "member_ids": [str(member_id)],
+        "gym_ids": [str(gym_id)],
+        "plan_ids": [str(plan_id)],
+        "price_ids": [str(price_id)],
+        "start_dates": [start_date],
+        "end_dates": [None],
+        "last_paid_dates": [start_date],
+        "next_due_dates": [None],
+        "stripe_item_ids": [None],
+        "prorates": [True],
+        "total_prices": [total_price],
+        "sync_statuses": [StripeSyncStatus.not_added.value],
     }
     async with db_pool.session() as session:
         result = await session.execute(text(sql), params)

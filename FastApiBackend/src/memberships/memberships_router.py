@@ -16,7 +16,9 @@ from src.memberships.memberships_schema import (
     MemberMembershipsFreezeRequest,
     MemberMembershipsMarkPaidCashRequest,
     MemberMembershipsRemoveDiscountsRequest,
+    MemberMembershipsStartPreviewResponse,
     MemberMembershipsStartRequest,
+    MemberMembershipsStartResponse,
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
 )
@@ -263,16 +265,20 @@ async def unfreeze_membership(
 @member_memberships_router.post(
     "/",
     status_code=status.HTTP_201_CREATED,
-    summary="Start a new membership",
+    response_model=MemberMembershipsStartResponse,
+    summary="Start memberships for a payer's family",
     description=(
-        "Creates a new membership for a member. Validates "
-        "the plan/price, checks for duplicates and frozen "
-        "accounts, syncs to Stripe, then inserts the CRM row."
+        "Creates every membership in the request for the paying account's "
+        "family in one call (a single membership = a one-item list), with "
+        "per-membership discounts applied before the first charge. Bills at "
+        "most two charges: one consolidated one-time invoice plus one "
+        "recurring converge. Returns the per-membership breakdown — a "
+        "failed charge group surfaces there, not as an error status."
     ),
     responses={
-        201: {"description": "Membership created successfully"},
+        201: {"description": "Breakdown of created/failed memberships"},
         401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
+        403: {"description": "Not authorized to update these members"},
     },
 )
 @inject
@@ -283,30 +289,22 @@ async def start_membership(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> None:
-    """Start a new membership for a member.
+) -> MemberMembershipsStartResponse:
+    """Start the request's memberships for the payer's family.
 
     Args:
-        request: Start request with plan, price, and start date.
+        request: Payer + the memberships to create (price + discounts each).
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_can_view_member(request.payer_member_id, user_payload)
+    for item_member_id in {item.member_id for item in request.memberships}:
+        await auth.verify_can_view_member(item_member_id, user_payload)
 
     try:
-        await memberships_service.start(
-            member_id=request.member_id,
-            gym_id=request.gym_id,
-            plan_id=request.plan_id,
-            price_id=request.price_id,
-            idempotency_key=request.idempotency_key,
-            prorate=request.prorate,
-            paid_with_cash=request.paid_with_cash,
-            discount_ids=request.discount_ids,
-            custom_discounts=request.custom_discounts,
-        )
+        return await memberships_service.start(request)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -325,15 +323,14 @@ async def start_membership(
         ) from None
     except Exception:
         logger.error(
-            "Failed to start membership: member_id=%s, gym_id=%s, plan_id=%s",
-            request.member_id,
+            "Failed to start memberships: payer_member_id=%s, gym_id=%s",
+            request.payer_member_id,
             request.gym_id,
-            request.plan_id,
             exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to start membership",
+            detail="Failed to start memberships",
         ) from None
 
 
@@ -412,17 +409,18 @@ async def update_membership_price(
 
 @member_memberships_router.post(
     "/preview",
-    response_model=DueNowVsRecurringPreview | None,
-    summary="Preview starting a membership",
+    response_model=MemberMembershipsStartPreviewResponse,
+    summary="Preview starting memberships",
     description=(
-        "Dry-run of the start endpoint: runs every validation "
-        "and returns the Stripe invoice preview without "
-        "creating any CRM rows or Stripe resources."
+        "Dry-run of the start endpoint: runs every validation, stages the "
+        "request (discounts included) as preview-only rows, and returns "
+        "the three-way invoice split (one_time / due_now / recurring) "
+        "without charging anything or leaving any rows behind."
     ),
     responses={
         200: {"description": "Preview retrieved successfully"},
         401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
+        403: {"description": "Not authorized to update these members"},
     },
 )
 @inject
@@ -433,20 +431,15 @@ async def preview_start_membership(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> DueNowVsRecurringPreview | None:
-    """Preview what starting a membership would charge."""
+) -> MemberMembershipsStartPreviewResponse:
+    """Preview what starting the request's memberships would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
+    await auth.verify_can_view_member(request.payer_member_id, user_payload)
+    for item_member_id in {item.member_id for item in request.memberships}:
+        await auth.verify_can_view_member(item_member_id, user_payload)
 
     try:
-        return await memberships_service.preview_start(
-            member_id=request.member_id,
-            gym_id=request.gym_id,
-            plan_id=request.plan_id,
-            price_id=request.price_id,
-            prorate=request.prorate,
-            paid_with_cash=request.paid_with_cash,
-        )
+        return await memberships_service.preview_start(request)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -465,9 +458,8 @@ async def preview_start_membership(
         ) from None
     except Exception:
         logger.error(
-            "Failed to preview start membership: member_id=%s, plan_id=%s",
-            request.member_id,
-            request.plan_id,
+            "Failed to preview start memberships: payer_member_id=%s",
+            request.payer_member_id,
             exc_info=True,
         )
         raise HTTPException(

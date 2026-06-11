@@ -15,6 +15,10 @@ from uuid import uuid4
 
 import pytest
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
@@ -40,11 +44,17 @@ CYCLE_AFTER_NEXT = CLOCK_START + timedelta(days=70)
 async def _start_membership(memberships_service, member, gym_id, plan):
     """Start a recurring membership with no discounts attached."""
     await memberships_service.start(
-        member_id=member.member_id,
-        gym_id=gym_id,
-        plan_id=plan.plan_id,
-        price_id=plan.price_id,
-        idempotency_key=uuid4(),
+        MemberMembershipsStartRequest(
+            payer_member_id=member.member_id,
+            gym_id=gym_id,
+            idempotency_key=uuid4(),
+            memberships=[
+                MemberMembershipsStartItem(
+                    member_id=member.member_id,
+                    price_id=plan.price_id,
+                ),
+            ],
+        )
     )
 
 

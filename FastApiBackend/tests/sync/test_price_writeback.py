@@ -26,6 +26,10 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
 
@@ -131,11 +135,17 @@ async def test_family_same_plan_each_row_holds_own_price(
 
         # Parent starts first → qty=1, line total = 5000
         await memberships_service.start(
-            member_id=parent.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=parent.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=parent.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         parent_only = await _fetch_total_price(
@@ -149,11 +159,17 @@ async def test_family_same_plan_each_row_holds_own_price(
 
         # Child joins → qty=2 on the same sub item, line total = 10000
         await memberships_service.start(
-            member_id=child.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=parent.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         parent_total = await _fetch_total_price(
@@ -238,18 +254,30 @@ async def test_family_different_plans_per_row_totals(
         )
 
         await memberships_service.start(
-            member_id=parent.member_id,
-            gym_id=gym_id,
-            plan_id=plan_a.plan_id,
-            price_id=plan_a.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=parent.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=parent.member_id,
+                        price_id=plan_a.price_id,
+                    ),
+                ],
+            )
         )
         await memberships_service.start(
-            member_id=child.member_id,
-            gym_id=gym_id,
-            plan_id=plan_b.plan_id,
-            price_id=plan_b.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=parent.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=plan_b.price_id,
+                    ),
+                ],
+            )
         )
 
         parent_a = await _fetch_total_price(
@@ -313,18 +341,30 @@ async def test_cross_family_isolation(
 
     try:
         await memberships_service.start(
-            member_id=family_a.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=family_a.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=family_a.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
         await memberships_service.start(
-            member_id=family_b.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=family_b.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=family_b.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
 
         # Both families should have independent 5000 totals.
@@ -403,11 +443,17 @@ async def test_full_cancel_zeroes_parent_monthly_total(
 
     try:
         await memberships_service.start(
-            member_id=member.member_id,
-            gym_id=gym_id,
-            plan_id=plan.plan_id,
-            price_id=plan.price_id,
-            idempotency_key=uuid4(),
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
         )
         before = await _fetch_profile_monthly(db_pool, member.member_id)
         assert before == 4500
