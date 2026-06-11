@@ -116,6 +116,8 @@ from src.sync.service.sync_one_time import (
 from src.sync.service.sync_service import (
     PaymentSyncService,
 )
+from src.tasks.service.tasks_executor import TasksExecutor
+from src.tasks.service.tasks_service import TasksService
 from src.waivers.service.waivers.waivers_service import WaiversService
 
 
@@ -141,6 +143,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.plans.plans_router",
             "src.stripe_webhooks.stripe_webhooks_router",
             # === end CRM billing router modules ===
+            "src.tasks.tasks_router",
         ],
     )
 
@@ -281,6 +284,17 @@ class DependencyInjector(containers.DeclarativeContainer):
     discounts_service = providers.Factory(
         DiscountsService,
         db_pool=db_pool,
+    )
+
+    # ── Tasks (tracked background operations) ────────────────────
+    # Store/read facade and runner are SEPARATE providers so the graph stays
+    # acyclic: domain facades depend on TasksService to create/read tasks,
+    # while TasksExecutor depends on the domains' per-type item handlers.
+    tasks_service = providers.Factory(TasksService, db_pool=db_pool)
+    tasks_executor = providers.Factory(
+        TasksExecutor,
+        db_pool=db_pool,
+        handlers=providers.Dict(),
     )
 
     # ── Member memberships ───────────────────────────────────────
