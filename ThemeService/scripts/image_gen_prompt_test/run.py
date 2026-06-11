@@ -36,10 +36,12 @@ PROMPT_PATH = Path(__file__).parent / "test_prompt.md"
 
 # Claude tiers, cheapest → most capable. Provider-prefixed for litellm.
 MODELS = [
-    "anthropic/claude-haiku-4-5-20251001",
-    "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-opus-4-7",
+    "anthropic/claude-opus-4-8",
+    "anthropic/claude-fable-5",
 ]
+
+# Models that don't support forced tool use — use raw completion + JSON parse.
+NO_STRUCTURED_MODELS = {"anthropic/claude-fable-5"}
 
 RULE = "=" * 72
 
@@ -69,14 +71,24 @@ async def main() -> int:
     for model in MODELS:
         print(f"\n{RULE}\n{model}\n{RULE}")
         try:
-            result = await llm.complete_structured(
-                messages, schema=_PromptOnly, model=model
-            )
+            if model in NO_STRUCTURED_MODELS:
+                msg = await llm.complete(messages, model=model)
+                content = msg.get("content") or ""
+                try:
+                    parsed = _PromptOnly.model_validate_json(content)
+                    prompt_text = parsed.prompt
+                except Exception:
+                    prompt_text = content.strip()
+            else:
+                result = await llm.complete_structured(
+                    messages, schema=_PromptOnly, model=model
+                )
+                prompt_text = result.prompt
         except Exception as exc:  # dev tool: report, try the next model
             print(f"FAILED: {exc}")
             continue
         print("\n--- prompt ---")
-        print(result.prompt)
+        print(prompt_text)
     return 0
 
 

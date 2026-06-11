@@ -107,7 +107,7 @@
 
   The background is fixed and not yours to choose: the subject sits on a
   single flat, perfectly even, solid background that is exactly
-  pure white (the app is in light mode). Nothing else is in frame — no scene, no real-world
+  pure black (the app is in dark mode). Nothing else is in frame — no scene, no real-world
   setting, no props, no shadow cast onto a ground or surface, no gradient, no
   texture, no border. This holds for every treatment, including the studio
   product look: photoreal materials and lighting are welcome, an in-context
@@ -146,40 +146,69 @@
     quality cue, usually none.
 
   --- Brand brief ---
-  Brand name: SmokeTest
-  In short: A calming indoor cycling studio that believes in taking it easy — riding for wellbeing, not for the burn.
-  In depth: SmokeTest is a calming indoor cycling studio and companion app. Its
-  whole philosophy is the opposite of hustle fitness: ride to feel
-  good, go at your own pace, leave lighter than you came. The audience
-  is people who want movement without pressure — beginners, people
-  returning to exercise, anyone burnt out by "no pain, no gain". The
-  voice is warm, gentle and unhurried, like a calm instructor with the
-  lights low: encouraging, never barking, never counting down at you.
+  Brand name: Modern Hot
+  In short: Hot room, loud music, hard flow — a modern hot-yoga studio where the heat, the playlist and the sweat are part of the workout.
+  In depth: Modern Hot is a modern hot-yoga studio and companion app for
+  people who want their yoga to feel like a workout — a hot room, a
+  curated playlist, and a flow that leaves the mat wet. The audience
+  runs from athletic newcomers chasing the sweat to regulars who
+  treat hot-class three nights a week like training. The brand sits
+  in a deliberate spot: it is athletic, contemporary and high-energy
+  — the studio that programs sculpt-flow alongside hot-power and
+  means it — but it is NOT a ritualised, dialogue-driven 26-and-2
+  Bikram room, and it is equally NOT a soft, candlelit restorative
+  studio. The point is heat, music and a real sweat earned in
+  eighty minutes.
+
+  The voice is energetic and direct — a teacher with a wireless
+  mic who cues over the playlist: "One more round, ride the beat —
+  you've got this." Confident, athletic and warm under the energy,
+  it credits the work without slipping into bro-hype. It must never
+  sound like screaming bootcamp ("BEAST MODE"), saccharine wellness,
+  a ritualised Bikram dialogue script, or sterile corporate copy.
+
+  Modern Hot has no mascot. Its anchor is a heat-and-soundwave motif
+  — a rising heat curl threaded with a clean audio waveform —
+  standing for the hot room and the music that drives it — carried
+  into the brand mark and echoed through its object iconography. A
+  sweat-beaded steel water bottle, a damp dark mat-towel and a
+  headphone silhouette complete the recurring object notes.
+  Celebratory moments bring the personality through dim,
+  spot-lit, sweat-shining compositions, never a character; small,
+  persistent elements stay clean, abstract and razor-legible at
+  small size. The brand mark stays a clean, professional mark a
+  real modern hot studio would use, never a busy illustrated scene.
 
   Visual system — the shared look every generated asset must wear:
 
-  - Feel: soft, airy, serene, unhurried. Spacious and breathing, with
-    plenty of calm empty room. Gentle and reassuring, never intense.
-  - Medium & materials: simple smooth modern 3D — soft matte surfaces,
-    generously rounded organic geometry, no sharp edges, minimal
-    detail. Light, weightless, almost pillowy. Never gritty, never
-    hard, never high-contrast.
-  - Finish & light: soft, even, diffused daylight; the faintest gentle
-    shading worked into each object's own surfaces for a little form —
-    no scene, no drama, no harsh shadow.
-  - Energy by role: even rewards and celebrations stay quiet and warm —
-    a gentle glow and a soft lift, never loud, never a burst.
-    Persistent icons are simple, rounded and still. Calm over
-    energetic, always.
-  - Hard nos: no neon, no high contrast, no aggressive angles, no
-    speed lines, no sweat-and-grind imagery, no clutter, nothing loud.
+  - Feel: athletic, contemporary and high-energy — the dim hot room
+    five seconds before the first beat drops. Charged and modern,
+    coiled rather than chaotic, never devotional and never soft.
+  - Medium & materials: glossy stylised 3D in sweat-beaded brushed
+    steel, dark damp mat-rubber, neoprene grip, smoked glass and
+    the faint heat-haze of a hot studio. Tactile and engineered,
+    with the heat-and-wave motif living in the composition. Never
+    pastel, never clip-art, never devotional-ornamental.
+  - Finish & light: hot directional spotlights cutting through
+    heat-haze, deep falloff into the dim room, a single
+    saturated colour wash on the back wall. Dramatic studio-floor
+    staging, never moody-grim and never flat.
+  - Energy by role: celebratory moments hit big and athletic — a
+    hot pop of brand colour over the sweat-shine, the playlist
+    crest, never confetti chaos. Small, persistent elements stay
+    clean, sharp and quiet, reading instantly at small size.
+  - Hard nos: no devotional ornament, mandala or Sanskrit-as-style
+    used as a brand surface; no chanted-shala signals; no
+    candle-and-blanket restorative softness; no cute, cartoon,
+    pastel or bubbly; no mascot, character, creature or face of
+    any kind; nothing flat, generic-stock or clip-arty.
 
   --- Palette ---
-    primary: oklch(64% 0.11 165) — Calm Sage: A soft, muted eucalyptus-inspired green for primary actions, CTAs, and key interactive moments. Desaturated and natural-feeling, it anchors the brand identity without ever shouting—perfect for buttons, links, and the visual moments that guide users gently through their practice.
-    background: oklch(97% 0.01 45) — Warm Oat: The app's serene, airy base surface—a warm near-white with the faintest oat paper undertone and minimal chroma. Bright and breathing, it creates the calm, spacious canvas where all content lives, never clinical or stark.
-    text: oklch(32% 0.02 210) — Soft Slate: A gentle, deep slate for primary text—warm rather than pure black, with just a whisper of blue undertone. It reads comfortably and clearly against the warm oat background while maintaining the app's soft, low-intensity feel.
-    accent: oklch(68% 0.13 35) — Dusty Clay: A warm, earthy terracotta for small secondary accents—badges, progress indicators, and gentle highlights. Muted and natural, it partners quietly with the sage primary, adding warmth and grounding without competing for attention.
+    primary: oklch(62% 0.22 22) — Hot Coral Burn: A saturated electric coral-red — the brand's signature spotlight-on-skin colour wash, bold and athletic. Used for primary CTAs and key brand accents, comfortably clearing WCAG AA contrast against the deep room-black canvas.
+    background: oklch(12% 0.01 28) — Deep Room Black: A near-black with a faint warm ember undertone, evoking the dim hot-room floor before the first beat drops. The base canvas for all elevated surfaces and composited overlays.
+    text: oklch(92% 0.01 28) — Heat Haze White: A near-white with a barely perceptible warm tint harmonised to the brand coral, keeping the palette cohesive. Primary readable colour for headings and body copy across the dark canvas.
+    accent: oklch(82% 0.22 135) — Electric Lime: A fresh, high-energy lime green — the cold-water counterpoint to the coral heat. Used sparingly on active nav items, selected pills, and active tab borders to read like a single bright cue light against the dark canvas.
   --- Background (fixed by app theme) ---
-  pure white (the app is in light mode)
+  pure black (the app is in dark mode)
   --- Subject ---
-  The single hero that celebrates a successful class booking. Fills the ClassBookedScreen as a full-bleed centred hero (~50-60% of the viewport), revealed with a scale-in pop after a brief loading + done-check sequence, with a "Class Booked" headline directly below it and a Continue button at the bottom. It appears the instant the user commits to booking a class and is the ONLY place a booking success is celebrated — the first positive payoff for that action and a key retention moment. The emotion is peak, congratulatory success: "you're in, your spot is locked".
+  Communicates that the user has an attendance streak going. Read that feeling and pick imagery that fits this brand's world (e.g. a flame, stacked forward chevrons, a lightning bolt, or pick wtv you think would fit is encouraged). This should be stylized to fit their brand and feel exciting while being clear and scannable. Must not be inside a token, wtv you pick should be on its own. Used in three places: (1) ~22x30 in the persistent top info bar beside the streak day count; (2) ~12x15 in the Home screen's upcoming-sessions card footer next to "You're on an X week streak!"; (3) the ~240px icon hero of the post-class Streak screen (the 1st post-class card), revealed by the streak celebration animation as it grows in.
