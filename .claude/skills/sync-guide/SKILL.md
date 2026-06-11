@@ -629,9 +629,18 @@ as the subscription-lifecycle dispatcher, not a freeze handler.
   passed straight to both the create and update Stripe requests — the caller
   chooses `proration_behavior` **explicitly**, never inferred from a per-item
   flag. Every subscription carries `StripeSubscriptionMetadata(member_id,
-  gym_id)`. `pay_first_invoice_out_of_band` only applies on **create**, and the
-  out-of-band first-invoice path triggers only when `proration_behavior ==
-  "always_invoice"`.
+  gym_id)`. `pay_first_invoice_out_of_band` (the **cash flag**) is threaded to
+  **both** branches now. On **create** it drives the out-of-band first-invoice
+  pay (only when `proration_behavior == "always_invoice"`); on **update** it
+  pays nothing out of band but is still passed through as the card-vs-cash
+  signal. In `payments-guide` that flag selects `payment_behavior`: a **card**
+  op (flag False) is sent `error_if_incomplete` on both create and update, so a
+  declined at-the-desk charge **fails the op** (create → 402 + no sub; update →
+  402 + Stripe rolls the item change back) instead of leaving an incomplete
+  sub / unpaid proration behind a success. A **cash** op keeps
+  `default_incomplete` + out-of-band pay (create) or no error-behavior (update —
+  the open proration invoice is settled later via `mark_paid_cash`). Only the
+  monthly **renewals** stay async (Stripe dunning).
 - **empty bucket + existing sub** → **cancel** the subscription.
 - **empty bucket + no sub** → `None` (nothing to do).
 

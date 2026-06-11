@@ -35,7 +35,24 @@ from src.payments.service.subscription.payments_subscription_base import (
 
 
 class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
-    """Create new Stripe subscriptions."""
+    """Create new Stripe subscriptions.
+
+    The first charge is verified synchronously on **both** settlement paths:
+
+    - **Card path** (not paying out of band) — ``payment_behavior =
+      'error_if_incomplete'``: if the first invoice can't be paid (a card
+      decline), Stripe 402s the create and leaves NO subscription behind, so a
+      decline fails the operation rather than reporting success while a dunning
+      cycle runs silently. A $0 / no-immediate-charge first invoice has nothing
+      to collect, so this is a no-op there.
+    - **Cash path** (``pay_first_invoice_out_of_band`` +
+      ``proration_behavior='always_invoice'``) — ``payment_behavior =
+      'default_incomplete'``: the sub is created incomplete with an open first
+      invoice that we then pay out of band ourselves (no card charge).
+
+    Only the monthly RENEWALS that follow remain asynchronous (Stripe dunning /
+    webhooks).
+    """
 
     async def _build_create_params(
         self,
@@ -80,8 +97,18 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         )
 
         if request.pay_first_invoice_out_of_band and proration_behavior == "always_invoice":
+            # Cash path: create the sub incomplete + an open first invoice we
+            # pay out of band ourselves (no card collection).
             create_params["payment_behavior"] = "default_incomplete"
             create_params["expand"] = ["latest_invoice"]
+        else:
+            # Card path: fail the create synchronously if the first invoice
+            # can't be paid. error_if_incomplete makes Stripe 402 (and create
+            # NO subscription) when the immediate charge declines, instead of
+            # leaving an incomplete sub + open unpaid invoice behind a
+            # "success" while it silently dunns. A $0 / no-immediate-charge
+            # first invoice has nothing to collect, so this is harmless there.
+            create_params["payment_behavior"] = "error_if_incomplete"
 
         if recurring_interval == DurationUnit.month:
             create_params["billing_cycle_anchor"] = await self._next_monthly_anchor_timestamp(

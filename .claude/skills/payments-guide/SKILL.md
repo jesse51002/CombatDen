@@ -264,14 +264,45 @@ shared deps and the static/instance helpers.
 
 | facade method | delegate (file) | does |
 | --- | --- | --- |
-| `create_subscription` / `preview_create_subscription` | `PaymentsSubscriptionCreate` (`_create`) | new sub (flexible billing mode), monthly/weekday anchor, optional first-invoice out-of-band |
-| `update_subscription` / `preview_update_subscription` | `PaymentsSubscriptionUpdate` (`_update`) | reconcile a sub to a desired item/discount set |
+| `create_subscription` / `preview_create_subscription` | `PaymentsSubscriptionCreate` (`_create`) | new sub (flexible billing mode), monthly/weekday anchor, first charge verified synchronously (card → `error_if_incomplete`; cash → `default_incomplete` + first-invoice out-of-band) |
+| `update_subscription` / `preview_update_subscription` | `PaymentsSubscriptionUpdate` (`_update`) | reconcile a sub to a desired item/discount set; card path sends `error_if_incomplete` so a declined proration 402s + rolls back |
 | `cancel_subscription` | `PaymentsSubscriptionCancel` (`_cancel`) | cancel now or at period end; no-op if already `canceled` |
 | `freeze_subscription` / `unfreeze_subscription` | `PaymentsSubscriptionFreeze` (`_freeze`) | `pause_collection` (`behavior="void"`, optional `resumes_at`) / resume with `billing_cycle_anchor="unchanged"` |
 | `migrate_subscriptions_to_price` | `PaymentsSubscriptionMigration` (`_migration`) | sequential price migration across subs |
 | `fetch_upcoming_invoice` | `PaymentsSubscriptionUpcoming` (`_upcoming`) | next-invoice preview via `invoices.create_preview(subscription=…)` |
 | `get_subscription` | `PaymentsSubscriptionRetrieve` (`_retrieve`) | **read current items + discounts** (the sync's read primitive) |
 | `get_subscription_item` | `PaymentsSubscriptionItem` (`_item`) | retrieve one sub-item (validates its parent isn't canceled) |
+
+### Synchronous first-charge — `payment_behavior` (card vs. cash)
+
+The at-the-desk charge a create / add produces is **verified synchronously**, so
+a declining card **fails the operation** rather than reporting success while
+Stripe silently dunns. The split is keyed on `pay_first_invoice_out_of_band`
+(the cash flag the sync threads through, §sync-guide):
+
+- **Create, card path** (`pay_first_invoice_out_of_band` False) →
+  `payment_behavior="error_if_incomplete"`: Stripe 402s the create when the
+  first invoice can't be paid and creates **no subscription** (verified: a
+  declined create leaves zero subs + zero invoices on the customer). A
+  `$0`/no-immediate-charge first invoice has nothing to collect, so it's a no-op
+  there.
+- **Create, cash path** (`pay_first_invoice_out_of_band` +
+  `proration_behavior="always_invoice"`) → `payment_behavior="default_incomplete"`
+  + the existing `_pay_first_invoice_out_of_band` (mark the open first invoice
+  paid out of band, no card charge). Unchanged.
+- **Update, card path** (`pay_first_invoice_out_of_band` False) →
+  `payment_behavior="error_if_incomplete"`: a proration charge the card can't
+  cover 402s the update, and Stripe **rolls the item change back** (verified: the
+  live sub keeps exactly its prior items) — so an add fails + reverts instead of
+  leaving the member added behind an open unpaid proration invoice. The cash path
+  (`pay_first_invoice_out_of_band` True) is **excluded**: its open proration
+  invoice is settled later via `mark_paid_cash`, so it must not error. A
+  `proration_behavior="none"` update generates no invoice → no-op.
+
+Only the monthly **renewals** after the first charge stay asynchronous (Stripe
+dunning → the `invoice.payment_failed` webhook). The preview paths don't read
+`payment_behavior` (they call `invoices.create_preview`), so setting it is inert
+for previews.
 
 ### `get_subscription` — the read-current-coupons primitive
 

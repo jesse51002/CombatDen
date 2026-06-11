@@ -101,13 +101,17 @@ text). When `multiple_charges` is true, say plainly that two separate charges
 were made. For a failed group, offer "retry the failed memberships" = a NEW
 request containing only the failed items (new idempotency key).
 
-**Copy caution — recurring "created" means converged, not PAID.** For a
-RECURRING membership, payment success is asynchronous by design (Stripe's
-dunning model): a declining card still yields `created` — the subscription
-exists with an open first invoice, and recovery/overdue surfaces through the
-webhooks + billing views. So the results screen says the membership was
-*created/started*, never "payment received". (A ONE-TIME membership's
-`created` DOES mean its invoice settled — its charge is synchronous.)
+**Copy note — `created` means the at-the-desk charge cleared.** The
+immediate charge is now verified synchronously for BOTH groups: a one-time
+membership's invoice settles on the spot, and a recurring membership's first
+charge is collected before the create returns (`error_if_incomplete` on the
+card path) — or recorded as cash (`paid_with_cash`, paid out of band). So a
+`created` result means the first payment succeeded (card) or was recorded as
+cash; a declining card now yields `failed`, not a `created` row hiding an
+unpaid invoice. The only thing that stays asynchronous is monthly RENEWALS
+after the first charge — those still run through Stripe dunning / webhooks, and
+overdue surfaces through the billing views. The results copy can say the
+charge went through, not just that the membership was started.
 
 ## Request mapping (one request per wizard run)
 

@@ -9,10 +9,13 @@ the real reason the op is list-based:
   * a mixed one-time + recurring cart producing exactly TWO charges (one
     consolidated one-time invoice + one recurring converge);
   * the Phase-A validation gate (every branch rejects with nothing written);
-  * a mixed cart whose recurring card fails at billing — the honest, observed
-    Stripe behavior (the recurring group is NOT failed by the start op; the
-    soft first-invoice decline is collected asynchronously, leaving an
-    ``incomplete`` sub behind a ``created`` result — see that test's docstring).
+  * a mixed cart whose recurring card declines — the at-the-desk charge is now
+    verified synchronously (``error_if_incomplete`` on the card path), so the
+    recurring group ``failed`` (its pending rows cleaned, no subscription left)
+    while the $0 one-time group still bills;
+  * the single-member decline, the cash-path regression (a declining card still
+    succeeds out of band), and adding to an EXISTING healthy sub when the card
+    now declines (the add fails + reverts, the live sub untouched).
 
 Every test cleans up exactly what it creates via the ``created`` fixture plus an
 explicit ``delete_member_data`` in a ``finally`` (linked children need the
@@ -666,7 +669,35 @@ def test_request_rejects_duplicate_member_price_pairs(gym_id):
         )
 
 
-# ── Test 4 — mixed cart, recurring card fails at billing (OBSERVED behavior) ──
+# ── Helper: stand a member up on a good card, then swap to a failing one ──
+
+
+async def _swap_to_failing_card(stripe_client, connect_opts, customer_id):
+    """Attach ``tok_chargeCustomerFail`` and make it the default PM.
+
+    ``tok_chargeDeclined`` declines even on attach (so creating a customer with
+    it as the default PM blows up). The pattern is: stand the member up with a
+    good card, then swap the customer's default to this one — it attaches
+    cleanly but fails every charge. (Test PMs are never cleaned up, so nothing
+    extra to track.)
+    """
+    failing_pm = await stripe_client.client.v1.payment_methods.create_async(
+        params={"type": "card", "card": {"token": "tok_chargeCustomerFail"}},
+        options=connect_opts,
+    )
+    await stripe_client.client.v1.payment_methods.attach_async(
+        failing_pm.id,
+        params={"customer": customer_id},
+        options=connect_opts,
+    )
+    await stripe_client.client.v1.customers.update_async(
+        customer_id,
+        params={"invoice_settings": {"default_payment_method": failing_pm.id}},
+        options=connect_opts,
+    )
+
+
+# ── Test 4 — mixed cart, declining card FAILS the recurring group ──
 
 
 @pytest.mark.timeout(240)
@@ -678,49 +709,27 @@ async def test_mixed_cart_recurring_card_fails_at_billing(
     connect_opts,
     created,
 ):
-    """Honest record: a recurring card that fails at billing does NOT fail the
-    recurring group inside ``start`` — it is collected asynchronously.
-
-    The task's envisioned scenario was a partial failure where the recurring
-    group hard-fails on a card decline while the $0 one-time group still bills.
-    That scenario is **not reachable against real Stripe** with the current
-    engine, and this test documents exactly why, asserting the true state.
+    """A declining card FAILS the recurring group — never reports success.
 
     Setup: payer with a $0 one-time membership + a paid recurring membership in
     ONE request (``prorate=True``, NOT cash). The payer's card-on-file is
     ``tok_chargeCustomerFail`` (attaches cleanly, fails every charge).
 
-    Observed behavior (verified against the shared Stripe test account):
+    With ``payment_behavior='error_if_incomplete'`` on the card create path,
+    Stripe 402s the subscription create when the first invoice can't be paid and
+    leaves NO subscription behind. So:
       * ``charge_count == 2`` / ``multiple_charges is True`` — both groups run.
       * The $0 one-time group settles: result ``created``, invoice ``in_…``
-        finalized + paid ($0), row ``applied``.
-      * The recurring group does NOT raise and does NOT fail. The engine creates
-        the subscription with ``payment_behavior='default_incomplete'`` and,
-        because ``pay_first_invoice_out_of_band`` is False, never explicitly
-        charges the first invoice — it relies on Stripe's automatic collection.
-        With a GOOD card Stripe auto-pays that first invoice; with this failing
-        card the auto-attempt fails SILENTLY: the subscription is left
-        ``incomplete`` with an ``open``, unpaid first invoice
-        (``amount_due > 0``, ``amount_paid == 0``), yet the start op reports the
-        recurring result as ``created`` and writes the CRM row ``applied``.
+        finalized + paid ($0), row ``applied`` — a successful charge is never
+        un-billed even though its sibling group fails.
+      * The recurring group ``failed`` with the decline error text; its pending
+        membership row is cleaned up (gone from the unfiltered base); and there
+        is NO subscription left on the customer and no ``stripe_sub_id_month``.
 
-    Conclusion (the finding): the "a failed charge surfaces in the breakdown,
-    never as an exception" guarantee covers engine / Stripe-API exceptions
-    (a missing price, a lost subscription, the one-time invoice's own
-    ``finalize``/``pay``). It does NOT cover a soft first-invoice card decline
-    on the recurring converge, which Stripe handles asynchronously via dunning
-    and which the start op neither observes nor reports. A recurring start can
-    therefore leave an ``incomplete`` subscription + unpaid first invoice behind
-    a ``created`` result — the webhook / reconciler path owns recovery, not the
-    start op. This is by design (it mirrors Stripe's subscription billing model),
-    not a bug in the start op, so the test asserts the observed state rather than
-    forcing a ``failed`` outcome.
+    The empirically-verified Stripe behavior the assertions below pin: a
+    declined ``error_if_incomplete`` create produces zero subscriptions and zero
+    invoices on the customer (the create is rolled back whole).
     """
-    # A card that ATTACHES fine but FAILS every charge to the customer.
-    # ``tok_chargeDeclined`` declines even on attach (so the factory's
-    # customer-create-with-default-PM step would blow up). Stand the member up
-    # with a good card, then swap the customer's default PM to the failing one.
-    # (Test PMs are never cleaned up, so nothing extra to track.)
     good_pm = await created.payment_method()
     payer = await created.member(
         gym_id,
@@ -728,21 +737,8 @@ async def test_mixed_cart_recurring_card_fails_at_billing(
         last_name="Payer",
         payment_method_id=good_pm,
     )
-    failing_pm = await stripe_client.client.v1.payment_methods.create_async(
-        params={"type": "card", "card": {"token": "tok_chargeCustomerFail"}},
-        options=connect_opts,
-    )
-    await stripe_client.client.v1.payment_methods.attach_async(
-        failing_pm.id,
-        params={"customer": payer.stripe_customer_id},
-        options=connect_opts,
-    )
-    await stripe_client.client.v1.customers.update_async(
-        payer.stripe_customer_id,
-        params={
-            "invoice_settings": {"default_payment_method": failing_pm.id},
-        },
-        options=connect_opts,
+    await _swap_to_failing_card(
+        stripe_client, connect_opts, payer.stripe_customer_id
     )
     free_plan = await created.plan(
         gym_id, plan_type="one_time", plan_name="Free Pass",
@@ -782,6 +778,7 @@ async def test_mixed_cart_recurring_card_fails_at_billing(
         rec_result = by_plan[paid_recurring.plan_id]
 
         # ── One-time group: $0 invoice settles, row kept + billed. ──
+        # The failed recurring sibling never un-bills this group.
         assert ot_result.status.value == "created"
         assert ot_result.item_id is not None
         ot_row = await _read_membership_row(db_pool, ot_result.item_id)
@@ -795,46 +792,330 @@ async def test_mixed_cart_recurring_card_fails_at_billing(
         assert invoice.status == "paid"
         assert invoice.amount_paid == 0
 
-        # ── Recurring group: NOT failed — created, row kept `applied`. ──
-        # The soft card decline is never observed by the start op.
-        assert rec_result.status.value == "created"
-        assert rec_result.error is None
-        rec_row = await _read_membership_row(db_pool, rec_result.item_id)
-        assert rec_row["status"] == "applied"
-        assert rec_row["stripe_item_id"] is not None
-        assert rec_row["stripe_item_id"].startswith("si_")
-        assert rec_row["total_price"] == 5000
+        # ── Recurring group: FAILED with the decline error. ──
+        assert rec_result.status.value == "failed"
+        assert rec_result.error is not None
+        assert "declined" in rec_result.error.lower()
 
-        # ── The smoking gun: the subscription is left `incomplete` and its
-        # first invoice is `open` + unpaid, despite the `created` result. ──
+        # The pending recurring membership row was cleaned up entirely.
+        assert (
+            await _count_membership_rows(db_pool, payer.member_id) == 1
+        ), "only the one-time row should remain; the recurring row was cleaned"
+
+        # ── No subscription was left behind on the customer. ──
         profile = await get_profile_stripe_ids(
             db_pool, payer.member_id, gym_id
+        )
+        assert profile.stripe_sub_id_month is None
+        subs = await stripe_client.client.v1.subscriptions.list_async(
+            params={
+                "customer": payer.stripe_customer_id,
+                "status": "all",
+                "limit": 10,
+            },
+            options=connect_opts,
+        )
+        assert subs.data == [], (
+            f"error_if_incomplete must leave no subscription; got "
+            f"{[(s.id, s.status) for s in subs.data]}"
+        )
+    finally:
+        await delete_member_data(db_pool, payer.member_id)
+
+
+# ── Test 5 — single-member recurring start, declining card → failed ──
+
+
+@pytest.mark.timeout(240)
+async def test_single_recurring_start_declining_card_fails(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """A lone recurring start on a declining card fails with no charge.
+
+    The simplest decline case: ONE recurring membership, no one-time sibling,
+    declining card, ``prorate=True``, NOT cash. The create 402s, so the result
+    row is ``failed``, the pending membership row is cleaned (no rows remain),
+    no subscription is left on the customer, and no charge succeeded.
+    """
+    good_pm = await created.payment_method()
+    member = await created.member(
+        gym_id, first_name="Lone", last_name="Decline",
+        payment_method_id=good_pm,
+    )
+    await _swap_to_failing_card(
+        stripe_client, connect_opts, member.stripe_customer_id
+    )
+    plan = await created.plan(
+        gym_id, plan_name="Solo Monthly", price_cents=5000
+    )
+
+    try:
+        response = await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                prorate=True,
+                paid_with_cash=False,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id, price_id=plan.price_id,
+                    ),
+                ],
+            )
+        )
+
+        # Single recurring charge group, which failed.
+        assert response.charge_count == 1
+        assert response.multiple_charges is False
+        assert len(response.results) == 1
+        result = response.results[0]
+        assert result.status.value == "failed"
+        assert result.error is not None
+        assert "declined" in result.error.lower()
+
+        # Pending row cleaned — nothing left for this member.
+        assert await _count_membership_rows(db_pool, member.member_id) == 0
+
+        # No subscription, no successful charge.
+        profile = await get_profile_stripe_ids(
+            db_pool, member.member_id, gym_id
+        )
+        assert profile.stripe_sub_id_month is None
+        subs = await stripe_client.client.v1.subscriptions.list_async(
+            params={
+                "customer": member.stripe_customer_id,
+                "status": "all",
+                "limit": 10,
+            },
+            options=connect_opts,
+        )
+        assert subs.data == []
+        invoices = await stripe_client.client.v1.invoices.list_async(
+            params={"customer": member.stripe_customer_id, "limit": 10},
+            options=connect_opts,
+        )
+        assert all(
+            inv.amount_paid == 0 for inv in invoices.data
+        ), "no charge should have succeeded against a declining card"
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+# ── Test 6 — cash recurring start STILL succeeds on a declining card ──
+
+
+@pytest.mark.timeout(240)
+async def test_cash_recurring_start_with_declining_card_succeeds(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """Regression: the cash path is NOT broken by error_if_incomplete.
+
+    A ``paid_with_cash=True`` recurring start for a member whose card declines
+    must STILL succeed: the cash path keeps ``default_incomplete`` + pays the
+    first invoice out of band (never touching the card), so the decline is
+    irrelevant. The result is ``created``, the row lands ``applied`` on a real
+    sub-item line, and the subscription's first invoice is paid out of band.
+    """
+    good_pm = await created.payment_method()
+    member = await created.member(
+        gym_id, first_name="Cash", last_name="Decline",
+        payment_method_id=good_pm,
+    )
+    await _swap_to_failing_card(
+        stripe_client, connect_opts, member.stripe_customer_id
+    )
+    plan = await created.plan(
+        gym_id, plan_name="Cash Monthly", price_cents=5000
+    )
+
+    try:
+        response = await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                prorate=True,
+                paid_with_cash=True,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id, price_id=plan.price_id,
+                    ),
+                ],
+            )
+        )
+
+        assert response.charge_count == 1
+        result = response.results[0]
+        assert result.status.value == "created", (
+            f"cash start must succeed despite the declining card; "
+            f"error={result.error}"
+        )
+
+        row = await _read_membership_row(db_pool, result.item_id)
+        assert row["status"] == "applied"
+        assert row["stripe_item_id"] is not None
+        assert row["stripe_item_id"].startswith("si_")
+
+        # The subscription exists and its first invoice was paid out of band.
+        profile = await get_profile_stripe_ids(
+            db_pool, member.member_id, gym_id
         )
         assert profile.stripe_sub_id_month is not None
         sub = await stripe_client.client.v1.subscriptions.retrieve_async(
             profile.stripe_sub_id_month, options=connect_opts
         )
-        assert sub.status == "incomplete", (
-            f"expected an incomplete sub from the failing card, got {sub.status}"
+        # An out-of-band-paid first invoice activates the sub (not incomplete).
+        assert sub.status == "active"
+        invoices = await stripe_client.client.v1.invoices.list_async(
+            params={
+                "customer": member.stripe_customer_id,
+                "subscription": profile.stripe_sub_id_month,
+                "limit": 10,
+            },
+            options=connect_opts,
         )
-        # The recurring first invoice is open and unpaid (the prorated amount).
-        recurring_invoices = [
-            inv
-            for inv in (
-                await stripe_client.client.v1.invoices.list_async(
-                    params={
-                        "customer": payer.stripe_customer_id,
-                        "subscription": profile.stripe_sub_id_month,
-                        "limit": 10,
-                    },
-                    options=connect_opts,
-                )
-            ).data
-        ]
-        assert len(recurring_invoices) == 1
-        first_invoice = recurring_invoices[0]
-        assert first_invoice.status == "open"
-        assert first_invoice.amount_due > 0
-        assert first_invoice.amount_paid == 0
+        assert len(invoices.data) == 1
+        first_invoice = invoices.data[0]
+        assert first_invoice.status == "paid"
+        # Paid out of band (the cash path stamps the invoice) — the sub going
+        # `active` despite the declining default card is the proof the card was
+        # never charged.
+        invoice_metadata = (
+            first_invoice.metadata.to_dict() if first_invoice.metadata else {}
+        )
+        assert invoice_metadata.get("crm_paid_with_cash") == "true"
     finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+# ── Test 7 — adding to an EXISTING healthy sub when the card now declines ──
+
+
+@pytest.mark.timeout(300)
+async def test_add_to_existing_sub_card_declines_fails_and_reverts(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """Adding a recurring membership to a live family fails + reverts on decline.
+
+    Start a healthy recurring family (payer on a good card), then swap the
+    payer's card to a declining one and add a SECOND recurring membership (a
+    linked child) with ``prorate=True``. The add generates a proration invoice;
+    with ``error_if_incomplete`` on the update card path Stripe 402s and rolls
+    the item change back. So:
+      * the add result is ``failed`` with the decline error;
+      * the child's pending membership row is reverted (gone);
+      * the EXISTING subscription is untouched — still ONE item (the payer's),
+        still ``active`` — and the payer's membership row is untouched.
+
+    Empirically verified: ``error_if_incomplete`` on the update rolls the item
+    change back on the 402 (the live sub keeps exactly its prior items), so no
+    explicit-pay-then-revert fallback is needed.
+    """
+    good_pm = await created.payment_method()
+    payer = await created.member(
+        gym_id, first_name="Existing", last_name="Payer",
+        payment_method_id=good_pm,
+    )
+    child = await created.member(
+        gym_id, first_name="Existing", last_name="Child",
+    )
+    payer_plan = await created.plan(
+        gym_id, plan_name="Existing Payer Plan", price_cents=5000
+    )
+    child_plan = await created.plan(
+        gym_id, plan_name="Existing Child Plan", price_cents=6000
+    )
+
+    try:
+        await _link_child(db_pool, child.member_id, payer.member_id)
+
+        # First start: the payer's recurring membership on a GOOD card.
+        first = await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=payer.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                prorate=True,
+                paid_with_cash=False,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=payer.member_id,
+                        price_id=payer_plan.price_id,
+                    ),
+                ],
+            )
+        )
+        assert first.results[0].status.value == "created"
+        payer_item_id = first.results[0].item_id
+
+        profile = await get_profile_stripe_ids(
+            db_pool, payer.member_id, gym_id
+        )
+        sub_id = profile.stripe_sub_id_month
+        assert sub_id is not None
+        sub_before = await stripe_client.client.v1.subscriptions.retrieve_async(
+            sub_id, options=connect_opts
+        )
+        assert len(sub_before.items.data) == 1
+        assert sub_before.status == "active"
+
+        # Swap to a declining card, then add the child's membership (an UPDATE
+        # of the existing sub).
+        await _swap_to_failing_card(
+            stripe_client, connect_opts, payer.stripe_customer_id
+        )
+        add = await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=payer.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                prorate=True,
+                paid_with_cash=False,
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=child_plan.price_id,
+                    ),
+                ],
+            )
+        )
+
+        # ── The add failed with the decline. ──
+        assert add.results[0].status.value == "failed"
+        assert add.results[0].error is not None
+        assert "declined" in add.results[0].error.lower()
+
+        # ── The child's pending row was reverted (cleaned). ──
+        assert await _count_membership_rows(db_pool, child.member_id) == 0
+
+        # ── The existing sub + payer membership are untouched. ──
+        sub_after = await stripe_client.client.v1.subscriptions.retrieve_async(
+            sub_id, options=connect_opts
+        )
+        assert len(sub_after.items.data) == 1, (
+            "error_if_incomplete must roll the add back; the live sub keeps "
+            "exactly its prior single item"
+        )
+        assert sub_after.status == "active"
+        payer_row = await _read_membership_row(db_pool, payer_item_id)
+        assert payer_row["status"] == "applied"
+        assert payer_row["stripe_item_id"] is not None
+    finally:
+        await delete_member_data(db_pool, child.member_id)
         await delete_member_data(db_pool, payer.member_id)

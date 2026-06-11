@@ -54,11 +54,14 @@ class PaymentSyncStripe:
             idempotency_key: Base key for Stripe. Sub-operation keys
                 are derived from it (``:sub_create``, ``:sub_update``,
                 ``:sub_cancel``).
-            pay_first_invoice_out_of_band: When a new subscription
-                is being created (no existing sub id on the bucket),
-                mark its first invoice as paid out of band instead
-                of charging the customer's default payment method.
-                Ignored when updating an existing subscription.
+            pay_first_invoice_out_of_band: The cash flag. On a new
+                subscription (no existing sub id on the bucket), mark
+                its first invoice as paid out of band instead of
+                charging the customer's default payment method. On an
+                update it does NOT pay anything out of band, but it is
+                still threaded through: it suppresses the card path's
+                ``error_if_incomplete`` so a cash family's open proration
+                invoice can be settled out of band later (mark-paid-cash).
 
         Returns:
             Subscription response if created/updated, None if cancelled.
@@ -188,11 +191,14 @@ class PaymentSyncStripe:
     ) -> PaymentsSubscriptionResponse:
         """Create or update the subscription for this bucket.
 
-        ``pay_first_invoice_out_of_band`` only applies when a new
-        subscription is being created. Updating an existing
-        subscription (adding/removing items) does not trigger the
-        "first invoice" pattern; any proration charge should be
-        handled separately via the mark-paid-cash endpoint.
+        ``pay_first_invoice_out_of_band`` (the cash flag) is threaded to
+        BOTH branches. On **create** it drives the out-of-band first-invoice
+        pay. On **update** it is the card-vs-cash signal for the proration
+        charge: a card update (False) is sent ``error_if_incomplete`` so a
+        declined proration fails + rolls back; a cash update (True) is NOT,
+        so its open proration invoice can be settled out of band later
+        (mark-paid-cash). The update itself never pays the proration invoice
+        out of band here — only the create's first invoice does.
         """
         metadata = StripeSubscriptionMetadata(
             member_id=parent.member_id,
@@ -204,6 +210,7 @@ class PaymentSyncStripe:
                     stripe_subscription_id=bucket.existing_sub_id,
                     stripe_customer_id=parent.stripe_customer_id,
                     items=bucket.items,
+                    pay_first_invoice_out_of_band=pay_first_invoice_out_of_band,
                     proration_behavior=proration_behavior,
                     metadata=metadata,
                     idempotency_key=f"{idempotency_key}:sub_update",
