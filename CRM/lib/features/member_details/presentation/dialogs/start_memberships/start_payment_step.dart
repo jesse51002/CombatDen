@@ -39,53 +39,60 @@ class StartPaymentStep extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
         Text('How is this paid?',
-            style: DesignConstants.h3),
-        SwitchListTile(
-          value: paidWithCash,
-          onChanged: onPaidWithCashChanged,
-          activeThumbColor: DesignConstants.primaryColor,
-          contentPadding: EdgeInsets.zero,
-          title: Text(
-            'Paid in cash (no card charge today)',
-            style: DesignConstants.p,
-          ),
-          subtitle: Text(
-            'Today’s charges are recorded as settled '
-            'in cash; future recurring cycles still '
-            'charge the card.',
-            style: DesignConstants.pSmall.copyWith(
-              color: DesignConstants.text2nd,
-            ),
-          ),
-        ),
-        if (!paidWithCash)
-          CardWalletSection(
-            cardOnFile: cardOnFile,
-            onAddNew: onAddNewCard,
-          ),
-        if (hasRecurring)
-          SwitchListTile(
-            value: prorate,
-            onChanged: onProrateChanged,
-            activeThumbColor:
-                DesignConstants.primaryColor,
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              'Prorate the first recurring charge',
-              style: DesignConstants.p,
-            ),
-            subtitle: Text(
-              'Charge only for the remainder of the '
-              'current cycle.',
-              style: DesignConstants.pSmall.copyWith(
-                color: DesignConstants.text2nd,
+            style: DesignConstants.h2),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            SwitchListTile(
+              value: paidWithCash,
+              onChanged: onPaidWithCashChanged,
+              activeThumbColor:
+                  DesignConstants.primaryColor,
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'Paid in cash (no card charge today)',
+                style: DesignConstants.p,
+              ),
+              subtitle: Text(
+                'Today’s charges are recorded as '
+                'settled in cash; future recurring '
+                'cycles still charge the card.',
+                style: DesignConstants.pSmall.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
               ),
             ),
-          ),
-        _TotalsEcho(preview: preview),
+            if (!paidWithCash)
+              CardWalletSection(
+                cardOnFile: cardOnFile,
+                onAddNew: onAddNewCard,
+              ),
+            if (hasRecurring)
+              SwitchListTile(
+                value: prorate,
+                onChanged: onProrateChanged,
+                activeThumbColor:
+                    DesignConstants.primaryColor,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Prorate the first recurring charge',
+                  style: DesignConstants.p,
+                ),
+                subtitle: Text(
+                  'Charge only for the remainder of '
+                  'the current cycle.',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+              ),
+            _TotalsEcho(preview: preview),
+          ],
+        ),
       ],
     );
   }
@@ -111,12 +118,12 @@ class _TotalsEcho extends StatelessWidget {
     }
     return Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingSmall,
       ),
       decoration: BoxDecoration(
         color: DesignConstants.backgroundColor,
         borderRadius: BorderRadius.circular(
-          DesignConstants.radiusSmall,
+          DesignConstants.radiusBig,
         ),
         border:
             Border.all(color: DesignConstants.divider),

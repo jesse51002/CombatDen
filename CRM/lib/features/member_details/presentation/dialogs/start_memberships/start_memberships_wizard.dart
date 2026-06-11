@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
@@ -661,6 +662,15 @@ class _StartMembershipsWizardState
             _step == StartMembershipsStep.results;
         return AppDialog(
           title: 'Start memberships',
+          // A workflow surface, not a confirmation box:
+          // a generous viewport fraction with a fixed
+          // stepper/header and footer; the step content
+          // scrolls in between.
+          expanded: true,
+          maxWidth: DesignConstants.dialogMaxWidthWide,
+          contentPadding: const EdgeInsets.all(
+            DesignConstants.paddingBig,
+          ),
           body: StartMembershipsStepBody(
             step: _step,
             launchMember: widget.member,

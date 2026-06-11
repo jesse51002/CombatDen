@@ -38,7 +38,7 @@ class MemberReviewGroup extends StatelessWidget {
       decoration: BoxDecoration(
         color: DesignConstants.backgroundColor,
         borderRadius: BorderRadius.circular(
-          DesignConstants.radiusSmall,
+          DesignConstants.radiusBig,
         ),
         border: Border.all(color: DesignConstants.divider),
       ),
@@ -46,12 +46,7 @@ class MemberReviewGroup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
-          Text(
-            name,
-            style: DesignConstants.p.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(name, style: DesignConstants.h2),
           for (final d in drafts)
             _MembershipReviewTile(
               draft: d,

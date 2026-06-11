@@ -43,17 +43,24 @@ class StartDiscountsStep extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
-        Text(
-          'Discounts for ${member.name}',
-          style: DesignConstants.h3,
-        ),
-        Text(
-          'Optional — applied before the first charge.',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text2nd,
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingSmall,
+          children: [
+            Text(
+              'Discounts for ${member.name}',
+              style: DesignConstants.h2,
+            ),
+            Text(
+              'Optional — applied before the first '
+              'charge.',
+              style: DesignConstants.p.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          ],
         ),
         FutureBuilder<List<DiscountResponse>>(
           future: discountsFuture,
@@ -77,7 +84,10 @@ class StartDiscountsStep extends StatelessWidget {
             return Column(
               crossAxisAlignment:
                   CrossAxisAlignment.stretch,
-              spacing: DesignConstants.spacingMedium,
+              // The membership cards are substantial
+              // objects — a full step up of air between
+              // them.
+              spacing: DesignConstants.spacingLarge,
               children: drafts
                   .map(
                     (draft) => DraftDiscountsCard(

@@ -67,23 +67,29 @@ class StartMembershipParticipantStep extends StatelessWidget {
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
-        Text(
-          title ?? 'Who is this membership for?',
-          style: DesignConstants.h3,
-        ),
-        Text(
-          subtitle ??
-              '${member.fullName} remains the billable party — '
-                  'card charges still come off their account.',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text2nd,
-          ),
-        ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingSmall,
+          children: [
+            Text(
+              title ?? 'Who is this membership for?',
+              style: DesignConstants.h2,
+            ),
+            Text(
+              subtitle ??
+                  '${member.fullName} remains the billable party — '
+                      'card charges still come off their account.',
+              style: DesignConstants.p.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
           children: participants
               .map(
                 (p) => _ParticipantTile(
@@ -118,7 +124,7 @@ class _ParticipantTile extends StatelessWidget {
     final disabled = disabledReason != null;
     final content = Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingSmall,
       ),
       decoration: BoxDecoration(
         color: selected

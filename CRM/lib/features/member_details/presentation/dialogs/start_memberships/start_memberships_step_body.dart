@@ -24,10 +24,13 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_results_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_review_step.dart';
 
-/// The scrollable body of the Start Memberships wizard: the
-/// step indicator, the persistent payer/current-member
-/// context header, and the active step. Pure presentation —
-/// all state and transitions live in the orchestrator.
+/// The body of the Start Memberships wizard: the step
+/// indicator and the persistent payer/current-member
+/// context header stay fixed on top as their own zones,
+/// and the active step scrolls beneath them at a readable
+/// centered measure. Pure presentation — all state and
+/// transitions live in the orchestrator. Needs a bounded
+/// height (it lives in the wizard's expanded [AppDialog]).
 class StartMembershipsStepBody extends StatelessWidget {
   final StartMembershipsStep step;
   final MemberDetailResponse launchMember;
@@ -129,7 +132,9 @@ class StartMembershipsStepBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingLarge,
+      // Chrome zones (stepper, context header) and the
+      // content area read as distinct surfaces.
+      spacing: DesignConstants.spacingBig,
       children: [
         StartMembershipsStepIndicator(step: step),
         if (step != StartMembershipsStep.payer)
@@ -138,7 +143,20 @@ class StartMembershipsStepBody extends StatelessWidget {
             currentMember:
                 _isPerMemberStep ? currentMember : null,
           ),
-        _activeStep(),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Center(
+              // Tight width (clamped by the viewport) so
+              // every step fills the same readable
+              // measure, whitespace on both sides.
+              child: SizedBox(
+                width:
+                    DesignConstants.dialogContentMaxWidth,
+                child: _activeStep(),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }

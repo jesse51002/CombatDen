@@ -213,9 +213,9 @@ class _PreviewPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return SectionCard(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingSmall,
       ),
-      borderRadius: DesignConstants.radiusSmall,
+      borderRadius: DesignConstants.radiusBig,
       backgroundColor: DesignConstants.backgroundColor,
       child: child,
     );

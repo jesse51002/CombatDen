@@ -114,19 +114,28 @@ class _StartFailed extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
-        Text(
-          'The request was not accepted',
-          style: DesignConstants.h3.copyWith(
-            color: DesignConstants.badRed,
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingSmall,
+          children: [
+            Text(
+              'The request was not accepted',
+              style: DesignConstants.h2.copyWith(
+                color: DesignConstants.badRed,
+              ),
+            ),
+            Text(error, style: DesignConstants.p),
+          ],
         ),
-        Text(error, style: DesignConstants.p),
-        AppOutlineButton(
-          text: 'Back to payment',
-          borderRadius: DesignConstants.radiusSmall,
-          onPressed: onBackToPayment,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AppOutlineButton(
+            text: 'Back to payment',
+            borderRadius: DesignConstants.radiusSmall,
+            onPressed: onBackToPayment,
+          ),
         ),
       ],
     );
@@ -152,12 +161,12 @@ class _Breakdown extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
         if (result.multipleCharges)
           Container(
             padding: const EdgeInsets.all(
-              DesignConstants.spacingSmall,
+              DesignConstants.paddingSmall,
             ),
             decoration: BoxDecoration(
               color: DesignConstants.backgroundColor,
@@ -172,14 +181,14 @@ class _Breakdown extends StatelessWidget {
               'Two separate charges were made: one for '
               'the one-time purchases and one for the '
               'recurring memberships.',
-              style: DesignConstants.pSmall.copyWith(
+              style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),
             ),
           ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingSmall,
+          spacing: DesignConstants.spacingMedium,
           children: result.results
               .map(
                 (r) => _ResultRow(
@@ -198,10 +207,13 @@ class _Breakdown extends StatelessWidget {
               .toList(),
         ),
         if (result.hasFailures)
-          AppOutlineButton(
-            text: 'Retry the failed memberships',
-            borderRadius: DesignConstants.radiusSmall,
-            onPressed: onRetryFailed,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: AppOutlineButton(
+              text: 'Retry the failed memberships',
+              borderRadius: DesignConstants.radiusSmall,
+              onPressed: onRetryFailed,
+            ),
           ),
       ],
     );
@@ -231,7 +243,7 @@ class _ResultRow extends StatelessWidget {
         : DesignConstants.badRed;
     final row = Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingSmall,
       ),
       decoration: BoxDecoration(
         color: DesignConstants.backgroundColor,

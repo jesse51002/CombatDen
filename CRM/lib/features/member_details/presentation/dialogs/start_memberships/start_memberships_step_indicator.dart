@@ -24,7 +24,7 @@ class StartMembershipsStepIndicator
     final activeIndex = groups.indexOf(step.group);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      spacing: DesignConstants.spacingSmall,
+      spacing: DesignConstants.spacingLarge,
       children: [
         for (var i = 0; i < groups.length; i++)
           Expanded(
@@ -71,7 +71,7 @@ class _GroupSegment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      spacing: DesignConstants.spacingTiny,
+      spacing: DesignConstants.spacingSmall,
       children: [
         if (active && group.substepCount > 1)
           Row(

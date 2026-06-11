@@ -26,12 +26,12 @@ class TotalDueTodayRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingSmall,
       ),
       decoration: BoxDecoration(
         color: DesignConstants.primaryColor10,
         borderRadius: BorderRadius.circular(
-          DesignConstants.radiusSmall,
+          DesignConstants.radiusBig,
         ),
       ),
       child: Row(

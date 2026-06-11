@@ -25,8 +25,9 @@ class StartMembershipsHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final member = currentMember;
     return Container(
-      padding: const EdgeInsets.all(
-        DesignConstants.spacingSmall,
+      padding: const EdgeInsets.symmetric(
+        horizontal: DesignConstants.paddingSmall,
+        vertical: DesignConstants.spacingMedium,
       ),
       decoration: BoxDecoration(
         color: DesignConstants.primaryColor10,
@@ -36,7 +37,7 @@ class StartMembershipsHeader extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingTiny,
+        spacing: DesignConstants.spacingSmall,
         children: [
           _HeaderLine(
             label: 'Paying',
@@ -97,15 +98,14 @@ class _HeaderLine extends StatelessWidget {
         Expanded(
           child: RichText(
             text: TextSpan(
-              style: DesignConstants.pSmall.copyWith(
+              style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),
               children: [
                 TextSpan(text: '$label: '),
                 TextSpan(
                   text: name,
-                  style:
-                      DesignConstants.pSmall.copyWith(
+                  style: DesignConstants.p.copyWith(
                     color: DesignConstants.text,
                     fontWeight: FontWeight.w600,
                   ),

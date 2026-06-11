@@ -57,66 +57,102 @@ class StartPlansStep extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
         Text(
           'Memberships for ${member.name}',
-          style: DesignConstants.h3,
+          style: DesignConstants.h2,
         ),
-        if (existingMemberships.isNotEmpty)
-          StartAlreadyHas(
-            memberId: member.memberId,
-            memberships: existingMemberships,
-          ),
-        FutureBuilder<List<MembershipPlanResponse>>(
-          future: plansFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState !=
-                ConnectionState.done) {
-              return const SizedBox(
-                height: 160,
-                child: Center(child: AppSpinner()),
-              );
-            }
-            if (snapshot.hasError) {
-              return Text(
-                'Couldn’t load plans. Please try again.',
-                style: DesignConstants.p.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-              );
-            }
-            final plans = (snapshot.data ?? const [])
-                .where((p) => p.activePrice != null)
-                .toList();
-            if (plans.isEmpty) {
-              return Text(
-                'This gym has no purchasable plans yet.',
-                style: DesignConstants.p.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-              );
-            }
-            return Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.stretch,
-              spacing: DesignConstants.spacingSmall,
-              children: plans.map((p) {
-                final draft = _draftFor(p.planId);
-                return _PlanCheckTile(
-                  plan: p,
-                  draft: draft,
-                  disabledReason:
-                      disabledPlanReasons[p.planId],
-                  onToggle: () => onToggle(p),
-                  onCountChanged: (c) =>
-                      onCountChanged(p.planId, c),
-                );
-              }).toList(),
-            );
-          },
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            if (existingMemberships.isNotEmpty)
+              StartAlreadyHas(
+                memberId: member.memberId,
+                memberships: existingMemberships,
+              ),
+            _PlanList(
+              plansFuture: plansFuture,
+              draftFor: _draftFor,
+              disabledPlanReasons: disabledPlanReasons,
+              onToggle: onToggle,
+              onCountChanged: onCountChanged,
+            ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+/// The gym's purchasable plans as a checkbox list — the
+/// plans step's content group below "Already has".
+class _PlanList extends StatelessWidget {
+  final Future<List<MembershipPlanResponse>> plansFuture;
+  final MembershipDraft? Function(String planId) draftFor;
+  final Map<String, String> disabledPlanReasons;
+  final ValueChanged<MembershipPlanResponse> onToggle;
+  final void Function(String planId, int count)
+      onCountChanged;
+
+  const _PlanList({
+    required this.plansFuture,
+    required this.draftFor,
+    required this.disabledPlanReasons,
+    required this.onToggle,
+    required this.onCountChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<MembershipPlanResponse>>(
+      future: plansFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState !=
+            ConnectionState.done) {
+          return const SizedBox(
+            height: 160,
+            child: Center(child: AppSpinner()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Text(
+            'Couldn’t load plans. Please try again.',
+            style: DesignConstants.p.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          );
+        }
+        final plans = (snapshot.data ?? const [])
+            .where((p) => p.activePrice != null)
+            .toList();
+        if (plans.isEmpty) {
+          return Text(
+            'This gym has no purchasable plans yet.',
+            style: DesignConstants.p.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
+          children: plans.map((p) {
+            final draft = draftFor(p.planId);
+            return _PlanCheckTile(
+              plan: p,
+              draft: draft,
+              disabledReason:
+                  disabledPlanReasons[p.planId],
+              onToggle: () => onToggle(p),
+              onCountChanged: (c) =>
+                  onCountChanged(p.planId, c),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }
@@ -149,7 +185,7 @@ class _PlanCheckTile extends StatelessWidget {
     final disabled = disabledReason != null;
     final body = Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingSmall,
       ),
       decoration: BoxDecoration(
         color: _selected && !disabled

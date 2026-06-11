@@ -51,23 +51,29 @@ class StartMembersStep extends StatelessWidget {
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
-        Text(
-          'Who is getting memberships?',
-          style: DesignConstants.h3,
-        ),
-        Text(
-          'Pick everyone to enroll in this run — the '
-          'payer themselves and members already linked '
-          'to them.',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text2nd,
-          ),
-        ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingSmall,
+          children: [
+            Text(
+              'Who is getting memberships?',
+              style: DesignConstants.h2,
+            ),
+            Text(
+              'Pick everyone to enroll in this run — '
+              'the payer themselves and members already '
+              'linked to them.',
+              style: DesignConstants.p.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingMedium,
           children: [
             ...candidates.map(
               (c) => _MemberCheckTile(
@@ -108,7 +114,7 @@ class _MemberCheckTile extends StatelessWidget {
       ),
       child: Container(
         padding: const EdgeInsets.all(
-          DesignConstants.spacingMedium,
+          DesignConstants.paddingSmall,
         ),
         decoration: BoxDecoration(
           color: selected
@@ -205,7 +211,7 @@ class _LinkFirstTile extends StatelessWidget {
       ),
       child: Container(
         padding: const EdgeInsets.all(
-          DesignConstants.spacingMedium,
+          DesignConstants.paddingSmall,
         ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(

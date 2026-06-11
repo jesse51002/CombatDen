@@ -32,7 +32,7 @@ class CardWalletSection extends StatelessWidget {
     final card = cardOnFile;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingSmall,
+      spacing: DesignConstants.spacingMedium,
       children: [
         if (card != null)
           _WalletCardTile(
@@ -61,10 +61,13 @@ class CardWalletSection extends StatelessWidget {
           selected: false,
           disabled: true,
         ),
-        AppOutlineButton(
-          text: 'Add new card',
-          borderRadius: DesignConstants.radiusSmall,
-          onPressed: onAddNew,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AppOutlineButton(
+            text: 'Add new card',
+            borderRadius: DesignConstants.radiusSmall,
+            onPressed: onAddNew,
+          ),
         ),
       ],
     );
@@ -88,7 +91,7 @@ class _WalletCardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final tile = Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingSmall,
       ),
       decoration: BoxDecoration(
         color: selected

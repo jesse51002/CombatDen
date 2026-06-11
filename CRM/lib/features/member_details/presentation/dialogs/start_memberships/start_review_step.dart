@@ -34,18 +34,24 @@ class StartReviewStep extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingMedium,
+      spacing: DesignConstants.spacingLarge,
       children: [
-        Text(
-          'Who’s getting what',
-          style: DesignConstants.h3,
-        ),
-        Text(
-          'A last look at the lineup — prices come on '
-          'the next step.',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text2nd,
-          ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: DesignConstants.spacingSmall,
+          children: [
+            Text(
+              'Who’s getting what',
+              style: DesignConstants.h2,
+            ),
+            Text(
+              'A last look at the lineup — prices come '
+              'on the next step.',
+              style: DesignConstants.p.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          ],
         ),
         FutureBuilder<List<DiscountResponse>>(
           future: discountsFuture,
@@ -68,7 +74,9 @@ class StartReviewStep extends StatelessWidget {
             return Column(
               crossAxisAlignment:
                   CrossAxisAlignment.stretch,
-              spacing: DesignConstants.spacingMedium,
+              // One substantial card per member — a full
+              // step of air between them.
+              spacing: DesignConstants.spacingLarge,
               children: [
                 for (final m in members)
                   if ((draftsByMember[m.memberId] ??

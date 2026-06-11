@@ -71,7 +71,7 @@ class DraftDiscountsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: DesignConstants.backgroundColor,
         borderRadius: BorderRadius.circular(
-          DesignConstants.radiusSmall,
+          DesignConstants.radiusBig,
         ),
         border: Border.all(color: DesignConstants.divider),
       ),
@@ -109,10 +109,13 @@ class DraftDiscountsCard extends StatelessWidget {
                   ),
               ],
             ),
-          AppOutlineButton(
-            text: 'Add discount',
-            borderRadius: DesignConstants.radiusSmall,
-            onPressed: () => _openPicker(context),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: AppOutlineButton(
+              text: 'Add discount',
+              borderRadius: DesignConstants.radiusSmall,
+              onPressed: () => _openPicker(context),
+            ),
           ),
         ],
       ),
@@ -142,13 +145,13 @@ class _MembershipHeader extends StatelessWidget {
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingTiny,
+            spacing: DesignConstants.spacingSmall,
             children: [
-              Text(plan.planName, style: DesignConstants.h3),
+              Text(plan.planName, style: DesignConstants.h2),
               Text(
                 '${plan.planType.displayLabel} · '
                 'For $memberName',
-                style: DesignConstants.pSmall.copyWith(
+                style: DesignConstants.p.copyWith(
                   color: DesignConstants.text2nd,
                 ),
               ),
