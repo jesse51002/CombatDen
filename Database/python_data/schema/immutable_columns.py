@@ -273,6 +273,42 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
     }
 )
 
+TASKS: frozenset[str] = frozenset(
+    {
+        # Backend-executed tracked operations: written by the backend at
+        # service_role only, read-only for clients. Every column is
+        # user-immutable.
+        "task_id",
+        "gym_id",
+        "task_type",
+        "status",
+        "created_at",
+        "started_at",
+        "finished_at",
+    }
+)
+
+TASK_ITEMS: frozenset[str] = frozenset(
+    {
+        # Per-membership work units of a task: backend-written records, every
+        # column user-immutable.
+        "task_item_id",
+        "task_id",
+        "gym_id",
+        "member_id",
+        "status",
+        "attempt_count",
+        "error_message",
+        "old_item_id",
+        "new_item_id",
+        "target_price_id",
+        "prorate",
+        "created_at",
+        "started_at",
+        "finished_at",
+    }
+)
+
 MEMBER_MEMBERSHIP_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
     {
         # Applied-discount rows: apply = INSERT, remove = DELETE, never an UPDATE
