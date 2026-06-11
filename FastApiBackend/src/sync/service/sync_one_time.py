@@ -33,10 +33,10 @@ from src.payments.schema.payments_payment_schema import (
 from src.payments.service.payments_stripe_payment_service import (
     PaymentsStripePaymentService,
 )
-from src.shared.billing_parent import ParentProfile
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_profile import PayerProfile
+from src.shared.payer_resolver import PayerResolver
 from src.sync.service.sync_discounts import (
     PaymentSyncDiscounts,
 )
@@ -63,7 +63,7 @@ class PaymentSyncOneTime:
         db_pool: DirectDatabasePool,
         discounts: PaymentSyncDiscounts,
         payment_service: PaymentsStripePaymentService,
-        parent_resolver: BillingParentResolver,
+        parent_resolver: PayerResolver,
     ) -> None:
         self._queries = PaymentSyncQueries(db_pool)
         self._discounts = discounts
@@ -157,7 +157,7 @@ class PaymentSyncOneTime:
 
     async def _build_plan(
         self,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_account_id: str,
         preview: bool = False,
     ) -> OneTimeInvoicePlan:

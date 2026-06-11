@@ -33,8 +33,8 @@ from src.shared.gym_stripe_service import GymStripeService
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
-    from src.shared.billing_parent import ParentProfile
-    from src.shared.billing_parent_resolver import BillingParentResolver
+    from src.shared.payer_profile import PayerProfile
+    from src.shared.payer_resolver import PayerResolver
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
@@ -50,7 +50,7 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         db_pool: DirectDatabasePool,
         payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
-        parent_resolver: BillingParentResolver,
+        parent_resolver: PayerResolver,
     ) -> None:
         super().__init__(
             db_pool,
@@ -62,7 +62,7 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
     async def validate(
         self,
         request: MemberMembershipsStartRequest,
-    ) -> tuple[ParentProfile, dict[UUID, dict]]:
+    ) -> tuple[PayerProfile, dict[UUID, dict]]:
         """Run every up-front check; return the payer + plan/price rows.
 
         Returns:
@@ -101,7 +101,7 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
     async def _resolve_payer(
         self,
         request: MemberMembershipsStartRequest,
-    ) -> ParentProfile:
+    ) -> PayerProfile:
         """Validate the payer is a top-level, in-gym, unfrozen paying account.
 
         ``resolve_parent`` already raises if the resolved account has no

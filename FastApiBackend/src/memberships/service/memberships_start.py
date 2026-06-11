@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from src.memberships.service.memberships_start_validation import (
         MemberMembershipsStartValidation,
     )
-    from src.shared.billing_parent import ParentProfile
+    from src.shared.payer_profile import PayerProfile
     from src.sync.service.sync_one_time import (
         PaymentSyncOneTime,
     )
@@ -163,7 +163,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
     async def _insert_all(
         self,
         request: MemberMembershipsStartRequest,
-        parent: ParentProfile,
+        parent: PayerProfile,
         plan_prices: dict[UUID, dict],
         states: list[MemberMembershipsStartItemState],
     ) -> None:

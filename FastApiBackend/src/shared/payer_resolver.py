@@ -1,4 +1,4 @@
-"""Shared service: resolve a member to the paying parent + gym Stripe account."""
+"""Shared service: resolve a payer (and, until the teardown completes, a parent)."""
 
 from pathlib import Path
 from uuid import UUID
@@ -6,15 +6,15 @@ from uuid import UUID
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.payer_profile import PayerProfile
 from src.shared.sql_loader import load_sql
 
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 
 
-class BillingParentResolver:
+class PayerResolver:
     """Resolves billing profiles: the family parent, or a specific payer.
 
     Two lookups live here:
@@ -39,7 +39,7 @@ class BillingParentResolver:
         self._db_pool = db_pool
         self._gym_stripe = gym_stripe_service
 
-    async def resolve_parent(self, member_id: UUID) -> ParentProfile:
+    async def resolve_parent(self, member_id: UUID) -> PayerProfile:
         """Resolve a member to their paying parent profile.
 
         Follows account_linked_to_id once (single-level hierarchy).
@@ -64,9 +64,9 @@ class BillingParentResolver:
             raise ValueError(
                 f"Parent {row['member_id']} has no stripe_customer_id",
             )
-        return ParentProfile(**row)
+        return PayerProfile(**row)
 
-    async def resolve(self, member_id: UUID) -> tuple[ParentProfile, str]:
+    async def resolve(self, member_id: UUID) -> tuple[PayerProfile, str]:
         """Resolve the paying parent + that gym's Stripe Connect account id."""
         parent = await self.resolve_parent(member_id)
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(
@@ -74,7 +74,7 @@ class BillingParentResolver:
         )
         return parent, stripe_account_id
 
-    async def resolve_payer(self, payer_member_id: UUID) -> ParentProfile:
+    async def resolve_payer(self, payer_member_id: UUID) -> PayerProfile:
         """Resolve a specific payer's OWN billing profile (no link follow).
 
         The payer is whoever a membership's ``paid_by_member_id`` names — the
@@ -97,12 +97,12 @@ class BillingParentResolver:
             raise ValueError(
                 f"Billing profile not found for payer {payer_member_id}",
             )
-        return ParentProfile(**row)
+        return PayerProfile(**row)
 
     async def resolve_payer_with_account(
         self,
         payer_member_id: UUID,
-    ) -> tuple[ParentProfile, str]:
+    ) -> tuple[PayerProfile, str]:
         """Resolve a payer's profile + that gym's Stripe Connect account id."""
         payer = await self.resolve_payer(payer_member_id)
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(

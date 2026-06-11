@@ -12,8 +12,8 @@ from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR as MEMBERSHIPS_SQL_DIR
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
+from src.shared.payer_profile import PayerProfile
 from src.shared.sql_loader import load_sql
 from src.sync import SQL_DIR
 from src.sync.sync_schema import (
@@ -55,7 +55,7 @@ class PaymentSyncQueries:
 
     async def get_family_ids(
         self,
-        parent: ParentProfile,
+        parent: PayerProfile,
     ) -> list[UUID]:
         """Get all family member IDs (parent + linked children)."""
         sql = load_sql(SYNC_SQL_DIR / "get_family_ids.sql")

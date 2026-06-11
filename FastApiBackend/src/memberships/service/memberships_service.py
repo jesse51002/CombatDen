@@ -59,8 +59,8 @@ if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
-    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
+    from src.shared.payer_resolver import PayerResolver
     from src.shared.paying_member_lock import PayingMemberLock
     from src.sync.service.sync_freeze import (
         PaymentSyncFreeze,
@@ -86,7 +86,7 @@ class MemberMembershipsService:
         payment_sync_service: PaymentSyncService,
         payment_service: PaymentsStripePaymentService,
         gym_stripe_service: GymStripeService,
-        parent_resolver: BillingParentResolver,
+        parent_resolver: PayerResolver,
         freeze_service: PaymentSyncFreeze,
         paying_lock: PayingMemberLock,
         payment_sync_one_time: PaymentSyncOneTime,

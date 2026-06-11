@@ -35,9 +35,9 @@ from src.payments.service.payments_stripe_members_service import (
 from src.payments.service.payments_stripe_payment_service import (
     PaymentsStripePaymentService,
 )
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_resolver import PayerResolver
 from src.shared.sql_loader import load_sql
 from src.sync.service.sync_discounts import PaymentSyncDiscounts
 from src.sync.service.sync_one_time import PaymentSyncOneTime
@@ -51,7 +51,7 @@ def _build_one_time_engine(db_pool, stripe_client) -> PaymentSyncOneTime:
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     payment_svc = PaymentsStripePaymentService(stripe_client, members_svc)
-    parent_resolver = BillingParentResolver(db_pool, GymStripeService(db_pool))
+    parent_resolver = PayerResolver(db_pool, GymStripeService(db_pool))
     return PaymentSyncOneTime(
         db_pool,
         discounts=PaymentSyncDiscounts(discount_svc),

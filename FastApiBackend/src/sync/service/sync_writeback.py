@@ -10,9 +10,9 @@ from src.payments.schema.payments_members_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import stripe_ts_to_gym_date
+from src.shared.payer_profile import PayerProfile
 from src.sync.service.sync_queries import (
     PaymentSyncQueries,
 )
@@ -82,7 +82,7 @@ class PaymentSyncWriteback:
 
     async def _sync_parent_monthly_total(
         self,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_sub_id: str | None,
         stripe_account_id: str,
     ) -> None:
@@ -167,7 +167,7 @@ class PaymentSyncWriteback:
 
     async def _mark_removed_deleted(
         self,
-        parent: ParentProfile,
+        parent: PayerProfile,
         sub_result: PaymentsSubscriptionResponse | None,
     ) -> None:
         """Stamp 'deleted' on cancelled rows whose line is gone from the sub."""

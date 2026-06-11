@@ -19,9 +19,9 @@ from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
-    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.database import DirectDatabasePool
     from src.shared.gym_stripe_service import GymStripeService
+    from src.shared.payer_resolver import PayerResolver
     from src.sync.service.sync_freeze import (
         PaymentSyncFreeze,
     )
@@ -47,7 +47,7 @@ class MemberMembershipsFreeze(MemberMembershipsBase):
         db_pool: DirectDatabasePool,
         payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
-        parent_resolver: BillingParentResolver,
+        parent_resolver: PayerResolver,
         freeze_service: PaymentSyncFreeze,
     ) -> None:
         super().__init__(

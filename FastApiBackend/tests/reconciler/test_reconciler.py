@@ -18,15 +18,15 @@ from src.core.config import PAYING_MEMBER_LOCK_PREFIX
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.payer_resolver import PayerResolver
 from src.shared.resource_lock import ResourceLock
 
 _TOTAL_PRICE = 5000
 
 
-def _parent_resolver(db_pool) -> BillingParentResolver:
-    return BillingParentResolver(db_pool, GymStripeService(db_pool))
+def _parent_resolver(db_pool) -> PayerResolver:
+    return PayerResolver(db_pool, GymStripeService(db_pool))
 
 
 async def _insert_membership(

@@ -18,9 +18,9 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionDesiredItem,
     SubscriptionItemDiscount,
 )
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_profile import PayerProfile
 from src.sync.service.sync_discounts import (
     PaymentSyncDiscounts,
 )
@@ -53,7 +53,7 @@ class PaymentSyncBuilder:
 
     async def build_sync_params(
         self,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_account_id: str,
         preview: bool = False,
     ) -> SyncParams:

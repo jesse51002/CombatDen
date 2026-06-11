@@ -381,7 +381,7 @@ async def test_phase_a_payer_frozen_rejects(
     """3a: a frozen payer is rejected before anything is written.
 
     The freeze window is written directly to ``members`` (the simplest way to
-    make ``ParentProfile.is_frozen`` true at validation time, with no live
+    make ``PayerProfile.is_frozen`` true at validation time, with no live
     subscription needed). ``_resolve_payer`` raises and no membership row lands.
     """
     pm_id = await created.payment_method()

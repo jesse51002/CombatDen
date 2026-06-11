@@ -20,9 +20,9 @@ from src.payments.schema.payments_invoice_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
+from src.shared.payer_profile import PayerProfile
+from src.shared.payer_resolver import PayerResolver
 from src.shared.paying_member_lock import LockBusyError, PayingMemberLock
 from src.sync.service.sync_builder import (
     PaymentSyncBuilder,
@@ -47,7 +47,7 @@ class PaymentSyncService:
     """Syncs membership payment state with Stripe.
 
     Thin orchestrator over focused sub-services: resolve the paying parent
-    (``BillingParentResolver``), finalize the once-discount lifecycle
+    (``PayerResolver``), finalize the once-discount lifecycle
     (``PaymentSyncOnceDiscounts``), build the desired subscription bucket +
     resolved discount coupons from the DB (``PaymentSyncBuilder`` →
     ``PaymentSyncDiscounts``, at build time so preview reflects discounts), then
@@ -60,7 +60,7 @@ class PaymentSyncService:
         self,
         db_pool: DirectDatabasePool,
         subscription_service: PaymentsStripeSubscriptionService,
-        parent_resolver: BillingParentResolver,
+        parent_resolver: PayerResolver,
         once_discounts: PaymentSyncOnceDiscounts,
         builder: PaymentSyncBuilder,
         paying_lock: PayingMemberLock,
@@ -143,7 +143,7 @@ class PaymentSyncService:
 
     async def _handle_lost_subscription(
         self,
-        parent: ParentProfile,
+        parent: PayerProfile,
         exc: PaymentsResourceNotFoundError,
     ) -> None:
         """Record a gone subscription as a cancellation, then re-raise.

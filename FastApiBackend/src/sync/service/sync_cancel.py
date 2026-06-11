@@ -10,7 +10,7 @@ recurring membership cancelled (set ``cancel_date`` then stamp
 the CRM stops pointing at the dead sub. No Stripe calls — Stripe already cancelled.
 
 The parent is already resolved by the caller (the sync resolves it up front), so
-this takes the ``ParentProfile`` directly and re-resolves nothing. Idempotent: an
+this takes the ``PayerProfile`` directly and re-resolves nothing. Idempotent: an
 already-cancelled family yields zero cancellable rows and re-nulling the sub id is
 a no-op.
 """
@@ -22,9 +22,9 @@ from uuid import UUID
 from sqlalchemy import text
 
 from src.memberships import SQL_DIR as MEMBERSHIPS_SQL_DIR
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_profile import PayerProfile
 from src.shared.sql_loader import load_sql
 from src.sync import SQL_DIR
 
@@ -37,7 +37,7 @@ class PaymentSyncCancel:
     def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db_pool = db_pool
 
-    async def cancel_dead_subscription(self, parent: ParentProfile) -> int:
+    async def cancel_dead_subscription(self, parent: PayerProfile) -> int:
         """Cancel the family's live recurring memberships; return the count.
 
         For the already-resolved paying ``parent``: mark every live recurring

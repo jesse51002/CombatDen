@@ -10,7 +10,7 @@ from src.payments.schema.payments_members_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
+from src.shared.payer_profile import PayerProfile
 
 
 class PaymentSyncFreeze:
@@ -37,7 +37,7 @@ class PaymentSyncFreeze:
 
     async def sync_freeze_state(
         self,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_account_id: str,
         *,
         idempotency_key: UUID,

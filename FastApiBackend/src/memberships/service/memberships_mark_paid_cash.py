@@ -24,8 +24,8 @@ if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
-    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
+    from src.shared.payer_resolver import PayerResolver
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
@@ -42,7 +42,7 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
         payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
-        parent_resolver: BillingParentResolver,
+        parent_resolver: PayerResolver,
     ) -> None:
         super().__init__(
             db_pool,

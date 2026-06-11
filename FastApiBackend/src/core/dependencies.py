@@ -71,9 +71,9 @@ from src.rewards.service.rewards_redemption_service import (
 )
 from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool, SupabaseClient
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.payer_resolver import PayerResolver
 from src.shared.paying_member_lock import PayingMemberLock
 from src.shared.resource_lock import ResourceLock
 from src.stripe_webhooks.service.account_updated_handler import (
@@ -209,11 +209,11 @@ class DependencyInjector(containers.DeclarativeContainer):
     )
 
     # ── Payment sync ─────────────────────────────────────────────
-    # Shared parent/billing-account resolver, injected wherever parent
+    # Shared payer resolver, injected wherever payer (or, temporarily, parent)
     # resolution is needed: the sync, the freeze service, and the lifecycle /
     # validation callers (start, freeze, charge_card, mark_paid_cash).
-    billing_parent_resolver = providers.Factory(
-        BillingParentResolver,
+    payer_resolver = providers.Factory(
+        PayerResolver,
         db_pool=db_pool,
         gym_stripe_service=gym_stripe_service,
     )
@@ -226,7 +226,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     paying_member_lock = providers.Factory(
         PayingMemberLock,
         db_pool=db_pool,
-        parent_resolver=billing_parent_resolver,
+        parent_resolver=payer_resolver,
     )
     # Standalone freeze service: the dedicated freeze/unfreeze request resolves
     # the parent then calls this directly. The main sync no longer does a
@@ -261,7 +261,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         PaymentSyncService,
         db_pool=db_pool,
         subscription_service=payments_subscription_service,
-        parent_resolver=billing_parent_resolver,
+        parent_resolver=payer_resolver,
         once_discounts=payment_sync_once_discounts,
         builder=payment_sync_builder,
         paying_lock=paying_member_lock,
@@ -273,7 +273,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         discounts=payment_sync_discounts,
         payment_service=payments_payment_service,
-        parent_resolver=billing_parent_resolver,
+        parent_resolver=payer_resolver,
     )
 
     # ── Discounts ────────────────────────────────────────────────
@@ -290,7 +290,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_service=payment_sync_service,
         payment_service=payments_payment_service,
         gym_stripe_service=gym_stripe_service,
-        parent_resolver=billing_parent_resolver,
+        parent_resolver=payer_resolver,
         freeze_service=payment_sync_freeze,
         paying_lock=paying_member_lock,
         payment_sync_one_time=payment_sync_one_time,
@@ -394,7 +394,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     reconciler_orphan_cleanup_sweep = providers.Factory(
         OrphanCleanupSweep,
         db_pool=db_pool,
-        parent_resolver=billing_parent_resolver,
+        parent_resolver=payer_resolver,
         resource_lock=resource_lock,
     )
     reconciler_payment_push_sweep = providers.Factory(

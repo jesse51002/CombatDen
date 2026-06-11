@@ -39,9 +39,9 @@ from src.payments.service.subscription import (
 from src.plans.service.plans_service import (
     MembershipPlansService,
 )
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.payer_resolver import PayerResolver
 from src.shared.paying_member_lock import PayingMemberLock
 from src.sync.service.sync_builder import (
     PaymentSyncBuilder,
@@ -110,7 +110,7 @@ def build_paying_member_lock(
     db_pool: DirectDatabasePool,
 ) -> PayingMemberLock:
     """Build the paying-member concurrency lock (mirrors dependencies.py)."""
-    parent_resolver = BillingParentResolver(db_pool, GymStripeService(db_pool))
+    parent_resolver = PayerResolver(db_pool, GymStripeService(db_pool))
     return PayingMemberLock(db_pool, parent_resolver)
 
 
@@ -121,7 +121,7 @@ def build_payment_sync_service(
     """Build the membership payment-sync service.
 
     Mirrors ``src/core/dependencies.py`` (payment_sync_service). PaymentSyncService
-    is a thin orchestrator: it takes the shared ``BillingParentResolver``, the
+    is a thin orchestrator: it takes the shared ``PayerResolver``, the
     ``PaymentSyncFreeze`` / ``PaymentSyncOnceDiscounts`` sub-services, and a
     ``PaymentSyncBuilder`` (which itself owns a ``PaymentSyncDiscounts`` coupon
     engine), and builds its Stripe-dispatch + writeback halves internally.
@@ -136,7 +136,7 @@ def build_payment_sync_service(
         discount_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
-    parent_resolver = BillingParentResolver(db_pool, gym_stripe_svc)
+    parent_resolver = PayerResolver(db_pool, gym_stripe_svc)
     once_discounts = PaymentSyncOnceDiscounts(db_pool, subscription_svc)
     discounts = PaymentSyncDiscounts(discount_svc)
     builder = PaymentSyncBuilder(db_pool, discounts)
@@ -193,7 +193,7 @@ def build_member_memberships_service(
         discount_svc,
     )
     gym_stripe_svc = GymStripeService(db_pool)
-    parent_resolver = BillingParentResolver(db_pool, gym_stripe_svc)
+    parent_resolver = PayerResolver(db_pool, gym_stripe_svc)
     freeze_service = PaymentSyncFreeze(subscription_svc)
     paying_lock = PayingMemberLock(db_pool, parent_resolver)
     sync_svc = build_payment_sync_service(db_pool, stripe_client)

@@ -31,8 +31,8 @@ from src.core.config import (
     LOCK_TTL_SECONDS,
     PAYING_MEMBER_LOCK_PREFIX,
 )
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
+from src.shared.payer_resolver import PayerResolver
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class PayingMemberLock:
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        parent_resolver: BillingParentResolver,
+        parent_resolver: PayerResolver,
     ) -> None:
         self._db_pool = db_pool
         self._parent = parent_resolver

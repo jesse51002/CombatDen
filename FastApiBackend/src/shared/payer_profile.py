@@ -1,4 +1,4 @@
-"""Shared model for a member's paying-parent billing profile."""
+"""Shared model for a paying member (payer) billing profile."""
 
 from datetime import date
 from uuid import UUID
@@ -8,12 +8,12 @@ from pydantic import BaseModel
 from src.shared.gym_timezone import gym_today
 
 
-class ParentProfile(BaseModel):
+class PayerProfile(BaseModel):
     """A payer's billing-profile fields.
 
     The billing surface of whoever pays (Stripe customer + monthly
     subscription + freeze window). Hydrated two ways by
-    ``BillingParentResolver``: ``resolve_parent`` follows the single-level
+    ``PayerResolver``: ``resolve_parent`` follows the single-level
     account hierarchy to the FAMILY parent; ``resolve_payer`` looks up a
     specific ``paid_by_member_id`` directly (a self-paying linked member's
     own profile). Shared because payer resolution is needed across

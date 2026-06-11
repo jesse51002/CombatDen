@@ -11,9 +11,9 @@ alone (DI-injectable) for reuse.
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_profile import PayerProfile
 from src.sync.service.sync_queries import (
     PaymentSyncQueries,
 )
@@ -44,7 +44,7 @@ class PaymentSyncOnceDiscounts:
 
     async def sync_once_discounts(
         self,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_account_id: str,
     ) -> None:
         """Stamp every consumed ``once`` discount for the parent's family.

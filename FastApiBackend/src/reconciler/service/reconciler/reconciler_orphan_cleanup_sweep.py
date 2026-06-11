@@ -18,8 +18,8 @@ from src.core.config import PAYING_MEMBER_LOCK_PREFIX
 from src.memberships import SQL_DIR as MEMBERSHIPS_SQL_DIR
 from src.reconciler import SQL_DIR
 from src.reconciler.service.reconciler.reconciler_result import SweepResult
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
+from src.shared.payer_resolver import PayerResolver
 from src.shared.resource_lock import ResourceLock
 from src.shared.sql_loader import load_sql
 
@@ -34,7 +34,7 @@ class OrphanCleanupSweep:
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        parent_resolver: BillingParentResolver,
+        parent_resolver: PayerResolver,
         resource_lock: ResourceLock,
     ) -> None:
         self._db_pool = db_pool

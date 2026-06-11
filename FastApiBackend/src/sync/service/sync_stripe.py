@@ -19,7 +19,7 @@ from src.payments.schema.payments_members_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
+from src.shared.payer_profile import PayerProfile
 from src.sync.sync_schema import (
     IntervalBucket,
 )
@@ -39,7 +39,7 @@ class PaymentSyncStripe:
     async def execute_sync(
         self,
         bucket: IntervalBucket,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_account_id: str,
         idempotency_key: UUID,
         pay_first_invoice_out_of_band: bool = False,
@@ -90,7 +90,7 @@ class PaymentSyncStripe:
     async def preview_execute_sync(
         self,
         bucket: IntervalBucket,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_account_id: str,
         proration_behavior: Literal["none", "always_invoice"] = "none",
     ) -> DueNowVsRecurringPreview | None:
@@ -135,7 +135,7 @@ class PaymentSyncStripe:
     async def _run_preview(
         self,
         bucket: IntervalBucket,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_account_id: str,
         proration_behavior: Literal["none", "always_invoice"],
     ) -> PreviewInvoice:
@@ -182,7 +182,7 @@ class PaymentSyncStripe:
     async def _sync_bucket(
         self,
         bucket: IntervalBucket,
-        parent: ParentProfile,
+        parent: PayerProfile,
         stripe_account_id: str,
         *,
         idempotency_key: UUID,
