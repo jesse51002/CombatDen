@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/member_details/data/models/discount_response.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/live_discounted_price.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_labels.dart';
 
 /// One member's block on the review step: their name, then
 /// a tile per picked membership with the attached discounts
-/// (names only) beneath it. Pure content — no prices.
+/// beneath it and the live (slashed → discounted) price on
+/// the right. Totals still come on the Preview step.
 class MemberReviewGroup extends StatelessWidget {
   final String name;
   final List<MembershipDraft> drafts;
+
+  /// Full preset list — drives the live discounted price.
+  final List<DiscountResponse> presets;
 
   /// Preset discount names by id, best-effort (a missing
   /// id falls back to a generic label).
@@ -19,6 +25,7 @@ class MemberReviewGroup extends StatelessWidget {
     super.key,
     required this.name,
     required this.drafts,
+    required this.presets,
     required this.presetNames,
   });
 
@@ -26,7 +33,7 @@ class MemberReviewGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingBig,
       ),
       decoration: BoxDecoration(
         color: DesignConstants.backgroundColor,
@@ -37,7 +44,7 @@ class MemberReviewGroup extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingMedium,
+        spacing: DesignConstants.spacingLarge,
         children: [
           Text(
             name,
@@ -48,6 +55,7 @@ class MemberReviewGroup extends StatelessWidget {
           for (final d in drafts)
             _MembershipReviewTile(
               draft: d,
+              presets: presets,
               presetNames: presetNames,
             ),
         ],
@@ -58,10 +66,12 @@ class MemberReviewGroup extends StatelessWidget {
 
 class _MembershipReviewTile extends StatelessWidget {
   final MembershipDraft draft;
+  final List<DiscountResponse> presets;
   final Map<String, String> presetNames;
 
   const _MembershipReviewTile({
     required this.draft,
+    required this.presets,
     required this.presetNames,
   });
 
@@ -100,6 +110,11 @@ class _MembershipReviewTile extends StatelessWidget {
                   color: DesignConstants.text2nd,
                 ),
               ),
+            const Spacer(),
+            LiveDiscountedPrice(
+              draft: draft,
+              presets: presets,
+            ),
           ],
         ),
         for (final n in _discountNames)

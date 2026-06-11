@@ -29,8 +29,19 @@ List<MembershipInfo> membershipsForParticipant(
   List<MembershipInfo> all,
   String memberId,
 ) =>
+    // `all` is the participant's OWN detail fetch, so a
+    // membership with an EMPTY roster (the backend omits
+    // the per-member map on solo memberships) is theirs —
+    // dropping it hid a child's own memberships entirely.
+    // A non-empty roster attributes precisely (the payer's
+    // detail carries family plans whose roster names the
+    // covered children, not the payer).
     all
-        .where((m) => m.members.containsKey(memberId))
+        .where(
+          (m) =>
+              m.members.isEmpty ||
+              m.members.containsKey(memberId),
+        )
         .toList();
 
 /// The participant's own status on a membership — their

@@ -59,9 +59,10 @@ class StartReviewStep extends StatelessWidget {
             }
             // Preset names, best-effort (a failed load
             // falls back to a generic label).
+            final presets = snapshot.data ??
+                const <DiscountResponse>[];
             final names = <String, String>{
-              for (final d in snapshot.data ??
-                  const <DiscountResponse>[])
+              for (final d in presets)
                 d.discountId: d.discountName,
             };
             return Column(
@@ -77,6 +78,7 @@ class StartReviewStep extends StatelessWidget {
                       name: m.name,
                       drafts:
                           draftsByMember[m.memberId]!,
+                      presets: presets,
                       presetNames: names,
                     ),
               ],

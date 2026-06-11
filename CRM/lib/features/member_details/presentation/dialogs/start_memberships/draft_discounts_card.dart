@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/added_discount_chip.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/discount_picker_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/live_discounted_price.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_labels.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
@@ -66,7 +66,7 @@ class DraftDiscountsCard extends StatelessWidget {
         draft.customDiscounts.isNotEmpty;
     return Container(
       padding: const EdgeInsets.all(
-        DesignConstants.spacingMedium,
+        DesignConstants.paddingBig,
       ),
       decoration: BoxDecoration(
         color: DesignConstants.backgroundColor,
@@ -77,11 +77,12 @@ class DraftDiscountsCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingMedium,
+        spacing: DesignConstants.spacingLarge,
         children: [
           _MembershipHeader(
             draft: draft,
             memberName: memberName,
+            presets: presets,
           ),
           if (hasDiscounts)
             Wrap(
@@ -124,10 +125,12 @@ class DraftDiscountsCard extends StatelessWidget {
 class _MembershipHeader extends StatelessWidget {
   final MembershipDraft draft;
   final String memberName;
+  final List<DiscountResponse> presets;
 
   const _MembershipHeader({
     required this.draft,
     required this.memberName,
+    required this.presets,
   });
 
   @override
@@ -152,13 +155,7 @@ class _MembershipHeader extends StatelessWidget {
             ],
           ),
         ),
-        Text(
-          formatMinorUnits(
-            plan.activePrice!.price,
-            currency: 'USD',
-          ),
-          style: DesignConstants.h2,
-        ),
+        LiveDiscountedPrice(draft: draft, presets: presets),
       ],
     );
   }

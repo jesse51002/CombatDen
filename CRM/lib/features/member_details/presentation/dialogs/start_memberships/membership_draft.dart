@@ -1,3 +1,4 @@
+import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
@@ -45,6 +46,36 @@ class MembershipDraft {
       customDiscounts:
           customDiscounts ?? this.customDiscounts,
     );
+  }
+
+  /// Whether any discount (preset or custom) is added.
+  bool get hasDiscounts =>
+      discountIds.isNotEmpty || customDiscounts.isNotEmpty;
+
+  /// UI estimate of this membership's price after the added
+  /// discounts, in cents: percents apply first (compounding
+  /// sequentially), then dollar amounts subtract, floored at
+  /// zero — mirroring the backend's percent→dollar coupon
+  /// order. The Preview step stays the authoritative figure.
+  int discountedPriceCents(List<DiscountResponse> presets) {
+    final base = plan.activePrice?.price ?? 0;
+    final values = <DiscountValue>[
+      for (final id in discountIds)
+        for (final d in presets)
+          if (d.discountId == id) d.value,
+      ...customDiscounts,
+    ];
+    var price = base.toDouble();
+    for (final v in values) {
+      final pct = v.percentageOff;
+      if (pct != null) price *= 1 - pct / 100;
+    }
+    var cents = price.round();
+    for (final v in values) {
+      final dollars = v.dollarOff;
+      if (dollars != null) cents -= dollars;
+    }
+    return cents < 0 ? 0 : cents;
   }
 
   /// The wire item for this draft, or null when the plan
