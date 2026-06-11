@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid5
@@ -23,6 +22,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsBatchStartResponse,
     MemberMembershipsBatchStartResultItem,
     MemberMembershipsBatchStartStatus,
+    MemberMembershipsStartItemState,
 )
 from src.memberships.service.memberships_base import (
     MemberMembershipsBase,
@@ -64,22 +64,6 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class _StartItemState:
-    """Per-item working state across the start phases (internal only)."""
-
-    member_id: UUID
-    plan_id: UUID
-    plan_type: PlanType
-    item_id: UUID | None = None
-    applied_ids: list[UUID] = field(default_factory=list)
-    minted_ids: list[UUID] = field(default_factory=list)
-    status: MemberMembershipsBatchStartStatus = (
-        MemberMembershipsBatchStartStatus.created
-    )
-    error: str | None = None
 
 
 class MemberMembershipsStart(MemberMembershipsBase):
@@ -605,7 +589,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         parent, plan_prices = await self._validate_request(request)
 
         states = [
-            _StartItemState(
+            MemberMembershipsStartItemState(
                 member_id=item.member_id,
                 plan_id=plan_prices[item.price_id]["plan_id"],
                 plan_type=PlanType(
@@ -660,7 +644,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         request: MemberMembershipsBatchStartRequest,
         parent: ParentProfile,
         plan_prices: dict[UUID, dict],
-        states: list[_StartItemState],
+        states: list[MemberMembershipsStartItemState],
     ) -> None:
         """Phase B (pure DB): pending rows + minted customs + discounts.
 
@@ -734,7 +718,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
     async def _charge_one_time_group(
         self,
         request: MemberMembershipsBatchStartRequest,
-        group: list[_StartItemState],
+        group: list[MemberMembershipsStartItemState],
     ) -> None:
         """Phase C: ONE consolidated invoice sweeps the pending one-time rows.
 
@@ -764,7 +748,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
     async def _converge_recurring_group(
         self,
         request: MemberMembershipsBatchStartRequest,
-        group: list[_StartItemState],
+        group: list[MemberMembershipsStartItemState],
     ) -> None:
         """Phase D: ONE recurring converge adds the pending recurring rows.
 
@@ -793,7 +777,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
     async def _verify_group(
         self,
-        group: list[_StartItemState],
+        group: list[MemberMembershipsStartItemState],
         keep_unverified: bool,
     ) -> None:
         """Verify each row's writeback flipped it to ``applied``.
@@ -822,7 +806,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
     async def _fail_group(
         self,
-        group: list[_StartItemState],
+        group: list[MemberMembershipsStartItemState],
         error: str,
         cleanup: bool,
     ) -> None:
@@ -835,7 +819,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
     async def _cleanup_states(
         self,
-        states: list[_StartItemState],
+        states: list[MemberMembershipsStartItemState],
     ) -> None:
         """Undo un-billed items: applied rows → minted customs → pending rows.
 

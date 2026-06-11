@@ -149,6 +149,27 @@ class MemberMembershipsBatchStartResponse(BaseModel):
     multiple_charges: bool
 
 
+class MemberMembershipsStartItemState(BaseModel):
+    """One item's working state across the start phases (internal only).
+
+    Not an API shape — the start service threads this through its insert /
+    charge / converge / verify phases and folds it into the response
+    breakdown at the end. ``plan_id`` / ``plan_type`` are derived from the
+    item's price row.
+    """
+
+    member_id: UUID
+    plan_id: UUID
+    plan_type: PlanType
+    item_id: UUID | None = None
+    applied_ids: list[UUID] = Field(default_factory=list)
+    minted_ids: list[UUID] = Field(default_factory=list)
+    status: MemberMembershipsBatchStartStatus = (
+        MemberMembershipsBatchStartStatus.created
+    )
+    error: str | None = None
+
+
 class MemberMembershipsBatchInvoices(BaseModel):
     """The batch preview's three-way invoice split.
 
