@@ -26,7 +26,7 @@ When you add a feature that talks to the FastApiBackend, it gets a bloc. When yo
 
 - **All FastApiBackend calls go through `ApiClient`** (`lib/core/network/api_client.dart`). It wraps a single configured `dio` instance, attaches the **Supabase JWT** as a Bearer token on every request, applies a **30s timeout**, and on a **401 refreshes the Supabase session (time-bounded) and retries once**; if the refresh fails **or times out** it calls `ApiClient.onUnauthorized` (wired in `main.dart`) to sign the session out, dropping the auth gate back to the login screen. The refresh timeout is essential: gotrue treats a network/host-unreachable refresh failure as *retryable* and keeps retrying without emitting an event, so an unbounded refresh would hang the request — and with it the boot-time gym fetch — leaving the auth gate spinning forever instead of redirecting to login on an expired session. Never create a raw `Dio` or make bare HTTP calls for CRM data — use `ApiClient`.
 - **Repositories wrap `ApiClient`.** Each feature's `data/repositories/` exposes domain methods (`getMembersList`, `getMyGym`, `getMember`, …), takes an `ApiClient` in its constructor, converts JSON responses to models, and throws typed exceptions. Blocs depend on repositories, never on `ApiClient` directly. Keep the layering: **Screen → Bloc → Repository → ApiClient → backend.** Never skip a layer.
-- **Read `../Database/openapi.json` before calling any endpoint.** It is the authoritative request/response contract. Match the path, method, and every field listed under `required` in the request schema; model `fromJson` must track the response shape exactly. When the contract changes, update the models in the same change.
+- **Read the Pydantic schemas (`../FastApiBackend/src/<domain>/<domain>_schema.py`) before calling any endpoint.** They are the authoritative request/response contract. Match the path, method, and every field listed under `required`; model `fromJson` must track the response shape exactly. When the contract changes, update the models in the same change. (`../Database/openapi.json` is an optional gitignored local dump — never committed, never expected to exist, never flagged in review.)
 
 ## Models & code generation
 
@@ -54,7 +54,7 @@ When you add a feature that talks to the FastApiBackend, it gets a bloc. When yo
 
 ## Stripe billing
 
-- Stripe is initialized in `main.dart` (`Stripe.publishableKey` from env, then `applySettings()`). Billing actions (charge card, refund, invoices, update card, plan/price changes) live in `features/member_details/presentation/dialogs/` and dispatch through `MemberDetailBloc` against FastApiBackend endpoints. `flutter_stripe` / `flutter_stripe_web` / `stripe_js` provide the web payment surface. Read the matching `../Database/openapi.json` schema before wiring any billing endpoint.
+- Stripe is initialized in `main.dart` (`Stripe.publishableKey` from env, then `applySettings()`). Billing actions (charge card, refund, invoices, update card, plan/price changes) live in `features/member_details/presentation/dialogs/` and dispatch through `MemberDetailBloc` against FastApiBackend endpoints. `flutter_stripe` / `flutter_stripe_web` / `stripe_js` provide the web payment surface. Read the matching Pydantic schema in `../FastApiBackend/src/<domain>/<domain>_schema.py` before wiring any billing endpoint.
 
 ## Testing
 
@@ -97,8 +97,8 @@ The Theme tab doubles as a **public theme browser** the marketing landing page l
 
 ## Sibling systems in this monorepo
 
-- `../FastApiBackend/` — the CRM's primary backend. All members / member-detail / gym-setup / billing calls go here via `ApiClient`. Contract: `../Database/openapi.json`.
-- `../Database/` — Supabase schemas + `openapi.json` (the authoritative API contract). Read it before writing any endpoint call.
+- `../FastApiBackend/` — the CRM's primary backend. All members / member-detail / gym-setup / billing calls go here via `ApiClient`. Contract: Pydantic schemas in `../FastApiBackend/src/<domain>/<domain>_schema.py`.
+- `../Database/` — Supabase schemas, RLS, enum mirrors. `openapi.json` is an optional gitignored local convenience dump (never committed, never expected to exist).
 - `../VideoService/` — the read-only video feed + gym detail this app's videos tab calls (see *VideoService integration*). Must be running for that tab to populate.
 - `../ThemeService/ThemeFlutter/` — the shared `theme_flutter` white-label runtime + resolvers (path dep) for the theme preview.
 - `../MobileApp/` — the member-facing mobile app, which shares this app's design language. Shared widget candidates often live there too (check before building new shared widgets).

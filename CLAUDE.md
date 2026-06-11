@@ -82,5 +82,5 @@ When asked to spin up a diff / open a review of the current checkout (e.g. a wor
 - Keep concurrent fan-out reasonable; prefer Sonnet + batching over a huge Opus burst.
 
 ## Calling the FastApi Backend
-- The authoritative request/response contract lives in `Database/openapi.json` (a regenerated OpenAPI dump).
-- Before writing or modifying any code that calls a backend endpoint (seed scripts, tests, other services), read the matching request schema in `Database/openapi.json` and include every field listed under `required`.
+- The authoritative request/response contract is the backend's Pydantic schemas in `FastApiBackend/src/<domain>/<domain>_schema.py`. Before writing or modifying any code that calls a backend endpoint (seed scripts, tests, other services), read the matching schema there and include every field listed under `required`.
+- `Database/openapi.json` is an **optional, gitignored** local convenience dump. It is never committed, never expected to exist, and must never be flagged as missing or stale. To regenerate it locally from a running backend: `curl localhost:8000/openapi.json > Database/openapi.json`.

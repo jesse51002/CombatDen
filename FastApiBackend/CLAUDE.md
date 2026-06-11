@@ -57,7 +57,7 @@ real customers, so it is edited under a stricter rule than the rest of the repo:
 
 **Don't test retired or non-existent routes**
 - When a route is removed or renamed, **delete its tests** — never keep a test that asserts the old path now returns 404/405. A "this route is gone" assertion has no behavioral value, silently rots as the router grows (a future unrelated route on that path flips it green or red for the wrong reason), and just adds noise. The same goes for asserting that a route which never existed is absent.
-- Test the routes that **exist** and their real behavior (status codes, payloads, auth). Coverage of the API surface comes from `Database/openapi.json` + the live router, not from negative existence checks.
+- Test the routes that **exist** and their real behavior (status codes, payloads, auth). Coverage of the API surface comes from the Pydantic schemas (`src/<domain>/<domain>_schema.py`) + the live router, not from negative existence checks.
 
 **Integration tests must clean up exactly what they create (the `created` fixture)**
 - Tests run against a **real shared local Supabase DB + a real shared Stripe test Connect account** — no transaction rollback, no ephemeral DB. Every test must delete exactly the rows/Stripe objects it created, and **never** the single seeded gym (`tests/seed_constants.py`) or any other shared/seed data.

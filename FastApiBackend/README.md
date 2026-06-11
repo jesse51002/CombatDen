@@ -90,7 +90,7 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 - **Auth is Supabase JWT, not custom.** `shared/auth.py` validates tokens via the Supabase JWKS; routes depend on it through DI. Don't roll your own auth.
 - **Dependency injection via `dependency-injector`.** `core/dependencies.py` is the container that wires every service + `Auth` + the DB pool; routers receive them through `Provide[...]`. (`architecture.mermaid` is generated from this wiring.)
 - **Reuse Database enums/schemas.** `shared/db_schema_path.py` puts `../Database/python_data/schema` on `sys.path`; import enums with `from schema.<module> import <Enum>` instead of redefining them.
-- **`openapi.json` is the contract.** The app's schema is dumped to `../Database/openapi.json`; clients (the CRM, seed scripts, tests) build against it — read the `required` fields before calling an endpoint.
+- **The Pydantic schemas are the contract.** Clients (the CRM, seed scripts, tests) build against `src/<domain>/<domain>_schema.py` — read the `required` fields there before calling an endpoint. `../Database/openapi.json` is an optional gitignored local dump (never committed; regenerate with `curl localhost:8000/openapi.json` when useful).
 - **Stripe-gated tables are `service_role`-write-only** (enforced by RLS in `../Database`); those writes go through this backend, never the `authenticated` client.
 
 See `CLAUDE.md` in this directory for the full coding standards.
@@ -106,5 +106,5 @@ poetry run uvicorn src.main:app --reload   # docs at /docs when APP_DEBUG=true
 ## Cross-system
 
 - **Caller:** the **CRM** (`../CRM`) — authenticated `dio` client, **WIP**.
-- **Data:** the shared **Supabase Postgres** (read/write) + the **`../Database`** package (enum mirrors + `openapi.json`).
+- **Data:** the shared **Supabase Postgres** (read/write) + the **`../Database`** package (enum mirrors in `python_data/schema/`).
 - **External:** **Stripe** (payments, Connect, webhooks) and **Supabase Auth** (JWT/JWKS).
