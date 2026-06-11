@@ -43,13 +43,16 @@ class PaymentsInvoicePaymentCreateRequest(BaseModel):
     ``metadata`` is the invoice-level envelope (a ``BaseStripeMetadata``
     subclass — membership-one-time or ad-hoc); the service calls its
     ``to_stripe_metadata()``. ``currency`` applies to amount lines (price lines
-    carry their own).
+    carry their own). ``description`` is the INVOICE-level description (the
+    header line on the hosted invoice/receipt) — distinct from each item's
+    line-level ``description``.
     """
 
     stripe_customer_id: str
     items: list[PaymentsInvoiceItemSpec]
     metadata: BaseStripeMetadata
     currency: str = "usd"
+    description: str | None = None
     paid_out_of_band: bool = False
     idempotency_key: str
 

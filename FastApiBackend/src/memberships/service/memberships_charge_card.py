@@ -103,6 +103,8 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
                 )
             ],
             metadata=metadata,
+            # The reason lands on BOTH the invoice header and the line item.
+            description=request.reason,
             paid_out_of_band=request.paid_cash,
             idempotency_key=str(request.idempotency_key),
         )

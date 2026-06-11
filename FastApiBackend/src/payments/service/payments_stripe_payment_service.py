@@ -93,12 +93,15 @@ class PaymentsStripePaymentService:
             update={"crm_paid_with_cash": True} if request.paid_out_of_band else {},
         )
 
+        invoice_params = InvoiceCreateParams(
+            customer=request.stripe_customer_id,
+            metadata=metadata.to_stripe_metadata(),
+            auto_advance=False,
+        )
+        if request.description is not None:
+            invoice_params["description"] = request.description
         invoice = await self._stripe.v1.invoices.create_async(
-            params=InvoiceCreateParams(
-                customer=request.stripe_customer_id,
-                metadata=metadata.to_stripe_metadata(),
-                auto_advance=False,
-            ),
+            params=invoice_params,
             options=self._client.connect_opts(
                 stripe_account_id,
                 idempotency_key=f"{base_key}:invoice",
