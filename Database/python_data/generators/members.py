@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from api_creation.plans import PlanRecord
 from constants import (
+    CUSTOM_DISCOUNT_PROBABILITY,
     DISCOUNTS_PER_MEMBERSHIP_MAX,
     LINKED_FAMILY_FRACTION,
     MAX_LINKED_CHILDREN_PER_PARENT,
@@ -56,12 +57,19 @@ class CurrentMembership:
     first charge — no separate add call. The draw happens in the sequential build
     phase (``_assign_discounts``) so the random choices stay deterministic and
     the concurrent creation pipeline only does I/O.
+
+    ``custom_discount`` is an optional inline one-shot DiscountValue dict minted
+    at start time (the backend creates a ``custom`` discount entry and applies it
+    before the first charge). A membership may carry both preset discount_ids and
+    one custom discount. The draw happens alongside the preset draw in
+    ``_assign_custom_discounts``.
     """
 
     plan: PlanRecord
     prorate: bool = True
     cancel_after_start: bool = False
     discount_ids: list[uuid.UUID] = field(default_factory=list)
+    custom_discount: dict | None = None
 
 
 @dataclass
@@ -278,6 +286,59 @@ def _assign_discounts(
         m.current.discount_ids = [d.discount_id for d in chosen]
 
 
+def _random_custom_discount() -> dict:
+    """Return one DiscountValue dict chosen from four representative shapes.
+
+    Shapes are sampled uniformly to spread variety across seeded memberships:
+      0 — once percent (10-25 %)
+      1 — once dollar amount ($5-$15, expressed in cents)
+      2 — ongoing percent with a 2-3 month duration
+      3 — ongoing percent, forever (no duration, no end_date)
+
+    Dollar amounts are deliberately small so they're safe vs. the cheapest
+    plan price even if Stripe floors at zero.
+    """
+    shape = random.randint(0, 3)
+    if shape == 0:
+        return {
+            "percentage_off": round(random.uniform(10.0, 25.0), 1),
+            "discount_mode": "once",
+        }
+    if shape == 1:
+        return {
+            "dollar_off": random.randint(500, 1500),
+            "discount_mode": "once",
+        }
+    if shape == 2:
+        return {
+            "percentage_off": round(random.uniform(5.0, 20.0), 1),
+            "discount_mode": "ongoing",
+            "duration_amount": random.randint(2, 3),
+            "duration_unit": "month",
+        }
+    # shape == 3: ongoing forever
+    return {
+        "percentage_off": round(random.uniform(5.0, 15.0), 1),
+        "discount_mode": "ongoing",
+    }
+
+
+def _assign_custom_discounts(members: list[MemberPlan]) -> None:
+    """Randomly attach one inline custom discount to ~CUSTOM_DISCOUNT_PROBABILITY
+    of live, non-cancel-at-start memberships.
+
+    Drawn here in the sequential build phase (alongside ``_assign_discounts``)
+    so the PRNG advances deterministically. A membership may carry both preset
+    ``discount_ids`` and a ``custom_discount`` — these are not mutually
+    exclusive. At most one custom discount per membership.
+    """
+    for m in members:
+        if m.current is None or m.current.cancel_after_start:
+            continue
+        if random.random() < CUSTOM_DISCOUNT_PROBABILITY:
+            m.current.custom_discount = _random_custom_discount()
+
+
 def _apply_freezes(members: list[MemberPlan]) -> None:
     """~15% of non-child members with a current membership get a frozen window."""
     for m in members:
@@ -351,8 +412,10 @@ def build_plans(
 
     Each live membership is given a random 0-DISCOUNTS_PER_MEMBERSHIP_MAX set of
     distinct regular discounts (pre-drawn here; applied after the membership is
-    started). Family linking (a paying parent + cardless children under it) is
-    unchanged; linked/family discounts are no longer seeded.
+    started). Additionally, ~CUSTOM_DISCOUNT_PROBABILITY of live memberships also
+    receive one inline custom discount (a one-shot DiscountValue minted at start).
+    Family linking (a paying parent + cardless children under it) is unchanged;
+    linked/family discounts are no longer seeded.
     """
     members: list[MemberPlan] = [
         _demographics(f"{gym_handle}/member{i}", _pick_rank_id(ranks))
@@ -375,6 +438,7 @@ def build_plans(
 
     _apply_freezes(members)
     _assign_discounts(members, discounts)
+    _assign_custom_discounts(members)
     return members
 
 

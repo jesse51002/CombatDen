@@ -139,14 +139,21 @@ def _start_item(member: MemberPlan) -> dict:
     one plan), so the item carries no plan_id. ``discount_ids`` are the pre-drawn
     preset / linked discounts chosen in the sequential build phase
     (generators.members._assign_discounts) and applied before the first charge.
+    ``custom_discounts`` carries at most one inline DiscountValue dict
+    (generators.members._assign_custom_discounts) — the backend mints a one-shot
+    ``custom`` discount entry and applies it before the first charge alongside any
+    preset discounts. Omitted entirely when None so the wire payload stays clean.
     """
     current = member.current
     assert current is not None and member.member_id is not None
-    return {
+    item: dict = {
         "member_id": str(member.member_id),
         "price_id": str(current.plan.price_id),
         "discount_ids": [str(d) for d in current.discount_ids],
     }
+    if current.custom_discount is not None:
+        item["custom_discounts"] = [current.custom_discount]
+    return item
 
 
 def _read_back_record(
