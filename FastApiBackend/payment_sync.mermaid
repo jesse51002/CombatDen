@@ -49,7 +49,7 @@ flowchart TB
       w_rows["_apply_membership_rows — map live items by stripe_price_id → each row:<br/>apply_membership_sync = stripe_item_id + next_due_date (gym-local) + 'applied'"]
       w_memberprice["set_member_post_discount_prices — each membership's OWN post-discount<br/>price → total_price (per item_id; build-time amounts from member_amounts)"]
       w_links["coupon links → set_applied_discount_coupon_id (stripe_coupon_id + 'applied') per row"]
-      w_del["_mark_removed_deleted — cancelled rows gone from live sub → mark_membership_deleted ('deleted')"]
+      w_del["_mark_removed_deleted — every cancelled row (converge removed its billing) → mark_membership_deleted ('deleted')"]
       w_subid["update_profile_sub_id — parent stripe_sub_id_month (None when cancelled)"]
       w_prices["_sync_parent_monthly_total — parent monthly total from Stripe upcoming invoice (set_parent_monthly_total)"]
       w_rows --> w_memberprice

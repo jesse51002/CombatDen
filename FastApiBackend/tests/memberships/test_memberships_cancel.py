@@ -11,10 +11,12 @@ import pytest
 import stripe
 from sqlalchemy import text
 
+from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
 )
+from src.shared.sql_loader import load_sql
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
@@ -202,6 +204,143 @@ async def test_cancel_already_cancelled_noop(
         )
     finally:
         await delete_member_data(db_pool, member.member_id)
+
+
+async def test_cancel_one_of_shared_consolidated_line(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """Regression: cancel ONE family member off a shared consolidated line.
+
+    Two linked members on the same price share ONE Stripe item (quantity 2).
+    Cancelling one must succeed (not revert), stamp the cancelled row
+    ``deleted`` even though the shared line id stays live for the sibling,
+    and leave the sibling billing on that line at quantity 1.
+    """
+    pm_id = await created.payment_method()
+    payer = await created.member(gym_id, payment_method_id=pm_id)
+    child = await created.member(gym_id)
+    plan = await created.plan(gym_id)
+
+    link_sql = load_sql(SQL_DIR / "member_memberships_link.sql")
+    async with db_pool.session() as session:
+        await session.execute(
+            text(link_sql),
+            {
+                "member_id": str(child.member_id),
+                "parent_member_id": str(payer.member_id),
+            },
+        )
+        await session.commit()
+
+    try:
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=payer.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=payer.member_id,
+                        price_id=plan.price_id,
+                    ),
+                    MemberMembershipsStartItem(
+                        member_id=child.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
+        )
+
+        rows = {}
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT item_id, member_id, stripe_item_id "
+                    "FROM member_memberships_unfiltered "
+                    "WHERE member_id IN (:payer_id, :child_id)"
+                ),
+                {
+                    "payer_id": str(payer.member_id),
+                    "child_id": str(child.member_id),
+                },
+            )
+            for row in result.mappings().fetchall():
+                rows[UUID(str(row["member_id"]))] = row
+
+        # Consolidated: both rows carry the SAME Stripe line id.
+        assert (
+            rows[payer.member_id]["stripe_item_id"]
+            == rows[child.member_id]["stripe_item_id"]
+        )
+        child_item_id = UUID(str(rows[child.member_id]["item_id"]))
+        payer_item_id = UUID(str(rows[payer.member_id]["item_id"]))
+
+        profile = await get_profile_stripe_ids(
+            db_pool,
+            payer.member_id,
+            gym_id,
+        )
+        before = await snapshot_billing_state(
+            stripe_client,
+            profile.stripe_customer_id,
+            connect_opts,
+        )
+
+        # Must succeed — the old live-line diff never stamped a row
+        # removed from a shared line, so the verify reverted the cancel.
+        await memberships_service.cancel(
+            child_item_id,
+            child.member_id,
+            idempotency_key=uuid4(),
+        )
+
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT item_id, cancel_date, "
+                    "stripe_sync_status::text AS status "
+                    "FROM member_memberships_unfiltered "
+                    "WHERE item_id IN (:child_item, :payer_item)"
+                ),
+                {
+                    "child_item": str(child_item_id),
+                    "payer_item": str(payer_item_id),
+                },
+            )
+            by_item = {
+                UUID(str(r["item_id"])): r
+                for r in result.mappings().fetchall()
+            }
+
+        assert by_item[child_item_id]["cancel_date"] is not None
+        assert by_item[child_item_id]["status"] == "deleted"
+        assert by_item[payer_item_id]["cancel_date"] is None
+        assert by_item[payer_item_id]["status"] == "applied"
+
+        # Sibling keeps billing on the shared line at quantity 1.
+        sub = await fetch_subscription(
+            stripe_client,
+            profile.stripe_sub_id_month,
+            connect_opts,
+        )
+        qty_by_price = {
+            item.price.id: item.quantity for item in sub.items.data
+        }
+        assert qty_by_price.get(plan.stripe_price_id) == 1
+
+        await assert_no_unexpected_charges(
+            stripe_client,
+            before,
+            connect_opts,
+        )
+    finally:
+        await delete_member_data(db_pool, child.member_id)
+        await delete_member_data(db_pool, payer.member_id)
 
 
 async def test_cancel_one_time_raises(

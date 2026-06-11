@@ -285,7 +285,9 @@ sequence is:
    sync-owned state** in one place: per-membership Stripe line id + next_due_date
    + `stripe_sync_status = 'applied'` (mapping the live items → rows by price),
    the coupon links (+ `applied` on the applied-discount rows), `deleted` on
-   cancelled rows confirmed gone from the live sub, the parent's sub id, each
+   every cancelled row (the desired state excludes cancelled rows, so the
+   converge removed each one's billing — even when its consolidated line id
+   stays live for the remaining family members), the parent's sub id, each
    membership's own post-discount price onto `total_price`, and the parent's
    monthly total from Stripe's upcoming invoice.
 
@@ -941,7 +943,7 @@ convergence writeback" boundary.
 - **Writeback:** `sync_writeback.py` (`PaymentSyncWriteback.write` →
   `_apply_membership_rows` / `_sync_parent_monthly_total` / `_mark_removed_deleted`;
   per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on
-  removed rows, sub id, each membership's own post-discount price → `total_price`,
+  every cancelled row, sub id, each membership's own post-discount price → `total_price`,
   and the parent monthly total from Stripe's upcoming invoice — all via
   `PaymentSyncQueries`). Writeback SQL: `apply_membership_sync.sql`,
   `set_membership_post_discount_prices.sql`, `sync_profile_monthly_total.sql`,

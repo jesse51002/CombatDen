@@ -1,11 +1,12 @@
 -- Read the family's CANCELLED recurring memberships that still carry a Stripe
--- line id and are not yet marked deleted — the candidates the writeback checks
--- against the live subscription to confirm removal and stamp 'deleted'. Reads the
--- unfiltered base table (service-role).
+-- line id and are not yet marked deleted. The writeback stamps every one of
+-- them 'deleted' after a successful converge: the desired state excludes all
+-- cancelled rows by construction, so the converge removed each row's billing —
+-- its line, or its share of a consolidated line (whose id may stay live for
+-- the remaining family members on that price). Reads the unfiltered base
+-- table (service-role).
 SELECT
-    mm.item_id,
-    mm.member_id,
-    mm.stripe_item_id
+    mm.item_id
 FROM member_memberships_unfiltered mm
 JOIN membership_plans mp
     ON mm.plan_id = mp.plan_id AND mm.gym_id = mp.gym_id

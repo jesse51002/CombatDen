@@ -432,15 +432,15 @@ class PaymentSyncQueries:
     async def get_cancelled_recurring(
         self,
         family_ids: list[UUID],
-    ) -> dict[UUID, str]:
+    ) -> list[UUID]:
         """Read cancelled recurring rows still carrying a Stripe line id.
 
-        Returns ``item_id → stripe_item_id`` for cancelled rows not yet marked
-        ``deleted`` — the writeback diffs these against the live subscription to
-        confirm removal and stamp ``deleted``.
+        Returns the ``item_id`` of each cancelled row not yet marked
+        ``deleted`` — the writeback stamps them all after a successful
+        converge, since the desired state excludes every cancelled row.
         """
         if not family_ids:
-            return {}
+            return []
 
         sql = load_sql(SYNC_SQL_DIR / "get_cancelled_recurring.sql")
         async with self._db_pool.session() as session:
@@ -450,7 +450,7 @@ class PaymentSyncQueries:
             )
             rows = result.mappings().fetchall()
 
-        return {UUID(str(r["item_id"])): r["stripe_item_id"] for r in rows}
+        return [UUID(str(r["item_id"])) for r in rows]
 
     async def mark_memberships_deleted(
         self,
