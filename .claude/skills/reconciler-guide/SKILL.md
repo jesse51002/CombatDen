@@ -117,7 +117,13 @@ deliberate:
   family key `paying_member_lock:{parent}` → if free, delete (reusing the guarded
   `member_memberships_delete_pending.sql`) and count `changed`; if held, an op is
   in flight → `skipped`. The delete's own `stripe_item_id IS NULL` guard means a
-  row confirmed in the gap is never removed.
+  row confirmed in the gap is never removed. **Task-produced rows are excluded
+  at the query**: a pending row referenced as a `task_items.new_item_id` by a
+  `pending`/`running`/**`failed`** item is a reprice's successor, not an orphan
+  — it waits lock-free between retry attempts, and after a failed task it is
+  the member's only live membership (the old row is already cancelled), so
+  reaping it would erase the membership; the push sweep converges it to
+  `applied` instead.
 - **`PaymentPushSweep`** — lists the active billing members
   (`reconciler_active_billing_members.sql` → distinct paying parents with an
   active recurring membership, `member_id` only) and calls the existing

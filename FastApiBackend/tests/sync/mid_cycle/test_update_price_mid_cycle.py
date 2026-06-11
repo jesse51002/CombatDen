@@ -28,7 +28,10 @@ from src.memberships.memberships_schema import (
 )
 from src.plans.plans_schema import MembershipPlanPriceRequest
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.db_reads import get_profile_stripe_ids
+from tests.helpers.db_reads import (
+    await_task_terminal,
+    get_profile_stripe_ids,
+)
 from tests.helpers.stripe_assertions import (
     advance_to_next_cycle_and_fetch_invoice,
     assert_immediate_prorated_invoice,
@@ -188,12 +191,12 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
             connect_opts,
         )
 
-        await memberships_service.update_price(
+        task_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=False,
         )
+        assert await await_task_terminal(db_pool, task_id) == "completed"
 
         # Stripe side: item points at new price, no mid-cycle invoice.
         sub = await fetch_subscription(
@@ -297,12 +300,12 @@ async def test_update_price_mid_cycle_with_prorate_true(
             connect_opts,
         )
 
-        await memberships_service.update_price(
+        task_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=True,
         )
+        assert await await_task_terminal(db_pool, task_id) == "completed"
 
         # Stripe side: item swapped to new price.
         sub = await fetch_subscription(
@@ -421,12 +424,12 @@ async def test_update_price_to_cheaper_tier_mid_cycle(
             connect_opts,
         )
 
-        await memberships_service.update_price(
+        task_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=False,
         )
+        assert await await_task_terminal(db_pool, task_id) == "completed"
 
         sub = await fetch_subscription(
             stripe_client,

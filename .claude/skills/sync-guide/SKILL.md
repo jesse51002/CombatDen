@@ -145,7 +145,8 @@ converges Stripe to it.)
 | --- | --- |
 | `memberships_start.py` | a new membership's **recurring** group (its one-time group goes to `PaymentSyncOneTime` instead — §12) |
 | `memberships_cancel.py` | cancel a membership |
-| `memberships_update_price.py` | mid-cycle price swap |
+| `memberships_update_price.py` | requests a reprice (validates + creates the `membership_reprice` task; the executor below does the converge) |
+| `memberships_reprice_executor.py` | the reprice task's per-item executor (cancel old row + insert successor, then converge) |
 | `memberships_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
 
 These callers all live in `src/memberships/service/`.
@@ -181,7 +182,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
 `src/shared/db_first_helpers.py` encapsulates steps 2–3:
 
 0. **Pre-sync to a clean baseline — ONLY the prorating ops** (`start` and
-   `update_price`). Call the sync once FIRST (`_pre_sync_payments` on
+   the reprice executor). Call the sync once FIRST (`_pre_sync_payments` on
    `MemberMembershipsBase`), with a **fresh** idempotency key and default (no)
    proration, to converge the family's DB↔Stripe state **before mutating**. It
    exists for one reason: a prorating op (`always_invoice`) must not **bill for
@@ -198,7 +199,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
 2. **Call the param-less sync** (`update_payments_recurring`, or
    `PaymentSyncFreeze.sync_freeze_state` for freeze) — it re-derives the desired
    state from that DB write and converges Stripe, then writes back
-   `stripe_sync_status`. (Note: a prorating op — start / update_price — thus runs
+   `stripe_sync_status`. (Note: a prorating op — start / the reprice — thus runs
    **two** syncs: the pre-sync converge, then this post-change converge; the
    non-prorating ops run just this one.)
 3. **Verify the writeback landed, and revert the DB write if it did not** — so the
@@ -214,7 +215,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    | --- | --- | --- | --- |
    | start (recurring) | insert pending row (`not_added`) | row flips `not_added → applied` | delete the pending row |
    | cancel | set `cancel_date` (status stays `applied`) | row flips `applied → deleted` | clear `cancel_date` |
-   | update_price | write new `price_id` + stage `migrating` | row flips `migrating → applied` | restore old `price_id`/`total_price`, reset `applied` |
+   | reprice (the `membership_reprice` task executor) | ONE txn: cancel old row effective today + insert successor at the new price (`not_added`) + copy live applied discounts + stamp `new_item_id` on the task item | successor flips `not_added → applied` AND old row flips `applied → deleted` | **NO revert** — the txn IS the desired state (append-only); a failed attempt retries (3×), then the task is `failed` and the reconciler's push sweep converges the pending successor |
    | freeze / unfreeze | write / clear the freeze window | — (no membership-row status) | restore / re-clear the freeze window |
    | link / unlink | set / clear `account_linked_to_id` | — (child has no recurring) | unlink / re-link |
 
@@ -222,22 +223,17 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    transition (freeze, link) pass `verify_fn=None` and get the achievable
    guarantee: **revert-on-exception**.
 
-**Immutability is keyed on the real Stripe state, not a transient flag** — and the
-two columns differ on purpose:
+**Identity is fully immutable; only `cancel_date` is staged-reversible:**
 - **`cancel_date` (foreground, verified)** locks only once the membership is
   actually **removed from Stripe** (`stripe_sync_status = 'deleted'`,
   `trg_prevent_cancel_date_overwrite`). While the cancel is unconfirmed the column
   stays clearable, so the revert just clears `cancel_date` — **no status to stage
-  or un-stage** (cancel never uses `migrating`).
-- **`stripe_item_id`** is immutable **except while `stripe_sync_status = 'migrating'`**
-  (`trg_prevent_stripe_item_id_overwrite`). `migrating` is reserved for the **price
-  migration** (`update_price`): mutating the line id is safe then because a price
-  migration is a background-style converge, not a paying↔cancel transition. The
-  caller stages `migrating`, the writeback moves the line + stamps `applied`, after
-  which the id is immutable again. **`migrating` is ONLY for price migrations** —
-  add/cancel are foreground verified ops and never use it. (Engine half of the
-  rule the `migrating` enum value exists for — keep it in sync with the schema
-  triggers if either changes.)
+  or un-stage**.
+- **`stripe_item_id` and `price_id` are immutable once set, no exceptions, even at
+  service-role** (`trg_prevent_stripe_item_id_overwrite`,
+  `trg_prevent_price_id_overwrite`). Any move to a different price or line is a
+  NEW membership row — the reprice cancels the old row and inserts a successor;
+  nothing ever re-stamps an existing row's line id.
 
 > **Known residual:** if Stripe converged but the writeback failed to stamp the
 > column (rare — it is the last step), the revert undoes the DB change while Stripe
@@ -888,7 +884,7 @@ nothing again (terminal).
    semantics in SQL:** the real path reads **only `not_added`** rows (the
    just-inserted, never-charged ones). An already-`applied` row is **never
    re-read** — re-reading would re-charge it — so, unlike the recurring read,
-   there is **no `applied` / `migrating` inclusion**. Reads the unfiltered base
+   there is **no `applied` inclusion**. Reads the unfiltered base
    (service-role), reusing the same family applied-discount read so each
    membership carries its discounts.
 2. **Group ONE-per-membership** (`_group_per_membership`, keyed by `item_id`).

@@ -78,6 +78,12 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         row = await self._get_membership(item_id, member_id)
         self._validate_update_price(row, item_id, member_id)
 
+        # The in-task guard doubles as the double-submit guard (one
+        # unfinished reprice per membership) and runs BEFORE the no-op
+        # check so a mid-task membership reports "in a task", not
+        # "already on the price".
+        await self._tasks.assert_memberships_not_in_task([item_id])
+
         active_price = await self._get_active_price_for_plan(
             row["gym_id"],
             row["plan_id"],
@@ -88,10 +94,6 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
                 f"Membership is already on the plan's active price: "
                 f"item_id={item_id}, price_id={target_price_id}"
             )
-
-        # The in-task guard doubles as the double-submit guard: one
-        # unfinished reprice per membership.
-        await self._tasks.assert_memberships_not_in_task([item_id])
 
         task_id = await self._tasks.create_task(
             UUID(str(row["gym_id"])),

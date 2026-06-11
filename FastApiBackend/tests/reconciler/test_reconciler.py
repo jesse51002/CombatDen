@@ -12,8 +12,10 @@ fixture and is not covered here.
 
 from uuid import UUID, uuid4
 
+from schema.task import TaskType
 from sqlalchemy import text
 
+import src.shared.db_schema_path  # noqa: F401
 from src.core.config import PAYING_MEMBER_LOCK_PREFIX
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
@@ -21,6 +23,9 @@ from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
 from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.resource_lock import ResourceLock
+from src.tasks.service.tasks_queries import TasksQueries
+from src.tasks.service.tasks_service import TasksService
+from src.tasks.tasks_schema import TaskItemCreate
 
 _TOTAL_PRICE = 5000
 
@@ -189,5 +194,85 @@ async def test_orphan_cleanup_skips_when_family_lock_held(
     sweep = OrphanCleanupSweep(
         db_pool, _parent_resolver(db_pool), ResourceLock(db_pool)
     )
+    await sweep.run()
+    assert await _membership_row(db_pool, item_id) is None
+
+
+async def test_orphan_cleanup_skips_task_referenced_rows(
+    db_pool, gym_id, created
+):
+    """A pending row a TASK produced is not an orphan.
+
+    The reprice's successor waits as 'not_added' between retry attempts
+    (and after a FAILED task, it is the member's only live membership) —
+    the sweep must leave it for the push sweep to converge. Once the task
+    item is 'completed', the row is sweepable again.
+    """
+    member = await created.member(gym_id)
+    plan = await created.plan(gym_id)
+    item_id = await _insert_membership(
+        db_pool,
+        member.member_id,
+        gym_id,
+        plan,
+        stripe_item_id=None,
+        sync_status="not_added",
+    )
+
+    tasks_service = TasksService(db_pool)
+    queries = TasksQueries(db_pool)
+    task_id = await tasks_service.create_task(
+        gym_id,
+        TaskType.membership_reprice,
+        [
+            TaskItemCreate(
+                member_id=member.member_id,
+                target_price_id=plan.price_id,
+                prorate=False,
+            ),
+        ],
+    )
+    items = await queries.get_items_for_task(task_id)
+    task_item_id = items[0].task_item_id
+    # Reference the pending row as the task's successor (pending item).
+    async with db_pool.session() as session:
+        await session.execute(
+            text(
+                "UPDATE task_items SET new_item_id = :item "
+                "WHERE task_item_id = :ti"
+            ),
+            {"item": str(item_id), "ti": str(task_item_id)},
+        )
+        await session.commit()
+
+    sweep = OrphanCleanupSweep(
+        db_pool, _parent_resolver(db_pool), ResourceLock(db_pool)
+    )
+
+    # Pending item -> excluded.
+    await sweep.run()
+    assert await _membership_row(db_pool, item_id) is not None
+
+    # FAILED item -> still excluded (the successor is the member's only
+    # live membership).
+    claimed = await queries.claim_item(task_item_id)
+    await queries.fail_item(claimed.task_item_id, "test: forced failure")
+    await sweep.run()
+    assert await _membership_row(db_pool, item_id) is not None
+
+    # Task records removed -> the row is an ordinary orphan again. (A
+    # COMPLETED item can never expose its successor to the sweep for real:
+    # completed means the verify saw the row 'applied' with its line id
+    # stamped, so it never matches the orphan criteria.)
+    async with db_pool.session() as session:
+        await session.execute(
+            text("DELETE FROM task_items WHERE task_item_id = :ti"),
+            {"ti": str(task_item_id)},
+        )
+        await session.execute(
+            text("DELETE FROM tasks WHERE task_id = :t"),
+            {"t": str(task_id)},
+        )
+        await session.commit()
     await sweep.run()
     assert await _membership_row(db_pool, item_id) is None

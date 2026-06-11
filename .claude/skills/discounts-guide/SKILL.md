@@ -176,14 +176,22 @@ only) invoice is discounted.
 **DiscountsService never touches applied-discount rows** — it owns only
 `gym_discounts` / `gym_discount_values`.
 
-The custom lifecycle is **mint → apply once → archive**, and it is **explicit
-in the DB** (migration `20260610120000_custom_discount_single_use`):
+The custom lifecycle is **mint → apply → follow the membership's successor
+chain → archive**, and it is **explicit in the DB**:
 
 - `trg_custom_discount_single_value` (`gym_discount_values`) — a custom can
   never get a second value version (no re-versioning).
 - `trg_custom_discount_single_application`
-  (`member_membership_applied_discounts`) — a custom's value can never be
-  applied to a second membership.
+  (`member_membership_applied_discounts`) — a custom's value can be applied to
+  at most **one LIVE membership at a time**: a second application is rejected
+  while an existing one is live (not end-dated AND its membership not yet
+  cancelled-effective). This is what lets the **reprice carry-over** work: the
+  `membership_reprice` task cancels the old row effective today, then COPIES
+  the live applications (custom included) onto the successor row
+  (`applied_discounts/copy_applied_discounts.sql`) — the old application no
+  longer counts as live, while attaching the same custom to a second live
+  membership still dies at the DB. `preview_add` copies (the reprice preview's
+  staging) skip the gate and never block a real application.
 
 Service guards mirror the triggers with clean errors: `update_discount`
 rejects a `custom` outright (no rename, no value edit), and the public apply
