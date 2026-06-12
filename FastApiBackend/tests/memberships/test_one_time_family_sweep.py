@@ -51,12 +51,12 @@ def _build_one_time_engine(db_pool, stripe_client) -> PaymentSyncOneTime:
     members_svc = PaymentsStripeMembersService(stripe_client)
     discount_svc = PaymentsStripeDiscountService(stripe_client)
     payment_svc = PaymentsStripePaymentService(stripe_client, members_svc)
-    parent_resolver = PayerResolver(db_pool, GymStripeService(db_pool))
+    payer_resolver = PayerResolver(db_pool, GymStripeService(db_pool))
     return PaymentSyncOneTime(
         db_pool,
         discounts=PaymentSyncDiscounts(discount_svc),
         payment_service=payment_svc,
-        parent_resolver=parent_resolver,
+        payer_resolver=payer_resolver,
     )
 
 

@@ -1,8 +1,11 @@
 """Phase A of the start op: validate EVERYTHING up-front, write nothing.
 
-One request creates N memberships for a paying parent's family (a single
-membership = a one-item list). The real start and the start preview run this
-IDENTICAL validation first — it lives in its own class so that stays
+One request creates N memberships billed by ONE payer (a single membership =
+a one-item list). The payer may be the member themselves (self-pay, including
+a linked member paying their own way) or a member's linked parent —
+``_check_links`` is the authorization rule: every non-payer member in the
+request must be linked to the payer. The real start and the start preview run
+this IDENTICAL validation first — it lives in its own class so that stays
 structural, not copy-paste. Any failure rejects the whole request with
 nothing written and nothing billed.
 
@@ -50,14 +53,14 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         db_pool: DirectDatabasePool,
         payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
-        parent_resolver: PayerResolver,
+        payer_resolver: PayerResolver,
     ) -> None:
         super().__init__(
             db_pool,
             payment_sync_service,
             gym_stripe_service,
         )
-        self._parent_resolver = parent_resolver
+        self._payer_resolver = payer_resolver
 
     async def validate(
         self,
@@ -74,7 +77,7 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         Raises:
             ValueError: On the first failed check.
         """
-        parent = await self._resolve_payer(request)
+        payer = await self._resolve_payer(request)
         await self._check_links(request)
 
         price_ids = list({item.price_id for item in request.memberships})
@@ -96,41 +99,36 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
             )
 
         await self._check_discounts(request)
-        return parent, plan_prices
+        return payer, plan_prices
 
     async def _resolve_payer(
         self,
         request: MemberMembershipsStartRequest,
     ) -> PayerProfile:
-        """Validate the payer is a top-level, in-gym, unfrozen paying account.
+        """Validate the payer is an in-gym, unfrozen billing profile.
 
-        ``resolve_parent`` already raises if the resolved account has no
-        Stripe customer; card presence is not pre-checked (a missing card
-        surfaces as the charge's own failure, and ``paid_with_cash`` needs
-        no card).
+        The payer's OWN profile is resolved directly — a linked member may be
+        the payer (self-pay); ``_check_links`` then enforces that every other
+        member in the request is linked to this payer (the authorization
+        rule). ``resolve_payer`` already raises if the account has no Stripe
+        customer; card presence is not pre-checked (a missing card surfaces as
+        the charge's own failure, and ``paid_with_cash`` needs no card).
 
         Raises:
-            ValueError: If the payer is itself linked to another paying
-                account, is in a different gym, or is frozen.
+            ValueError: If the payer is in a different gym or is frozen.
         """
-        parent = await self._parent_resolver.resolve_parent(
+        payer = await self._payer_resolver.resolve_payer(
             request.payer_member_id,
         )
-        if parent.member_id != request.payer_member_id:
-            raise ValueError(
-                f"Payer {request.payer_member_id} is linked to paying account "
-                f"{parent.member_id} — the payer must be a top-level "
-                f"paying account",
-            )
-        if parent.gym_id != request.gym_id:
+        if payer.gym_id != request.gym_id:
             raise ValueError(
                 f"Payer {request.payer_member_id} is not in gym {request.gym_id}",
             )
-        if parent.is_frozen:
+        if payer.is_frozen:
             raise ValueError(
                 "Cannot start memberships: payer account is frozen",
             )
-        return parent
+        return payer
 
     async def _check_links(
         self,
@@ -138,10 +136,11 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
     ) -> None:
         """Every member exists, is in the gym, and is linked to THIS payer.
 
-        The start op never links — an unlinked or differently-linked member
-        is rejected with a "link them first" error. The payer itself (when
-        it appears in the items) was already validated as top-level by
-        ``_resolve_payer``.
+        This IS the payer-authorization rule: a payer may bill their own
+        memberships and those of members linked to them — nothing else. The
+        start op never links — an unlinked or differently-linked member is
+        rejected with a "link them first" error. The payer's own items need
+        no link check (self-pay is always allowed).
 
         Raises:
             ValueError: If a member is missing, in another gym, unlinked,

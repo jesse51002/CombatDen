@@ -421,7 +421,7 @@ async def test_phase_a_payer_frozen_rejects(
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_phase_a_payer_is_linked_child_rejects(
+async def test_phase_a_linked_child_self_pays_own_membership(
     memberships_service,
     db_pool,
     gym_id,
@@ -429,44 +429,54 @@ async def test_phase_a_payer_is_linked_child_rejects(
     connect_opts,
     created,
 ):
-    """3b: a payer that is itself a linked child is rejected.
+    """3b: a linked child CAN be the payer of their own membership.
 
-    ``resolve_parent`` resolves the linked child up to its paying parent, so
-    ``parent.member_id != payer_member_id`` → the "payer must be a top-level
-    paying account" guard fires. Nothing is written for either member.
+    Self-pay: the payer is the membership's own member, billed on their OWN
+    Stripe customer + subscription. The parent's billing is untouched — the
+    link is the authorization layer only, never the billing key.
     """
-    pm_id = await created.payment_method()
-    real_payer = await created.member(
-        gym_id, first_name="Top", last_name="Level", payment_method_id=pm_id
+    parent_pm = await created.payment_method()
+    parent = await created.member(
+        gym_id, first_name="Top", last_name="Level", payment_method_id=parent_pm
     )
+    child_pm = await created.payment_method()
     linked_child = await created.member(
-        gym_id, first_name="Linked", last_name="Child"
+        gym_id, first_name="Linked", last_name="Child", payment_method_id=child_pm
     )
     plan = await created.plan(gym_id)
 
     try:
-        await _link_child(db_pool, linked_child.member_id, real_payer.member_id)
+        await _link_child(db_pool, linked_child.member_id, parent.member_id)
 
-        with pytest.raises(ValueError, match="top-level"):
-            await memberships_service.start(
-                MemberMembershipsStartRequest(
-                    payer_member_id=linked_child.member_id,
-                    gym_id=gym_id,
-                    idempotency_key=uuid4(),
-                    memberships=[
-                        MemberMembershipsStartItem(
-                            member_id=linked_child.member_id,
-                            price_id=plan.price_id,
-                        ),
-                    ],
-                )
+        result = await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=linked_child.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=linked_child.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
             )
+        )
+        assert all(r.status == "success" for r in result.results), result
 
-        assert await _count_membership_rows(db_pool, linked_child.member_id) == 0
-        assert await _count_membership_rows(db_pool, real_payer.member_id) == 0
+        # The CHILD's own subscription bills it; the parent has none.
+        child_profile = await get_profile_stripe_ids(
+            db_pool, linked_child.member_id, gym_id
+        )
+        parent_profile = await get_profile_stripe_ids(
+            db_pool, parent.member_id, gym_id
+        )
+        assert child_profile.stripe_sub_id_month is not None
+        assert parent_profile.stripe_sub_id_month is None
+        assert await _count_membership_rows(db_pool, linked_child.member_id) == 1
+        assert await _count_membership_rows(db_pool, parent.member_id) == 0
     finally:
         await delete_member_data(db_pool, linked_child.member_id)
-        await delete_member_data(db_pool, real_payer.member_id)
+        await delete_member_data(db_pool, parent.member_id)
 
 
 async def test_phase_a_member_unlinked_rejects(

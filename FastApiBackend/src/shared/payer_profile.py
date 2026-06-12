@@ -12,12 +12,11 @@ class PayerProfile(BaseModel):
     """A payer's billing-profile fields.
 
     The billing surface of whoever pays (Stripe customer + monthly
-    subscription + freeze window). Hydrated two ways by
-    ``PayerResolver``: ``resolve_parent`` follows the single-level
-    account hierarchy to the FAMILY parent; ``resolve_payer`` looks up a
-    specific ``paid_by_member_id`` directly (a self-paying linked member's
-    own profile). Shared because payer resolution is needed across
-    billing-touching services, not just the payment sync.
+    subscription + freeze window). Hydrated by ``PayerResolver.resolve_payer``
+    — a direct lookup of the payer's own row (a membership's
+    ``paid_by_member_id``: the family parent or a self-paying linked member).
+    Shared because payer resolution is needed across billing-touching
+    services, not just the payment sync.
     """
 
     member_id: UUID

@@ -101,7 +101,7 @@ async def test_link_happy_path(
         await delete_member_data(db_pool, parent.member_id)
 
 
-async def test_link_clears_existing_card_fields(
+async def test_link_keeps_existing_card_fields(
     memberships_service,
     db_pool,
     gym_id,
@@ -109,7 +109,11 @@ async def test_link_clears_existing_card_fields(
     connect_opts,
     created,
 ):
-    """A child with an existing card should have card fields nulled on link."""
+    """Linking keeps the child's own card — billing state is per-payer.
+
+    The link is the authorization layer only; a linked member may self-pay,
+    so their payment method / card columns must survive the link.
+    """
     parent = await created.member(
         gym_id,
         first_name="Parent",
@@ -134,9 +138,9 @@ async def test_link_clears_existing_card_fields(
 
         row = await _fetch_profile(db_pool, child.member_id)
         assert str(row["account_linked_to_id"]) == str(parent.member_id)
-        assert row["stripe_payment_method_id"] is None
-        assert row["card_brand"] is None
-        assert row["card_last_four"] is None
+        assert row["stripe_payment_method_id"] is not None
+        assert row["card_brand"] is not None
+        assert row["card_last_four"] is not None
     finally:
         await delete_member_data(db_pool, child.member_id)
         await delete_member_data(db_pool, parent.member_id)

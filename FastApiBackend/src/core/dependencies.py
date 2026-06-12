@@ -218,15 +218,15 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
     )
     # Generic non-blocking TTL-lease lock (key-agnostic). Used by the scheduled
-    # reconciler's orphan-cleanup family check.
+    # reconciler's orphan-cleanup payer check.
     resource_lock = providers.Factory(ResourceLock, db_pool=db_pool)
-    # The one concurrency lock: a TTL lease keyed on a member's paying parent,
-    # so no two billing ops sync the same family at once. Used by the facade,
-    # the webhook settle, and the bulk fan-out.
+    # The one concurrency lock: a TTL lease keyed directly on the payer ids
+    # callers pass, so no two billing ops converge the same payer's
+    # subscription at once. Used by the facade, the webhook settle, and the
+    # bulk fan-out.
     paying_member_lock = providers.Factory(
         PayingMemberLock,
         db_pool=db_pool,
-        parent_resolver=payer_resolver,
     )
     # Standalone freeze service: the dedicated freeze/unfreeze request resolves
     # the parent then calls this directly. The main sync no longer does a
@@ -290,7 +290,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_service=payment_sync_service,
         payment_service=payments_payment_service,
         gym_stripe_service=gym_stripe_service,
-        parent_resolver=payer_resolver,
+        payer_resolver=payer_resolver,
         freeze_service=payment_sync_freeze,
         paying_lock=paying_member_lock,
         payment_sync_one_time=payment_sync_one_time,
@@ -394,7 +394,6 @@ class DependencyInjector(containers.DeclarativeContainer):
     reconciler_orphan_cleanup_sweep = providers.Factory(
         OrphanCleanupSweep,
         db_pool=db_pool,
-        parent_resolver=payer_resolver,
         resource_lock=resource_lock,
     )
     reconciler_payment_push_sweep = providers.Factory(

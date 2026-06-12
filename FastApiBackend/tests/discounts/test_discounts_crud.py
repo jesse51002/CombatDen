@@ -403,9 +403,9 @@ async def _seed_membership_with_applied_discount(db_pool, gym_id, value_id):
         mem_row = await session.execute(
             text(
                 "INSERT INTO member_memberships_unfiltered "
-                "(member_id, gym_id, plan_id, price_id, start_date, "
-                " total_price, stripe_item_id) "
-                "VALUES (:member_id, :gym_id, :plan_id, :price_id, "
+                "(member_id, paid_by_member_id, gym_id, plan_id, price_id, "
+                " start_date, total_price, stripe_item_id) "
+                "VALUES (:member_id, :member_id, :gym_id, :plan_id, :price_id, "
                 " CURRENT_DATE, 5000, :si) RETURNING item_id"
             ),
             {

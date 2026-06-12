@@ -1,6 +1,6 @@
--- The PAYER's own billing profile — a direct lookup, no parent redirect.
--- Same shape as resolve_parent.sql minus the link-following self-join, so
--- both hydrate the same PayerProfile model.
+-- The PAYER's own billing profile — a direct lookup of their row, no
+-- link-following, no parent redirect. The payer is whoever a membership's
+-- paid_by_member_id names (or an explicit request payer).
 SELECT
     p.member_id,
     p.gym_id,

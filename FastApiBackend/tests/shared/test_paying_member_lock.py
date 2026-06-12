@@ -2,17 +2,16 @@
 
 Exercises the one lock service against the ``resource_locks`` table: acquire /
 release, contention (block then ``LockBusyError``), expiry-steal, token-fenced
-release, independent families, and the multi-member ``lock`` (acquire all / dedupe
-/ no deadlock on the same pair / max-hold abort). The resolver is mocked so each
-member resolves to itself as the paying parent; the timing constants are
-monkeypatched small so the tests run fast.
+release, independent payers, and the multi-key ``lock`` (acquire all / dedupe
+/ no deadlock on the same pair / max-hold abort). Keys are the passed ids
+directly (no resolution); the timing settings are monkeypatched small so the
+tests run fast.
 
 Requires a migrated local DB (the ``resource_locks`` table).
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
@@ -32,22 +31,9 @@ async def _force_delete(db_pool, *keys: str) -> None:
         await session.commit()
 
 
-def _resolver() -> MagicMock:
-    """A resolver where each member resolves to itself as the paying parent."""
-    resolver = MagicMock()
-
-    async def _resolve(member_id: UUID) -> MagicMock:
-        parent = MagicMock()
-        parent.member_id = member_id
-        return parent
-
-    resolver.resolve_parent = AsyncMock(side_effect=_resolve)
-    return resolver
-
-
 @pytest.fixture
 def lock(db_pool) -> PayingMemberLock:
-    return PayingMemberLock(db_pool, _resolver())
+    return PayingMemberLock(db_pool)
 
 
 @pytest.fixture

@@ -118,7 +118,7 @@ class InvoicePaidHandler:
         raw_metadata = invoice_metadata(invoice)
         is_one_time = raw_metadata.get("crm_one_time_payment") == STRIPE_METADATA_TRUE
 
-        member_id = await self._resolve_member_id(
+        member_id, payer_member_id = await self._resolve_member_id(
             session,
             invoice,
             gym_id,
@@ -151,7 +151,8 @@ class InvoicePaidHandler:
 
         if not is_one_time:
             await self._update_memberships(session, invoice, gym_id)
-            await self._settle_once_discounts(member_id, gym_id)
+            if payer_member_id is not None:
+                await self._settle_once_discounts(payer_member_id, gym_id)
 
         await self._capture_discounts(
             session,
@@ -171,13 +172,17 @@ class InvoicePaidHandler:
         *,
         raw_metadata: dict[str, str],
         is_one_time: bool,
-    ) -> UUID | None:
-        """Find a member_id for this invoice.
+    ) -> tuple[UUID | None, UUID | None]:
+        """Find the (member_id, payer_member_id) for this invoice.
 
-        One-time invoices carry ``member_id`` directly in metadata
-        (they have no subscription item to look up). Subscription
-        invoices are resolved by matching any line's
-        ``subscription_item`` against ``member_memberships``.
+        ``member_id`` is the OWNER/beneficiary (invoice + charge
+        attribution); ``payer_member_id`` is the membership's
+        ``paid_by_member_id`` — whose subscription billed it, the target
+        of the once-discount settle. One-time invoices carry ``member_id``
+        directly in metadata (no subscription item to look up; no settle
+        runs, so the payer is ``None``). Subscription invoices are
+        resolved by matching any line's ``subscription_item`` against
+        ``member_memberships``.
         """
         if is_one_time:
             member_id_str = raw_metadata.get("member_id")
@@ -186,7 +191,7 @@ class InvoicePaidHandler:
                     "invoice.paid one-time invoice is missing member_id "
                     f"in metadata (stripe_invoice_id={invoice.get('id')})"
                 )
-            return UUID(member_id_str)
+            return UUID(member_id_str), None
 
         membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
         for line in self._lines(invoice):
@@ -202,8 +207,8 @@ class InvoicePaidHandler:
             )
             row = result.mappings().fetchone()
             if row is not None:
-                return row["member_id"]
-        return None
+                return row["member_id"], row["paid_by_member_id"]
+        return None, None
 
     async def _upsert_invoice(
         self,
@@ -360,15 +365,15 @@ class InvoicePaidHandler:
 
     async def _settle_once_discounts(
         self,
-        member_id: UUID,
+        payer_member_id: UUID,
         gym_id: UUID,
     ) -> None:
         """Promptly finalize any ``once`` discount Stripe just invoiced.
 
         When a subscription invoice is paid, a consumed ``once`` coupon drops off
         the live sub — stamp its ``end_date`` now instead of waiting for the
-        member's next manual op (or the deferred reconciler). A no-op when the
-        family has no unconsumed ``once`` discounts.
+        member's next manual op (or the reconciler sweep). A no-op when the
+        payer has no unconsumed ``once`` discounts.
 
         Best-effort: a failure here must NOT roll back the invoice/charge writes
         (the critical path), so it is logged and swallowed — the next sync /
@@ -376,20 +381,20 @@ class InvoicePaidHandler:
         own DB transaction (a separate pool), independent of this webhook's.
         """
         try:
-            async with self._paying_lock.lock([member_id]):
-                await self._sync.settle_once_discounts(member_id)
+            async with self._paying_lock.lock([payer_member_id]):
+                await self._sync.settle_once_discounts(payer_member_id)
         except LockBusyError:
             logger.info(
-                "invoice.paid once-discount settle skipped (family busy) for "
-                "member_id=%s gym_id=%s; the next sync settles it",
-                member_id,
+                "invoice.paid once-discount settle skipped (payer busy) for "
+                "payer=%s gym_id=%s; the next sync settles it",
+                payer_member_id,
                 gym_id,
             )
         except Exception:
             logger.error(
                 "invoice.paid once-discount settle failed for "
-                "member_id=%s gym_id=%s",
-                member_id,
+                "payer=%s gym_id=%s",
+                payer_member_id,
                 gym_id,
                 exc_info=True,
             )

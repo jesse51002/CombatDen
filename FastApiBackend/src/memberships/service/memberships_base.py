@@ -97,18 +97,19 @@ class MemberMembershipsBase:
             row = result.fetchone()
         return StripeSyncStatus(row[0]) if row else None
 
-    async def _pre_sync_payments(self, member_id: UUID) -> None:
-        """Converge the family to a clean DB↔Stripe baseline BEFORE mutating.
+    async def _pre_sync_payments(self, payer_member_id: UUID) -> None:
+        """Converge the payer to a clean DB↔Stripe baseline BEFORE mutating.
 
-        Every lifecycle op runs this first so it never builds a new desired state
-        on top of a DB that has drifted from Stripe (e.g. a half-finished prior
-        op left a pending or unsettled row). Uses a FRESH idempotency key —
-        independent of the operation's own key, since it is a separate converge —
-        and default ``proration_behavior`` (``none``), so it reconciles without
-        billing. If it raises, the operation aborts before any DB change.
+        Every prorating lifecycle op runs this first so it never builds a new
+        desired state on top of a DB that has drifted from Stripe (e.g. a
+        half-finished prior op left a pending or unsettled row). Uses a FRESH
+        idempotency key — independent of the operation's own key, since it is a
+        separate converge — and default ``proration_behavior`` (``none``), so it
+        reconciles without billing. If it raises, the operation aborts before
+        any DB change.
         """
         await self._payment_sync.update_payments_recurring(
-            member_id,
+            payer_member_id,
             idempotency_key=uuid4(),
         )
 
@@ -218,9 +219,9 @@ class MemberMembershipsBase:
     ) -> dict[tuple[UUID, UUID], UUID]:
         """Insert membership rows in ONE multi-row statement.
 
-        Each row dict carries: member_id, gym_id, plan_id, price_id,
-        start_date, end_date, last_paid_date, next_due_date, stripe_item_id,
-        prorate, total_price, and optionally sync_status (default
+        Each row dict carries: member_id, paid_by_member_id, gym_id, plan_id,
+        price_id, start_date, end_date, last_paid_date, next_due_date,
+        stripe_item_id, prorate, total_price, and optionally sync_status (default
         ``not_added`` — the real start's pending row; the start preview
         passes ``preview_add`` so the dry-run sees it but the real path
         never bills it). All rows appear atomically, or none.
@@ -232,6 +233,7 @@ class MemberMembershipsBase:
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
             "member_ids": [str(r["member_id"]) for r in rows],
+            "paid_by_member_ids": [str(r["paid_by_member_id"]) for r in rows],
             "gym_ids": [str(r["gym_id"]) for r in rows],
             "plan_ids": [str(r["plan_id"]) for r in rows],
             "price_ids": [str(r["price_id"]) for r in rows],
@@ -268,7 +270,8 @@ class MemberMembershipsBase:
         """Build the start op's membership insert rows, one per item.
 
         Shared by the real start (``not_added``) and the staged preview
-        (``preview_add``) so the two stage IDENTICAL rows. A non-recurring
+        (``preview_add``) so the two stage IDENTICAL rows. Every row's
+        ``paid_by_member_id`` is the request's single payer. A non-recurring
         plan with a duration gets its absolute ``end_date`` resolved here.
         """
         rows: list[dict] = []
@@ -290,6 +293,7 @@ class MemberMembershipsBase:
                 )
             rows.append({
                 "member_id": item.member_id,
+                "paid_by_member_id": request.payer_member_id,
                 "gym_id": request.gym_id,
                 "plan_id": plan_price["plan_id"],
                 "price_id": item.price_id,
