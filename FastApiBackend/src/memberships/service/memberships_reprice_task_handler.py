@@ -2,17 +2,17 @@
 
 The bridge between the generic tasks executor and the task-agnostic
 ``MemberMembershipsReprice``: it translates the item's typed parameters into
-a plain ``reprice(...)`` call and persists the old→new linkage
-(``task_items.new_item_id``) via the reprice's generic in-transaction hook —
-the durable marker the orphan-sweep exclusion and the CRM badge read. The
+a plain ``reprice(...)`` call and, on success, records the returned successor
+onto the item (``task_items.new_item_id`` — the old→new linkage the CRM badge
+reads). The reprice handles its own failure (verify-or-revert), so a failed
+item simply carries the error — the membership is exactly as it was. The
 reprice itself knows nothing about tasks; this adapter is the only place the
 two meet.
 """
 
 import logging
-from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships.service.memberships_reprice import (
@@ -33,35 +33,43 @@ class MemberMembershipsRepriceTaskHandler:
         db_pool: DirectDatabasePool,
         reprice_service: MemberMembershipsReprice,
     ) -> None:
+        self._db_pool = db_pool
         self._reprice = reprice_service
         self._tasks_queries = TasksQueries(db_pool)
 
     async def execute_item(self, item: TaskItemResponse) -> None:
         """Execute one claimed reprice item; raises on failure (retried).
 
+        An item that already carries a ``new_item_id`` finished its reprice
+        on a previous run (the process died between the reprice succeeding
+        and the item being marked completed) — nothing left to do.
+
         Raises:
             ValueError: If the item is missing its reprice parameters, or
-                the reprice no longer validates.
+                the reprice does not validate.
             LockBusyError / SyncNotConfirmedError: Propagated from the
-                reprice (retryable).
+                reprice (retryable; the reprice reverted itself).
         """
         if item.old_item_id is None or item.target_price_id is None:
             raise ValueError(
                 f"Reprice item missing parameters: "
                 f"task_item_id={item.task_item_id}"
             )
+        if item.new_item_id is not None:
+            return
 
-        async def _record(session: AsyncSession, new_item_id: UUID) -> None:
+        new_item_id = await self._reprice.reprice(
+            member_id=item.member_id,
+            old_item_id=item.old_item_id,
+            target_price_id=item.target_price_id,
+            prorate=bool(item.prorate),
+        )
+
+        session: AsyncSession
+        async with self._db_pool.session() as session:
             await self._tasks_queries.set_item_new_membership(
                 session,
                 item.task_item_id,
                 new_item_id,
             )
-
-        await self._reprice.reprice(
-            member_id=item.member_id,
-            old_item_id=item.old_item_id,
-            target_price_id=item.target_price_id,
-            prorate=bool(item.prorate),
-            record_successor=_record,
-        )
+            await session.commit()

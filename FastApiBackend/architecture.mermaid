@@ -38,9 +38,9 @@ flowchart TB
     reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>invoice-fetch → orphan-clean (skips task-referenced rows) → push<br/>per-family lock guards mutations; no sweep-wide lock"]
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     tasks_service["TasksService — src/tasks/ · tracked background ops<br/>create/read tasks + items · the in-task guard<br/>(item-targeted membership ops reject mid-task rows → 409)"]
-    tasks_executor["TasksExecutor — src/tasks/ · runs task items<br/>atomic claim → handler dispatch → retry ×3 → failed (no revert)<br/>+ 5-min stale-sweep (APScheduler, shared with reconciler)"]
-    memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC reprice (params in, successor id out):<br/>cancel old row + insert successor + copy discounts (one txn) → converge → verify<br/>idempotent resume via successor detection · generic in-txn record hook"]
-    memberships_reprice_task_handler["MemberMembershipsRepriceTaskHandler<br/>src/memberships/ · thin adapter, no op logic:<br/>item params → reprice; stamps new_item_id via the record hook"]
+    tasks_executor["TasksExecutor — src/tasks/ · runs task items<br/>atomic claim → handler dispatch → retry ×3 → failed (ops self-revert)<br/>+ 5-min stale-sweep (APScheduler, shared with reconciler)"]
+    memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC reprice (params in, successor id out):<br/>cancel old row + insert successor + copy discounts (one txn)<br/>→ converge → verify-or-REVERT (standard DB-first contract)"]
+    memberships_reprice_task_handler["MemberMembershipsRepriceTaskHandler<br/>src/memberships/ · thin adapter, no op logic:<br/>item params → reprice; records the returned successor on the item"]
     subgraph Payments["💳 Payments — Stripe core (router-less)"]
       direction TB
       p_client["PaymentsStripeClient"]

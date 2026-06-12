@@ -146,7 +146,7 @@ converges Stripe to it.)
 | `memberships_start.py` | a new membership's **recurring** group (its one-time group goes to `PaymentSyncOneTime` instead — §12) |
 | `memberships_cancel.py` | cancel a membership |
 | `memberships_update_price.py` | requests a reprice (validates + creates the `membership_reprice` task; the executor below does the converge) |
-| `memberships_reprice.py` | the task-agnostic reprice op (cancel old row + insert successor, then converge; idempotent resume) |
+| `memberships_reprice.py` | the task-agnostic reprice op (cancel old row + insert successor, then converge; verify-or-revert) |
 | `memberships_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
 
 These callers all live in `src/memberships/service/`.
@@ -215,7 +215,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    | --- | --- | --- | --- |
    | start (recurring) | insert pending row (`not_added`) | row flips `not_added → applied` | delete the pending row |
    | cancel | set `cancel_date` (status stays `applied`) | row flips `applied → deleted` | clear `cancel_date` |
-   | reprice (the `membership_reprice` task executor) | ONE txn: cancel old row effective today + insert successor at the new price (`not_added`) + copy live applied discounts + stamp `new_item_id` on the task item | successor flips `not_added → applied` AND old row flips `applied → deleted` | **NO revert** — the txn IS the desired state (append-only); a failed attempt retries (3×), then the task is `failed` and the reconciler's push sweep converges the pending successor |
+   | reprice (`MemberMembershipsReprice` — standalone, task-agnostic) | ONE txn: cancel old row effective today + insert successor at the new price (`not_added`) + copy live applied discounts | successor flips `not_added → applied` AND old row flips `applied → deleted` | delete the discount copies → delete the pending successor → clear the old row's `cancel_date` (still clearable pre-`deleted`); skipped if the successor's line already stamped (known-residual doctrine — the re-sync/reconciler finishes the converge) |
    | freeze / unfreeze | write / clear the freeze window | — (no membership-row status) | restore / re-clear the freeze window |
    | link / unlink | set / clear `account_linked_to_id` | — (child has no recurring) | unlink / re-link |
 

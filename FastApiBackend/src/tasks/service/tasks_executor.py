@@ -1,13 +1,13 @@
 """Runs tasks: claims items, dispatches to the task_type's handler, retries.
 
 The executor owns the task/item state machine; the operation logic lives in
-each domain's registered handler (e.g. the memberships reprice executor). Per
+each domain's registered handler (e.g. the memberships reprice handler). Per
 item it mirrors the reconciler's bulk-sync retry: claim → execute → on failure
 record the error, release to 'pending', wait, re-claim — up to
 ``TASK_ITEM_MAX_ATTEMPTS`` attempts (never sleeping after the last), then mark
-the item 'failed'. No revert on failure: the operation's DB writes already
-encode the desired state, and the reconciler's push sweep converges any
-leftover pending membership row.
+the item 'failed'. The executor never reverts anything — each operation
+handles its own failure (the DB-first verify-or-revert contract), so a failed
+item is purely a record of the error.
 """
 
 import asyncio

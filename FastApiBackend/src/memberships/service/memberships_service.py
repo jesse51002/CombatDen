@@ -104,11 +104,11 @@ class MemberMembershipsService:
         # acquire here would deadlock to LockBusyError.
         self._paying_lock = paying_lock
         # The in-task guard: every ITEM-targeted op rejects a membership row
-        # referenced by an unfinished task (the family lock only serializes
-        # in-flight attempts; a task awaiting retry holds no lock, so the
-        # guard is what protects its desired state between attempts).
-        # Member-level ops (charge_card, freeze, link) are not item-targeted
-        # and stay unguarded.
+        # referenced by an unfinished task — a queued/retrying task holds no
+        # lock, so without the guard a staff op could race the task's pending
+        # work (or double-submit the same reprice). Member-level ops
+        # (charge_card, freeze, link) are not item-targeted and stay
+        # unguarded.
         self._tasks = tasks_service
         deps = (
             db_pool,

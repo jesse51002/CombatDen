@@ -11,17 +11,27 @@ DB phase (lock-busy exhaustion), and staff retry = re-submitting the reprice.
 from uuid import UUID, uuid4
 
 import pytest
+import stripe
 from schema.task import TaskType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
+from src.memberships.memberships_schema import (
+    MemberMembershipsStartItem,
+    MemberMembershipsStartRequest,
+)
+from src.payments.payments_exceptions import PaymentsStripeError
 from src.plans.plans_schema import MembershipPlanPriceRequest
+from src.shared.db_first_helpers import SyncNotConfirmedError
 from src.tasks.service.tasks_queries import TasksQueries
 from src.tasks.service.tasks_service import TasksService
 from src.tasks.tasks_exceptions import MembershipInTaskError
 from src.tasks.tasks_schema import TaskItemCreate
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.db_reads import await_task_terminal
+from tests.helpers.db_reads import (
+    await_task_terminal,
+    get_applied_discounts,
+)
 from tests.helpers.service_factory import (
     build_memberships_reprice,
     build_paying_member_lock,
@@ -130,7 +140,7 @@ async def test_in_task_guard_blocks_item_ops(
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_reprice_resumes_after_db_phase(
+async def test_reprice_reverts_on_failed_converge(
     memberships_service,
     plans_service,
     db_pool,
@@ -139,26 +149,50 @@ async def test_reprice_resumes_after_db_phase(
     connect_opts,
     created,
 ):
-    """A re-run that finds the DB phase already written resumes by itself.
+    """A converge failure REVERTS the reprice's DB phase entirely.
 
-    The reprice is task-agnostic, so its crash recovery cannot rely on any
-    external marker: when the old row is already cancelled and a live
-    successor at the target price exists, ``reprice`` must detect it,
-    skip the DB phase, and just converge + verify.
+    The reprice is a standalone DB-first op — it handles its own failure
+    like cancel/start do: an unconfirmed converge deletes the discount
+    copies + the pending successor and clears the old row's cancel_date,
+    leaving the membership exactly as it was. Failure is injected by
+    pointing the target price at a nonexistent Stripe price.
     """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
     plan = await created.plan(gym_id)
+    preset = await created.discount(gym_id, percentage_off=20)
     reprice_service = build_memberships_reprice(db_pool, stripe_client)
 
     try:
-        item_id = await _start_and_get_item_id(
-            memberships_service,
-            db_pool,
-            member,
-            gym_id,
-            plan,
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                        discount_ids=[preset.discount_id],
+                    ),
+                ],
+            )
         )
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT item_id FROM member_memberships "
+                    "WHERE member_id = :id AND plan_id = :plan_id"
+                ),
+                {
+                    "id": str(member.member_id),
+                    "plan_id": str(plan.plan_id),
+                },
+            )
+            item_id = UUID(str(result.scalar_one()))
+        discounts_before = await get_applied_discounts(db_pool, item_id)
+        assert len(discounts_before) == 1
+
         new_price = await plans_service.set_price(
             MembershipPlanPriceRequest(
                 plan_id=plan.plan_id,
@@ -166,50 +200,50 @@ async def test_reprice_resumes_after_db_phase(
                 price=8000,
             ),
         )
-
-        # Simulate a run that died after its DB phase: cancel the old row
-        # effective today + insert the pending successor, exactly as the
-        # reprice transaction writes them.
+        # Failure injection: the converge must die when it tries to put the
+        # successor's line on Stripe.
         async with db_pool.session() as session:
             await session.execute(
                 text(
-                    "UPDATE member_memberships_unfiltered "
-                    "SET cancel_date = CURRENT_DATE WHERE item_id = :i"
+                    "UPDATE membership_plan_prices_unfiltered "
+                    "SET stripe_price_id = 'price_nonexistent_for_test' "
+                    "WHERE price_id = :p"
                 ),
-                {"i": str(item_id)},
+                {"p": str(new_price.price_id)},
             )
-            result = await session.execute(
-                text(
-                    "INSERT INTO member_memberships_unfiltered "
-                    "(member_id, gym_id, plan_id, price_id, start_date, "
-                    " last_paid_date, total_price) "
-                    "VALUES (:member_id, :gym_id, :plan_id, :price_id, "
-                    " CURRENT_DATE, CURRENT_DATE, 8000) "
-                    "RETURNING item_id"
-                ),
-                {
-                    "member_id": str(member.member_id),
-                    "gym_id": str(gym_id),
-                    "plan_id": str(plan.plan_id),
-                    "price_id": str(new_price.price_id),
-                },
-            )
-            staged_successor = UUID(str(result.scalar_one()))
             await session.commit()
 
-        returned = await reprice_service.reprice(
-            member_id=member.member_id,
-            old_item_id=item_id,
-            target_price_id=new_price.price_id,
-            prorate=False,
-        )
+        with pytest.raises(
+            (PaymentsStripeError, SyncNotConfirmedError, stripe.StripeError)
+        ):
+            await reprice_service.reprice(
+                member_id=member.member_id,
+                old_item_id=item_id,
+                target_price_id=new_price.price_id,
+                prorate=False,
+            )
 
-        assert returned == staged_successor  # resumed, not re-written
-        old_row = await _get_membership_row(db_pool, item_id)
-        assert old_row["status"] == "deleted"
-        new_row = await _get_membership_row(db_pool, staged_successor)
-        assert new_row["status"] == "applied"
-        assert new_row["stripe_item_id"] is not None
+        # Fully reverted: old row live and untouched, no successor row,
+        # the applied discount exactly as it was (no copies left behind).
+        row = await _get_membership_row(db_pool, item_id)
+        assert row["cancel_date"] is None
+        assert row["status"] == "applied"
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT count(*) FROM member_memberships_unfiltered "
+                    "WHERE member_id = :id AND price_id = :p"
+                ),
+                {
+                    "id": str(member.member_id),
+                    "p": str(new_price.price_id),
+                },
+            )
+            assert int(result.scalar_one()) == 0
+        discounts_after = await get_applied_discounts(db_pool, item_id)
+        assert {str(d["applied_discount_id"]) for d in discounts_after} == {
+            str(d["applied_discount_id"]) for d in discounts_before
+        }
     finally:
         await delete_member_data(db_pool, member.member_id)
 

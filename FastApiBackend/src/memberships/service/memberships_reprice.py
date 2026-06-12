@@ -1,4 +1,4 @@
-"""Run ONE membership reprice (append-only) — task-agnostic.
+"""Run ONE membership reprice (append-only, DB-first verify-or-revert).
 
 A reprice never mutates the membership row — ``price_id`` and
 ``stripe_item_id`` are trigger-enforced immutable. One DB transaction cancels
@@ -9,17 +9,16 @@ line decremented or removed, new line created or joined, prorated per the
 request — and the existing writeback stamps the successor ``applied`` and the
 old row ``deleted``.
 
-This service knows NOTHING about how it is dispatched: plain parameters in,
-the successor's item_id out, plus an optional generic in-transaction hook so
-a caller can persist the old→new linkage atomically with the reprice's own
-writes. It is idempotent/resumable on its own: a re-run that finds the old
-row already cancelled with a live successor at the target price skips
-straight to the convergent sync. No revert on failure — the transaction IS
-the desired state; re-running converges it.
+A standalone operation like every other lifecycle op: it knows NOTHING about
+how it is dispatched (a tracked task today, a direct CRM call tomorrow) —
+plain parameters in, the successor's item_id out — and it handles its own
+failure with the standard ``sync_or_revert`` contract: an unconfirmed
+converge REVERTS the DB phase (discount copies → pending successor → the old
+row's ``cancel_date``, still clearable pre-'deleted') and raises, leaving the
+membership exactly as it was.
 """
 
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import date
 from uuid import UUID, uuid4
 
@@ -33,7 +32,7 @@ from src.memberships.service.memberships_base import (
     MemberMembershipsBase,
 )
 from src.shared.database import DirectDatabasePool
-from src.shared.db_first_helpers import SyncNotConfirmedError
+from src.shared.db_first_helpers import sync_or_revert
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.gym_timezone import gym_today
 from src.shared.paying_member_lock import PayingMemberLock
@@ -41,11 +40,6 @@ from src.shared.sql_loader import load_sql
 from src.sync.service.sync_service import PaymentSyncService
 
 logger = logging.getLogger(__name__)
-
-# Optional caller hook, executed INSIDE the reprice's DB transaction with the
-# successor's item_id — for persisting linkage atomically with the reprice's
-# own writes. The reprice neither knows nor cares what the hook does.
-RecordSuccessor = Callable[[AsyncSession, UUID], Awaitable[None]]
 
 
 class MemberMembershipsReprice(MemberMembershipsBase):
@@ -67,86 +61,94 @@ class MemberMembershipsReprice(MemberMembershipsBase):
         old_item_id: UUID,
         target_price_id: UUID,
         prorate: bool,
-        record_successor: RecordSuccessor | None = None,
     ) -> UUID:
-        """Run one reprice; returns the successor row's item_id.
+        """Run one reprice (DB-first); returns the successor row's item_id.
 
-        Takes the family lock itself. Idempotent: a re-run after a crash or
-        failed converge resumes — old row already cancelled + live successor
-        at the target price found → skip to the sync. A membership already
-        sitting on the target price (a race; callers validate against it)
-        gets a defensive billing-safe re-sync and returns its own item_id.
+        Takes the family lock itself. A membership already sitting on the
+        target price (a race; callers validate against it) gets a defensive
+        billing-safe re-sync and returns its own item_id.
 
         Args:
             member_id: The member being repriced.
             old_item_id: The membership row being replaced.
             target_price_id: Must be the plan's currently active price.
             prorate: ``always_invoice`` vs ``none`` on the converge.
-            record_successor: Optional hook run inside the reprice's DB
-                transaction with (session, successor item_id).
 
         Raises:
-            LockBusyError: The family is busy (retry later).
-            ValueError: The membership no longer validates (gone, cancelled
-                with no successor, ended, or the target is no longer the
-                plan's active price).
-            SyncNotConfirmedError: The converge did not confirm on Stripe.
-                Nothing is reverted — re-running converges the same desired
-                state.
+            LockBusyError: The family is busy.
+            ValueError: The membership does not validate (not found,
+                cancelled, ended, or the target is no longer the plan's
+                active price).
+            SyncNotConfirmedError: The converge could not be confirmed on
+                Stripe — the DB phase has been reverted, the membership is
+                exactly as it was.
         """
         async with self._paying_lock.lock([member_id]):
-            new_item_id = await self._ensure_desired_state(
+            row = await self._get_membership(old_item_id, member_id)
+            self._validate_reprice(row, old_item_id, member_id)
+
+            if UUID(str(row["price_id"])) == target_price_id:
+                # Already on the target (callers reject no-ops; a race can
+                # still land here). Nothing to write — re-sync defensively,
+                # without proration so it can never bill.
+                await self._payment_sync.update_payments_recurring(
+                    member_id,
+                    idempotency_key=uuid4(),
+                    proration_behavior="none",
+                )
+                return old_item_id
+
+            target_price = await self._get_target_price(
+                row,
+                old_item_id,
+                target_price_id,
+            )
+
+            # Prorating op: converge the family to a clean baseline first.
+            await self._pre_sync_payments(member_id)
+
+            new_item_id = await self._write_db_phase(
+                row,
                 member_id,
                 old_item_id,
                 target_price_id,
+                target_price,
                 prorate,
-                record_successor,
             )
 
-            # ── Sync phase: idempotent/convergent, safe to re-run. The
-            # defensive no-op (successor == old row: nothing changed) syncs
-            # without proration so it can never bill.
-            is_noop = new_item_id == old_item_id
-            do_prorate = prorate and not is_noop
-            await self._payment_sync.update_payments_recurring(
-                member_id,
-                idempotency_key=uuid4(),
-                proration_behavior=(
-                    "always_invoice" if do_prorate else "none"
+            await sync_or_revert(
+                sync_fn=lambda: self._payment_sync.update_payments_recurring(
+                    member_id,
+                    idempotency_key=uuid4(),
+                    proration_behavior=(
+                        "always_invoice" if prorate else "none"
+                    ),
+                ),
+                revert_fn=lambda: self._revert_db_phase(
+                    member_id,
+                    old_item_id,
+                    new_item_id,
+                ),
+                entity_name="member_membership_reprice",
+                crm_pk=str(old_item_id),
+                verify_fn=lambda: self._verify(
+                    member_id,
+                    old_item_id,
+                    new_item_id,
                 ),
             )
-
-            await self._verify(member_id, old_item_id, new_item_id)
             return new_item_id
 
     # ── Private ────────────────────────────────────────────────
 
-    async def _ensure_desired_state(
+    def _validate_reprice(
         self,
-        member_id: UUID,
+        row: dict,
         old_item_id: UUID,
-        target_price_id: UUID,
-        prorate: bool,
-        record_successor: RecordSuccessor | None,
-    ) -> UUID:
-        """Make the DB encode the reprice; returns the successor item_id.
-
-        Either writes it (cancel old + insert successor + copy discounts,
-        one transaction) or recognizes it is already written (resume) /
-        already true (no-op).
-        """
-        row = await self._get_membership(old_item_id, member_id)
-
+        member_id: UUID,
+    ) -> None:
+        """Validate the membership can be repriced."""
         if row["cancel_date"] is not None:
-            successor = await self._find_successor(
-                member_id,
-                row,
-                target_price_id,
-            )
-            if successor is not None:
-                # Resume: a prior run's DB phase already wrote the desired
-                # state; only the converge is left.
-                return successor
             raise ValueError(
                 f"Cannot reprice cancelled membership: "
                 f"item_id={old_item_id}, member_id={member_id}"
@@ -159,86 +161,6 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 f"Cannot reprice ended membership: "
                 f"item_id={old_item_id}, member_id={member_id}"
             )
-
-        if UUID(str(row["price_id"])) == target_price_id:
-            # Already on the target (a race; callers reject no-ops). The
-            # old row IS the desired state — record it as its own successor.
-            if record_successor is not None:
-                async with self._db_pool.session() as session:
-                    await record_successor(session, old_item_id)
-                    await session.commit()
-            return old_item_id
-
-        target_price = await self._get_target_price(
-            row,
-            old_item_id,
-            target_price_id,
-        )
-
-        # Prorating op: converge the family to a clean baseline first.
-        await self._pre_sync_payments(member_id)
-
-        today = gym_today(row["timezone"])
-        async with self._db_pool.session() as session:
-            # Order matters for the DB gates: the old row's cancellation must
-            # be effective before the successor INSERT (no-active/overlap
-            # triggers) and before the discount copies (single-LIVE custom
-            # trigger). FK targets: successor before copies.
-            await self._cancel_immediate(
-                session,
-                old_item_id,
-                member_id,
-                today,
-            )
-            new_item_id = await self._insert_successor(
-                session,
-                row,
-                member_id,
-                target_price_id,
-                target_price,
-                prorate,
-                today,
-            )
-            await self._copy_applied_discounts(
-                session,
-                old_item_id,
-                new_item_id,
-                today,
-            )
-            if record_successor is not None:
-                await record_successor(session, new_item_id)
-            await session.commit()
-
-        logger.info(
-            "Reprice DB phase done: old_item_id=%s -> new_item_id=%s "
-            "(price %s -> %s)",
-            old_item_id,
-            new_item_id,
-            row["price_id"],
-            target_price_id,
-        )
-        return new_item_id
-
-    async def _find_successor(
-        self,
-        member_id: UUID,
-        row: dict,
-        target_price_id: UUID,
-    ) -> UUID | None:
-        """The member's live row on the target price (resume detection)."""
-        sql = load_sql(SQL_DIR / "member_memberships_find_successor.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {
-                    "member_id": str(member_id),
-                    "gym_id": str(row["gym_id"]),
-                    "plan_id": str(row["plan_id"]),
-                    "target_price_id": str(target_price_id),
-                },
-            )
-            found = result.fetchone()
-        return UUID(str(found[0])) if found else None
 
     async def _get_target_price(
         self,
@@ -264,6 +186,100 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 f"item_id={old_item_id}"
             )
         return active_price
+
+    async def _write_db_phase(
+        self,
+        row: dict,
+        member_id: UUID,
+        old_item_id: UUID,
+        target_price_id: UUID,
+        target_price: dict,
+        prorate: bool,
+    ) -> UUID:
+        """Write the reprice's desired state in ONE transaction.
+
+        Order matters for the DB gates: the old row's cancellation must be
+        effective before the successor INSERT (no-active/overlap triggers)
+        and before the discount copies (single-LIVE custom trigger). FK
+        targets: successor before copies.
+        """
+        today = gym_today(row["timezone"])
+        async with self._db_pool.session() as session:
+            await self._cancel_immediate(
+                session,
+                old_item_id,
+                member_id,
+                today,
+            )
+            new_item_id = await self._insert_successor(
+                session,
+                row,
+                member_id,
+                target_price_id,
+                target_price,
+                prorate,
+                today,
+            )
+            await self._copy_applied_discounts(
+                session,
+                old_item_id,
+                new_item_id,
+                today,
+            )
+            await session.commit()
+
+        logger.info(
+            "Reprice DB phase written: old_item_id=%s -> new_item_id=%s "
+            "(price %s -> %s)",
+            old_item_id,
+            new_item_id,
+            row["price_id"],
+            target_price_id,
+        )
+        return new_item_id
+
+    async def _revert_db_phase(
+        self,
+        member_id: UUID,
+        old_item_id: UUID,
+        new_item_id: UUID,
+    ) -> None:
+        """Undo the reprice's DB phase after an unconfirmed converge.
+
+        Reverse order of the write: discount copies → pending successor →
+        clear the old row's ``cancel_date`` (allowed — the old row was never
+        stamped 'deleted', which is exactly the unconfirmed case).
+
+        Known-residual guard (same doctrine as the other DB-first reverts):
+        if the writeback already stamped the successor's line id, the swap
+        materially landed on Stripe — the successor row is permanent (its
+        line id is immutable, a historical record) and un-cancelling the old
+        row would resurrect a second live membership. The revert is skipped;
+        the idempotent re-sync / reconciler finishes the converge.
+        """
+        new_status = await self._get_sync_status(new_item_id, member_id)
+        if new_status == StripeSyncStatus.applied:
+            logger.warning(
+                "Reprice revert skipped — successor already on Stripe "
+                "(new_item_id=%s); the re-sync/reconciler completes it",
+                new_item_id,
+            )
+            return
+
+        async with self._db_pool.session() as session:
+            await self._delete_copied_discounts(session, new_item_id)
+            await session.commit()
+        await self._delete_pending([new_item_id])
+        async with self._db_pool.session() as session:
+            sql = load_sql(SQL_DIR / "member_memberships_uncancel.sql")
+            await session.execute(
+                text(sql),
+                {
+                    "item_id": str(old_item_id),
+                    "member_id": str(member_id),
+                },
+            )
+            await session.commit()
 
     async def _cancel_immediate(
         self,
@@ -333,30 +349,25 @@ class MemberMembershipsReprice(MemberMembershipsBase):
             },
         )
 
+    async def _delete_copied_discounts(
+        self,
+        session: AsyncSession,
+        new_item_id: UUID,
+    ) -> None:
+        sql = load_sql(
+            SQL_DIR / "applied_discounts" / "delete_copied_discounts.sql"
+        )
+        await session.execute(text(sql), {"item_id": str(new_item_id)})
+
     async def _verify(
         self,
         member_id: UUID,
         old_item_id: UUID,
         new_item_id: UUID,
-    ) -> None:
-        """The converge must have landed: successor applied, old row deleted.
-
-        Raises:
-            SyncNotConfirmedError: If the writeback did not confirm. Nothing
-                is reverted — the DB already encodes the desired state; a
-                re-run (or the reconciler's push sweep) converges it.
-        """
+    ) -> bool:
+        """The converge landed iff successor 'applied' AND old row 'deleted'."""
         new_status = await self._get_sync_status(new_item_id, member_id)
         if new_status != StripeSyncStatus.applied:
-            raise SyncNotConfirmedError(
-                f"Reprice not confirmed: successor row not applied "
-                f"(new_item_id={new_item_id}, status={new_status})"
-            )
-        if new_item_id == old_item_id:
-            return  # defensive no-op: there is no separate old row
+            return False
         old_status = await self._get_sync_status(old_item_id, member_id)
-        if old_status != StripeSyncStatus.deleted:
-            raise SyncNotConfirmedError(
-                f"Reprice not confirmed: old row not deleted "
-                f"(old_item_id={old_item_id}, status={old_status})"
-            )
+        return old_status == StripeSyncStatus.deleted
