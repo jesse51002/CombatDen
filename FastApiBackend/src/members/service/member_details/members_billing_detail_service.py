@@ -170,7 +170,12 @@ class MembersBillingDetailService:
             linked_to_account=linked_to_account,
             linked_accounts=linked_accounts,
             streak_weeks=streak_weeks,
-            total_monthly_recurring_price=(parent_row["total_monthly_recurring_price"]),
+            # Per-payer semantics: the QUERIED member's own row carries what
+            # THEY pay monthly (the sync writes each payer's own total; a
+            # member who pays nothing reads 0).
+            total_monthly_recurring_price=(
+                target_row["total_monthly_recurring_price"] or 0
+            ),
             today=today,
         )
 

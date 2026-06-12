@@ -84,6 +84,7 @@ class MembersBillingGrouper:
             members = {
                 row["member_id"]: BillingMembershipMemberInfo(
                     item_id=row["item_id"],
+                    paid_by_member_id=row["paid_by_member_id"],
                     end_date=row["membership_end_date"],
                     cancel_date=row["membership_cancel_date"],
                     on_outdated_price=bool(row["on_outdated_price"]),

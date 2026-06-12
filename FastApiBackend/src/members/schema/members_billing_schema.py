@@ -108,9 +108,13 @@ class BillingMembershipMemberInfo(BaseModel):
     post-discount share — the plan price minus this member's own
     discounts), so the CRM renders the membership card atomically for one
     covered member at a time rather than as a family-wide aggregate.
+    ``paid_by_member_id`` is the membership's PAYER — whose subscription
+    bills it (the member themselves, or their linked parent) — driving the
+    CRM's "Paid by" display.
     """
 
     item_id: UUID
+    paid_by_member_id: UUID
     end_date: date | None = None
     cancel_date: date | None = None
     on_outdated_price: bool = False
