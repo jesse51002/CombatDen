@@ -146,7 +146,7 @@ converges Stripe to it.)
 | `memberships_start.py` | a new membership's **recurring** group (its one-time group goes to `PaymentSyncOneTime` instead — §12) |
 | `memberships_cancel.py` | cancel a membership |
 | `memberships_update_price.py` | requests a reprice (validates + creates the `membership_reprice` task; the executor below does the converge) |
-| `memberships_reprice_executor.py` | the reprice task's per-item executor (cancel old row + insert successor, then converge) |
+| `memberships_reprice.py` | the task-agnostic reprice op (cancel old row + insert successor, then converge; idempotent resume) |
 | `memberships_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
 
 These callers all live in `src/memberships/service/`.

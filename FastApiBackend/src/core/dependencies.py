@@ -30,8 +30,11 @@ from src.members.service.member_details.members_billing_detail_service import (
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
-from src.memberships.service.memberships_reprice_executor import (
-    MemberMembershipsRepriceExecutor,
+from src.memberships.service.memberships_reprice import (
+    MemberMembershipsReprice,
+)
+from src.memberships.service.memberships_reprice_task_handler import (
+    MemberMembershipsRepriceTaskHandler,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -296,20 +299,29 @@ class DependencyInjector(containers.DeclarativeContainer):
     # acyclic: domain facades depend on TasksService to create/read tasks,
     # while TasksExecutor depends on the domains' per-type item handlers.
     tasks_service = providers.Factory(TasksService, db_pool=db_pool)
-    # The membership_reprice item handler (append-only reprice: cancel old
-    # row + insert successor in one txn, then the convergent sync).
-    memberships_reprice_executor = providers.Factory(
-        MemberMembershipsRepriceExecutor,
+    # The reprice operation itself — task-agnostic (append-only reprice:
+    # cancel old row + insert successor in one txn, then the convergent
+    # sync). Knows nothing about how it is dispatched.
+    memberships_reprice = providers.Factory(
+        MemberMembershipsReprice,
         db_pool=db_pool,
         payment_sync_service=payment_sync_service,
         gym_stripe_service=gym_stripe_service,
         paying_lock=paying_member_lock,
     )
+    # The thin adapter that registers it as the membership_reprice handler
+    # (translates item params + persists the old→new linkage via the
+    # reprice's generic in-txn hook).
+    memberships_reprice_task_handler = providers.Factory(
+        MemberMembershipsRepriceTaskHandler,
+        db_pool=db_pool,
+        reprice_service=memberships_reprice,
+    )
     tasks_executor = providers.Factory(
         TasksExecutor,
         db_pool=db_pool,
         handlers=providers.Dict({
-            TaskType.membership_reprice: memberships_reprice_executor,
+            TaskType.membership_reprice: memberships_reprice_task_handler,
         }),
     )
 

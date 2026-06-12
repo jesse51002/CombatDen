@@ -16,8 +16,11 @@ from src.discounts.service.discounts_service import DiscountsService
 from src.members.service.management.members_management_service import (
     MembersManagementService,
 )
-from src.memberships.service.memberships_reprice_executor import (
-    MemberMembershipsRepriceExecutor,
+from src.memberships.service.memberships_reprice import (
+    MemberMembershipsReprice,
+)
+from src.memberships.service.memberships_reprice_task_handler import (
+    MemberMembershipsRepriceTaskHandler,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -236,19 +239,33 @@ def build_tasks_executor(
 
     Mirrors ``src/core/dependencies.py`` (tasks_executor).
     """
+    reprice_handler = MemberMembershipsRepriceTaskHandler(
+        db_pool=db_pool,
+        reprice_service=build_memberships_reprice(db_pool, stripe_client),
+    )
+    return TasksExecutor(
+        db_pool,
+        handlers={TaskType.membership_reprice: reprice_handler},
+    )
+
+
+def build_memberships_reprice(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MemberMembershipsReprice:
+    """Build the task-agnostic reprice service.
+
+    Mirrors ``src/core/dependencies.py`` (memberships_reprice).
+    """
     gym_stripe_svc = GymStripeService(db_pool)
     parent_resolver = BillingParentResolver(db_pool, gym_stripe_svc)
     paying_lock = PayingMemberLock(db_pool, parent_resolver)
     sync_svc = build_payment_sync_service(db_pool, stripe_client)
-    reprice_executor = MemberMembershipsRepriceExecutor(
+    return MemberMembershipsReprice(
         db_pool=db_pool,
         payment_sync_service=sync_svc,
         gym_stripe_service=gym_stripe_svc,
         paying_lock=paying_lock,
-    )
-    return TasksExecutor(
-        db_pool,
-        handlers={TaskType.membership_reprice: reprice_executor},
     )
 
 

@@ -5,7 +5,8 @@ trigger-enforced immutable, so the membership row is never mutated. This
 service VALIDATES and creates a ``membership_reprice`` task (one item), fires
 its execution in the background, and returns the task_id immediately; the CRM
 polls ``GET /tasks/{task_id}``. The actual cancel-old + insert-successor +
-converge work lives in ``MemberMembershipsRepriceExecutor``.
+converge work lives in the task-agnostic ``MemberMembershipsReprice``
+(dispatched via ``MemberMembershipsRepriceTaskHandler``).
 """
 
 import logging

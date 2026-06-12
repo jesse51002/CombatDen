@@ -22,7 +22,10 @@ from src.tasks.tasks_exceptions import MembershipInTaskError
 from src.tasks.tasks_schema import TaskItemCreate
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import await_task_terminal
-from tests.helpers.service_factory import build_paying_member_lock
+from tests.helpers.service_factory import (
+    build_memberships_reprice,
+    build_paying_member_lock,
+)
 from tests.memberships.test_memberships_update_price import (
     _get_membership_row,
     _get_task_item,
@@ -123,6 +126,90 @@ async def test_in_task_guard_blocks_item_ops(
         await queries.fail_item(claimed.task_item_id, "test: forced terminal")
         await queries.finalize_task_status(task_id)
         await tasks_service.assert_memberships_not_in_task([item_id])
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+async def test_reprice_resumes_after_db_phase(
+    memberships_service,
+    plans_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """A re-run that finds the DB phase already written resumes by itself.
+
+    The reprice is task-agnostic, so its crash recovery cannot rely on any
+    external marker: when the old row is already cancelled and a live
+    successor at the target price exists, ``reprice`` must detect it,
+    skip the DB phase, and just converge + verify.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
+    reprice_service = build_memberships_reprice(db_pool, stripe_client)
+
+    try:
+        item_id = await _start_and_get_item_id(
+            memberships_service,
+            db_pool,
+            member,
+            gym_id,
+            plan,
+        )
+        new_price = await plans_service.set_price(
+            MembershipPlanPriceRequest(
+                plan_id=plan.plan_id,
+                gym_id=gym_id,
+                price=8000,
+            ),
+        )
+
+        # Simulate a run that died after its DB phase: cancel the old row
+        # effective today + insert the pending successor, exactly as the
+        # reprice transaction writes them.
+        async with db_pool.session() as session:
+            await session.execute(
+                text(
+                    "UPDATE member_memberships_unfiltered "
+                    "SET cancel_date = CURRENT_DATE WHERE item_id = :i"
+                ),
+                {"i": str(item_id)},
+            )
+            result = await session.execute(
+                text(
+                    "INSERT INTO member_memberships_unfiltered "
+                    "(member_id, gym_id, plan_id, price_id, start_date, "
+                    " last_paid_date, total_price) "
+                    "VALUES (:member_id, :gym_id, :plan_id, :price_id, "
+                    " CURRENT_DATE, CURRENT_DATE, 8000) "
+                    "RETURNING item_id"
+                ),
+                {
+                    "member_id": str(member.member_id),
+                    "gym_id": str(gym_id),
+                    "plan_id": str(plan.plan_id),
+                    "price_id": str(new_price.price_id),
+                },
+            )
+            staged_successor = UUID(str(result.scalar_one()))
+            await session.commit()
+
+        returned = await reprice_service.reprice(
+            member_id=member.member_id,
+            old_item_id=item_id,
+            target_price_id=new_price.price_id,
+            prorate=False,
+        )
+
+        assert returned == staged_successor  # resumed, not re-written
+        old_row = await _get_membership_row(db_pool, item_id)
+        assert old_row["status"] == "deleted"
+        new_row = await _get_membership_row(db_pool, staged_successor)
+        assert new_row["status"] == "applied"
+        assert new_row["stripe_item_id"] is not None
     finally:
         await delete_member_data(db_pool, member.member_id)
 
