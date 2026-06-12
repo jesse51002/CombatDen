@@ -4,7 +4,8 @@
 -- the engine then converges) while a start PREVIEW inserts 'preview_add'
 -- (the preview build sees it; the real path excludes it so it can never
 -- bill, and the preview deletes it afterward). Arrays are bound and CAST
--- (never :param::type — asyncpg cannot bind that form).
+-- (never a bind followed directly by a double-colon cast — asyncpg cannot
+-- bind that form).
 INSERT INTO member_memberships_unfiltered (
     member_id, gym_id, plan_id, price_id,
     start_date, end_date, last_paid_date, next_due_date,
