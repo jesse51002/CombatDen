@@ -13,7 +13,6 @@ from sqlalchemy import text
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR as MEMBERSHIPS_SQL_DIR
 from src.shared.database import DirectDatabasePool
-from src.shared.payer_profile import PayerProfile
 from src.shared.sql_loader import load_sql
 from src.sync import SQL_DIR
 from src.sync.sync_schema import (
@@ -51,54 +50,33 @@ class PaymentSyncQueries:
     def __init__(self, db_pool: DirectDatabasePool) -> None:
         self._db_pool = db_pool
 
-    # ── Family Members ──────────────────────────────────────────
-
-    async def get_family_ids(
-        self,
-        parent: PayerProfile,
-    ) -> list[UUID]:
-        """Get all family member IDs (parent + linked children)."""
-        sql = load_sql(SYNC_SQL_DIR / "get_family_ids.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {
-                    "parent_member_id": str(parent.member_id),
-                    "gym_id": str(parent.gym_id),
-                },
-            )
-            rows = result.mappings().fetchall()
-
-        return [UUID(str(r["member_id"])) for r in rows]
-
     # ── Active Memberships ──────────────────────────────────────
 
     async def get_active_memberships(
         self,
-        family_ids: list[UUID],
+        payer_member_id: UUID,
         today: date,
         preview: bool = False,
     ) -> list[ActiveMembershipRow]:
-        """Get the family's desired recurring memberships, each with discounts.
+        """Get the payer's desired recurring memberships, each with discounts.
 
-        One call: reads the desired recurring memberships, then their **active**
-        applied discounts (the read excludes any past its end_date as of
-        ``today`` — the gym-timezone date), and attaches each membership's
-        discounts onto its row (the discount rides the membership).
+        Scope is the payer: every membership whose ``paid_by_member_id`` is
+        this payer, regardless of which family member owns it. One call: reads
+        the desired recurring memberships, then their **active** applied
+        discounts (the read excludes any past its end_date as of ``today`` —
+        the gym-timezone date), and attaches each membership's discounts onto
+        its row (the discount rides the membership).
 
         ``preview`` selects which rows the build sees: the **real** path drops
         every ``preview_*`` staged row; the **preview** path keeps ``preview_add``
         (so the dry-run reflects staged additions) and drops ``preview_remove``.
         """
-        if not family_ids:
-            return []
-
         sql = load_sql(SYNC_SQL_DIR / "get_active_recurring.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
                 {
-                    "member_ids": [str(uid) for uid in family_ids],
+                    "payer_member_id": str(payer_member_id),
                     "excluded_statuses": _excluded_statuses(preview),
                 },
             )
@@ -106,7 +84,7 @@ class PaymentSyncQueries:
 
         memberships = [self._parse_membership_row(r) for r in rows]
         discounts_by_item = await self._get_discounts_by_item(
-            family_ids,
+            payer_member_id,
             today,
             preview,
         )
@@ -138,13 +116,14 @@ class PaymentSyncQueries:
 
     async def get_active_one_time(
         self,
-        family_ids: list[UUID],
+        payer_member_id: UUID,
         today: date,
         preview: bool = False,
     ) -> list[ActiveMembershipRow]:
-        """Get the family's PENDING non-recurring memberships + their discounts.
+        """Get the payer's PENDING non-recurring memberships + their discounts.
 
-        Covers BOTH ``one_time`` and ``trial`` plans — a trial bills
+        Scope is the payer (every row whose ``paid_by_member_id`` is this
+        payer). Covers BOTH ``one_time`` and ``trial`` plans — a trial bills
         identically as a $0 line on the same consolidated invoice. The
         **real** path reads only ``not_added`` rows — the just-inserted,
         never-charged memberships this charge bills on the consolidated
@@ -152,12 +131,9 @@ class PaymentSyncQueries:
         so an already-``applied`` row is never re-read (that would re-charge
         it). The **preview** path additionally reads ``preview_add`` (the
         staged row a start preview cuts then rolls back). Reads the unfiltered
-        base (service-role) and reuses the family applied-discount read,
+        base (service-role) and reuses the payer applied-discount read,
         attaching each membership's discounts onto its row.
         """
-        if not family_ids:
-            return []
-
         statuses = [StripeSyncStatus.not_added.value]
         if preview:
             statuses.append(StripeSyncStatus.preview_add.value)
@@ -167,7 +143,7 @@ class PaymentSyncQueries:
             result = await session.execute(
                 text(sql),
                 {
-                    "member_ids": [str(uid) for uid in family_ids],
+                    "payer_member_id": str(payer_member_id),
                     "statuses": statuses,
                 },
             )
@@ -175,7 +151,7 @@ class PaymentSyncQueries:
 
         memberships = [self._parse_membership_row(r) for r in rows]
         discounts_by_item = await self._get_discounts_by_item(
-            family_ids,
+            payer_member_id,
             today,
             preview,
         )
@@ -187,13 +163,14 @@ class PaymentSyncQueries:
 
     async def _get_discounts_by_item(
         self,
-        family_ids: list[UUID],
+        payer_member_id: UUID,
         today: date,
         preview: bool = False,
     ) -> dict[UUID, list[AppliedDiscount]]:
-        """Read the family's active applied discounts, grouped by membership.
+        """Read the payer's active applied discounts, grouped by membership.
 
-        Keyed by ``item_id``. The query excludes any discount past its end_date
+        Keyed by ``item_id``; scoped to memberships whose ``paid_by_member_id``
+        is this payer. The query excludes any discount past its end_date
         as of ``today`` (the gym-timezone date) — the engine's date-lifetime
         cutoff lives in the SQL, not in code — and the ``preview_*`` staging rows
         per the ``preview`` flag (real drops both; preview keeps ``preview_add``).
@@ -205,7 +182,7 @@ class PaymentSyncQueries:
             result = await session.execute(
                 text(sql),
                 {
-                    "member_ids": [str(uid) for uid in family_ids],
+                    "payer_member_id": str(payer_member_id),
                     "today": today,
                     "excluded_statuses": _excluded_statuses(preview),
                 },
@@ -220,22 +197,21 @@ class PaymentSyncQueries:
 
     async def get_unconsumed_once_discounts(
         self,
-        family_ids: list[UUID],
+        payer_member_id: UUID,
     ) -> list[OnceDiscount]:
-        """Read the family's attached-but-unconsumed ``once`` discounts.
+        """Read the payer's attached-but-unconsumed ``once`` discounts.
 
         Only ``once`` rows with no end_date and a coupon already attached — the
-        candidates the sync checks against the live subscription. Reads the
-        unfiltered base tables (service-role).
+        candidates the sync checks against the payer's live subscription. Scoped
+        by the membership's ``paid_by_member_id`` so the candidate set matches
+        the one subscription the settle reads. Reads the unfiltered base tables
+        (service-role).
         """
-        if not family_ids:
-            return []
-
         sql = load_sql(APPLIED_SQL_DIR / "get_unconsumed_once_discounts.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
-                {"member_ids": [str(uid) for uid in family_ids]},
+                {"payer_member_id": str(payer_member_id)},
             )
             rows = result.mappings().fetchall()
 
@@ -309,10 +285,10 @@ class PaymentSyncQueries:
         member_id: UUID,
         stripe_sub_id_month: str | None,
     ) -> None:
-        """Write stripe_sub_id_month back to the parent profile.
+        """Write stripe_sub_id_month back to the payer's members row.
 
         Args:
-            member_id: The parent profile to update.
+            member_id: The payer to update.
             stripe_sub_id_month: The Stripe subscription ID, or
                 None if cancelled.
         """
@@ -407,12 +383,12 @@ class PaymentSyncQueries:
             )
             await session.commit()
 
-    async def set_parent_monthly_total(
+    async def set_payer_monthly_total(
         self,
         member_id: UUID,
         total_monthly_recurring_price: int,
     ) -> None:
-        """Set total_monthly_recurring_price on the parent's members row.
+        """Set total_monthly_recurring_price on the payer's members row.
 
         Backend-managed column (service-role write); clamped at 0.
         """
@@ -431,22 +407,19 @@ class PaymentSyncQueries:
 
     async def get_cancelled_recurring(
         self,
-        family_ids: list[UUID],
+        payer_member_id: UUID,
     ) -> dict[UUID, str]:
-        """Read cancelled recurring rows still carrying a Stripe line id.
+        """Read the payer's cancelled recurring rows still carrying a line id.
 
         Returns ``item_id → stripe_item_id`` for cancelled rows not yet marked
-        ``deleted`` — the writeback diffs these against the live subscription to
-        confirm removal and stamp ``deleted``.
+        ``deleted`` — the writeback diffs these against the payer's live
+        subscription to confirm removal and stamp ``deleted``.
         """
-        if not family_ids:
-            return {}
-
         sql = load_sql(SYNC_SQL_DIR / "get_cancelled_recurring.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
-                {"member_ids": [str(uid) for uid in family_ids]},
+                {"payer_member_id": str(payer_member_id)},
             )
             rows = result.mappings().fetchall()
 

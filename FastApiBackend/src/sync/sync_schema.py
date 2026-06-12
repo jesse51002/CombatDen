@@ -163,7 +163,7 @@ class SyncParams(BaseModel):
     """
 
     bucket: IntervalBucket
-    parent: PayerProfile
+    payer: PayerProfile
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
     membership_post_discount_amounts: dict[UUID, int] = {}
@@ -197,7 +197,7 @@ class OneTimeInvoicePlan(BaseModel):
     """
 
     items: list[OneTimeInvoiceItem] = []
-    parent: PayerProfile
+    payer: PayerProfile
     stripe_account_id: str
     coupon_links: dict[UUID, str] = {}
     once_consumed_ids: list[UUID] = []

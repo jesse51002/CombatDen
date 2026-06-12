@@ -261,7 +261,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         PaymentSyncService,
         db_pool=db_pool,
         subscription_service=payments_subscription_service,
-        parent_resolver=payer_resolver,
+        payer_resolver=payer_resolver,
         once_discounts=payment_sync_once_discounts,
         builder=payment_sync_builder,
         paying_lock=paying_member_lock,
@@ -273,7 +273,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         discounts=payment_sync_discounts,
         payment_service=payments_payment_service,
-        parent_resolver=payer_resolver,
+        payer_resolver=payer_resolver,
     )
 
     # ── Discounts ────────────────────────────────────────────────
