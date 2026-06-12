@@ -24,13 +24,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from src.core.config import (
-    LOCK_ACQUIRE_TIMEOUT_SECONDS,
-    LOCK_MAX_HOLD_SECONDS,
-    LOCK_POLL_INTERVAL_SECONDS,
-    LOCK_TTL_SECONDS,
-    PAYING_MEMBER_LOCK_PREFIX,
-)
+from src.core.config import settings
 from src.shared.database import DirectDatabasePool
 from src.shared.payer_resolver import PayerResolver
 from src.shared.sql_loader import load_sql
@@ -68,22 +62,23 @@ class PayingMemberLock:
         Wrap a single member in a list; pass several to lock several families at
         once. Resolves each member to its paying parent, dedupes + **sorts** the
         keys (so two ops requesting the same set never deadlock), acquires them all
-        (blocking up to ``LOCK_ACQUIRE_TIMEOUT_SECONDS``, else ``LockBusyError``),
-        holds under ``LOCK_MAX_HOLD_SECONDS``, and releases everything on exit.
+        (blocking up to ``settings.lock_acquire_timeout_seconds``, else
+        ``LockBusyError``), holds under ``settings.lock_max_hold_seconds``, and
+        releases everything on exit.
         """
         keys = await self._resolve_keys(member_ids)
         token = uuid4()
         held: list[str] = []
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + LOCK_ACQUIRE_TIMEOUT_SECONDS
+        deadline = loop.time() + settings.lock_acquire_timeout_seconds
         try:
             for key in keys:
                 while not await self._try_acquire(key, token):
                     if loop.time() >= deadline:
                         raise LockBusyError(key)
-                    await asyncio.sleep(LOCK_POLL_INTERVAL_SECONDS)
+                    await asyncio.sleep(settings.lock_poll_interval_seconds)
                 held.append(key)
-            async with asyncio.timeout(LOCK_MAX_HOLD_SECONDS):
+            async with asyncio.timeout(settings.lock_max_hold_seconds):
                 yield
         finally:
             for key in held:
@@ -105,7 +100,7 @@ class PayingMemberLock:
             {
                 "lock_key": key,
                 "token": str(token),
-                "ttl_seconds": LOCK_TTL_SECONDS,
+                "ttl_seconds": settings.lock_ttl_seconds,
             },
         )
         return row is not None
@@ -127,4 +122,4 @@ class PayingMemberLock:
 
     @staticmethod
     def _key(parent_member_id: UUID) -> str:
-        return f"{PAYING_MEMBER_LOCK_PREFIX}:{parent_member_id}"
+        return f"{settings.paying_member_lock_prefix}:{parent_member_id}"

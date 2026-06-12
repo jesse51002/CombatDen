@@ -14,7 +14,7 @@ from uuid import UUID
 
 from sqlalchemy import text
 
-from src.core.config import PAYING_MEMBER_LOCK_PREFIX
+from src.core.config import settings
 from src.memberships import SQL_DIR as MEMBERSHIPS_SQL_DIR
 from src.reconciler import SQL_DIR
 from src.reconciler.service.reconciler.reconciler_result import SweepResult
@@ -80,7 +80,7 @@ class OrphanCleanupSweep:
             result.errors += 1
             return
 
-        key = f"{PAYING_MEMBER_LOCK_PREFIX}:{parent.member_id}"
+        key = f"{settings.paying_member_lock_prefix}:{parent.member_id}"
         async with self._resource_lock.try_lock(key) as acquired:
             if not acquired:
                 result.skipped += 1

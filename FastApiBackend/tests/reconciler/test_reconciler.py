@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
-from src.core.config import PAYING_MEMBER_LOCK_PREFIX
+from src.core.config import settings
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
@@ -171,7 +171,7 @@ async def test_orphan_cleanup_skips_when_family_lock_held(
 
     # Hold this family's lock so the sweep must skip the orphan.
     lock = ResourceLock(db_pool)
-    family_key = f"{PAYING_MEMBER_LOCK_PREFIX}:{member.member_id}"
+    family_key = f"{settings.paying_member_lock_prefix}:{member.member_id}"
     token = uuid4()
     assert await lock.acquire_once(family_key, token) is True
     try:
