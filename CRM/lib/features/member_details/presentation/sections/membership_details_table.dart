@@ -19,10 +19,16 @@ class MembershipDetailsTable extends StatelessWidget {
   final MembershipInfo membership;
   final String coveredMemberId;
 
+  /// member id → display name across the family, for the
+  /// "Paid by" row (the payer may be the covered member or
+  /// their linked parent).
+  final Map<String, String> memberNames;
+
   const MembershipDetailsTable({
     super.key,
     required this.membership,
     required this.coveredMemberId,
+    this.memberNames = const {},
   });
 
   MembershipStatus get _status =>
@@ -84,6 +90,15 @@ class MembershipDetailsTable extends StatelessWidget {
             membership.totalPriceFor(coveredMemberId),
           ),
         ),
+        (
+          membershipLabel('Paid by:'),
+          Text(
+            _paidByText(),
+            style: DesignConstants.h2.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
         if (usage != null)
           (
             membershipLabel('Usage:'),
@@ -119,6 +134,15 @@ class MembershipDetailsTable extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  /// "Self" when the covered member pays their own way,
+  /// otherwise the payer's name (or a dash while unknown).
+  String _paidByText() {
+    final payerId = membership.paidByFor(coveredMemberId);
+    if (payerId == null) return '—';
+    if (payerId == coveredMemberId) return 'Self';
+    return memberNames[payerId] ?? 'Linked account';
   }
 
   String _usageText(PayingForMember usage) {

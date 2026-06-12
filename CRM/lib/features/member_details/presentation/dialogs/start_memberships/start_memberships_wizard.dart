@@ -26,7 +26,8 @@ import 'package:crm/features/member_details/presentation/dialogs/update_card_dia
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
 /// The Start Memberships wizard — one request per run:
-/// 1. who pays (only the top-level paying account),
+/// 1. who pays (any family member — the top-level account
+///    pays for the family; a linked member self-pays),
 /// 2. who's getting memberships (payer + linked members),
 /// 3. per member: pick plans (count stepper on one_time /
 ///    trial),
@@ -128,9 +129,11 @@ class _StartMembershipsWizardState
     super.dispose();
   }
 
-  /// The payer is the top-level paying account: the viewed
-  /// member when they are not linked to anyone, otherwise
-  /// the account they are linked to.
+  /// The DEFAULT payer is the top-level paying account: the
+  /// viewed member when they are not linked to anyone,
+  /// otherwise the account they are linked to. The payer
+  /// step lets staff switch to any family member (a linked
+  /// member self-pays their own memberships).
   void _initPayer() {
     final viewed = widget.member;
     final parentId = viewed.linkedToAccount;
@@ -379,6 +382,33 @@ class _StartMembershipsWizardState
 
   // ----- Selection mutations -----
 
+  /// Switching the payer restarts the selection under the
+  /// new payer: who can be covered depends on who pays
+  /// (the backend's self-or-parent rule), so stale picks
+  /// and drafts are cleared and the payer's own detail is
+  /// (re)loaded for the members step.
+  void _onPayerSelected(StartMembershipParticipant p) {
+    if (p.memberId == _payer.memberId) return;
+    setState(() {
+      _payer = StartMembershipParticipant(
+        memberId: p.memberId,
+        name: p.name,
+        photoUrl: p.photoUrl,
+        isPayer: true,
+      );
+      _payerDetail = _memberDetails[p.memberId];
+      _selectedMemberIds
+        ..clear()
+        ..add(p.memberId);
+      _drafts.clear();
+      _preview = null;
+      _previewRequest = null;
+    });
+    if (_payerDetail == null) {
+      _loadPayerDetail();
+    }
+  }
+
   void _onMemberToggle(String memberId) {
     setState(() {
       if (!_selectedMemberIds.remove(memberId)) {
@@ -446,8 +476,8 @@ class _StartMembershipsWizardState
   Future<void> _onAddNewCard() async {
     // The update-card flow acts on the bloc's VIEWED
     // member, so it only applies when the payer launched
-    // the wizard from their own page (linked accounts
-    // can't hold a card anyway).
+    // the wizard from their own page (a linked member's
+    // own card is added from their page the same way).
     if (widget.member.memberId != _payer.memberId) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -576,8 +606,7 @@ class _StartMembershipsWizardState
             payerCardOnFile: _payerDetail?.cardOnFile,
             memberNames: memberNamesOf(_configMembers),
             planNames: planNamesOf(_drafts),
-            onPayerSelected: (p) =>
-                setState(() => _payer = p),
+            onPayerSelected: _onPayerSelected,
             onMemberToggle: _onMemberToggle,
             onLinkFirst: _onLinkFirst,
             onPlanToggle: _onPlanToggle,

@@ -16,6 +16,12 @@ class MembershipMemberInfo extends Equatable {
   /// update price, mark-paid-cash, discount add/remove).
   final String itemId;
 
+  /// The PAYER of this membership — whose Stripe customer /
+  /// subscription bills it: the covered member themselves
+  /// (self-pay) or their linked parent. Drives the card's
+  /// "Paid by" row.
+  final String paidByMemberId;
+
   /// Natural end date of the membership (e.g. the final
   /// day of a one-time pass). Null for recurring plans
   /// that have no scheduled end.
@@ -45,6 +51,7 @@ class MembershipMemberInfo extends Equatable {
 
   const MembershipMemberInfo({
     required this.itemId,
+    required this.paidByMemberId,
     this.endDate,
     this.cancelDate,
     this.onOutdatedPrice = false,
@@ -90,6 +97,7 @@ class MembershipMemberInfo extends Equatable {
   @override
   List<Object?> get props => [
         itemId,
+        paidByMemberId,
         endDate,
         cancelDate,
         onOutdatedPrice,

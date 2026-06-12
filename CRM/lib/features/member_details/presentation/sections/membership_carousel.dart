@@ -173,6 +173,12 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
         MembershipDetailsTable(
           membership: membership,
           coveredMemberId: selectedId,
+          memberNames: {
+            widget.member.memberId:
+                widget.member.fullName,
+            for (final a in widget.member.linkedAccounts)
+              a.memberId: a.fullName,
+          },
         ),
         if (showOutdated)
           OutdatedPriceCard(
