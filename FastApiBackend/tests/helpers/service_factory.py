@@ -9,6 +9,7 @@ Standalone module — no pytest imports, no fixture dependencies.
 """
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from schema.task import TaskType
 
@@ -18,9 +19,6 @@ from src.members.service.management.members_management_service import (
 )
 from src.memberships.service.memberships_reprice import (
     MemberMembershipsReprice,
-)
-from src.memberships.service.memberships_reprice_task_handler import (
-    MemberMembershipsRepriceTaskHandler,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -70,6 +68,9 @@ from src.sync.service.sync_service import (
     PaymentSyncService,
 )
 from src.tasks.service.tasks_executor import TasksExecutor
+from src.tasks.service.tasks_membership_reprice_handler import (
+    MembershipRepriceTaskHandler,
+)
 from src.tasks.service.tasks_service import TasksService
 
 # ── Payment services namespace ──────────────────────────────────
@@ -214,8 +215,6 @@ def build_member_memberships_service(
         parent_resolver=parent_resolver,
     )
     discounts_svc = DiscountsService(db_pool)
-    tasks_svc = TasksService(db_pool)
-    tasks_executor = build_tasks_executor(db_pool, stripe_client)
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -226,8 +225,22 @@ def build_member_memberships_service(
         paying_lock,
         one_time_svc,
         discounts_svc,
-        tasks_svc,
-        tasks_executor,
+        build_memberships_reprice(db_pool, stripe_client),
+    )
+
+
+def build_membership_reprice_task_handler(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MembershipRepriceTaskHandler:
+    """Build the membership_reprice task handler (the tasks↔memberships glue).
+
+    Mirrors ``src/core/dependencies.py`` (membership_reprice_task_handler).
+    """
+    return MembershipRepriceTaskHandler(
+        db_pool=db_pool,
+        reprice_service=build_memberships_reprice(db_pool, stripe_client),
+        tasks_service=TasksService(db_pool),
     )
 
 
@@ -239,13 +252,13 @@ def build_tasks_executor(
 
     Mirrors ``src/core/dependencies.py`` (tasks_executor).
     """
-    reprice_handler = MemberMembershipsRepriceTaskHandler(
-        db_pool=db_pool,
-        reprice_service=build_memberships_reprice(db_pool, stripe_client),
-    )
     return TasksExecutor(
         db_pool,
-        handlers={TaskType.membership_reprice: reprice_handler},
+        handlers={
+            TaskType.membership_reprice: (
+                build_membership_reprice_task_handler(db_pool, stripe_client)
+            ),
+        },
     )
 
 
@@ -267,6 +280,33 @@ def build_memberships_reprice(
         gym_stripe_service=gym_stripe_svc,
         paying_lock=paying_lock,
     )
+
+
+async def request_reprice_task(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+    item_id: UUID,
+    member_id: UUID,
+    prorate: bool = False,
+) -> UUID:
+    """Request a reprice exactly as ``PUT /member_memberships/price`` does.
+
+    Mirrors the router orchestration — the in-task guard, the handler's
+    validate-and-create, then firing the background run — and raises the same
+    exceptions (``MembershipInTaskError`` / ``ValueError``) without creating a
+    task. Returns the fired task's id; poll it with ``await_task_terminal``.
+    """
+    tasks_service = TasksService(db_pool)
+    handler = build_membership_reprice_task_handler(db_pool, stripe_client)
+    executor = build_tasks_executor(db_pool, stripe_client)
+    await tasks_service.assert_memberships_not_in_task([item_id])
+    task_id = await handler.create(
+        item_id=item_id,
+        member_id=member_id,
+        prorate=prorate,
+    )
+    executor.start_in_background(task_id)
+    return task_id
 
 
 def build_discounts_service(

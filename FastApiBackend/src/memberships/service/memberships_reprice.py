@@ -1,21 +1,20 @@
-"""Run ONE membership reprice (append-only, DB-first verify-or-revert).
+"""The membership reprice operation (append-only, DB-first verify-or-revert).
 
 A reprice never mutates the membership row — ``price_id`` and
-``stripe_item_id`` are trigger-enforced immutable. One DB transaction cancels
-the old row effective today, inserts its successor at the target price
-(pending, NULL line id), and copies the live applied discounts onto the
-successor. The EXISTING payment sync then converges Stripe — old consolidated
-line decremented or removed, new line created or joined, prorated per the
-request — and the existing writeback stamps the successor ``applied`` and the
-old row ``deleted``.
+``stripe_item_id`` are trigger-enforced immutable. ``reprice`` cancels the old
+row effective today, inserts its successor at the target price, copies the
+live applied discounts onto the successor (ONE transaction), then the EXISTING
+payment sync converges Stripe and the writeback stamps the successor
+``applied`` and the old row ``deleted``.
 
-A standalone operation like every other lifecycle op: it knows NOTHING about
-how it is dispatched (a tracked task today, a direct CRM call tomorrow) —
-plain parameters in, the successor's item_id out — and it handles its own
-failure with the standard ``sync_or_revert`` contract: an unconfirmed
-converge REVERTS the DB phase (discount copies → pending successor → the old
-row's ``cancel_date``, still clearable pre-'deleted') and raises, leaving the
-membership exactly as it was.
+A standalone membership operation that knows NOTHING about how it is dispatched
+(a tracked task today, a direct CRM call tomorrow): plain parameters in, the
+successor's item_id out, and it handles its own failure with the standard
+``sync_or_revert`` contract — an unconfirmed converge REVERTS the DB phase and
+raises, leaving the membership exactly as it was. ``resolve_target_price``
+fail-fast-validates a request (so a caller can reject an invalid / no-op
+reprice without doing any work), and ``preview_reprice`` is the read-only
+dry-run. This module imports nothing from ``src.tasks``.
 """
 
 import logging
@@ -28,11 +27,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR
+from src.memberships.memberships_schema import RepriceResolution
 from src.memberships.service.memberships_base import (
     MemberMembershipsBase,
 )
+from src.payments.schema.payments_invoice_schema import (
+    DueNowVsRecurringPreview,
+)
 from src.shared.database import DirectDatabasePool
-from src.shared.db_first_helpers import sync_or_revert
+from src.shared.db_first_helpers import staged_preview, sync_or_revert
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.gym_timezone import gym_today
 from src.shared.paying_member_lock import PayingMemberLock
@@ -43,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 
 class MemberMembershipsReprice(MemberMembershipsBase):
-    """Execute one reprice onto a target price (no dispatch knowledge)."""
+    """Execute / resolve / preview a reprice onto a target price."""
 
     def __init__(
         self,
@@ -54,6 +57,39 @@ class MemberMembershipsReprice(MemberMembershipsBase):
     ) -> None:
         super().__init__(db_pool, payment_sync_service, gym_stripe_service)
         self._paying_lock = paying_lock
+
+    async def resolve_target_price(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+    ) -> RepriceResolution:
+        """Fail-fast-validate a reprice request; resolve its target price.
+
+        Read-only (no lock, no writes): a caller runs this BEFORE doing any
+        work so an invalid or no-op reprice is rejected up front. The target
+        is the plan's single ``is_active`` price; a membership already on it
+        is a no-op and rejected.
+
+        Raises:
+            ValueError: If the membership is not found, cancelled, ended, has
+                no active price, or is already on the active price.
+        """
+        row = await self._get_membership(item_id, member_id)
+        self._validate_reprice(row, item_id, member_id)
+        active_price = await self._get_active_price_for_plan(
+            row["gym_id"],
+            row["plan_id"],
+        )
+        target_price_id = UUID(str(active_price["price_id"]))
+        if UUID(str(row["price_id"])) == target_price_id:
+            raise ValueError(
+                f"Membership is already on the plan's active price: "
+                f"item_id={item_id}, price_id={target_price_id}"
+            )
+        return RepriceResolution(
+            gym_id=UUID(str(row["gym_id"])),
+            target_price_id=target_price_id,
+        )
 
     async def reprice(
         self,
@@ -139,7 +175,91 @@ class MemberMembershipsReprice(MemberMembershipsBase):
             )
             return new_item_id
 
-    # ── Private ────────────────────────────────────────────────
+    async def preview_reprice(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        prorate: bool = False,
+    ) -> DueNowVsRecurringPreview | None:
+        """Preview repricing a membership to the plan's active price.
+
+        Stages the reprice EXACTLY as ``reprice`` would write it, as
+        preview-only rows: the old row stamped ``preview_remove``, a
+        ``preview_add`` successor at the active price, and ``preview_add``
+        copies of the live applied discounts — then reads the engine preview
+        and always cleans up (``finally``). ``price_id`` is never touched
+        (it is trigger-immutable). Takes the family lock itself.
+
+        Raises:
+            ValueError: Same validation conditions as ``resolve_target_price``,
+                except already-on-active-price previews as-is (nothing to
+                stage).
+        """
+        async with self._paying_lock.lock([member_id]):
+            row = await self._get_membership(item_id, member_id)
+            self._validate_reprice(row, item_id, member_id)
+            active_price = await self._get_active_price_for_plan(
+                row["gym_id"],
+                row["plan_id"],
+            )
+            proration_behavior = "always_invoice" if prorate else "none"
+
+            if UUID(str(row["price_id"])) == UUID(
+                str(active_price["price_id"])
+            ):
+                # Already on the active price — nothing to stage; preview as-is.
+                return (
+                    await self._payment_sync.preview_update_payments_recurring(
+                        member_id,
+                        proration_behavior=proration_behavior,
+                    )
+                )
+
+            today = gym_today(row["timezone"])
+            staged_item_ids: list[UUID] = []
+
+            async def _stage() -> None:
+                await self._set_sync_status(
+                    item_id,
+                    member_id,
+                    StripeSyncStatus.preview_remove,
+                )
+                staged_item_ids.append(
+                    await self._stage_successor_with_discounts(
+                        row,
+                        item_id,
+                        member_id,
+                        active_price,
+                        today,
+                        prorate,
+                    )
+                )
+
+            async def _cleanup() -> None:
+                # Applied discounts RESTRICT on the membership row, so the
+                # copies go first, then the staged pending row, then the old
+                # row's status is restored.
+                if staged_item_ids:
+                    await self._delete_preview_discount_copies(staged_item_ids)
+                    await self._delete_pending(staged_item_ids)
+                await self._set_sync_status(
+                    item_id,
+                    member_id,
+                    StripeSyncStatus.applied,
+                )
+
+            return await staged_preview(
+                stage_fn=_stage,
+                cleanup_fn=_cleanup,
+                preview_fn=lambda: (
+                    self._payment_sync.preview_update_payments_recurring(
+                        member_id,
+                        proration_behavior=proration_behavior,
+                    )
+                ),
+            )
+
+    # ── Private — validation / resolution ──────────────────────
 
     def _validate_reprice(
         self,
@@ -186,6 +306,8 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 f"item_id={old_item_id}"
             )
         return active_price
+
+    # ── Private — DB phase (write + revert) ────────────────────
 
     async def _write_db_phase(
         self,
@@ -281,6 +403,21 @@ class MemberMembershipsReprice(MemberMembershipsBase):
             )
             await session.commit()
 
+    async def _verify(
+        self,
+        member_id: UUID,
+        old_item_id: UUID,
+        new_item_id: UUID,
+    ) -> bool:
+        """The converge landed iff successor 'applied' AND old row 'deleted'."""
+        new_status = await self._get_sync_status(new_item_id, member_id)
+        if new_status != StripeSyncStatus.applied:
+            return False
+        old_status = await self._get_sync_status(old_item_id, member_id)
+        return old_status == StripeSyncStatus.deleted
+
+    # ── Private — shared row writes (real + preview) ───────────
+
     async def _cancel_immediate(
         self,
         session: AsyncSession,
@@ -359,15 +496,78 @@ class MemberMembershipsReprice(MemberMembershipsBase):
         )
         await session.execute(text(sql), {"item_id": str(new_item_id)})
 
-    async def _verify(
+    # ── Private — preview staging ──────────────────────────────
+
+    async def _stage_successor_with_discounts(
         self,
+        row: dict,
+        item_id: UUID,
         member_id: UUID,
+        active_price: dict,
+        today: date,
+        prorate: bool,
+    ) -> UUID:
+        """Insert the preview successor + its preview discount copies.
+
+        Mirrors the real reprice's writes one-for-one (same insert SQL, same
+        copy SQL) with ``preview_add`` so the engine preview prices exactly
+        the state the real reprice would bill.
+        """
+        inserted = await self._crm_insert([
+            {
+                "member_id": member_id,
+                "gym_id": UUID(str(row["gym_id"])),
+                "plan_id": UUID(str(row["plan_id"])),
+                "price_id": UUID(str(active_price["price_id"])),
+                "start_date": today,
+                "end_date": None,
+                "last_paid_date": today,
+                "next_due_date": None,
+                "stripe_item_id": None,
+                "prorate": prorate,
+                "total_price": active_price["price"],
+                "sync_status": StripeSyncStatus.preview_add,
+            },
+        ])
+        staged_id = next(iter(inserted.values()))
+        await self._copy_discounts_preview(item_id, staged_id, today)
+        return staged_id
+
+    async def _copy_discounts_preview(
+        self,
         old_item_id: UUID,
-        new_item_id: UUID,
-    ) -> bool:
-        """The converge landed iff successor 'applied' AND old row 'deleted'."""
-        new_status = await self._get_sync_status(new_item_id, member_id)
-        if new_status != StripeSyncStatus.applied:
-            return False
-        old_status = await self._get_sync_status(old_item_id, member_id)
-        return old_status == StripeSyncStatus.deleted
+        staged_item_id: UUID,
+        today: date,
+    ) -> None:
+        """Stage preview_add copies of the old row's live applied discounts."""
+        sql = load_sql(
+            SQL_DIR / "applied_discounts" / "copy_applied_discounts.sql"
+        )
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {
+                    "old_item_id": str(old_item_id),
+                    "new_item_id": str(staged_item_id),
+                    "gym_today": today,
+                    "sync_status": StripeSyncStatus.preview_add.value,
+                },
+            )
+            await session.commit()
+
+    async def _delete_preview_discount_copies(
+        self,
+        staged_item_ids: list[UUID],
+    ) -> None:
+        """Delete the staged rows' preview discount copies (FK order)."""
+        sql = load_sql(
+            SQL_DIR
+            / "applied_discounts"
+            / "delete_preview_applied_discounts.sql"
+        )
+        async with self._db_pool.session() as session:
+            await session.execute(
+                text(sql),
+                {"item_ids": [str(i) for i in staged_item_ids]},
+            )
+            await session.commit()

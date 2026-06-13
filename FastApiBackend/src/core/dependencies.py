@@ -33,9 +33,6 @@ from src.members.service.member_payments_service import (
 from src.memberships.service.memberships_reprice import (
     MemberMembershipsReprice,
 )
-from src.memberships.service.memberships_reprice_task_handler import (
-    MemberMembershipsRepriceTaskHandler,
-)
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
 )
@@ -125,6 +122,9 @@ from src.sync.service.sync_service import (
     PaymentSyncService,
 )
 from src.tasks.service.tasks_executor import TasksExecutor
+from src.tasks.service.tasks_membership_reprice_handler import (
+    MembershipRepriceTaskHandler,
+)
 from src.tasks.service.tasks_service import TasksService
 from src.waivers.service.waivers.waivers_service import WaiversService
 
@@ -294,14 +294,10 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
     )
 
-    # ── Tasks (tracked background operations) ────────────────────
-    # Store/read facade and runner are SEPARATE providers so the graph stays
-    # acyclic: domain facades depend on TasksService to create/read tasks,
-    # while TasksExecutor depends on the domains' per-type item handlers.
-    tasks_service = providers.Factory(TasksService, db_pool=db_pool)
-    # The reprice operation itself — task-agnostic (append-only reprice:
-    # cancel old row + insert successor in one txn, then the convergent
-    # sync). Knows nothing about how it is dispatched.
+    # ── Reprice operation (memberships — task-agnostic) ──────────
+    # The append-only reprice op (cancel old row + insert successor in one
+    # txn, then the convergent sync, DB-first verify-or-revert). Pure
+    # membership logic: it knows nothing about how it is dispatched.
     memberships_reprice = providers.Factory(
         MemberMembershipsReprice,
         db_pool=db_pool,
@@ -309,19 +305,26 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
         paying_lock=paying_member_lock,
     )
-    # The thin adapter that registers it as the membership_reprice handler
-    # (translates item params + persists the old→new linkage via the
-    # reprice's generic in-txn hook).
-    memberships_reprice_task_handler = providers.Factory(
-        MemberMembershipsRepriceTaskHandler,
+
+    # ── Tasks (tracked background operations) ────────────────────
+    # The generic engine: TasksService (store/read + the in-task guard) and
+    # TasksExecutor (run) are SEPARATE providers so the memberships↔tasks
+    # graph stays acyclic. The membership_reprice handler is the ONE
+    # tasks↔memberships bridge (tasks → memberships); it both creates and
+    # runs membership_reprice tasks. The dependency points one way only —
+    # nothing in src/memberships imports src/tasks.
+    tasks_service = providers.Factory(TasksService, db_pool=db_pool)
+    membership_reprice_task_handler = providers.Factory(
+        MembershipRepriceTaskHandler,
         db_pool=db_pool,
         reprice_service=memberships_reprice,
+        tasks_service=tasks_service,
     )
     tasks_executor = providers.Factory(
         TasksExecutor,
         db_pool=db_pool,
         handlers=providers.Dict({
-            TaskType.membership_reprice: memberships_reprice_task_handler,
+            TaskType.membership_reprice: membership_reprice_task_handler,
         }),
     )
 
@@ -337,8 +340,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         paying_lock=paying_member_lock,
         payment_sync_one_time=payment_sync_one_time,
         discounts_service=discounts_service,
-        tasks_service=tasks_service,
-        tasks_executor=tasks_executor,
+        reprice_service=memberships_reprice,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────

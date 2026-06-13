@@ -32,6 +32,7 @@ from tests.helpers.db_reads import (
     await_task_terminal,
     get_profile_stripe_ids,
 )
+from tests.helpers.service_factory import request_reprice_task
 from tests.helpers.stripe_assertions import (
     advance_to_next_cycle_and_fetch_invoice,
     assert_immediate_prorated_invoice,
@@ -191,7 +192,9 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
             connect_opts,
         )
 
-        task_id = await memberships_service.update_price(
+        task_id = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=item_id,
             member_id=member.member_id,
             prorate=False,
@@ -300,7 +303,9 @@ async def test_update_price_mid_cycle_with_prorate_true(
             connect_opts,
         )
 
-        task_id = await memberships_service.update_price(
+        task_id = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=item_id,
             member_id=member.member_id,
             prorate=True,
@@ -424,7 +429,9 @@ async def test_update_price_to_cheaper_tier_mid_cycle(
             connect_opts,
         )
 
-        task_id = await memberships_service.update_price(
+        task_id = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=item_id,
             member_id=member.member_id,
             prorate=False,

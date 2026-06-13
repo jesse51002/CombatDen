@@ -1,11 +1,12 @@
-"""The in-task guard + the reprice task's retry/failure end-state.
+"""The in-task guard + the reprice op's failure end-state.
 
-A membership row referenced by a PENDING/RUNNING task item rejects every
-item-targeted mutation (409 at the router; ``MembershipInTaskError`` at the
-facade) — the family lock only serializes in-flight attempts, so the guard is
-what protects a task's desired state between retries. A terminal task lifts
-the guard; a FAILED reprice leaves the DB untouched when it never reached its
-DB phase (lock-busy exhaustion), and staff retry = re-submitting the reprice.
+The in-task guard (``TasksService.assert_memberships_not_in_task``, wired into
+every item-targeted membership endpoint at the router) rejects a mutation on a
+membership referenced by a PENDING/RUNNING task item — a queued/retrying task
+holds no family lock, so the guard is what stops a staff op racing the task's
+pending work (or a double-submitted reprice). A terminal task lifts the guard.
+The reprice op is standalone DB-first verify-or-revert: a lock-busy exhaustion
+fails the task with the membership untouched, and staff retry = re-submitting.
 """
 
 from uuid import UUID, uuid4
@@ -35,6 +36,7 @@ from tests.helpers.db_reads import (
 from tests.helpers.service_factory import (
     build_memberships_reprice,
     build_paying_member_lock,
+    request_reprice_task,
 )
 from tests.memberships.test_memberships_update_price import (
     _get_membership_row,
@@ -69,14 +71,18 @@ async def _seed_applied_membership(db_pool, member, gym_id, plan) -> UUID:
     return item_id
 
 
-async def test_in_task_guard_blocks_item_ops(
-    memberships_service,
+async def test_in_task_guard_blocks_then_lifts(
     db_pool,
+    stripe_client,
     gym_id,
     created,
 ):
-    """Every item-targeted op rejects a membership inside an unfinished task;
-    a terminal task lifts the guard."""
+    """The guard rejects a membership inside an unfinished task — every
+    item-targeted endpoint calls it — and a terminal task lifts it.
+
+    The reprice REQUEST path (``request_reprice_task``, mirroring the router)
+    is the double-submit case: it guards before creating a second task.
+    """
     member = await created.member(gym_id)
     plan = await created.plan(gym_id)
     tasks_service = TasksService(db_pool)
@@ -99,35 +105,13 @@ async def test_in_task_guard_blocks_item_ops(
             ],
         )
 
+        # The guard every item-targeted endpoint runs rejects the membership.
         with pytest.raises(MembershipInTaskError):
-            await memberships_service.cancel(
-                item_id, member.member_id, idempotency_key=uuid4(),
-            )
+            await tasks_service.assert_memberships_not_in_task([item_id])
+        # The reprice request path guards before creating a second task.
         with pytest.raises(MembershipInTaskError):
-            await memberships_service.mark_paid_cash(
-                item_id=item_id,
-                member_id=member.member_id,
-                idempotency_key=uuid4(),
-            )
-        with pytest.raises(MembershipInTaskError):
-            await memberships_service.add_discounts(
-                item_id=item_id,
-                member_id=member.member_id,
-                discount_ids=[uuid4()],
-                idempotency_key=uuid4(),
-            )
-        with pytest.raises(MembershipInTaskError):
-            await memberships_service.remove_discounts(
-                item_id=item_id,
-                member_id=member.member_id,
-                applied_ids=[uuid4()],
-                idempotency_key=uuid4(),
-            )
-        # A second reprice on the same membership is the double-submit case.
-        with pytest.raises(MembershipInTaskError):
-            await memberships_service.update_price(
-                item_id=item_id,
-                member_id=member.member_id,
+            await request_reprice_task(
+                db_pool, stripe_client, item_id, member.member_id,
             )
 
         # Terminal task → guard lifted.
@@ -282,7 +266,9 @@ async def test_reprice_lock_busy_exhausts_then_resubmit_succeeds(
         )
 
         async with paying_lock.lock([member.member_id]):
-            task_id = await memberships_service.update_price(
+            task_id = await request_reprice_task(
+                db_pool,
+                stripe_client,
                 item_id=item_id,
                 member_id=member.member_id,
                 prorate=False,
@@ -302,7 +288,9 @@ async def test_reprice_lock_busy_exhausts_then_resubmit_succeeds(
         assert row["status"] == "applied"
 
         # Staff retry = re-submit (the failed task no longer guards the row).
-        task_2 = await memberships_service.update_price(
+        task_2 = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=item_id,
             member_id=member.member_id,
             prorate=False,

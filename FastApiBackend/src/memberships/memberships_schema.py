@@ -222,6 +222,20 @@ class MemberMembershipsUpdatePriceResponse(BaseModel):
     task_id: UUID
 
 
+class RepriceResolution(BaseModel):
+    """The validated target of a reprice request.
+
+    ``MemberMembershipsReprice.resolve_target_price`` returns this after
+    fail-fast validation (membership live, no-op rejected); a caller uses it
+    to do the work (e.g. build a tracked task). Carries only the resolved
+    facts — ``member_id`` / ``old_item_id`` / ``prorate`` are the caller's
+    own request inputs.
+    """
+
+    gym_id: UUID
+    target_price_id: UUID
+
+
 class MemberMembershipsAddDiscountsRequest(BaseModel):
     """Add applied-discount rows to a membership (or preview the addition).
 

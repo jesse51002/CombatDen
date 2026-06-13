@@ -44,9 +44,6 @@ from src.memberships.service.memberships_start_preview import (
 from src.memberships.service.memberships_start_validation import (
     MemberMembershipsStartValidation,
 )
-from src.memberships.service.memberships_update_price import (
-    MemberMembershipsUpdatePrice,
-)
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
@@ -55,6 +52,9 @@ from src.shared.database import DirectDatabasePool
 if TYPE_CHECKING:
     from src.discounts.service.discounts_service import (
         DiscountsService,
+    )
+    from src.memberships.service.memberships_reprice import (
+        MemberMembershipsReprice,
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
@@ -71,15 +71,15 @@ if TYPE_CHECKING:
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
-    from src.tasks.service.tasks_executor import TasksExecutor
-    from src.tasks.service.tasks_service import TasksService
 
 
 class MemberMembershipsService:
     """Membership lifecycle operations (facade).
 
     Delegates to focused sub-services for cancel, freeze,
-    start, and update_price operations.
+    start, and reprice operations. Knows nothing about tasks — the reprice
+    REQUEST (create a tracked task) is orchestrated above the facade, in the
+    router; the facade exposes only the pure membership preview.
     """
 
     def __init__(
@@ -93,8 +93,7 @@ class MemberMembershipsService:
         paying_lock: PayingMemberLock,
         payment_sync_one_time: PaymentSyncOneTime,
         discounts_service: DiscountsService,
-        tasks_service: TasksService,
-        tasks_executor: TasksExecutor,
+        reprice_service: MemberMembershipsReprice,
     ) -> None:
         # Every single-family lifecycle op is wrapped in the paying-parent
         # concurrency lock (held across its pre-sync + DB write + sync) so no two
@@ -103,13 +102,9 @@ class MemberMembershipsService:
         # them bare — PayingMemberLock is non-reentrant, and a nested same-family
         # acquire here would deadlock to LockBusyError.
         self._paying_lock = paying_lock
-        # The in-task guard: every ITEM-targeted op rejects a membership row
-        # referenced by an unfinished task — a queued/retrying task holds no
-        # lock, so without the guard a staff op could race the task's pending
-        # work (or double-submit the same reprice). Member-level ops
-        # (charge_card, freeze, link) are not item-targeted and stay
-        # unguarded.
-        self._tasks = tasks_service
+        # The reprice op is standalone and takes its own family lock; the
+        # facade only exposes its read-only preview.
+        self._reprice = reprice_service
         deps = (
             db_pool,
             payment_sync_service,
@@ -142,11 +137,6 @@ class MemberMembershipsService:
             discounts_service=discounts_service,
             validation=self._start_validation,
         )
-        self._update_price = MemberMembershipsUpdatePrice(
-            *deps,
-            tasks_service=tasks_service,
-            tasks_executor=tasks_executor,
-        )
         self._mark_paid_cash = MemberMembershipsMarkPaidCash(
             *deps,
             payment_service=payment_service,
@@ -173,12 +163,7 @@ class MemberMembershipsService:
 
         Returns the resolved ``cancel_date`` — the date through
         which the membership remains active.
-
-        Raises:
-            MembershipInTaskError: If the membership is inside an
-                unfinished task.
         """
-        await self._tasks.assert_memberships_not_in_task([item_id])
         async with self._paying_lock.lock([member_id]):
             return await self._cancel.cancel(
                 item_id, member_id, idempotency_key,
@@ -256,13 +241,7 @@ class MemberMembershipsService:
         member_id: UUID,
         idempotency_key: UUID,
     ) -> None:
-        """Mark a recurring membership's open Stripe invoice as paid via cash.
-
-        Raises:
-            MembershipInTaskError: If the membership is inside an
-                unfinished task.
-        """
-        await self._tasks.assert_memberships_not_in_task([item_id])
+        """Mark a recurring membership's open Stripe invoice as paid via cash."""
         async with self._paying_lock.lock([member_id]):
             await self._mark_paid_cash.mark_paid_cash(
                 item_id, member_id, idempotency_key,
@@ -278,25 +257,11 @@ class MemberMembershipsService:
         async with self._paying_lock.lock([request.member_id]):
             await self._charge_card.charge_card(request)
 
-    # ── Update Price ───────────────────────────────────────────
-
-    async def update_price(
-        self,
-        item_id: UUID,
-        member_id: UUID,
-        prorate: bool = False,
-    ) -> UUID:
-        """Request a reprice onto the plan's active price; returns task_id.
-
-        NO lock wrap: this only validates and creates the tracked
-        ``membership_reprice`` task (fired in the background) — the task
-        executor takes the family lock itself when it runs.
-        """
-        return await self._update_price.request_update_price(
-            item_id=item_id,
-            member_id=member_id,
-            prorate=prorate,
-        )
+    # ── Reprice preview ────────────────────────────────────────
+    #
+    # The reprice EXECUTION is a standalone op (``MemberMembershipsReprice``)
+    # run as a tracked task; the request-to-task orchestration lives in the
+    # router (above the facade). The facade exposes only the pure preview.
 
     async def preview_update_price(
         self,
@@ -304,13 +269,12 @@ class MemberMembershipsService:
         member_id: UUID,
         prorate: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Preview upgrading a membership to the plan's active price."""
-        async with self._paying_lock.lock([member_id]):
-            return await self._update_price.preview_update_price(
-                item_id=item_id,
-                member_id=member_id,
-                prorate=prorate,
-            )
+        """Preview repricing a membership to the plan's active price."""
+        return await self._reprice.preview_reprice(
+            item_id=item_id,
+            member_id=member_id,
+            prorate=prorate,
+        )
 
     # ── Apply Discounts (add / remove applied-discount rows) ───────────────
 
@@ -322,14 +286,7 @@ class MemberMembershipsService:
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Add applied-discount rows, or preview the addition (``preview=True``).
-
-        Raises:
-            MembershipInTaskError: If the membership is inside an
-                unfinished task (previews included — there is nothing
-                actionable to preview on a mid-task membership).
-        """
-        await self._tasks.assert_memberships_not_in_task([item_id])
+        """Add applied-discount rows, or preview the addition (``preview=True``)."""
         async with self._paying_lock.lock([member_id]):
             return await self._update_discounts.add_discounts(
                 item_id=item_id,
@@ -347,13 +304,7 @@ class MemberMembershipsService:
         idempotency_key: UUID,
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
-        """Remove applied-discount rows, or preview the removal (``preview=True``).
-
-        Raises:
-            MembershipInTaskError: If the membership is inside an
-                unfinished task (previews included).
-        """
-        await self._tasks.assert_memberships_not_in_task([item_id])
+        """Remove applied-discount rows, or preview the removal (``preview=True``)."""
         async with self._paying_lock.lock([member_id]):
             return await self._update_discounts.remove_discounts(
                 item_id=item_id,

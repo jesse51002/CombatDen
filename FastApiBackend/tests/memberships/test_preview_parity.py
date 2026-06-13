@@ -38,6 +38,7 @@ from tests.helpers.preview_parity import (
     assert_preview_matches_invoice,
     fetch_only_new_invoice,
 )
+from tests.helpers.service_factory import request_reprice_task
 from tests.helpers.stripe_assertions import (
     advance_to_next_cycle_and_fetch_invoice,
     assert_immediate_prorated_invoice,
@@ -304,7 +305,9 @@ async def test_preview_update_price_prorate_true_matches_invoice(
         )
         assert preview is not None
 
-        task_id = await memberships_service.update_price(
+        task_id = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=item_id,
             member_id=member.member_id,
             prorate=True,
@@ -393,7 +396,9 @@ async def test_preview_update_price_prorate_false_matches_renewal(
         )
         assert preview is not None
 
-        task_id = await memberships_service.update_price(
+        task_id = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=item_id,
             member_id=member.member_id,
             prorate=False,

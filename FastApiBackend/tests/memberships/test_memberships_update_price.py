@@ -37,6 +37,7 @@ from tests.helpers.db_reads import (
     get_applied_discounts,
     get_profile_stripe_ids,
 )
+from tests.helpers.service_factory import request_reprice_task
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
     assert_subscription_item_price,
@@ -170,7 +171,9 @@ async def test_update_price_tier(
             connect_opts,
         )
 
-        task_id = await memberships_service.update_price(
+        task_id = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=item_id,
             member_id=member.member_id,
             prorate=False,
@@ -343,7 +346,9 @@ async def test_reprice_one_member_off_shared_consolidated_line(
             connect_opts,
         )
 
-        task_id = await memberships_service.update_price(
+        task_id = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=child_item_id,
             member_id=child.member_id,
             prorate=False,
@@ -442,7 +447,9 @@ async def test_same_day_double_reprice(
                 price=8000,
             ),
         )
-        task_1 = await memberships_service.update_price(
+        task_1 = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=item_id,
             member_id=member.member_id,
             prorate=False,
@@ -458,7 +465,9 @@ async def test_same_day_double_reprice(
                 price=9000,
             ),
         )
-        task_2 = await memberships_service.update_price(
+        task_2 = await request_reprice_task(
+            db_pool,
+            stripe_client,
             item_id=second_item_id,
             member_id=member.member_id,
             prorate=False,
@@ -519,7 +528,9 @@ async def test_update_cancelled_raises_no_task(
         tasks_before = await _count_tasks(db_pool, gym_id)
 
         with pytest.raises(ValueError):
-            await memberships_service.update_price(
+            await request_reprice_task(
+                db_pool,
+                stripe_client,
                 item_id=item_id,
                 member_id=member.member_id,
             )
@@ -569,7 +580,9 @@ async def test_update_price_noop_rejected_no_task(
         tasks_before = await _count_tasks(db_pool, gym_id)
 
         with pytest.raises(ValueError, match="already on"):
-            await memberships_service.update_price(
+            await request_reprice_task(
+                db_pool,
+                stripe_client,
                 item_id=item_id,
                 member_id=member.member_id,
                 prorate=True,

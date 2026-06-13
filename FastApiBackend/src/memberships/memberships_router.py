@@ -31,6 +31,11 @@ from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
 from src.shared.auth import Auth, security
+from src.tasks.service.tasks_executor import TasksExecutor
+from src.tasks.service.tasks_membership_reprice_handler import (
+    MembershipRepriceTaskHandler,
+)
+from src.tasks.service.tasks_service import TasksService
 from src.tasks.tasks_exceptions import MembershipInTaskError
 
 logger = logging.getLogger(__name__)
@@ -68,6 +73,9 @@ async def cancel_membership(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
 ) -> MemberMembershipsCancelResponse:
     """Cancel a specific membership for a member.
 
@@ -92,6 +100,7 @@ async def cancel_membership(
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
+        await tasks_service.assert_memberships_not_in_task([item_id])
         cancel_date = await memberships_service.cancel(item_id, member_id, idempotency_key)
         return MemberMembershipsCancelResponse(cancel_date=cancel_date)
     except MembershipInTaskError as exc:
@@ -368,27 +377,42 @@ async def update_membership_price(
     request: MemberMembershipsUpdatePriceRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    memberships_service: MemberMembershipsService = Depends(
-        Provide[DependencyInjector.member_memberships_service]
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
+    reprice_task_handler: MembershipRepriceTaskHandler = Depends(
+        Provide[DependencyInjector.membership_reprice_task_handler]
+    ),
+    tasks_executor: TasksExecutor = Depends(
+        Provide[DependencyInjector.tasks_executor]
     ),
 ) -> MemberMembershipsUpdatePriceResponse:
     """Request a reprice onto the plan's active price (202 + task_id).
+
+    Orchestrates the membership operation (validated + run as a tracked task)
+    with the generic task engine — the in-task guard (409), then the reprice
+    handler's validate-and-create (400 on an invalid / no-op reprice), then
+    firing the background run.
 
     Args:
         request: Update price request with prorate flag.
         credentials: Bearer token credentials.
         auth: Injected auth service.
-        memberships_service: Injected memberships service.
+        tasks_service: Injected tasks service (the in-task guard).
+        reprice_task_handler: Injected membership_reprice task handler.
+        tasks_executor: Injected tasks executor (fires the run).
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        task_id = await memberships_service.update_price(
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
+        task_id = await reprice_task_handler.create(
             item_id=request.item_id,
             member_id=request.member_id,
             prorate=request.prorate,
         )
+        tasks_executor.start_in_background(task_id)
         return MemberMembershipsUpdatePriceResponse(task_id=task_id)
     except MembershipInTaskError as exc:
         raise HTTPException(
@@ -635,12 +659,16 @@ async def add_membership_discounts(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
 ) -> DueNowVsRecurringPreview | None:
     """Add applied-discount rows to a membership, or preview the addition."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
         return await memberships_service.add_discounts(
             item_id=request.item_id,
             member_id=request.member_id,
@@ -706,12 +734,16 @@ async def remove_membership_discounts(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
 ) -> DueNowVsRecurringPreview | None:
     """Remove applied-discount rows from a membership, or preview the removal."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
         return await memberships_service.remove_discounts(
             item_id=request.item_id,
             member_id=request.member_id,
@@ -780,12 +812,16 @@ async def mark_membership_paid_cash(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
 ) -> None:
     """Mark a recurring membership's open invoice as paid via cash."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
         await memberships_service.mark_paid_cash(
             item_id=request.item_id,
             member_id=request.member_id,

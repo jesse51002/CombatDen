@@ -39,8 +39,8 @@ flowchart TB
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     tasks_service["TasksService — src/tasks/ · tracked background ops<br/>create/read tasks + items · the in-task guard<br/>(item-targeted membership ops reject mid-task rows → 409)"]
     tasks_executor["TasksExecutor — src/tasks/ · runs task items<br/>atomic claim → handler dispatch → retry ×3 → failed (ops self-revert)<br/>+ 5-min stale-sweep (APScheduler, shared with reconciler)"]
-    memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC reprice (params in, successor id out):<br/>cancel old row + insert successor + copy discounts (one txn)<br/>→ converge → verify-or-REVERT (standard DB-first contract)"]
-    memberships_reprice_task_handler["MemberMembershipsRepriceTaskHandler<br/>src/memberships/ · thin adapter, no op logic:<br/>item params → reprice; records the returned successor on the item"]
+    memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC reprice (params in, successor id out):<br/>reprice / resolve_target_price / preview_reprice · imports NOTHING from tasks<br/>cancel old + insert successor + copy discounts (txn) → converge → verify-or-REVERT"]
+    membership_reprice_task_handler["MembershipRepriceTaskHandler<br/>src/tasks/ · the ONE tasks↔memberships bridge (tasks → memberships):<br/>create (validate via reprice + enqueue) · execute_item (run + record successor)"]
     subgraph Payments["💳 Payments — Stripe core (router-less)"]
       direction TB
       p_client["PaymentsStripeClient"]
@@ -81,10 +81,13 @@ flowchart TB
     r_plan --> membership_plans_service
     r_hook --> stripe_webhooks_service
     r_task --> tasks_service
-    member_memberships_service -->|"reprice: create task + in-task guard"| tasks_service
-    member_memberships_service -->|"reprice: fire background run"| tasks_executor
-    tasks_executor -->|"membership_reprice handler"| memberships_reprice_task_handler
-    memberships_reprice_task_handler --> memberships_reprice
+    r_mm -->|"reprice request: validate + create"| membership_reprice_task_handler
+    r_mm -->|"in-task guard (item ops) · fire run"| tasks_service
+    r_mm --> tasks_executor
+    member_memberships_service -->|"reprice preview"| memberships_reprice
+    membership_reprice_task_handler -->|"enqueue"| tasks_service
+    tasks_executor -->|"membership_reprice handler"| membership_reprice_task_handler
+    membership_reprice_task_handler --> memberships_reprice
     memberships_reprice --> payment_sync_service
     memberships_reprice --> gym_stripe_service
     stripe_webhooks_service -->|"invoice.paid → settle once discounts"| payment_sync_service
@@ -128,7 +131,7 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe ext;
   class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task route;
-  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_reprice_task_handler svc;
+  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,resource_lock,tasks_service,tasks_executor,memberships_reprice,membership_reprice_task_handler svc;
   class payment_sync_service,billing_parent_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;
