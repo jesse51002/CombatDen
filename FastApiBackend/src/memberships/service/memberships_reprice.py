@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR
-from src.memberships.memberships_schema import RepriceResolution
+from src.memberships.memberships_schema import BatchRepriceTarget
 from src.memberships.service.memberships_base import (
     MemberMembershipsBase,
 )
@@ -58,61 +58,67 @@ class MemberMembershipsReprice(MemberMembershipsBase):
         super().__init__(db_pool, payment_sync_service, gym_stripe_service)
         self._paying_lock = paying_lock
 
-    async def resolve_target_price(
+    async def find_plan_reprice_targets(
         self,
-        item_id: UUID,
-        member_id: UUID,
-    ) -> RepriceResolution:
-        """Fail-fast-validate a reprice request; resolve its target price.
+        gym_id: UUID,
+        plan_id: UUID,
+    ) -> list[BatchRepriceTarget]:
+        """Discover the memberships a per-plan batch reprice must upgrade.
 
-        Read-only (no lock, no writes): a caller runs this BEFORE doing any
-        work so an invalid reprice is rejected up front and the task can pin
-        the target. The target is the plan's single ``is_active`` price. A
-        no-op (the membership is already on it) is NOT rejected here — the
-        task is created and ``reprice`` no-ops it (cheaper than a second
-        active-price comparison every request).
-
-        Raises:
-            ValueError: If the membership is not found, cancelled, ended, or
-                has no active price.
+        Every LIVE (applied, not cancelled) recurring membership on the plan
+        whose price is not the plan's active one, minus any already
+        referenced by an unfinished task. Read-only; the plan's active price
+        is the pinned target for all (≤1 active price per plan). Empty when
+        nothing needs upgrading (incl. a plan with no active price).
         """
-        row = await self._get_membership(item_id, member_id)
-        self._validate_reprice(row, item_id, member_id)
-        active_price = await self._get_active_price_for_plan(
-            row["gym_id"],
-            row["plan_id"],
-        )
-        return RepriceResolution(
-            gym_id=UUID(str(row["gym_id"])),
-            target_price_id=UUID(str(active_price["price_id"])),
-        )
+        sql = load_sql(SQL_DIR / "member_memberships_plan_reprice_targets.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"gym_id": str(gym_id), "plan_id": str(plan_id)},
+            )
+            rows = result.mappings().fetchall()
+        return [
+            BatchRepriceTarget(
+                member_id=UUID(str(r["member_id"])),
+                old_item_id=UUID(str(r["item_id"])),
+                target_price_id=UUID(str(r["target_price_id"])),
+            )
+            for r in rows
+        ]
 
     async def reprice(
         self,
         member_id: UUID,
         old_item_id: UUID,
-        target_price_id: UUID,
         prorate: bool,
+        target_price_id: UUID | None = None,
     ) -> UUID:
         """Run one reprice (DB-first); returns the successor row's item_id.
 
-        Takes the family lock itself. Reprices to the PINNED
-        ``target_price_id`` as-is — even if it is no longer the plan's active
-        price (a newer one was created after the request); the upgrade the
-        user asked for must still happen. A membership already on the target
-        is a no-op (returns its own item_id, no work, no bill).
+        Takes the family lock itself, converges synchronously, returns when
+        done — a standalone op like ``cancel`` / ``start``. The single
+        member-detail upgrade calls it directly (no task); the per-plan batch
+        runs it per task item.
 
-        Args:
-            member_id: The member being repriced.
-            old_item_id: The membership row being replaced.
-            target_price_id: The pinned target price (a price of the
-                membership's plan; need not be the currently active one).
-            prorate: ``always_invoice`` vs ``none`` on the converge.
+        ``target_price_id`` resolution:
+        - **None** (the single, member-detail upgrade) → resolve the plan's
+          current ``is_active`` price and reprice to it.
+        - **given** (the batch pins the active price at batch-discovery time)
+          → reprice to that exact price **as-is**, never re-checked against
+          the plan's *current* active price. A newer price created before the
+          item runs must NOT divert or fail the upgrade the user asked for (a
+          deactivated CRM price keeps a usable Stripe price — `plans_price.py`
+          never archives one).
+
+        A membership already on the target is a no-op (returns its own
+        item_id, no work, no bill).
 
         Raises:
             LockBusyError: The family is busy.
             ValueError: The membership does not validate (not found,
-                cancelled, ended) or the target is not a price of its plan.
+                cancelled, ended), has no active price (None case), or the
+                given target is not a price of its plan.
             SyncNotConfirmedError: The converge could not be confirmed on
                 Stripe — the DB phase has been reverted, the membership is
                 exactly as it was.
@@ -121,24 +127,25 @@ class MemberMembershipsReprice(MemberMembershipsBase):
             row = await self._get_membership(old_item_id, member_id)
             self._validate_reprice(row, old_item_id, member_id)
 
-            if UUID(str(row["price_id"])) == target_price_id:
-                # Already on the target — a no-op (e.g. a duplicate request,
-                # or the membership was already repriced). Nothing to do, and
-                # nothing to bill: the reconciler's sweep converges any
-                # DB↔Stripe drift, so there's no defensive re-sync here.
-                return old_item_id
+            if target_price_id is None:
+                target_price = await self._get_active_price_for_plan(
+                    row["gym_id"],
+                    row["plan_id"],
+                )
+                target_price_id = UUID(str(target_price["price_id"]))
+            else:
+                target_price = await self._get_price_for_plan(
+                    row["gym_id"],
+                    row["plan_id"],
+                    target_price_id,
+                )
 
-            # Reprice to the PINNED target price as-is — never re-checked
-            # against the plan's *current* active price. The task pinned what
-            # the user chose at request time (the regular UI sends only the
-            # item id → the backend pins the then-active price; a batch pins
-            # active-at-batch-start), so a newer price created before the task
-            # runs must NOT divert or fail the upgrade.
-            target_price = await self._get_price_for_plan(
-                row["gym_id"],
-                row["plan_id"],
-                target_price_id,
-            )
+            if UUID(str(row["price_id"])) == target_price_id:
+                # Already on the target — a no-op (a duplicate request, or
+                # already repriced). Nothing to do and nothing to bill: the
+                # reconciler's sweep converges any DB↔Stripe drift, so there
+                # is no defensive re-sync here.
+                return old_item_id
 
             # Prorating op: converge the family to a clean baseline first.
             await self._pre_sync_payments(member_id)

@@ -257,11 +257,25 @@ class MemberMembershipsService:
         async with self._paying_lock.lock([request.member_id]):
             await self._charge_card.charge_card(request)
 
-    # ── Reprice preview ────────────────────────────────────────
+    # ── Reprice (single, direct — NOT a task) ──────────────────
     #
-    # The reprice EXECUTION is a standalone op (``MemberMembershipsReprice``)
-    # run as a tracked task; the request-to-task orchestration lives in the
-    # router (above the facade). The facade exposes only the pure preview.
+    # The member-detail upgrade is a direct, synchronous reprice (like
+    # cancel) — tasks are only for the per-plan BATCH, orchestrated in the
+    # router via the tasks layer. The op takes its own family lock.
+
+    async def update_price(
+        self,
+        item_id: UUID,
+        member_id: UUID,
+        prorate: bool = False,
+    ) -> UUID:
+        """Reprice ONE membership to its plan's active price; returns the
+        successor row id (== ``item_id`` when it was already on the price)."""
+        return await self._reprice.reprice(
+            member_id=member_id,
+            old_item_id=item_id,
+            prorate=prorate,
+        )
 
     async def preview_update_price(
         self,

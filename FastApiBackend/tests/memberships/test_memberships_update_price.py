@@ -1,23 +1,20 @@
-"""Integration tests for the task-based membership reprice.
+"""Integration tests for the DIRECT (single) membership reprice.
 
-A reprice is APPEND-ONLY: ``update_price`` validates, creates a
-``membership_reprice`` task (one item), fires it in the background, and
-returns the task_id. The executor cancels the old row effective today,
-inserts a successor at the plan's active price, and the sync converges
-Stripe. The tests poll the task to terminal (the CRM's contract) and then
-assert:
+The member-detail upgrade is a direct, synchronous op (NOT a task — tasks are
+only for the per-plan batch): ``memberships_service.update_price`` cancels the
+old row effective today, inserts a successor at the plan's active price,
+converges Stripe, and RETURNS the successor's item_id (== the input id on a
+no-op). The tests assert:
 
 1. The old row is cancelled + ``deleted``, its ``price_id`` untouched
    (trigger-immutable), and the successor row is ``applied`` on the new
    price with a fresh Stripe line.
 2. The Stripe subscription carries the new price; the old price is gone.
 3. No surprise invoice was created (``prorate=False`` path).
-4. Failed validation creates NO task and mutates nothing — including the
-   no-op case (already on the active price).
+4. An invalid (cancelled) reprice raises and mutates nothing; a no-op
+   (already on the active price) returns the row's own id unchanged.
 """
 
-import asyncio
-import time
 from uuid import UUID, uuid4
 
 import pytest
@@ -37,18 +34,13 @@ from tests.helpers.db_reads import (
     get_applied_discounts,
     get_profile_stripe_ids,
 )
-from tests.helpers.service_factory import (
-    build_memberships_reprice,
-    request_reprice_task,
-)
+from tests.helpers.service_factory import build_memberships_reprice
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
     assert_subscription_item_price,
     fetch_subscription,
     snapshot_billing_state,
 )
-
-_TASK_TIMEOUT_SECONDS = 120
 
 
 async def _start_and_get_item_id(memberships_service, db_pool, member, gym_id, plan):
@@ -77,37 +69,6 @@ async def _start_and_get_item_id(memberships_service, db_pool, member, gym_id, p
     return UUID(str(row["item_id"]))
 
 
-async def _await_task_terminal(db_pool, task_id: UUID) -> str:
-    """Poll the task (the CRM's contract) until completed/failed."""
-    deadline = time.monotonic() + _TASK_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        async with db_pool.session() as session:
-            result = await session.execute(
-                text("SELECT status::text FROM tasks WHERE task_id = :t"),
-                {"t": str(task_id)},
-            )
-            status = result.scalar_one()
-        if status in ("completed", "failed"):
-            return status
-        await asyncio.sleep(1)
-    raise AssertionError(
-        f"Task {task_id} not terminal after {_TASK_TIMEOUT_SECONDS}s"
-    )
-
-
-async def _get_task_item(db_pool, task_id: UUID) -> dict:
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text(
-                "SELECT status::text AS status, attempt_count, "
-                "error_message, old_item_id, new_item_id "
-                "FROM task_items WHERE task_id = :t"
-            ),
-            {"t": str(task_id)},
-        )
-        return dict(result.mappings().one())
-
-
 async def _get_membership_row(db_pool, item_id: UUID) -> dict:
     async with db_pool.session() as session:
         result = await session.execute(
@@ -119,15 +80,6 @@ async def _get_membership_row(db_pool, item_id: UUID) -> dict:
             {"item_id": str(item_id)},
         )
         return dict(result.mappings().one())
-
-
-async def _count_tasks(db_pool, gym_id) -> int:
-    async with db_pool.session() as session:
-        result = await session.execute(
-            text("SELECT count(*) FROM tasks WHERE gym_id = :g"),
-            {"g": str(gym_id)},
-        )
-        return int(result.scalar_one())
 
 
 async def test_update_price_tier(
@@ -174,22 +126,11 @@ async def test_update_price_tier(
             connect_opts,
         )
 
-        task_id = await request_reprice_task(
-            db_pool,
-            stripe_client,
+        new_item_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
             prorate=False,
         )
-
-        status = await _await_task_terminal(db_pool, task_id)
-        item = await _get_task_item(db_pool, task_id)
-        assert status == "completed", (
-            f"reprice task failed: {item['error_message']}"
-        )
-        assert item["status"] == "completed"
-        assert UUID(str(item["old_item_id"])) == item_id
-        new_item_id = UUID(str(item["new_item_id"]))
         assert new_item_id != item_id
 
         # Old row: cancelled + deleted, identity untouched (append-only).
@@ -349,19 +290,11 @@ async def test_reprice_one_member_off_shared_consolidated_line(
             connect_opts,
         )
 
-        task_id = await request_reprice_task(
-            db_pool,
-            stripe_client,
+        new_item_id = await memberships_service.update_price(
             item_id=child_item_id,
             member_id=child.member_id,
             prorate=False,
         )
-        status = await _await_task_terminal(db_pool, task_id)
-        item = await _get_task_item(db_pool, task_id)
-        assert status == "completed", (
-            f"reprice task failed: {item['error_message']}"
-        )
-        new_item_id = UUID(str(item["new_item_id"]))
 
         # Old row: cancelled + deleted, identity untouched; sibling intact.
         old_row = await _get_membership_row(db_pool, child_item_id)
@@ -450,16 +383,11 @@ async def test_same_day_double_reprice(
                 price=8000,
             ),
         )
-        task_1 = await request_reprice_task(
-            db_pool,
-            stripe_client,
+        second_item_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
             prorate=False,
         )
-        assert await _await_task_terminal(db_pool, task_1) == "completed"
-        item_1 = await _get_task_item(db_pool, task_1)
-        second_item_id = UUID(str(item_1["new_item_id"]))
 
         price_v3 = await plans_service.set_price(
             MembershipPlanPriceRequest(
@@ -468,19 +396,11 @@ async def test_same_day_double_reprice(
                 price=9000,
             ),
         )
-        task_2 = await request_reprice_task(
-            db_pool,
-            stripe_client,
+        third_item_id = await memberships_service.update_price(
             item_id=second_item_id,
             member_id=member.member_id,
             prorate=False,
         )
-        status = await _await_task_terminal(db_pool, task_2)
-        item_2 = await _get_task_item(db_pool, task_2)
-        assert status == "completed", (
-            f"second same-day reprice failed: {item_2['error_message']}"
-        )
-        third_item_id = UUID(str(item_2["new_item_id"]))
 
         second_row = await _get_membership_row(db_pool, second_item_id)
         assert second_row["status"] == "deleted"
@@ -565,7 +485,7 @@ async def test_reprice_to_now_inactive_pinned_price(
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_update_cancelled_raises_no_task(
+async def test_update_cancelled_raises(
     memberships_service,
     db_pool,
     gym_id,
@@ -573,6 +493,7 @@ async def test_update_cancelled_raises_no_task(
     connect_opts,
     created,
 ):
+    """Repricing a cancelled membership is rejected (direct → ValueError)."""
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
     plan = await created.plan(gym_id)
@@ -594,23 +515,18 @@ async def test_update_cancelled_raises_no_task(
         await memberships_service.cancel(item_id, member.member_id, idempotency_key=uuid4())
 
         # Snapshot after cancel — the rejected reprice below must not
-        # create any invoice, any task, or any membership row.
+        # create any invoice or mutate any membership row.
         before = await snapshot_billing_state(
             stripe_client,
             profile.stripe_customer_id,
             connect_opts,
         )
-        tasks_before = await _count_tasks(db_pool, gym_id)
 
         with pytest.raises(ValueError):
-            await request_reprice_task(
-                db_pool,
-                stripe_client,
+            await memberships_service.update_price(
                 item_id=item_id,
                 member_id=member.member_id,
             )
-
-        assert await _count_tasks(db_pool, gym_id) == tasks_before
 
         await assert_no_unexpected_charges(
             stripe_client,
@@ -621,7 +537,7 @@ async def test_update_cancelled_raises_no_task(
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_update_price_noop_completes_unchanged(
+async def test_update_price_noop_unchanged(
     memberships_service,
     db_pool,
     gym_id,
@@ -629,11 +545,10 @@ async def test_update_price_noop_completes_unchanged(
     connect_opts,
     created,
 ):
-    """Already on the plan's active price → the task completes as a no-op.
+    """Already on the plan's active price → a true no-op.
 
-    The request isn't pre-rejected (resolve doesn't re-compare the active
-    price); reprice no-ops, so the membership is untouched and NOTHING is
-    billed even with prorate=True (the no-op returns before any sync).
+    ``update_price`` returns the membership's own id, touches nothing, and
+    bills nothing even with prorate=True (the no-op returns before any sync).
     """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
@@ -658,20 +573,13 @@ async def test_update_price_noop_completes_unchanged(
             connect_opts,
         )
 
-        task_id = await request_reprice_task(
-            db_pool,
-            stripe_client,
+        new_item_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
             prorate=True,
         )
-        status = await _await_task_terminal(db_pool, task_id)
-        item = await _get_task_item(db_pool, task_id)
-        assert status == "completed", (
-            f"no-op reprice task failed: {item['error_message']}"
-        )
-        # No-op marker: the successor IS the row itself; nothing changed.
-        assert UUID(str(item["new_item_id"])) == item_id
+        # No-op: the returned id IS the row itself; nothing changed.
+        assert new_item_id == item_id
         row = await _get_membership_row(db_pool, item_id)
         assert row["status"] == "applied"
         assert row["cancel_date"] is None

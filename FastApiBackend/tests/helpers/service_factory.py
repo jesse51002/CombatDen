@@ -282,31 +282,26 @@ def build_memberships_reprice(
     )
 
 
-async def request_reprice_task(
+async def batch_reprice_plan(
     db_pool: DirectDatabasePool,
     stripe_client: PaymentsStripeClient,
-    item_id: UUID,
-    member_id: UUID,
+    gym_id: UUID,
+    plan_id: UUID,
     prorate: bool = False,
-) -> UUID:
-    """Request a reprice exactly as ``PUT /member_memberships/price`` does.
+) -> tuple[UUID | None, int]:
+    """Run a per-plan batch reprice exactly as ``POST /reprice-plan`` does.
 
-    Mirrors the router orchestration — the in-task guard, the handler's
-    validate-and-create, then firing the background run — and raises the same
-    exceptions (``MembershipInTaskError`` / ``ValueError``) without creating a
-    task. Returns the fired task's id; poll it with ``await_task_terminal``.
+    Mirrors the router: discover the plan's memberships to upgrade, create
+    one task, fire the background run. Returns ``(task_id, count)`` —
+    ``(None, 0)`` when nothing needs upgrading. Poll with
+    ``await_task_terminal``.
     """
-    tasks_service = TasksService(db_pool)
     handler = build_membership_reprice_task_handler(db_pool, stripe_client)
     executor = build_tasks_executor(db_pool, stripe_client)
-    await tasks_service.assert_memberships_not_in_task([item_id])
-    task_id = await handler.create(
-        item_id=item_id,
-        member_id=member_id,
-        prorate=prorate,
-    )
-    executor.start_in_background(task_id)
-    return task_id
+    task_id, count = await handler.create_batch(gym_id, plan_id, prorate)
+    if task_id is not None:
+        executor.start_in_background(task_id)
+    return task_id, count
 
 
 def build_discounts_service(

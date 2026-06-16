@@ -2,9 +2,11 @@
 
 The tasks engine is generic; this is the one place that knows a
 ``membership_reprice`` task drives ``MemberMembershipsReprice``. It both
-CREATES such a task (``create`` — validate via the reprice op, then enqueue)
-and RUNS one of its items (``execute_item`` — call the reprice op, record the
-successor). The dependency points one way only: tasks → memberships;
+CREATES the per-plan BATCH task (``create_batch`` — discover via the reprice
+op, then enqueue one item per membership) and RUNS one of its items
+(``execute_item`` — call the reprice op, record the successor). Tasks are
+ONLY for the batch; the single member-detail upgrade calls the reprice op
+directly. The dependency points one way only: tasks → memberships;
 ``src.memberships`` imports nothing from ``src.tasks``.
 """
 
@@ -27,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class MembershipRepriceTaskHandler:
-    """Creates and runs membership_reprice tasks."""
+    """Creates (batch) and runs membership_reprice tasks."""
 
     def __init__(
         self,
@@ -40,39 +42,44 @@ class MembershipRepriceTaskHandler:
         self._tasks = tasks_service
         self._tasks_queries = TasksQueries(db_pool)
 
-    async def create(
+    async def create_batch(
         self,
-        item_id: UUID,
-        member_id: UUID,
+        gym_id: UUID,
+        plan_id: UUID,
         prorate: bool,
-    ) -> UUID:
-        """Validate the reprice request + create its task; returns task_id.
+    ) -> tuple[UUID | None, int]:
+        """Discover the plan's memberships to upgrade + create ONE task.
 
-        Fail-fast validation (via the reprice op's ``resolve_target_price``)
-        so an invalid / no-op reprice raises before any task row is written.
-        Does NOT fire the run — the caller does (keeping the handler off the
-        executor, so no DI cycle).
+        Auto-discovers every live membership on the plan not on its active
+        price (skipping any already mid-task) and creates one
+        ``membership_reprice`` task with an item per membership (each pinning
+        the plan's active price). Does NOT fire the run — the caller does
+        (keeping the handler off the executor, so no DI cycle).
 
-        Raises:
-            ValueError: If the membership does not validate or is already on
-                the active price (no no-op tasks).
+        Returns:
+            ``(task_id, membership_count)`` — ``(None, 0)`` when nothing
+            needs upgrading (no task is created).
         """
-        resolution = await self._reprice.resolve_target_price(
-            item_id,
-            member_id,
+        targets = await self._reprice.find_plan_reprice_targets(
+            gym_id,
+            plan_id,
         )
-        return await self._tasks.create_task(
-            resolution.gym_id,
+        if not targets:
+            return None, 0
+        task_id = await self._tasks.create_task(
+            gym_id,
             TaskType.membership_reprice,
             [
                 TaskItemCreate(
-                    member_id=member_id,
-                    old_item_id=item_id,
-                    target_price_id=resolution.target_price_id,
+                    member_id=t.member_id,
+                    old_item_id=t.old_item_id,
+                    target_price_id=t.target_price_id,
                     prorate=prorate,
-                ),
+                )
+                for t in targets
             ],
         )
+        return task_id, len(targets)
 
     async def execute_item(self, item: TaskItemResponse) -> None:
         """Run one claimed reprice item; raises on failure (retried).

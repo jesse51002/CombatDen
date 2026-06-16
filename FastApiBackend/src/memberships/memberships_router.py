@@ -11,6 +11,8 @@ from fastapi.security import HTTPAuthorizationCredentials
 from src.core.dependencies import DependencyInjector
 from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
+    MemberMembershipsBatchRepriceRequest,
+    MemberMembershipsBatchRepriceResponse,
     MemberMembershipsCancelResponse,
     MemberMembershipsChargeCardRequest,
     MemberMembershipsFreezeRequest,
@@ -352,24 +354,23 @@ async def start_membership(
 
 @member_memberships_router.put(
     "/price",
-    status_code=status.HTTP_202_ACCEPTED,
     response_model=MemberMembershipsUpdatePriceResponse,
-    summary="Reprice membership to the plan's current price",
+    summary="Reprice ONE membership to the plan's current price",
     description=(
-        "Requests moving a membership onto its plan's currently active "
-        "price. The reprice runs as a tracked background task "
-        "(cancel-old-row + insert-successor + Stripe converge); this "
-        "returns the task_id immediately — poll GET /api/v1/tasks/{task_id} "
-        "until terminal. A membership already on the active price is "
-        "rejected (400); a membership already inside an unfinished task is "
-        "rejected (409)."
+        "Moves a membership onto its plan's currently active price — a "
+        "DIRECT, synchronous reprice (cancel-old-row + insert-successor + "
+        "Stripe converge), like cancel. Returns the successor membership id "
+        "(the same id when it was already on the price — a no-op). Tasks are "
+        "only for the per-plan BATCH endpoint. A membership inside an "
+        "unfinished batch task is rejected (409)."
     ),
     responses={
-        202: {"description": "Reprice accepted; poll the returned task"},
-        400: {"description": "Invalid request (incl. already on the price)"},
+        200: {"description": "Repriced; the successor membership id"},
+        400: {"description": "Invalid request (cancelled / ended membership)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         409: {"description": "Membership is inside an unfinished task"},
+        502: {"description": "Stripe error"},
     },
 )
 @inject
@@ -377,43 +378,34 @@ async def update_membership_price(
     request: MemberMembershipsUpdatePriceRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
     tasks_service: TasksService = Depends(
         Provide[DependencyInjector.tasks_service]
     ),
-    reprice_task_handler: MembershipRepriceTaskHandler = Depends(
-        Provide[DependencyInjector.membership_reprice_task_handler]
-    ),
-    tasks_executor: TasksExecutor = Depends(
-        Provide[DependencyInjector.tasks_executor]
-    ),
 ) -> MemberMembershipsUpdatePriceResponse:
-    """Request a reprice onto the plan's active price (202 + task_id).
-
-    Orchestrates the membership operation (validated + run as a tracked task)
-    with the generic task engine — the in-task guard (409), then the reprice
-    handler's validate-and-create (400 on an invalid / no-op reprice), then
-    firing the background run.
+    """Reprice one membership to its plan's active price (direct; 200 + id).
 
     Args:
         request: Update price request with prorate flag.
         credentials: Bearer token credentials.
         auth: Injected auth service.
-        tasks_service: Injected tasks service (the in-task guard).
-        reprice_task_handler: Injected membership_reprice task handler.
-        tasks_executor: Injected tasks executor (fires the run).
+        memberships_service: Injected memberships service.
+        tasks_service: Injected tasks service (the in-task guard — a
+            membership mid-batch-task is rejected 409).
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
         await tasks_service.assert_memberships_not_in_task([request.item_id])
-        task_id = await reprice_task_handler.create(
+        new_item_id = await memberships_service.update_price(
             item_id=request.item_id,
             member_id=request.member_id,
             prorate=request.prorate,
         )
-        tasks_executor.start_in_background(task_id)
-        return MemberMembershipsUpdatePriceResponse(task_id=task_id)
+        return MemberMembershipsUpdatePriceResponse(item_id=new_item_id)
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -445,6 +437,81 @@ async def update_membership_price(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update membership price",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/reprice-plan",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=MemberMembershipsBatchRepriceResponse,
+    summary="Batch-upgrade a plan's members to its active price",
+    description=(
+        "Upgrades EVERY member on the plan to the plan's currently active "
+        "price. The backend auto-discovers every live membership not already "
+        "on the active price (skipping any already mid-task), creates one "
+        "tracked task with an item per membership, runs it in the "
+        "background, and returns the task_id — poll GET /api/v1/tasks/"
+        "{task_id} for per-membership progress. Returns task_id=null when "
+        "nothing needs upgrading."
+    ),
+    responses={
+        202: {"description": "Batch accepted; poll the returned task"},
+        400: {"description": "Invalid request"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+    },
+)
+@inject
+async def batch_reprice_plan(
+    request: MemberMembershipsBatchRepriceRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    reprice_task_handler: MembershipRepriceTaskHandler = Depends(
+        Provide[DependencyInjector.membership_reprice_task_handler]
+    ),
+    tasks_executor: TasksExecutor = Depends(
+        Provide[DependencyInjector.tasks_executor]
+    ),
+) -> MemberMembershipsBatchRepriceResponse:
+    """Batch-reprice a plan's members to its active price (202 + task_id).
+
+    Args:
+        request: Batch reprice request (plan_id, gym_id, prorate).
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        reprice_task_handler: Injected membership_reprice task handler.
+        tasks_executor: Injected tasks executor (fires the run).
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(request.gym_id, user_payload)
+
+    try:
+        task_id, count = await reprice_task_handler.create_batch(
+            gym_id=request.gym_id,
+            plan_id=request.plan_id,
+            prorate=request.prorate,
+        )
+        if task_id is not None:
+            tasks_executor.start_in_background(task_id)
+        return MemberMembershipsBatchRepriceResponse(
+            task_id=task_id,
+            membership_count=count,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to batch-reprice plan %s (gym %s)",
+            request.plan_id,
+            request.gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to batch-reprice plan",
         ) from None
 
 

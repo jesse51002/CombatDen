@@ -195,15 +195,15 @@ class MemberMembershipsChargeCardRequest(BaseModel):
 
 
 class MemberMembershipsUpdatePriceRequest(BaseModel):
-    """Reprice a membership onto its plan's currently active price.
+    """Reprice ONE membership onto its plan's currently active price.
 
-    The target price is not caller-supplied: the reprice always moves the
-    membership onto the plan's single ``is_active = true`` price. The
-    endpoint validates, creates a tracked ``membership_reprice`` task, and
-    returns its task_id (202) — a membership already on the active price is
-    rejected (no no-op tasks). The task executor mints its own Stripe
-    idempotency keys per attempt; ``idempotency_key`` is accepted for client
-    compatibility but unused by the task flow.
+    The member-detail upgrade: the target is not caller-supplied — the
+    reprice moves the membership onto the plan's single ``is_active = true``
+    price. This is a DIRECT, synchronous op (NOT a task — tasks are only for
+    the per-plan batch): the endpoint reprices and returns the new membership
+    id. A membership already on the active price is a no-op (returns its own
+    id). ``idempotency_key`` is accepted for client compatibility; the
+    reprice mints its own Stripe keys.
     """
 
     item_id: UUID
@@ -213,26 +213,47 @@ class MemberMembershipsUpdatePriceRequest(BaseModel):
 
 
 class MemberMembershipsUpdatePriceResponse(BaseModel):
-    """The reprice was accepted as a tracked background task.
+    """The reprice's successor membership row id (== ``item_id`` on a no-op)."""
 
-    Poll ``GET /api/v1/tasks/{task_id}`` until the task is terminal; the
-    item carries the old→new membership row linkage and any error.
+    item_id: UUID
+
+
+class MemberMembershipsBatchRepriceRequest(BaseModel):
+    """Upgrade EVERY member on a plan to that plan's active price (batch).
+
+    The only task workflow: the backend auto-discovers every active
+    membership on ``plan_id`` whose price is not the plan's ``is_active``
+    price (skipping any already mid-task), creates one ``membership_reprice``
+    task with an item per membership, runs it in the background, and returns
+    the task id to poll. The caller never supplies a member list.
     """
 
-    task_id: UUID
-
-
-class RepriceResolution(BaseModel):
-    """The validated target of a reprice request.
-
-    ``MemberMembershipsReprice.resolve_target_price`` returns this after
-    fail-fast validation (membership live, no-op rejected); a caller uses it
-    to do the work (e.g. build a tracked task). Carries only the resolved
-    facts — ``member_id`` / ``old_item_id`` / ``prorate`` are the caller's
-    own request inputs.
-    """
-
+    plan_id: UUID
     gym_id: UUID
+    prorate: bool = False
+
+
+class MemberMembershipsBatchRepriceResponse(BaseModel):
+    """The batch reprice task (``task_id`` is null when nothing needs it).
+
+    Poll ``GET /api/v1/tasks/{task_id}`` for per-membership progress.
+    ``membership_count`` is how many memberships the task is repricing.
+    """
+
+    task_id: UUID | None
+    membership_count: int
+
+
+class BatchRepriceTarget(BaseModel):
+    """One membership the per-plan batch will reprice.
+
+    Returned by ``MemberMembershipsReprice.find_plan_reprice_targets`` —
+    member + the membership row to replace + the plan's active price pinned
+    as the target. The task handler maps each to a task item.
+    """
+
+    member_id: UUID
+    old_item_id: UUID
     target_price_id: UUID
 
 

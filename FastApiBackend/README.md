@@ -15,7 +15,7 @@ read/write REST API over the shared Supabase Postgres, authenticated with Supaba
 ```mermaid
 flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
-  FB["⚙️ FastApiBackend — CRM / billing API<br/>11 domains · 71 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · memberships · plans · stripe_webhooks · tasks<br/>+ payments · sync · reconciler (router-less; reconciler = twice-daily billing sweep)"]
+  FB["⚙️ FastApiBackend — CRM / billing API<br/>11 domains · 72 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · memberships · plans · stripe_webhooks · tasks<br/>+ payments · sync · reconciler (router-less; reconciler = twice-daily billing sweep)"]
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)"]
   Stripe["Stripe — payments · Connect · webhooks"]
   CRM -->|"authenticated REST · WIP"| FB
@@ -77,7 +77,7 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 | `rewards` | Reward catalog + redemptions |
 | `waivers` | Versioned waiver documents (plain gym config) + read-only e-sign signature tracking (per-waiver roster + per-member status) |
 | `discounts` | Coupon-free discount presets (plain gym config; coupons computed at sync, not on the preset) |
-| `memberships` | Member ↔ plan subscriptions: one list-based **start** (a payer's family in one call, discounts applied at creation, ≤2 charges — one consolidated one-time invoice + one recurring converge — per-membership breakdown out), freeze/unfreeze, **reprice as a tracked task** (membership rows are append-only — `price_id`/`stripe_item_id` immutable; `PUT /price` returns 202 + task_id, the executor cancels the old row + inserts a successor and the CRM polls `/tasks`), apply/remove discounts (add/remove immutable applied-discount rows; coupons computed + written back at sync; one-time/trial = creation-only), previews (start = 3-way `one_time / due_now / recurring`), cash/card charge, link/unlink family accounts (pure DB change) |
+| `memberships` | Member ↔ plan subscriptions: one list-based **start** (a payer's family in one call, discounts applied at creation, ≤2 charges — one consolidated one-time invoice + one recurring converge — per-membership breakdown out), freeze/unfreeze, **reprice** (membership rows are append-only — `price_id`/`stripe_item_id` immutable, so a reprice cancels the old row + inserts a successor: `PUT /price` upgrades ONE member directly/synchronously, `POST /reprice-plan` batch-upgrades every member on a plan to its active price as a tracked task the CRM polls via `/tasks`), apply/remove discounts (add/remove immutable applied-discount rows; coupons computed + written back at sync; one-time/trial = creation-only), previews (start = 3-way `one_time / due_now / recurring`), cash/card charge, link/unlink family accounts (pure DB change) |
 | `plans` | Plan + price templates (Stripe products / prices) + migration |
 | `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB (invoices, charges, refunds, and `customer.subscription.deleted` → triggers a family sync that cancels the gone subscription in the CRM) |
 | `tasks` | Tracked background operations (`tasks` + `task_items` tables): an op endpoint creates a task and returns its id immediately; the executor claims items atomically, dispatches to the task_type's registered handler (e.g. `membership_reprice`), retries ×3, and a 5-min sweep recovers crashed runs. Read-only polling routes (`GET /tasks/ongoing`, `GET /tasks/{id}`); item-targeted membership ops reject mid-task rows (409) |

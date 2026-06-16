@@ -9,7 +9,7 @@ flowchart TB
     r_rew["<b>rewards</b> · /api/v1/rewards · 7 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem<br/>GET /redemptions"]
     r_waiver["<b>waivers</b> · /api/v1/waivers · 8 routes<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /{waiver_id}<br/>GET /{waiver_id}/versions<br/>GET /{waiver_id}/signatures<br/>GET /signatures/by-member/{member_id}"]
     r_disc["<b>discounts</b> · /api/v1/discounts · 4 routes<br/>(coupon-free presets)<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /"]
-    r_mm["<b>memberships</b> · /api/v1/member_memberships · 12 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price<br/>POST /preview<br/>POST /cancel/preview<br/>POST /price/preview<br/>POST /discounts/add (preview bool)<br/>POST /discounts/remove (preview bool)<br/>POST /mark-paid-cash<br/>POST /charge-card"]
+    r_mm["<b>memberships</b> · /api/v1/member_memberships · 13 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price (single, direct)<br/>POST /reprice-plan (batch → task)<br/>POST /preview<br/>POST /cancel/preview<br/>POST /price/preview<br/>POST /discounts/add (preview bool)<br/>POST /discounts/remove (preview bool)<br/>POST /mark-paid-cash<br/>POST /charge-card"]
     r_plan["<b>plans</b> · /api/v1/membership_plans · 8 routes<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /<br/>GET /{plan_id}<br/>POST /price<br/>POST /migrate<br/>POST /migrate-all"]
     r_hook["<b>stripe_webhooks</b> · /api/v1/stripe · 1 route<br/>POST /webhooks"]
     r_task["<b>tasks</b> · /api/v1/tasks · 2 routes<br/>(read-only polling for tracked background ops)<br/>GET /ongoing<br/>GET /{task_id}"]
@@ -39,8 +39,8 @@ flowchart TB
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     tasks_service["TasksService — src/tasks/ · tracked background ops<br/>create/read tasks + items · the in-task guard<br/>(item-targeted membership ops reject mid-task rows → 409)"]
     tasks_executor["TasksExecutor — src/tasks/ · runs task items<br/>atomic claim → handler dispatch → retry ×3 → failed (ops self-revert)<br/>+ 5-min stale-sweep (APScheduler, shared with reconciler)"]
-    memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC reprice (params in, successor id out):<br/>reprice / resolve_target_price / preview_reprice · imports NOTHING from tasks<br/>cancel old + insert successor + copy discounts (txn) → converge → verify-or-REVERT"]
-    membership_reprice_task_handler["MembershipRepriceTaskHandler<br/>src/tasks/ · the ONE tasks↔memberships bridge (tasks → memberships):<br/>create (validate via reprice + enqueue) · execute_item (run + record successor)"]
+    memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC reprice (imports NOTHING from tasks):<br/>reprice (optional target → else plan active) · find_plan_reprice_targets (batch discovery) · preview_reprice<br/>cancel old + insert successor + copy discounts (txn) → converge → verify-or-REVERT"]
+    membership_reprice_task_handler["MembershipRepriceTaskHandler<br/>src/tasks/ · the ONE tasks↔memberships bridge (tasks → memberships):<br/>create_batch (discover via reprice + enqueue one item/membership) · execute_item (run + record successor)"]
     subgraph Payments["💳 Payments — Stripe core (router-less)"]
       direction TB
       p_client["PaymentsStripeClient"]
@@ -81,10 +81,10 @@ flowchart TB
     r_plan --> membership_plans_service
     r_hook --> stripe_webhooks_service
     r_task --> tasks_service
-    r_mm -->|"reprice request: validate + create"| membership_reprice_task_handler
-    r_mm -->|"in-task guard (item ops) · fire run"| tasks_service
-    r_mm --> tasks_executor
-    member_memberships_service -->|"reprice preview"| memberships_reprice
+    r_mm -->|"batch reprice: discover + create"| membership_reprice_task_handler
+    r_mm -->|"in-task guard (item ops)"| tasks_service
+    r_mm -->|"fire batch run"| tasks_executor
+    member_memberships_service -->|"single reprice (direct) + preview"| memberships_reprice
     membership_reprice_task_handler -->|"enqueue"| tasks_service
     tasks_executor -->|"membership_reprice handler"| membership_reprice_task_handler
     membership_reprice_task_handler --> memberships_reprice
