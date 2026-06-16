@@ -87,21 +87,18 @@ async def test_link_happy_path(
         row = await _fetch_profile(db_pool, child.member_id)
         assert row["account_linked_to_id"] is not None
         assert str(row["account_linked_to_id"]) == str(parent.member_id)
-        # linked_account_no_stripe constraint fields must all be NULL
+        # linked_account_no_subscription_or_freeze: only the child's own
+        # subscription + freeze window must be NULL (recurring billing + freeze
+        # stay parent-consolidated). The card columns are free to hold a value.
         assert row["stripe_sub_id_month"] is None
-        assert row["card_brand"] is None
-        assert row["card_last_four"] is None
-        assert row["card_exp_month"] is None
-        assert row["card_exp_year"] is None
         assert row["freeze_start_date"] is None
         assert row["freeze_end_date"] is None
-        assert row["payment_type"] is None
     finally:
         await delete_member_data(db_pool, child.member_id)
         await delete_member_data(db_pool, parent.member_id)
 
 
-async def test_link_clears_existing_card_fields(
+async def test_link_keeps_existing_card_fields(
     memberships_service,
     db_pool,
     gym_id,
@@ -109,7 +106,8 @@ async def test_link_clears_existing_card_fields(
     connect_opts,
     created,
 ):
-    """A child with an existing card should have card fields nulled on link."""
+    """A child with an existing card KEEPS it on link (every member may hold
+    a card; only the subscription + freeze stay parent-consolidated)."""
     parent = await created.member(
         gym_id,
         first_name="Parent",
@@ -134,9 +132,14 @@ async def test_link_clears_existing_card_fields(
 
         row = await _fetch_profile(db_pool, child.member_id)
         assert str(row["account_linked_to_id"]) == str(parent.member_id)
-        assert row["stripe_payment_method_id"] is None
-        assert row["card_brand"] is None
-        assert row["card_last_four"] is None
+        # The card survives the link unchanged...
+        assert row["stripe_payment_method_id"] == pre["stripe_payment_method_id"]
+        assert row["card_brand"] == pre["card_brand"]
+        assert row["card_last_four"] == pre["card_last_four"]
+        # ...while the child's own subscription + freeze stay null.
+        assert row["stripe_sub_id_month"] is None
+        assert row["freeze_start_date"] is None
+        assert row["freeze_end_date"] is None
     finally:
         await delete_member_data(db_pool, child.member_id)
         await delete_member_data(db_pool, parent.member_id)

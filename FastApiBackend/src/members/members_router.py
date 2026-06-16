@@ -476,11 +476,12 @@ async def unlink_member_payment(
     summary="Link member to a parent account",
     description=(
         "Links an existing member to a paying parent account. The child must "
-        "have zero active recurring memberships. Clears any stripe subscription, "
-        "card, and freeze state on the child (required by the "
-        "linked_account_no_stripe DB constraint). This is a relationship change "
-        "only — the member carries no active recurring membership, so no "
-        "subscription is re-billed and no charges are issued."
+        "have zero active recurring memberships. Clears the child's own "
+        "subscription and freeze state (required by the "
+        "linked_account_no_subscription_or_freeze DB constraint); the child "
+        "keeps its own saved card. This is a relationship change only — the "
+        "member carries no active recurring membership, so no subscription is "
+        "re-billed and no charges are issued."
     ),
     responses={
         200: {"description": "Member linked successfully"},

@@ -49,18 +49,18 @@ CREATE TABLE members (
             (freeze_start_date IS NULL AND freeze_end_date IS NULL)
             OR (freeze_start_date IS NOT NULL AND freeze_end_date IS NOT NULL)
         ),
-    CONSTRAINT linked_account_no_stripe
+    -- A linked (child) account may hold its OWN saved card
+    -- (stripe_payment_method_id + the card_* cache + payment_type) — every
+    -- member can store a card. What stays parent-consolidated is RECURRING
+    -- billing and the FREEZE window: a linked account never carries its own
+    -- subscription or freeze dates (those live on the paying parent).
+    CONSTRAINT linked_account_no_subscription_or_freeze
         CHECK (
             account_linked_to_id IS NULL
             OR (
                 stripe_sub_id_month IS NULL
                 AND freeze_start_date IS NULL
                 AND freeze_end_date IS NULL
-                AND payment_type IS NULL
-                AND card_brand IS NULL
-                AND card_last_four IS NULL
-                AND card_exp_month IS NULL
-                AND card_exp_year IS NULL
             )
         ),
     CONSTRAINT fk_member_linked_account

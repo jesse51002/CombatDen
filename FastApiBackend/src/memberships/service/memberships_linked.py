@@ -1,9 +1,10 @@
 """Link / unlink a member to a paying parent account.
 
-Linking sets ``members.account_linked_to_id`` (and NULLs the child's
-stripe/card/freeze fields, required by the ``linked_account_no_stripe`` DB
-check); unlinking clears it. Both REQUIRE the target member to have zero active
-recurring memberships (``_assert_no_active_recurring``).
+Linking sets ``members.account_linked_to_id`` (and NULLs the child's own
+subscription + freeze fields, required by the
+``linked_account_no_subscription_or_freeze`` DB check — the child keeps its own
+saved card); unlinking clears it. Both REQUIRE the target member to have zero
+active recurring memberships (``_assert_no_active_recurring``).
 
 These are **pure DB changes — no Stripe sync.** Because a member with no active
 recurring memberships contributes no membership line and no applied-discount rows
@@ -70,9 +71,10 @@ class MemberMembershipsLinked:
         """Link a member to a paying parent account.
 
         Validates the child is not already linked and has no active recurring
-        memberships, then sets ``account_linked_to_id`` and NULLs all
-        stripe/card/freeze fields (required by the ``linked_account_no_stripe``
-        DB check).
+        memberships, then sets ``account_linked_to_id`` and NULLs the child's
+        own subscription + freeze fields (required by the
+        ``linked_account_no_subscription_or_freeze`` DB check); the child keeps
+        its own saved card.
 
         Pure DB change — no Stripe sync: the child has no active recurring
         memberships, so the family's consolidated subscription is unaffected (see
@@ -244,8 +246,10 @@ class MemberMembershipsLinked:
         member_id: UUID,
         parent_member_id: UUID,
     ) -> None:
-        """Set ``account_linked_to_id`` on the child (also NULLs its stripe/card
-        fields, per the ``linked_account_no_stripe`` DB check)."""
+        """Set ``account_linked_to_id`` on the child (also NULLs its own
+        subscription + freeze fields, per the
+        ``linked_account_no_subscription_or_freeze`` DB check; the child keeps
+        its saved card)."""
         sql = load_sql(SQL_DIR / "member_memberships_link.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
@@ -266,9 +270,8 @@ class MemberMembershipsLinked:
     ) -> None:
         """Clear ``account_linked_to_id`` on the child.
 
-        NOTE: a child carries no card by design (a link NULLed its stripe/card
-        fields), so unlinking only restores the relationship — the member simply
-        re-adds a card if needed.
+        Unlinking only restores the relationship — the child kept its own saved
+        card while linked, so nothing card-related needs re-adding here.
         """
         sql = load_sql(SQL_DIR / "member_memberships_unlink.sql")
         async with self._db_pool.session() as session:
