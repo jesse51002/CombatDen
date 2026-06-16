@@ -66,13 +66,15 @@ class MemberMembershipsReprice(MemberMembershipsBase):
         """Fail-fast-validate a reprice request; resolve its target price.
 
         Read-only (no lock, no writes): a caller runs this BEFORE doing any
-        work so an invalid or no-op reprice is rejected up front. The target
-        is the plan's single ``is_active`` price; a membership already on it
-        is a no-op and rejected.
+        work so an invalid reprice is rejected up front and the task can pin
+        the target. The target is the plan's single ``is_active`` price. A
+        no-op (the membership is already on it) is NOT rejected here — the
+        task is created and ``reprice`` no-ops it (cheaper than a second
+        active-price comparison every request).
 
         Raises:
-            ValueError: If the membership is not found, cancelled, ended, has
-                no active price, or is already on the active price.
+            ValueError: If the membership is not found, cancelled, ended, or
+                has no active price.
         """
         row = await self._get_membership(item_id, member_id)
         self._validate_reprice(row, item_id, member_id)
@@ -80,15 +82,9 @@ class MemberMembershipsReprice(MemberMembershipsBase):
             row["gym_id"],
             row["plan_id"],
         )
-        target_price_id = UUID(str(active_price["price_id"]))
-        if UUID(str(row["price_id"])) == target_price_id:
-            raise ValueError(
-                f"Membership is already on the plan's active price: "
-                f"item_id={item_id}, price_id={target_price_id}"
-            )
         return RepriceResolution(
             gym_id=UUID(str(row["gym_id"])),
-            target_price_id=target_price_id,
+            target_price_id=UUID(str(active_price["price_id"])),
         )
 
     async def reprice(
@@ -100,21 +96,23 @@ class MemberMembershipsReprice(MemberMembershipsBase):
     ) -> UUID:
         """Run one reprice (DB-first); returns the successor row's item_id.
 
-        Takes the family lock itself. A membership already sitting on the
-        target price (a race; callers validate against it) gets a defensive
-        billing-safe re-sync and returns its own item_id.
+        Takes the family lock itself. Reprices to the PINNED
+        ``target_price_id`` as-is — even if it is no longer the plan's active
+        price (a newer one was created after the request); the upgrade the
+        user asked for must still happen. A membership already on the target
+        is a no-op (returns its own item_id, no work, no bill).
 
         Args:
             member_id: The member being repriced.
             old_item_id: The membership row being replaced.
-            target_price_id: Must be the plan's currently active price.
+            target_price_id: The pinned target price (a price of the
+                membership's plan; need not be the currently active one).
             prorate: ``always_invoice`` vs ``none`` on the converge.
 
         Raises:
             LockBusyError: The family is busy.
             ValueError: The membership does not validate (not found,
-                cancelled, ended, or the target is no longer the plan's
-                active price).
+                cancelled, ended) or the target is not a price of its plan.
             SyncNotConfirmedError: The converge could not be confirmed on
                 Stripe — the DB phase has been reverted, the membership is
                 exactly as it was.
@@ -124,19 +122,21 @@ class MemberMembershipsReprice(MemberMembershipsBase):
             self._validate_reprice(row, old_item_id, member_id)
 
             if UUID(str(row["price_id"])) == target_price_id:
-                # Already on the target (callers reject no-ops; a race can
-                # still land here). Nothing to write — re-sync defensively,
-                # without proration so it can never bill.
-                await self._payment_sync.update_payments_recurring(
-                    member_id,
-                    idempotency_key=uuid4(),
-                    proration_behavior="none",
-                )
+                # Already on the target — a no-op (e.g. a duplicate request,
+                # or the membership was already repriced). Nothing to do, and
+                # nothing to bill: the reconciler's sweep converges any
+                # DB↔Stripe drift, so there's no defensive re-sync here.
                 return old_item_id
 
-            target_price = await self._get_target_price(
-                row,
-                old_item_id,
+            # Reprice to the PINNED target price as-is — never re-checked
+            # against the plan's *current* active price. The task pinned what
+            # the user chose at request time (the regular UI sends only the
+            # item id → the backend pins the then-active price; a batch pins
+            # active-at-batch-start), so a newer price created before the task
+            # runs must NOT divert or fail the upgrade.
+            target_price = await self._get_price_for_plan(
+                row["gym_id"],
+                row["plan_id"],
                 target_price_id,
             )
 
@@ -281,31 +281,6 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 f"Cannot reprice ended membership: "
                 f"item_id={old_item_id}, member_id={member_id}"
             )
-
-    async def _get_target_price(
-        self,
-        row: dict,
-        old_item_id: UUID,
-        target_price_id: UUID,
-    ) -> dict:
-        """The target must still be the plan's active price.
-
-        Raises:
-            ValueError: If the plan's active price moved since the reprice
-                was requested (the caller re-requests against the new one).
-        """
-        active_price = await self._get_active_price_for_plan(
-            row["gym_id"],
-            row["plan_id"],
-        )
-        if UUID(str(active_price["price_id"])) != target_price_id:
-            raise ValueError(
-                f"Target price is no longer the plan's active price: "
-                f"target_price_id={target_price_id}, "
-                f"active_price_id={active_price['price_id']}, "
-                f"item_id={old_item_id}"
-            )
-        return active_price
 
     # ── Private — DB phase (write + revert) ────────────────────
 

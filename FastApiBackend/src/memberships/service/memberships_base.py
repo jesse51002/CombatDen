@@ -123,6 +123,41 @@ class MemberMembershipsBase:
             raise ValueError(f"No active price for plan: plan_id={plan_id}, gym_id={gym_id}")
         return dict(row)
 
+    async def _get_price_for_plan(
+        self,
+        gym_id: UUID,
+        plan_id: UUID,
+        price_id: UUID,
+    ) -> dict:
+        """Fetch a SPECIFIC price row of a plan by id — active or not.
+
+        The reprice honors the price pinned on its task **as-is**, even if a
+        newer price has since become the plan's active one (the user started
+        the reprice against the price active then, and a deactivated CRM
+        price keeps its usable Stripe price — `plans_price.py` never archives
+        a Stripe price). Returns the row (``stripe_price_id`` / ``price`` /
+        ``is_active``).
+
+        Raises:
+            ValueError: If the price is not a price of this plan.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_get_price.sql")
+        params = {
+            "gym_id": str(gym_id),
+            "plan_id": str(plan_id),
+            "price_id": str(price_id),
+        }
+        async with self._db_pool.session() as session:
+            result = await session.execute(text(sql), params)
+            row = result.mappings().fetchone()
+
+        if not row:
+            raise ValueError(
+                f"Price is not on this plan: price_id={price_id}, "
+                f"plan_id={plan_id}, gym_id={gym_id}"
+            )
+        return dict(row)
+
     async def _pre_sync_payments(self, member_id: UUID) -> None:
         """Converge the family to a clean DB↔Stripe baseline BEFORE mutating.
 

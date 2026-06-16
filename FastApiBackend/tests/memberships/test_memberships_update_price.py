@@ -37,7 +37,10 @@ from tests.helpers.db_reads import (
     get_applied_discounts,
     get_profile_stripe_ids,
 )
-from tests.helpers.service_factory import request_reprice_task
+from tests.helpers.service_factory import (
+    build_memberships_reprice,
+    request_reprice_task,
+)
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
     assert_subscription_item_price,
@@ -490,6 +493,78 @@ async def test_same_day_double_reprice(
         await delete_member_data(db_pool, member.member_id)
 
 
+async def test_reprice_to_now_inactive_pinned_price(
+    memberships_service,
+    plans_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """Reprice honors a PINNED target even after it's been deactivated.
+
+    The batch scenario: a user starts an upgrade pinning the then-active
+    price, then a newer price is created (deactivating the pinned one).
+    Start on v1; create v2 then v3 (so v2 is now inactive); reprice the
+    membership to v2 — it must move to v2 (the pinned target), NOT divert to
+    the current active v3 and NOT fail.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(gym_id)
+    reprice_service = build_memberships_reprice(db_pool, stripe_client)
+
+    try:
+        item_id = await _start_and_get_item_id(
+            memberships_service, db_pool, member, gym_id, plan,
+        )
+        profile = await get_profile_stripe_ids(
+            db_pool, member.member_id, gym_id,
+        )
+        v2 = await plans_service.set_price(
+            MembershipPlanPriceRequest(
+                plan_id=plan.plan_id, gym_id=gym_id, price=8000,
+            ),
+        )
+        # v3 becomes active, deactivating v2 (≤1 active price per plan).
+        await plans_service.set_price(
+            MembershipPlanPriceRequest(
+                plan_id=plan.plan_id, gym_id=gym_id, price=9000,
+            ),
+        )
+        before = await snapshot_billing_state(
+            stripe_client, profile.stripe_customer_id, connect_opts,
+        )
+
+        new_item_id = await reprice_service.reprice(
+            member_id=member.member_id,
+            old_item_id=item_id,
+            target_price_id=v2.price_id,
+            prorate=False,
+        )
+
+        old_row = await _get_membership_row(db_pool, item_id)
+        assert old_row["status"] == "deleted"
+        new_row = await _get_membership_row(db_pool, new_item_id)
+        assert UUID(str(new_row["price_id"])) == v2.price_id
+        assert new_row["total_price"] == 8000
+        assert new_row["status"] == "applied"
+
+        # Stripe carries v2's price (the pinned target), not active v3.
+        sub = await fetch_subscription(
+            stripe_client, profile.stripe_sub_id_month, connect_opts,
+        )
+        prices = {i.price.id for i in sub.items.data}
+        assert v2.stripe_price_id in prices
+
+        await assert_no_unexpected_charges(
+            stripe_client, before, connect_opts,
+        )
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
 async def test_update_cancelled_raises_no_task(
     memberships_service,
     db_pool,
@@ -546,7 +621,7 @@ async def test_update_cancelled_raises_no_task(
         await delete_member_data(db_pool, member.member_id)
 
 
-async def test_update_price_noop_rejected_no_task(
+async def test_update_price_noop_completes_unchanged(
     memberships_service,
     db_pool,
     gym_id,
@@ -554,7 +629,12 @@ async def test_update_price_noop_rejected_no_task(
     connect_opts,
     created,
 ):
-    """Already on the plan's active price → 400-style rejection, NO task."""
+    """Already on the plan's active price → the task completes as a no-op.
+
+    The request isn't pre-rejected (resolve doesn't re-compare the active
+    price); reprice no-ops, so the membership is untouched and NOTHING is
+    billed even with prorate=True (the no-op returns before any sync).
+    """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
     plan = await created.plan(gym_id)
@@ -577,18 +657,21 @@ async def test_update_price_noop_rejected_no_task(
             profile.stripe_customer_id,
             connect_opts,
         )
-        tasks_before = await _count_tasks(db_pool, gym_id)
 
-        with pytest.raises(ValueError, match="already on"):
-            await request_reprice_task(
-                db_pool,
-                stripe_client,
-                item_id=item_id,
-                member_id=member.member_id,
-                prorate=True,
-            )
-
-        assert await _count_tasks(db_pool, gym_id) == tasks_before
+        task_id = await request_reprice_task(
+            db_pool,
+            stripe_client,
+            item_id=item_id,
+            member_id=member.member_id,
+            prorate=True,
+        )
+        status = await _await_task_terminal(db_pool, task_id)
+        item = await _get_task_item(db_pool, task_id)
+        assert status == "completed", (
+            f"no-op reprice task failed: {item['error_message']}"
+        )
+        # No-op marker: the successor IS the row itself; nothing changed.
+        assert UUID(str(item["new_item_id"])) == item_id
         row = await _get_membership_row(db_pool, item_id)
         assert row["status"] == "applied"
         assert row["cancel_date"] is None
