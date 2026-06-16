@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
@@ -6,10 +7,11 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_labels.dart';
 
-/// One member's block on the review step: their name, then
+/// One member's block on the review step: their name + an
+/// Edit action (jumps back into their plans/discounts), then
 /// a tile per picked membership with the attached discounts
-/// beneath it and the live (slashed → discounted) price on
-/// the right. Totals still come on the Preview step.
+/// beneath it, the live (slashed → discounted) price, and a
+/// Remove action. Totals still come on the Preview step.
 class MemberReviewGroup extends StatelessWidget {
   final String name;
   final List<MembershipDraft> drafts;
@@ -21,12 +23,20 @@ class MemberReviewGroup extends StatelessWidget {
   /// id falls back to a generic label).
   final Map<String, String> presetNames;
 
+  /// Edit this member's lineup (back to plans/discounts).
+  final VoidCallback onEdit;
+
+  /// Remove one membership draft, by its plan id.
+  final ValueChanged<String> onRemoveDraft;
+
   const MemberReviewGroup({
     super.key,
     required this.name,
     required this.drafts,
     required this.presets,
     required this.presetNames,
+    required this.onEdit,
+    required this.onRemoveDraft,
   });
 
   @override
@@ -46,12 +56,29 @@ class MemberReviewGroup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
-          Text(name, style: DesignConstants.h2),
+          Row(
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: DesignConstants.h2,
+                ),
+              ),
+              _ReviewIconButton(
+                icon: Symbols.edit_sharp,
+                tooltip: 'Edit $name’s memberships',
+                onPressed: onEdit,
+              ),
+            ],
+          ),
           for (final d in drafts)
             _MembershipReviewTile(
               draft: d,
               presets: presets,
               presetNames: presetNames,
+              onRemove: () =>
+                  onRemoveDraft(d.plan.planId),
             ),
         ],
       ),
@@ -63,11 +90,13 @@ class _MembershipReviewTile extends StatelessWidget {
   final MembershipDraft draft;
   final List<DiscountResponse> presets;
   final Map<String, String> presetNames;
+  final VoidCallback onRemove;
 
   const _MembershipReviewTile({
     required this.draft,
     required this.presets,
     required this.presetNames,
+    required this.onRemove,
   });
 
   List<String> get _discountNames => [
@@ -119,6 +148,11 @@ class _MembershipReviewTile extends StatelessWidget {
               draft: draft,
               presets: presets,
             ),
+            _ReviewIconButton(
+              icon: Symbols.delete_sharp,
+              tooltip: 'Remove ${plan.planName}',
+              onPressed: onRemove,
+            ),
           ],
         ),
         for (final n in _discountNames)
@@ -156,6 +190,36 @@ class _PlanTypeTag extends StatelessWidget {
         style: DesignConstants.pSmall.copyWith(
           color: DesignConstants.primaryColor,
         ),
+      ),
+    );
+  }
+}
+
+/// Compact edit / remove action used on the review tiles.
+class _ReviewIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _ReviewIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+      icon: Icon(
+        icon,
+        size: DesignConstants.iconSizeSmall,
+        weight: DesignConstants.iconWeight,
+        color: DesignConstants.text2nd,
       ),
     );
   }

@@ -27,6 +27,14 @@ class MemberMembershipsStartRequest extends Equatable {
   final String gymId;
   final bool prorate;
   final bool paidWithCash;
+
+  /// One-off card for the one-time charge (null = saved
+  /// default); set only on PAY, never on preview.
+  final String? customPaymentMethodId;
+
+  /// Promote [customPaymentMethodId] to the saved default
+  /// after a successful charge.
+  final bool customCardSetDefault;
   final String idempotencyKey;
   final List<MemberMembershipsStartItem> memberships;
 
@@ -37,6 +45,8 @@ class MemberMembershipsStartRequest extends Equatable {
     required this.memberships,
     this.prorate = true,
     this.paidWithCash = false,
+    this.customPaymentMethodId,
+    this.customCardSetDefault = false,
   });
 
   MemberMembershipsStartRequest copyWith({
@@ -44,6 +54,8 @@ class MemberMembershipsStartRequest extends Equatable {
     String? gymId,
     bool? prorate,
     bool? paidWithCash,
+    String? customPaymentMethodId,
+    bool? customCardSetDefault,
     String? idempotencyKey,
     List<MemberMembershipsStartItem>? memberships,
   }) {
@@ -53,6 +65,10 @@ class MemberMembershipsStartRequest extends Equatable {
       gymId: gymId ?? this.gymId,
       prorate: prorate ?? this.prorate,
       paidWithCash: paidWithCash ?? this.paidWithCash,
+      customPaymentMethodId: customPaymentMethodId ??
+          this.customPaymentMethodId,
+      customCardSetDefault: customCardSetDefault ??
+          this.customCardSetDefault,
       idempotencyKey:
           idempotencyKey ?? this.idempotencyKey,
       memberships: memberships ?? this.memberships,
@@ -68,6 +84,8 @@ class MemberMembershipsStartRequest extends Equatable {
         gymId,
         prorate,
         paidWithCash,
+        customPaymentMethodId,
+        customCardSetDefault,
         idempotencyKey,
         memberships,
       ];

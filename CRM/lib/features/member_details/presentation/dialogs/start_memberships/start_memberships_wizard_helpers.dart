@@ -96,6 +96,18 @@ bool hasRecurringDrafts(
       ),
     );
 
+/// Whether any configured draft is a one-time / trial plan
+/// (non-recurring) — gates the one-off-card option.
+bool hasOneTimeDrafts(
+  List<StartMembershipParticipant> members,
+  Map<String, List<MembershipDraft>> drafts,
+) =>
+    members.any(
+      (m) => (drafts[m.memberId] ?? const []).any(
+        (d) => d.plan.planType != PlanType.recurring,
+      ),
+    );
+
 Map<String, String> memberNamesOf(
   List<StartMembershipParticipant> members,
 ) =>
@@ -120,6 +132,8 @@ MemberMembershipsStartRequest? buildStartRequest({
   required bool paidWithCash,
   required List<StartMembershipParticipant> configMembers,
   required Map<String, List<MembershipDraft>> drafts,
+  String? customPaymentMethodId,
+  bool customCardSetDefault = false,
 }) {
   final items = <MemberMembershipsStartItem>[];
   for (final m in configMembers) {
@@ -136,6 +150,8 @@ MemberMembershipsStartRequest? buildStartRequest({
     idempotencyKey: idempotencyKey,
     prorate: prorate,
     paidWithCash: paidWithCash,
+    customPaymentMethodId: customPaymentMethodId,
+    customCardSetDefault: customCardSetDefault,
     memberships: items,
   );
 }

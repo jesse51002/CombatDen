@@ -63,8 +63,13 @@ class CardWalletSection extends StatelessWidget {
         ),
         Align(
           alignment: Alignment.centerLeft,
+          // The saved card pays recurring (and one-time
+          // unless a one-off card is used); editing it
+          // replaces the default on file.
           child: AppOutlineButton(
-            text: 'Add new card',
+            text: card == null
+                ? 'Add card'
+                : 'Edit card on file',
             borderRadius: DesignConstants.radiusSmall,
             onPressed: onAddNew,
           ),

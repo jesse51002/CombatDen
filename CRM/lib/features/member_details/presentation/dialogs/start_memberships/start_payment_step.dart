@@ -5,14 +5,18 @@ import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/card_wallet_section.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/one_time_card_section.dart';
 
 /// Step 7 — settlement. Card on file (the wallet UI is a
 /// known placeholder — see [CardWalletSection]) vs the REAL
 /// cash toggle (`paid_with_cash`: the one-time invoice
 /// settles out-of-band, the recurring first invoice is
 /// marked paid out-of-band, future cycles still auto-charge
-/// the card). Echoes the preview totals — the last thing
-/// seen before PAY is the number.
+/// the card). When the cart has a one-time / trial item the
+/// [OneTimeCardSection] lets staff pay it with a card entered
+/// now. Echoes the preview totals — the last thing seen
+/// before PAY is the number.
 class StartPaymentStep extends StatelessWidget {
   final CardOnFile? cardOnFile;
   final bool paidWithCash;
@@ -20,6 +24,10 @@ class StartPaymentStep extends StatelessWidget {
   final bool prorate;
   final ValueChanged<bool> onProrateChanged;
   final bool hasRecurring;
+  final bool hasOneTime;
+  final CustomCardCapture? customCard;
+  final VoidCallback onAddOrChangeCustomCard;
+  final VoidCallback onRemoveCustomCard;
   final MemberMembershipsStartPreview? preview;
   final VoidCallback onAddNewCard;
 
@@ -31,6 +39,10 @@ class StartPaymentStep extends StatelessWidget {
     required this.prorate,
     required this.onProrateChanged,
     required this.hasRecurring,
+    required this.hasOneTime,
+    required this.customCard,
+    required this.onAddOrChangeCustomCard,
+    required this.onRemoveCustomCard,
     required this.preview,
     required this.onAddNewCard,
   });
@@ -70,6 +82,13 @@ class StartPaymentStep extends StatelessWidget {
               CardWalletSection(
                 cardOnFile: cardOnFile,
                 onAddNew: onAddNewCard,
+              ),
+            if (!paidWithCash && hasOneTime)
+              OneTimeCardSection(
+                customCard: customCard,
+                hasRecurring: hasRecurring,
+                onAddOrChange: onAddOrChangeCustomCard,
+                onRemove: onRemoveCustomCard,
               ),
             if (hasRecurring)
               SwitchListTile(

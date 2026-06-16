@@ -23,11 +23,19 @@ class StartReviewStep extends StatelessWidget {
   /// preset NAMES for the summary.
   final Future<List<DiscountResponse>> discountsFuture;
 
+  /// Edit jumps the wizard back into [memberId]'s
+  /// plans/discounts; remove drops one membership draft.
+  final ValueChanged<String> onEditMember;
+  final void Function(String memberId, String planId)
+      onRemoveDraft;
+
   const StartReviewStep({
     super.key,
     required this.members,
     required this.draftsByMember,
     required this.discountsFuture,
+    required this.onEditMember,
+    required this.onRemoveDraft,
   });
 
   @override
@@ -88,6 +96,13 @@ class StartReviewStep extends StatelessWidget {
                           draftsByMember[m.memberId]!,
                       presets: presets,
                       presetNames: names,
+                      onEdit: () =>
+                          onEditMember(m.memberId),
+                      onRemoveDraft: (planId) =>
+                          onRemoveDraft(
+                        m.memberId,
+                        planId,
+                      ),
                     ),
               ],
             );

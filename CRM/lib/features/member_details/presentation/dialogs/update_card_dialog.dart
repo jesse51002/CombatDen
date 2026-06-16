@@ -6,6 +6,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
+import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
@@ -28,10 +29,17 @@ class UpdateCardDialog extends StatefulWidget {
   final String memberName;
   final CardOnFile? card;
 
+  /// The member whose saved card this edits. Null targets
+  /// the currently viewed member; the start-memberships
+  /// wizard sets it to the payer so the card is editable
+  /// from any launching page.
+  final String? targetMemberId;
+
   const UpdateCardDialog({
     super.key,
     required this.memberName,
     this.card,
+    this.targetMemberId,
   });
 
   /// Resolves `true` only when the user taps "Remove card";
@@ -40,6 +48,7 @@ class UpdateCardDialog extends StatefulWidget {
     required BuildContext context,
     required String memberName,
     CardOnFile? card,
+    String? targetMemberId,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -49,6 +58,7 @@ class UpdateCardDialog extends StatefulWidget {
         child: UpdateCardDialog(
           memberName: memberName,
           card: card,
+          targetMemberId: targetMemberId,
         ),
       ),
     );
@@ -80,7 +90,10 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
       );
       if (!mounted) return;
       context.read<MemberDetailBloc>().add(
-            UpdateCardRequested(paymentMethod.id),
+            UpdateCardRequested(
+              paymentMethod.id,
+              targetMemberId: widget.targetMemberId,
+            ),
           );
       Navigator.of(context).pop();
     } catch (e) {
@@ -118,35 +131,12 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
               color: DesignConstants.text,
             ),
           ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: DesignConstants.card,
-              borderRadius: BorderRadius.circular(
-                DesignConstants.radiusBig,
-              ),
-              border: Border.all(
-                color: DesignConstants.text,
-                width: 2,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: DesignConstants.spacingMedium,
-              ),
-              child: CardField(
-                enablePostalCode: true,
-                style: DesignConstants.p.copyWith(
-                  color: DesignConstants.text,
-                ),
-                onCardChanged: (details) {
-                  final isComplete =
-                      details?.complete ?? false;
-                  if (isComplete != _complete) {
-                    setState(() => _complete = isComplete);
-                  }
-                },
-              ),
-            ),
+          CardFieldBox(
+            onComplete: (isComplete) {
+              if (isComplete != _complete) {
+                setState(() => _complete = isComplete);
+              }
+            },
           ),
           if (_error != null)
             Text(
