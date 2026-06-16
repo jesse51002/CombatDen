@@ -32,6 +32,9 @@ from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 
 import src.shared.db_schema_path  # noqa: F401
+from src.members.schema.members_billing_schema import (
+    MembersBillingUpdateCardRequest,
+)
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItemState,
     MemberMembershipsStartRequest,
@@ -49,6 +52,9 @@ from src.shared.gym_timezone import gym_today
 if TYPE_CHECKING:
     from src.discounts.service.discounts_service import (
         DiscountsService,
+    )
+    from src.members.service.management.members_management_service import (
+        MembersManagementService,
     )
     from src.memberships.service.memberships_discounts import (  # noqa: E501
         MemberMembershipsDiscounts,
@@ -79,6 +85,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         update_discounts: MemberMembershipsDiscounts,
         discounts_service: DiscountsService,
         validation: MemberMembershipsStartValidation,
+        members_management_service: MembersManagementService,
     ) -> None:
         super().__init__(
             db_pool,
@@ -89,6 +96,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self._update_discounts = update_discounts
         self._discounts = discounts_service
         self._validation = validation
+        self._members_management = members_management_service
 
     async def start(
         self,
@@ -125,6 +133,16 @@ class MemberMembershipsStart(MemberMembershipsBase):
             s for s in states if s.plan_type == PlanType.recurring
         ]
 
+        # A one-off card only pays the one-time invoice; with no one-time
+        # group it would silently do nothing (recurring always bills the
+        # saved default), so reject loudly before anything is written.
+        if request.custom_payment_method_id is not None and not one_time:
+            raise ValueError(
+                "custom_payment_method_id given but the request has no "
+                "one-time / trial memberships — recurring memberships "
+                "always bill the saved card",
+            )
+
         # Pre-sync only when a recurring converge will run: converge the
         # payer's family to a clean DB↔Stripe baseline BEFORE inserting.
         if recurring:
@@ -132,10 +150,27 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
         await self._insert_all(request, parent, plan_prices, states)
 
+        one_time_charged = False
         if one_time:
-            await self._charge_one_time_group(request, one_time)
+            one_time_charged = await self._charge_one_time_group(
+                request, one_time,
+            )
         if recurring:
             await self._converge_recurring_group(request, recurring)
+
+        # Promote the one-off card to the payer's saved default LAST — only
+        # after a successful one-time charge — so this purchase billed exactly
+        # as previewed (the recurring converge above used the old default) and
+        # only future cycles bill the new card.
+        if (
+            request.custom_card_set_default
+            and one_time_charged
+            and request.custom_payment_method_id is not None
+        ):
+            await self._set_default_card(
+                request.payer_member_id,
+                request.custom_payment_method_id,
+            )
 
         charge_count = (1 if one_time else 0) + (1 if recurring else 0)
         return MemberMembershipsStartResponse(
@@ -209,13 +244,17 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self,
         request: MemberMembershipsStartRequest,
         group: list[MemberMembershipsStartItemState],
-    ) -> None:
+    ) -> bool:
         """Phase C: ONE consolidated invoice sweeps the pending one-time rows.
 
         The group shares the invoice's fate: an exception means nothing was
         billed (per-step Stripe idempotency) → the whole group fails and is
         cleaned up. After a successful charge an unconfirmed writeback marks
         the row failed but KEEPS it — its line is billed; never un-bill.
+
+        Returns ``True`` when the charge itself succeeded (did not raise), so
+        the caller knows whether a one-off card was actually charged before
+        promoting it to the saved default.
         """
         try:
             await self._payment_sync_one_time.charge_one_time(
@@ -227,13 +266,49 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     request.idempotency_key, PlanType.one_time.value,
                 ),
                 paid_with_cash=request.paid_with_cash,
+                payment_method_id=request.custom_payment_method_id,
+                # Keep a to-be-saved card attached after the charge so the
+                # set-default step can promote it; otherwise detach (one-off).
+                detach_payment_method_after=(
+                    not request.custom_card_set_default
+                ),
             )
         except Exception as exc:
             await self._fail_group(
                 group, f"one-time invoice failed: {exc}", cleanup=True,
             )
-            return
+            return False
         await self._verify_group(group, keep_unverified=True)
+        return True
+
+    async def _set_default_card(
+        self,
+        payer_member_id: UUID,
+        payment_method_id: str,
+    ) -> None:
+        """Promote the one-off card to the payer's saved default — best effort.
+
+        Reuses ``MembersManagementService.update_card`` (set customer default →
+        detach the old default → write the members card cache). The card is
+        already attached (the charge kept it), so the attach inside update_card
+        is a no-op. A failure here must NOT un-bill the successful charge, so it
+        is logged and swallowed — the card simply stays attached as a
+        non-default method and staff can re-save it from the member page.
+        """
+        try:
+            await self._members_management.update_card(
+                payer_member_id,
+                MembersBillingUpdateCardRequest(
+                    payment_method_id=payment_method_id,
+                ),
+            )
+        except Exception:
+            logger.warning(
+                "One-off card charged but promoting it to member %s's "
+                "default failed; it stays attached (non-default).",
+                payer_member_id,
+                exc_info=True,
+            )
 
     async def _converge_recurring_group(
         self,

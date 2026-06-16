@@ -2,9 +2,10 @@
 
 from datetime import date
 from enum import StrEnum
+from typing import Self
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from schema.gym_discount import DiscountType
 from schema.membership_plan import PlanType
 
@@ -64,16 +65,41 @@ class MemberMembershipsStartRequest(BaseModel):
     single ``idempotency_key`` deterministically derives one sub-key per
     charge group (one-time invoice / recurring converge), so a client retry
     of the same request dedups both charges at Stripe.
+
+    ``custom_payment_method_id`` charges the consolidated ONE-TIME invoice
+    with a specific card (a one-off card entered at checkout) instead of the
+    payer's saved default; the recurring converge always uses the saved
+    default. ``custom_card_set_default`` then promotes that card to the
+    payer's saved default — but ONLY after the whole request succeeds, so a
+    failed charge never changes the saved card. Both are card-only
+    (mutually exclusive with ``paid_with_cash``) and the start op rejects a
+    custom card on a request with no one-time / trial group.
     """
 
     payer_member_id: UUID
     gym_id: UUID
     prorate: bool = True
     paid_with_cash: bool = False
+    custom_payment_method_id: str | None = None
+    custom_card_set_default: bool = False
     idempotency_key: UUID
     memberships: list[MemberMembershipsStartItem] = Field(
         default_factory=list,
     )
+
+    @model_validator(mode="after")
+    def _validate_custom_card(self) -> Self:
+        """A one-off card is card-only and required for the set-default flag."""
+        if self.custom_payment_method_id is not None and self.paid_with_cash:
+            raise ValueError(
+                "custom_payment_method_id cannot be combined with "
+                "paid_with_cash (a cash settle charges no card)",
+            )
+        if self.custom_card_set_default and self.custom_payment_method_id is None:
+            raise ValueError(
+                "custom_card_set_default requires custom_payment_method_id",
+            )
+        return self
 
     @field_validator("memberships")
     @classmethod

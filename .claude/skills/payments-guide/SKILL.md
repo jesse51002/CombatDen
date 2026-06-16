@@ -140,6 +140,14 @@ created but the CRM writeback failed — surfaced loudly for operator cleanup).
   invoice-settings default).
 - `update_customer` — updates details and **swaps the card**: attaches the new
   PaymentMethod, sets it default, then **detaches the old** one.
+- `attach_payment_method` / `detach_payment_method` — attach a PaymentMethod to a
+  customer **without** making it default, and detach one (both idempotency-keyed).
+  Used by the one-off-card charge path (`create_invoice_payment` with a
+  `payment_method_id`): a card the member entered for this purchase only is
+  attached, charged, then detached — the saved default is untouched. Attach is a
+  no-op when the method is already attached (so a retry is safe); a detached
+  method can **never** be re-attached, so the charge path detaches only AFTER a
+  successful pay.
 - `unlink_customer_card` — clears the default PaymentMethod and detaches it
   (no-op if the customer is gone).
 - `retrieve_customer` — raises `PaymentsResourceNotFoundError` if missing/deleted.
@@ -194,7 +202,18 @@ back to active because the DB says it's current.
   Invoice-level `metadata` is any `BaseStripeMetadata` (membership-one-time or
   ad-hoc); a consolidated multi-plan invoice's
   `StripeMembershipOneTimeMetadata.plan_id` is `None`. **No price-active check** —
-  prices are never deactivated.
+  prices are never deactivated. An optional **`payment_method_id`** charges a
+  SPECIFIC card (a one-off card entered at checkout) instead of the customer's
+  default: the `_pay_invoice` helper attaches it (`{base}:attach`), pays with it
+  (`pay_params["payment_method"]`), then — when `detach_payment_method_after`
+  (default `True`) — detaches it (`{base}:detach`), never touching
+  `invoice_settings.default_payment_method`. The detach runs ONLY after a
+  successful pay (a declined pay leaves the card attached-but-non-default so a
+  retry can reuse it) and is **best-effort** (a detach failure is logged, not
+  raised — the invoice is already paid, so raising would wrongly read as a charge
+  failure). `payment_method_id` is mutually exclusive with `paid_out_of_band`
+  (model-validated). A `$0` invoice auto-pays at finalize and skips the pay step
+  entirely, so a one-off card is never attached for a zero-total charge.
 - `refund_payment` — refund a PaymentIntent (full or partial).
 - `pay_open_subscription_invoice_out_of_band` — find the subscription's single
   open invoice, stamp `crm_paid_with_cash="true"` on it, and `invoices.pay` with
