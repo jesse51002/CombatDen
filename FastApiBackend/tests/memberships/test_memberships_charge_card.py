@@ -214,6 +214,7 @@ async def test_charge_card_gym_mismatch_raises(
             await memberships_service.charge_card(
                 MemberMembershipsChargeCardRequest(
                     member_id=member.member_id,
+                    paid_by_member_id=member.member_id,
                     gym_id=wrong_gym_id,
                     amount_cents=1000,
                     reason="Should fail",

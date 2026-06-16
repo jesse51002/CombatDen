@@ -461,7 +461,9 @@ async def test_phase_a_linked_child_self_pays_own_membership(
                 ],
             )
         )
-        assert all(r.status == "success" for r in result.results), result
+        assert all(
+            r.status.value == "created" for r in result.results
+        ), result
 
         # The CHILD's own subscription bills it; the parent has none.
         child_profile = await get_profile_stripe_ids(
