@@ -870,13 +870,22 @@ The deep difference from the recurring engine: a one-time membership is
 re-derive-and-converge loop and no self-heal, because there is nothing to keep
 converging. This is why it is a separate service, not a mode of the reconciler.
 
-### `charge_one_time(member_id, idempotency_key, paid_with_cash=False) -> None`
+### `charge_one_time(member_id, idempotency_key, paid_with_cash=False, payment_method_id=None, detach_payment_method_after=True) -> None`
 
 The real path. Resolves the paying parent, builds the desired invoice, charges
 it once, writes back. **A no-op when the family has no pending one-time
 memberships** (never cuts an empty invoice). Returns `None` — the caller reads
 the DB (`applied`) to confirm. Re-running finds no `not_added` rows and charges
 nothing again (terminal).
+
+`payment_method_id` charges a **specific** card (a one-off card entered at
+checkout) instead of the payer's saved default — the payment service
+attaches → pays → detaches it without touching the saved default (see
+`payments-guide`). `detach_payment_method_after=False` keeps the card attached
+after a successful charge (the start op uses this when it then promotes the card
+to the saved default). Both are pass-through only and are ignored on a cash
+settle; `preview_one_time` is unaffected (a payment method never changes the
+amount).
 
 1. **Read the family's PENDING non-recurring memberships** (`_build_plan` ->
    `PaymentSyncQueries.get_active_one_time(family_ids, today, preview=False)`,
