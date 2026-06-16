@@ -213,6 +213,43 @@ class MemberMembershipsBase:
                     f"plan_id={plan_id}"
                 )
 
+    async def _assert_payer_allowed(
+        self,
+        member_id: UUID,
+        paid_by_member_id: UUID,
+    ) -> None:
+        """Validate a payer is authorized to bill for a member.
+
+        The payer must be the member themselves (self-pay) or the member's
+        linked parent — ``account_linked_to_id`` is the authorization layer
+        (paying for someone else requires that member be linked to you).
+        Shared by every membership op that takes an explicit payer
+        (``charge_card`` today; store / drop-in later). The start op enforces
+        the same rule in batch via its own ``_check_links``.
+
+        Raises:
+            ValueError: If the member is missing, or the payer is neither the
+                member nor the member's linked parent.
+        """
+        if paid_by_member_id == member_id:
+            return
+        sql = load_sql(SQL_DIR / "member_memberships_start_account_links.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"member_ids": [str(member_id)]},
+            )
+            row = result.mappings().fetchone()
+        if row is None:
+            raise ValueError(f"Member {member_id} not found")
+        linked_to = row["account_linked_to_id"]
+        if linked_to is None or UUID(str(linked_to)) != paid_by_member_id:
+            raise ValueError(
+                f"Payer {paid_by_member_id} is not authorized for member "
+                f"{member_id} — the payer must be the member or their "
+                f"linked parent",
+            )
+
     async def _crm_insert(
         self,
         rows: list[dict],

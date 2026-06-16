@@ -13,11 +13,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-from uuid import UUID
 
-from sqlalchemy import text
-
-from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsChargeCardRequest,
 )
@@ -32,7 +28,6 @@ from src.payments.schema.payments_payment_schema import (
     PaymentsInvoicePaymentCreateRequest,
 )
 from src.shared.database import DirectDatabasePool
-from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
@@ -126,36 +121,3 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
             payment_request,
             stripe_account_id,
         )
-
-    async def _assert_payer_allowed(
-        self,
-        member_id: UUID,
-        paid_by_member_id: UUID,
-    ) -> None:
-        """The payer must be the member themselves or their linked parent.
-
-        The link is the authorization layer: paying for someone else's
-        charge requires that member be linked to you.
-
-        Raises:
-            ValueError: If the member is missing or the payer is neither
-                the member nor the member's linked parent.
-        """
-        if paid_by_member_id == member_id:
-            return
-        sql = load_sql(SQL_DIR / "member_memberships_start_account_links.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"member_ids": [str(member_id)]},
-            )
-            row = result.mappings().fetchone()
-        if row is None:
-            raise ValueError(f"Member {member_id} not found")
-        linked_to = row["account_linked_to_id"]
-        if linked_to is None or UUID(str(linked_to)) != paid_by_member_id:
-            raise ValueError(
-                f"Payer {paid_by_member_id} is not authorized for member "
-                f"{member_id} — the payer must be the member or their "
-                f"linked parent",
-            )
