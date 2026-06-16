@@ -204,6 +204,10 @@ def build_member_memberships_service(
         parent_resolver=parent_resolver,
     )
     discounts_svc = DiscountsService(db_pool)
+    management_svc = build_member_management_service(
+        db_pool,
+        stripe_client,
+    )
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -214,6 +218,7 @@ def build_member_memberships_service(
         paying_lock,
         one_time_svc,
         discounts_svc,
+        management_svc,
     )
 
 
