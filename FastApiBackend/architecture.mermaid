@@ -88,6 +88,7 @@ flowchart TB
     member_memberships_service --> gym_stripe_service
     member_memberships_service --> billing_parent_resolver
     member_memberships_service -->|"mint inline custom discounts at start"| discounts_service
+    member_memberships_service -->|"start: save one-off card as default"| members_management_service
     payment_sync_one_time --> Payments
     payment_sync_one_time --> billing_parent_resolver
     membership_plans_service --> gym_stripe_service
