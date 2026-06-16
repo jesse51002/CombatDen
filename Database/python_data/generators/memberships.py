@@ -36,8 +36,9 @@ def _interval_days(duration_amount: int | None, duration_unit: str | None) -> in
 def _payer_id(
     member: MemberPlan, handle_to_id: dict[str, uuid.UUID]
 ) -> uuid.UUID:
-    """The member's payer: their linked parent if linked, else themselves."""
-    if member.linked_primary_handle is not None:
+    """The member's payer: a self-paying child (or any non-linked member) pays
+    themselves; a parent-paid linked child is paid by their linked parent."""
+    if not member.self_pays and member.linked_primary_handle is not None:
         return handle_to_id[member.linked_primary_handle]
     assert member.member_id is not None
     return member.member_id
