@@ -173,6 +173,54 @@ class PaymentsStripeMembersService:
         )
         return self._map_customer_response(customer, pm)
 
+    # ── Payment Methods (attach / detach without touching default) ─
+
+    async def attach_payment_method(
+        self,
+        payment_method_id: str,
+        stripe_customer_id: str,
+        stripe_account_id: str,
+        *,
+        idempotency_key: str,
+    ) -> None:
+        """Attach a payment method to a customer WITHOUT making it default.
+
+        Stripe requires a payment method to belong to the customer before an
+        invoice can be paid with it, so the one-time charge path attaches the
+        card the member entered for this purchase, charges it, then detaches it
+        (see ``detach_payment_method``) — the customer's default payment method
+        is never touched. Idempotent: re-attaching an already-attached method to
+        the same customer is a no-op success, so a retried charge is safe.
+        """
+        await self._stripe.v1.payment_methods.attach_async(
+            payment_method_id,
+            params=PaymentMethodAttachParams(customer=stripe_customer_id),
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=idempotency_key,
+            ),
+        )
+
+    async def detach_payment_method(
+        self,
+        payment_method_id: str,
+        stripe_account_id: str,
+        *,
+        idempotency_key: str,
+    ) -> None:
+        """Detach a payment method from its customer.
+
+        A detached payment method can NEVER be re-attached, so callers detach
+        only after the charge they needed it for has already succeeded.
+        """
+        await self._stripe.v1.payment_methods.detach_async(
+            payment_method_id,
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=idempotency_key,
+            ),
+        )
+
     # ── Unlink ───────────────────────────────────────────────────
 
     async def unlink_customer_card(

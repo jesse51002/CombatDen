@@ -125,16 +125,10 @@ class PaymentsStripePaymentService:
         # Zero-amount invoices are auto-marked paid at finalization, so paying
         # again raises "Invoice is already paid".
         if invoice.status != "paid":
-            pay_params = InvoicePayParams()
-            if request.paid_out_of_band:
-                pay_params["paid_out_of_band"] = True
-            invoice = await self._stripe.v1.invoices.pay_async(
+            invoice = await self._pay_invoice(
                 invoice.id,
-                params=pay_params,
-                options=self._client.connect_opts(
-                    stripe_account_id,
-                    idempotency_key=f"{base_key}:pay",
-                ),
+                request,
+                stripe_account_id,
             )
 
         ordered_lines = self._order_lines(invoice, invoice_item_ids)
@@ -148,6 +142,84 @@ class PaymentsStripePaymentService:
             line_amounts=[amount for _, amount in ordered_lines],
             metadata=invoice.metadata.to_dict() if invoice.metadata else {},
         )
+
+    async def _pay_invoice(
+        self,
+        invoice_id: str,
+        request: PaymentsInvoicePaymentCreateRequest,
+        stripe_account_id: str,
+    ) -> stripe.Invoice:
+        """Pay a finalized invoice — cash, a one-off card, or the default.
+
+        A one-off card (``request.payment_method_id``) must belong to the
+        customer before Stripe will charge it, so we attach → pay → (on
+        success) detach. The detach runs ONLY after a successful pay — a
+        declined pay leaves the card attached but non-default so a retry can
+        reuse it (a detached method can never be re-attached) — and is
+        best-effort: the invoice is already paid, so a detach failure must not
+        surface as a charge failure.
+        """
+        base_key = request.idempotency_key
+        pay_params = InvoicePayParams()
+        if request.paid_out_of_band:
+            pay_params["paid_out_of_band"] = True
+
+        if request.payment_method_id is not None:
+            await self._members.attach_payment_method(
+                request.payment_method_id,
+                request.stripe_customer_id,
+                stripe_account_id,
+                idempotency_key=f"{base_key}:attach",
+            )
+            pay_params["payment_method"] = request.payment_method_id
+
+        invoice = await self._stripe.v1.invoices.pay_async(
+            invoice_id,
+            params=pay_params,
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=f"{base_key}:pay",
+            ),
+        )
+
+        if (
+            request.payment_method_id is not None
+            and request.detach_payment_method_after
+        ):
+            await self._detach_after_pay(
+                request.payment_method_id,
+                stripe_account_id,
+                idempotency_key=f"{base_key}:detach",
+            )
+
+        return invoice
+
+    async def _detach_after_pay(
+        self,
+        payment_method_id: str,
+        stripe_account_id: str,
+        *,
+        idempotency_key: str,
+    ) -> None:
+        """Best-effort detach of a one-off card after a successful pay.
+
+        The invoice is already paid, so a detach failure is logged and
+        swallowed — raising would wrongly signal a charge failure and a caller
+        could un-bill a billed invoice.
+        """
+        try:
+            await self._members.detach_payment_method(
+                payment_method_id,
+                stripe_account_id,
+                idempotency_key=idempotency_key,
+            )
+        except stripe.StripeError:
+            logger.warning(
+                "Failed to detach one-off payment method %s after a "
+                "successful charge; it remains attached (non-default).",
+                payment_method_id,
+                exc_info=True,
+            )
 
     async def _create_items(
         self,
