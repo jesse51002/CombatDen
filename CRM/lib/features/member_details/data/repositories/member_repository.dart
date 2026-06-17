@@ -482,6 +482,7 @@ class MemberRepository {
   /// saved card. [idempotencyKey] dedupes retries.
   Future<void> chargeCard({
     required String memberId,
+    required String paidByMemberId,
     required String gymId,
     required int amount,
     required String reason,
@@ -492,6 +493,7 @@ class MemberRepository {
       '/api/v1/member_memberships/charge-card',
       data: {
         'member_id': memberId,
+        'paid_by_member_id': paidByMemberId,
         'gym_id': gymId,
         'amount_cents': amount,
         'reason': reason,

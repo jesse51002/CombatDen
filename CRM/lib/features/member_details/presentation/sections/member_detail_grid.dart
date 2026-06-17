@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/app_constants.dart';
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/presentation/sections/invoices_section.dart';
 import 'package:crm/features/member_details/presentation/sections/member_waivers_section.dart';
@@ -38,36 +37,56 @@ class MemberDetailGrid extends StatelessWidget {
     required this.refreshToken,
   });
 
-  /// The account's soonest upcoming billing date across its
-  /// memberships — labels the next invoice (which carries no
-  /// date of its own).
-  DateTime? get _nextDueDate {
-    DateTime? soonest;
+  /// The distinct payers behind this member's recurring memberships
+  /// (self and/or their linked parent), each with the soonest next-due
+  /// date among the memberships they fund. One Invoices card is shown
+  /// per payer — up to two when the memberships are split. Membership
+  /// order is preserved so the dominant payer leads.
+  List<InvoicePayer> get _invoicePayers {
+    final order = <String>[];
+    final dueByPayer = <String, DateTime?>{};
     for (final m in member.memberships) {
+      if (m.planType?.toLowerCase() != 'recurring') continue;
+      final payerId = m.paidByFor(member.memberId);
+      if (payerId == null) continue;
       final due = m.nextDueDate;
-      if (due == null) continue;
-      if (soonest == null || due.isBefore(soonest)) {
-        soonest = due;
+      if (!dueByPayer.containsKey(payerId)) {
+        order.add(payerId);
+        dueByPayer[payerId] = due;
+      } else {
+        final current = dueByPayer[payerId];
+        if (due != null &&
+            (current == null || due.isBefore(current))) {
+          dueByPayer[payerId] = due;
+        }
       }
     }
-    return soonest;
+    return [
+      for (final id in order)
+        InvoicePayer(
+          memberId: id,
+          name: _payerNameFor(id),
+          photoUrl: _payerPhotoFor(id),
+          nextDueDate: dueByPayer[id],
+        ),
+    ];
   }
 
-  /// The paying account behind the invoices — this member when
-  /// unlinked, else the linked parent account.
-  LinkedAccount? get _payer {
-    final parentId = member.linkedToAccount;
-    if (parentId == null) return null;
+  String _payerNameFor(String id) {
+    if (id == member.memberId) return member.fullName;
     for (final a in member.linkedAccounts) {
-      if (a.memberId == parentId) return a;
+      if (a.memberId == id) return a.fullName;
+    }
+    return 'Linked account';
+  }
+
+  String? _payerPhotoFor(String id) {
+    if (id == member.memberId) return member.photoUrl;
+    for (final a in member.linkedAccounts) {
+      if (a.memberId == id) return a.photoUrl;
     }
     return null;
   }
-
-  String get _payerName => _payer?.fullName ?? member.fullName;
-
-  String? get _payerPhotoUrl =>
-      _payer?.photoUrl ?? member.photoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -79,9 +98,7 @@ class MemberDetailGrid extends StatelessWidget {
           member: member,
           currentIndex: currentIndex,
           onPageChanged: onPageChanged,
-          nextDueDate: _nextDueDate,
-          payerName: _payerName,
-          payerPhotoUrl: _payerPhotoUrl,
+          payers: _invoicePayers,
           refreshToken: refreshToken,
         ),
         PaymentHistorySection(
@@ -99,18 +116,14 @@ class _Grid extends StatelessWidget {
   final MemberDetailResponse member;
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
-  final DateTime? nextDueDate;
-  final String payerName;
-  final String? payerPhotoUrl;
+  final List<InvoicePayer> payers;
   final int refreshToken;
 
   const _Grid({
     required this.member,
     required this.currentIndex,
     required this.onPageChanged,
-    required this.nextDueDate,
-    required this.payerName,
-    required this.payerPhotoUrl,
+    required this.payers,
     required this.refreshToken,
   });
 
@@ -141,11 +154,8 @@ class _Grid extends StatelessWidget {
           onPageChanged: onPageChanged,
         );
         final invoices = InvoicesSection(
-          memberId: member.memberId,
           gymId: member.gymId,
-          nextDueDate: nextDueDate,
-          payerName: payerName,
-          payerPhotoUrl: payerPhotoUrl,
+          payers: payers,
           refreshKey: refreshToken,
           // In the wide grid BalancedColumns inserts the row
           // gap only when the card actually renders.

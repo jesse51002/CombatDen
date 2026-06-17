@@ -1,5 +1,6 @@
 SELECT
     mm.plan_id,
+    mm.paid_by_member_id,
     mm.gym_id,
     mp.plan_type,
     mp.duration_unit,

@@ -1,17 +1,14 @@
--- Resolve the paying account for a member and return the data needed to
--- fetch its upcoming (next) Stripe invoice: the parent's monthly
--- subscription id and the gym's Connect account id. A linked child resolves
--- to its parent (COALESCE(account_linked_to_id, member_id)); an unlinked
--- member resolves to itself.
+-- Return the data needed to fetch a member's OWN upcoming (next) Stripe
+-- invoice: the member's monthly subscription id and the gym's Connect
+-- account id. Under per-payer billing each payer funds their own
+-- subscription, so this reads the queried member's OWN stripe_sub_id_month
+-- (NO parent resolution) — callers pass the PAYER whose invoice they want.
+-- A member with no own subscription (their memberships are paid by someone
+-- else) has a null stripe_sub_id_month and yields no upcoming invoice.
 SELECT
-    p.stripe_sub_id_month,
+    mbp.stripe_sub_id_month,
     g.stripe_account_id,
-    p.gym_id
-FROM member_billing_profile self_profile
-JOIN member_billing_profile p
-    ON p.member_id = COALESCE(
-        self_profile.account_linked_to_id, self_profile.member_id
-    )
-   AND p.gym_id = self_profile.gym_id
-JOIN gyms g ON g.gym_id = p.gym_id
-WHERE self_profile.member_id = :member_id
+    mbp.gym_id
+FROM member_billing_profile mbp
+JOIN gyms g ON g.gym_id = mbp.gym_id
+WHERE mbp.member_id = :member_id

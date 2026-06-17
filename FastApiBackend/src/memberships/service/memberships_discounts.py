@@ -89,6 +89,7 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
         row = await self._get_membership(item_id, member_id)
         self._validate_apply(row, item_id, member_id)
         gym_id = row["gym_id"]
+        payer_member_id = row["paid_by_member_id"]
         apply_date = gym_today(row["timezone"])
 
         if preview:
@@ -111,7 +112,7 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
                 cleanup_fn=lambda: self.delete_applied_discounts(member_id, staged),
                 preview_fn=lambda: (
                     self._payment_sync.preview_update_payments_recurring(
-                        member_id,
+                        payer_member_id,
                     )
                 ),
             )
@@ -124,7 +125,7 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
             apply_date=apply_date,
         )
         await self._payment_sync.update_payments_recurring(
-            member_id,
+            payer_member_id,
             idempotency_key=idempotency_key,
         )
         return None
@@ -148,7 +149,7 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
         invoice preview in that mode, else ``None``.
 
         The staged ``preview_remove`` is safe only because the facade holds the
-        per-parent ``PayingMemberLock`` around this op — that serializes the
+        per-payer ``PayingMemberLock`` around this op — that serializes the
         paying family, so no concurrent real sync can drop the staged row before
         ``finally`` reverts it to ``applied``.
 
@@ -158,6 +159,7 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
         """
         row = await self._get_membership(item_id, member_id)
         self._validate_apply(row, item_id, member_id)
+        payer_member_id = row["paid_by_member_id"]
 
         if preview:
             async def _stage() -> None:
@@ -175,14 +177,14 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
                 cleanup_fn=_cleanup,
                 preview_fn=lambda: (
                     self._payment_sync.preview_update_payments_recurring(
-                        member_id,
+                        payer_member_id,
                     )
                 ),
             )
 
         await self.delete_applied_discounts(member_id, applied_ids)
         await self._payment_sync.update_payments_recurring(
-            member_id,
+            payer_member_id,
             idempotency_key=idempotency_key,
         )
         return None

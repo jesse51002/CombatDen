@@ -4,6 +4,7 @@ import 'package:json_annotation/json_annotation.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
+import 'package:crm/features/member_details/data/models/pays_for_member.dart';
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/rank.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
@@ -42,6 +43,11 @@ class MemberDetailResponse extends Equatable {
   final PersonalInfo personalInfo;
   @JsonKey(defaultValue: [])
   final List<LinkedAccount> linkedAccounts;
+
+  /// Every member (the viewed member included) whose recurring
+  /// memberships this member funds — what a freeze on them would pause.
+  @JsonKey(defaultValue: [])
+  final List<PaysForMember> paysFor;
   @JsonKey(defaultValue: [])
   final List<MembershipInfo> memberships;
   final Retention retention;
@@ -63,6 +69,7 @@ class MemberDetailResponse extends Equatable {
     required this.totalMembershipCount,
     required this.personalInfo,
     this.linkedAccounts = const [],
+    this.paysFor = const [],
     this.memberships = const [],
     required this.retention,
     this.rank,
@@ -95,6 +102,7 @@ class MemberDetailResponse extends Equatable {
         totalMembershipCount,
         personalInfo,
         linkedAccounts,
+        paysFor,
         memberships,
         retention,
         rank,

@@ -23,7 +23,7 @@ flowchart TB
   %% dimension's values reconverge into the next. family + non-family converge
   %% into the shared membership lifecycle.
   Members["👤 Members ×100"]
-  Members -->|"~50%"| m_fam["family<br/>paying root + 1–5 cardless kids"]
+  Members -->|"~50%"| m_fam["family<br/>paying root + 1–5 linked kids<br/>~50% of kids self-pay (own card), rest parent-paid"]
   Members -->|"~50%"| m_non["non-family"]
   m_fam --> m_life
   m_non --> m_life
@@ -86,10 +86,11 @@ flowchart TB
   Discounts -.->|"~15% of live memberships"| d_custom["custom_discounts one-shot<br/>inline at start · backend-minted"]
 
   %% ── Memberships · grouped live vs closed (one status each) ──
-  %% Live memberships are started via one batch POST per paying-parent family:
-  %% link each child first, then POST /member_memberships/ with all family
-  %% members' items (each carrying discount_ids + optional custom_discounts);
-  %% a failed result in the breakdown hard-fails the seed.
+  %% Live memberships are started via batch POSTs grouped by PAYER: link each
+  %% child first, then POST /member_memberships/ for the parent-paid group (root
+  %% + parent-paid kids, billed to the root) and one more POST per self-paying
+  %% child (billed to that child). Each item carries discount_ids + optional
+  %% custom_discounts; a failed result in the breakdown hard-fails the seed.
   Memberships["📄 Memberships · live ≈50 + closed ≈50–70"]
   Memberships --> ms_live["live ≈50"]
   Memberships --> ms_closed["closed ≈50–70"]

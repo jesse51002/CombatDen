@@ -14,19 +14,16 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
-from src.core.config import PAYING_MEMBER_LOCK_PREFIX
+from src.core.config import settings
 from src.reconciler.service.reconciler.reconciler_orphan_cleanup_sweep import (
     OrphanCleanupSweep,
 )
-from src.shared.billing_parent_resolver import BillingParentResolver
-from src.shared.gym_stripe_service import GymStripeService
 from src.shared.resource_lock import ResourceLock
 
 _TOTAL_PRICE = 5000
 
 
-def _parent_resolver(db_pool) -> BillingParentResolver:
-    return BillingParentResolver(db_pool, GymStripeService(db_pool))
+
 
 
 async def _insert_membership(
@@ -43,10 +40,10 @@ async def _insert_membership(
     # valid for any later cancel; harmless for the not_added orphan rows here.
     sql = """
         INSERT INTO member_memberships_unfiltered (
-            member_id, gym_id, plan_id, price_id,
+            member_id, paid_by_member_id, gym_id, plan_id, price_id,
             start_date, stripe_item_id, total_price, stripe_sync_status
         ) VALUES (
-            :member_id, :gym_id, :plan_id, :price_id,
+            :member_id, :member_id, :gym_id, :plan_id, :price_id,
             CURRENT_DATE - 7, :stripe_item_id, :total_price,
             CAST(:sync_status AS stripe_sync_status)
         )
@@ -145,9 +142,7 @@ async def test_orphan_cleanup_deletes_not_added_row(
         sync_status="not_added",
     )
 
-    sweep = OrphanCleanupSweep(
-        db_pool, _parent_resolver(db_pool), ResourceLock(db_pool)
-    )
+    sweep = OrphanCleanupSweep(db_pool, ResourceLock(db_pool))
     result = await sweep.run()
 
     assert result.processed >= 1
@@ -169,25 +164,21 @@ async def test_orphan_cleanup_skips_when_family_lock_held(
         sync_status="not_added",
     )
 
-    # Hold this family's lock so the sweep must skip the orphan.
+    # Hold this payer's lock so the sweep must skip the orphan.
     lock = ResourceLock(db_pool)
-    family_key = f"{PAYING_MEMBER_LOCK_PREFIX}:{member.member_id}"
+    family_key = f"{settings.paying_member_lock_prefix}:{member.member_id}"
     token = uuid4()
     assert await lock.acquire_once(family_key, token) is True
     try:
-        sweep = OrphanCleanupSweep(
-            db_pool, _parent_resolver(db_pool), ResourceLock(db_pool)
-        )
+        sweep = OrphanCleanupSweep(db_pool, ResourceLock(db_pool))
         result = await sweep.run()
         assert result.skipped >= 1
-        # Row survived because its family was busy.
+        # Row survived because its payer was busy.
         assert await _membership_row(db_pool, item_id) is not None
     finally:
         await lock.release(family_key, token)
 
     # With the lock free, the next sweep deletes it.
-    sweep = OrphanCleanupSweep(
-        db_pool, _parent_resolver(db_pool), ResourceLock(db_pool)
-    )
+    sweep = OrphanCleanupSweep(db_pool, ResourceLock(db_pool))
     await sweep.run()
     assert await _membership_row(db_pool, item_id) is None
