@@ -112,21 +112,16 @@ class _StartMembershipsWizardState
   void initState() {
     super.initState();
     _bloc = context.read<MemberDetailBloc>();
+    // Clear any breakdown from a prior run on open — the only
+    // consumer of the start result is this wizard, so a fresh
+    // open always starts clean. We deliberately do NOT dispatch
+    // on dispose: emitting while the dialog's own BlocProvider /
+    // BlocBuilder tears down raced the widget teardown and threw
+    // a `_dependents.isEmpty` assertion on close.
     _bloc.add(const StartMembershipsCleared());
     _plansFuture =
         _repository.listMembershipPlans(widget.member.gymId);
     _initPayer();
-  }
-
-  @override
-  void dispose() {
-    // Leave no stale breakdown behind for the next run
-    // (the bloc outlives this dialog; it may already be
-    // closed when the whole screen tears down).
-    try {
-      _bloc.add(const StartMembershipsCleared());
-    } catch (_) {}
-    super.dispose();
   }
 
   /// The DEFAULT payer is the top-level paying account: the

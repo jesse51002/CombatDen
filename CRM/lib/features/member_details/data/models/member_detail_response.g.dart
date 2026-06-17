@@ -28,6 +28,11 @@ MemberDetailResponse _$MemberDetailResponseFromJson(
           ?.map((e) => LinkedAccount.fromJson(e as Map<String, dynamic>))
           .toList() ??
       [],
+  paysFor:
+      (json['pays_for'] as List<dynamic>?)
+          ?.map((e) => PaysForMember.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      [],
   memberships:
       (json['memberships'] as List<dynamic>?)
           ?.map((e) => MembershipInfo.fromJson(e as Map<String, dynamic>))

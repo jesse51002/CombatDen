@@ -1,37 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
+import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_membership_checklist.dart';
-import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_membership_step.dart';
-import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_participant_banner.dart';
-import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_step_indicator.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_target.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant_step.dart';
+import 'package:crm/features/member_details/presentation/widgets/invoice_preview_section.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
-import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
 
-/// Two-step cancellation flow:
-///   1. Pick which covered person to cancel for. Linked
-///      accounts with no recurring memberships to cancel are
-///      greyed out. Skipped when the member has no linked
-///      accounts.
-///   2. Pick the recurring membership to cancel for that
-///      person, then confirm via [BillingConfirmationDialog].
+/// Single-step cancellation for the viewed member: pick which of
+/// THEIR recurring memberships to cancel, then confirm via
+/// [BillingConfirmationDialog]. The member-detail page is
+/// member-centric (it shows only this member's own memberships), so
+/// cancellation is always for this member — there is no "who" to pick.
 class CancelMembershipDialog extends StatefulWidget {
   final MemberDetailResponse member;
 
-  /// The membership the carousel was showing when cancel was
-  /// pressed — used to seed the default participant.
+  /// The membership the carousel was showing when cancel was pressed —
+  /// pre-selects it in the checklist when it is a cancellable target.
   final MembershipInfo? initialMembership;
 
   const CancelMembershipDialog({
@@ -65,209 +59,133 @@ class CancelMembershipDialog extends StatefulWidget {
 
 class _CancelMembershipDialogState
     extends State<CancelMembershipDialog> {
-  late CancelMembershipStep _step;
-  late StartMembershipParticipant _participant;
+  final MemberRepository _repository =
+      MemberRepository(apiClient: ApiClient());
   String? _selectedItemId;
 
-  bool get _hasLinked =>
-      widget.member.linkedAccounts.isNotEmpty;
+  /// Whether "Review cancellation" was pressed — reveals the billing
+  /// preview + confirm inline at the bottom (no separate popup).
+  bool _reviewing = false;
 
-  @override
-  void initState() {
-    super.initState();
-    // Default to the first participant that actually has a
-    // cancellable recurring membership, so the banner and
-    // checklist open on someone with something to cancel.
-    final initial = widget.initialMembership;
-    final defaultMemberId =
-        initial != null && initial.members.isNotEmpty
-            ? initial.members.keys.first
-            : _firstEligibleMemberId() ??
-                widget.member.memberId;
-    _participant = _buildParticipant(defaultMemberId);
-    _step = _hasLinked
-        ? CancelMembershipStep.participant
-        : CancelMembershipStep.memberships;
-  }
-
-  String? _firstEligibleMemberId() {
-    for (final id in [
-      widget.member.memberId,
-      ...widget.member.linkedAccounts.map((a) => a.memberId),
-    ]) {
-      if (_targetsFor(id).isNotEmpty) return id;
+  /// The target for the selected item, or null when nothing is picked.
+  CancelTarget? get _selectedTarget {
+    final id = _selectedItemId;
+    if (id == null) return null;
+    for (final t in _targets) {
+      if (t.member.itemId == id) return t;
     }
     return null;
   }
 
-  StartMembershipParticipant _buildParticipant(String id) {
-    if (id == widget.member.memberId) {
-      return StartMembershipParticipant(
-        memberId: widget.member.memberId,
-        name: widget.member.fullName,
-        photoUrl: widget.member.photoUrl,
-        isPayer: true,
-      );
+  @override
+  void initState() {
+    super.initState();
+    // Open on the membership the carousel was showing, when it is a
+    // cancellable target for this member.
+    final itemId = widget
+        .initialMembership?.members[widget.member.memberId]?.itemId;
+    if (itemId != null &&
+        _targets.any((t) => t.member.itemId == itemId)) {
+      _selectedItemId = itemId;
     }
-    final a = widget.member.linkedAccounts.firstWhere(
-      (la) => la.memberId == id,
-    );
-    return StartMembershipParticipant(
-      memberId: a.memberId,
-      name: a.fullName,
-      photoUrl: a.photoUrl,
-      isPayer: false,
-    );
   }
 
-  List<CancelTarget> _targetsFor(String memberId) {
+  /// This member's recurring, cancellable memberships.
+  List<CancelTarget> get _targets {
     final out = <CancelTarget>[];
     for (final m in widget.member.memberships) {
       if (!_isRecurring(m)) continue;
-      final info = m.members[memberId];
+      final info = m.members[widget.member.memberId];
       if (info == null) continue;
       out.add(CancelTarget(membership: m, member: info));
     }
     return out;
   }
 
-  Map<String, String> get _disabledMemberIds {
-    final map = <String, String>{};
-    for (final id in [
-      widget.member.memberId,
-      ...widget.member.linkedAccounts.map((a) => a.memberId),
-    ]) {
-      if (_targetsFor(id).isEmpty) {
-        map[id] = 'No recurring memberships to cancel';
-      }
-    }
-    return map;
-  }
-
-  void _next() =>
-      setState(() => _step = CancelMembershipStep.memberships);
-  void _back() =>
-      setState(() => _step = CancelMembershipStep.participant);
-
   @override
   Widget build(BuildContext context) {
-    final targets = _targetsFor(_participant.memberId);
-    final canConfirm = _selectedItemId != null;
-
-    final primaryLabel =
-        _step == CancelMembershipStep.participant
-            ? 'Next'
-            : 'Review cancellation';
-    final primaryOnPressed = switch (_step) {
-      CancelMembershipStep.participant =>
-        _disabledMemberIds.containsKey(_participant.memberId)
-            ? null
-            : _next,
-      CancelMembershipStep.memberships =>
-        canConfirm ? _onConfirm : null,
-    };
-    final secondaryLabel = switch (_step) {
-      CancelMembershipStep.participant => 'Cancel',
-      CancelMembershipStep.memberships =>
-        _hasLinked ? 'Back' : 'Cancel',
-    };
-    final secondaryOnPressed = switch (_step) {
-      CancelMembershipStep.participant => () =>
-          Navigator.of(context).pop(),
-      CancelMembershipStep.memberships =>
-        _hasLinked ? _back : () => Navigator.of(context).pop(),
-    };
-
+    final selected = _selectedTarget;
+    final reviewing = _reviewing && selected != null;
+    final dateFmt = DateFormat('MMM d, yyyy');
     return AppDialog(
       title: 'Cancel membership',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
-          if (_hasLinked) CancelStepIndicator(step: _step),
-          if (_step == CancelMembershipStep.memberships)
-            CancelParticipantBanner(participant: _participant),
-          switch (_step) {
-            CancelMembershipStep.participant =>
-              StartMembershipParticipantStep(
-                member: widget.member,
-                selectedMemberId: _participant.memberId,
-                onSelected: (p) => setState(() {
-                  _participant = p;
-                  _selectedItemId = null;
-                }),
-                disabledMemberIds: _disabledMemberIds,
-                title: 'Who are you cancelling for?',
-                subtitle: 'People without recurring '
-                    'memberships are greyed out.',
+          CancelMembershipChecklist(
+            targets: _targets,
+            selectedItemId: _selectedItemId,
+            // Changing the pick drops back to step 1 so the preview
+            // always reflects what "Review" was pressed for.
+            onSelect: (itemId) => setState(() {
+              _selectedItemId = itemId;
+              _reviewing = false;
+            }),
+          ),
+          if (reviewing) ...[
+            Text(
+              'Cancelling ${selected.membership.planName} for '
+              '${widget.member.fullName}. Access ends '
+              '${dateFmt.format(_accessUntil(selected).toLocal())}'
+              ' — recurring billing stops after the current '
+              'cycle.',
+              style: DesignConstants.p.copyWith(
+                color: DesignConstants.text2nd,
               ),
-            CancelMembershipStep.memberships =>
-              CancelMembershipChecklist(
-                targets: targets,
-                selectedItemId: _selectedItemId,
-                onSelect: (itemId) => setState(
-                  () => _selectedItemId = itemId,
-                ),
+            ),
+            Text(
+              'Billing after cancellation',
+              style: DesignConstants.h3.copyWith(
+                color: DesignConstants.text2nd,
               ),
-          },
+            ),
+            InvoicePreviewSection(
+              // The cancellation's effect on the paying sub: the
+              // recurring invoice drops the cancelled membership, shown
+              // as a current → new comparison against the payer's sub.
+              loadPreview: () => _repository.previewCancelMembership(
+                selected.member.itemId,
+                widget.member.memberId,
+              ),
+              loadCurrent: () => _repository.getUpcomingInvoice(
+                selected.member.paidByMemberId,
+              ),
+              showDueNow: false,
+              recurringFallbackMonthly:
+                  widget.member.totalMonthlyRecurringPrice,
+              refreshKey: selected.member.itemId,
+              emptyLabel: 'No change to recurring billing.',
+              errorLabel:
+                  'Could not load the cancellation preview.',
+            ),
+          ],
         ],
       ),
       actions: AppDialogActions(
-        primaryLabel: primaryLabel,
+        primaryLabel:
+            reviewing ? 'Cancel membership' : 'Review cancellation',
         primaryColor: DesignConstants.badRed,
-        primaryOnPressed: primaryOnPressed,
-        secondaryLabel: secondaryLabel,
-        secondaryOnPressed: secondaryOnPressed,
+        primaryOnPressed: selected == null
+            ? null
+            : (reviewing ? _confirmCancel : _review),
+        secondaryLabel: reviewing ? 'Back' : 'Cancel',
+        secondaryOnPressed: reviewing
+            ? () => setState(() => _reviewing = false)
+            : () => Navigator.of(context).pop(),
       ),
     );
   }
 
-  Future<void> _onConfirm() async {
-    final itemId = _selectedItemId;
-    if (itemId == null) return;
-    final target = _targetsFor(_participant.memberId)
-        .firstWhere((t) => t.member.itemId == itemId);
+  void _review() => setState(() => _reviewing = true);
 
-    final initial = _participant.name.isNotEmpty
-        ? _participant.name[0].toUpperCase()
-        : '?';
-    final dateFmt = DateFormat('MMM d, yyyy');
-
-    final confirmed = await BillingConfirmationDialog.show(
-      context: context,
-      title: 'Confirm cancellation',
-      summary: 'Cancelling ${target.membership.planName} for '
-          '${_participant.name}. Access ends after the '
-          'current cycle.',
-      effects: [
-        BillingEffect(
-          icon: Symbols.block_sharp,
-          iconColor: DesignConstants.badRed,
-          text: '${target.membership.planName} — access '
-              'until '
-              '${dateFmt.format(_accessUntil(target).toLocal())}.',
-        ),
-        const BillingEffect(
-          icon: Symbols.payments_sharp,
-          text: 'Recurring billing stops for this membership.',
-        ),
-      ],
-      affected: [
-        BillingAffectedPerson(
-          fullName: _participant.name,
-          initial: initial,
-          photoUrl: _participant.photoUrl,
-        ),
-      ],
-      confirmLabel: 'Cancel membership',
-      confirmColor: DesignConstants.badRed,
-    );
-    if (!confirmed || !mounted) return;
-
+  void _confirmCancel() {
+    final target = _selectedTarget;
+    if (target == null) return;
     context.read<MemberDetailBloc>().add(
           CancelMembershipRequested(
             itemId: target.member.itemId,
-            memberId: _participant.memberId,
+            memberId: widget.member.memberId,
           ),
         );
     Navigator.of(context).pop();

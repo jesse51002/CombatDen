@@ -279,6 +279,11 @@ class DesignConstants {
   static const double dialogMaxWidthWide = 1100.0;
   static const double dialogHeightFractionWide = 0.88;
   static const double dialogContentMaxWidth = 760.0;
+  // Floor for the wide dialog's height so its fixed chrome (title,
+  // stepper, footer) always fits and the scrolling body never gets a
+  // negative height; on a viewport too short for this the whole surface
+  // scrolls instead of rendering blank.
+  static const double dialogMinExpandedHeight = 560.0;
 
   // Geist — the landing page's typeface (LandingPage/hifi/ds.jsx `sans`).
   static final TextStyle baseFont = GoogleFonts.geist(

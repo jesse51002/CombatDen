@@ -109,9 +109,7 @@ class _MembershipLabelRow extends StatelessWidget {
       children: [
         Flexible(
           child: Semantics(
-            label:
-                'Paying for ${member.totalMembershipCount} '
-                'memberships',
+            label: member.membershipOverview,
             child: Text(
               member.membershipOverview,
               style: DesignConstants.h2.copyWith(

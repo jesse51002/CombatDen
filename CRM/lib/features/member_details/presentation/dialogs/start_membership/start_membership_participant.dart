@@ -6,9 +6,10 @@ class StartMembershipParticipant {
   final String name;
   final String? photoUrl;
 
-  /// True when this participant is the primary account
-  /// holder (the billable party). Linked accounts are
-  /// still billed via the account holder's card.
+  /// True when this participant is the flow's payer — the
+  /// account whose card (or cash) settles the charges. Under
+  /// the payer model each membership names its own payer, so
+  /// a linked member paying is self-pay on their own card.
   final bool isPayer;
 
   const StartMembershipParticipant({

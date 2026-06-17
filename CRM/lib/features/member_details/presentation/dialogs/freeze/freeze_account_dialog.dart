@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
-import 'package:crm/features/member_details/data/models/paying_for_member.dart';
+import 'package:crm/features/member_details/data/models/pays_for_member.dart';
 import 'package:crm/features/member_details/presentation/dialogs/freeze/months_stepper.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
-import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
 
-/// Collects a freeze duration (1–12 months) then routes
-/// through [BillingConfirmationDialog] — listing every
-/// affected member — before dispatching
-/// [FreezeAccountRequested] for the whole account. The bloc
-/// fills member id / gym id / idempotency key from state.
+/// Collects a freeze duration (1–12 months) and shows, inline, exactly
+/// what the freeze pauses — every member + membership the viewed member
+/// pays for (their whole subscription, the member themselves included).
+/// Confirms in place (no separate popup) and dispatches
+/// [FreezeAccountRequested]; the bloc fills member id / gym id /
+/// idempotency key from state.
 class FreezeAccountDialog extends StatefulWidget {
   final MemberDetailResponse member;
 
@@ -73,17 +72,7 @@ class _FreezeAccountDialogState
     _setMonths(current + delta);
   }
 
-  List<PayingForMember> _affectedMembers() {
-    final byId = <String, PayingForMember>{};
-    for (final m in widget.member.memberships) {
-      for (final p in m.payingFor) {
-        byId.putIfAbsent(p.memberId, () => p);
-      }
-    }
-    return byId.values.toList();
-  }
-
-  Future<void> _onConfirm() async {
+  void _onFreeze() {
     final months = _parseMonths();
     if (months == null) {
       setState(() {
@@ -92,43 +81,6 @@ class _FreezeAccountDialogState
       });
       return;
     }
-    final affected = _affectedMembers()
-        .map(
-          (p) => BillingAffectedPerson(
-            fullName: p.fullName,
-            initial: p.firstName.isNotEmpty
-                ? p.firstName[0].toUpperCase()
-                : '?',
-            photoUrl: p.photoUrl,
-          ),
-        )
-        .toList();
-
-    final confirmed = await BillingConfirmationDialog.show(
-      context: context,
-      title: 'Confirm freeze',
-      summary: 'Freezing pauses every membership on this '
-          'account and suspends recurring billing for the '
-          'duration below.',
-      effects: [
-        BillingEffect(
-          icon: Symbols.pause_circle_sharp,
-          iconColor: DesignConstants.okYellow,
-          text: 'Billing paused for $months '
-              '${months == 1 ? 'month' : 'months'}.',
-        ),
-        const BillingEffect(
-          icon: Symbols.schedule_sharp,
-          text: 'Memberships resume automatically when the '
-              'freeze ends — no action required.',
-        ),
-      ],
-      affected: affected,
-      confirmLabel: 'Freeze account',
-      confirmColor: DesignConstants.okYellow,
-    );
-    if (!confirmed || !mounted) return;
-
     context
         .read<MemberDetailBloc>()
         .add(FreezeAccountRequested(months));
@@ -137,6 +89,7 @@ class _FreezeAccountDialogState
 
   @override
   Widget build(BuildContext context) {
+    final paysFor = widget.member.paysFor;
     return AppDialog(
       title: 'Freeze account',
       body: Column(
@@ -144,13 +97,17 @@ class _FreezeAccountDialogState
         spacing: DesignConstants.spacingLarge,
         children: [
           Text(
-            'Freezing pauses every membership on this '
-            'account. ${widget.member.fullName} will not be '
-            'billed during the freeze period.',
+            'Freezing pauses every membership '
+            '${widget.member.firstName} pays for and suspends '
+            'recurring billing for the duration below. '
+            'Memberships resume automatically when the freeze '
+            'ends — no action required.',
             style: DesignConstants.p.copyWith(
               color: DesignConstants.text2nd,
             ),
           ),
+          if (paysFor.isNotEmpty)
+            _FreezeImpact(paysFor: paysFor),
           MonthsStepper(
             controller: _controller,
             minMonths: _minMonths,
@@ -173,12 +130,105 @@ class _FreezeAccountDialogState
         ],
       ),
       actions: AppDialogActions(
-        primaryLabel: 'Review freeze',
+        primaryLabel: 'Freeze account',
         primaryColor: DesignConstants.okYellow,
-        primaryOnPressed: _onConfirm,
+        primaryOnPressed: _onFreeze,
         secondaryLabel: 'Cancel',
         secondaryOnPressed: () => Navigator.of(context).pop(),
       ),
+    );
+  }
+}
+
+/// The inline "what this freeze pauses" list: every member the viewed
+/// member pays for, each with the membership(s) that will pause.
+class _FreezeImpact extends StatelessWidget {
+  final List<PaysForMember> paysFor;
+
+  const _FreezeImpact({required this.paysFor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(
+        DesignConstants.spacingMedium,
+      ),
+      decoration: BoxDecoration(
+        color: DesignConstants.backgroundColor,
+        borderRadius: BorderRadius.circular(
+          DesignConstants.radiusSmall,
+        ),
+        border: Border.all(color: DesignConstants.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          Text(
+            'This freeze pauses',
+            style: DesignConstants.h3.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+          ...paysFor.map((m) => _ImpactRow(member: m)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImpactRow extends StatelessWidget {
+  final PaysForMember member;
+
+  const _ImpactRow({required this.member});
+
+  @override
+  Widget build(BuildContext context) {
+    final plans =
+        member.memberships.map((m) => m.planName).join(', ');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        CircleAvatar(
+          radius: DesignConstants.iconSizeSmall,
+          backgroundColor: DesignConstants.surface,
+          backgroundImage: member.photoUrl != null
+              ? NetworkImage(member.photoUrl!)
+              : null,
+          child: member.photoUrl == null
+              ? Text(
+                  member.firstName.isNotEmpty
+                      ? member.firstName[0].toUpperCase()
+                      : '?',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text,
+                  ),
+                )
+              : null,
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingTiny,
+            children: [
+              Text(
+                member.fullName,
+                style: DesignConstants.h3,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (plans.isNotEmpty)
+                Text(
+                  plans,
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

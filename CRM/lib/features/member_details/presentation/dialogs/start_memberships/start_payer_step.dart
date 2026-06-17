@@ -4,12 +4,13 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant_step.dart';
 
-/// Step 1 — who pays. Lists the viewed member's whole
-/// family (themselves + every linked account); ANY of them
-/// can pay. A linked member paying = self-pay: their own
-/// card + their own subscription bill THEIR memberships
-/// only (the backend's self-or-parent rule), so picking a
-/// linked payer limits the next step to just them.
+/// Step 1 — who pays. Lists exactly two valid payers: the
+/// viewed member (self-pay) and their linked parent, if any
+/// — the backend's self-or-parent rule. A child or other
+/// linked member is NOT a payer option here; to start a
+/// membership a child pays for, open the child's own page.
+/// Picking the parent lets the next step enroll the whole
+/// family; picking self limits it to the viewed member.
 class StartPayerStep extends StatelessWidget {
   /// The member whose page launched the wizard (with their
   /// family in `linkedAccounts`).
@@ -34,16 +35,23 @@ class StartPayerStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final parentId = member.linkedToAccount;
     return StartMembershipParticipantStep(
       member: member,
       selectedMemberId: selectedMemberId,
       onSelected: onSelected,
       payerMemberId: payerMemberId,
+      // Only the member and their linked parent are valid
+      // payers; siblings / children are excluded here.
+      linkedAccountIds: parentId != null ? {parentId} : const {},
+      subtitleBuilder: (p) => p.memberId == member.memberId
+          ? 'Member getting Membership'
+          : 'Authorized Payer',
       title: 'Who is paying?',
       subtitle: 'Every charge in this flow goes to the '
           'selected payer\u2019s card (or is recorded as '
-          'cash). A linked member can pay for their own '
-          'memberships on their own card.',
+          'cash). The member can pay their own way, or their '
+          'linked parent can pay for them.',
     );
   }
 }
