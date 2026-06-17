@@ -24,8 +24,8 @@ if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
-    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
+    from src.shared.payer_resolver import PayerResolver
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
@@ -42,7 +42,7 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
         payment_sync_service: PaymentSyncService,
         gym_stripe_service: GymStripeService,
         payment_service: PaymentsStripePaymentService,
-        parent_resolver: BillingParentResolver,
+        payer_resolver: PayerResolver,
     ) -> None:
         super().__init__(
             db_pool,
@@ -50,7 +50,7 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
             gym_stripe_service,
         )
         self._payment_service = payment_service
-        self._parent_resolver = parent_resolver
+        self._payer_resolver = payer_resolver
 
     async def mark_paid_cash(
         self,
@@ -61,14 +61,13 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
         """Mark the membership's subscription's open invoice paid via cash.
 
         Validates the membership is recurring and has a Stripe
-        subscription item, resolves the paying parent to get the
-        monthly subscription id, then delegates to the payment
-        service to list + pay the open invoice.
+        subscription item, resolves the membership's PAYER (the row's
+        ``paid_by_member_id``) to get the monthly subscription id, then
+        delegates to the payment service to list + pay the open invoice.
 
         Args:
             item_id: The membership row id.
-            member_id: The member (or family member) whose
-                subscription holds the open invoice.
+            member_id: The member who owns the membership row.
 
         Raises:
             ValueError: If the membership is not recurring, not
@@ -84,16 +83,20 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
         if not membership["stripe_item_id"]:
             raise ValueError(f"Membership {item_id} is not linked to a Stripe subscription")
 
-        parent = await self._parent_resolver.resolve_parent(member_id)
-        if not parent.stripe_sub_id_month:
-            raise ValueError(f"No active monthly subscription for member_id={member_id}")
+        payer = await self._payer_resolver.resolve_payer(
+            membership["paid_by_member_id"],
+        )
+        if not payer.stripe_sub_id_month:
+            raise ValueError(
+                f"No active monthly subscription for payer {payer.member_id}",
+            )
 
         stripe_account_id = await self._gym_stripe.get_stripe_account_id(
-            parent.gym_id,
+            payer.gym_id,
         )
 
         await self._payment_service.pay_open_subscription_invoice_out_of_band(
-            stripe_subscription_id=parent.stripe_sub_id_month,
+            stripe_subscription_id=payer.stripe_sub_id_month,
             stripe_account_id=stripe_account_id,
             idempotency_key=str(idempotency_key),
         )

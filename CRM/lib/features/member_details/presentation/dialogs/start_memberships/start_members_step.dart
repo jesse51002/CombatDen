@@ -10,8 +10,11 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 /// Step 2 — who's getting memberships. Multi-select over
 /// the payer + members already linked to the payer (the
 /// backend hard-rejects unlinked members: the start op
-/// never links). The "link a member first" affordance jumps
-/// to the existing link flow and returns here.
+/// never links). A payer who is themselves a LINKED member
+/// self-pays: nobody is linked to them, so the only valid
+/// covered member is the payer — the list collapses to just
+/// them. The "link a member first" affordance jumps to the
+/// existing link flow and returns here.
 class StartMembersStep extends StatelessWidget {
   /// The PAYER's member detail (its `linkedAccounts` are
   /// the linkable family). Null while it is still loading.
@@ -39,16 +42,22 @@ class StartMembersStep extends StatelessWidget {
         child: Center(child: AppSpinner()),
       );
     }
+    // A linked payer (their detail carries a
+    // linkedToAccount) can bill only their own
+    // memberships — single-level linking means nobody can
+    // be linked TO them.
+    final payerIsLinked = detail.linkedToAccount != null;
     final candidates = <StartMembershipParticipant>[
       payer,
-      ...detail.linkedAccounts.map(
-        (a) => StartMembershipParticipant(
-          memberId: a.memberId,
-          name: a.fullName,
-          photoUrl: a.photoUrl,
-          isPayer: false,
+      if (!payerIsLinked)
+        ...detail.linkedAccounts.map(
+          (a) => StartMembershipParticipant(
+            memberId: a.memberId,
+            name: a.fullName,
+            photoUrl: a.photoUrl,
+            isPayer: false,
+          ),
         ),
-      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,9 +72,12 @@ class StartMembersStep extends StatelessWidget {
               style: DesignConstants.h2,
             ),
             Text(
-              'Pick everyone to enroll in this run — '
-              'the payer themselves and members already '
-              'linked to them.',
+              detail.linkedToAccount != null
+                  ? 'A linked member pays for their own '
+                      'memberships only.'
+                  : 'Pick everyone to enroll in this '
+                      'run — the payer themselves and '
+                      'members already linked to them.',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),
@@ -84,7 +96,8 @@ class StartMembersStep extends StatelessWidget {
                 onTap: () => onToggle(c.memberId),
               ),
             ),
-            StartLinkFirstTile(onTap: onLinkFirst),
+            if (detail.linkedToAccount == null)
+              StartLinkFirstTile(onTap: onLinkFirst),
           ],
         ),
       ],

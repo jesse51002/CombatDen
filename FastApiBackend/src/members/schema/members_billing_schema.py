@@ -85,6 +85,23 @@ class BillingPayingForMember(BillingLinkedAccount):
     classes_remaining: int | None = None
 
 
+class BillingPaysForMembership(BaseModel):
+    """One active recurring membership the viewed member funds."""
+
+    item_id: UUID
+    plan_name: str
+
+
+class BillingPaysForMember(BillingLinkedAccount):
+    """A member whose recurring memberships the viewed member pays for,
+    with the funded membership(s). Drives the freeze-impact display:
+    freezing the viewed member pauses every membership listed across
+    ``pays_for`` (their whole subscription), the viewed member included.
+    """
+
+    memberships: list[BillingPaysForMembership] = []
+
+
 class BillingDiscountInfo(BaseModel):
     """A discount that was applied to a past invoice (payment-history line).
 
@@ -108,9 +125,13 @@ class BillingMembershipMemberInfo(BaseModel):
     post-discount share — the plan price minus this member's own
     discounts), so the CRM renders the membership card atomically for one
     covered member at a time rather than as a family-wide aggregate.
+    ``paid_by_member_id`` is the membership's PAYER — whose subscription
+    bills it (the member themselves, or their linked parent) — driving the
+    CRM's "Paid by" display.
     """
 
     item_id: UUID
+    paid_by_member_id: UUID
     end_date: date | None = None
     cancel_date: date | None = None
     on_outdated_price: bool = False
@@ -265,6 +286,10 @@ class MemberBillingDetailResponse(BaseModel):
     total_membership_count: int
     personal_info: BillingPersonalInfo
     linked_accounts: list[BillingLinkedAccount] = []
+    # Every member (the viewed member included) whose recurring
+    # memberships the viewed member funds — what a freeze on this member
+    # would pause. Empty when they pay for nobody / nothing recurring.
+    pays_for: list[BillingPaysForMember] = []
     memberships: list[BillingMembershipInfo]
     retention: BillingRetention
     rank: BillingRank | None = None

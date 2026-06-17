@@ -382,7 +382,7 @@ class TestNotFound:
     def test_freeze_no_billing_profile(self, api):
         """POST /freeze for a member with no billing profile returns 404.
 
-        resolve_parent() looks up member_billing_profile; the seed has
+        resolve_payer() looks up member_billing_profile; the seed has
         no billing profiles, so 404 is the correct behaviour.
         """
         r = api.post(

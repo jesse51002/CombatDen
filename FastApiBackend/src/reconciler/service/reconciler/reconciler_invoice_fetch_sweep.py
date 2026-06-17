@@ -1,7 +1,7 @@
 """InvoiceFetchSweep — backfill missed billing webhooks from Stripe.
 
 A missed-webhook backstop. Per gym Connect account it lists the last
-``RECONCILER_INVOICE_LOOKBACK_DAYS`` of Stripe activity and re-records each
+``settings.reconciler_invoice_lookback_days`` of Stripe activity and re-records each
 object through the SAME handler ``record`` methods the webhook dispatcher uses --
 but driving objects from list calls instead of events, so it cannot rely on the
 event-log dedup. Idempotency therefore comes from the DB layer: the invoice
@@ -27,10 +27,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.config import (
-    RECONCILER_INVOICE_LOOKBACK_DAYS,
-    RECONCILER_STRIPE_PAGE_SIZE,
-)
+from src.core.config import settings
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.reconciler import SQL_DIR
 from src.reconciler.service.reconciler.reconciler_result import SweepResult
@@ -82,7 +79,7 @@ class InvoiceFetchSweep:
         result = SweepResult(name=SWEEP_NAME)
         cutoff = (
             int(time.time())
-            - RECONCILER_INVOICE_LOOKBACK_DAYS * SECONDS_PER_DAY
+            - settings.reconciler_invoice_lookback_days * SECONDS_PER_DAY
         )
         gyms = await self._list_gyms()
         for gym in gyms:
@@ -119,7 +116,7 @@ class InvoiceFetchSweep:
     ) -> None:
         """List + record one gym's recent invoices and refunds."""
         opts = PaymentsStripeClient.connect_opts_readonly(account_id)
-        created = {"created": {"gte": cutoff}, "limit": RECONCILER_STRIPE_PAGE_SIZE}
+        created = {"created": {"gte": cutoff}, "limit": settings.reconciler_stripe_page_size}
 
         async for invoice in self._iter(
             self._stripe.v1.invoices.list_async, created, opts
@@ -181,7 +178,7 @@ class InvoiceFetchSweep:
         """Record each succeeded payment of a paid invoice as a charge."""
         params = {
             "invoice": invoice["id"],
-            "limit": RECONCILER_STRIPE_PAGE_SIZE,
+            "limit": settings.reconciler_stripe_page_size,
         }
         async for payment in self._iter(
             self._stripe.v1.invoice_payments.list_async, params, opts

@@ -1,14 +1,16 @@
-"""Start each family's current memberships via the backend, one call per family.
+"""Start each family's current memberships via the backend, grouped by PAYER.
 
-POST /api/v1/member_memberships/ starts EVERY membership in the request for a
-paying account's family in ONE call: the body carries the payer plus a list of
-per-member items ({member_id, price_id, discount_ids, custom_discounts}), and
-each membership's discounts land before the first charge. Each item creates a
-row in member_memberships AND its Stripe subscription item, writing the real
-stripe_item_id back. The endpoint requires every member to already have a Stripe
-customer + card on file (created in api_creation/members via PUT /card) and to
-already be LINKED to the payer (the start never links), so we keep the link
-step and only ever start carded members.
+POST /api/v1/member_memberships/ starts a set of memberships under ONE payer:
+the body carries the payer plus a list of per-member items ({member_id,
+price_id, discount_ids, custom_discounts}), and each membership's discounts land
+before the first charge. Each item creates a row in member_memberships AND its
+Stripe subscription item (on the payer's customer), writing the real
+stripe_item_id back. A family makes one request for the PARENT-PAID group (the
+root plus any parent-paid children) and one more PER SELF-PAYING child (payer =
+that child) — so a family with self-payers makes several requests. Every payer
+must have a Stripe customer + card on file (created in api_creation/members),
+and every non-payer item member must already be LINKED to the payer (the start
+never links), so we keep the link step and only ever start carded payers.
 
 The endpoint returns a per-membership breakdown ({member_id, plan_id, status,
 item_id, error}) but no full row body, so for each created membership we read
@@ -20,15 +22,15 @@ A failed charge group comes back as ``failed`` RESULTS, not an HTTP error, so we
 check every result's status and hard-fail loudly with the full breakdown if any
 membership did not come back ``created``.
 
-Concurrency model — grouped by PAYING-PARENT FAMILY:
-  The backend serializes billing ops per paying-parent family via a
-  non-reentrant lock with a short acquire timeout, and a membership start can
-  take many seconds. So the unit of parallelism is the *family*: each family
-  runs its whole sequence sequentially on one worker (link each child, start the
-  whole family in one request, freeze, cancel any cancel-at-start memberships),
-  and ``run_concurrent`` runs several families at once. Families have disjoint
-  lock keys, so they never contend; the single start per family means the lock
-  is acquired once for the whole family, so it never 409s.
+Concurrency model — grouped by FAMILY:
+  The backend serializes billing ops per PAYER via a non-reentrant lock with a
+  short acquire timeout, and a membership start can take many seconds. So the
+  unit of parallelism is the *family*: each family runs its whole sequence
+  sequentially on one worker (link each child, start the parent-paid group, then
+  each self-paying child, freeze, cancel any cancel-at-start memberships), and
+  ``run_concurrent`` runs several families at once. Every payer in a family is a
+  distinct member, so the family's own requests never contend each other, and
+  families are disjoint, so different families never contend — no 409s.
 
 Idempotent: if a member already has a live (not-cancelled, not-ended)
 membership, we reuse it (same plan) or cancel + recreate (reconcile path) before
@@ -314,14 +316,15 @@ def process_family(
 ) -> list[CurrentMembershipRecord]:
     """Run one family's membership creation sequentially.
 
-    Order matters: link each child to the payer first (the start never links,
-    and a child's item rides the payer's subscription), then start the WHOLE
-    family in ONE request (the payer's own membership plus every linked child's,
-    each item carrying its pre-drawn discounts, applied before the first charge),
-    then freeze the account (root only). Members already live on the same plan
-    are reused without an API call; a plan mismatch is reconciled (cancel old)
-    before the start. All ops here touch a single family, so the per-parent lock
-    never contends; ``run_concurrent`` runs several families at once.
+    Order matters: link each child to the parent first (the start never links).
+    Then start by PAYER — the parent-paid group in one request (the root's own
+    membership plus every parent-paid child's, riding the root's subscription),
+    then each self-paying child in its own request (own subscription) — each item
+    carrying its pre-drawn discounts, applied before the first charge. Then
+    freeze the account (root only). Members already live on the same plan are
+    reused without an API call; a plan mismatch is reconciled (cancel old) before
+    the start. Every payer in the family is a distinct member, so the family's
+    requests never contend; ``run_concurrent`` runs several families at once.
     """
     # Children must be linked before the start (the start never links, and the
     # link endpoint requires the payer to be resolvable as their parent).
@@ -330,15 +333,31 @@ def process_family(
     ]
 
     records: list[CurrentMembershipRecord] = []
-    to_start: list[MemberPlan] = []
+    # Memberships split by PAYER: the parent-paid group (root + parent-paid
+    # children) bill on the root's subscription in ONE request; each self-paying
+    # child bills on their OWN subscription in their own request.
+    parent_to_start: list[MemberPlan] = []
+    self_pay_to_start: list[MemberPlan] = []
     for member in [family.root, *linked_children]:
         member_to_start, existing = _resolve_member(api, client, gym_id, member)
         if existing is not None:
             records.append(existing)
         if member_to_start is not None:
-            to_start.append(member_to_start)
+            if member_to_start.self_pays:
+                self_pay_to_start.append(member_to_start)
+            else:
+                parent_to_start.append(member_to_start)
 
-    records.extend(_start_family(api, client, gym_id, family.root, to_start))
+    # Parent-paid group → payer is the root (covers the root's own membership
+    # plus every parent-paid child). Skipped when empty (e.g. all reused).
+    records.extend(
+        _start_family(api, client, gym_id, family.root, parent_to_start)
+    )
+    # Each self-paying child → its own request, payer = the child itself
+    # (member_id == payer, so the start's self-or-parent check passes trivially);
+    # billed on the child's own card + own subscription.
+    for child in self_pay_to_start:
+        records.extend(_start_family(api, client, gym_id, child, [child]))
 
     _apply_freeze(client, family.root)
 

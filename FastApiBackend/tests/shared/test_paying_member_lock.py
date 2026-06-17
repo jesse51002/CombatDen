@@ -2,25 +2,23 @@
 
 Exercises the one lock service against the ``resource_locks`` table: acquire /
 release, contention (block then ``LockBusyError``), expiry-steal, token-fenced
-release, independent families, and the multi-member ``lock`` (acquire all / dedupe
-/ no deadlock on the same pair / max-hold abort). The resolver is mocked so each
-member resolves to itself as the paying parent; the timing constants are
-monkeypatched small so the tests run fast.
+release, independent payers, and the multi-key ``lock`` (acquire all / dedupe
+/ no deadlock on the same pair / max-hold abort). Keys are the passed ids
+directly (no resolution); the timing settings are monkeypatched small so the
+tests run fast.
 
 Requires a migrated local DB (the ``resource_locks`` table).
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
+from src.core.config import settings
 from src.shared.paying_member_lock import LockBusyError, PayingMemberLock
-
-MODULE = "src.shared.paying_member_lock"
 
 
 async def _force_delete(db_pool, *keys: str) -> None:
@@ -33,29 +31,16 @@ async def _force_delete(db_pool, *keys: str) -> None:
         await session.commit()
 
 
-def _resolver() -> MagicMock:
-    """A resolver where each member resolves to itself as the paying parent."""
-    resolver = MagicMock()
-
-    async def _resolve(member_id: UUID) -> MagicMock:
-        parent = MagicMock()
-        parent.member_id = member_id
-        return parent
-
-    resolver.resolve_parent = AsyncMock(side_effect=_resolve)
-    return resolver
-
-
 @pytest.fixture
 def lock(db_pool) -> PayingMemberLock:
-    return PayingMemberLock(db_pool, _resolver())
+    return PayingMemberLock(db_pool)
 
 
 @pytest.fixture
 def fast_acquire(monkeypatch) -> None:
     """A short acquire budget so contention tests fail quickly."""
-    monkeypatch.setattr(f"{MODULE}.LOCK_ACQUIRE_TIMEOUT_SECONDS", 0.5)
-    monkeypatch.setattr(f"{MODULE}.LOCK_POLL_INTERVAL_SECONDS", 0.05)
+    monkeypatch.setattr(settings, "lock_acquire_timeout_seconds", 0.5)
+    monkeypatch.setattr(settings, "lock_poll_interval_seconds", 0.05)
 
 
 async def test_lock_acquires_then_releases(lock, db_pool) -> None:
@@ -85,7 +70,7 @@ async def test_second_lock_blocks_then_raises(lock, db_pool, fast_acquire) -> No
 
 
 async def test_expired_lease_is_reacquirable(lock, db_pool, monkeypatch) -> None:
-    monkeypatch.setattr(f"{MODULE}.LOCK_TTL_SECONDS", 1)
+    monkeypatch.setattr(settings, "lock_ttl_seconds", 1)
     key = PayingMemberLock._key(uuid4())
     try:
         # Acquire without releasing (simulate a crashed holder).
@@ -161,7 +146,7 @@ async def test_same_pair_does_not_deadlock(lock, db_pool) -> None:
 
 
 async def test_max_hold_aborts_and_releases(lock, db_pool, monkeypatch) -> None:
-    monkeypatch.setattr(f"{MODULE}.LOCK_MAX_HOLD_SECONDS", 0.3)
+    monkeypatch.setattr(settings, "lock_max_hold_seconds", 0.3)
     m = uuid4()
     key = PayingMemberLock._key(m)
     try:

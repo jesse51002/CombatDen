@@ -23,6 +23,15 @@ CREATE TABLE member_memberships_unfiltered (
     gym_id UUID NOT NULL CONSTRAINT fk_membership_gym REFERENCES gyms(gym_id),
     plan_id UUID NOT NULL,
     price_id UUID NOT NULL CONSTRAINT fk_membership_price REFERENCES membership_plan_prices_unfiltered(price_id),
+    -- Who PAYS for this membership: the member whose own Stripe customer +
+    -- subscription bills this row. Always populated — for a normal family
+    -- membership it is the resolved paying parent; for a self-paying linked
+    -- member it is that member. The payment sync groups memberships by this
+    -- column (one subscription per payer); account_linked_to_id on members is
+    -- the authorization layer only (who is ALLOWED to pay for whom), never the
+    -- billing key. Immutable once set — changing the payer is cancel-old +
+    -- insert-new (the append-only model), never an in-place edit.
+    paid_by_member_id UUID NOT NULL CONSTRAINT fk_membership_payer REFERENCES members(member_id),
     start_date DATE NOT NULL,
     end_date DATE,
     cancel_date DATE,
@@ -59,6 +68,9 @@ CREATE TABLE member_memberships_unfiltered (
     CONSTRAINT fk_membership_member_gym
         FOREIGN KEY (member_id, gym_id)
         REFERENCES members (member_id, gym_id),
+    CONSTRAINT fk_membership_payer_gym
+        FOREIGN KEY (paid_by_member_id, gym_id)
+        REFERENCES members (member_id, gym_id),
     CONSTRAINT fk_membership_plan_gym
         FOREIGN KEY (plan_id, gym_id)
         REFERENCES membership_plans_unfiltered (plan_id, gym_id),
@@ -75,6 +87,14 @@ CREATE TABLE member_memberships_unfiltered (
 -- op, so without this the per-op cost grows linearly with total membership rows.
 CREATE INDEX idx_member_memberships_member
     ON member_memberships_unfiltered (member_id);
+
+-- Index on the payer. The payment sync partitions every family's active
+-- memberships by paid_by_member_id (one subscription per payer) and the
+-- reconciler lists distinct payers with live rows — both filter on this
+-- column. Partial on the live rows (cancel_date IS NULL) to stay lean.
+CREATE INDEX idx_member_memberships_paid_by
+    ON member_memberships_unfiltered (paid_by_member_id)
+    WHERE cancel_date IS NULL;
 
 -- Discounts no longer live on the membership row: applying a discount writes a
 -- frozen snapshot into member_membership_applied_discounts (keyed by item_id).
@@ -111,9 +131,28 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Trigger: paid_by_member_id is immutable once set — unconditional, no
+-- 'migrating' exception. Changing who pays moves the line to a DIFFERENT
+-- payer's Stripe subscription, so it is always cancel-old + insert-new (the
+-- append-only model), never an in-place reassignment of the existing row.
+CREATE OR REPLACE FUNCTION prevent_paid_by_member_id_overwrite()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.paid_by_member_id IS DISTINCT FROM OLD.paid_by_member_id THEN
+        RAISE EXCEPTION 'paid_by_member_id cannot be changed after creation'
+            USING CONSTRAINT = 'paid_by_member_id_immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TRIGGER trg_prevent_price_id_overwrite
     BEFORE UPDATE OF price_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_price_id_overwrite();
+
+CREATE TRIGGER trg_prevent_paid_by_member_id_overwrite
+    BEFORE UPDATE OF paid_by_member_id ON member_memberships_unfiltered
+    FOR EACH ROW EXECUTE FUNCTION prevent_paid_by_member_id_overwrite();
 
 -- Trigger: cancel_date locks only once the membership is actually REMOVED from
 -- Stripe (stripe_sync_status = 'deleted'). Before that the cancel is unconfirmed,
@@ -345,9 +384,12 @@ WHERE stripe_item_id IS NOT NULL
 
 ALTER VIEW member_memberships SET (security_invoker = true);
 
--- View: derives status from date fields (cancel_date > end_date > account freeze window > active)
--- Linked (child) accounts inherit freeze from their parent account.
--- Freeze/linked state lives on members (unified identity + billing), keyed by member_id.
+-- View: derives status from date fields (cancel_date > end_date > payer freeze window > active)
+-- Freeze is per PAYER: the membership is frozen when its paid_by_member_id's
+-- freeze window (on members) is active — the payer's pause_collection covers
+-- exactly the memberships their subscription bills. A parent-paid membership
+-- follows the parent's window (paid_by = parent); a self-paid membership
+-- follows the self-payer's own window, independent of the linked parent.
 CREATE VIEW member_memberships_status
 WITH (security_invoker = true)
 AS
@@ -365,10 +407,8 @@ SELECT mm.*,
     END AS status
 FROM member_memberships mm
 JOIN gyms g ON g.gym_id = mm.gym_id
-JOIN members mbp
-    ON mbp.member_id = mm.member_id
 JOIN members freeze_owner
-    ON freeze_owner.member_id = COALESCE(mbp.account_linked_to_id, mbp.member_id);
+    ON freeze_owner.member_id = mm.paid_by_member_id;
 
 -- Safety net: CLI migration diffing can strip security_invoker from CREATE VIEW
 ALTER VIEW member_memberships_status SET (security_invoker = true);

@@ -1,8 +1,9 @@
--- Read the ACTIVE applied discounts for a family's memberships, joined to its
--- value version (for the percent/dollar + mode) and the membership's plan (so
--- the sync can group discounts per consolidated line). Reads the unfiltered base
--- tables (service-role): half-synced rows (no stripe_coupon_id yet) must still
--- be seen by the sync that resolves them.
+-- Read the ACTIVE applied discounts for a PAYER's memberships (every row whose
+-- membership is paid by :payer_member_id), joined to its value version (for the
+-- percent/dollar + mode) and the membership's plan (so the sync can group
+-- discounts per consolidated line). Reads the unfiltered base tables
+-- (service-role): half-synced rows (no stripe_coupon_id yet) must still be seen
+-- by the sync that resolves them.
 --
 -- Date-lifetime filter (:today is the gym-timezone "today"): a discount is active
 -- only while end_date IS NULL (forever / no cutoff) or end_date > today. This is
@@ -27,6 +28,6 @@ JOIN gym_discount_values_unfiltered v
     ON ad.value_id = v.value_id
 JOIN member_memberships_unfiltered mm
     ON ad.item_id = mm.item_id AND ad.gym_id = mm.gym_id
-WHERE ad.member_id = ANY(:member_ids)
+WHERE mm.paid_by_member_id = :payer_member_id
   AND (ad.end_date IS NULL OR ad.end_date > :today)
   AND ad.stripe_sync_status::text <> ALL(:excluded_statuses)

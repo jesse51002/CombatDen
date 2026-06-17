@@ -37,8 +37,8 @@ talks to **Stripe** for payments, Connect onboarding, and inbound webhooks. Dash
 
 **For the full internal graph** — every route, the service classes, the grouped **Payments** Stripe
 core, the cross-cutting **`PaymentSyncService`** (the declarative reconciler called by three domains —
-it re-derives each family's desired Stripe state from the DB and converges Stripe onto it), and the
-shared **`BillingParentResolver`** — see
+it re-derives each payer's desired Stripe state from the DB and converges Stripe onto it), and the
+shared **`PayerResolver`** — see
 **[`architecture.mermaid`](architecture.mermaid)** (generated from the DI wiring; render it with the
 `mermaid-creation` skill).
 

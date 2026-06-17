@@ -22,8 +22,8 @@ import pytest
 from sqlalchemy import text
 
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.gym_stripe_service import GymStripeService
+from src.shared.payer_resolver import PayerResolver
 from src.sync.service.sync_cancel import (
     PaymentSyncCancel,
 )
@@ -32,8 +32,8 @@ from tests.helpers.service_factory import build_payment_sync_service
 _TOTAL_PRICE = 5000
 
 
-def _parent_resolver(db_pool) -> BillingParentResolver:
-    return BillingParentResolver(db_pool, GymStripeService(db_pool))
+def _payer_resolver(db_pool) -> PayerResolver:
+    return PayerResolver(db_pool, GymStripeService(db_pool))
 
 
 async def _insert_membership(
@@ -53,10 +53,10 @@ async def _insert_membership(
     """
     sql = """
         INSERT INTO member_memberships_unfiltered (
-            member_id, gym_id, plan_id, price_id,
+            member_id, paid_by_member_id, gym_id, plan_id, price_id,
             start_date, stripe_item_id, total_price, stripe_sync_status
         ) VALUES (
-            :member_id, :gym_id, :plan_id, :price_id,
+            :member_id, :member_id, :gym_id, :plan_id, :price_id,
             CURRENT_DATE - 7, :stripe_item_id, :total_price,
             CAST(:sync_status AS stripe_sync_status)
         )
@@ -135,8 +135,8 @@ async def test_cancel_dead_subscription_cancels_family_and_nulls_sub_id(
     )
     await _set_sub_id(db_pool, member.member_id, f"sub_fake_{uuid4().hex[:12]}")
 
-    parent = await _parent_resolver(db_pool).resolve_parent(member.member_id)
-    cancelled = await PaymentSyncCancel(db_pool).cancel_dead_subscription(parent)
+    payer = await _payer_resolver(db_pool).resolve_payer(member.member_id)
+    cancelled = await PaymentSyncCancel(db_pool).cancel_dead_subscription(payer)
 
     assert cancelled == 1
     row = await _membership_row(db_pool, item_id)
@@ -159,13 +159,13 @@ async def test_cancel_dead_subscription_is_idempotent(db_pool, gym_id, created):
     )
     await _set_sub_id(db_pool, member.member_id, f"sub_fake_{uuid4().hex[:12]}")
 
-    resolver = _parent_resolver(db_pool)
+    resolver = _payer_resolver(db_pool)
     svc = PaymentSyncCancel(db_pool)
-    parent = await resolver.resolve_parent(member.member_id)
-    assert await svc.cancel_dead_subscription(parent) == 1
-    # Second run: the family is already cancelled -> nothing to cancel.
-    parent_again = await resolver.resolve_parent(member.member_id)
-    assert await svc.cancel_dead_subscription(parent_again) == 0
+    payer = await resolver.resolve_payer(member.member_id)
+    assert await svc.cancel_dead_subscription(payer) == 1
+    # Second run: the payer is already cancelled -> nothing to cancel.
+    payer_again = await resolver.resolve_payer(member.member_id)
+    assert await svc.cancel_dead_subscription(payer_again) == 0
 
 
 # ── update_payments_recurring: dead-sub catch (real Stripe not-found) ──

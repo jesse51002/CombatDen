@@ -459,6 +459,7 @@ class MemberDetailBloc
       emit: emit,
       action: () => _repository.chargeCard(
         memberId: s.member.memberId,
+        paidByMemberId: event.paidByMemberId,
         gymId: s.member.gymId,
         amount: event.amount,
         reason: event.description,

@@ -4,8 +4,8 @@ The executor owns the task/item state machine; the operation logic lives in
 each domain's registered handler (e.g. the memberships reprice handler). Per
 item it mirrors the reconciler's bulk-sync retry: claim → execute → on failure
 record the error, release to 'pending', wait, re-claim — up to
-``TASK_ITEM_MAX_ATTEMPTS`` attempts (never sleeping after the last), then mark
-the item 'failed'. The executor never reverts anything — each operation
+``settings.task_item_max_attempts`` attempts (never sleeping after the last),
+then mark the item 'failed'. The executor never reverts anything — each operation
 handles its own failure (the DB-first verify-or-revert contract), so a failed
 item is purely a record of the error.
 """
@@ -18,11 +18,7 @@ from uuid import UUID
 from schema.task import TaskStatus, TaskType
 
 import src.shared.db_schema_path  # noqa: F401
-from src.core.config import (
-    TASK_ITEM_MAX_ATTEMPTS,
-    TASK_ITEM_RETRY_DELAY_SECONDS,
-    TASK_STALE_RUNNING_SECONDS,
-)
+from src.core.config import settings
 from src.shared.database import DirectDatabasePool
 from src.tasks.service.tasks_queries import TasksQueries
 from src.tasks.tasks_schema import TaskItemResponse
@@ -131,11 +127,11 @@ class TasksExecutor:
                 logger.error(
                     "Task item attempt %s/%s failed: task_item_id=%s",
                     claimed.attempt_count,
-                    TASK_ITEM_MAX_ATTEMPTS,
+                    settings.task_item_max_attempts,
                     claimed.task_item_id,
                     exc_info=True,
                 )
-                if claimed.attempt_count >= TASK_ITEM_MAX_ATTEMPTS:
+                if claimed.attempt_count >= settings.task_item_max_attempts:
                     await self._queries.fail_item(
                         claimed.task_item_id,
                         str(exc),
@@ -146,7 +142,7 @@ class TasksExecutor:
                     claimed.task_item_id,
                     str(exc),
                 )
-                await asyncio.sleep(TASK_ITEM_RETRY_DELAY_SECONDS)
+                await asyncio.sleep(settings.task_item_retry_delay_seconds)
                 continue
 
             await self._queries.complete_item(claimed.task_item_id)
@@ -164,6 +160,6 @@ class TasksExecutor:
         if item.status == TaskStatus.running:
             return await self._queries.claim_stale_item(
                 item.task_item_id,
-                TASK_STALE_RUNNING_SECONDS,
+                settings.task_stale_running_seconds,
             )
         return None

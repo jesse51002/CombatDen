@@ -225,13 +225,20 @@ class ChargeCardRequested extends MemberDetailEvent {
   final int amount;
   final String description;
 
+  /// Whose Stripe customer is billed — the viewed member
+  /// (self-pay) or their linked parent, picked in the
+  /// charge dialog.
+  final String paidByMemberId;
+
   const ChargeCardRequested({
     required this.amount,
     required this.description,
+    required this.paidByMemberId,
   });
 
   @override
-  List<Object?> get props => [amount, description];
+  List<Object?> get props =>
+      [amount, description, paidByMemberId];
 }
 
 /// NOTE: refund has no backend endpoint in the merged

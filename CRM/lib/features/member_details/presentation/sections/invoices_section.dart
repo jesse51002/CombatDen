@@ -16,18 +16,36 @@ import 'package:crm/shared/widgets/section_card.dart';
 /// Stripe invoice status that counts as outstanding/open.
 const _kOpenStatus = 'open';
 
-/// Bundle of the two read-only invoice reads this card uses.
-class _InvoicesData {
-  final List<PaymentsInvoiceResponse> invoices;
-  final PreviewInvoice? upcoming;
+/// A payer whose invoice this card surfaces — the member themselves
+/// (self-pay) or their linked parent. Under per-payer billing a member's
+/// memberships can be split across two subscriptions, so one card is
+/// rendered per distinct payer (up to two).
+class InvoicePayer {
+  final String memberId;
+  final String name;
+  final String? photoUrl;
 
-  const _InvoicesData({
-    required this.invoices,
-    required this.upcoming,
+  /// The payer's soonest next-due date among the memberships of this
+  /// member they fund (the upcoming-invoice preview carries no date).
+  final DateTime? nextDueDate;
+
+  const InvoicePayer({
+    required this.memberId,
+    required this.name,
+    this.photoUrl,
+    this.nextDueDate,
   });
 }
 
-/// The single invoice the card surfaces.
+/// A payer paired with the one invoice picked for them (or none).
+class _PayerInvoice {
+  final InvoicePayer payer;
+  final _PickedInvoice? picked;
+
+  const _PayerInvoice({required this.payer, this.picked});
+}
+
+/// The single invoice a payer's card surfaces.
 class _PickedInvoice {
   final bool overdue;
   final int amount;
@@ -48,44 +66,37 @@ class _PickedInvoice {
   });
 }
 
-/// Account-level Invoices card (sits with the membership in the
-/// right column). Shows **one** invoice at a time — the overdue
-/// one if there is any, otherwise the next (upcoming) one — with
-/// the payer, amount, due date, and an in-card mark-paid-with-cash
-/// action. When the account has neither, the card renders nothing.
-/// Read-only side reads (its own [FutureBuilder], like Waivers).
+/// Account-level Invoices card (sits with the membership in the right
+/// column). Shows **one card per payer** of the member's memberships —
+/// up to two when their memberships are split between self-pay and a
+/// linked payer. Each card surfaces that payer's overdue invoice if any,
+/// otherwise their next (upcoming) one, with the payer, amount, due date,
+/// and an in-card mark-paid-with-cash action. When no payer has an
+/// invoice, the section renders nothing. Read-only side reads (its own
+/// [FutureBuilder], like Waivers).
 class InvoicesSection extends StatefulWidget {
-  final String memberId;
   final String gymId;
 
-  /// The account's next billing date, used to label the upcoming
-  /// invoice (the upcoming-invoice preview carries no date).
-  final DateTime? nextDueDate;
-
-  /// The paying account this invoice belongs to.
-  final String payerName;
-  final String? payerPhotoUrl;
+  /// The distinct payers behind this member's memberships (self and/or a
+  /// linked parent). One invoice card is rendered per payer that has one.
+  final List<InvoicePayer> payers;
 
   /// Re-fetches the invoices whenever this changes — bump it after a
   /// billing mutation (discount or membership add/remove) so the card
   /// reflects the new charge instead of the one loaded at first build.
   final Object? refreshKey;
 
-  /// Whether the card supplies its own top gap when it has an
-  /// invoice to show. The stacked layout keeps this on (its
-  /// parent column has no gap slot, so an absent invoice leaves
-  /// no dead strip); the wide grid turns it off because
-  /// `BalancedColumns` adds the row gap only when the card
+  /// Whether the section supplies its own top gap when it has a card to
+  /// show. The stacked layout keeps this on (its parent column has no gap
+  /// slot, so an absent card leaves no dead strip); the wide grid turns it
+  /// off because `BalancedColumns` adds the row gap only when the section
   /// actually renders.
   final bool topGap;
 
   const InvoicesSection({
     super.key,
-    required this.memberId,
     required this.gymId,
-    required this.payerName,
-    this.nextDueDate,
-    this.payerPhotoUrl,
+    required this.payers,
     this.refreshKey,
     this.topGap = true,
   });
@@ -96,7 +107,7 @@ class InvoicesSection extends StatefulWidget {
 }
 
 class _InvoicesSectionState extends State<InvoicesSection> {
-  late Future<_InvoicesData> _future;
+  late Future<List<_PayerInvoice>> _future;
 
   @override
   void initState() {
@@ -114,20 +125,30 @@ class _InvoicesSectionState extends State<InvoicesSection> {
     }
   }
 
-  Future<_InvoicesData> _load() async {
+  Future<List<_PayerInvoice>> _load() async {
     final repo = MemberRepository(apiClient: ApiClient());
-    final invoicesF = repo.listMemberInvoices(widget.memberId);
-    final upcomingF = repo.getUpcomingInvoice(widget.memberId);
-    return _InvoicesData(
-      invoices: await invoicesF,
-      upcoming: await upcomingF,
+    // Each payer's invoices come from THEIR own Stripe customer +
+    // subscription, so the fetch is keyed on the payer, not the member.
+    return Future.wait(
+      widget.payers.map((p) async {
+        final invoices = await repo.listMemberInvoices(p.memberId);
+        final upcoming = await repo.getUpcomingInvoice(p.memberId);
+        return _PayerInvoice(
+          payer: p,
+          picked: _pick(invoices, upcoming, p.nextDueDate),
+        );
+      }),
     );
   }
 
-  /// Pick the one invoice to show: an overdue (open) one first,
-  /// otherwise the upcoming one, otherwise none.
-  _PickedInvoice? _pick(_InvoicesData data) {
-    final open = data.invoices
+  /// Pick the one invoice to show for a payer: an overdue (open) one
+  /// first, otherwise the upcoming one, otherwise none.
+  _PickedInvoice? _pick(
+    List<PaymentsInvoiceResponse> invoices,
+    PreviewInvoice? upcoming,
+    DateTime? nextDueDate,
+  ) {
+    final open = invoices
         .where((i) => i.status == _kOpenStatus)
         .toList();
     if (open.isNotEmpty) {
@@ -139,13 +160,12 @@ class _InvoicesSectionState extends State<InvoicesSection> {
         date: i.createdAt,
       );
     }
-    final upcoming = data.upcoming;
     if (upcoming != null) {
       return _PickedInvoice(
         overdue: false,
         amount: upcoming.amountDue,
         currency: upcoming.currency,
-        date: widget.nextDueDate,
+        date: nextDueDate,
         preview: upcoming,
       );
     }
@@ -154,42 +174,62 @@ class _InvoicesSectionState extends State<InvoicesSection> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_InvoicesData>(
+    return FutureBuilder<List<_PayerInvoice>>(
       future: _future,
       builder: (context, snapshot) {
         final data = snapshot.data;
         if (data == null) return const SizedBox.shrink();
-        final invoice = _pick(data);
-        if (invoice == null) return const SizedBox.shrink();
-        final card = _InvoiceCard(
-          invoice: invoice,
-          payerName: widget.payerName,
-          payerPhotoUrl: widget.payerPhotoUrl,
+        final bodies = [
+          for (final pi in data)
+            if (pi.picked != null)
+              _InvoiceBody(
+                invoice: pi.picked!,
+                payerName: pi.payer.name,
+                payerPhotoUrl: pi.payer.photoUrl,
+              ),
+        ];
+        if (bodies.isEmpty) return const SizedBox.shrink();
+        // One card holds every payer's invoice, separated by spacing —
+        // each block leads with its own payer header so the two read
+        // as distinct invoices without needing separate cards.
+        final content = SectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingBig,
+            children: [
+              Text(
+                bodies.length == 1 ? 'Invoice' : 'Invoices',
+                style: DesignConstants.h2,
+              ),
+              ...bodies,
+            ],
+          ),
         );
-        if (!widget.topGap) return card;
+        if (!widget.topGap) return content;
         // Own top gap so the parent column needs no `spacing` —
-        // that way an absent invoice leaves no dead strip and the
+        // that way an absent card leaves no dead strip and the
         // membership card fills the whole column.
         return Padding(
           padding: const EdgeInsets.only(
             top: DesignConstants.spacingBig,
           ),
-          child: card,
+          child: content,
         );
       },
     );
   }
 }
 
-/// The Invoices card body — the single invoice rendered directly
-/// in the card (no nested tile): eyebrow, payer, due date,
-/// amount, and the cash action.
-class _InvoiceCard extends StatelessWidget {
+/// One payer's invoice block inside the shared Invoices card: the
+/// payer header (eyebrow, name, due date), the amount breakdown, and
+/// the cash action. The enclosing [InvoicesSection] owns the card and
+/// stacks one of these per payer.
+class _InvoiceBody extends StatelessWidget {
   final _PickedInvoice invoice;
   final String payerName;
   final String? payerPhotoUrl;
 
-  const _InvoiceCard({
+  const _InvoiceBody({
     required this.invoice,
     required this.payerName,
     required this.payerPhotoUrl,
@@ -210,81 +250,77 @@ class _InvoiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          Text('Invoice', style: DesignConstants.h2),
-          Row(
-            spacing: DesignConstants.spacingMedium,
-            children: [
-              CircleAvatar(
-                radius: DesignConstants.iconSizeMedium,
-                backgroundColor: DesignConstants.backgroundColor,
-                backgroundImage: payerPhotoUrl != null
-                    ? NetworkImage(payerPhotoUrl!)
-                    : null,
-                child: payerPhotoUrl == null
-                    ? Text(
-                        payerName.isNotEmpty
-                            ? payerName[0].toUpperCase()
-                            : '?',
-                        style: DesignConstants.pSmall.copyWith(
-                          color: DesignConstants.text,
-                        ),
-                      )
-                    : null,
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  spacing: DesignConstants.spacingTiny,
-                  children: [
-                    Text(
-                      invoice.overdue ? 'Overdue' : 'Upcoming',
-                      style: DesignConstants.pBig.copyWith(
-                        color: invoice.overdue
-                            ? DesignConstants.badRed
-                            : DesignConstants.text2nd,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      payerName,
-                      style: DesignConstants.h3,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      'Due ${formatDay(invoice.date)}',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        Row(
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            CircleAvatar(
+              radius: DesignConstants.iconSizeMedium,
+              backgroundColor: DesignConstants.backgroundColor,
+              backgroundImage: payerPhotoUrl != null
+                  ? NetworkImage(payerPhotoUrl!)
+                  : null,
+              child: payerPhotoUrl == null
+                  ? Text(
+                      payerName.isNotEmpty
+                          ? payerName[0].toUpperCase()
+                          : '?',
                       style: DesignConstants.pSmall.copyWith(
-                        color: DesignConstants.text2nd,
+                        color: DesignConstants.text,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          InvoiceBreakdown(data: _money),
-          AppOutlineButton(
-            fullWidth: true,
-            text: 'Mark paid with cash',
-            borderRadius: DesignConstants.radiusSmall,
-            onPressed: () => ComingSoonDialog.show(
-              context: context,
-              title: 'Mark paid with cash',
-              message:
-                  'Marking an invoice paid with cash is '
-                  'coming soon.',
+                    )
+                  : null,
             ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: DesignConstants.spacingTiny,
+                children: [
+                  Text(
+                    invoice.overdue ? 'Overdue' : 'Upcoming',
+                    style: DesignConstants.pBig.copyWith(
+                      color: invoice.overdue
+                          ? DesignConstants.badRed
+                          : DesignConstants.text2nd,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    payerName,
+                    style: DesignConstants.h3,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Due ${formatDay(invoice.date)}',
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        InvoiceBreakdown(data: _money),
+        AppOutlineButton(
+          fullWidth: true,
+          text: 'Mark paid with cash',
+          borderRadius: DesignConstants.radiusSmall,
+          onPressed: () => ComingSoonDialog.show(
+            context: context,
+            title: 'Mark paid with cash',
+            message:
+                'Marking an invoice paid with cash is '
+                'coming soon.',
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from api_creation.plans import PlanRecord
 from constants import (
+    CHILD_SELF_PAY_FRACTION,
     CUSTOM_DISCOUNT_PROBABILITY,
     DISCOUNTS_PER_MEMBERSHIP_MAX,
     LINKED_FAMILY_FRACTION,
@@ -103,6 +104,11 @@ class MemberPlan:
     # parent's real member_id is resolved after creation by the backend link
     # endpoint, then the child's own membership is started under the parent.
     linked_primary_handle: str | None = None
+    # A linked child who pays for their OWN membership (own card + own
+    # subscription). Still linked to the parent (authorization), but
+    # paid_by_member_id = themselves. False for roots/solos and parent-paid
+    # children.
+    self_pays: bool = False
     # Account-level freeze window (parents/singles only — never children).
     account_freeze_start: date | None = None
     account_freeze_end: date | None = None
@@ -360,12 +366,13 @@ def _form_linked_families(
     Mirrors the original CRM seed: shuffle the members, take a fraction of them
     as "linkable", then repeatedly pull one off as a paying parent (root) and
     give it 1-MAX_LINKED_CHILDREN_PER_PARENT children. Roots get a forced
-    recurring membership — the backend link endpoint requires the parent to have
-    an active recurring subscription. Each child also gets its own recurring
-    membership (on any plan, not necessarily the parent's); the child references
-    the root via linked_primary_handle and is linked (cardless) after creation,
-    and its membership is started afterward so the item rides the parent's
-    subscription. Regular discounts are drawn per membership in
+    recurring membership. Each child also gets its own recurring membership (on
+    any plan, not necessarily the parent's) and references the root via
+    linked_primary_handle. ~CHILD_SELF_PAY_FRACTION of children SELF-PAY their
+    membership (``self_pays`` — own card, billed to their own subscription); the
+    rest are paid by the parent (the item rides the parent's subscription).
+    Either way the child is linked to the parent (the link is the authorization
+    layer, not the billing key). Regular discounts are drawn per membership in
     ``_assign_discounts`` (family members included, like any other membership).
 
     Operates on member *indices* (never reorders `members`, since create_all
@@ -389,9 +396,10 @@ def _form_linked_families(
             child = linkable.pop()
             members[child].linked_primary_handle = members[root].local_handle
             # Each child carries its own membership (any recurring plan — not
-            # necessarily the parent's). Started AFTER the child is linked so
-            # the item rides the parent's subscription.
+            # necessarily the parent's). ~CHILD_SELF_PAY_FRACTION self-pay it on
+            # their own card + own subscription; the rest ride the parent's.
             members[child].current = CurrentMembership(plan=random.choice(recurring))
+            members[child].self_pays = random.random() < CHILD_SELF_PAY_FRACTION
             family_idx.add(child)
 
     return family_idx

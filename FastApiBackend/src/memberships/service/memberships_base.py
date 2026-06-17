@@ -158,18 +158,19 @@ class MemberMembershipsBase:
             )
         return dict(row)
 
-    async def _pre_sync_payments(self, member_id: UUID) -> None:
-        """Converge the family to a clean DB↔Stripe baseline BEFORE mutating.
+    async def _pre_sync_payments(self, payer_member_id: UUID) -> None:
+        """Converge the payer to a clean DB↔Stripe baseline BEFORE mutating.
 
-        Every lifecycle op runs this first so it never builds a new desired state
-        on top of a DB that has drifted from Stripe (e.g. a half-finished prior
-        op left a pending or unsettled row). Uses a FRESH idempotency key —
-        independent of the operation's own key, since it is a separate converge —
-        and default ``proration_behavior`` (``none``), so it reconciles without
-        billing. If it raises, the operation aborts before any DB change.
+        Every prorating lifecycle op runs this first so it never builds a new
+        desired state on top of a DB that has drifted from Stripe (e.g. a
+        half-finished prior op left a pending or unsettled row). Uses a FRESH
+        idempotency key — independent of the operation's own key, since it is a
+        separate converge — and default ``proration_behavior`` (``none``), so it
+        reconciles without billing. If it raises, the operation aborts before
+        any DB change.
         """
         await self._payment_sync.update_payments_recurring(
-            member_id,
+            payer_member_id,
             idempotency_key=uuid4(),
         )
 
@@ -273,15 +274,52 @@ class MemberMembershipsBase:
                     f"plan_id={plan_id}"
                 )
 
+    async def _assert_payer_allowed(
+        self,
+        member_id: UUID,
+        paid_by_member_id: UUID,
+    ) -> None:
+        """Validate a payer is authorized to bill for a member.
+
+        The payer must be the member themselves (self-pay) or the member's
+        linked parent — ``account_linked_to_id`` is the authorization layer
+        (paying for someone else requires that member be linked to you).
+        Shared by every membership op that takes an explicit payer
+        (``charge_card`` today; store / drop-in later). The start op enforces
+        the same rule in batch via its own ``_check_links``.
+
+        Raises:
+            ValueError: If the member is missing, or the payer is neither the
+                member nor the member's linked parent.
+        """
+        if paid_by_member_id == member_id:
+            return
+        sql = load_sql(SQL_DIR / "member_memberships_start_account_links.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"member_ids": [str(member_id)]},
+            )
+            row = result.mappings().fetchone()
+        if row is None:
+            raise ValueError(f"Member {member_id} not found")
+        linked_to = row["account_linked_to_id"]
+        if linked_to is None or UUID(str(linked_to)) != paid_by_member_id:
+            raise ValueError(
+                f"Payer {paid_by_member_id} is not authorized for member "
+                f"{member_id} — the payer must be the member or their "
+                f"linked parent",
+            )
+
     async def _crm_insert(
         self,
         rows: list[dict],
     ) -> dict[tuple[UUID, UUID], UUID]:
         """Insert membership rows in ONE multi-row statement.
 
-        Each row dict carries: member_id, gym_id, plan_id, price_id,
-        start_date, end_date, last_paid_date, next_due_date, stripe_item_id,
-        prorate, total_price, and optionally sync_status (default
+        Each row dict carries: member_id, paid_by_member_id, gym_id, plan_id,
+        price_id, start_date, end_date, last_paid_date, next_due_date,
+        stripe_item_id, prorate, total_price, and optionally sync_status (default
         ``not_added`` — the real start's pending row; the start preview
         passes ``preview_add`` so the dry-run sees it but the real path
         never bills it). All rows appear atomically, or none.
@@ -293,6 +331,7 @@ class MemberMembershipsBase:
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
             "member_ids": [str(r["member_id"]) for r in rows],
+            "paid_by_member_ids": [str(r["paid_by_member_id"]) for r in rows],
             "gym_ids": [str(r["gym_id"]) for r in rows],
             "plan_ids": [str(r["plan_id"]) for r in rows],
             "price_ids": [str(r["price_id"]) for r in rows],
@@ -329,7 +368,8 @@ class MemberMembershipsBase:
         """Build the start op's membership insert rows, one per item.
 
         Shared by the real start (``not_added``) and the staged preview
-        (``preview_add``) so the two stage IDENTICAL rows. A non-recurring
+        (``preview_add``) so the two stage IDENTICAL rows. Every row's
+        ``paid_by_member_id`` is the request's single payer. A non-recurring
         plan with a duration gets its absolute ``end_date`` resolved here.
         """
         rows: list[dict] = []
@@ -351,6 +391,7 @@ class MemberMembershipsBase:
                 )
             rows.append({
                 "member_id": item.member_id,
+                "paid_by_member_id": request.payer_member_id,
                 "gym_id": request.gym_id,
                 "plan_id": plan_price["plan_id"],
                 "price_id": item.price_id,

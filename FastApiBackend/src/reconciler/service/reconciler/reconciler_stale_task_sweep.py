@@ -5,7 +5,7 @@ run right after the request returns. If the process dies mid-run, the task is
 left ``pending`` (never started) or ``running`` with a stale claim. This sweep —
 one step of the twice-daily reconciler run — re-runs every unfinished task; the
 executor's atomic claims decide what is actually runnable (a ``pending`` item,
-or a ``running`` claim older than ``TASK_STALE_RUNNING_SECONDS`` left by a dead
+or a ``running`` claim older than ``settings.task_stale_running_seconds`` left by a dead
 process), so a still-live in-process run is never disturbed.
 
 The recovery loop lives here, in the reconciler — the tasks engine owns only

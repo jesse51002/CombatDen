@@ -1,7 +1,6 @@
 import enum
 import logging
 import sys
-from typing import Final
 
 from pydantic_settings import BaseSettings
 
@@ -65,41 +64,39 @@ class Settings(BaseSettings):
     # execution died) — see src/reconciler/.
     reconciler_enabled: bool = True
     reconciler_cron_hours: list[int] = [2, 14]  # UTC hours, twice daily
+    # Scheduled reconciler sweep tuning — see src/reconciler/. No
+    # reconciler-wide lock: safety is the per-payer PayingMemberLock every
+    # payment op already holds, so concurrent sweeps are safe (they only
+    # repeat idempotent work).
+    reconciler_invoice_lookback_days: int = 1
+    reconciler_stripe_page_size: int = 100
 
+    # Billing cycle anchors
+    monthly_billing_anchor_day: int = 1  # 1st of month
+    weekly_billing_anchor_weekday: int = 6  # Sunday (Python weekday: Mon=0, Sun=6)
 
-# Billing cycle anchor constants
-MONTHLY_BILLING_ANCHOR_DAY: Final[int] = 1  # 1st of month
-WEEKLY_BILLING_ANCHOR_WEEKDAY: Final[int] = 6  # Sunday (Python weekday: Mon=0, Sun=6)
+    # Concurrency-lease timings — see src/shared/paying_member_lock.py
+    lock_ttl_seconds: int = 60  # hard cap; a crashed/stuck holder self-heals
+    lock_max_hold_seconds: float = 55.0  # abort the op before its lease expires (< TTL)
+    lock_acquire_timeout_seconds: float = 5.0  # block this long, then LockBusyError -> 409
+    lock_poll_interval_seconds: float = 0.25  # retry cadence while waiting
+    # The lock-key namespace for a payer lease.
+    paying_member_lock_prefix: str = "paying_member_lock"
 
-# Concurrency-lease timings — see src/shared/paying_member_lock.py
-LOCK_TTL_SECONDS: Final[int] = 60  # hard cap; a crashed/stuck holder self-heals
-LOCK_MAX_HOLD_SECONDS: Final[float] = 55.0  # abort the op before its lease expires (< TTL)
-LOCK_ACQUIRE_TIMEOUT_SECONDS: Final[float] = 5.0  # block this long, then LockBusyError -> 409
-LOCK_POLL_INTERVAL_SECONDS: Final[float] = 0.25  # retry cadence while waiting
-# The lock-key namespace for a paying-parent family lease.
-PAYING_MEMBER_LOCK_PREFIX: Final[str] = "paying_member_lock"
+    # Bulk payment-sync retry — re-attempt payers that failed a pass (most
+    # often a transient busy payer): up to bulk_sync_max_retries retry passes,
+    # each after a bulk_sync_retry_delay_seconds wait.
+    bulk_sync_retry_delay_seconds: int = 10
+    bulk_sync_max_retries: int = 3
 
-# Bulk payment-sync retry — re-attempt members that failed a pass (most often a
-# transient busy family): up to BULK_SYNC_MAX_RETRIES retry passes, each after a
-# BULK_SYNC_RETRY_DELAY_SECONDS wait.
-BULK_SYNC_RETRY_DELAY_SECONDS: Final[int] = 10
-BULK_SYNC_MAX_RETRIES: Final[int] = 3
-
-# Tracked background tasks (src/tasks/) — per-item retry mirrors the bulk-sync
-# retry: up to TASK_ITEM_MAX_ATTEMPTS attempts, TASK_ITEM_RETRY_DELAY_SECONDS
-# between them (most failures are a transient busy family). A 'running' claim
-# older than TASK_STALE_RUNNING_SECONDS belongs to a dead process (every live
-# attempt finishes well under LOCK_MAX_HOLD_SECONDS) and may be reclaimed when
-# the reconciler's stale-task recovery re-runs it (see src/reconciler/).
-TASK_ITEM_MAX_ATTEMPTS: Final[int] = 3
-TASK_ITEM_RETRY_DELAY_SECONDS: Final[int] = 10
-TASK_STALE_RUNNING_SECONDS: Final[int] = 120
-
-# Scheduled reconciler — see src/reconciler/. No reconciler-wide lock: safety is
-# the per-paying-family PayingMemberLock every payment op already holds, so
-# concurrent sweeps are safe (they only repeat idempotent work).
-RECONCILER_INVOICE_LOOKBACK_DAYS: Final[int] = 1
-RECONCILER_STRIPE_PAGE_SIZE: Final[int] = 100
+    # Tracked background tasks (src/tasks/) — per-item retry mirrors the
+    # bulk-sync retry: up to task_item_max_attempts attempts,
+    # task_item_retry_delay_seconds between them. A 'running' claim older than
+    # task_stale_running_seconds belongs to a dead process and may be reclaimed
+    # when the reconciler's stale-task recovery re-runs it (see src/reconciler/).
+    task_item_max_attempts: int = 3
+    task_item_retry_delay_seconds: int = 10
+    task_stale_running_seconds: int = 120
 
 
 settings = Settings()

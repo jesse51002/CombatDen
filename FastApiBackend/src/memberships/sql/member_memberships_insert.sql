@@ -7,17 +7,18 @@
 -- (never a bind followed directly by a double-colon cast — asyncpg cannot
 -- bind that form).
 INSERT INTO member_memberships_unfiltered (
-    member_id, gym_id, plan_id, price_id,
+    member_id, paid_by_member_id, gym_id, plan_id, price_id,
     start_date, end_date, last_paid_date, next_due_date,
     stripe_item_id, prorate, total_price, stripe_sync_status
 )
 SELECT
-    u.member_id, u.gym_id, u.plan_id, u.price_id,
+    u.member_id, u.paid_by_member_id, u.gym_id, u.plan_id, u.price_id,
     u.start_date, u.end_date, u.last_paid_date, u.next_due_date,
     u.stripe_item_id, u.prorate, u.total_price,
     CAST(u.sync_status AS stripe_sync_status)
 FROM unnest(
     CAST(:member_ids AS UUID[]),
+    CAST(:paid_by_member_ids AS UUID[]),
     CAST(:gym_ids AS UUID[]),
     CAST(:plan_ids AS UUID[]),
     CAST(:price_ids AS UUID[]),
@@ -30,7 +31,7 @@ FROM unnest(
     CAST(:total_prices AS INTEGER[]),
     CAST(:sync_statuses AS TEXT[])
 ) AS u(
-    member_id, gym_id, plan_id, price_id,
+    member_id, paid_by_member_id, gym_id, plan_id, price_id,
     start_date, end_date, last_paid_date, next_due_date,
     stripe_item_id, prorate, total_price, sync_status
 )

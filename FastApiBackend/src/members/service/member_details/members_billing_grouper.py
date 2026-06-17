@@ -1,7 +1,9 @@
 """Groups membership rows by plan for the CRM member detail carousel."""
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date
+from enum import StrEnum
 from uuid import UUID
 
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
@@ -23,6 +25,41 @@ from src.memberships.memberships_schema import (
     MemberMembershipsAppliedDiscount,
 )
 from src.shared.formatters import format_minor_units
+
+
+class OverviewKind(StrEnum):
+    """Which payer-role sentence the member's overview line uses.
+
+    A member is exactly one of these — the roles are mutually exclusive
+    under the payer model (a root account pays for self/others; a linked
+    child is paid for and pays for nobody).
+    """
+
+    self_pay = "self_pay"  # pays only their own membership(s)
+    pays_for_others = "pays_for_others"  # pays >=1 OTHER member's membership
+    beneficiary = "beneficiary"  # >=1 own membership paid by someone else
+
+
+@dataclass(frozen=True)
+class MembershipOverviewContext:
+    """Resolved inputs for the profile-header overview string.
+
+    The detail service computes this from the family rows (it owns the
+    payer math); the grouper only formats it. ``total`` is already scoped
+    to ``kind`` (what the viewed member pays for ``pays_for_others``,
+    their own active-recurring sum otherwise), in minor units.
+    """
+
+    kind: OverviewKind
+    total: int
+    has_trial: bool
+    has_cancelled: bool
+    has_frozen: bool
+    has_overdue: bool
+    paying_count: int  # active recurring count in the scanned scope
+    members_paid_for_count: int  # distinct members the viewer pays for
+    own_payer_ids: frozenset[UUID]  # payers of the viewer's own memberships
+    viewed_member_id: UUID
 
 
 class MembersBillingGrouper:
@@ -84,6 +121,7 @@ class MembersBillingGrouper:
             members = {
                 row["member_id"]: BillingMembershipMemberInfo(
                     item_id=row["item_id"],
+                    paid_by_member_id=row["paid_by_member_id"],
                     end_date=row["membership_end_date"],
                     cancel_date=row["membership_cancel_date"],
                     on_outdated_price=bool(row["on_outdated_price"]),
@@ -123,78 +161,120 @@ class MembersBillingGrouper:
 
         return grouped
 
-    def filter_plans_for_member(
-        self,
-        all_grouped: list[BillingMembershipInfo],
-        member_id: UUID,
-    ) -> list[BillingMembershipInfo]:
-        """Filter grouped plans to only those covering the target member.
-
-        Used when the queried member is a linked (child) account.
-
-        Args:
-            all_grouped: Full list of grouped plans.
-            member_id: The queried member's ID.
-
-        Returns:
-            Plans where the member_id is present in ``members``.
-        """
-        return [plan for plan in all_grouped if member_id in plan.members]
-
     def build_membership_overview(
         self,
-        linked_to_id: UUID | None,
-        monthly_total: int,
-        has_trial: bool,
-        has_cancelled: bool,
-        has_frozen: bool,
-        has_overdue: bool,
-        paying_count: int,
+        ctx: MembershipOverviewContext,
         supplementary: MembersBillingSupplementary,
-    ) -> tuple[str, UUID | None]:
-        """Build the membership overview string and linked_to_account value.
+    ) -> str:
+        """Build the profile-header membership overview string.
 
-        The ``monthly_total`` / ``paying_count`` are the **queried member's**
-        scope: for a primary/solo account, the family bill it pays and the
-        family's active recurring count; for a linked account, that member's
-        OWN total and count (the same line a normal member gets, with a
-        ``(Paid by <name>)`` suffix appended).
+        Three payer-role sentences (see :class:`OverviewKind`):
+
+        - ``self_pay``  → ``Paying $X/mo for N Membership(s)``
+        - ``pays_for_others`` → ``Paying $X/mo across N members``
+        - ``beneficiary`` → ``$X/mo worth of memberships (Paid by …)``
+
+        Salient account states (frozen / overdue / trial / cancelled)
+        short-circuit the price phrase and keep their existing strings;
+        the beneficiary ``(Paid by …)`` suffix is appended in every state.
 
         Args:
-            linked_to_id: The parent account ID if the member is linked.
-            monthly_total: The total to display (minor units) — the family bill
-                for a primary account, the member's own sum for a linked one.
-            has_trial: Whether any membership in scope is a trial.
-            has_cancelled: Whether any membership in scope is cancelled.
-            has_frozen: Whether any membership in scope is frozen.
-            has_overdue: Whether any membership in scope is overdue.
-            paying_count: Number of active recurring memberships in scope.
-            supplementary: For profile lookups.
+            ctx: Resolved payer-role inputs from the detail service.
+            supplementary: For payer-name lookups.
 
         Returns:
-            Tuple of (overview_string, linked_to_account_id).
+            The overview string.
         """
-        summary = self._build_price_summary(
-            monthly_total,
-            has_trial,
-            has_cancelled,
-            has_frozen,
-            has_overdue,
-            paying_count,
-        )
+        if ctx.kind == OverviewKind.pays_for_others:
+            return self._overview_pays_for_others(ctx)
+        if ctx.kind == OverviewKind.beneficiary:
+            return self._overview_beneficiary(ctx, supplementary)
+        return self._overview_self_pay(ctx)
 
-        base = summary
-        if paying_count > 0:
-            label = "Membership" if paying_count == 1 else "Memberships"
-            base = f"{summary} for {paying_count} {label}"
+    def _overview_self_pay(self, ctx: MembershipOverviewContext) -> str:
+        """``Paying $X/mo for N Membership(s)`` — the viewer pays only
+        their own memberships. Salient states keep the count suffix."""
+        state = self._state_phrase(ctx)
+        suffix = self._count_suffix(ctx.paying_count)
+        if state is None:
+            return f"Paying {format_minor_units(ctx.total)}/mo{suffix}"
+        if ctx.paying_count > 0:
+            return f"{state}{suffix}"
+        return state
 
-        if linked_to_id is None:
-            return base, None
+    def _overview_pays_for_others(self, ctx: MembershipOverviewContext) -> str:
+        """``Paying $X/mo across N members`` — the viewer pays for >=1
+        other member (self counted when they also hold a membership)."""
+        members = ctx.members_paid_for_count
+        state = self._state_phrase(ctx)
+        across = f" across {members} members" if members > 0 else ""
+        if state is None:
+            return f"Paying {format_minor_units(ctx.total)}/mo{across}"
+        return f"{state}{across}"
 
-        # Linked account: the same line a normal member gets, plus who pays.
-        primary = supplementary.profiles_dict.get(linked_to_id)
-        name = primary.first_name if primary else "Primary"
-        return f"{base} (Paid by {name})", linked_to_id
+    def _overview_beneficiary(
+        self,
+        ctx: MembershipOverviewContext,
+        supplementary: MembersBillingSupplementary,
+    ) -> str:
+        """``$X/mo worth of memberships (Paid by …)`` — >=1 of the
+        viewer's own memberships is paid by someone else."""
+        suffix = self._paid_by_suffix(ctx, supplementary)
+        state = self._state_phrase(ctx)
+        if state is None:
+            return f"{format_minor_units(ctx.total)}/mo worth of memberships {suffix}"
+        return f"{state} {suffix}"
+
+    def _count_suffix(self, paying_count: int) -> str:
+        """`` for N Membership(s)`` suffix, or empty when nothing active."""
+        if paying_count <= 0:
+            return ""
+        label = "Membership" if paying_count == 1 else "Memberships"
+        return f" for {paying_count} {label}"
+
+    def _paid_by_suffix(
+        self,
+        ctx: MembershipOverviewContext,
+        supplementary: MembersBillingSupplementary,
+    ) -> str:
+        """``(Paid by self / <name>)`` — self listed first, then payers.
+
+        A linked child has at most one non-self payer (their linked
+        parent), so the ordering is deterministic.
+        """
+        names: list[str] = []
+        if ctx.viewed_member_id in ctx.own_payer_ids:
+            names.append("self")
+        for payer_id in ctx.own_payer_ids:
+            if payer_id == ctx.viewed_member_id:
+                continue
+            profile = supplementary.profiles_dict.get(payer_id)
+            names.append(profile.first_name if profile else "Primary")
+        return f"(Paid by {' / '.join(names)})"
+
+    def _state_phrase(self, ctx: MembershipOverviewContext) -> str | None:
+        """Salient account-state string, or ``None`` for normal paying.
+
+        Returns ``None`` only for the normal positive-paying state so each
+        payer-role builder can supply its own price phrasing; every other
+        state (frozen / overdue / active-without-total / trial / cancelled /
+        none) returns its display string directly.
+        """
+        if ctx.has_frozen:
+            return "Account is Frozen"
+        if ctx.has_overdue:
+            if ctx.total > 0:
+                return f"Overdue · {format_minor_units(ctx.total)}/mo"
+            return "Overdue"
+        if ctx.total > 0:
+            return None
+        if ctx.paying_count > 0:
+            return "Active"
+        if ctx.has_trial:
+            return "Member is on Trial"
+        if ctx.has_cancelled:
+            return "Membership is Cancelled"
+        return "No active memberships"
 
     def _display_status(
         self,
@@ -294,56 +374,3 @@ class MembersBillingGrouper:
                 discounts.append(MemberMembershipsAppliedDiscount(**applied))
         return discounts
 
-    def _build_price_summary(
-        self,
-        monthly_total: int,
-        has_trial: bool,
-        has_cancelled: bool,
-        has_frozen: bool,
-        has_overdue: bool,
-        paying_count: int,
-    ) -> str:
-        """Build a price summary string.
-
-        Returns strings like:
-        - "Account is Frozen"
-        - "Overdue · $320/mo"
-        - "Overdue"
-        - "Paying $320/mo"
-        - "Active"
-        - "Member is on Trial"
-        - "Membership is Cancelled"
-
-        Args:
-            monthly_total: Parent's total_monthly_recurring_price in minor units.
-            has_trial: Whether any membership is a trial.
-            has_cancelled: Whether any membership is cancelled.
-            has_frozen: Whether any membership is frozen.
-            has_overdue: Whether any membership is overdue.
-            paying_count: Count of active recurring memberships.
-
-        Returns:
-            Summary string.
-        """
-        if has_frozen:
-            return "Account is Frozen"
-        if has_overdue:
-            # Frozen pauses billing and wins above; otherwise an overdue
-            # membership is the salient state. Keep the price context when
-            # the denormalised monthly total has been written.
-            if monthly_total > 0:
-                return f"Overdue · {format_minor_units(monthly_total)}/mo"
-            return "Overdue"
-        if monthly_total > 0:
-            return f"Paying {format_minor_units(monthly_total)}/mo"
-        if paying_count > 0:
-            # Active recurring memberships exist but the denormalised
-            # monthly total has not been written yet (seed data, or the
-            # Stripe price write-back has not run). Report the active
-            # state instead of falsely claiming there are none.
-            return "Active"
-        if has_trial:
-            return "Member is on Trial"
-        if has_cancelled:
-            return "Membership is Cancelled"
-        return "No active memberships"

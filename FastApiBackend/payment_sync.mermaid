@@ -18,15 +18,15 @@ flowchart TB
 
   subgraph engine["⚙️ PaymentSyncService — the sync engine"]
     direction TB
-    entry_real["▶ update_payments_recurring(member_id, idempotency_key,<br/>pay_first_invoice_out_of_band, proration_behavior) -> None<br/>REAL: converge Stripe + write back · caller reads DB ('applied') to confirm"]
-    entry_prev["▷ preview_update_payments_recurring(member_id, proration_behavior)<br/>-> invoice preview | None · PREVIEW: read-only dry run, no DB writes"]
+    entry_real["▶ update_payments_recurring(payer_member_id, idempotency_key,<br/>pay_first_invoice_out_of_band, proration_behavior) -> None<br/>REAL: converge Stripe + write back · caller reads DB ('applied') to confirm"]
+    entry_prev["▷ preview_update_payments_recurring(payer_member_id, proration_behavior)<br/>-> invoice preview | None · PREVIEW: read-only dry run, no DB writes"]
 
-    resolve["1 · resolve parent + gym account — SHARED<br/>BillingParentResolver.resolve — follow account_linked_to_id once → (ParentProfile, account)"]
+    resolve["1 · resolve payer + gym account — SHARED<br/>PayerResolver.resolve_payer_with_account — direct payer-row lookup → (PayerProfile, account)"]
     settle["2 · settle once discounts — SHARED (preview settles too)<br/>PaymentSyncOnceDiscounts.sync_once_discounts<br/>get_unconsumed_once_discounts → read live sub coupons (get_subscription)<br/>coupon gone from sub = consumed → mark_once_consumed (stamp end_date)<br/>ALSO the standalone target of settle_once_discounts (invoice.paid webhook)"]
 
     subgraph build_sp["3 · build_sync_params (PaymentSyncBuilder) — SHARED · pure read, NO DB writes"]
       direction TB
-      b_read["get_active_memberships(family_ids, today, preview)<br/>active recurring (cancel_date IS NULL) each carrying its applied discounts<br/>the preview flag toggles which stripe_sync_status set is read"]
+      b_read["get_active_memberships(payer_member_id, today, preview)<br/>the payer's active recurring (paid_by_member_id = payer, cancel_date IS NULL) each carrying its applied discounts<br/>the preview flag toggles which stripe_sync_status set is read"]
       b_group["_group_by_price → consolidated lines (qty = # memberships on the price)"]
       b_bucket["_build_bucket → IntervalBucket: one desired item per price,<br/>items carry the resolved coupons + the existing sub id"]
       b_read --> b_group
@@ -51,7 +51,7 @@ flowchart TB
       w_links["coupon links → set_applied_discount_coupon_id (stripe_coupon_id + 'applied') per row"]
       w_del["_mark_removed_deleted — every cancelled row (converge removed its billing) → mark_membership_deleted ('deleted')"]
       w_subid["update_profile_sub_id — parent stripe_sub_id_month (None when cancelled)"]
-      w_prices["_sync_parent_monthly_total — parent monthly total from Stripe upcoming invoice (set_parent_monthly_total)"]
+      w_prices["_sync_payer_monthly_total — payer monthly total from Stripe upcoming invoice (set_payer_monthly_total)"]
       w_rows --> w_memberprice
       w_memberprice --> w_links
       w_links --> w_del
@@ -81,9 +81,9 @@ flowchart TB
 
   reconciler["🧹 Scheduled reconciler — BUILT (its own reconciler domain; see reconciler-guide)<br/>twice-daily sweep · drives bulk_payment_sync (push) + Stripe→CRM cancellation absorption<br/>mid-cycle end_date expiry + once-consumption backstop on idle members"]
 
-  webhook["📨 invoice.paid webhook handler (stripe_webhooks)<br/>after a subscription invoice is paid → settle_once_discounts(member_id)<br/>best-effort · own txn · stamps a consumed once's end_date promptly"]
+  webhook["📨 invoice.paid webhook handler (stripe_webhooks)<br/>after a subscription invoice is paid → settle_once_discounts(payer_member_id)<br/>best-effort · own txn · stamps a consumed once's end_date promptly"]
 
-  supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_parent · get_family_ids · get_active_recurring (+ applied discounts)<br/>get_unconsumed_once_discounts · mark_once_consumed<br/>apply_membership_sync · mark_membership_deleted · set_applied_discount_coupon_id<br/>update_profile_sub_ids · set_member_post_discount_prices · sync_profile_monthly_total"]
+  supabase["🗄️ Supabase — service-role, unfiltered base tables<br/>resolve_payer · get_active_recurring (payer-scoped, + applied discounts)<br/>get_unconsumed_once_discounts · mark_once_consumed<br/>apply_membership_sync · mark_membership_deleted · set_applied_discount_coupon_id<br/>update_profile_sub_ids · set_member_post_discount_prices · sync_profile_monthly_total"]
   stripe["💳 Stripe — gym Connect account<br/>get_subscription (live coupons for once-settle)<br/>create / update / cancel subscription · pause_collection<br/>coupons via PaymentsStripeDiscountService (find-or-create) · upcoming invoice (preview)"]
 
   triggers -->|"mutations → update / preview · plan reprice → bulk"| engine

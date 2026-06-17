@@ -61,10 +61,10 @@ class MemberMembershipsReprice(MemberMembershipsBase):
     ) -> UUID:
         """Run one reprice (DB-first); returns the successor row's item_id.
 
-        Takes the family lock itself, converges synchronously, returns when
-        done — a standalone op like ``cancel`` / ``start``. The single
-        member-detail upgrade calls it directly (no task); the per-plan batch
-        runs it per task item.
+        Takes the payer lock itself (the membership's ``paid_by_member_id``),
+        converges synchronously, returns when done — a standalone op like
+        ``cancel`` / ``start``. The single member-detail upgrade calls it
+        directly (no task); the per-plan batch runs it per task item.
 
         ``target_price_id`` resolution:
         - **None** (the single, member-detail upgrade) → resolve the plan's
@@ -80,7 +80,7 @@ class MemberMembershipsReprice(MemberMembershipsBase):
         item_id, no work, no bill).
 
         Raises:
-            LockBusyError: The family is busy.
+            LockBusyError: The payer is busy.
             ValueError: The membership does not validate (not found,
                 cancelled, ended), has no active price (None case), or the
                 given target is not a price of its plan.
@@ -88,7 +88,12 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 Stripe — the DB phase has been reverted, the membership is
                 exactly as it was.
         """
-        async with self._paying_lock.lock([member_id]):
+        # ``paid_by_member_id`` is immutable, so resolving the payer before
+        # locking is race-free — and the lock keys on the PAYER, not the
+        # member: a child's membership paid by a parent must lock the parent's
+        # subscription, the one this reprice converges.
+        payer_id = await self._resolve_payer(old_item_id, member_id)
+        async with self._paying_lock.lock([payer_id]):
             row = await self._get_membership(old_item_id, member_id)
             self._validate_reprice(row, old_item_id, member_id)
 
@@ -112,8 +117,8 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 # is no defensive re-sync here.
                 return old_item_id
 
-            # Prorating op: converge the family to a clean baseline first.
-            await self._pre_sync_payments(member_id)
+            # Prorating op: converge the payer to a clean baseline first.
+            await self._pre_sync_payments(payer_id)
 
             new_item_id = await self._write_db_phase(
                 row,
@@ -126,7 +131,7 @@ class MemberMembershipsReprice(MemberMembershipsBase):
 
             await sync_or_revert(
                 sync_fn=lambda: self._payment_sync.update_payments_recurring(
-                    member_id,
+                    payer_id,
                     idempotency_key=uuid4(),
                     proration_behavior=(
                         "always_invoice" if prorate else "none"
@@ -148,6 +153,20 @@ class MemberMembershipsReprice(MemberMembershipsBase):
             return new_item_id
 
     # ── Private — validation / resolution ──────────────────────
+
+    async def _resolve_payer(
+        self,
+        old_item_id: UUID,
+        member_id: UUID,
+    ) -> UUID:
+        """The membership's payer (``paid_by_member_id``) — the lock/sync key.
+
+        Read before locking: ``paid_by_member_id`` is immutable, so this is
+        race-free and lets the reprice lock the PAYER's subscription rather
+        than the member's own.
+        """
+        row = await self._get_membership(old_item_id, member_id)
+        return UUID(str(row["paid_by_member_id"]))
 
     def _validate_reprice(
         self,
@@ -314,6 +333,7 @@ class MemberMembershipsReprice(MemberMembershipsBase):
             text(sql),
             {
                 "member_ids": [str(member_id)],
+                "paid_by_member_ids": [str(row["paid_by_member_id"])],
                 "gym_ids": [str(row["gym_id"])],
                 "plan_ids": [str(row["plan_id"])],
                 "price_ids": [str(target_price_id)],
