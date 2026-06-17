@@ -55,6 +55,7 @@ from bootstrap import gyms as bs_gyms
 from bootstrap import history as bs_history
 from bootstrap import ranks as bs_ranks
 from bootstrap import rewards as bs_rewards
+from bootstrap import waivers as bs_waivers
 from config import get_supabase_client
 from constants import DEFAULT_PASSWORD, DISCOUNTS_PER_GYM, PLANS_PER_GYM, SEED
 from faker import Faker
@@ -98,6 +99,10 @@ def seed() -> None:
             progress.log("Creating gym ranks...")
             ranks = bs_ranks.create_gym_ranks(client, gym_id, gym_type)
             progress.log(f"  {len(ranks)} ranks")
+
+            # Default authorized-payer waiver (undeletable, direct DB).
+            progress.log("Creating default authorized-payer waiver...")
+            bs_waivers.create(client, gym_id)
 
             # Plans + prices (real Stripe products + prices).
             progress.log("Creating plans...")

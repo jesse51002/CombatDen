@@ -30,6 +30,7 @@ from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectServic
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
+from src.waivers.service.waivers.waivers_service import WaiversService
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +45,18 @@ class GymsService:
     Args:
         db_pool: Injected database connection pool.
         stripe_connect_service: Injected Stripe Connect wrapper.
+        waivers_service: Injected waivers service; used to seed-copy the
+            gym's default authorized-payer waiver on creation.
     """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
         stripe_connect_service: GymsStripeConnectService,
+        waivers_service: WaiversService,
     ) -> None:
         self._db_pool = db_pool
+        self._waivers_service = waivers_service
         self._create_service = GymsCreateService(
             db_pool=db_pool,
             stripe_connect_service=stripe_connect_service,
@@ -81,11 +86,29 @@ class GymsService:
         if not user_email:
             raise ValueError("user_email is required for Stripe onboarding")
 
-        return await self._create_service.create_gym(
+        response = await self._create_service.create_gym(
             request=request,
             user_id=user_id,
             user_email=user_email,
         )
+
+        # Seed-copy the gym's undeletable default authorized-payer waiver. The
+        # gym is already permanent here (past the Stripe-attach cleanup window),
+        # so a failure leaves a usable gym lacking only its default waiver — it
+        # is logged + surfaced for an operator to re-create rather than silently
+        # dropped (the authorized-payer gate needs this document to exist).
+        try:
+            await self._waivers_service.create_default_waiver(response.gym_id)
+        except Exception:
+            logger.error(
+                "Failed to create the default authorized-payer waiver for "
+                "gym %s (the gym is otherwise created)",
+                response.gym_id,
+                exc_info=True,
+            )
+            raise
+
+        return response
 
     # ── Onboarding status ──────────────────────────────────────
 

@@ -402,6 +402,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         GymsService,
         db_pool=db_pool,
         stripe_connect_service=gyms_stripe_connect_service,
+        waivers_service=waivers_service,
     )
 
     # ── Stripe webhooks ──────────────────────────────────────────

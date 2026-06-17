@@ -2,8 +2,9 @@
 
 Delegates to focused sub-services while preserving the public API. Waivers are
 plain gym config (no Stripe): a named, versioned document plus an append-only
-e-sign audit. Phase 1 covers catalog CRUD, version history, and read-only
-signature tracking; the front-desk signing capture is Phase 2.
+e-sign audit. Covers catalog CRUD, version history, read-only signature
+tracking, and seed-copying a gym's undeletable default authorized-payer waiver;
+the front-desk signing capture is recorded by the link flow (memberships).
 """
 
 from __future__ import annotations
@@ -70,6 +71,13 @@ class WaiversService:
     ) -> WaiverResponse:
         """Create a waiver and publish its first version."""
         return await self._create.create_waiver(request)
+
+    async def create_default_waiver(
+        self,
+        gym_id: UUID,
+    ) -> WaiverResponse:
+        """Seed-copy the gym's undeletable default authorized-payer waiver."""
+        return await self._create.create_default_waiver(gym_id)
 
     async def update_waiver(
         self,
