@@ -1,4 +1,3 @@
-import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
@@ -23,7 +22,7 @@ part 'member_memberships_start_request.g.dart';
   createFactory: false,
   explicitToJson: true,
 )
-class MemberMembershipsStartRequest extends Equatable {
+class MemberMembershipsStartRequest {
   final String payerMemberId;
   final String gymId;
   final bool prorate;
@@ -69,15 +68,4 @@ class MemberMembershipsStartRequest extends Equatable {
 
   Map<String, dynamic> toJson() =>
       _$MemberMembershipsStartRequestToJson(this);
-
-  @override
-  List<Object?> get props => [
-        payerMemberId,
-        gymId,
-        prorate,
-        paidWithCash,
-        payment,
-        idempotencyKey,
-        memberships,
-      ];
 }

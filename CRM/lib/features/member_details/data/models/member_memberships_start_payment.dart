@@ -1,4 +1,3 @@
-import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'member_memberships_start_payment.g.dart';
@@ -11,12 +10,16 @@ part 'member_memberships_start_payment.g.dart';
 /// charging (required by the backend when the cart has a recurring
 /// membership; optional for a purely one-time cart, where `false`
 /// means a one-off card the backend never saves).
+///
+/// A plain request DTO (toJson only): NOT Equatable, so json
+/// codegen can't leak Equatable's `props` / `stringify` /
+/// `hashCode` getters into the wire body.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createFactory: false,
   explicitToJson: true,
 )
-class MemberMembershipsStartPayment extends Equatable {
+class MemberMembershipsStartPayment {
   final String paymentMethodId;
   final bool setDefault;
 
@@ -27,7 +30,4 @@ class MemberMembershipsStartPayment extends Equatable {
 
   Map<String, dynamic> toJson() =>
       _$MemberMembershipsStartPaymentToJson(this);
-
-  @override
-  List<Object?> get props => [paymentMethodId, setDefault];
 }

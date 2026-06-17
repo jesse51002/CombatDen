@@ -9,8 +9,6 @@ part of 'member_memberships_start_request.dart';
 Map<String, dynamic> _$MemberMembershipsStartRequestToJson(
   MemberMembershipsStartRequest instance,
 ) => <String, dynamic>{
-  'stringify': instance.stringify,
-  'hash_code': instance.hashCode,
   'payer_member_id': instance.payerMemberId,
   'gym_id': instance.gymId,
   'prorate': instance.prorate,
@@ -18,5 +16,4 @@ Map<String, dynamic> _$MemberMembershipsStartRequestToJson(
   'payment': instance.payment?.toJson(),
   'idempotency_key': instance.idempotencyKey,
   'memberships': instance.memberships.map((e) => e.toJson()).toList(),
-  'props': instance.props,
 };
