@@ -287,7 +287,12 @@ sequence is:
    the coupon links (+ `applied` on the applied-discount rows), `deleted` on
    cancelled rows confirmed gone from the live sub, the parent's sub id, each
    membership's own post-discount price onto `total_price`, and the parent's
-   monthly total from Stripe's upcoming invoice.
+   monthly total from Stripe's upcoming invoice. **Each step is independently
+   guarded** — a failure in one is logged at ERROR and never aborts the others
+   (`write` never raises), so the writeback persists everything it *can* and any
+   step that didn't land self-heals on the next sync / reconciler run; notably one
+   bad coupon or membership row can't block the status stamp a caller's verify
+   reads (§8).
 
 Returns **`None`** — the sync writes everything it owns back to the DB; callers
 read the DB (the `applied` status) to confirm it landed, and use
@@ -698,9 +703,14 @@ from the Stripe invoice — it is the amount the discount math computed.
 `PaymentSyncWriteback._sync_parent_monthly_total` reads the **upcoming invoice**
 (`fetch_upcoming_invoice`, payments-guide) and sums its recurring lines onto the
 parent's monthly total; when `stripe_sub_id` is `None` (fully cancelled) it zeroes
-that total. **Writeback failures are logged at ERROR and never re-raised** —
-Stripe is authoritative and a later mutation / the reconciler re-corrects the
-mirror. (`update_stripe_item_id.sql` also exists in this folder; the membership
+that total. **`write` is best-effort per step: every writeback runs under its own
+guard (`_run_step` for the single calls; per-iteration `try` inside
+`_apply_membership_rows` / `_apply_coupon_links`), so a failure is logged at ERROR
+and never re-raised and never aborts the remaining writebacks** — Stripe is
+authoritative and a later mutation / the reconciler re-corrects the mirror. (This is
+why a transient coupon-link failure can no longer block the `deleted`/`applied`
+stamp a caller's verify reads — the historical cancel-revert bug.)
+(`update_stripe_item_id.sql` also exists in this folder; the membership
 lifecycle callers use it to write back a new line's `stripe_item_id` — owned by
 `memberships-guide`.)
 
@@ -849,8 +859,12 @@ compare-desired-vs-actual **skip-if-equal** guard on the push path — today
 - **`bulk_payment_sync` swallows per-membership errors** —
   `PaymentsResourceNotFoundError` and any `Exception` are logged at ERROR and the
   loop continues, so one member's broken Stripe state doesn't abort the batch.
-- **Price writeback never raises** — Stripe is authoritative; a failed mirror is
-  re-corrected by the next mutation or the reconciler.
+- **Writeback is best-effort per step; `write` never raises** — every step runs
+  under its own guard (`_run_step` + per-iteration `try` in the row/coupon loops),
+  so one failed write (a price, a coupon link, a status stamp) is logged at ERROR
+  and never aborts the rest. Stripe is authoritative; a failed mirror is re-corrected
+  by the next mutation or the reconciler, and the caller's verify/revert still
+  catches an un-stamped `applied`/`deleted` status independently.
 
 ---
 
