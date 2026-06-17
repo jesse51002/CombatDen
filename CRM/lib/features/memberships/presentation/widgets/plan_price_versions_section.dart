@@ -62,13 +62,13 @@ class PlanPriceVersionsSection extends StatefulWidget {
 
 class _PlanPriceVersionsSectionState
     extends State<PlanPriceVersionsSection> {
-  // Explains what upgrading does — no charge now, new price next cycle.
+  // Explains what migrating does — no charge now, new price next cycle.
   static const _migrateExplanation =
-      'Upgrading moves everyone still on a previous price onto the current '
+      'Migrating moves everyone still on a previous price onto the current '
       'price. They will not be charged now — the new price takes effect on '
-      'their next billing cycle. A background task will track the upgrade for '
-      'each member. Keep them on their current price to leave their billing '
-      'unchanged until you upgrade later.';
+      'their next billing cycle. A background task will track the migration '
+      'for each member. Keep them on their current price to leave their '
+      'billing unchanged until you migrate later.';
 
   List<MembershipPlanPriceWithCount>? _prices;
   String? _error;
@@ -185,8 +185,8 @@ class _PlanPriceVersionsSectionState
     // move them onto the new price.
     if (_membersOnOldPrices > 0) {
       final migrate = await _confirmMigrate(
-        title: 'Upgrade members?',
-        primaryLabel: 'Upgrade them',
+        title: 'Migrate members?',
+        primaryLabel: 'Migrate them',
         secondaryLabel: 'Keep current price',
       );
       if (migrate) await _runMigrate();
@@ -196,8 +196,8 @@ class _PlanPriceVersionsSectionState
   Future<void> _migrateOld() async {
     if (_busy) return;
     final migrate = await _confirmMigrate(
-      title: 'Upgrade members',
-      primaryLabel: 'Upgrade',
+      title: 'Migrate members',
+      primaryLabel: 'Migrate',
       secondaryLabel: 'Cancel',
     );
     if (migrate) await _runMigrate();
@@ -250,7 +250,7 @@ class _PlanPriceVersionsSectionState
               planName: widget.planName,
               targetPriceCents: targetCents,
             ));
-        _snack('Upgrade started for ${result.membershipCount} member(s).');
+        _snack('Migration started for ${result.membershipCount} member(s).');
       }
       await _load();
     } catch (e) {

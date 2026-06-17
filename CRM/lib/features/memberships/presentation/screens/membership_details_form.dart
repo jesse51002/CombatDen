@@ -79,6 +79,10 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
 
   bool get _isEdit => widget.plan != null;
 
+  // A plan with members can't be deleted (the backend rejects it too) —
+  // their billing references it. Move them off first.
+  bool get _hasMembers => (widget.plan?.enrolledCount ?? 0) > 0;
+
   @override
   void initState() {
     super.initState();
@@ -508,13 +512,21 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
       spacing: DesignConstants.spacingMedium,
       children: [
         if (_isEdit)
-          AppOutlineButton(
-            text: 'Delete',
-            onPressed: _saving ? null : _delete,
-            borderRadius: DesignConstants.radiusSmall,
-            borderColor: DesignConstants.badRed,
-            textStyle: DesignConstants.h3.copyWith(
-              color: DesignConstants.badRed,
+          Tooltip(
+            message: _hasMembers
+                ? 'Move its members to another plan before deleting.'
+                : 'Delete this plan',
+            // Grey (disabled look) when it can't be deleted; red otherwise.
+            child: AppOutlineButton(
+              text: 'Delete',
+              onPressed: (_saving || _hasMembers) ? null : _delete,
+              borderRadius: DesignConstants.radiusSmall,
+              borderColor: (_saving || _hasMembers)
+                  ? DesignConstants.text3rd
+                  : DesignConstants.badRed,
+              textColor: (_saving || _hasMembers)
+                  ? DesignConstants.text3rd
+                  : DesignConstants.badRed,
             ),
           ),
         const Spacer(),

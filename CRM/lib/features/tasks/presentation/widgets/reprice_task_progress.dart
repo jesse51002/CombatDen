@@ -53,7 +53,7 @@ class _PollingView extends StatelessWidget {
 
   String _buildLabel() {
     var label =
-        'Upgrading ${state.completed} of ${state.total} membership(s)';
+        'Migrating ${state.completed} of ${state.total} membership(s)';
     if (state.planName != null) label += ' on ${state.planName}';
     if (state.targetPriceCents != null) {
       label +=
@@ -119,7 +119,7 @@ class _DoneView extends StatelessWidget {
 
   String _buildSuccessLabel() {
     var label =
-        'Upgrade complete — ${state.task.completedCount} membership(s)';
+        'Migration complete — ${state.task.completedCount} membership(s)';
     if (state.planName != null) label += ' on ${state.planName}';
     if (state.targetPriceCents != null) {
       label +=
@@ -158,8 +158,8 @@ class _DoneView extends StatelessWidget {
           Expanded(
             child: Text(
               failed
-                  ? 'Upgrade failed — ${state.task.completedCount} of '
-                      '${state.task.totalCount} membership(s) upgraded before '
+                  ? 'Migration failed — ${state.task.completedCount} of '
+                      '${state.task.totalCount} membership(s) migrated before '
                       'the error.'
                   : _buildSuccessLabel(),
               style: DesignConstants.pSmall.copyWith(
