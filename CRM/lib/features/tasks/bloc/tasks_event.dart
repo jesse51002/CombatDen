@@ -21,10 +21,18 @@ class TasksOngoingRequested extends TasksEvent {
 class TaskPollingStarted extends TasksEvent {
   final String taskId;
   final String gymId;
-  const TaskPollingStarted({required this.taskId, required this.gymId});
+  final String? planName;
+  final int? targetPriceCents;
+
+  const TaskPollingStarted({
+    required this.taskId,
+    required this.gymId,
+    this.planName,
+    this.targetPriceCents,
+  });
 
   @override
-  List<Object?> get props => [taskId, gymId];
+  List<Object?> get props => [taskId, gymId, planName, targetPriceCents];
 }
 
 // Internal — do not dispatch from outside TasksBloc.

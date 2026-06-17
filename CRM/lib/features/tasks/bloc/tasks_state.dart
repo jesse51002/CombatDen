@@ -41,9 +41,14 @@ class TaskPolling extends TasksState {
   /// the polled task so the guard stays live during the run).
   final Set<String> inTaskItemIds;
 
+  final String? planName;
+  final int? targetPriceCents;
+
   const TaskPolling({
     required this.task,
     required this.inTaskItemIds,
+    this.planName,
+    this.targetPriceCents,
   });
 
   int get completed => task.completedCount;
@@ -54,19 +59,33 @@ class TaskPolling extends TasksState {
       total > 0 ? completed / total : null;
 
   @override
-  List<Object?> get props => [task, inTaskItemIds];
+  List<Object?> get props => [
+        task,
+        inTaskItemIds,
+        planName,
+        targetPriceCents,
+      ];
 }
 
 /// Polling finished — terminal state.
 class TaskPollingDone extends TasksState {
   final TaskResponse task;
   final Set<String> inTaskItemIds;
+  final String? planName;
+  final int? targetPriceCents;
 
   const TaskPollingDone({
     required this.task,
     required this.inTaskItemIds,
+    this.planName,
+    this.targetPriceCents,
   });
 
   @override
-  List<Object?> get props => [task, inTaskItemIds];
+  List<Object?> get props => [
+        task,
+        inTaskItemIds,
+        planName,
+        targetPriceCents,
+      ];
 }

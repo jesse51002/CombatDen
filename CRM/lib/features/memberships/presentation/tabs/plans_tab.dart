@@ -64,20 +64,27 @@ class _PlansTable extends StatelessWidget {
     final tasksBloc = context.read<TasksBloc>();
     final gymId = state.gymId;
     String? startedTaskId;
+    int? startedTargetPriceCents;
     await Navigator.of(context).push(
       MaterialPageRoute<bool>(
         settings: const RouteSettings(name: AppRoutes.membershipDetails),
         builder: (_) => MembershipDetailsScreen(
           plan: plan,
-          onRepriceTaskStarted: (taskId) => startedTaskId = taskId,
+          onRepriceTaskStarted: (taskId, priceCents) {
+            startedTaskId = taskId;
+            startedTargetPriceCents = priceCents;
+          },
         ),
       ),
     );
     plansBloc.add(PlansInitRequested(gymId));
     if (startedTaskId != null) {
-      tasksBloc.add(
-        TaskPollingStarted(taskId: startedTaskId!, gymId: gymId),
-      );
+      tasksBloc.add(TaskPollingStarted(
+        taskId: startedTaskId!,
+        gymId: gymId,
+        planName: plan?.planName,
+        targetPriceCents: startedTargetPriceCents,
+      ));
     }
   }
 

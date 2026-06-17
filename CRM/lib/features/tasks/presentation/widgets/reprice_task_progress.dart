@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
 import 'package:crm/features/tasks/bloc/tasks_state.dart';
 import 'package:crm/features/tasks/data/models/task_enums.dart';
@@ -50,6 +51,17 @@ class _PollingView extends StatelessWidget {
 
   const _PollingView({required this.state});
 
+  String _buildLabel() {
+    var label =
+        'Upgrading ${state.completed} of ${state.total} membership(s)';
+    if (state.planName != null) label += ' on ${state.planName}';
+    if (state.targetPriceCents != null) {
+      label +=
+          ' to ${formatMinorUnits(state.targetPriceCents!, decimalDigits: 2)}';
+    }
+    return '$label…';
+  }
+
   @override
   Widget build(BuildContext context) {
     final progress = state.progress;
@@ -75,8 +87,7 @@ class _PollingView extends StatelessWidget {
               ),
               Expanded(
                 child: Text(
-                  'Upgrading ${state.completed} of '
-                  '${state.total} member(s)…',
+                  _buildLabel(),
                   style: DesignConstants.pSmall.copyWith(
                     color: DesignConstants.primaryColor,
                     fontWeight: FontWeight.w600,
@@ -105,6 +116,18 @@ class _DoneView extends StatelessWidget {
   final TaskPollingDone state;
 
   const _DoneView({required this.state});
+
+  String _buildSuccessLabel() {
+    var label =
+        'Upgrade complete — ${state.task.completedCount} membership(s)';
+    if (state.planName != null) label += ' on ${state.planName}';
+    if (state.targetPriceCents != null) {
+      label +=
+          ' moved to'
+          ' ${formatMinorUnits(state.targetPriceCents!, decimalDigits: 2)}';
+    }
+    return '$label.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,10 +159,9 @@ class _DoneView extends StatelessWidget {
             child: Text(
               failed
                   ? 'Upgrade failed — ${state.task.completedCount} of '
-                      '${state.task.totalCount} member(s) upgraded before '
+                      '${state.task.totalCount} membership(s) upgraded before '
                       'the error.'
-                  : 'Upgrade complete — ${state.task.completedCount} '
-                      'member(s) upgraded.',
+                  : _buildSuccessLabel(),
               style: DesignConstants.pSmall.copyWith(
                 color: failed
                     ? DesignConstants.badRed

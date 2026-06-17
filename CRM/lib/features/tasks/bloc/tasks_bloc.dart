@@ -20,6 +20,8 @@ import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 class TasksBloc extends Bloc<TasksEvent, TasksState> {
   final TasksRepository _repository;
   Timer? _pollTimer;
+  String? _planName;
+  int? _targetPriceCents;
 
   /// Polling interval. Short enough to feel responsive;
   /// long enough not to spam the backend.
@@ -52,6 +54,8 @@ class TasksBloc extends Bloc<TasksEvent, TasksState> {
     Emitter<TasksState> emit,
   ) async {
     _cancelTimer();
+    _planName = event.planName;
+    _targetPriceCents = event.targetPriceCents;
     // Immediate first fetch.
     try {
       final task = await _repository.getTask(
@@ -60,10 +64,20 @@ class TasksBloc extends Bloc<TasksEvent, TasksState> {
       );
       final inFlight = task.inFlightItemIds;
       if (task.isTerminal) {
-        emit(TaskPollingDone(task: task, inTaskItemIds: inFlight));
+        emit(TaskPollingDone(
+          task: task,
+          inTaskItemIds: inFlight,
+          planName: _planName,
+          targetPriceCents: _targetPriceCents,
+        ));
         return;
       }
-      emit(TaskPolling(task: task, inTaskItemIds: inFlight));
+      emit(TaskPolling(
+        task: task,
+        inTaskItemIds: inFlight,
+        planName: _planName,
+        targetPriceCents: _targetPriceCents,
+      ));
     } catch (e, s) {
       log('Task poll failed', error: e, stackTrace: s);
       emit(TasksError(e.toString()));
@@ -89,10 +103,20 @@ class TasksBloc extends Bloc<TasksEvent, TasksState> {
       final inFlight = task.inFlightItemIds;
       if (task.isTerminal) {
         _cancelTimer();
-        emit(TaskPollingDone(task: task, inTaskItemIds: inFlight));
+        emit(TaskPollingDone(
+          task: task,
+          inTaskItemIds: inFlight,
+          planName: _planName,
+          targetPriceCents: _targetPriceCents,
+        ));
         return;
       }
-      emit(TaskPolling(task: task, inTaskItemIds: inFlight));
+      emit(TaskPolling(
+        task: task,
+        inTaskItemIds: inFlight,
+        planName: _planName,
+        targetPriceCents: _targetPriceCents,
+      ));
     } catch (e, s) {
       log('Task poll tick failed', error: e, stackTrace: s);
       // Keep polling on transient errors — only cancel on terminal.
@@ -104,6 +128,8 @@ class TasksBloc extends Bloc<TasksEvent, TasksState> {
     Emitter<TasksState> emit,
   ) {
     _cancelTimer();
+    _planName = null;
+    _targetPriceCents = null;
     emit(const TasksInitial());
   }
 
@@ -123,6 +149,8 @@ class TasksBloc extends Bloc<TasksEvent, TasksState> {
   @override
   Future<void> close() {
     _cancelTimer();
+    _planName = null;
+    _targetPriceCents = null;
     return super.close();
   }
 }
