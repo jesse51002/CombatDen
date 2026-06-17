@@ -15,7 +15,15 @@ import 'package:crm/shared/widgets/app_shell.dart';
 class MembershipDetailsScreen extends StatelessWidget {
   final MembershipPlanResponse? plan;
 
-  const MembershipDetailsScreen({super.key, this.plan});
+  // Surfaces a queued reprice's task id to the caller (the Plans tab),
+  // which owns the shared TasksBloc and progress bar.
+  final void Function(String taskId)? onRepriceTaskStarted;
+
+  const MembershipDetailsScreen({
+    super.key,
+    this.plan,
+    this.onRepriceTaskStarted,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +36,7 @@ class MembershipDetailsScreen extends StatelessWidget {
             repository: ctx.read<MembershipsRepository>(),
             gymId: selectedGym.gymId ?? '',
             plan: plan,
+            onRepriceTaskStarted: onRepriceTaskStarted,
           ),
         ),
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
@@ -10,6 +11,9 @@ import 'package:crm/features/member_details/presentation/sections/membership_det
 import 'package:crm/features/member_details/presentation/sections/outdated_price_card.dart';
 import 'package:crm/features/member_details/presentation/widgets/membership_display_helpers.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
+import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
+import 'package:crm/features/tasks/bloc/tasks_state.dart';
+import 'package:crm/features/tasks/presentation/widgets/in_task_badge.dart';
 import 'package:crm/shared/widgets/filter_pills.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
@@ -130,6 +134,17 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
     final selectedId = _effectiveId(membership);
     final selectedStatus = _statusFor(membership, selectedId);
 
+    // Determine if this member's item is currently in an upgrade task.
+    final itemId = membership.itemIdFor(selectedId);
+    final tasksState = context.watch<TasksBloc>().state;
+    final inTaskIds = switch (tasksState) {
+      TasksLoaded(:final inTaskItemIds) => inTaskItemIds,
+      TaskPolling(:final inTaskItemIds) => inTaskItemIds,
+      TaskPollingDone(:final inTaskItemIds) => inTaskItemIds,
+      _ => const <String>{},
+    };
+    final isInTask = itemId != null && inTaskIds.contains(itemId);
+
     // Show the member selector whenever the membership covers
     // someone other than just the viewed member — including a
     // single covered person who isn't them (a parent viewing a
@@ -139,7 +154,8 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
     final showSelector = coveredIds.isNotEmpty &&
         !(coveredIds.length == 1 &&
             coveredIds.first == widget.member.memberId);
-    final showOutdated = !isTerminalStatus(selectedStatus) &&
+    final showOutdated = !isInTask &&
+        !isTerminalStatus(selectedStatus) &&
         membership.isOnOutdatedPriceFor(selectedId) &&
         membership.currentActivePrice != null;
 
@@ -174,6 +190,7 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
           membership: membership,
           coveredMemberId: selectedId,
         ),
+        if (isInTask) const InTaskBadge(),
         if (showOutdated)
           OutdatedPriceCard(
             membership: membership,
@@ -206,6 +223,7 @@ class _MembershipCarouselState extends State<MembershipCarousel> {
           MembershipActionsRow(
             member: widget.member,
             currentMembership: membership,
+            isInTask: isInTask,
           ),
         ],
       ),

@@ -23,10 +23,15 @@ class MembershipActionsRow extends StatelessWidget {
   /// only to seed the cancel wizard's default participant.
   final MembershipInfo? currentMembership;
 
+  /// When true the membership's item is part of an in-progress
+  /// upgrade task — all mutation actions are disabled.
+  final bool isInTask;
+
   const MembershipActionsRow({
     super.key,
     required this.member,
     this.currentMembership,
+    this.isInTask = false,
   });
 
   bool get _anyFrozen => member.memberships.any(
@@ -61,7 +66,7 @@ class MembershipActionsRow extends StatelessWidget {
               ? 'Unfreeze account'
               : 'Freeze account',
           borderRadius: DesignConstants.radiusSmall,
-          onPressed: () => _onFreezeTap(context),
+          onPressed: isInTask ? null : () => _onFreezeTap(context),
         ),
         AppOutlineButton(
           fullWidth: true,
@@ -69,7 +74,7 @@ class MembershipActionsRow extends StatelessWidget {
           borderColor: DesignConstants.badRed,
           textColor: DesignConstants.badRed,
           borderRadius: DesignConstants.radiusSmall,
-          onPressed: _hasCancellable
+          onPressed: (!isInTask && _hasCancellable)
               ? () => CancelMembershipDialog.show(
                     context: context,
                     member: member,

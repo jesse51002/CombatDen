@@ -29,12 +29,17 @@ class PlanPriceVersionsSection extends StatefulWidget {
   final String gymId;
   final TextEditingController priceController;
 
+  // Fired with the upgrade task id once a reprice is queued, so an
+  // ancestor (the Plans tab) can drive the shared progress bar.
+  final void Function(String taskId)? onRepriceTaskStarted;
+
   const PlanPriceVersionsSection({
     super.key,
     required this.repository,
     required this.planId,
     required this.gymId,
     required this.priceController,
+    this.onRepriceTaskStarted,
   });
 
   @override
@@ -43,19 +48,21 @@ class PlanPriceVersionsSection extends StatefulWidget {
 }
 
 class _PlanPriceVersionsSectionState extends State<PlanPriceVersionsSection> {
-  // Explains what migrating does — no charge now, new price next cycle.
+  // Explains what upgrading does — no charge now, new price next cycle.
   static const _migrateExplanation =
-      'Migrating moves everyone still on a previous price onto the current '
-      'price. They are not charged anything now — the new price takes effect '
-      'on their next billing cycle. Keep them on their current price to leave '
-      'their billing unchanged until you migrate later.';
+      'Upgrading moves everyone still on a previous price onto the current '
+      'price. They will not be charged now — the new price takes effect on '
+      'their next billing cycle. A background task will track the upgrade for '
+      'each member. Keep them on their current price to leave their billing '
+      'unchanged until you upgrade later.';
 
   List<MembershipPlanPriceWithCount>? _prices;
   String? _error;
   bool _busy = false;
+  String? _lastTaskId;
 
-  // Old price versions whose migration has been queued this session — the
-  // background sync may not have completed, so don't re-trigger them.
+  // Old price versions whose upgrade has been queued this session — the
+  // background task may not have completed, so don't re-trigger them.
   final Set<String> _migrating = {};
 
   @override
@@ -128,8 +135,8 @@ class _PlanPriceVersionsSectionState extends State<PlanPriceVersionsSection> {
     // move them onto the new price.
     if (_membersOnOldPrices > 0) {
       final migrate = await _confirmMigrate(
-        title: 'Migrate members?',
-        primaryLabel: 'Migrate them',
+        title: 'Upgrade members?',
+        primaryLabel: 'Upgrade them',
         secondaryLabel: 'Keep current price',
       );
       if (migrate) await _runMigrate();
@@ -139,8 +146,8 @@ class _PlanPriceVersionsSectionState extends State<PlanPriceVersionsSection> {
   Future<void> _migrateOld() async {
     if (_busy) return;
     final migrate = await _confirmMigrate(
-      title: 'Migrate members',
-      primaryLabel: 'Migrate',
+      title: 'Upgrade members',
+      primaryLabel: 'Upgrade',
       secondaryLabel: 'Cancel',
     );
     if (migrate) await _runMigrate();
@@ -176,11 +183,21 @@ class _PlanPriceVersionsSectionState extends State<PlanPriceVersionsSection> {
       }
     });
     try {
-      await widget.repository.migrateAllToCurrentPrice(
+      final result = await widget.repository.repriceAllOnPlan(
         widget.planId,
         widget.gymId,
       );
-      _snack('Migration queued');
+      if (mounted) {
+        setState(() {
+          _lastTaskId = result.taskId;
+        });
+      }
+      if (result.taskId == null) {
+        _snack('Everyone is already on the latest price.');
+      } else {
+        widget.onRepriceTaskStarted?.call(result.taskId!);
+        _snack('Upgrade started for ${result.membershipCount} member(s).');
+      }
       await _load();
     } catch (e) {
       if (mounted) setState(_migrating.clear);
@@ -230,6 +247,8 @@ class _PlanPriceVersionsSectionState extends State<PlanPriceVersionsSection> {
             migrating: _migrating.contains(old.priceId),
             onMigrate: _busy ? null : _migrateOld,
           ),
+        if (_lastTaskId != null)
+          _UpgradeTaskNote(taskId: _lastTaskId!),
         AppOutlineButton(
           text: 'Update price',
           onPressed: _busy ? null : _updatePrice,
@@ -241,6 +260,40 @@ class _PlanPriceVersionsSectionState extends State<PlanPriceVersionsSection> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _UpgradeTaskNote extends StatelessWidget {
+  final String taskId;
+  const _UpgradeTaskNote({required this.taskId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(DesignConstants.spacingMedium),
+      decoration: BoxDecoration(
+        color: DesignConstants.accentSoft,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+      ),
+      child: Row(
+        spacing: DesignConstants.spacingSmall,
+        children: [
+          Icon(
+            Icons.sync,
+            size: DesignConstants.iconSizeSmall,
+            color: DesignConstants.primaryColor,
+          ),
+          Expanded(
+            child: Text(
+              'Upgrade in progress.',
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.primaryColor,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -31,11 +31,16 @@ class MembershipDetailsForm extends StatefulWidget {
   final String gymId;
   final MembershipPlanResponse? plan;
 
+  // Forwarded to the price section so a queued reprice's task id can
+  // reach the Plans tab and drive the shared progress bar.
+  final void Function(String taskId)? onRepriceTaskStarted;
+
   const MembershipDetailsForm({
     super.key,
     required this.repository,
     required this.gymId,
     this.plan,
+    this.onRepriceTaskStarted,
   });
 
   @override
@@ -335,6 +340,7 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
           planId: widget.plan!.planId,
           gymId: widget.gymId,
           priceController: _price,
+          onRepriceTaskStarted: widget.onRepriceTaskStarted,
         ),
       );
     }
