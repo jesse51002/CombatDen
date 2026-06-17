@@ -239,8 +239,13 @@ class _ManageDiscountsDialogState
     // current → new comparison.
     return InvoicePreviewSection(
       loadPreview: _loadPreview,
-      loadCurrent: () =>
-          _repository.getUpcomingInvoice(widget.coveredMemberId),
+      // The "before" invoice is the sub that actually bills this
+      // membership — its payer's subscription, not the covered
+      // member's (who may be paid for by their parent).
+      loadCurrent: () => _repository.getUpcomingInvoice(
+        widget.membership.paidByFor(widget.coveredMemberId) ??
+            widget.coveredMemberId,
+      ),
       showDueNow: false,
       recurringFallbackMonthly:
           widget.member.totalMonthlyRecurringPrice,

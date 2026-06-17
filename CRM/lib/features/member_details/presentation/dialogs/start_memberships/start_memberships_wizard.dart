@@ -29,7 +29,8 @@ import 'package:crm/features/member_details/presentation/dialogs/update_card_dia
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
 /// The Start Memberships wizard — one request per run:
-/// 1. who pays (only the top-level paying account),
+/// 1. who pays (any family member — the top-level account
+///    pays for the family; a linked member self-pays),
 /// 2. who's getting memberships (payer + linked members),
 /// 3. per member: pick plans (count stepper on one_time /
 ///    trial),
@@ -123,26 +124,23 @@ class _StartMembershipsWizardState
   void initState() {
     super.initState();
     _bloc = context.read<MemberDetailBloc>();
+    // Clear any breakdown from a prior run on open — the only
+    // consumer of the start result is this wizard, so a fresh
+    // open always starts clean. We deliberately do NOT dispatch
+    // on dispose: emitting while the dialog's own BlocProvider /
+    // BlocBuilder tears down raced the widget teardown and threw
+    // a `_dependents.isEmpty` assertion on close.
     _bloc.add(const StartMembershipsCleared());
     _plansFuture =
         _repository.listMembershipPlans(widget.member.gymId);
     _initPayer();
   }
 
-  @override
-  void dispose() {
-    // Leave no stale breakdown behind for the next run
-    // (the bloc outlives this dialog; it may already be
-    // closed when the whole screen tears down).
-    try {
-      _bloc.add(const StartMembershipsCleared());
-    } catch (_) {}
-    super.dispose();
-  }
-
-  /// The payer is the top-level paying account: the viewed
-  /// member when they are not linked to anyone, otherwise
-  /// the account they are linked to.
+  /// The DEFAULT payer is the top-level paying account: the
+  /// viewed member when they are not linked to anyone,
+  /// otherwise the account they are linked to. The payer
+  /// step lets staff switch to any family member (a linked
+  /// member self-pays their own memberships).
   void _initPayer() {
     final viewed = widget.member;
     final parentId = viewed.linkedToAccount;
@@ -481,6 +479,33 @@ class _StartMembershipsWizardState
 
   // ----- Selection mutations -----
 
+  /// Switching the payer restarts the selection under the
+  /// new payer: who can be covered depends on who pays
+  /// (the backend's self-or-parent rule), so stale picks
+  /// and drafts are cleared and the payer's own detail is
+  /// (re)loaded for the members step.
+  void _onPayerSelected(StartMembershipParticipant p) {
+    if (p.memberId == _payer.memberId) return;
+    setState(() {
+      _payer = StartMembershipParticipant(
+        memberId: p.memberId,
+        name: p.name,
+        photoUrl: p.photoUrl,
+        isPayer: true,
+      );
+      _payerDetail = _memberDetails[p.memberId];
+      _selectedMemberIds
+        ..clear()
+        ..add(p.memberId);
+      _drafts.clear();
+      _preview = null;
+      _previewRequest = null;
+    });
+    if (_payerDetail == null) {
+      _loadPayerDetail();
+    }
+  }
+
   void _onMemberToggle(String memberId) {
     setState(() {
       if (!_selectedMemberIds.remove(memberId)) {
@@ -676,8 +701,7 @@ class _StartMembershipsWizardState
             payerCardOnFile: _payerDetail?.cardOnFile,
             memberNames: memberNamesOf(_configMembers),
             planNames: planNamesOf(_drafts),
-            onPayerSelected: (p) =>
-                setState(() => _payer = p),
+            onPayerSelected: _onPayerSelected,
             onMemberToggle: _onMemberToggle,
             onLinkFirst: _onLinkFirst,
             onPlanToggle: _onPlanToggle,

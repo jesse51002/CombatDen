@@ -6,17 +6,21 @@ import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 
-/// Step 0 — pick which person the action applies to. The
-/// primary member stays the billable party regardless; only
-/// the membership row's owner changes. Shown only when the
-/// member has linked accounts.
+/// Step 0 — pick which person the action applies to. Shown
+/// only when the member has linked accounts.
 ///
 /// Reused by both the Start Membership and Cancel Membership
 /// flows. [disabledMemberIds] greys out (and blocks taps on)
 /// participants the caller can't act on, mapping each member
 /// id to a reason shown in place of the tile subtitle.
-/// [title] / [subtitle] override the default Start Membership
-/// copy for other flows.
+/// [title] / [subtitle] override the default copy.
+///
+/// [linkedAccountIds] restricts which linked accounts appear
+/// (the viewed [member] is always shown); the payer step uses
+/// it to offer only the member and their linked parent.
+/// [subtitleBuilder] supplies each tile's fixed role label
+/// (e.g. "Authorized Payer" / "Member getting Membership") —
+/// it does not change with selection.
 class StartMembershipParticipantStep extends StatelessWidget {
   final MemberDetailResponse member;
   final String selectedMemberId;
@@ -35,6 +39,17 @@ class StartMembershipParticipantStep extends StatelessWidget {
   /// (the payer is then in `linkedAccounts`).
   final String? payerMemberId;
 
+  /// When non-null, only linked accounts whose id is in this
+  /// set are listed (the viewed member is always listed).
+  /// Null lists every linked account (the cancel flow).
+  final Set<String>? linkedAccountIds;
+
+  /// Builds the fixed subtitle/role label for a tile. When
+  /// null, tiles show only their name (plus any disabled
+  /// reason). The label is constant — never selection-driven.
+  final String Function(StartMembershipParticipant)?
+      subtitleBuilder;
+
   const StartMembershipParticipantStep({
     super.key,
     required this.member,
@@ -44,11 +59,18 @@ class StartMembershipParticipantStep extends StatelessWidget {
     this.title,
     this.subtitle,
     this.payerMemberId,
+    this.linkedAccountIds,
+    this.subtitleBuilder,
   });
 
   @override
   Widget build(BuildContext context) {
     final payerId = payerMemberId ?? member.memberId;
+    final allowed = linkedAccountIds;
+    final visibleLinked = allowed == null
+        ? member.linkedAccounts
+        : member.linkedAccounts
+            .where((a) => allowed.contains(a.memberId));
     final participants = <StartMembershipParticipant>[
       StartMembershipParticipant(
         memberId: member.memberId,
@@ -56,7 +78,7 @@ class StartMembershipParticipantStep extends StatelessWidget {
         photoUrl: member.photoUrl,
         isPayer: member.memberId == payerId,
       ),
-      ...member.linkedAccounts.map(
+      ...visibleLinked.map(
         (LinkedAccount a) => StartMembershipParticipant(
           memberId: a.memberId,
           name: a.fullName,
@@ -79,8 +101,7 @@ class StartMembershipParticipantStep extends StatelessWidget {
             ),
             Text(
               subtitle ??
-                  '${member.fullName} remains the billable party — '
-                      'card charges still come off their account.',
+                  'Pick the person this action applies to.',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),
@@ -90,16 +111,16 @@ class StartMembershipParticipantStep extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingMedium,
-          children: participants
-              .map(
-                (p) => _ParticipantTile(
-                  participant: p,
-                  selected: p.memberId == selectedMemberId,
-                  disabledReason: disabledMemberIds[p.memberId],
-                  onTap: () => onSelected(p),
-                ),
-              )
-              .toList(),
+          children: participants.map((p) {
+            final disabledReason = disabledMemberIds[p.memberId];
+            return _ParticipantTile(
+              participant: p,
+              selected: p.memberId == selectedMemberId,
+              subtitle: disabledReason ?? subtitleBuilder?.call(p),
+              disabled: disabledReason != null,
+              onTap: () => onSelected(p),
+            );
+          }).toList(),
         ),
       ],
     );
@@ -109,19 +130,23 @@ class StartMembershipParticipantStep extends StatelessWidget {
 class _ParticipantTile extends StatelessWidget {
   final StartMembershipParticipant participant;
   final bool selected;
-  final String? disabledReason;
+
+  /// Fixed subtitle (role label or disabled reason); null
+  /// renders the tile with just the name.
+  final String? subtitle;
+  final bool disabled;
   final VoidCallback onTap;
 
   const _ParticipantTile({
     required this.participant,
     required this.selected,
+    required this.disabled,
     required this.onTap,
-    this.disabledReason,
+    this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
-    final disabled = disabledReason != null;
     final content = Container(
       padding: const EdgeInsets.all(
         DesignConstants.paddingSmall,
@@ -156,16 +181,13 @@ class _ParticipantTile extends StatelessWidget {
                   participant.name,
                   style: DesignConstants.h3,
                 ),
-                Text(
-                  disabledReason ??
-                      (participant.isPayer
-                          ? 'Account holder · pays the bill'
-                          : 'Linked account · billed via '
-                              'account holder'),
-                  style: DesignConstants.pSmall.copyWith(
-                    color: DesignConstants.text2nd,
+                if (subtitle != null)
+                  Text(
+                    subtitle!,
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
                   ),
-                ),
               ],
             ),
           ),

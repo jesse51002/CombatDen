@@ -346,10 +346,10 @@ async def webhook_fixture(
     # (the view hides 'not_added', which is the column default).
     insert_sql = """
         INSERT INTO member_memberships_unfiltered (
-            member_id, gym_id, plan_id, price_id,
+            member_id, paid_by_member_id, gym_id, plan_id, price_id,
             start_date, stripe_item_id, total_price, stripe_sync_status
         ) VALUES (
-            :member_id, :gym_id, :plan_id, :price_id,
+            :member_id, :member_id, :gym_id, :plan_id, :price_id,
             CURRENT_DATE, :stripe_item_id, :total_price, 'applied'
         )
         RETURNING item_id

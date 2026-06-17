@@ -11,9 +11,9 @@ alone (DI-injectable) for reuse.
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_profile import PayerProfile
 from src.sync.service.sync_queries import (
     PaymentSyncQueries,
 )
@@ -22,13 +22,16 @@ from src.sync.service.sync_queries import (
 class PaymentSyncOnceDiscounts:
     """Finalizes the ``once``-discount lifecycle in the DB before convergence.
 
-    Queries the family's attached-but-unconsumed ``once`` discounts (the DB does
-    the ``once`` + no-end_date + has-coupon filtering), reads the live
-    subscription's coupons — the only thing that can tell a consumed ``once``
-    from a pending one, since Stripe owns billing outcomes — and stamps the
-    ``end_date`` of every one whose coupon Stripe has already invoiced (dropped
-    from the live set). After this runs, the convergence's pure ``end_date``
-    exclusion drops the consumed ones, so it needs no live-Stripe read.
+    Queries the PAYER's attached-but-unconsumed ``once`` discounts (the DB does
+    the ``once`` + no-end_date + has-coupon filtering, scoped by
+    ``paid_by_member_id``), reads the payer's live subscription's coupons — the
+    only thing that can tell a consumed ``once`` from a pending one, since
+    Stripe owns billing outcomes — and stamps the ``end_date`` of every one
+    whose coupon Stripe has already invoiced (dropped from the live set). The
+    candidate set and the live read target the SAME payer subscription, so a
+    coupon live on a different payer's sub can never be mistaken for consumed.
+    After this runs, the convergence's pure ``end_date`` exclusion drops the
+    consumed ones, so it needs no live-Stripe read.
 
     Only ``once`` discounts need this — an ongoing discount's lifetime is its
     ``end_date`` (pure date logic, dropped at convergence).
@@ -44,24 +47,23 @@ class PaymentSyncOnceDiscounts:
 
     async def sync_once_discounts(
         self,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_account_id: str,
     ) -> None:
-        """Stamp every consumed ``once`` discount for the parent's family.
+        """Stamp every consumed ``once`` discount on the payer's memberships.
 
-        A no-op when the family has no unconsumed ``once`` discounts or there is
+        A no-op when the payer has no unconsumed ``once`` discounts or there is
         no live subscription to read (a brand-new sub has invoiced nothing, so
         every ``once`` is still pending).
         """
-        family_ids = await self._queries.get_family_ids(parent)
         once_discounts = await self._queries.get_unconsumed_once_discounts(
-            family_ids,
+            payer.member_id,
         )
         if not once_discounts:
             return
 
         current_coupon_ids = await self._current_coupon_ids(
-            parent.stripe_sub_id_month,
+            payer.stripe_sub_id_month,
             stripe_account_id,
         )
         # Set math: a candidate's coupon missing from the live subscription
@@ -79,7 +81,7 @@ class PaymentSyncOnceDiscounts:
         ]
         await self._queries.mark_once_consumed(
             consumed_ids,
-            gym_today(parent.timezone),
+            gym_today(payer.timezone),
         )
 
     async def _current_coupon_ids(

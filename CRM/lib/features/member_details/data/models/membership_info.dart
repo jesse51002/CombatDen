@@ -87,6 +87,11 @@ class MembershipInfo extends Equatable {
   String? itemIdFor(String memberId) =>
       members[memberId]?.itemId;
 
+  /// The payer of [memberId]'s membership on this plan —
+  /// null when the member has no slice here.
+  String? paidByFor(String memberId) =>
+      members[memberId]?.paidByMemberId;
+
   /// Scheduled cancel/end date for the given member, or
   /// null when the membership has no scheduled exit.
   MembershipExitDate? exitDateFor(String memberId) =>

@@ -1,6 +1,6 @@
 """Start memberships: ONE list-based op, DB-first, at most two charges.
 
-One request creates N memberships for a paying parent's family (a single
+One request creates N memberships billed by ONE payer (a single
 membership = a one-item list — there is no separate single-start path).
 Per-membership discounts land BEFORE the charge, so the first (one-time:
 only) invoice is discounted. Billing is at most two charges: ONE
@@ -62,7 +62,7 @@ if TYPE_CHECKING:
     from src.memberships.service.memberships_start_validation import (
         MemberMembershipsStartValidation,
     )
-    from src.shared.billing_parent import ParentProfile
+    from src.shared.payer_profile import PayerProfile
     from src.sync.service.sync_one_time import (
         PaymentSyncOneTime,
     )
@@ -114,7 +114,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         Raises:
             ValueError: If Phase A validation fails (nothing written).
         """
-        parent, plan_prices = await self._validation.validate(request)
+        payer, plan_prices = await self._validation.validate(request)
 
         states = [
             MemberMembershipsStartItemState(
@@ -148,7 +148,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         if recurring:
             await self._pre_sync_payments(request.payer_member_id)
 
-        await self._insert_all(request, parent, plan_prices, states)
+        await self._insert_all(request, payer, plan_prices, states)
 
         one_time_charged = False
         if one_time:
@@ -198,7 +198,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
     async def _insert_all(
         self,
         request: MemberMembershipsStartRequest,
-        parent: ParentProfile,
+        payer: PayerProfile,
         plan_prices: dict[UUID, dict],
         states: list[MemberMembershipsStartItemState],
     ) -> None:
@@ -209,7 +209,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         failure here undoes everything inserted so far and re-raises —
         nothing has been billed yet.
         """
-        start_date = gym_today(parent.timezone)
+        start_date = gym_today(payer.timezone)
         rows = self._build_pending_rows(request, plan_prices, start_date)
         inserted = await self._crm_insert(rows)
         for state in states:

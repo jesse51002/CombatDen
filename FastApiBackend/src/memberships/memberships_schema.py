@@ -203,16 +203,20 @@ class MemberMembershipsMarkPaidCashRequest(BaseModel):
 
 
 class MemberMembershipsChargeCardRequest(BaseModel):
-    """Charge a member's card for an ad-hoc amount.
+    """Charge an ad-hoc amount for a member, billed to an explicit payer.
 
     Creates a one-off Stripe invoice (outside any subscription)
     for ``amount_cents`` with ``reason`` used as both the invoice
-    description and the invoice item name. ``paid_cash`` routes
-    the invoice through the out-of-band payment path instead of
-    charging the card.
+    description and the invoice item name. ``member_id`` is the
+    BENEFICIARY (whose record the charge belongs to);
+    ``paid_by_member_id`` is whose customer/card is billed — the
+    member themselves or their linked parent (chosen in the CRM).
+    ``paid_cash`` routes the invoice through the out-of-band
+    payment path instead of charging the card.
     """
 
     member_id: UUID
+    paid_by_member_id: UUID
     gym_id: UUID
     amount_cents: int = Field(..., gt=0)
     reason: str = Field(..., min_length=1)

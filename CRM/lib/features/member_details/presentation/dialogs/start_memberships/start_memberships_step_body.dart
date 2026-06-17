@@ -249,6 +249,9 @@ class StartMembershipsStepBody extends StatelessWidget {
         return StartPreviewStep(
           repository: repository,
           request: req,
+          // The payer's current monthly bill is the "before"
+          // baseline for the recurring card's before→after.
+          currentMonthly: payerDetail?.totalMonthlyRecurringPrice,
           onLoaded: onPreviewLoaded,
         );
       case StartMembershipsStep.payment:

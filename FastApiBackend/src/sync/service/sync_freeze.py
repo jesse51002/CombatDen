@@ -10,18 +10,18 @@ from src.payments.schema.payments_members_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
+from src.shared.payer_profile import PayerProfile
 
 
 class PaymentSyncFreeze:
-    """Converges Stripe pause_collection to a parent's DB freeze window.
+    """Converges Stripe pause_collection to a payer's DB freeze window.
 
     DB-first and minimal: the freeze window is written to the DB elsewhere (the
     freeze/unfreeze request handler); this service takes the already-resolved
-    parent and syncs Stripe to it. Standalone + DI-injectable — the dedicated
-    freeze/unfreeze request resolves the parent then calls this directly, and
-    the membership sync calls it for its maintenance re-apply with the parent it
-    already resolved (no extra read).
+    payer and syncs Stripe to it. Standalone + DI-injectable — the dedicated
+    freeze/unfreeze request resolves the payer then calls this directly. Freeze
+    is per payer: pausing one payer's subscription never touches another
+    payer's, even within the same linked family.
 
     Idempotent (re-freezing updates the resume date; unfreezing a non-paused
     subscription is a Stripe no-op); lets ``PaymentsResourceNotFoundError``
@@ -37,33 +37,33 @@ class PaymentSyncFreeze:
 
     async def sync_freeze_state(
         self,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_account_id: str,
         *,
         idempotency_key: UUID,
     ) -> bool:
-        """Converge Stripe to the parent's DB freeze window.
+        """Converge Stripe to the payer's DB freeze window.
 
-        Frozen in the DB (``parent.is_frozen``) → pause collection; otherwise →
+        Frozen in the DB (``payer.is_frozen``) → pause collection; otherwise →
         resume. No-op (returns the DB state) when there is no subscription to
         act on.
 
         Args:
-            parent: The paying parent, carrying the DB freeze window + sub id.
+            payer: The payer, carrying the DB freeze window + sub id.
             stripe_account_id: The gym's Stripe Connect account ID.
             idempotency_key: Base key for the Stripe op.
 
         Returns:
             The resulting frozen state (``True`` frozen, ``False`` unfrozen).
         """
-        sub_id = parent.stripe_sub_id_month
+        sub_id = payer.stripe_sub_id_month
         if not sub_id:
-            return parent.is_frozen
+            return payer.is_frozen
 
-        if parent.is_frozen:
+        if payer.is_frozen:
             await self._freeze(
                 sub_id,
-                parent.freeze_end_date,
+                payer.freeze_end_date,
                 stripe_account_id,
                 idempotency_key=idempotency_key,
             )

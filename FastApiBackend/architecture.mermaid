@@ -26,7 +26,7 @@ flowchart TB
     members_management_service["MembersManagementService"]
     payment_sync_service["PaymentSyncService — src/sync/ · declarative reconciler<br/>orchestrates: Builder→Discounts (coupons at build), Freeze,<br/>OnceDiscounts settle, Stripe (execute), Writeback · -> None"]
     payment_sync_one_time["PaymentSyncOneTime — src/sync/ · one-shot one-time engine<br/>ONE consolidated invoice for pending one_time/trial memberships<br/>(start's non-recurring path) · reuses Discounts.resolve · NOT a converge"]
-    billing_parent_resolver["BillingParentResolver<br/>shared paying-parent / family resolution"]
+    payer_resolver["PayerResolver<br/>shared payer resolution (paid_by_member_id)"]
     membership_plans_service["MembershipPlansService<br/>src/plans/"]
     ranks_service["RanksService"]
     rewards_redemption_service["RewardsRedemptionService"]
@@ -86,21 +86,21 @@ flowchart TB
     member_memberships_service -->|"start: one-time / trial group"| payment_sync_one_time
     member_memberships_service --> Payments
     member_memberships_service --> gym_stripe_service
-    member_memberships_service --> billing_parent_resolver
+    member_memberships_service --> payer_resolver
     member_memberships_service -->|"mint inline custom discounts at start"| discounts_service
     member_memberships_service -->|"start: save one-off card as default"| members_management_service
     payment_sync_one_time --> Payments
-    payment_sync_one_time --> billing_parent_resolver
+    payment_sync_one_time --> payer_resolver
     membership_plans_service --> gym_stripe_service
     membership_plans_service --> Payments
     membership_plans_service --> payment_sync_service
     payment_sync_service --> Payments
-    payment_sync_service --> billing_parent_resolver
-    billing_parent_resolver --> gym_stripe_service
+    payment_sync_service --> payer_resolver
+    payer_resolver --> gym_stripe_service
     reconciler_service --> resource_lock
     reconciler_service -->|"invoice-fetch: reuses handler record"| stripe_webhooks_service
     reconciler_service -->|"push: bulk_payment_sync (billing none)"| payment_sync_service
-    reconciler_service --> billing_parent_resolver
+    reconciler_service --> payer_resolver
     stripe_webhooks_service -->|"customer.subscription.deleted → sync"| payment_sync_service
   end
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)<br/>member_membership_applied_discounts<br/>(applied-discount rows · sync writes back stripe_coupon_id + status)"]
@@ -118,7 +118,7 @@ flowchart TB
   class Supabase,Stripe ext;
   class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook route;
   class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,resource_lock svc;
-  class payment_sync_service,billing_parent_resolver,reconciler_service hub;
+  class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;
   style Payments fill:#eafaf0,stroke:#2f8f53;

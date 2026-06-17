@@ -10,6 +10,9 @@ from datetime import date
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy import text
+
+from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsChargeCardRequest,
     MemberMembershipsStartPreviewResponse,
@@ -51,6 +54,7 @@ from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.sql_loader import load_sql
 
 if TYPE_CHECKING:
     from src.discounts.service.discounts_service import (
@@ -62,8 +66,8 @@ if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
     )
-    from src.shared.billing_parent_resolver import BillingParentResolver
     from src.shared.gym_stripe_service import GymStripeService
+    from src.shared.payer_resolver import PayerResolver
     from src.shared.paying_member_lock import PayingMemberLock
     from src.sync.service.sync_freeze import (
         PaymentSyncFreeze,
@@ -89,19 +93,22 @@ class MemberMembershipsService:
         payment_sync_service: PaymentSyncService,
         payment_service: PaymentsStripePaymentService,
         gym_stripe_service: GymStripeService,
-        parent_resolver: BillingParentResolver,
+        payer_resolver: PayerResolver,
         freeze_service: PaymentSyncFreeze,
         paying_lock: PayingMemberLock,
         payment_sync_one_time: PaymentSyncOneTime,
         discounts_service: DiscountsService,
         members_management_service: MembersManagementService,
     ) -> None:
-        # Every single-family lifecycle op is wrapped in the paying-parent
-        # concurrency lock (held across its pre-sync + DB write + sync) so no two
-        # ops sync the same family at once. EXCEPTION: link / unlink lock TWO
-        # families (member + paying parent) themselves, so the facade delegates
-        # them bare — PayingMemberLock is non-reentrant, and a nested same-family
-        # acquire here would deadlock to LockBusyError.
+        # Every lifecycle op is wrapped in the payer concurrency lock (held
+        # across its pre-sync + DB write + sync) so no two ops converge the
+        # same payer's subscription at once. Item-scoped ops lock the ROW's
+        # payer (paid_by_member_id — immutable, so reading it before locking
+        # is race-free). EXCEPTION: link / unlink lock TWO accounts (member +
+        # parent) themselves, so the facade delegates them bare —
+        # PayingMemberLock is non-reentrant, and a nested same-key acquire
+        # here would deadlock to LockBusyError.
+        self._db_pool = db_pool
         self._paying_lock = paying_lock
         deps = (
             db_pool,
@@ -111,7 +118,7 @@ class MemberMembershipsService:
         self._cancel = MemberMembershipsCancel(*deps)
         self._freeze = MemberMembershipsFreeze(
             *deps,
-            parent_resolver=parent_resolver,
+            payer_resolver=payer_resolver,
             freeze_service=freeze_service,
         )
         self._update_discounts = MemberMembershipsDiscounts(*deps)
@@ -119,7 +126,7 @@ class MemberMembershipsService:
         # never drift on what a valid request is.
         self._start_validation = MemberMembershipsStartValidation(
             *deps,
-            parent_resolver=parent_resolver,
+            payer_resolver=payer_resolver,
         )
         self._start = MemberMembershipsStart(
             *deps,
@@ -140,12 +147,12 @@ class MemberMembershipsService:
         self._mark_paid_cash = MemberMembershipsMarkPaidCash(
             *deps,
             payment_service=payment_service,
-            parent_resolver=parent_resolver,
+            payer_resolver=payer_resolver,
         )
         self._charge_card = MemberMembershipsChargeCard(
             *deps,
             payment_service=payment_service,
-            parent_resolver=parent_resolver,
+            payer_resolver=payer_resolver,
         )
         # link / unlink is a pure DB change (no sync) and owns its OWN two-family
         # locking, so it takes only db_pool + the lock — not the sync deps above.
@@ -164,7 +171,8 @@ class MemberMembershipsService:
         Returns the resolved ``cancel_date`` — the date through
         which the membership remains active.
         """
-        async with self._paying_lock.lock([member_id]):
+        payer_id = await self._get_payer_for_item(item_id)
+        async with self._paying_lock.lock([payer_id]):
             return await self._cancel.cancel(
                 item_id, member_id, idempotency_key,
             )
@@ -175,7 +183,8 @@ class MemberMembershipsService:
         member_id: UUID,
     ) -> DueNowVsRecurringPreview | None:
         """Preview what cancelling a membership would charge."""
-        async with self._paying_lock.lock([member_id]):
+        payer_id = await self._get_payer_for_item(item_id)
+        async with self._paying_lock.lock([payer_id]):
             return await self._cancel.preview_cancel(item_id, member_id)
 
     # ── Freeze / Unfreeze ──────────────────────────────────────
@@ -187,7 +196,7 @@ class MemberMembershipsService:
         freeze_months: int,
         idempotency_key: UUID,
     ) -> None:
-        """Freeze a member's account (account-level)."""
+        """Freeze a payer's billing (their own subscription)."""
         async with self._paying_lock.lock([member_id]):
             await self._freeze.freeze(
                 member_id, gym_id, freeze_months, idempotency_key,
@@ -199,7 +208,7 @@ class MemberMembershipsService:
         gym_id: UUID,
         idempotency_key: UUID,
     ) -> None:
-        """Unfreeze a member's account (account-level)."""
+        """Unfreeze a payer's billing (their own subscription)."""
         async with self._paying_lock.lock([member_id]):
             await self._freeze.unfreeze(member_id, gym_id, idempotency_key)
 
@@ -209,12 +218,12 @@ class MemberMembershipsService:
         self,
         request: MemberMembershipsStartRequest,
     ) -> MemberMembershipsStartResponse:
-        """Start the request's memberships (one call, one family, ≤2 charges).
+        """Start the request's memberships (one call, one payer, ≤2 charges).
 
-        Locks the payer plus every member in the request — linked members
-        resolve to the payer's family key (the lock dedupes), and locking
-        the members too keeps the link-state validation race-free against a
-        concurrent link/unlink.
+        Locks the payer plus every member in the request — the payer key
+        serializes billing; locking the covered members too keeps the
+        link-state validation race-free against a concurrent link/unlink
+        (which locks those same member ids).
         """
         member_ids = [request.payer_member_id] + [
             item.member_id for item in request.memberships
@@ -242,7 +251,8 @@ class MemberMembershipsService:
         idempotency_key: UUID,
     ) -> None:
         """Mark a recurring membership's open Stripe invoice as paid via cash."""
-        async with self._paying_lock.lock([member_id]):
+        payer_id = await self._get_payer_for_item(item_id)
+        async with self._paying_lock.lock([payer_id]):
             await self._mark_paid_cash.mark_paid_cash(
                 item_id, member_id, idempotency_key,
             )
@@ -253,8 +263,8 @@ class MemberMembershipsService:
         self,
         request: MemberMembershipsChargeCardRequest,
     ) -> None:
-        """Charge a member's card (or mark as cash) for an ad-hoc amount."""
-        async with self._paying_lock.lock([request.member_id]):
+        """Charge the request's explicit payer for an ad-hoc amount."""
+        async with self._paying_lock.lock([request.paid_by_member_id]):
             await self._charge_card.charge_card(request)
 
     # ── Update Price ───────────────────────────────────────────
@@ -267,7 +277,8 @@ class MemberMembershipsService:
         prorate: bool = False,
     ) -> None:
         """Upgrade a membership to its plan's currently active price."""
-        async with self._paying_lock.lock([member_id]):
+        payer_id = await self._get_payer_for_item(item_id)
+        async with self._paying_lock.lock([payer_id]):
             await self._update_price.update_price(
                 item_id=item_id,
                 member_id=member_id,
@@ -282,7 +293,8 @@ class MemberMembershipsService:
         prorate: bool = False,
     ) -> DueNowVsRecurringPreview | None:
         """Preview upgrading a membership to the plan's active price."""
-        async with self._paying_lock.lock([member_id]):
+        payer_id = await self._get_payer_for_item(item_id)
+        async with self._paying_lock.lock([payer_id]):
             return await self._update_price.preview_update_price(
                 item_id=item_id,
                 member_id=member_id,
@@ -300,7 +312,8 @@ class MemberMembershipsService:
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
         """Add applied-discount rows, or preview the addition (``preview=True``)."""
-        async with self._paying_lock.lock([member_id]):
+        payer_id = await self._get_payer_for_item(item_id)
+        async with self._paying_lock.lock([payer_id]):
             return await self._update_discounts.add_discounts(
                 item_id=item_id,
                 member_id=member_id,
@@ -318,7 +331,8 @@ class MemberMembershipsService:
         preview: bool = False,
     ) -> DueNowVsRecurringPreview | None:
         """Remove applied-discount rows, or preview the removal (``preview=True``)."""
-        async with self._paying_lock.lock([member_id]):
+        payer_id = await self._get_payer_for_item(item_id)
+        async with self._paying_lock.lock([payer_id]):
             return await self._update_discounts.remove_discounts(
                 item_id=item_id,
                 member_id=member_id,
@@ -330,7 +344,7 @@ class MemberMembershipsService:
     # ── Linked account (link / unlink / check) ─────────────────
     #
     # Delegated BARE — no ``self._paying_lock.lock(...)`` wrap: link / unlink lock
-    # TWO families (member + paying parent) internally, and the lock is
+    # TWO accounts (member + parent) internally, and the lock is
     # non-reentrant. These are pure DB changes (no Stripe sync).
 
     async def link_account(
@@ -355,3 +369,25 @@ class MemberMembershipsService:
     ) -> MembersBillingLinkCheckResponse:
         """Check whether a member can be linked to a parent account."""
         return await self._linked.check_link_account(member_id, parent_member_id)
+
+    # ── Private ────────────────────────────────────────────────
+
+    async def _get_payer_for_item(self, item_id: UUID) -> UUID:
+        """The membership row's payer — the lock key for item-scoped ops.
+
+        ``paid_by_member_id`` is immutable, so reading it before taking the
+        lock is race-free (changing the payer is cancel-old + insert-new).
+
+        Raises:
+            ValueError: If the membership row does not exist.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_get_payer.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"item_id": str(item_id)},
+            )
+            row = result.fetchone()
+        if not row:
+            raise ValueError(f"Membership not found: item_id={item_id}")
+        return UUID(str(row[0]))

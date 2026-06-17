@@ -1,4 +1,4 @@
-"""Charge a family's PENDING one-time memberships on one consolidated invoice.
+"""Charge a payer's PENDING one-time memberships on one consolidated invoice.
 
 A one-time membership is billed by a single invoice line, discounted at creation
 and **terminal** (charged exactly once). This service is the one-time counterpart
@@ -33,10 +33,10 @@ from src.payments.schema.payments_payment_schema import (
 from src.payments.service.payments_stripe_payment_service import (
     PaymentsStripePaymentService,
 )
-from src.shared.billing_parent import ParentProfile
-from src.shared.billing_parent_resolver import BillingParentResolver
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_profile import PayerProfile
+from src.shared.payer_resolver import PayerResolver
 from src.sync.service.sync_discounts import (
     PaymentSyncDiscounts,
 )
@@ -51,7 +51,7 @@ from src.sync.sync_schema import (
 
 
 class PaymentSyncOneTime:
-    """Charge a family's pending one-time memberships (own invoice, reuses resolve).
+    """Charge a payer's pending one-time memberships (own invoice, reuses resolve).
 
     Independent of ``PaymentSyncService`` (recurring): own read filter + own
     per-membership grouping + own invoice execute + own writeback, sharing only
@@ -63,29 +63,30 @@ class PaymentSyncOneTime:
         db_pool: DirectDatabasePool,
         discounts: PaymentSyncDiscounts,
         payment_service: PaymentsStripePaymentService,
-        parent_resolver: BillingParentResolver,
+        payer_resolver: PayerResolver,
     ) -> None:
         self._queries = PaymentSyncQueries(db_pool)
         self._discounts = discounts
         self._payments = payment_service
-        self._parent = parent_resolver
+        self._payer = payer_resolver
 
     async def charge_one_time(
         self,
-        member_id: UUID,
+        payer_member_id: UUID,
         idempotency_key: UUID,
         paid_with_cash: bool = False,
         payment_method_id: str | None = None,
         detach_payment_method_after: bool = True,
     ) -> None:
-        """Charge the family's PENDING one-time memberships on ONE invoice.
+        """Charge the payer's PENDING one-time memberships on ONE invoice.
 
-        Resolves the paying parent, builds the desired invoice (one line per
-        pending one-time membership, item-level discounts), charges it once, and
-        writes back each membership's line id + invoice id + price + the applied
-        discounts. A **no-op** when the family has no pending one-time memberships
-        (never cuts an empty invoice). Returns ``None`` — the caller reads the DB
-        (the ``applied`` status) to confirm. One-time memberships are terminal, so
+        Resolves the payer's own profile, builds the desired invoice (one line
+        per pending one-time membership the payer bills, item-level discounts),
+        charges it once on the payer's customer, and writes back each
+        membership's line id + invoice id + price + the applied discounts. A
+        **no-op** when the payer has no pending one-time memberships (never cuts
+        an empty invoice). Returns ``None`` — the caller reads the DB (the
+        ``applied`` status) to confirm. One-time memberships are terminal, so
         re-running finds no ``not_added`` rows and charges nothing again.
 
         ``payment_method_id`` charges a SPECIFIC card (a one-off card entered at
@@ -95,8 +96,10 @@ class PaymentSyncOneTime:
         the card (e.g. promote it to the saved default afterward). Both are
         ignored on a cash settle (``paid_with_cash``).
         """
-        parent, stripe_account_id = await self._parent.resolve(member_id)
-        plan = await self._build_plan(parent, stripe_account_id)
+        payer, stripe_account_id = await self._payer.resolve_payer_with_account(
+            payer_member_id,
+        )
+        plan = await self._build_plan(payer, stripe_account_id)
         if not plan.items:
             return
         result = await self._execute(
@@ -110,9 +113,9 @@ class PaymentSyncOneTime:
 
     async def preview_one_time(
         self,
-        member_id: UUID,
+        payer_member_id: UUID,
     ) -> PreviewInvoice | None:
-        """Preview the family's STAGED one-time invoice (no charge, no writes).
+        """Preview the payer's STAGED one-time invoice (no charge, no writes).
 
         The caller stages the membership(s) being previewed as ``preview_add``
         first; this reads that staged state (``preview=True``), resolves the
@@ -126,12 +129,14 @@ class PaymentSyncOneTime:
         subscription-derived lines are stripped (``_one_time_only``) and the
         totals recomputed from the kept lines before returning.
         """
-        parent, stripe_account_id = await self._parent.resolve(member_id)
-        plan = await self._build_plan(parent, stripe_account_id, preview=True)
+        payer, stripe_account_id = await self._payer.resolve_payer_with_account(
+            payer_member_id,
+        )
+        plan = await self._build_plan(payer, stripe_account_id, preview=True)
         if not plan.items:
             return None
         request = PaymentsInvoicePaymentPreviewRequest(
-            stripe_customer_id=parent.stripe_customer_id,
+            stripe_customer_id=payer.stripe_customer_id,
             items=self._to_item_specs(plan),
         )
         preview = await self._payments.preview_invoice_payment(
@@ -172,14 +177,15 @@ class PaymentSyncOneTime:
 
     async def _build_plan(
         self,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_account_id: str,
         preview: bool = False,
     ) -> OneTimeInvoicePlan:
-        """Read the family's PENDING one-time memberships → the desired invoice.
+        """Read the payer's PENDING one-time memberships → the desired invoice.
 
-        One invoice line **per membership**: reads the one-time rows (``not_added``,
-        plus ``preview_add`` when ``preview``) each carrying its discounts, groups
+        One invoice line **per membership**: reads the payer's one-time rows
+        (``not_added``, plus ``preview_add`` when ``preview``) each carrying its
+        discounts, groups
         them one-per-membership so the **unchanged** ``PaymentSyncDiscounts.resolve``
         runs ÷1 (no averaging — each membership keeps its exact discount), and
         assembles the ordered ``OneTimeInvoicePlan`` (one item per membership,
@@ -187,10 +193,9 @@ class PaymentSyncOneTime:
         coupon_id`` links and the ``once``-mode ids to mark consumed. No DB writes
         (coupon find-or-create is an idempotent gym-wide Stripe op).
         """
-        today = gym_today(parent.timezone)
-        family_ids = await self._queries.get_family_ids(parent)
+        today = gym_today(payer.timezone)
         memberships = await self._queries.get_active_one_time(
-            family_ids, today, preview
+            payer.member_id, today, preview
         )
         groups = self._group_per_membership(memberships)
 
@@ -219,7 +224,7 @@ class PaymentSyncOneTime:
         ]
         return OneTimeInvoicePlan(
             items=items,
-            parent=parent,
+            payer=payer,
             stripe_account_id=stripe_account_id,
             coupon_links=resolved.links,
             once_consumed_ids=once_consumed_ids,
@@ -271,11 +276,11 @@ class PaymentSyncOneTime:
         never touched.
         """
         request = PaymentsInvoicePaymentCreateRequest(
-            stripe_customer_id=plan.parent.stripe_customer_id,
+            stripe_customer_id=plan.payer.stripe_customer_id,
             items=self._to_item_specs(plan),
             metadata=StripeMembershipOneTimeMetadata(
-                member_id=plan.parent.member_id,
-                gym_id=plan.parent.gym_id,
+                member_id=plan.payer.member_id,
+                gym_id=plan.payer.gym_id,
             ),
             paid_out_of_band=paid_with_cash,
             payment_method_id=payment_method_id,
@@ -304,7 +309,7 @@ class PaymentSyncOneTime:
         ``strict=True`` fails loud if Stripe returned a different
         line count than we sent.
         """
-        today = gym_today(plan.parent.timezone)
+        today = gym_today(plan.payer.timezone)
         for item, line_id, amount in zip(
             plan.items,
             result.line_item_ids,

@@ -40,6 +40,10 @@ class StripeSyncStatus(StrEnum):
 class MemberMembershipCreate(SeedModel):
     item_id: UUID
     member_id: UUID
+    # Who pays this membership (NOT NULL in the DB): the linked parent for a
+    # family child, else the member themselves. The payment sync groups
+    # memberships by this column — one subscription per payer.
+    paid_by_member_id: UUID
     gym_id: UUID
     plan_id: UUID
     price_id: UUID
@@ -64,9 +68,10 @@ class MemberMembershipCreate(SeedModel):
     def status(self) -> MembershipDbStatus:
         """Approximate status for data generation.
 
-        Freeze is account-level (member_billing_profile), not membership-level,
-        so this computed field cannot derive frozen status. The DB view
-        member_memberships_status is the authoritative source.
+        Freeze is payer-level (the paid_by_member_id's freeze window on
+        members), not membership-level, so this computed field cannot derive
+        frozen status. The DB view member_memberships_status is the
+        authoritative source.
         """
         today = date.today()
         if self.cancel_date is not None and self.cancel_date <= today:

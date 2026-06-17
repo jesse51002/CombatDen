@@ -65,6 +65,7 @@ SELECT
         '[]'::jsonb
     ) AS applied_discounts,
     ms.item_id,
+    ms.paid_by_member_id,
     ms.status       AS membership_status,
     ms.start_date   AS membership_start_date,
     ms.end_date     AS membership_end_date,
