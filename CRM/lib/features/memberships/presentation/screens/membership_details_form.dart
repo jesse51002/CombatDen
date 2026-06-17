@@ -12,6 +12,7 @@ import 'package:crm/features/memberships/data/models/membership_plan_create_requ
 import 'package:crm/features/memberships/data/models/membership_plan_update_request.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/memberships/presentation/widgets/linked_discount_section.dart';
 import 'package:crm/features/memberships/presentation/widgets/plan_price_versions_section.dart';
 import 'package:crm/features/memberships/presentation/widgets/plan_type_cards.dart';
@@ -28,14 +29,22 @@ import 'package:crm/shared/widgets/form/app_dropdown_field.dart';
 /// `true` on success so the caller can refresh its list.
 class MembershipDetailsForm extends StatefulWidget {
   final MembershipsRepository repository;
+  final TasksRepository tasksRepository;
   final String gymId;
   final MembershipPlanResponse? plan;
+
+  // Forwarded to the price section so a queued reprice's task id and
+  // target price can reach the Plans tab and drive the shared progress bar.
+  final void Function(String taskId, int targetPriceCents)?
+      onRepriceTaskStarted;
 
   const MembershipDetailsForm({
     super.key,
     required this.repository,
+    required this.tasksRepository,
     required this.gymId,
     this.plan,
+    this.onRepriceTaskStarted,
   });
 
   @override
@@ -69,6 +78,10 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
   bool _saving = false;
 
   bool get _isEdit => widget.plan != null;
+
+  // A plan with members can't be deleted (the backend rejects it too) —
+  // their billing references it. Move them off first.
+  bool get _hasMembers => (widget.plan?.enrolledCount ?? 0) > 0;
 
   @override
   void initState() {
@@ -332,9 +345,12 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
         label: 'Price (\$)',
         child: PlanPriceVersionsSection(
           repository: widget.repository,
+          tasksRepository: widget.tasksRepository,
           planId: widget.plan!.planId,
           gymId: widget.gymId,
+          planName: widget.plan?.planName,
           priceController: _price,
+          onRepriceTaskStarted: widget.onRepriceTaskStarted,
         ),
       );
     }
@@ -496,13 +512,21 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
       spacing: DesignConstants.spacingMedium,
       children: [
         if (_isEdit)
-          AppOutlineButton(
-            text: 'Delete',
-            onPressed: _saving ? null : _delete,
-            borderRadius: DesignConstants.radiusSmall,
-            borderColor: DesignConstants.badRed,
-            textStyle: DesignConstants.h3.copyWith(
-              color: DesignConstants.badRed,
+          Tooltip(
+            message: _hasMembers
+                ? 'Move its members to another plan before deleting.'
+                : 'Delete this plan',
+            // Grey (disabled look) when it can't be deleted; red otherwise.
+            child: AppOutlineButton(
+              text: 'Delete',
+              onPressed: (_saving || _hasMembers) ? null : _delete,
+              borderRadius: DesignConstants.radiusSmall,
+              borderColor: (_saving || _hasMembers)
+                  ? DesignConstants.text3rd
+                  : DesignConstants.badRed,
+              textColor: (_saving || _hasMembers)
+                  ? DesignConstants.text3rd
+                  : DesignConstants.badRed,
             ),
           ),
         const Spacer(),

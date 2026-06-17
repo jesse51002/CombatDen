@@ -2,7 +2,11 @@
 -- confirmed on Stripe (NULL stripe_item_id, still 'not_added'). A crash between
 -- the insert and the verified sync can strand one. The cleanup deletes such a
 -- row only when its PAYER lock is free (no op in flight); read from the
--- unfiltered base since the filtered view hides 'not_added'.
+-- unfiltered base since the filtered view hides 'not_added'. The reprice's
+-- in-flight successor is covered by the same lock check (the reprice holds the
+-- payer lock across its DB phase + converge, and reverts the successor on
+-- failure, so a lock-free pending successor only exists after a crash — a
+-- genuine orphan).
 SELECT item_id, member_id, paid_by_member_id, gym_id
 FROM member_memberships_unfiltered
 WHERE stripe_item_id IS NULL

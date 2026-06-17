@@ -1,5 +1,7 @@
 from dependency_injector import containers, providers
+from schema.task import TaskType
 
+import src.shared.db_schema_path  # noqa: F401
 from src.classes.service.checkin.classes_checkin_service import (
     ClassesCheckinService,
 )
@@ -27,6 +29,9 @@ from src.members.service.member_details.members_billing_detail_service import (
 )
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
+)
+from src.memberships.service.memberships_reprice import (
+    MemberMembershipsReprice,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -65,6 +70,9 @@ from src.reconciler.service.reconciler.reconciler_payment_push_sweep import (
 )
 from src.reconciler.service.reconciler.reconciler_service import (
     ReconcilerService,
+)
+from src.reconciler.service.reconciler.reconciler_stale_task_sweep import (
+    StaleTaskSweep,
 )
 from src.reconciler.service.reconciler.reconciler_subscription_orphan_sweep import (
     SubscriptionOrphanSweep,
@@ -119,6 +127,11 @@ from src.sync.service.sync_one_time import (
 from src.sync.service.sync_service import (
     PaymentSyncService,
 )
+from src.tasks.service.tasks_executor import TasksExecutor
+from src.tasks.service.tasks_membership_reprice_handler import (
+    MembershipRepriceTaskHandler,
+)
+from src.tasks.service.tasks_service import TasksService
 from src.waivers.service.waivers.waivers_service import WaiversService
 
 
@@ -144,6 +157,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.plans.plans_router",
             "src.stripe_webhooks.stripe_webhooks_router",
             # === end CRM billing router modules ===
+            "src.tasks.tasks_router",
         ],
     )
 
@@ -286,6 +300,40 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
     )
 
+    # ── Reprice operation (memberships — task-agnostic) ──────────
+    # The append-only reprice op (cancel old row + insert successor in one
+    # txn, then the convergent sync, DB-first verify-or-revert). Pure
+    # membership logic: it knows nothing about how it is dispatched.
+    memberships_reprice = providers.Factory(
+        MemberMembershipsReprice,
+        db_pool=db_pool,
+        payment_sync_service=payment_sync_service,
+        gym_stripe_service=gym_stripe_service,
+        paying_lock=paying_member_lock,
+    )
+
+    # ── Tasks (tracked background operations) ────────────────────
+    # The generic engine: TasksService (store/read + the in-task guard) and
+    # TasksExecutor (run) are SEPARATE providers so the memberships↔tasks
+    # graph stays acyclic. The membership_reprice handler is the ONE
+    # tasks↔memberships bridge (tasks → memberships); it both creates and
+    # runs membership_reprice tasks. The dependency points one way only —
+    # nothing in src/memberships imports src/tasks.
+    tasks_service = providers.Factory(TasksService, db_pool=db_pool)
+    membership_reprice_task_handler = providers.Factory(
+        MembershipRepriceTaskHandler,
+        db_pool=db_pool,
+        reprice_service=memberships_reprice,
+        tasks_service=tasks_service,
+    )
+    tasks_executor = providers.Factory(
+        TasksExecutor,
+        db_pool=db_pool,
+        handlers=providers.Dict({
+            TaskType.membership_reprice: membership_reprice_task_handler,
+        }),
+    )
+
     # ── Member memberships ───────────────────────────────────────
     member_memberships_service = providers.Factory(
         MemberMembershipsService,
@@ -298,6 +346,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         paying_lock=paying_member_lock,
         payment_sync_one_time=payment_sync_one_time,
         discounts_service=discounts_service,
+        reprice_service=memberships_reprice,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────
@@ -336,7 +385,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
         stripe_membership_service=payments_membership_service,
         stripe_price_service=payments_price_service,
-        payment_sync_service=payment_sync_service,
         discounts_service=discounts_service,
     )
 
@@ -417,6 +465,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         ),
         refund_handler=stripe_webhook_refund_handler,
     )
+    # Stale-task recovery: the reconciler re-runs unfinished tracked tasks
+    # whose in-process execution died (the recovery loop lives in the
+    # reconciler; the tasks engine only knows how to run ONE task).
+    reconciler_stale_task_sweep = providers.Factory(
+        StaleTaskSweep,
+        db_pool=db_pool,
+        tasks_executor=tasks_executor,
+    )
     reconciler_subscription_orphan_sweep = providers.Factory(
         SubscriptionOrphanSweep,
         db_pool=db_pool,
@@ -428,5 +484,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
         payment_push_sweep=reconciler_payment_push_sweep,
         invoice_fetch_sweep=reconciler_invoice_fetch_sweep,
+        stale_task_sweep=reconciler_stale_task_sweep,
         subscription_orphan_sweep=reconciler_subscription_orphan_sweep,
     )

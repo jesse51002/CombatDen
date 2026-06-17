@@ -1,5 +1,5 @@
 -- Of the given Stripe subscription-item ids, the ones mapped to a LIVE membership
--- (stripe_sync_status 'applied' or 'migrating' — the row is on Stripe, billing).
+-- (stripe_sync_status 'applied' — the row is on Stripe, billing).
 -- A 'deleted' row is NOT a live link (its line should be gone from Stripe), and
 -- the filtered member_memberships view does NOT hide 'deleted' — so the orphan
 -- sweep reads the unfiltered base with an explicit status filter. A subscription
@@ -9,4 +9,4 @@
 SELECT stripe_item_id
 FROM member_memberships_unfiltered
 WHERE stripe_item_id = ANY(:stripe_item_ids)
-  AND stripe_sync_status IN ('applied', 'migrating')
+  AND stripe_sync_status = 'applied'

@@ -267,10 +267,46 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "paid_by_member_id",  # immutable payer (trigger: trg_prevent_paid_by_member_id_overwrite)
         "created_at",  # auto-generated timestamp
         # Stripe columns — always set by backend
-        "stripe_item_id",
+        "stripe_item_id",  # immutable once set (trigger, no exceptions)
         "stripe_one_time_invoice_id",  # one-time consolidated invoice id (writeback)
         "stripe_sync_status",  # sync writeback (Stripe-convergence confirmation)
-        "price_id",
+        "price_id",  # immutable (trigger: trg_prevent_price_id_overwrite); reprice = new row
+    }
+)
+
+TASKS: frozenset[str] = frozenset(
+    {
+        # Backend-executed tracked operations: written by the backend at
+        # service_role only, read-only for clients. Every column is
+        # user-immutable.
+        "task_id",
+        "gym_id",
+        "task_type",
+        "status",
+        "created_at",
+        "started_at",
+        "finished_at",
+    }
+)
+
+TASK_ITEMS: frozenset[str] = frozenset(
+    {
+        # Per-membership work units of a task: backend-written records, every
+        # column user-immutable.
+        "task_item_id",
+        "task_id",
+        "gym_id",
+        "member_id",
+        "status",
+        "attempt_count",
+        "error_message",
+        "old_item_id",
+        "new_item_id",
+        "target_price_id",
+        "prorate",
+        "created_at",
+        "started_at",
+        "finished_at",
     }
 )
 

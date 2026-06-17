@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Awaitable
-from uuid import UUID
 
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
 from src.payments.schema.payments_members_schema import (
@@ -29,8 +28,8 @@ class PaymentSyncWriteback:
     the per-membership Stripe line id / next_due_date / ``applied`` status, each
     membership's own post-discount price onto ``total_price``, the coupon links
     (+ ``applied`` on the applied-discount rows), the payer's subscription id,
-    ``deleted`` on cancelled rows confirmed gone, and the payer's monthly
-    recurring total from Stripe's upcoming invoice. All writes go through
+    ``deleted`` on every cancelled row (the converge removed its billing), and
+    the payer's monthly recurring total from Stripe's upcoming invoice. All writes go through
     ``PaymentSyncQueries``; nothing here is preview-safe — call it only on the
     real path.
     """
@@ -81,9 +80,10 @@ class PaymentSyncWriteback:
             f"apply_coupon_links payer={payer.member_id}",
         )
 
-        # 'deleted' on cancelled rows confirmed gone from the live sub.
+        # 'deleted' on every cancelled row (the converge removed its billing),
+        # best-effort so one failed write can't abort the rest.
         await self._run_step(
-            self._mark_removed_deleted(payer, sub_result),
+            self._mark_removed_deleted(payer),
             f"mark_removed_deleted payer={payer.member_id}",
         )
 
@@ -238,22 +238,19 @@ class PaymentSyncWriteback:
                     exc_info=True,
                 )
 
-    async def _mark_removed_deleted(
-        self,
-        payer: PayerProfile,
-        sub_result: PaymentsSubscriptionResponse | None,
-    ) -> None:
-        """Stamp 'deleted' on the payer's cancelled rows gone from the sub."""
+    async def _mark_removed_deleted(self, payer: PayerProfile) -> None:
+        """Stamp 'deleted' on every of the payer's cancelled rows after converge.
+
+        The desired state excludes every cancelled row by construction
+        (``get_active_recurring`` drops any row with a ``cancel_date``), so a
+        successful converge means each cancelled row's billing is gone from
+        Stripe: its line was removed, or its share of a consolidated line was
+        decremented. The line id itself may still be live for the payer's
+        remaining members on that price — which is why the rows are stamped
+        unconditionally rather than diffed against the live line ids (a
+        live-line check would never stamp a row removed from a shared line).
+        """
         cancelled = await self._queries.get_cancelled_recurring(payer.member_id)
         if not cancelled:
             return
-        live_item_ids = {
-            item.stripe_subscription_item_id
-            for item in (sub_result.items if sub_result else [])
-        }
-        removed: list[UUID] = [
-            item_id
-            for item_id, stripe_item_id in cancelled.items()
-            if stripe_item_id not in live_item_ids
-        ]
-        await self._queries.mark_memberships_deleted(removed)
+        await self._queries.mark_memberships_deleted(cancelled)

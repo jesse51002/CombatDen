@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
@@ -9,6 +10,9 @@ import 'package:crm/features/member_details/presentation/sections/membership_act
 import 'package:crm/features/member_details/presentation/sections/membership_details_table.dart';
 import 'package:crm/features/member_details/presentation/sections/outdated_price_card.dart';
 import 'package:crm/features/member_details/presentation/widgets/membership_display_helpers.dart';
+import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
+import 'package:crm/features/tasks/bloc/tasks_state.dart';
+import 'package:crm/features/tasks/presentation/widgets/in_task_badge.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 
 /// Paged membership card — one of the **viewed member's own**
@@ -66,7 +70,20 @@ class MembershipCarousel extends StatelessWidget {
     final status =
         membership.payingForMemberFor(coveredId)?.status ??
             membership.status;
-    final showOutdated = !isTerminalStatus(status) &&
+
+    // Whether this membership's row is currently in an upgrade task.
+    final itemId = membership.itemIdFor(coveredId);
+    final tasksState = context.watch<TasksBloc>().state;
+    final inTaskIds = switch (tasksState) {
+      TasksLoaded(:final inTaskItemIds) => inTaskItemIds,
+      TaskPolling(:final inTaskItemIds) => inTaskItemIds,
+      TaskPollingDone(:final inTaskItemIds) => inTaskItemIds,
+      _ => const <String>{},
+    };
+    final isInTask = itemId != null && inTaskIds.contains(itemId);
+
+    final showOutdated = !isInTask &&
+        !isTerminalStatus(status) &&
         membership.isOnOutdatedPriceFor(coveredId) &&
         membership.currentActivePrice != null;
 
@@ -99,6 +116,7 @@ class MembershipCarousel extends StatelessWidget {
           payerName: payer?.name,
           payerPhotoUrl: payer?.photoUrl,
         ),
+        if (isInTask) const InTaskBadge(),
         if (showOutdated)
           OutdatedPriceCard(
             membership: membership,
@@ -130,6 +148,7 @@ class MembershipCarousel extends StatelessWidget {
           MembershipActionsRow(
             member: member,
             currentMembership: membership,
+            isInTask: isInTask,
           ),
         ],
       ),

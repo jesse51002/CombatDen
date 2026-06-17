@@ -26,7 +26,6 @@ from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
     PreviewInvoice,
 )
-from src.plans.plans_schema import MembershipPlanPriceRequest
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
 from tests.helpers.stripe_assertions import (
@@ -530,98 +529,6 @@ async def test_preview_cancel_already_cancelled_returns_none(
             member.member_id,
         )
         assert preview is None
-
-        await assert_no_unexpected_charges(
-            stripe_client,
-            before,
-            connect_opts,
-        )
-    finally:
-        await delete_member_data(db_pool, member.member_id)
-
-
-# ── Update price preview ────────────────────────────────────────────
-
-
-async def test_preview_update_price(
-    memberships_service,
-    plans_service,
-    db_pool,
-    gym_id,
-    stripe_client,
-    connect_opts,
-    created,
-):
-    pm_id = await created.payment_method()
-    member = await created.member(gym_id, payment_method_id=pm_id)
-    plan = await created.plan(gym_id)
-
-    try:
-        item_id = await _start_and_get_item_id(
-            memberships_service,
-            db_pool,
-            member,
-            gym_id,
-            plan,
-        )
-        profile = await get_profile_stripe_ids(
-            db_pool,
-            member.member_id,
-            gym_id,
-        )
-        assert profile.stripe_sub_id_month is not None
-
-        new_price = await plans_service.set_price(
-            MembershipPlanPriceRequest(
-                plan_id=plan.plan_id,
-                gym_id=gym_id,
-                price=8000,
-            ),
-        )
-
-        before = await snapshot_billing_state(
-            stripe_client,
-            profile.stripe_customer_id,
-            connect_opts,
-        )
-
-        preview = await memberships_service.preview_update_price(
-            item_id=item_id,
-            member_id=member.member_id,
-            prorate=False,
-        )
-
-        _assert_valid_due_now_split(preview)
-
-        # CRM price_id must still be the ORIGINAL — preview does no writes.
-        async with db_pool.session() as session:
-            result = await session.execute(
-                text(
-                    "SELECT price_id, total_price "
-                    "FROM member_memberships_unfiltered "
-                    "WHERE item_id = :item_id"
-                ),
-                {"item_id": str(item_id)},
-            )
-            row = result.mappings().fetchone()
-
-        assert UUID(str(row["price_id"])) == plan.price_id, (
-            "preview_update_price must not change the CRM price_id"
-        )
-
-        # Stripe subscription item must still be on the original price.
-        sub = await fetch_subscription(
-            stripe_client,
-            profile.stripe_sub_id_month,
-            connect_opts,
-        )
-        remaining_prices = {item.price.id for item in sub.items.data}
-        assert plan.stripe_price_id in remaining_prices, (
-            "preview_update_price must not swap the Stripe price"
-        )
-        assert new_price.stripe_price_id not in remaining_prices, (
-            "preview_update_price must not attach the new Stripe price"
-        )
 
         await assert_no_unexpected_charges(
             stripe_client,

@@ -5,15 +5,12 @@
 -- here because member_memberships is the earliest-loaded table that uses it.
 -- `applied`/`deleted` are stamped by the sync (the writeback) once Stripe
 -- confirms; `preview_add`/`preview_remove` are reserved for preview-staging.
--- `migrating` (memberships only) marks that a migration was requested but has
--- not completed yet.
 CREATE TYPE stripe_sync_status AS ENUM (
     'not_added',
     'applied',
     'deleted',
     'preview_add',
-    'preview_remove',
-    'migrating'
+    'preview_remove'
 );
 
 -- Memberships are append-only: once created, a membership can only be
@@ -119,6 +116,21 @@ CREATE TRIGGER trg_prevent_plan_id_overwrite
     BEFORE UPDATE OF plan_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_plan_id_overwrite();
 
+-- Trigger: price_id is immutable (NOT NULL at insert, never changes) — even at
+-- service-role. A reprice is a NEW membership row at the new price (cancel the
+-- old row + insert its successor, executed by the membership_reprice task);
+-- nothing may repoint an existing row's price.
+CREATE OR REPLACE FUNCTION prevent_price_id_overwrite()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.price_id IS DISTINCT FROM OLD.price_id THEN
+        RAISE EXCEPTION 'price_id cannot be changed after creation'
+            USING CONSTRAINT = 'price_id_immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Trigger: paid_by_member_id is immutable once set — unconditional, no
 -- 'migrating' exception. Changing who pays moves the line to a DIFFERENT
 -- payer's Stripe subscription, so it is always cancel-old + insert-new (the
@@ -134,6 +146,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE TRIGGER trg_prevent_price_id_overwrite
+    BEFORE UPDATE OF price_id ON member_memberships_unfiltered
+    FOR EACH ROW EXECUTE FUNCTION prevent_price_id_overwrite();
+
 CREATE TRIGGER trg_prevent_paid_by_member_id_overwrite
     BEFORE UPDATE OF paid_by_member_id ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_paid_by_member_id_overwrite();
@@ -141,9 +157,7 @@ CREATE TRIGGER trg_prevent_paid_by_member_id_overwrite
 -- Trigger: cancel_date locks only once the membership is actually REMOVED from
 -- Stripe (stripe_sync_status = 'deleted'). Before that the cancel is unconfirmed,
 -- so a DB-first cancel whose sync did not land can revert simply by clearing
--- cancel_date — no transient status to stage/un-stage. (Cancel is a foreground,
--- verified op; it never uses 'migrating'. 'migrating' is reserved for the
--- background price migration that moves stripe_item_id — see that trigger below.)
+-- cancel_date — no transient status to stage/un-stage.
 CREATE OR REPLACE FUNCTION prevent_cancel_date_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -161,18 +175,16 @@ CREATE TRIGGER trg_prevent_cancel_date_overwrite
     BEFORE UPDATE OF cancel_date ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION prevent_cancel_date_overwrite();
 
--- Trigger: stripe_item_id is immutable once set — EXCEPT while the row is
--- 'migrating'. A PRICE MIGRATION moves the membership's line to the new price's
--- Stripe item, so while stripe_sync_status = 'migrating' the writeback may
--- re-stamp the line id; once it stamps 'applied' the id is immutable again.
--- 'migrating' is ONLY for price migrations (mutating the line id then is safe) —
--- cancel/add are foreground verified ops and never use it.
+-- Trigger: stripe_item_id is immutable once set — no exceptions, even at
+-- service-role. The line id is the row's Stripe identity: NULL until the first
+-- sync stamps it, frozen from then on. Any move to a different line (a reprice,
+-- a payer change) is a NEW membership row (cancel old + insert new), never a
+-- re-stamp of the existing row.
 CREATE OR REPLACE FUNCTION prevent_stripe_item_id_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.stripe_item_id IS NOT NULL
-       AND NEW.stripe_item_id IS DISTINCT FROM OLD.stripe_item_id
-       AND OLD.stripe_sync_status <> 'migrating' THEN
+       AND NEW.stripe_item_id IS DISTINCT FROM OLD.stripe_item_id THEN
         RAISE EXCEPTION 'stripe_item_id cannot be changed once set'
             USING CONSTRAINT = 'stripe_item_id_immutable';
     END IF;
@@ -185,9 +197,8 @@ CREATE TRIGGER trg_prevent_stripe_item_id_overwrite
     FOR EACH ROW EXECUTE FUNCTION prevent_stripe_item_id_overwrite();
 
 -- Trigger: stripe_one_time_invoice_id is immutable once set. Stamped once when a
--- one-time membership's consolidated invoice is created; never migrated (unlike
--- stripe_item_id there is no 'migrating' exception — a one-time invoice is a
--- terminal charge, not a line that moves between Stripe items).
+-- one-time membership's consolidated invoice is created — a one-time invoice is
+-- a terminal charge, not a line that moves between Stripe items.
 CREATE OR REPLACE FUNCTION prevent_stripe_one_time_invoice_id_overwrite()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -229,7 +240,9 @@ CREATE TRIGGER trg_recurring_no_end_date
     FOR EACH ROW EXECUTE FUNCTION check_recurring_no_end_date();
 
 -- Trigger: inserting a recurring membership requires all existing memberships
--- for the same user+gym to be ended or cancelled
+-- for the same user+gym to be ended or cancelled. Preview-staged rows
+-- ('preview_add') are transient hypotheticals deleted in the preview's cleanup
+-- and never billed — they skip the gate AND never block a real insert.
 CREATE OR REPLACE FUNCTION check_recurring_no_active_memberships()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -237,6 +250,10 @@ DECLARE
     v_active_count INTEGER;
     v_today DATE;
 BEGIN
+    IF NEW.stripe_sync_status = 'preview_add' THEN
+        RETURN NEW;
+    END IF;
+
     SELECT plan_type INTO v_plan_type
     FROM membership_plans_unfiltered
     WHERE plan_id = NEW.plan_id;
@@ -251,6 +268,7 @@ BEGIN
           AND mm.gym_id = NEW.gym_id
           AND mm.plan_id = NEW.plan_id
           AND mm.item_id <> NEW.item_id
+          AND mm.stripe_sync_status <> 'preview_add'
           AND (mm.cancel_date IS NULL OR mm.cancel_date > v_today)
           AND (mm.end_date IS NULL OR mm.end_date > v_today);
 
@@ -267,12 +285,18 @@ CREATE TRIGGER trg_recurring_no_active_memberships
     BEFORE INSERT ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION check_recurring_no_active_memberships();
 
--- Trigger: no overlapping date ranges for recurring memberships on the same plan
+-- Trigger: no overlapping date ranges for recurring memberships on the same
+-- plan. Preview-staged rows ('preview_add') skip the gate and never block a
+-- real row (transient hypotheticals, deleted in the preview's cleanup).
 CREATE OR REPLACE FUNCTION check_recurring_no_overlapping_daterange()
 RETURNS TRIGGER AS $$
 DECLARE
     v_plan_type VARCHAR;
 BEGIN
+    IF NEW.stripe_sync_status = 'preview_add' THEN
+        RETURN NEW;
+    END IF;
+
     SELECT plan_type INTO v_plan_type
     FROM membership_plans_unfiltered
     WHERE plan_id = NEW.plan_id;
@@ -285,6 +309,7 @@ BEGIN
               AND mm.gym_id = NEW.gym_id
               AND mm.plan_id = NEW.plan_id
               AND mm.item_id <> NEW.item_id
+              AND mm.stripe_sync_status <> 'preview_add'
               AND daterange(mm.start_date, mm.cancel_date, '[)')
                && daterange(NEW.start_date, NEW.cancel_date, '[)')
         ) THEN
@@ -300,14 +325,22 @@ CREATE TRIGGER trg_recurring_no_overlapping_daterange
     BEFORE INSERT OR UPDATE OF cancel_date ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION check_recurring_no_overlapping_daterange();
 
--- Trigger: new recurring memberships must have a start_date strictly after
--- all previous entries for the same (member_id, gym_id, plan_id)
+-- Trigger: new recurring memberships must have a start_date on or after all
+-- previous entries for the same (member_id, gym_id, plan_id). A SAME-day
+-- successor is allowed (equality passes): a reprice cancels the old row
+-- effective today and inserts its replacement starting today — two truly live
+-- same-day rows remain impossible via the no-active + overlap triggers.
+-- Preview-staged rows ('preview_add') skip the gate and never block a real row.
 CREATE OR REPLACE FUNCTION check_recurring_chronological_start_date()
 RETURNS TRIGGER AS $$
 DECLARE
     v_plan_type VARCHAR;
     v_max_start_date DATE;
 BEGIN
+    IF NEW.stripe_sync_status = 'preview_add' THEN
+        RETURN NEW;
+    END IF;
+
     SELECT plan_type INTO v_plan_type
     FROM membership_plans_unfiltered
     WHERE plan_id = NEW.plan_id;
@@ -318,10 +351,11 @@ BEGIN
         WHERE mm.member_id = NEW.member_id
           AND mm.gym_id = NEW.gym_id
           AND mm.plan_id = NEW.plan_id
-          AND mm.item_id <> NEW.item_id;
+          AND mm.item_id <> NEW.item_id
+          AND mm.stripe_sync_status <> 'preview_add';
 
-        IF v_max_start_date IS NOT NULL AND NEW.start_date <= v_max_start_date THEN
-            RAISE EXCEPTION 'start_date must be after % (latest existing start_date for this plan)', v_max_start_date
+        IF v_max_start_date IS NOT NULL AND NEW.start_date < v_max_start_date THEN
+            RAISE EXCEPTION 'start_date must be on or after % (latest existing start_date for this plan)', v_max_start_date
                 USING CONSTRAINT = 'recurring_chronological_start_date';
         END IF;
     END IF;
@@ -336,7 +370,7 @@ CREATE TRIGGER trg_recurring_chronological_start_date
 -- View: gate on BOTH the Stripe id and the sync-status enum. A row with no
 -- `stripe_item_id` was never put on Stripe (not valid to surface), and the
 -- sync-status hides `not_added` (pending) and `preview_*` (dry-run staging), so
--- the client only sees real synced rows (applied / deleted / migrating). The two
+-- the client only sees real synced rows (applied / deleted). The two
 -- conditions are kept in lockstep with the `hide_incomplete_stripe_records` RLS
 -- policy (`access_rules/member_memberships.sql`) so the view and RLS can't drift.
 -- `member_memberships_status` reads this view, so cancelled (`deleted`) rows —

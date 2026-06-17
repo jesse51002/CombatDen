@@ -47,9 +47,6 @@ from src.memberships.service.memberships_start_preview import (
 from src.memberships.service.memberships_start_validation import (
     MemberMembershipsStartValidation,
 )
-from src.memberships.service.memberships_update_price import (
-    MemberMembershipsUpdatePrice,
-)
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
@@ -59,6 +56,9 @@ from src.shared.sql_loader import load_sql
 if TYPE_CHECKING:
     from src.discounts.service.discounts_service import (
         DiscountsService,
+    )
+    from src.memberships.service.memberships_reprice import (
+        MemberMembershipsReprice,
     )
     from src.payments.service.payments_stripe_payment_service import (
         PaymentsStripePaymentService,
@@ -81,7 +81,9 @@ class MemberMembershipsService:
     """Membership lifecycle operations (facade).
 
     Delegates to focused sub-services for cancel, freeze,
-    start, and update_price operations.
+    start, and reprice operations. Knows nothing about tasks — the reprice
+    REQUEST (create a tracked task) is orchestrated above the facade, in the
+    router; the facade exposes only the pure membership preview.
     """
 
     def __init__(
@@ -95,6 +97,7 @@ class MemberMembershipsService:
         paying_lock: PayingMemberLock,
         payment_sync_one_time: PaymentSyncOneTime,
         discounts_service: DiscountsService,
+        reprice_service: MemberMembershipsReprice,
     ) -> None:
         # Every lifecycle op is wrapped in the payer concurrency lock (held
         # across its pre-sync + DB write + sync) so no two ops converge the
@@ -106,6 +109,9 @@ class MemberMembershipsService:
         # here would deadlock to LockBusyError.
         self._db_pool = db_pool
         self._paying_lock = paying_lock
+        # The reprice op is standalone and takes its own family lock; the
+        # facade only exposes its read-only preview.
+        self._reprice = reprice_service
         deps = (
             db_pool,
             payment_sync_service,
@@ -138,7 +144,6 @@ class MemberMembershipsService:
             discounts_service=discounts_service,
             validation=self._start_validation,
         )
-        self._update_price = MemberMembershipsUpdatePrice(*deps)
         self._mark_paid_cash = MemberMembershipsMarkPaidCash(
             *deps,
             payment_service=payment_service,
@@ -262,39 +267,25 @@ class MemberMembershipsService:
         async with self._paying_lock.lock([request.paid_by_member_id]):
             await self._charge_card.charge_card(request)
 
-    # ── Update Price ───────────────────────────────────────────
+    # ── Reprice (single, direct — NOT a task) ──────────────────
+    #
+    # The member-detail upgrade is a direct, synchronous reprice (like
+    # cancel) — tasks are only for the per-plan BATCH, orchestrated in the
+    # router via the tasks layer. The op takes its own family lock.
 
     async def update_price(
         self,
         item_id: UUID,
         member_id: UUID,
-        idempotency_key: UUID,
         prorate: bool = False,
-    ) -> None:
-        """Upgrade a membership to its plan's currently active price."""
-        payer_id = await self._get_payer_for_item(item_id)
-        async with self._paying_lock.lock([payer_id]):
-            await self._update_price.update_price(
-                item_id=item_id,
-                member_id=member_id,
-                idempotency_key=idempotency_key,
-                prorate=prorate,
-            )
-
-    async def preview_update_price(
-        self,
-        item_id: UUID,
-        member_id: UUID,
-        prorate: bool = False,
-    ) -> DueNowVsRecurringPreview | None:
-        """Preview upgrading a membership to the plan's active price."""
-        payer_id = await self._get_payer_for_item(item_id)
-        async with self._paying_lock.lock([payer_id]):
-            return await self._update_price.preview_update_price(
-                item_id=item_id,
-                member_id=member_id,
-                prorate=prorate,
-            )
+    ) -> UUID:
+        """Reprice ONE membership to its plan's active price; returns the
+        successor row id (== ``item_id`` when it was already on the price)."""
+        return await self._reprice.reprice(
+            member_id=member_id,
+            old_item_id=item_id,
+            prorate=prorate,
+        )
 
     # ── Apply Discounts (add / remove applied-discount rows) ───────────────
 
