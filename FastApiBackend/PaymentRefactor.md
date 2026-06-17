@@ -13,22 +13,6 @@
 > lists only remaining work — when something ships it is **removed**, never
 > annotated "done".
 
-## 7. Per-membership `paid_by_member_id` — who pays each membership (✅ BUILT)
-
-Shipped on the `paid-by-member-id` branch. Every `member_memberships` row carries
-an **immutable** `paid_by_member_id` (the resolved parent, or a self-paying linked
-member). The payment engine is now **payer-centric**:
-`update_payments_recurring(payer_member_id)`, reads scoped by `paid_by_member_id`,
-one subscription per payer, per-payer freeze / cancel / charge_card (explicit
-payer). `account_linked_to_id` is the **authorization layer** only (you must be
-linked to pay for someone else; the payer must be the membership's member or that
-member's linked parent), never the billing key — and the `linked_account_no_stripe`
-CHECK is **dropped**, so a self-paying linked member holds their own card / sub /
-freeze window. The full rationale + mechanics live in the **`sync-guide`** and
-**`memberships-guide`** skills (the shipped-engine source of truth); the seed
-gives ~50% of linked children a self-paid membership; the CRM payer UI lives in
-`CRM/.../member_details`. (Kept here as an anchor — §8 and §11 below still cite §7
-for the payer-change-is-a-new-row immutability and the per-payer groups.)
 
 ## 11. Per-membership PAYMENT TYPE — cash vs card per item, not per request (not built)
 

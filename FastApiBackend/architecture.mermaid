@@ -35,7 +35,7 @@ flowchart TB
     streak_service["ClassesStreakService"]
     stripe_webhooks_service["StripeWebhooksService"]
     waivers_service["WaiversService"]
-    reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>invoice-fetch → stale-task recovery → orphan-clean → push<br/>per-family lock guards mutations; no sweep-wide lock"]
+    reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>invoice-fetch → stale-task recovery → orphan-clean → push → sub-orphans (cancel unlinked subs)<br/>per-family lock guards mutations; no sweep-wide lock"]
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     tasks_service["TasksService — src/tasks/ · tracked background ops<br/>create/read tasks + items · the in-task guard<br/>(item-targeted membership ops reject mid-task rows → 409)"]
     tasks_executor["TasksExecutor — src/tasks/ · runs task items<br/>atomic claim → handler dispatch → retry ×3 → failed (ops self-revert)<br/>crash recovery via the reconciler's stale-task sweep"]
@@ -115,6 +115,7 @@ flowchart TB
     reconciler_service -->|"invoice-fetch: reuses handler record"| stripe_webhooks_service
     reconciler_service -->|"stale-task recovery: re-run unfinished"| tasks_executor
     reconciler_service -->|"push: bulk_payment_sync (billing none)"| payment_sync_service
+    reconciler_service -->|"sub-orphans: list + cancel unlinked subs"| Payments
     reconciler_service --> payer_resolver
     stripe_webhooks_service -->|"customer.subscription.deleted → sync"| payment_sync_service
   end

@@ -32,6 +32,9 @@ from src.reconciler.service.reconciler.reconciler_result import (
 from src.reconciler.service.reconciler.reconciler_stale_task_sweep import (
     StaleTaskSweep,
 )
+from src.reconciler.service.reconciler.reconciler_subscription_orphan_sweep import (
+    SubscriptionOrphanSweep,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,25 +48,29 @@ class ReconcilerService:
         payment_push_sweep: PaymentPushSweep,
         invoice_fetch_sweep: InvoiceFetchSweep,
         stale_task_sweep: StaleTaskSweep,
+        subscription_orphan_sweep: SubscriptionOrphanSweep,
     ) -> None:
         self._orphan_cleanup_sweep = orphan_cleanup_sweep
         self._payment_push_sweep = payment_push_sweep
         self._invoice_fetch_sweep = invoice_fetch_sweep
         self._stale_task_sweep = stale_task_sweep
+        self._subscription_orphan_sweep = subscription_orphan_sweep
 
     async def run(self) -> ReconcilerRunResult:
         """Run every step-service in order and return each one's ``SweepResult``."""
         logger.info("Reconciler sweep starting")
         sweeps: list[SweepResult] = []
         # Run order: invoice-fetch (refresh dates/charges) -> stale-task
-        # recovery (re-run crashed tracked tasks, advancing their state +
-        # converging) -> orphan-cleanup -> payment-push (config drift). The
-        # push's sync now self-heals a dead sub natively (cancels the family +
-        # nulls the sub id), so there is no separate Stripe-status pass.
+        # recovery (re-run crashed tracked tasks) -> orphan-cleanup ->
+        # payment-push (config drift) -> subscription-orphans. The push's sync
+        # self-heals a dead sub natively (cancels the family + nulls the sub id),
+        # so there is no separate Stripe-status pass; subscription-orphans runs
+        # LAST so the push has re-linked any real sub before we judge orphans.
         sweeps.append(await self._invoice_fetch_sweep.run())
         sweeps.append(await self._stale_task_sweep.run())
         sweeps.append(await self._orphan_cleanup_sweep.run())
         sweeps.append(await self._payment_push_sweep.run())
+        sweeps.append(await self._subscription_orphan_sweep.run())
         logger.info(
             "Reconciler sweep complete (%d step(s))",
             len(sweeps),
