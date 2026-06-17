@@ -8,7 +8,7 @@ reverted / deleted (a start / cancel revert, or an orphan-cleanup of a
 billing a member who no longer has that membership.
 
 Linkage is by subscription-ITEM id against the live membership rows
-(``stripe_sync_status`` ``applied`` / ``migrating``); a ``deleted`` row is NOT a
+(``stripe_sync_status`` ``applied``); a ``deleted`` row is NOT a
 live link (and the filtered view does not hide ``deleted``, so the read goes to
 the unfiltered base with an explicit status filter). Runs LAST in the reconciler
 (after the push sweep re-links any real sub), and skips subscriptions younger than
@@ -131,7 +131,7 @@ class SubscriptionOrphanSweep:
         await self._cancel_orphan(sub.get("id"), account_id, result)
 
     async def _has_live_link(self, item_ids: list[str]) -> bool:
-        """True iff any item id maps to a live ('applied'/'migrating') row."""
+        """True iff any item id maps to a live ('applied') row."""
         if not item_ids:
             return False
         sql = load_sql(SQL_DIR / "reconciler_linked_item_ids.sql")

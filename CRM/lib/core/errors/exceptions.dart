@@ -76,3 +76,14 @@ class DatabaseException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Thrown when a mutation is blocked because the target
+/// membership is part of an in-progress background task.
+/// Triggered by a 409 from the backend.
+class MembershipInTaskException implements Exception {
+  final String message;
+  const MembershipInTaskException(this.message);
+
+  @override
+  String toString() => message;
+}

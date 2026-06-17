@@ -28,7 +28,9 @@ from src.memberships.memberships_schema import (
 )
 from src.plans.plans_schema import MembershipPlanPriceRequest
 from tests.helpers.cleanup import delete_member_data
-from tests.helpers.db_reads import get_profile_stripe_ids
+from tests.helpers.db_reads import (
+    get_profile_stripe_ids,
+)
 from tests.helpers.stripe_assertions import (
     advance_to_next_cycle_and_fetch_invoice,
     assert_immediate_prorated_invoice,
@@ -191,7 +193,6 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
         await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=False,
         )
 
@@ -300,7 +301,6 @@ async def test_update_price_mid_cycle_with_prorate_true(
         await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=True,
         )
 
@@ -424,7 +424,6 @@ async def test_update_price_to_cheaper_tier_mid_cycle(
         await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            idempotency_key=uuid4(),
             prorate=False,
         )
 

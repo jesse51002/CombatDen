@@ -1,9 +1,12 @@
 flowchart TB
   %% Scheduled reconciler — orchestration flow of ReconcilerService.run().
   %% Source of truth: src/reconciler/ (reconciler-guide skill).
-  %% APScheduler (app lifespan) fires run() twice daily, then runs the four
-  %% step-services in order: invoice-fetch -> orphan-cleanup -> payment-push ->
-  %% subscription-orphans (cancel live Stripe subs with no live DB link, last).
+  %% APScheduler (app lifespan) fires run() twice daily, then runs the five
+  %% step-services in order: invoice-fetch -> stale-task recovery ->
+  %% orphan-cleanup -> payment-push -> subscription-orphans (cancel live Stripe
+  %% subs with no live DB link, last). Stale-task recovery re-runs unfinished
+  %% tracked tasks (src/tasks/) whose in-process run died — the recovery loop
+  %% lives here, the tasks engine only knows how to run ONE task.
   %% No reconciler-wide lock — safety is the per-family PayingMemberLock every
   %% payment op already holds.
   %% Each step reuses existing machinery: the fetcher drives the webhook handler
@@ -18,10 +21,12 @@ flowchart TB
   subgraph recon["🧹 ReconcilerService.run — sweep orchestrator"]
     direction TB
     fetch["InvoiceFetchSweep — missed-webhook backstop<br/>per gym Connect acct: list invoices / payments / refunds in the configured lookback<br/>→ reuse webhook handler record(obj) (the handle/record seam)<br/>paid → bill + succeeded charges · open+attempted → failed attempt · refunds<br/>idempotent: invoice upsert · charge/refund UNIQUE · failed synthetic key<br/>each object in its own txn · pending/not-recorded caught per object"]
+    stale_task["StaleTaskSweep — re-run crashed tracked tasks<br/>list unfinished tasks → TasksExecutor.run_task each<br/>atomic claims skip live runs (pending or stale-running reclaimed)<br/>advances task state + converges via the engine; failed tasks left to push"]
     orphan["OrphanCleanupSweep — delete stranded not_added rows<br/>per orphan: non-blocking try paying-family lock<br/>free → delete (stripe_item_id IS NULL guard) · held → skip (op in flight)"]
     push["PaymentPushSweep — CRM→Stripe converge<br/>distinct paying parents w/ active recurring → bulk_payment_sync<br/>proration none = billing none (no charge)<br/>the sync self-heals a gone sub: cancel the family + null the sub id"]
-    suborphan["SubscriptionOrphanSweep — cancel Stripe subs with no live DB link<br/>per Connect acct (deduped): list non-cancelled subs (mirrors invoice-fetch _iter)<br/>skip if younger than reconciler_orphan_min_age_seconds · skip if items &gt; one page<br/>sub item ids vs live rows (applied/migrating, unfiltered base) — none → cancel sub<br/>immediate cancel via payments primitive (idempotent) · each cancel isolated"]
-    fetch --> orphan
+    suborphan["SubscriptionOrphanSweep — cancel Stripe subs with no live DB link<br/>per Connect acct (deduped): list non-cancelled subs (mirrors invoice-fetch _iter)<br/>skip if younger than reconciler_orphan_min_age_seconds · skip if items &gt; one page<br/>sub item ids vs live rows (applied, unfiltered base) — none → cancel sub<br/>immediate cancel via payments primitive (idempotent) · each cancel isolated"]
+    fetch --> stale_task
+    stale_task --> orphan
     orphan --> push
     push --> suborphan
   end
@@ -36,6 +41,7 @@ flowchart TB
   recon -->|"invoice-fetch: reuse handler record on listed objects"| handlers
   recon -->|"push: bulk_payment_sync (billing none)"| engine
   recon -->|"orphan-cleanup: list + delete orphans (per-family lock check)"| supabase
+  recon -->|"stale-task recovery: read unfinished + advance task state"| supabase
   recon -->|"invoice-fetch: list recent activity per gym"| stripe
   recon -->|"subscription-orphans: list subs · cancel unlinked (per Connect acct)"| stripe
   recon -->|"subscription-orphans: live item-id linkage check"| supabase
@@ -48,5 +54,5 @@ flowchart TB
   classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
   class sched,handlers,engine svc;
   class supabase,stripe ext;
-  class fetch,orphan,push,suborphan svc;
+  class fetch,stale_task,orphan,push,suborphan svc;
   style recon fill:#fdf0c8,stroke:#caab2f;

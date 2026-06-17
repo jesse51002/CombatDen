@@ -7,8 +7,8 @@
 -- hides incomplete / preview rows; this is the engine's read.
 --
 -- Desired-active = not cancelled and not in a non-billing sync status.
--- 'not_added' = pending add; 'applied' = live; 'migrating' = mid-migration — all
--- bill. 'deleted' / 'preview_*' do not.
+-- 'not_added' = pending add; 'applied' = live — both bill.
+-- 'deleted' / 'preview_*' do not.
 SELECT
     mm.item_id,
     mm.member_id,

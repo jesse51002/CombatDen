@@ -6,13 +6,16 @@ SELECT mpp.price_id,
        mpp.is_active,
        mpp.created_at,
        (
+         -- The migrate-able set: members actively billing this price (the
+         -- same filter the per-plan reprice discovery uses). NOT "active
+         -- through the paid period" — a cancelled/deleted row with a future
+         -- cancel_date is leaving, not on this price to migrate.
          SELECT count(DISTINCT mm.member_id)
-         FROM member_memberships mm
-         JOIN gyms g ON g.gym_id = mm.gym_id
+         FROM member_memberships_unfiltered mm
          WHERE mm.price_id = mpp.price_id
            AND mm.plan_id  = mpp.plan_id
-           AND (mm.cancel_date IS NULL OR mm.cancel_date > (now() AT TIME ZONE g.timezone)::date)
-           AND (mm.end_date   IS NULL OR mm.end_date   > (now() AT TIME ZONE g.timezone)::date)
+           AND mm.stripe_sync_status = 'applied'
+           AND mm.cancel_date IS NULL
        ) AS member_count
 FROM membership_plan_prices mpp
 WHERE mpp.plan_id = :plan_id

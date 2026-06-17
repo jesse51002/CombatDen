@@ -1,3 +1,4 @@
+import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
@@ -301,12 +302,22 @@ class MemberRepository {
     required String memberId,
     required String idempotencyKey,
   }) async {
-    await _apiClient.delete(
-      '/api/v1/member_memberships/'
-      '?item_id=$itemId'
-      '&member_id=$memberId'
-      '&idempotency_key=$idempotencyKey',
-    );
+    try {
+      await _apiClient.delete(
+        '/api/v1/member_memberships/'
+        '?item_id=$itemId'
+        '&member_id=$memberId'
+        '&idempotency_key=$idempotencyKey',
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/cancel/preview`.
@@ -329,10 +340,20 @@ class MemberRepository {
   Future<void> updateMembershipPrice(
     MemberMembershipsUpdatePriceRequest req,
   ) async {
-    await _apiClient.put(
-      '/api/v1/member_memberships/price',
-      data: req.toJson(),
-    );
+    try {
+      await _apiClient.put(
+        '/api/v1/member_memberships/price',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/price/preview`.
@@ -354,20 +375,40 @@ class MemberRepository {
   Future<void> freezeAccount(
     MemberMembershipsFreezeRequest req,
   ) async {
-    await _apiClient.post(
-      '/api/v1/member_memberships/freeze',
-      data: req.toJson(),
-    );
+    try {
+      await _apiClient.post(
+        '/api/v1/member_memberships/freeze',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/unfreeze`.
   Future<void> unfreezeAccount(
     MemberMembershipsUnfreezeRequest req,
   ) async {
-    await _apiClient.post(
-      '/api/v1/member_memberships/unfreeze',
-      data: req.toJson(),
-    );
+    try {
+      await _apiClient.post(
+        '/api/v1/member_memberships/unfreeze',
+        data: req.toJson(),
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/mark-paid-cash`.
@@ -424,14 +465,24 @@ class MemberRepository {
   Future<DueNowVsRecurringPreview?> addMembershipDiscounts(
     MemberMembershipsAddDiscountsRequest req,
   ) async {
-    final response = await _apiClient.post(
-      '/api/v1/member_memberships/discounts/add',
-      data: req.toJson(),
-    );
-    if (response.data == null) return null;
-    return DueNowVsRecurringPreview.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/member_memberships/discounts/add',
+        data: req.toJson(),
+      );
+      if (response.data == null) return null;
+      return DueNowVsRecurringPreview.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/discounts/remove` — removes the
@@ -441,14 +492,24 @@ class MemberRepository {
   Future<DueNowVsRecurringPreview?> removeMembershipDiscounts(
     MemberMembershipsRemoveDiscountsRequest req,
   ) async {
-    final response = await _apiClient.post(
-      '/api/v1/member_memberships/discounts/remove',
-      data: req.toJson(),
-    );
-    if (response.data == null) return null;
-    return DueNowVsRecurringPreview.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/member_memberships/discounts/remove',
+        data: req.toJson(),
+      );
+      if (response.data == null) return null;
+      return DueNowVsRecurringPreview.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 409) {
+        throw MembershipInTaskException(
+          e.detail ??
+              'This membership is part of an in-progress upgrade task.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// `POST /api/v1/member_memberships/discounts/preview` —

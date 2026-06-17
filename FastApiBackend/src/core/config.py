@@ -59,7 +59,9 @@ class Settings(BaseSettings):
     # Logging Configuration
     log_level: str = "DEBUG"
 
-    # Scheduled reconciler (twice-daily billing safety-net sweep)
+    # Scheduled reconciler (twice-daily billing safety-net sweep). Its run now
+    # also recovers stale tasks (re-runs unfinished tasks whose in-process
+    # execution died) — see src/reconciler/.
     reconciler_enabled: bool = True
     reconciler_cron_hours: list[int] = [2, 14]  # UTC hours, twice daily
     # Scheduled reconciler sweep tuning — see src/reconciler/. No
@@ -91,6 +93,15 @@ class Settings(BaseSettings):
     # each after a bulk_sync_retry_delay_seconds wait.
     bulk_sync_retry_delay_seconds: int = 10
     bulk_sync_max_retries: int = 3
+
+    # Tracked background tasks (src/tasks/) — per-item retry mirrors the
+    # bulk-sync retry: up to task_item_max_attempts attempts,
+    # task_item_retry_delay_seconds between them. A 'running' claim older than
+    # task_stale_running_seconds belongs to a dead process and may be reclaimed
+    # when the reconciler's stale-task recovery re-runs it (see src/reconciler/).
+    task_item_max_attempts: int = 3
+    task_item_retry_delay_seconds: int = 10
+    task_stale_running_seconds: int = 120
 
 
 settings = Settings()

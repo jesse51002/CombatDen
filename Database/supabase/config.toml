@@ -108,6 +108,12 @@ schema_paths = [
     "./schemas/member_invoice_applied_discounts.sql",
     "./schemas/member_charges.sql",
     "./schemas/stripe_webhook_events.sql",
+    # Backend-executed tracked operations. task_items FKs tasks + members +
+    # member_memberships + membership_plan_prices, so both load after those —
+    # and tasks must precede task_items (the glob would order them
+    # alphabetically backwards).
+    "./schemas/tasks.sql",
+    "./schemas/task_items.sql",
     "./schemas/*.sql",
     "./access_rules/*.sql"
 ]
