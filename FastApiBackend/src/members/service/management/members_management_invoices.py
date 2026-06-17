@@ -86,16 +86,19 @@ class MembersManagementInvoices(MembersManagementBase):
         self,
         member_id: UUID,
     ) -> PreviewInvoice | None:
-        """Fetch the upcoming (next) invoice for a member's account.
+        """Fetch the upcoming (next) invoice for a member's OWN subscription.
 
-        Resolves the paying account (a linked child resolves to its
-        parent), reads its monthly Stripe subscription id, and previews
-        the next invoice. Returns ``None`` when the account has no
-        recurring subscription or Stripe has no upcoming invoice for it —
-        an empty state, not an error.
+        Under per-payer billing each payer funds their own subscription,
+        so ``member_id`` is the PAYER whose invoice is wanted: this reads
+        that member's OWN monthly Stripe subscription id (no parent
+        resolution) and previews its next invoice. Returns ``None`` when
+        the member has no recurring subscription of their own (e.g. their
+        memberships are paid by someone else) or Stripe has no upcoming
+        invoice for it — an empty state, not an error. To see the invoice
+        for a membership a parent pays, pass the parent's id.
 
         Args:
-            member_id: The member whose next invoice to preview.
+            member_id: The payer whose next invoice to preview.
 
         Returns:
             The upcoming invoice preview, or ``None`` when there is none.

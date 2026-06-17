@@ -24,6 +24,8 @@ from src.members.schema.members_crm_members_list_schema import (
 )
 from src.members.service.member_details.members_billing_grouper import (
     MembersBillingGrouper,
+    MembershipOverviewContext,
+    OverviewKind,
 )
 from src.members.service.members_status_mapping import is_membership_overdue
 
@@ -40,6 +42,7 @@ class _StubSupplementary:
 
 def _membership_row(*, status: str, next_due: date | None, **overrides) -> dict:
     """Build one member_details.sql-shaped row for the grouper."""
+    member_id = uuid4()
     row = {
         "plan_id": uuid4(),
         "plan_name": "Unlimited",
@@ -58,7 +61,9 @@ def _membership_row(*, status: str, next_due: date | None, **overrides) -> dict:
         "freeze_start_date": None,
         "freeze_end_date": None,
         "on_outdated_price": False,
-        "member_id": uuid4(),
+        "member_id": member_id,
+        # Defaults to self-pay (payer == member); override for linked payers.
+        "paid_by_member_id": member_id,
         "item_id": uuid4(),
         "first_name": "Ada",
         "last_name": "Lovelace",
@@ -148,79 +153,146 @@ def test_plan_total_sums_only_active_member_shares():
     assert grouped[0].members[child["member_id"]].total_price == 3000
 
 
-def test_overview_reflects_overdue_with_price():
-    grouper = MembersBillingGrouper()
+class _PayerSupp:
+    """Stub supplementary exposing a single payer profile by id."""
 
-    overview, linked = grouper.build_membership_overview(
-        linked_to_id=None,
-        monthly_total=12000,
-        has_trial=False,
-        has_cancelled=False,
-        has_frozen=False,
-        has_overdue=True,
-        paying_count=1,
-        supplementary=None,
+    def __init__(self, payer_id, first_name: str) -> None:
+        class _Profile:
+            pass
+
+        profile = _Profile()
+        profile.first_name = first_name
+        self.profiles_dict = {payer_id: profile}
+
+
+def _overview_ctx(**overrides) -> MembershipOverviewContext:
+    """Build a MembershipOverviewContext with self-pay defaults.
+
+    ``own_payer_ids`` defaults to the viewer paying themselves; override it
+    (and ``kind``) for the beneficiary / payer-for-others cases.
+    """
+    member_id = overrides.pop("viewed_member_id", uuid4())
+    defaults = {
+        "kind": OverviewKind.self_pay,
+        "total": 12000,
+        "has_trial": False,
+        "has_cancelled": False,
+        "has_frozen": False,
+        "has_overdue": False,
+        "paying_count": 1,
+        "members_paid_for_count": 0,
+        "own_payer_ids": frozenset({member_id}),
+        "viewed_member_id": member_id,
+    }
+    defaults.update(overrides)
+    return MembershipOverviewContext(**defaults)
+
+
+def test_overview_self_pay_singular():
+    grouper = MembersBillingGrouper()
+    ctx = _overview_ctx(total=13784, paying_count=1)
+    assert (
+        grouper.build_membership_overview(ctx, None)
+        == "Paying $137.84/mo for 1 Membership"
     )
 
-    assert linked is None
-    assert overview == "Overdue · $120/mo for 1 Membership"
+
+def test_overview_self_pay_plural():
+    grouper = MembersBillingGrouper()
+    ctx = _overview_ctx(total=20000, paying_count=2)
+    assert (
+        grouper.build_membership_overview(ctx, None)
+        == "Paying $200/mo for 2 Memberships"
+    )
+
+
+def test_overview_reflects_overdue_with_price():
+    grouper = MembersBillingGrouper()
+    ctx = _overview_ctx(total=12000, has_overdue=True, paying_count=1)
+    assert (
+        grouper.build_membership_overview(ctx, None)
+        == "Overdue · $120/mo for 1 Membership"
+    )
 
 
 def test_overview_reflects_overdue_without_price():
     grouper = MembersBillingGrouper()
-
-    overview, _ = grouper.build_membership_overview(
-        linked_to_id=None,
-        monthly_total=0,
-        has_trial=False,
-        has_cancelled=False,
-        has_frozen=False,
-        has_overdue=True,
-        paying_count=1,
-        supplementary=None,
-    )
-
-    assert overview == "Overdue for 1 Membership"
+    ctx = _overview_ctx(total=0, has_overdue=True, paying_count=1)
+    assert grouper.build_membership_overview(ctx, None) == "Overdue for 1 Membership"
 
 
-def test_overview_linked_shows_own_total_with_payer_suffix():
-    """A linked account reads like a normal member's line — its OWN total +
-    count — with a '(Paid by <name>)' suffix instead of the parent's bill."""
+def test_overview_pays_for_others_counts_self_plus_others():
+    """A payer-for-others reads 'across N members' — N counts the payer too
+    when they hold a membership in the set (parent + 2 kids = 3)."""
     grouper = MembersBillingGrouper()
-    parent_id = uuid4()
-
-    class _Bruce:
-        first_name = "Bruce"
-
-    class _Supp:
-        profiles_dict = {parent_id: _Bruce()}
-
-    overview, linked = grouper.build_membership_overview(
-        linked_to_id=parent_id,
-        monthly_total=7000,  # the CHILD's own sum, passed by the service
-        has_trial=False,
-        has_cancelled=False,
-        has_frozen=False,
-        has_overdue=False,
-        paying_count=1,
-        supplementary=_Supp(),
+    ctx = _overview_ctx(
+        kind=OverviewKind.pays_for_others,
+        total=41250,
+        members_paid_for_count=3,
+        paying_count=3,
+    )
+    assert (
+        grouper.build_membership_overview(ctx, None)
+        == "Paying $412.50/mo across 3 members"
     )
 
-    assert overview == "Paying $70/mo for 1 Membership (Paid by Bruce)"
-    assert linked == parent_id
+
+def test_overview_beneficiary_all_paid_by_parent():
+    """A child whose memberships are all paid by the parent reads
+    '$X/mo worth of memberships (Paid by <parent>)' — no 'self'."""
+    grouper = MembersBillingGrouper()
+    child_id, parent_id = uuid4(), uuid4()
+    ctx = _overview_ctx(
+        kind=OverviewKind.beneficiary,
+        total=13784,
+        viewed_member_id=child_id,
+        own_payer_ids=frozenset({parent_id}),
+    )
+    assert (
+        grouper.build_membership_overview(ctx, _PayerSupp(parent_id, "Cynthia"))
+        == "$137.84/mo worth of memberships (Paid by Cynthia)"
+    )
 
 
-def test_price_summary_frozen_wins_over_overdue():
+def test_overview_beneficiary_split_self_and_parent():
+    """A split beneficiary lists self first, then the parent."""
+    grouper = MembersBillingGrouper()
+    child_id, parent_id = uuid4(), uuid4()
+    ctx = _overview_ctx(
+        kind=OverviewKind.beneficiary,
+        total=20000,
+        viewed_member_id=child_id,
+        own_payer_ids=frozenset({child_id, parent_id}),
+    )
+    assert (
+        grouper.build_membership_overview(ctx, _PayerSupp(parent_id, "Cynthia"))
+        == "$200/mo worth of memberships (Paid by self / Cynthia)"
+    )
+
+
+def test_overview_frozen_wins_over_overdue():
     # A frozen account pauses billing, so frozen takes precedence.
     grouper = MembersBillingGrouper()
-
-    summary = grouper._build_price_summary(
-        12000,
-        False,  # has_trial
-        False,  # has_cancelled
-        True,  # has_frozen
-        True,  # has_overdue
-        0,  # paying_count
+    ctx = _overview_ctx(
+        total=12000, has_frozen=True, has_overdue=True, paying_count=0
     )
+    assert grouper.build_membership_overview(ctx, None) == "Account is Frozen"
 
-    assert summary == "Account is Frozen"
+
+def test_overview_beneficiary_frozen_keeps_payer_suffix():
+    """A frozen beneficiary still shows who pays — the suffix survives the
+    salient-state short-circuit."""
+    grouper = MembersBillingGrouper()
+    child_id, parent_id = uuid4(), uuid4()
+    ctx = _overview_ctx(
+        kind=OverviewKind.beneficiary,
+        total=0,
+        has_frozen=True,
+        paying_count=0,
+        viewed_member_id=child_id,
+        own_payer_ids=frozenset({parent_id}),
+    )
+    assert (
+        grouper.build_membership_overview(ctx, _PayerSupp(parent_id, "Cynthia"))
+        == "Account is Frozen (Paid by Cynthia)"
+    )
