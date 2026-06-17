@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     # repeat idempotent work).
     reconciler_invoice_lookback_days: int = 1
     reconciler_stripe_page_size: int = 100
+    # Subscription-orphan sweep: only cancel a Stripe sub with no live DB link
+    # once it is older than this. Without metadata we can't lock an unlinked sub
+    # to its family, so a sub a live op just created (writeback not yet stamped)
+    # must age past any in-flight op before it can be judged an orphan.
+    reconciler_orphan_min_age_seconds: int = 3600
 
     # Billing cycle anchors
     monthly_billing_anchor_day: int = 1  # 1st of month

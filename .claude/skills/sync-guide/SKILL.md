@@ -798,7 +798,7 @@ directly.
 
 > **Deep source of truth: the `reconciler-guide` skill + `reconciler.mermaid`.**
 > This section is the engine-side summary; that skill owns the sweep mechanics
-> (orchestrator, the three step-services, the record seam).
+> (orchestrator, the four step-services, the record seam).
 
 A twice-daily sweep that runs the engine on a clock, independent of user activity,
 closing the "self-heals only when a member is touched" gap. It is **load-bearing**,
@@ -809,10 +809,11 @@ settles promptly via `settle_once_discounts` (§6); the sweep is the backstop fo
 missed webhook).
 
 It lives in `src/reconciler/` (router-less), is started by APScheduler in the app
-lifespan, and is a thin orchestrator (`ReconcilerService.run`) that runs three
-step-services in order — invoice-fetch -> orphan-cleanup -> push (no
-reconciler-wide lock — safety is the per-family `PayingMemberLock` every payment op
-already holds):
+lifespan, and is a thin orchestrator (`ReconcilerService.run`) that runs four
+step-services in order — invoice-fetch -> orphan-cleanup -> push ->
+subscription-orphans (cancel live Stripe subs with no live DB link; runs last so
+push re-links real subs first — owned by `reconciler-guide`) (no reconciler-wide
+lock — safety is the per-family `PayingMemberLock` every payment op already holds):
 
 - **`InvoiceFetchSweep`** — missed-webhook backstop. Per gym Connect account it
   lists the configured lookback of invoices / payments / refunds and re-records each
