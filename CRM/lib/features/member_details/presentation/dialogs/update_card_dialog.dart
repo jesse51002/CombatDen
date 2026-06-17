@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
@@ -131,6 +132,10 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
               color: DesignConstants.text,
             ),
           ),
+          _RecurringImpactWarning(
+            memberName: widget.memberName,
+            replacing: card != null,
+          ),
           CardFieldBox(
             onComplete: (isComplete) {
               if (isComplete != _complete) {
@@ -188,6 +193,63 @@ class _CurrentCardLine extends StatelessWidget {
                 'Expires ${card.expMonth}/${card.expYear}',
             style: DesignConstants.p.copyWith(
               color: DesignConstants.text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Spells out the global side effect of saving a card: it becomes the
+/// member's DEFAULT, so every recurring membership they have bills to it —
+/// not a one-off for a single purchase.
+class _RecurringImpactWarning extends StatelessWidget {
+  final String memberName;
+  final bool replacing;
+
+  const _RecurringImpactWarning({
+    required this.memberName,
+    required this.replacing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(
+        DesignConstants.paddingSmall,
+      ),
+      decoration: BoxDecoration(
+        color: DesignConstants.backgroundColor,
+        borderRadius: BorderRadius.circular(
+          DesignConstants.radiusSmall,
+        ),
+        border: Border.all(color: DesignConstants.okYellow),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingSmall,
+        children: [
+          Icon(
+            Symbols.warning_sharp,
+            size: DesignConstants.iconSizeSmall,
+            weight: DesignConstants.iconWeight,
+            color: DesignConstants.okYellow,
+          ),
+          Expanded(
+            child: Text(
+              replacing
+                  ? 'This is $memberName’s saved DEFAULT card. '
+                      'Saving a new one re-bills EVERY recurring '
+                      'membership they have to it going forward '
+                      '— it’s not a one-off for a single charge.'
+                  : 'This becomes $memberName’s saved DEFAULT '
+                      'card — every recurring membership they '
+                      'have bills to it going forward, not just '
+                      'one charge.',
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.text,
+              ),
             ),
           ),
         ],

@@ -7,33 +7,23 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
-/// Collects a one-off card for the start wizard's one-time
+/// Collects a ONE-OFF card for the start wizard's one-time
 /// charge. Tokenizes the card client-side and pops a
-/// [CustomCardCapture] (pm id + brand/last-four + the
-/// save-as-default choice) — it never dispatches a bloc
-/// event, so the card is not saved unless the caller, after a
-/// successful charge, acts on [CustomCardCapture.setAsDefault].
-///
-/// When the payer has no card on file ([forceDefault]) the
-/// save-as-default choice is hidden and forced on — a
-/// one-time-only purchase with no saved card must leave one.
+/// [CustomCardCapture] (pm id + brand/last-four) — it never
+/// dispatches a bloc event and is **never saved as the
+/// default**: the backend charges it once (attach → pay →
+/// detach) for today's one-time purchase only. Saving a
+/// default card is the separate "Edit card on file" flow.
 class OneTimeCardDialog extends StatefulWidget {
-  final bool forceDefault;
-
-  const OneTimeCardDialog({
-    super.key,
-    required this.forceDefault,
-  });
+  const OneTimeCardDialog({super.key});
 
   static Future<CustomCardCapture?> show({
     required BuildContext context,
-    required bool forceDefault,
   }) {
     return showDialog<CustomCardCapture>(
       context: context,
       barrierDismissible: false,
-      builder: (_) =>
-          OneTimeCardDialog(forceDefault: forceDefault),
+      builder: (_) => const OneTimeCardDialog(),
     );
   }
 
@@ -47,7 +37,6 @@ class _OneTimeCardDialogState
   bool _complete = false;
   bool _submitting = false;
   String? _error;
-  late bool _setAsDefault = widget.forceDefault;
 
   Future<void> _submit() async {
     if (!_complete || _submitting) return;
@@ -67,7 +56,6 @@ class _OneTimeCardDialogState
           pmId: pm.id,
           brand: pm.card.brand ?? 'Card',
           lastFour: pm.card.last4 ?? '••••',
-          setAsDefault: _setAsDefault,
         ),
       );
     } catch (_) {
@@ -84,21 +72,17 @@ class _OneTimeCardDialogState
   Widget build(BuildContext context) {
     return AppDialog(
       showCloseButton: !_submitting,
-      title: 'Use a different card',
+      title: 'Use a one-off card',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
           Text(
-            widget.forceDefault
-                ? 'This card is charged once for today’s '
-                    'one-time purchase and saved as the '
-                    'default card. Card details go straight '
-                    'to Stripe.'
-                : 'This card is charged once for today’s '
-                    'one-time purchase. Card details go '
-                    'straight to Stripe and are never '
-                    'stored on our servers.',
+            'This card is charged once for today’s one-time '
+            'purchase only. It is NOT saved and does not '
+            'change the card on file — recurring memberships '
+            'keep billing the saved card. Card details go '
+            'straight to Stripe.',
             style: DesignConstants.p.copyWith(
               color: DesignConstants.text,
             ),
@@ -110,12 +94,6 @@ class _OneTimeCardDialogState
               }
             },
           ),
-          if (!widget.forceDefault)
-            _SetDefaultToggle(
-              value: _setAsDefault,
-              onChanged: (v) =>
-                  setState(() => _setAsDefault = v),
-            ),
           if (_error != null)
             Text(
               _error!,
@@ -134,40 +112,6 @@ class _OneTimeCardDialogState
         secondaryOnPressed: _submitting
             ? null
             : () => Navigator.of(context).pop(),
-      ),
-    );
-  }
-}
-
-/// "Save as default" switch, shown only when the payer
-/// already has a card on file (otherwise the card is forced
-/// to become the default and the choice is hidden).
-class _SetDefaultToggle extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _SetDefaultToggle({
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SwitchListTile(
-      value: value,
-      onChanged: onChanged,
-      activeThumbColor: DesignConstants.primaryColor,
-      contentPadding: EdgeInsets.zero,
-      title: Text(
-        'Save as the default card',
-        style: DesignConstants.p,
-      ),
-      subtitle: Text(
-        'Replaces the card on file after this purchase '
-        'succeeds; future recurring cycles use it.',
-        style: DesignConstants.pSmall.copyWith(
-          color: DesignConstants.text2nd,
-        ),
       ),
     );
   }

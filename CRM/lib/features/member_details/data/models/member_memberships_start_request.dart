@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 
 part 'member_memberships_start_request.g.dart';
 
@@ -28,13 +29,9 @@ class MemberMembershipsStartRequest extends Equatable {
   final bool prorate;
   final bool paidWithCash;
 
-  /// One-off card for the one-time charge (null = saved
-  /// default); set only on PAY, never on preview.
-  final String? customPaymentMethodId;
-
-  /// Promote [customPaymentMethodId] to the saved default
-  /// after a successful charge.
-  final bool customCardSetDefault;
+  /// An optional card entered at checkout. Set only on PAY,
+  /// never on a preview.
+  final MemberMembershipsStartPayment? payment;
   final String idempotencyKey;
   final List<MemberMembershipsStartItem> memberships;
 
@@ -45,8 +42,7 @@ class MemberMembershipsStartRequest extends Equatable {
     required this.memberships,
     this.prorate = true,
     this.paidWithCash = false,
-    this.customPaymentMethodId,
-    this.customCardSetDefault = false,
+    this.payment,
   });
 
   MemberMembershipsStartRequest copyWith({
@@ -54,8 +50,7 @@ class MemberMembershipsStartRequest extends Equatable {
     String? gymId,
     bool? prorate,
     bool? paidWithCash,
-    String? customPaymentMethodId,
-    bool? customCardSetDefault,
+    MemberMembershipsStartPayment? payment,
     String? idempotencyKey,
     List<MemberMembershipsStartItem>? memberships,
   }) {
@@ -65,10 +60,7 @@ class MemberMembershipsStartRequest extends Equatable {
       gymId: gymId ?? this.gymId,
       prorate: prorate ?? this.prorate,
       paidWithCash: paidWithCash ?? this.paidWithCash,
-      customPaymentMethodId: customPaymentMethodId ??
-          this.customPaymentMethodId,
-      customCardSetDefault: customCardSetDefault ??
-          this.customCardSetDefault,
+      payment: payment ?? this.payment,
       idempotencyKey:
           idempotencyKey ?? this.idempotencyKey,
       memberships: memberships ?? this.memberships,
@@ -84,8 +76,7 @@ class MemberMembershipsStartRequest extends Equatable {
         gymId,
         prorate,
         paidWithCash,
-        customPaymentMethodId,
-        customCardSetDefault,
+        payment,
         idempotencyKey,
         memberships,
       ];

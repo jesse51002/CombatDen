@@ -8,6 +8,14 @@ import 'package:crm/core/constants/design_constants.dart';
 /// Card details go straight to Stripe and never reach our
 /// servers; this widget only reports completeness via
 /// [onComplete] — tokenization stays with the caller.
+///
+/// All colours are theme tokens so the Stripe field follows
+/// light/dark mode. The field's background is transparent, so
+/// it shows this box's [DesignConstants.card]; the typed text
+/// ([style]), the placeholders ([InputDecoration.hintStyle] →
+/// Stripe `::placeholder`) and the cursor must all be set, or
+/// the unset placeholder falls back to Stripe's dark default
+/// and reads as black-on-black in dark mode.
 class CardFieldBox extends StatelessWidget {
   final ValueChanged<bool> onComplete;
 
@@ -34,6 +42,13 @@ class CardFieldBox extends StatelessWidget {
           enablePostalCode: true,
           style: DesignConstants.p.copyWith(
             color: DesignConstants.text,
+          ),
+          cursorColor: DesignConstants.text,
+          decoration: InputDecoration(
+            border: InputBorder.none,
+            hintStyle: DesignConstants.p.copyWith(
+              color: DesignConstants.text2nd,
+            ),
           ),
           onCardChanged: (details) =>
               onComplete(details?.complete ?? false),

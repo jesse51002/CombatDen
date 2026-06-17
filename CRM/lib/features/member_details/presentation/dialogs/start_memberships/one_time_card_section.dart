@@ -7,19 +7,17 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 
 /// Payment-step section letting staff pay the ONE-TIME charge
 /// with a card entered now instead of the saved default.
-/// Shown only when the cart has a one-time / trial membership
-/// and the run isn't cash. Recurring memberships always bill
-/// the saved card — the clarifier says so on a mixed cart.
+/// Shown only for a PURELY one-time / trial cart that isn't
+/// cash — a cart with any recurring membership never offers
+/// it (recurring always bills the saved card).
 class OneTimeCardSection extends StatelessWidget {
   final CustomCardCapture? customCard;
-  final bool hasRecurring;
   final VoidCallback onAddOrChange;
   final VoidCallback onRemove;
 
   const OneTimeCardSection({
     super.key,
     required this.customCard,
-    required this.hasRecurring,
     required this.onAddOrChange,
     required this.onRemove,
   });
@@ -31,55 +29,40 @@ class OneTimeCardSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(
-          'One-time purchase card',
-          style: DesignConstants.h3,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: DesignConstants.spacingTiny,
+          children: [
+            Text(
+              'One-off card for this purchase',
+              style: DesignConstants.h3,
+            ),
+            Text(
+              'Charge just this one-time purchase to a '
+              'different card. It isn’t saved and isn’t '
+              'used for recurring memberships.',
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          ],
         ),
         if (card == null)
-          _AddCardPrompt(onAddOrChange: onAddOrChange)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: AppOutlineButton(
+              text: 'Use a one-off card',
+              borderRadius: DesignConstants.radiusSmall,
+              icon: const Icon(Symbols.add_card_sharp),
+              onPressed: onAddOrChange,
+            ),
+          )
         else
           _CapturedCardTile(
             card: card,
             onChange: onAddOrChange,
             onRemove: onRemove,
           ),
-        if (hasRecurring)
-          Text(
-            'Recurring memberships always bill the saved '
-            'card on file.',
-            style: DesignConstants.pSmall.copyWith(
-              color: DesignConstants.text2nd,
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _AddCardPrompt extends StatelessWidget {
-  final VoidCallback onAddOrChange;
-
-  const _AddCardPrompt({required this.onAddOrChange});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingSmall,
-      children: [
-        Text(
-          'Charge the one-time items to a different card '
-          'without saving it.',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text2nd,
-          ),
-        ),
-        AppOutlineButton(
-          text: 'Use a different card',
-          borderRadius: DesignConstants.radiusSmall,
-          icon: const Icon(Symbols.add_card_sharp),
-          onPressed: onAddOrChange,
-        ),
       ],
     );
   }
@@ -132,9 +115,7 @@ class _CapturedCardTile extends StatelessWidget {
                   style: DesignConstants.p,
                 ),
                 Text(
-                  card.setAsDefault
-                      ? 'Will become the default card'
-                      : 'One-time use',
+                  'One-time use · not saved',
                   style: DesignConstants.pSmall.copyWith(
                     color: DesignConstants.text2nd,
                   ),

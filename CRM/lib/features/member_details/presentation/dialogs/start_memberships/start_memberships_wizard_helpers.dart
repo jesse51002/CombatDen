@@ -1,5 +1,6 @@
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
@@ -132,8 +133,7 @@ MemberMembershipsStartRequest? buildStartRequest({
   required bool paidWithCash,
   required List<StartMembershipParticipant> configMembers,
   required Map<String, List<MembershipDraft>> drafts,
-  String? customPaymentMethodId,
-  bool customCardSetDefault = false,
+  MemberMembershipsStartPayment? payment,
 }) {
   final items = <MemberMembershipsStartItem>[];
   for (final m in configMembers) {
@@ -150,8 +150,7 @@ MemberMembershipsStartRequest? buildStartRequest({
     idempotencyKey: idempotencyKey,
     prorate: prorate,
     paidWithCash: paidWithCash,
-    customPaymentMethodId: customPaymentMethodId,
-    customCardSetDefault: customCardSetDefault,
+    payment: payment,
     memberships: items,
   );
 }

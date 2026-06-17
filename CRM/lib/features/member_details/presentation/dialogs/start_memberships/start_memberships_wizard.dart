@@ -10,11 +10,11 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
-import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
@@ -247,14 +247,18 @@ class _StartMembershipsWizardState
 
   /// The wire request. The one-off card rides on PAY only
   /// ([forPay]) — never on a preview — and only when paying
-  /// by card with a one-time item in the cart.
+  /// by card for a PURELY one-time cart (no recurring, which
+  /// always bills the saved default).
   MemberMembershipsStartRequest? _buildRequest(
     String idempotencyKey, {
     bool forPay = false,
   }) {
     final card = _customCard;
-    final useCard =
-        forPay && !_paidWithCash && _hasOneTime && card != null;
+    final useCard = forPay &&
+        !_paidWithCash &&
+        _hasOneTime &&
+        !_hasRecurring &&
+        card != null;
     return buildStartRequest(
       idempotencyKey: idempotencyKey,
       payerMemberId: _payer.memberId,
@@ -263,9 +267,13 @@ class _StartMembershipsWizardState
       paidWithCash: _paidWithCash,
       configMembers: _configMembers,
       drafts: _drafts,
-      customPaymentMethodId: useCard ? card.pmId : null,
-      customCardSetDefault:
-          useCard && card.setAsDefault,
+      // A one-off card is never saved as the default (set_default
+      // stays false) — it pays today's one-time invoice only.
+      payment: useCard
+          ? MemberMembershipsStartPayment(
+              paymentMethodId: card.pmId,
+            )
+          : null,
     );
   }
 
@@ -369,14 +377,14 @@ class _StartMembershipsWizardState
     final items = retryItemsFor(result.failed, _drafts);
     if (items.isEmpty) return;
     // A retry re-bills the same one-off card (Stripe keeps it
-    // attached after a decline so it can be reused), but only
-    // when a failed item is actually one-time.
+    // attached after a decline so it can be reused) — only for
+    // a purely one-time cart, the only shape that can hold a
+    // custom card.
     final card = _customCard;
-    final retryHasOneTime = result.failed.any(
-      (f) => f.planType != PlanType.recurring,
-    );
-    final useCard =
-        !_paidWithCash && retryHasOneTime && card != null;
+    final useCard = !_paidWithCash &&
+        _hasOneTime &&
+        !_hasRecurring &&
+        card != null;
     _bloc.add(StartMembershipsRequested(
       MemberMembershipsStartRequest(
         payerMemberId: _payer.memberId,
@@ -384,9 +392,11 @@ class _StartMembershipsWizardState
         idempotencyKey: const Uuid().v4(),
         prorate: _prorate,
         paidWithCash: _paidWithCash,
-        customPaymentMethodId: useCard ? card.pmId : null,
-        customCardSetDefault:
-            useCard && card.setAsDefault,
+        payment: useCard
+            ? MemberMembershipsStartPayment(
+                paymentMethodId: card.pmId,
+              )
+            : null,
         memberships: items,
       ),
     ));
@@ -462,12 +472,10 @@ class _StartMembershipsWizardState
   // ----- One-off card (one-time charge) -----
 
   Future<void> _onAddOrChangeCustomCard() async {
-    // No saved card to fall back on → this card must become
-    // the default; the dialog hides + forces the toggle.
-    final forceDefault = _payerDetail?.cardOnFile == null;
+    // A pure one-off — never saved, never the default. It pays
+    // today's one-time invoice once; no card on file is needed.
     final captured = await OneTimeCardDialog.show(
       context: context,
-      forceDefault: forceDefault,
     );
     if (captured == null || !mounted) return;
     setState(() => _customCard = captured);

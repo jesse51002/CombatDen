@@ -4,19 +4,17 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/card_wallet_section.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/one_time_card_section.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/saved_card_section.dart';
 
-/// Step 7 — settlement. Card on file (the wallet UI is a
-/// known placeholder — see [CardWalletSection]) vs the REAL
-/// cash toggle (`paid_with_cash`: the one-time invoice
-/// settles out-of-band, the recurring first invoice is
-/// marked paid out-of-band, future cycles still auto-charge
-/// the card). When the cart has a one-time / trial item the
-/// [OneTimeCardSection] lets staff pay it with a card entered
-/// now. Echoes the preview totals — the last thing seen
-/// before PAY is the number.
+/// Step 7 — settlement. The saved card on file ([SavedCardSection],
+/// editable) vs the REAL cash toggle (`paid_with_cash`: the one-time
+/// invoice settles out-of-band, the recurring first invoice is marked
+/// paid out-of-band, future cycles still auto-charge the card). When the
+/// cart is purely one-time / trial the [OneTimeCardSection] lets staff
+/// pay it with a one-off card entered now. Echoes the preview totals —
+/// the last thing seen before PAY is the number.
 class StartPaymentStep extends StatelessWidget {
   final CardOnFile? cardOnFile;
   final bool paidWithCash;
@@ -70,23 +68,29 @@ class StartPaymentStep extends StatelessWidget {
                 style: DesignConstants.p,
               ),
               subtitle: Text(
-                'Today’s charges are recorded as '
-                'settled in cash; future recurring '
-                'cycles still charge the card.',
+                'Today’s charges are settled in cash. '
+                'Future recurring cycles auto-charge the '
+                'card on file UNLESS you mark each '
+                'invoice paid in cash first — so a '
+                'cash-only subscription is fully '
+                'supported, no card required.',
                 style: DesignConstants.pSmall.copyWith(
                   color: DesignConstants.text2nd,
                 ),
               ),
             ),
             if (!paidWithCash)
-              CardWalletSection(
+              SavedCardSection(
                 cardOnFile: cardOnFile,
-                onAddNew: onAddNewCard,
+                hasRecurring: hasRecurring,
+                onAddOrEdit: onAddNewCard,
               ),
-            if (!paidWithCash && hasOneTime)
+            // A one-off card is offered ONLY for a purely one-time cart
+            // (no recurring) — recurring always bills the saved card, so a
+            // mixed cart never shows the option.
+            if (!paidWithCash && hasOneTime && !hasRecurring)
               OneTimeCardSection(
                 customCard: customCard,
-                hasRecurring: hasRecurring,
                 onAddOrChange: onAddOrChangeCustomCard,
                 onRemove: onRemoveCustomCard,
               ),
