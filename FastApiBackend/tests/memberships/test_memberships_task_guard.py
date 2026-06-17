@@ -41,15 +41,17 @@ async def _seed_applied_membership(db_pool, member, gym_id, plan) -> UUID:
         result = await session.execute(
             text(
                 "INSERT INTO member_memberships_unfiltered "
-                "(member_id, gym_id, plan_id, price_id, start_date, "
-                " last_paid_date, stripe_item_id, total_price, "
+                "(member_id, paid_by_member_id, gym_id, plan_id, price_id, "
+                " start_date, last_paid_date, stripe_item_id, total_price, "
                 " stripe_sync_status) "
-                "VALUES (:member_id, :gym_id, :plan_id, :price_id, "
-                " CURRENT_DATE, CURRENT_DATE, :line_id, 5000, 'applied') "
+                "VALUES (:member_id, :paid_by_member_id, :gym_id, :plan_id, "
+                " :price_id, CURRENT_DATE, CURRENT_DATE, :line_id, 5000, "
+                " 'applied') "
                 "RETURNING item_id"
             ),
             {
                 "member_id": str(member.member_id),
+                "paid_by_member_id": str(member.member_id),
                 "gym_id": str(gym_id),
                 "plan_id": str(plan.plan_id),
                 "price_id": str(plan.price_id),

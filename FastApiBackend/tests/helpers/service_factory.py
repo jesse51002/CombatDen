@@ -325,13 +325,11 @@ def build_membership_plans_service(
     price_svc = PaymentsStripePriceService(stripe_client)
     membership_svc = PaymentsStripeMembershipService(stripe_client, price_svc)
     gym_stripe_svc = GymStripeService(db_pool)
-    sync_svc = build_payment_sync_service(db_pool, stripe_client)
     discounts_svc = build_discounts_service(db_pool)
     return MembershipPlansService(
         db_pool,
         gym_stripe_svc,
         membership_svc,
         price_svc,
-        sync_svc,
         discounts_svc,
     )
