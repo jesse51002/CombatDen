@@ -13,6 +13,9 @@ import 'package:crm/features/memberships/bloc/plans/plans_event.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_bloc.dart';
 import 'package:crm/features/memberships/bloc/waivers/waivers_event.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
+import 'package:crm/features/tasks/bloc/tasks_event.dart';
+import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/memberships/presentation/dialogs/edit_discount_dialog.dart';
 import 'package:crm/features/memberships/presentation/tabs/discounts_tab.dart';
 import 'package:crm/features/memberships/presentation/tabs/plans_tab.dart';
@@ -32,9 +35,15 @@ class MembershipsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gymId = selectedGym.gymId ?? '';
-    return RepositoryProvider<MembershipsRepository>(
-      create: (_) =>
-          MembershipsRepository(apiClient: ApiClient()),
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<MembershipsRepository>(
+          create: (_) => MembershipsRepository(apiClient: ApiClient()),
+        ),
+        RepositoryProvider<TasksRepository>(
+          create: (_) => TasksRepository(apiClient: ApiClient()),
+        ),
+      ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider<PlansBloc>(
@@ -51,6 +60,11 @@ class MembershipsScreen extends StatelessWidget {
             create: (ctx) => WaiversBloc(
               repository: ctx.read<MembershipsRepository>(),
             )..add(WaiversInitRequested(gymId)),
+          ),
+          BlocProvider<TasksBloc>(
+            create: (ctx) => TasksBloc(
+              repository: ctx.read<TasksRepository>(),
+            )..add(TasksOngoingRequested(gymId)),
           ),
         ],
         child: AppShell(

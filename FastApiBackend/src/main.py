@@ -21,15 +21,19 @@ from src.ranks.ranks_router import ranks_router
 from src.reconciler.reconciler_scheduler import build_scheduler
 from src.rewards.rewards_router import rewards_router
 from src.stripe_webhooks.stripe_webhooks_router import stripe_webhooks_router
+from src.tasks.tasks_router import tasks_router
 from src.waivers.waivers_router import waivers_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown."""
+    # The twice-daily reconciler sweep also recovers stale tasks (re-runs
+    # unfinished tasks whose in-process execution died) as one of its steps.
     scheduler = None
     if settings.reconciler_enabled:
         scheduler = build_scheduler(app.container)
+    if scheduler is not None:
         scheduler.start()
     try:
         yield
@@ -76,6 +80,9 @@ def create_app() -> FastAPI:
     application.include_router(membership_plans_router)
     application.include_router(stripe_webhooks_router)
     # === end CRM billing routers ===
+
+    # Tracked background operations (read-only polling endpoints).
+    application.include_router(tasks_router)
 
     return application
 

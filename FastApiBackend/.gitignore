@@ -6,8 +6,9 @@ dist/
 build/
 .eggs/
 
-# Virtual environment
-.venv/
+# Virtual environment (no trailing slash: also ignore a .venv *symlink*,
+# as worktree setups create — `.venv/` would only match a real directory).
+.venv
 
 # Environment
 .env

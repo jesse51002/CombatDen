@@ -50,7 +50,7 @@ from src.memberships.service.memberships_base import (
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
-from src.shared.db_first_helpers import staged_preview
+from src.shared.db_first_helpers import staged_preview, sync_or_revert
 from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 
@@ -117,16 +117,27 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
                 ),
             )
 
-        await self.add_applied_discounts(
+        inserted = await self.add_applied_discounts(
             item_id=item_id,
             member_id=member_id,
             gym_id=gym_id,
             discount_ids=discount_ids,
             apply_date=apply_date,
         )
-        await self._payment_sync.update_payments_recurring(
-            payer_member_id,
-            idempotency_key=idempotency_key,
+        # DB-first: the rows are inserted; the sync resolves + stamps them
+        # 'applied'. Verify the writeback landed, else revert the inserts so the
+        # DB never drifts out of sync with Stripe.
+        await sync_or_revert(
+            sync_fn=lambda: self._payment_sync.update_payments_recurring(
+                payer_member_id,
+                idempotency_key=idempotency_key,
+            ),
+            revert_fn=lambda: self.delete_applied_discounts(
+                member_id, inserted,
+            ),
+            entity_name="member_membership_applied_discounts",
+            crm_pk=str(item_id),
+            verify_fn=lambda: self._applied_discounts_confirmed(inserted),
         )
         return None
 
@@ -182,10 +193,20 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
                 ),
             )
 
+        # Snapshot the rows BEFORE deleting so a failed sync can restore them.
+        # A hard-deleted row has no status to verify (the removal's effect on
+        # Stripe is execute_sync's, which still raises on failure) — so this is
+        # revert-on-exception only, no verify_fn.
+        snapshot = await self._read_applied_discounts_by_ids(applied_ids)
         await self.delete_applied_discounts(member_id, applied_ids)
-        await self._payment_sync.update_payments_recurring(
-            payer_member_id,
-            idempotency_key=idempotency_key,
+        await sync_or_revert(
+            sync_fn=lambda: self._payment_sync.update_payments_recurring(
+                payer_member_id,
+                idempotency_key=idempotency_key,
+            ),
+            revert_fn=lambda: self._restore_applied_discounts(snapshot),
+            entity_name="member_membership_applied_discounts",
+            crm_pk=str(item_id),
         )
         return None
 
@@ -259,6 +280,80 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
                         "applied_discount_id": str(applied_discount_id),
                         "member_id": str(member_id),
                         "sync_status": status.value,
+                    },
+                )
+            await session.commit()
+
+    async def _read_applied_discounts_by_ids(
+        self,
+        applied_discount_ids: list[UUID],
+    ) -> list[dict]:
+        """Read the unfiltered applied-discount rows for the given ids.
+
+        Reads the unfiltered base (service-role) so half-synced rows are visible.
+        Backs the add-verify (each row's sync status) and the remove-revert
+        snapshot (the fields needed to re-insert). Empty in -> empty out.
+        """
+        if not applied_discount_ids:
+            return []
+        sql = load_sql(_APPLIED_SQL / "get_applied_discounts_by_ids.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "applied_discount_ids": [
+                        str(i) for i in applied_discount_ids
+                    ],
+                },
+            )
+            return [dict(r) for r in result.mappings().fetchall()]
+
+    async def _applied_discounts_confirmed(
+        self,
+        applied_discount_ids: list[UUID],
+    ) -> bool:
+        """True iff every given applied-discount row was stamped ``applied``.
+
+        The add writeback (``set_applied_discount_coupon_id``) flips each
+        contributing row ``not_added`` -> ``applied``; an unconfirmed sync leaves
+        it un-stamped. An empty list is trivially confirmed (nothing to stamp).
+        """
+        if not applied_discount_ids:
+            return True
+        rows = await self._read_applied_discounts_by_ids(applied_discount_ids)
+        statuses = {
+            UUID(str(r["applied_discount_id"])): r["stripe_sync_status"]
+            for r in rows
+        }
+        return all(
+            statuses.get(aid) == StripeSyncStatus.applied.value
+            for aid in applied_discount_ids
+        )
+
+    async def _restore_applied_discounts(
+        self,
+        snapshot: list[dict],
+    ) -> None:
+        """Re-insert applied-discount rows from a pre-delete snapshot.
+
+        Reverts a remove whose sync did not land: re-inserts each removed row at
+        its original value version + end_date + status (new ids are fine — the
+        discount effect is restored and the next sync re-resolves its coupon).
+        """
+        if not snapshot:
+            return
+        insert_sql = load_sql(_APPLIED_SQL / "insert_applied_discount.sql")
+        async with self._db_pool.session() as session:
+            for row in snapshot:
+                await session.execute(
+                    text(insert_sql),
+                    {
+                        "item_id": str(row["item_id"]),
+                        "member_id": str(row["member_id"]),
+                        "gym_id": str(row["gym_id"]),
+                        "value_id": str(row["value_id"]),
+                        "end_date": row["end_date"],
+                        "sync_status": str(row["stripe_sync_status"]),
                     },
                 )
             await session.commit()

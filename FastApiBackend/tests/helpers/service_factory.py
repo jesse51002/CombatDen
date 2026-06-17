@@ -9,10 +9,16 @@ Standalone module — no pytest imports, no fixture dependencies.
 """
 
 from dataclasses import dataclass
+from uuid import UUID
+
+from schema.task import TaskType
 
 from src.discounts.service.discounts_service import DiscountsService
 from src.members.service.management.members_management_service import (
     MembersManagementService,
+)
+from src.memberships.service.memberships_reprice import (
+    MemberMembershipsReprice,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -61,6 +67,11 @@ from src.sync.service.sync_one_time import (
 from src.sync.service.sync_service import (
     PaymentSyncService,
 )
+from src.tasks.service.tasks_executor import TasksExecutor
+from src.tasks.service.tasks_membership_reprice_handler import (
+    MembershipRepriceTaskHandler,
+)
+from src.tasks.service.tasks_service import TasksService
 
 # ── Payment services namespace ──────────────────────────────────
 
@@ -217,8 +228,83 @@ def build_member_memberships_service(
         paying_lock,
         one_time_svc,
         discounts_svc,
+        build_memberships_reprice(db_pool, stripe_client),
         management_svc,
     )
+
+
+def build_membership_reprice_task_handler(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MembershipRepriceTaskHandler:
+    """Build the membership_reprice task handler (the tasks↔memberships glue).
+
+    Mirrors ``src/core/dependencies.py`` (membership_reprice_task_handler).
+    """
+    return MembershipRepriceTaskHandler(
+        db_pool=db_pool,
+        reprice_service=build_memberships_reprice(db_pool, stripe_client),
+        tasks_service=TasksService(db_pool),
+    )
+
+
+def build_tasks_executor(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> TasksExecutor:
+    """Build the tasks executor with the reprice handler registered.
+
+    Mirrors ``src/core/dependencies.py`` (tasks_executor).
+    """
+    return TasksExecutor(
+        db_pool,
+        handlers={
+            TaskType.membership_reprice: (
+                build_membership_reprice_task_handler(db_pool, stripe_client)
+            ),
+        },
+    )
+
+
+def build_memberships_reprice(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MemberMembershipsReprice:
+    """Build the task-agnostic reprice service.
+
+    Mirrors ``src/core/dependencies.py`` (memberships_reprice).
+    """
+    gym_stripe_svc = GymStripeService(db_pool)
+    paying_lock = build_paying_member_lock(db_pool)
+    sync_svc = build_payment_sync_service(db_pool, stripe_client)
+    return MemberMembershipsReprice(
+        db_pool=db_pool,
+        payment_sync_service=sync_svc,
+        gym_stripe_service=gym_stripe_svc,
+        paying_lock=paying_lock,
+    )
+
+
+async def batch_reprice_plan(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+    gym_id: UUID,
+    plan_id: UUID,
+    prorate: bool = False,
+) -> tuple[UUID | None, int]:
+    """Run a per-plan batch reprice exactly as ``POST /reprice-plan`` does.
+
+    Mirrors the router: discover the plan's memberships to upgrade, create
+    one task, fire the background run. Returns ``(task_id, count)`` —
+    ``(None, 0)`` when nothing needs upgrading. Poll with
+    ``await_task_terminal``.
+    """
+    handler = build_membership_reprice_task_handler(db_pool, stripe_client)
+    executor = build_tasks_executor(db_pool, stripe_client)
+    task_id, count = await handler.create_batch(gym_id, plan_id, prorate)
+    if task_id is not None:
+        executor.start_in_background(task_id)
+    return task_id, count
 
 
 def build_discounts_service(
@@ -244,13 +330,11 @@ def build_membership_plans_service(
     price_svc = PaymentsStripePriceService(stripe_client)
     membership_svc = PaymentsStripeMembershipService(stripe_client, price_svc)
     gym_stripe_svc = GymStripeService(db_pool)
-    sync_svc = build_payment_sync_service(db_pool, stripe_client)
     discounts_svc = build_discounts_service(db_pool)
     return MembershipPlansService(
         db_pool,
         gym_stripe_svc,
         membership_svc,
         price_svc,
-        sync_svc,
         discounts_svc,
     )

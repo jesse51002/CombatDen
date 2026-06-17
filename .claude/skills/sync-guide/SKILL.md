@@ -150,7 +150,8 @@ converges Stripe to it.)
 | --- | --- |
 | `memberships_start.py` | a new membership's **recurring** group (its one-time group goes to `PaymentSyncOneTime` instead — §12) |
 | `memberships_cancel.py` | cancel a membership |
-| `memberships_update_price.py` | mid-cycle price swap |
+| `memberships_update_price.py` | requests a reprice (validates + creates the `membership_reprice` task; the executor below does the converge) |
+| `memberships_reprice.py` | the task-agnostic reprice op (cancel old row + insert successor, then converge; verify-or-revert) |
 | `memberships_discounts.py` | apply / remove a discount (then re-sync resolves the coupon) |
 
 These callers all live in `src/memberships/service/`.
@@ -188,7 +189,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
 `src/shared/db_first_helpers.py` encapsulates steps 2–3:
 
 0. **Pre-sync to a clean baseline — ONLY the prorating ops** (`start` and
-   `update_price`). Call the sync once FIRST (`_pre_sync_payments` on
+   the reprice executor). Call the sync once FIRST (`_pre_sync_payments` on
    `MemberMembershipsBase`), with a **fresh** idempotency key and default (no)
    proration, to converge the payer's DB↔Stripe state **before mutating**. It
    exists for one reason: a prorating op (`always_invoice`) must not **bill for
@@ -205,7 +206,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
 2. **Call the param-less sync** (`update_payments_recurring`, or
    `PaymentSyncFreeze.sync_freeze_state` for freeze) — it re-derives the desired
    state from that DB write and converges Stripe, then writes back
-   `stripe_sync_status`. (Note: a prorating op — start / update_price — thus runs
+   `stripe_sync_status`. (Note: a prorating op — start / the reprice — thus runs
    **two** syncs: the pre-sync converge, then this post-change converge; the
    non-prorating ops run just this one.)
 3. **Verify the writeback landed, and revert the DB write if it did not** — so the
@@ -221,30 +222,31 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    | --- | --- | --- | --- |
    | start (recurring) | insert pending row (`not_added`) | row flips `not_added → applied` | delete the pending row |
    | cancel | set `cancel_date` (status stays `applied`) | row flips `applied → deleted` | clear `cancel_date` |
-   | update_price | write new `price_id` + stage `migrating` | row flips `migrating → applied` | restore old `price_id`/`total_price`, reset `applied` |
+   | reprice (`MemberMembershipsReprice` — standalone, task-agnostic) | ONE txn: cancel old row effective today + insert successor at the new price (`not_added`) + copy live applied discounts | successor flips `not_added → applied` AND old row flips `applied → deleted` | delete the discount copies → delete the pending successor → clear the old row's `cancel_date` (still clearable pre-`deleted`); skipped if the successor's line already stamped (known-residual doctrine — the re-sync/reconciler finishes the converge) |
    | freeze / unfreeze | write / clear the freeze window | — (no membership-row status) | restore / re-clear the freeze window |
    | link / unlink | set / clear `account_linked_to_id` | — (child has no recurring) | unlink / re-link |
+   | add_discounts | insert applied-discount rows (`not_added`) | every inserted row flips `not_added → applied` | delete the inserted rows |
+   | remove_discounts | delete applied-discount rows (snapshot first) | — (no row left to stamp) | re-insert from the pre-delete snapshot |
 
    Callers whose DB change does not map to a single membership-row status
-   transition (freeze, link) pass `verify_fn=None` and get the achievable
-   guarantee: **revert-on-exception**.
+   transition (freeze, link, remove_discounts) pass `verify_fn=None` and get the
+   achievable guarantee: **revert-on-exception**. The discount callers verify /
+   revert the **applied-discount** rows rather than a membership row: add confirms
+   every inserted row reached `applied` and deletes them otherwise; remove can't
+   verify a hard-deleted row, so it snapshots the rows first and re-inserts them on
+   a failed sync.
 
-**Immutability is keyed on the real Stripe state, not a transient flag** — and the
-two columns differ on purpose:
+**Identity is fully immutable; only `cancel_date` is staged-reversible:**
 - **`cancel_date` (foreground, verified)** locks only once the membership is
   actually **removed from Stripe** (`stripe_sync_status = 'deleted'`,
   `trg_prevent_cancel_date_overwrite`). While the cancel is unconfirmed the column
   stays clearable, so the revert just clears `cancel_date` — **no status to stage
-  or un-stage** (cancel never uses `migrating`).
-- **`stripe_item_id`** is immutable **except while `stripe_sync_status = 'migrating'`**
-  (`trg_prevent_stripe_item_id_overwrite`). `migrating` is reserved for the **price
-  migration** (`update_price`): mutating the line id is safe then because a price
-  migration is a background-style converge, not a paying↔cancel transition. The
-  caller stages `migrating`, the writeback moves the line + stamps `applied`, after
-  which the id is immutable again. **`migrating` is ONLY for price migrations** —
-  add/cancel are foreground verified ops and never use it. (Engine half of the
-  rule the `migrating` enum value exists for — keep it in sync with the schema
-  triggers if either changes.)
+  or un-stage**.
+- **`stripe_item_id` and `price_id` are immutable once set, no exceptions, even at
+  service-role** (`trg_prevent_stripe_item_id_overwrite`,
+  `trg_prevent_price_id_overwrite`). Any move to a different price or line is a
+  NEW membership row — the reprice cancels the old row and inserts a successor;
+  nothing ever re-stamps an existing row's line id.
 
 > **Known residual:** if Stripe converged but the writeback failed to stamp the
 > column (rare — it is the last step), the revert undoes the DB change while Stripe
@@ -293,9 +295,16 @@ sequence is:
    sync-owned state** in one place: per-membership Stripe line id + next_due_date
    + `stripe_sync_status = 'applied'` (mapping the live items → rows by price),
    the coupon links (+ `applied` on the applied-discount rows), `deleted` on
-   cancelled rows confirmed gone from the live sub, the parent's sub id, each
+   every cancelled row (the desired state excludes cancelled rows, so the
+   converge removed each one's billing — even when its consolidated line id
+   stays live for the remaining family members), the parent's sub id, each
    membership's own post-discount price onto `total_price`, and the parent's
-   monthly total from Stripe's upcoming invoice.
+   monthly total from Stripe's upcoming invoice. **Each step is independently
+   guarded** — a failure in one is logged at ERROR and never aborts the others
+   (`write` never raises), so the writeback persists everything it *can* and any
+   step that didn't land self-heals on the next sync / reconciler run; notably one
+   bad coupon or membership row can't block the status stamp a caller's verify
+   reads (§8).
 
 Returns **`None`** — the sync writes everything it owns back to the DB; callers
 read the DB (the `applied` status) to confirm it landed, and use
@@ -710,11 +719,16 @@ from the Stripe invoice — it is the amount the discount math computed.
 `PaymentSyncWriteback._sync_payer_monthly_total` reads the **upcoming invoice**
 (`fetch_upcoming_invoice`, payments-guide) and sums its recurring lines onto the
 payer's monthly total (the payer's own `members` row); when `stripe_sub_id` is
-`None` (fully cancelled) it zeroes that total. **Writeback failures are logged at ERROR and never re-raised** —
-Stripe is authoritative and a later mutation / the reconciler re-corrects the
-mirror. (`update_stripe_item_id.sql` also exists in this folder; the membership
-lifecycle callers use it to write back a new line's `stripe_item_id` — owned by
-`memberships-guide`.)
+`None` (fully cancelled) it zeroes that total. **`write` is best-effort per step:
+every writeback runs under its own guard (`_run_step` for the single calls;
+per-iteration `try` inside `_apply_membership_rows` / `_apply_coupon_links`), so a
+failure is logged at ERROR and never re-raised and never aborts the remaining
+writebacks** — Stripe is authoritative and a later mutation / the reconciler
+re-corrects the mirror. (This is why a transient coupon-link failure can no longer
+block the `deleted`/`applied` stamp a caller's verify reads — the historical
+cancel-revert bug.) (`update_stripe_item_id.sql` also exists in this folder; the
+membership lifecycle callers use it to write back a new line's `stripe_item_id` —
+owned by `memberships-guide`.)
 
 ---
 
@@ -782,7 +796,7 @@ directly.
 
 > **Deep source of truth: the `reconciler-guide` skill + `reconciler.mermaid`.**
 > This section is the engine-side summary; that skill owns the sweep mechanics
-> (orchestrator, the three step-services, the record seam).
+> (orchestrator, the four step-services, the record seam).
 
 A twice-daily sweep that runs the engine on a clock, independent of user activity,
 closing the "self-heals only when a member is touched" gap. It is **load-bearing**,
@@ -793,10 +807,11 @@ settles promptly via `settle_once_discounts` (§6); the sweep is the backstop fo
 missed webhook).
 
 It lives in `src/reconciler/` (router-less), is started by APScheduler in the app
-lifespan, and is a thin orchestrator (`ReconcilerService.run`) that runs three
-step-services in order — invoice-fetch -> orphan-cleanup -> push (no
-reconciler-wide lock — safety is the per-family `PayingMemberLock` every payment op
-already holds):
+lifespan, and is a thin orchestrator (`ReconcilerService.run`) that runs four
+step-services in order — invoice-fetch -> orphan-cleanup -> push ->
+subscription-orphans (cancel live Stripe subs with no live DB link; runs last so
+push re-links real subs first — owned by `reconciler-guide`) (no reconciler-wide
+lock — safety is the per-family `PayingMemberLock` every payment op already holds):
 
 - **`InvoiceFetchSweep`** — missed-webhook backstop. Per gym Connect account it
   lists the configured lookback of invoices / payments / refunds and re-records each
@@ -863,8 +878,12 @@ compare-desired-vs-actual **skip-if-equal** guard on the push path — today
 - **`bulk_payment_sync` swallows per-membership errors** —
   `PaymentsResourceNotFoundError` and any `Exception` are logged at ERROR and the
   loop continues, so one member's broken Stripe state doesn't abort the batch.
-- **Price writeback never raises** — Stripe is authoritative; a failed mirror is
-  re-corrected by the next mutation or the reconciler.
+- **Writeback is best-effort per step; `write` never raises** — every step runs
+  under its own guard (`_run_step` + per-iteration `try` in the row/coupon loops),
+  so one failed write (a price, a coupon link, a status stamp) is logged at ERROR
+  and never aborts the rest. Stripe is authoritative; a failed mirror is re-corrected
+  by the next mutation or the reconciler, and the caller's verify/revert still
+  catches an un-stamped `applied`/`deleted` status independently.
 
 ---
 
@@ -910,7 +929,7 @@ amount).
    semantics in SQL:** the real path reads **only `not_added`** rows (the
    just-inserted, never-charged ones). An already-`applied` row is **never
    re-read** — re-reading would re-charge it — so, unlike the recurring read,
-   there is **no `applied` / `migrating` inclusion**. Reads the unfiltered base
+   there is **no `applied` inclusion**. Reads the unfiltered base
    (service-role), reusing the same family applied-discount read so each
    membership carries its discounts.
 2. **Group ONE-per-membership** (`_group_per_membership`, keyed by `item_id`).
@@ -966,10 +985,12 @@ convergence writeback" boundary.
 - **Writeback:** `sync_writeback.py` (`PaymentSyncWriteback.write` →
   `_apply_membership_rows` / `_sync_payer_monthly_total` / `_mark_removed_deleted`;
   per-row line id / next_due_date / `applied`, coupon links + status, `deleted` on
-  removed rows, sub id, each membership's own post-discount price → `total_price`,
-  and the **payer's** monthly total from Stripe's upcoming invoice — written to the
-  payer's own `members` row, all via `PaymentSyncQueries`). Writeback SQL:
-  `apply_membership_sync.sql`, `set_membership_post_discount_prices.sql`,
+  every cancelled row (stamped unconditionally after a successful converge — the
+  desired state excludes them, so a live-line diff would miss a row removed from a
+  consolidated shared line), sub id, each membership's own post-discount price →
+  `total_price`, and the **payer's** monthly total from Stripe's upcoming invoice —
+  written to the payer's own `members` row, all via `PaymentSyncQueries`). Writeback
+  SQL: `apply_membership_sync.sql`, `set_membership_post_discount_prices.sql`,
   `sync_profile_monthly_total.sql`, `get_cancelled_recurring.sql`,
   `mark_membership_deleted.sql`.
 - **Shared payer resolver:** `src/shared/payer_resolver.py`

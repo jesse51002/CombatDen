@@ -107,6 +107,20 @@ async def delete_member_data(
             ),
             {"id": str(member_id)},
         )
+        # Task records (e.g. a reprice task) FK both the member and their
+        # membership rows, so they go before the memberships. A task whose
+        # items are all removed goes too (tasks are per-gym, not per-member,
+        # so only now-empty tasks are deleted).
+        await session.execute(
+            text("DELETE FROM task_items WHERE member_id = :id"),
+            {"id": str(member_id)},
+        )
+        await session.execute(
+            text(
+                "DELETE FROM tasks WHERE NOT EXISTS "
+                "(SELECT 1 FROM task_items ti WHERE ti.task_id = tasks.task_id)"
+            ),
+        )
         await session.execute(
             text("DELETE FROM member_memberships_unfiltered WHERE member_id = :id"),
             {"id": str(member_id)},

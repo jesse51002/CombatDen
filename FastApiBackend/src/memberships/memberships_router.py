@@ -11,6 +11,8 @@ from fastapi.security import HTTPAuthorizationCredentials
 from src.core.dependencies import DependencyInjector
 from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
+    MemberMembershipsBatchRepriceRequest,
+    MemberMembershipsBatchRepriceResponse,
     MemberMembershipsCancelResponse,
     MemberMembershipsChargeCardRequest,
     MemberMembershipsFreezeRequest,
@@ -21,6 +23,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsStartResponse,
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
+    MemberMembershipsUpdatePriceResponse,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -30,6 +33,12 @@ from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
 from src.shared.auth import Auth, security
+from src.tasks.service.tasks_executor import TasksExecutor
+from src.tasks.service.tasks_membership_reprice_handler import (
+    MembershipRepriceTaskHandler,
+)
+from src.tasks.service.tasks_service import TasksService
+from src.tasks.tasks_exceptions import MembershipInTaskError
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +75,9 @@ async def cancel_membership(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
 ) -> MemberMembershipsCancelResponse:
     """Cancel a specific membership for a member.
 
@@ -90,8 +102,14 @@ async def cancel_membership(
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
+        await tasks_service.assert_memberships_not_in_task([item_id])
         cancel_date = await memberships_service.cancel(item_id, member_id, idempotency_key)
         return MemberMembershipsCancelResponse(cancel_date=cancel_date)
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -336,19 +354,23 @@ async def start_membership(
 
 @member_memberships_router.put(
     "/price",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Upgrade membership to the plan's current price",
+    response_model=MemberMembershipsUpdatePriceResponse,
+    summary="Reprice ONE membership to the plan's current price",
     description=(
-        "Moves a membership onto its plan's currently active "
-        "price. Swaps the old price for the active one in "
-        "Stripe, then updates the CRM row. If the membership "
-        "is already on the active price, no CRM update occurs "
-        "but Stripe is still re-synced defensively."
+        "Moves a membership onto its plan's currently active price — a "
+        "DIRECT, synchronous reprice (cancel-old-row + insert-successor + "
+        "Stripe converge), like cancel. Returns the successor membership id "
+        "(the same id when it was already on the price — a no-op). Tasks are "
+        "only for the per-plan BATCH endpoint. A membership inside an "
+        "unfinished batch task is rejected (409)."
     ),
     responses={
-        204: {"description": "Price updated successfully"},
+        200: {"description": "Repriced; the successor membership id"},
+        400: {"description": "Invalid request (cancelled / ended membership)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {"description": "Membership is inside an unfinished task"},
+        502: {"description": "Stripe error"},
     },
 )
 @inject
@@ -359,25 +381,36 @@ async def update_membership_price(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> None:
-    """Upgrade a membership to its plan's currently active price.
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
+) -> MemberMembershipsUpdatePriceResponse:
+    """Reprice one membership to its plan's active price (direct; 200 + id).
 
     Args:
         request: Update price request with prorate flag.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
+        tasks_service: Injected tasks service (the in-task guard — a
+            membership mid-batch-task is rejected 409).
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        await memberships_service.update_price(
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
+        new_item_id = await memberships_service.update_price(
             item_id=request.item_id,
             member_id=request.member_id,
-            idempotency_key=request.idempotency_key,
             prorate=request.prorate,
         )
+        return MemberMembershipsUpdatePriceResponse(item_id=new_item_id)
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -404,6 +437,81 @@ async def update_membership_price(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update membership price",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/reprice-plan",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=MemberMembershipsBatchRepriceResponse,
+    summary="Batch-upgrade a plan's members to its active price",
+    description=(
+        "Upgrades EVERY member on the plan to the plan's currently active "
+        "price. The backend auto-discovers every live membership not already "
+        "on the active price (skipping any already mid-task), creates one "
+        "tracked task with an item per membership, runs it in the "
+        "background, and returns the task_id — poll GET /api/v1/tasks/"
+        "{task_id} for per-membership progress. Returns task_id=null when "
+        "nothing needs upgrading."
+    ),
+    responses={
+        202: {"description": "Batch accepted; poll the returned task"},
+        400: {"description": "Invalid request"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized for this gym"},
+    },
+)
+@inject
+async def batch_reprice_plan(
+    request: MemberMembershipsBatchRepriceRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    reprice_task_handler: MembershipRepriceTaskHandler = Depends(
+        Provide[DependencyInjector.membership_reprice_task_handler]
+    ),
+    tasks_executor: TasksExecutor = Depends(
+        Provide[DependencyInjector.tasks_executor]
+    ),
+) -> MemberMembershipsBatchRepriceResponse:
+    """Batch-reprice a plan's members to its active price (202 + task_id).
+
+    Args:
+        request: Batch reprice request (plan_id, gym_id, prorate).
+        credentials: Bearer token credentials.
+        auth: Injected auth service.
+        reprice_task_handler: Injected membership_reprice task handler.
+        tasks_executor: Injected tasks executor (fires the run).
+    """
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee(request.gym_id, user_payload)
+
+    try:
+        task_id, count = await reprice_task_handler.create_batch(
+            gym_id=request.gym_id,
+            plan_id=request.plan_id,
+            prorate=request.prorate,
+        )
+        if task_id is not None:
+            tasks_executor.start_in_background(task_id)
+        return MemberMembershipsBatchRepriceResponse(
+            task_id=task_id,
+            membership_count=count,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to batch-reprice plan %s (gym %s)",
+            request.plan_id,
+            request.gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to batch-reprice plan",
         ) from None
 
 
@@ -531,69 +639,6 @@ async def preview_cancel_membership(
 
 
 @member_memberships_router.post(
-    "/price/preview",
-    response_model=DueNowVsRecurringPreview | None,
-    summary="Preview updating a membership's price",
-    description=(
-        "Dry-run of the update-price endpoint: runs every "
-        "validation and returns the Stripe invoice preview for "
-        "the post-swap subscription state."
-    ),
-    responses={
-        200: {"description": "Preview retrieved successfully"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
-    },
-)
-@inject
-async def preview_update_membership_price(
-    request: MemberMembershipsUpdatePriceRequest,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    memberships_service: MemberMembershipsService = Depends(
-        Provide[DependencyInjector.member_memberships_service]
-    ),
-) -> DueNowVsRecurringPreview | None:
-    """Preview what updating a membership's price would charge."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
-
-    try:
-        return await memberships_service.preview_update_price(
-            item_id=request.item_id,
-            member_id=request.member_id,
-            prorate=request.prorate,
-        )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to preview update membership price: item_id=%s, member_id=%s",
-            request.item_id,
-            request.member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to preview membership price update",
-        ) from None
-
-
-@member_memberships_router.post(
     "/discounts/add",
     response_model=DueNowVsRecurringPreview | None,
     summary="Add applied-discount rows to a membership (or preview)",
@@ -618,12 +663,16 @@ async def add_membership_discounts(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
 ) -> DueNowVsRecurringPreview | None:
     """Add applied-discount rows to a membership, or preview the addition."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
         return await memberships_service.add_discounts(
             item_id=request.item_id,
             member_id=request.member_id,
@@ -631,6 +680,11 @@ async def add_membership_discounts(
             idempotency_key=request.idempotency_key,
             preview=request.preview,
         )
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -684,12 +738,16 @@ async def remove_membership_discounts(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
 ) -> DueNowVsRecurringPreview | None:
     """Remove applied-discount rows from a membership, or preview the removal."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
         return await memberships_service.remove_discounts(
             item_id=request.item_id,
             member_id=request.member_id,
@@ -697,6 +755,11 @@ async def remove_membership_discounts(
             idempotency_key=request.idempotency_key,
             preview=request.preview,
         )
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -753,17 +816,26 @@ async def mark_membership_paid_cash(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
+    tasks_service: TasksService = Depends(
+        Provide[DependencyInjector.tasks_service]
+    ),
 ) -> None:
     """Mark a recurring membership's open invoice as paid via cash."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
+        await tasks_service.assert_memberships_not_in_task([request.item_id])
         await memberships_service.mark_paid_cash(
             item_id=request.item_id,
             member_id=request.member_id,
             idempotency_key=request.idempotency_key,
         )
+    except MembershipInTaskError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():

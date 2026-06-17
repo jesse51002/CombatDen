@@ -225,18 +225,53 @@ class MemberMembershipsChargeCardRequest(BaseModel):
 
 
 class MemberMembershipsUpdatePriceRequest(BaseModel):
-    """Upgrade a membership to its plan's currently active price.
+    """Reprice ONE membership onto its plan's currently active price.
 
-    The target price is not caller-supplied: the service
-    always moves the membership onto the plan's single
-    ``is_active = true`` price. If the membership is already
-    there the call is a CRM no-op but still re-syncs Stripe.
+    The member-detail upgrade: the target is not caller-supplied — the
+    reprice moves the membership onto the plan's single ``is_active = true``
+    price. This is a DIRECT, synchronous op (NOT a task — tasks are only for
+    the per-plan batch): the endpoint reprices and returns the new membership
+    id. A membership already on the active price is a no-op (returns its own
+    id). ``idempotency_key`` is accepted for client compatibility; the
+    reprice mints its own Stripe keys.
     """
 
     item_id: UUID
     member_id: UUID
     prorate: bool = False
     idempotency_key: UUID
+
+
+class MemberMembershipsUpdatePriceResponse(BaseModel):
+    """The reprice's successor membership row id (== ``item_id`` on a no-op)."""
+
+    item_id: UUID
+
+
+class MemberMembershipsBatchRepriceRequest(BaseModel):
+    """Upgrade EVERY member on a plan to that plan's active price (batch).
+
+    The only task workflow: the backend auto-discovers every active
+    membership on ``plan_id`` whose price is not the plan's ``is_active``
+    price (skipping any already mid-task), creates one ``membership_reprice``
+    task with an item per membership, runs it in the background, and returns
+    the task id to poll. The caller never supplies a member list.
+    """
+
+    plan_id: UUID
+    gym_id: UUID
+    prorate: bool = False
+
+
+class MemberMembershipsBatchRepriceResponse(BaseModel):
+    """The batch reprice task (``task_id`` is null when nothing needs it).
+
+    Poll ``GET /api/v1/tasks/{task_id}`` for per-membership progress.
+    ``membership_count`` is how many memberships the task is repricing.
+    """
+
+    task_id: UUID | None
+    membership_count: int
 
 
 class MemberMembershipsAddDiscountsRequest(BaseModel):

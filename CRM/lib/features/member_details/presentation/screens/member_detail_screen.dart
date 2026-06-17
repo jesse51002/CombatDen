@@ -10,6 +10,9 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
+import 'package:crm/features/tasks/bloc/tasks_event.dart';
+import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/features/member_details/presentation/sections/member_detail_grid.dart';
 import 'package:crm/features/member_details/presentation/sections/member_search_sidebar.dart';
 import 'package:crm/features/member_details/presentation/sections/profile_header_section.dart';
@@ -44,15 +47,30 @@ class MemberDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepositoryProvider<MemberRepository>(
-      create: (_) =>
-          MemberRepository(apiClient: ApiClient()),
-      child: BlocProvider<MemberDetailBloc>(
-        create: (ctx) => MemberDetailBloc(
-          repository: ctx.read<MemberRepository>(),
-        )..add(
-            MemberDetailRequested(memberId, gymId: _gymId),
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<MemberRepository>(
+          create: (_) => MemberRepository(apiClient: ApiClient()),
+        ),
+        RepositoryProvider<TasksRepository>(
+          create: (_) => TasksRepository(apiClient: ApiClient()),
+        ),
+      ],
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<MemberDetailBloc>(
+            create: (ctx) => MemberDetailBloc(
+              repository: ctx.read<MemberRepository>(),
+            )..add(
+                MemberDetailRequested(memberId, gymId: _gymId),
+              ),
           ),
+          BlocProvider<TasksBloc>(
+            create: (ctx) => TasksBloc(
+              repository: ctx.read<TasksRepository>(),
+            )..add(TasksOngoingRequested(_gymId)),
+          ),
+        ],
         child: _MemberDetailView(gymId: _gymId),
       ),
     );

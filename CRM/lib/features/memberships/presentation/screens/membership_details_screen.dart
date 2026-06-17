@@ -7,6 +7,8 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/memberships/presentation/screens/membership_details_form.dart';
+import 'package:crm/features/tasks/bloc/tasks_bloc.dart';
+import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 
 /// Full-page create / edit screen for a membership plan (Name,
@@ -15,19 +17,42 @@ import 'package:crm/shared/widgets/app_shell.dart';
 class MembershipDetailsScreen extends StatelessWidget {
   final MembershipPlanResponse? plan;
 
-  const MembershipDetailsScreen({super.key, this.plan});
+  // Surfaces a queued reprice's task id and target price to the caller
+  // (the Plans tab), which owns the shared TasksBloc and progress bar.
+  final void Function(String taskId, int targetPriceCents)?
+      onRepriceTaskStarted;
+
+  const MembershipDetailsScreen({
+    super.key,
+    this.plan,
+    this.onRepriceTaskStarted,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return RepositoryProvider<MembershipsRepository>(
-      create: (_) => MembershipsRepository(apiClient: ApiClient()),
-      child: AppShell(
-        activeRoute: AppRoutes.memberships,
-        child: Builder(
-          builder: (ctx) => MembershipDetailsForm(
-            repository: ctx.read<MembershipsRepository>(),
-            gymId: selectedGym.gymId ?? '',
-            plan: plan,
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<MembershipsRepository>(
+          create: (_) => MembershipsRepository(apiClient: ApiClient()),
+        ),
+        RepositoryProvider<TasksRepository>(
+          create: (_) => TasksRepository(apiClient: ApiClient()),
+        ),
+      ],
+      child: BlocProvider<TasksBloc>(
+        create: (ctx) => TasksBloc(
+          repository: ctx.read<TasksRepository>(),
+        ),
+        child: AppShell(
+          activeRoute: AppRoutes.memberships,
+          child: Builder(
+            builder: (ctx) => MembershipDetailsForm(
+              repository: ctx.read<MembershipsRepository>(),
+              tasksRepository: ctx.read<TasksRepository>(),
+              gymId: selectedGym.gymId ?? '',
+              plan: plan,
+              onRepriceTaskStarted: onRepriceTaskStarted,
+            ),
           ),
         ),
       ),

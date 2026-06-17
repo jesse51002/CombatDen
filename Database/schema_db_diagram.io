@@ -615,6 +615,53 @@ Ref: member_charges.refunds_charge_id > member_charges.charge_id
 
 Ref: stripe_webhook_events.gym_id > gyms.gym_id
 
+// Backend-executed tracked operations (background ops the CRM polls).
+Table tasks {
+  task_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null]
+  task_type task_type [not null, note: 'enum: membership_reprice']
+  status task_status [not null, default: 'pending', note: 'enum: pending | running | completed | failed']
+  created_at timestamptz [not null, default: `now()`]
+  started_at timestamptz
+  finished_at timestamptz
+
+  indexes {
+    (gym_id, status)
+    status [note: 'partial: pending/running (crash-recovery sweep)']
+  }
+}
+
+Table task_items {
+  task_item_id uuid [primary key, default: `uuid_generate_v4()`]
+  task_id uuid [not null]
+  gym_id uuid [not null]
+  member_id uuid [not null]
+  status task_status [not null, default: 'pending']
+  attempt_count integer [not null, default: 0]
+  error_message text
+  old_item_id uuid [note: 'membership row the op acts on']
+  new_item_id uuid [note: 'successor row; stamped in the op transaction = DB phase done']
+  target_price_id uuid [note: 'membership_reprice param']
+  prorate boolean [note: 'membership_reprice param']
+  created_at timestamptz [not null, default: `now()`]
+  started_at timestamptz
+  finished_at timestamptz
+
+  indexes {
+    task_id
+    old_item_id [note: 'partial: NOT NULL (in-task guard)']
+    new_item_id [note: 'partial: NOT NULL (in-task guard + orphan-sweep exclusion)']
+  }
+}
+
+Ref: tasks.gym_id > gyms.gym_id
+Ref: task_items.task_id > tasks.task_id
+Ref: task_items.gym_id > gyms.gym_id
+Ref: task_items.member_id > members.member_id
+Ref: task_items.old_item_id > member_memberships_unfiltered.item_id
+Ref: task_items.new_item_id > member_memberships_unfiltered.item_id
+Ref: task_items.target_price_id > membership_plan_prices_unfiltered.price_id
+
 // ============================================================
 // VideoService demo content (video_* tables). The gym here is a gym-TYPE
 // template keyed by a text id (e.g. 'boxing') — NOT the customer `gyms` table.

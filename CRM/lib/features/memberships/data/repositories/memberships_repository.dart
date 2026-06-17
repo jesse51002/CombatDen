@@ -6,7 +6,8 @@ import 'package:crm/features/memberships/data/models/discount_create_request.dar
 import 'package:crm/features/memberships/data/models/discount_update_request.dart';
 import 'package:crm/features/memberships/data/models/member_waiver_status.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_create_request.dart';
-import 'package:crm/features/memberships/data/models/membership_plan_migrate_all_request.dart';
+import 'package:crm/features/memberships/data/models/member_memberships_reprice_all_request.dart';
+import 'package:crm/features/memberships/data/models/member_memberships_reprice_all_response.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_price_request.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_price_with_count.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_update_request.dart';
@@ -104,18 +105,25 @@ class MembershipsRepository {
         .toList();
   }
 
-  /// `POST /api/v1/membership_plans/migrate-all` — queues a background
-  /// sync moving every member on an older price onto the current price.
-  Future<void> migrateAllToCurrentPrice(
+  /// `POST /api/v1/member_memberships/reprice-plan` — queues a background
+  /// task that upgrades every member on this plan to its current active price.
+  /// Returns the task id (nullable — null when nothing needs upgrading) and
+  /// the membership count. HTTP 202.
+  Future<MemberMembershipsRepriceAllResponse> repriceAllOnPlan(
     String planId,
-    String gymId,
-  ) async {
-    await _apiClient.post(
-      '/api/v1/membership_plans/migrate-all',
-      data: MembershipPlanMigrateAllRequest(
+    String gymId, {
+    bool prorate = false,
+  }) async {
+    final response = await _apiClient.post(
+      '/api/v1/member_memberships/reprice-plan',
+      data: MemberMembershipsRepriceAllRequest(
         planId: planId,
         gymId: gymId,
+        prorate: prorate,
       ).toJson(),
+    );
+    return MemberMembershipsRepriceAllResponse.fromJson(
+      response.data as Map<String, dynamic>,
     );
   }
 

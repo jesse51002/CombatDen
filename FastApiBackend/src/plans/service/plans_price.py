@@ -1,4 +1,4 @@
-"""Price management and member migration for membership plans."""
+"""Price management for membership plans."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from fastapi import BackgroundTasks
 from schema.membership_plan import DurationUnit, PlanType
 from sqlalchemy import text
 
@@ -40,15 +39,12 @@ if TYPE_CHECKING:
         PaymentsStripePriceService,
     )
     from src.shared.gym_stripe_service import GymStripeService
-    from src.sync.service.sync_service import (
-        PaymentSyncService,
-    )
 
 logger = logging.getLogger(__name__)
 
 
 class MembershipPlansPrice(MembershipPlansBase):
-    """Set/update plan prices and migrate members."""
+    """Set / update plan prices."""
 
     def __init__(
         self,
@@ -57,7 +53,6 @@ class MembershipPlansPrice(MembershipPlansBase):
         stripe_membership_service: PaymentsStripeMembershipService,
         stripe_price_service: PaymentsStripePriceService,
         discounts_service: DiscountsService,
-        payment_sync_service: PaymentSyncService,
     ) -> None:
         super().__init__(
             db_pool,
@@ -66,7 +61,6 @@ class MembershipPlansPrice(MembershipPlansBase):
             stripe_price_service,
             discounts_service,
         )
-        self._payment_sync = payment_sync_service
 
     # ── Set Price ──────────────────────────────────────────────
 
@@ -212,97 +206,7 @@ class MembershipPlansPrice(MembershipPlansBase):
 
         return self._build_price_response(new_price_row)
 
-    # ── Migrate All Members ────────────────────────────────────
-
-    async def migrate_all_members(
-        self,
-        plan_id: UUID,
-        gym_id: UUID,
-        background_tasks: BackgroundTasks,
-    ) -> None:
-        """Migrate all active members on a plan to the current price.
-
-        Finds all member_ids with active memberships on this plan
-        and queues a background payment sync.
-
-        Args:
-            plan_id: The plan whose members to migrate.
-            gym_id: The gym owning the plan.
-            background_tasks: FastAPI background tasks.
-
-        Raises:
-            ValueError: If the plan is not found.
-        """
-        await self._get_plan(plan_id, gym_id)
-
-        affected = await self._get_affected_member_ids(plan_id)
-        if not affected:
-            return
-
-        self._run_migration(
-            affected,
-            background_tasks,
-        )
-
-    # ── Migrate Specific Members ───────────────────────────────
-
-    async def migrate_members(
-        self,
-        plan_id: UUID,
-        gym_id: UUID,
-        member_ids: list[UUID],
-        background_tasks: BackgroundTasks,
-    ) -> None:
-        """Migrate specific members to the current active price.
-
-        Args:
-            plan_id: The plan (validated for existence).
-            gym_id: The gym owning the plan.
-            member_ids: Explicit list of members to migrate.
-            background_tasks: FastAPI background tasks.
-
-        Raises:
-            ValueError: If the plan is not found.
-        """
-        await self._get_plan(plan_id, gym_id)
-
-        if not member_ids:
-            return
-
-        self._run_migration(
-            member_ids,
-            background_tasks,
-        )
-
     # ── Private ────────────────────────────────────────────────
-
-    def _run_migration(
-        self,
-        member_ids: list[UUID],
-        background_tasks: BackgroundTasks,
-    ) -> None:
-        """Queue a bulk payment sync as a background task."""
-        background_tasks.add_task(
-            self._payment_sync.bulk_payment_sync,
-            member_ids,
-        )
-
-    async def _get_affected_member_ids(
-        self,
-        plan_id: UUID,
-    ) -> list[UUID]:
-        """Find member_ids with active memberships on this plan."""
-        sql = load_sql(
-            SQL_DIR / "membership_plans_get_affected_members.sql",
-        )
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"plan_id": str(plan_id)},
-            )
-            rows = result.mappings().fetchall()
-
-        return [UUID(str(r["member_id"])) for r in rows]
 
     async def _delete_pending_price(
         self,
