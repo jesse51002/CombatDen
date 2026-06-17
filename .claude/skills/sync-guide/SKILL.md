@@ -224,10 +224,16 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    | update_price | write new `price_id` + stage `migrating` | row flips `migrating → applied` | restore old `price_id`/`total_price`, reset `applied` |
    | freeze / unfreeze | write / clear the freeze window | — (no membership-row status) | restore / re-clear the freeze window |
    | link / unlink | set / clear `account_linked_to_id` | — (child has no recurring) | unlink / re-link |
+   | add_discounts | insert applied-discount rows (`not_added`) | every inserted row flips `not_added → applied` | delete the inserted rows |
+   | remove_discounts | delete applied-discount rows (snapshot first) | — (no row left to stamp) | re-insert from the pre-delete snapshot |
 
    Callers whose DB change does not map to a single membership-row status
-   transition (freeze, link) pass `verify_fn=None` and get the achievable
-   guarantee: **revert-on-exception**.
+   transition (freeze, link, remove_discounts) pass `verify_fn=None` and get the
+   achievable guarantee: **revert-on-exception**. The discount callers verify /
+   revert the **applied-discount** rows rather than a membership row: add confirms
+   every inserted row reached `applied` and deletes them otherwise; remove can't
+   verify a hard-deleted row, so it snapshots the rows first and re-inserts them on
+   a failed sync.
 
 **Immutability is keyed on the real Stripe state, not a transient flag** — and the
 two columns differ on purpose:
