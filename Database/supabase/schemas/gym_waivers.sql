@@ -19,6 +19,11 @@ CREATE TABLE gym_waivers (
     name VARCHAR NOT NULL CHECK (name <> ''),
     current_version_id UUID,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    -- The undeletable default authorized-payer waiver (one per gym). Seeded as a
+    -- copy of the platform default; editable like any waiver, but never archived
+    -- or deleted (trg_prevent_default_waiver_removal) so the authorized-payer
+    -- gate always has a document to sign.
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (waiver_id),
@@ -26,3 +31,39 @@ CREATE TABLE gym_waivers (
 );
 
 CREATE INDEX idx_gym_waivers_gym ON gym_waivers (gym_id) WHERE is_deleted = false;
+
+-- At most one default waiver per gym.
+CREATE UNIQUE INDEX idx_gym_waivers_one_default
+    ON gym_waivers (gym_id) WHERE is_default = true;
+
+-- The default waiver is undeletable: it can be edited (which versions normally
+-- via gym_waiver_versions) but never archived (is_deleted) or hard-deleted, and
+-- is_default itself is fixed once set. Enforced for ALL roles (incl.
+-- service_role) so the authorized-payer gate always has a document to sign.
+CREATE OR REPLACE FUNCTION prevent_default_waiver_removal()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF OLD.is_default THEN
+            RAISE EXCEPTION
+                'Cannot delete the default waiver for gym %', OLD.gym_id;
+        END IF;
+        RETURN OLD;
+    END IF;
+    -- UPDATE: block archiving a default and block toggling is_default.
+    IF OLD.is_default AND NEW.is_deleted THEN
+        RAISE EXCEPTION
+            'Cannot archive the default waiver for gym %', OLD.gym_id;
+    END IF;
+    IF OLD.is_default <> NEW.is_default THEN
+        RAISE EXCEPTION
+            'is_default is immutable on gym_waivers (waiver %)', OLD.waiver_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_prevent_default_waiver_removal
+    BEFORE UPDATE OR DELETE ON gym_waivers
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_default_waiver_removal();

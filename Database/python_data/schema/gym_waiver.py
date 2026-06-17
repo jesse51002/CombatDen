@@ -9,3 +9,4 @@ class GymWaiverCreate(SeedModel):
     name: str
     current_version_id: UUID | None = None
     is_deleted: bool = False
+    is_default: bool = False

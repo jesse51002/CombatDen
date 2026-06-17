@@ -240,6 +240,7 @@ Table gym_waivers {
   name varchar [not null]
   current_version_id uuid
   is_deleted boolean [not null, default: false]
+  is_default boolean [not null, default: false, note: 'undeletable default authorized-payer waiver; <=1 per gym']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
@@ -276,6 +277,18 @@ Table member_waiver_signatures {
   ip_address inet
   user_agent varchar
   content_hash varchar [not null]
+}
+
+Table member_authorized_payers {
+  member_id uuid [not null]
+  payer_member_id uuid [not null]
+  gym_id uuid [not null]
+  signature_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (member_id, payer_member_id) [pk]
+  }
 }
 
 Table member_activities {
@@ -352,6 +365,11 @@ Ref: member_waiver_signatures.gym_id > gyms.gym_id
 Ref: member_waiver_signatures.member_id > members.member_id
 Ref: member_waiver_signatures.waiver_id > gym_waivers.waiver_id
 Ref: member_waiver_signatures.waiver_version_id > gym_waiver_versions.version_id
+
+Ref: member_authorized_payers.member_id > members.member_id
+Ref: member_authorized_payers.payer_member_id > members.member_id
+Ref: member_authorized_payers.gym_id > gyms.gym_id
+Ref: member_authorized_payers.signature_id > member_waiver_signatures.signature_id
 
 Ref: member_activities.member_id > members.member_id
 Ref: member_activities.gym_id > gyms.gym_id

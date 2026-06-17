@@ -142,6 +142,7 @@ GYM_WAIVERS: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "created_at",  # auto-generated timestamp
         "current_version_id",  # set by the publish-version flow, not a raw edit
+        "is_default",  # the undeletable default; set once at seed/create
         # name + is_deleted + updated_at are the writable update surface.
     }
 )
@@ -176,6 +177,17 @@ MEMBER_WAIVER_SIGNATURES: frozenset[str] = frozenset(
         "ip_address",  # audit trail, captured at sign time
         "user_agent",  # audit trail, captured at sign time
         "content_hash",  # frozen copy of the signed version's hash
+    }
+)
+
+MEMBER_AUTHORIZED_PAYERS: frozenset[str] = frozenset(
+    {
+        # Backend-managed authorization rows — clients never write any column.
+        "member_id",  # identity (the member being paid for)
+        "payer_member_id",  # identity (the authorized payer / signer)
+        "gym_id",  # identity FK, per-gym resource
+        "signature_id",  # the gating waiver signature
+        "created_at",  # auto-generated timestamp
     }
 )
 

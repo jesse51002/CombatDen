@@ -79,6 +79,9 @@ schema_paths = [
     "./schemas/gym_waivers.sql",
     "./schemas/gym_waiver_versions.sql",
     "./schemas/member_waiver_signatures.sql",
+    # Authorization layer (who may pay for whom). FKs members +
+    # member_waiver_signatures (the gating signature), so loads after both.
+    "./schemas/member_authorized_payers.sql",
     "./schemas/member_activities.sql",
     "./schemas/gym_history.sql",
     # VideoService demo content (video_* tables) — ordered by FK dependency.
