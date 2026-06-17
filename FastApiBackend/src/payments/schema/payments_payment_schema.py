@@ -47,11 +47,11 @@ class PaymentsInvoicePaymentCreateRequest(BaseModel):
     header line on the hosted invoice/receipt) — distinct from each item's
     line-level ``description``.
 
-    ``payment_method_id`` charges a SPECIFIC card (a one-off card entered at
-    checkout) instead of the customer's default: the service attaches it, pays
-    with it, then — when ``detach_payment_method_after`` — detaches it, never
-    touching the saved default. It is mutually exclusive with
-    ``paid_out_of_band``.
+    ``payment_method_id`` charges a SPECIFIC one-off card (entered at checkout)
+    instead of the customer's default: the service attaches it, pays with it,
+    then detaches it — never touching the saved default. (Saving a card as the
+    default is a separate, up-front ``update_customer`` step, not this path.)
+    It is mutually exclusive with ``paid_out_of_band``.
     """
 
     stripe_customer_id: str
@@ -61,7 +61,6 @@ class PaymentsInvoicePaymentCreateRequest(BaseModel):
     description: str | None = None
     paid_out_of_band: bool = False
     payment_method_id: str | None = None
-    detach_payment_method_after: bool = True
     idempotency_key: str
 
     @model_validator(mode="after")

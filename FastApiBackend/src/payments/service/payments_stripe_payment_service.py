@@ -182,10 +182,7 @@ class PaymentsStripePaymentService:
             ),
         )
 
-        if (
-            request.payment_method_id is not None
-            and request.detach_payment_method_after
-        ):
+        if request.payment_method_id is not None:
             await self._detach_after_pay(
                 request.payment_method_id,
                 stripe_account_id,

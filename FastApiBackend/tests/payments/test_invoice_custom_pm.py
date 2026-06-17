@@ -87,7 +87,7 @@ async def _one_time_price(membership_service, stripe_account_id, created):
     return resp.prices[0].stripe_price_id
 
 
-def _custom_pm_request(customer_id, price_id, pm_id, *, detach=True):
+def _custom_pm_request(customer_id, price_id, pm_id):
     return PaymentsInvoicePaymentCreateRequest(
         stripe_customer_id=customer_id,
         items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
@@ -98,7 +98,6 @@ def _custom_pm_request(customer_id, price_id, pm_id, *, detach=True):
             plan_id=uuid4(),
         ),
         payment_method_id=pm_id,
-        detach_payment_method_after=detach,
     )
 
 
@@ -115,7 +114,7 @@ async def test_custom_pm_charges_and_leaves_default(
     created,
 ):
     """A one-off card pays the invoice; the saved default is untouched and
-    the one-off card is detached after a successful pay (default ``detach``)."""
+    the one-off card is always detached after a successful pay."""
     customer_id, default_pm = await _customer_with_pm(
         members_service, stripe_client, stripe_account_id, connect_opts, created
     )
@@ -142,46 +141,6 @@ async def test_custom_pm_charges_and_leaves_default(
         one_off_pm, options=connect_opts
     )
     assert one_off.customer is None, "the one-off card must be detached"
-
-
-async def test_custom_pm_kept_when_not_detaching(
-    payment_service,
-    members_service,
-    membership_service,
-    stripe_client,
-    stripe_account_id,
-    connect_opts,
-    created,
-):
-    """``detach_payment_method_after=False`` keeps the one-off card attached
-    (the start op uses this when it then promotes the card to the default)."""
-    customer_id, default_pm = await _customer_with_pm(
-        members_service, stripe_client, stripe_account_id, connect_opts, created
-    )
-    price_id = await _one_time_price(
-        membership_service, stripe_account_id, created
-    )
-    one_off_pm = await create_payment_method(stripe_client, connect_opts)
-
-    resp = await payment_service.create_invoice_payment(
-        _custom_pm_request(
-            customer_id, price_id, one_off_pm, detach=False
-        ),
-        stripe_account_id,
-    )
-    assert resp.status == "paid"
-
-    one_off = await stripe_client.client.v1.payment_methods.retrieve_async(
-        one_off_pm, options=connect_opts
-    )
-    assert one_off.customer == customer_id, "the card must stay attached"
-    # The default is unchanged; the customer-delete teardown detaches the card.
-    customer = await stripe_client.client.v1.customers.retrieve_async(
-        customer_id, options=connect_opts
-    )
-    assert (
-        customer.invoice_settings.default_payment_method == default_pm
-    )
 
 
 def test_custom_pm_and_cash_are_mutually_exclusive():

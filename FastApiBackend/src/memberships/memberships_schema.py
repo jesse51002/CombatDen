@@ -54,6 +54,23 @@ class MemberMembershipsStartItem(BaseModel):
     custom_discounts: list[DiscountValue] = []
 
 
+class MemberMembershipsStartPayment(BaseModel):
+    """A card entered at checkout for a start request.
+
+    ``payment_method_id`` is a Stripe PaymentMethod (``pm_...``).
+    ``set_default`` promotes it to the payer's saved default **up-front**
+    (before any charge), so it bills BOTH the one-time invoice and the
+    recurring subscription. Recurring can only bill the saved default, so a
+    request that contains any recurring membership MUST set ``set_default``
+    (enforced in the start op, where plan types are known). A purely one-time
+    cart may leave it ``False`` — then the card is a one-off (attach → pay →
+    detach) and the payer's saved default is untouched.
+    """
+
+    payment_method_id: str
+    set_default: bool = False
+
+
 class MemberMembershipsStartRequest(BaseModel):
     """Start a linked family's memberships in one call.
 
@@ -66,38 +83,32 @@ class MemberMembershipsStartRequest(BaseModel):
     charge group (one-time invoice / recurring converge), so a client retry
     of the same request dedups both charges at Stripe.
 
-    ``custom_payment_method_id`` charges the consolidated ONE-TIME invoice
-    with a specific card (a one-off card entered at checkout) instead of the
-    payer's saved default; the recurring converge always uses the saved
-    default. ``custom_card_set_default`` then promotes that card to the
-    payer's saved default — but ONLY after the whole request succeeds, so a
-    failed charge never changes the saved card. Both are card-only
-    (mutually exclusive with ``paid_with_cash``) and the start op rejects a
-    custom card on a request with no one-time / trial group.
+    ``payment`` is an optional card entered at checkout
+    (``MemberMembershipsStartPayment``). When ``payment.set_default`` the card
+    is promoted to the payer's saved default before charging, so it bills the
+    one-time invoice AND the recurring subscription. It is card-only (mutually
+    exclusive with ``paid_with_cash``); the start op additionally rejects a
+    card on a request with a recurring membership unless ``set_default`` is set
+    (recurring always bills the saved default).
     """
 
     payer_member_id: UUID
     gym_id: UUID
     prorate: bool = True
     paid_with_cash: bool = False
-    custom_payment_method_id: str | None = None
-    custom_card_set_default: bool = False
+    payment: MemberMembershipsStartPayment | None = None
     idempotency_key: UUID
     memberships: list[MemberMembershipsStartItem] = Field(
         default_factory=list,
     )
 
     @model_validator(mode="after")
-    def _validate_custom_card(self) -> Self:
-        """A one-off card is card-only and required for the set-default flag."""
-        if self.custom_payment_method_id is not None and self.paid_with_cash:
+    def _validate_payment(self) -> Self:
+        """A card and an out-of-band (cash) settle are mutually exclusive."""
+        if self.payment is not None and self.paid_with_cash:
             raise ValueError(
-                "custom_payment_method_id cannot be combined with "
-                "paid_with_cash (a cash settle charges no card)",
-            )
-        if self.custom_card_set_default and self.custom_payment_method_id is None:
-            raise ValueError(
-                "custom_card_set_default requires custom_payment_method_id",
+                "payment cannot be combined with paid_with_cash "
+                "(a cash settle charges no card)",
             )
         return self
 

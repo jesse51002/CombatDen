@@ -203,15 +203,17 @@ back to active because the DB says it's current.
   ad-hoc); a consolidated multi-plan invoice's
   `StripeMembershipOneTimeMetadata.plan_id` is `None`. **No price-active check** —
   prices are never deactivated. An optional **`payment_method_id`** charges a
-  SPECIFIC card (a one-off card entered at checkout) instead of the customer's
+  SPECIFIC one-off card (entered at checkout) instead of the customer's
   default: the `_pay_invoice` helper attaches it (`{base}:attach`), pays with it
-  (`pay_params["payment_method"]`), then — when `detach_payment_method_after`
-  (default `True`) — detaches it (`{base}:detach`), never touching
-  `invoice_settings.default_payment_method`. The detach runs ONLY after a
-  successful pay (a declined pay leaves the card attached-but-non-default so a
-  retry can reuse it) and is **best-effort** (a detach failure is logged, not
-  raised — the invoice is already paid, so raising would wrongly read as a charge
-  failure). `payment_method_id` is mutually exclusive with `paid_out_of_band`
+  (`pay_params["payment_method"]`), then **always** detaches it (`{base}:detach`),
+  never touching `invoice_settings.default_payment_method`. (Saving a card as the
+  default is a separate up-front `update_customer` step, never this path — so a
+  card passed here is always a one-off and always detached; there is no
+  keep-attached option.) The detach runs ONLY after a successful pay (a declined
+  pay leaves the card attached-but-non-default so a retry can reuse it) and is
+  **best-effort** (a detach failure is logged, not raised — the invoice is
+  already paid, so raising would wrongly read as a charge failure).
+  `payment_method_id` is mutually exclusive with `paid_out_of_band`
   (model-validated). A `$0` invoice auto-pays at finalize and skips the pay step
   entirely, so a one-off card is never attached for a zero-total charge.
 - `refund_payment` — refund a PaymentIntent (full or partial).

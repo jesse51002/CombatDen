@@ -76,7 +76,6 @@ class PaymentSyncOneTime:
         idempotency_key: UUID,
         paid_with_cash: bool = False,
         payment_method_id: str | None = None,
-        detach_payment_method_after: bool = True,
     ) -> None:
         """Charge the payer's PENDING one-time memberships on ONE invoice.
 
@@ -89,12 +88,10 @@ class PaymentSyncOneTime:
         ``applied`` status) to confirm. One-time memberships are terminal, so
         re-running finds no ``not_added`` rows and charges nothing again.
 
-        ``payment_method_id`` charges a SPECIFIC card (a one-off card entered at
-        checkout) instead of the payer's saved default; ``detach_payment_method_after``
-        (default ``True``) controls whether that card is detached after a
-        successful charge — the caller passes ``False`` when it intends to keep
-        the card (e.g. promote it to the saved default afterward). Both are
-        ignored on a cash settle (``paid_with_cash``).
+        ``payment_method_id`` charges a SPECIFIC one-off card (entered at
+        checkout) instead of the payer's saved default — the payment service
+        attaches → pays → detaches it (a one-off is never kept; saving a card as
+        the default is a separate up-front step). Ignored on a cash settle.
         """
         payer, stripe_account_id = await self._payer.resolve_payer_with_account(
             payer_member_id,
@@ -107,7 +104,6 @@ class PaymentSyncOneTime:
             idempotency_key,
             paid_with_cash,
             payment_method_id,
-            detach_payment_method_after,
         )
         await self._writeback(plan, result)
 
@@ -263,7 +259,6 @@ class PaymentSyncOneTime:
         idempotency_key: UUID,
         paid_with_cash: bool,
         payment_method_id: str | None = None,
-        detach_payment_method_after: bool = True,
     ) -> PaymentsInvoicePaymentResponse:
         """Charge the assembled invoice — one price line per membership.
 
@@ -271,9 +266,8 @@ class PaymentSyncOneTime:
         payer + gym; per-membership provenance rides each line's ``stripe_item_id``
         after the writeback). ``line_item_ids`` / ``line_amounts`` come back in the
         same order as ``plan.items``. When ``payment_method_id`` is set the payment
-        service attaches that card, charges it, and (per
-        ``detach_payment_method_after``) detaches it — the payer's saved default is
-        never touched.
+        service attaches that one-off card, charges it, and detaches it — the
+        payer's saved default is never touched.
         """
         request = PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=plan.payer.stripe_customer_id,
@@ -284,7 +278,6 @@ class PaymentSyncOneTime:
             ),
             paid_out_of_band=paid_with_cash,
             payment_method_id=payment_method_id,
-            detach_payment_method_after=detach_payment_method_after,
             idempotency_key=str(idempotency_key),
         )
         return await self._payments.create_invoice_payment(
