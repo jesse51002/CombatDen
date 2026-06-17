@@ -5,12 +5,14 @@ description: >-
   router-less `reconciler` domain in FastApiBackend/src/reconciler/ that runs the
   billing engine on a clock (twice daily, APScheduler in the app lifespan) so
   drift on IDLE members self-heals. Covers ReconcilerService (the thin
-  orchestrator running the three step-services in order; the generic ResourceLock
-  the orphan cleanup uses), the three modular step-services run in order —
+  orchestrator running the four step-services in order; the generic ResourceLock
+  the orphan cleanup uses), the four modular step-services run in order —
   InvoiceFetchSweep (missed-webhook backfill that reuses the webhook handler
   record() seam), OrphanCleanupSweep (lock-guarded delete of stranded not_added
   rows), PaymentPushSweep (CRM→Stripe converge via the existing bulk_payment_sync,
-  whose sync now self-heals a gone subscription natively) — how a gone sub is
+  whose sync now self-heals a gone subscription natively), SubscriptionOrphanSweep
+  (the reverse direction — cancels live Stripe subs whose items map to no live
+  membership row, item-id linkage + an age guard) — how a gone sub is
   cancelled inside the sync (PaymentSyncCancel, owned by sync-guide), the
   customer.subscription.deleted webhook as a thin bulk_payment_sync trigger, the
   synthetic per-attempt failed-charge key, and the conflict-resolution rule
@@ -20,7 +22,8 @@ description: >-
   fetcher / the webhook handle→record seam, the synthetic failed-charge key, or
   ask how/when the reconciler runs. Trigger on "reconciler", "scheduled sweep",
   "twice daily", "APScheduler", "ResourceLock", "OrphanCleanupSweep",
-  "PaymentPushSweep", "InvoiceFetchSweep", "customer.subscription.deleted",
+  "PaymentPushSweep", "InvoiceFetchSweep", "SubscriptionOrphanSweep",
+  "orphan subscription", "cancel unlinked sub", "customer.subscription.deleted",
   "record seam", "synthetic charge key", "self-heal a gone sub", "dunning",
   "skip-if-equal", or any change to src/reconciler/. The payment-sync ENGINE the
   push step calls — including the gone-sub cancel (PaymentSyncCancel) — lives in
@@ -79,7 +82,7 @@ billing logic — every step reuses existing services.
   and `shutdown(wait=False)` on stop. The root test conftest sets
   `reconciler_enabled=False` so booting the app in a test never starts it.
 - **Orchestrator** — `ReconcilerService.run() -> ReconcilerRunResult` runs the
-  three steps in order and returns each one's `SweepResult`
+  four steps in order and returns each one's `SweepResult`
   (`processed / changed / skipped / errors`).
 - **No reconciler-wide lock.** Safety is the per-paying-family `PayingMemberLock`
   that **every payment op already holds** (and that the orphan cleanup checks
@@ -100,7 +103,7 @@ billing logic — every step reuses existing services.
 
 ---
 
-## 3. The three step-services — run order
+## 3. The four step-services — run order
 
 Each step is its **own service**; the orchestrator is thin. The order is
 deliberate:
@@ -108,8 +111,11 @@ deliberate:
 1. **`InvoiceFetchSweep`** (§5) — refresh dates/charges first, so the
    date-derived "overdue" view is current before anything reads it.
 2. **`OrphanCleanupSweep`** — remove stranded `not_added` rows.
-3. **`PaymentPushSweep`** — final CRM→Stripe converge over the now-clean set;
+3. **`PaymentPushSweep`** — CRM→Stripe converge over the now-clean set;
    this is also what cancels a gone sub (§4).
+4. **`SubscriptionOrphanSweep`** — the reverse cleanup: cancel live Stripe subs
+   with no live DB link. Runs **last** so the push has re-linked any real sub
+   (re-stamped its `stripe_item_id`) before we judge what's an orphan.
 
 - **`OrphanCleanupSweep`** — lists orphaned `not_added` rows
   (`stripe_item_id IS NULL`, from `reconciler_orphan_memberships.sql`). Per row:
@@ -126,10 +132,28 @@ deliberate:
   `end_date`, backstops a missed `once` settle, **and** — because the sync now
   self-heals a gone sub (§4) — cancels memberships whose Stripe sub is gone, with
   no separate status pass.
+- **`SubscriptionOrphanSweep`** — the reverse of `OrphanCleanupSweep` (which deletes
+  DB rows with no Stripe line): cancels live Stripe subscriptions whose items map to
+  **no live membership row**. Per Connect account
+  (`reconciler_gyms_with_connect.sql`, deduped) it lists non-cancelled subs directly
+  off the Stripe client (mirroring `InvoiceFetchSweep` + its `_iter` pagination) and,
+  for each, **skips** any younger than `settings.reconciler_orphan_min_age_seconds`
+  (the age guard — without metadata we can't lock an unlinked sub to its family, so a
+  sub a live op just created must age past any in-flight op) or whose items don't fit
+  one page (can't enumerate all items → can't safely judge), then checks the sub's
+  `si_…` item ids against `reconciler_linked_item_ids.sql`. That read hits the
+  **unfiltered** base with `stripe_sync_status IN ('applied','migrating')` — a
+  `deleted` row is **not** a live link (and the filtered view does **not** hide
+  `deleted`). No live link → cancel the whole subscription via the payments
+  `cancel_subscription` primitive (immediate, fresh idempotency key; idempotent — a
+  no-op for an already-cancelled sub). Each cancel is isolated in its own `try` so
+  one failure can't abort the sweep.
 
-Cancelling a gone sub is **not** a separate reconciler step — it happens **inside
-the sync** (§4), so the push sweep handles it as part of the converge, with no
-status pass.
+Cancelling a gone sub (a sub Stripe itself ended) is **not** a separate reconciler
+step — it happens **inside the sync** (§4), so the push sweep handles it as part of
+the converge. `SubscriptionOrphanSweep` is the **opposite** case: a sub Stripe still
+holds but the CRM no longer links to (a reverted/deleted membership) — config drift
+in the Stripe→CRM direction, so the CRM wins and the sub is cancelled.
 
 ---
 
@@ -182,7 +206,7 @@ backstop regardless).
 
 **`InvoiceFetchSweep`** is a missed-webhook backstop. Per gym Connect account
 (`reconciler_gyms_with_connect.sql`) it lists the last
-`RECONCILER_INVOICE_LOOKBACK_DAYS` of invoices / payments / refunds (paginated)
+`settings.reconciler_invoice_lookback_days` of invoices / payments / refunds (paginated)
 and re-records each through the SAME webhook handler logic — but driven by listed
 **objects** instead of events, so it **cannot** use the webhook event-log dedup.
 
@@ -266,12 +290,13 @@ write-reduction.
 
 - **Orchestrator:** `src/reconciler/service/reconciler/reconciler_service.py`
 - **Sweeps:** `reconciler_invoice_fetch_sweep.py`,
-  `reconciler_orphan_cleanup_sweep.py`, `reconciler_payment_push_sweep.py` — same
-  folder
+  `reconciler_orphan_cleanup_sweep.py`, `reconciler_payment_push_sweep.py`,
+  `reconciler_subscription_orphan_sweep.py` — same folder
 - **Result models:** `reconciler_result.py`
 - **Scheduler:** `src/reconciler/reconciler_scheduler.py` (+ lifespan in `src/main.py`)
 - **SQL:** `src/reconciler/sql/` (`reconciler_orphan_memberships.sql`,
-  `reconciler_active_billing_members.sql`, `reconciler_gyms_with_connect.sql`)
+  `reconciler_active_billing_members.sql`, `reconciler_gyms_with_connect.sql`,
+  `reconciler_linked_item_ids.sql` — the subscription-orphan linkage read)
 - **Shared lock:** `src/shared/resource_lock.py`
 - **Gone-sub cancel (in the sync, see `sync-guide`):**
   `src/sync/service/sync_cancel.py`
@@ -280,7 +305,8 @@ write-reduction.
   (registered in `stripe_webhooks_service.py`)
 - **The record seam:** `src/stripe_webhooks/service/{invoice_paid,invoice_payment_paid,invoice_payment_failed,refund}_handler.py`
 - **Config:** `src/core/config.py` (`reconciler_enabled`, `reconciler_cron_hours`,
-  `RECONCILER_INVOICE_LOOKBACK_DAYS`, `RECONCILER_STRIPE_PAGE_SIZE`)
+  `reconciler_invoice_lookback_days`, `reconciler_stripe_page_size`,
+  `reconciler_orphan_min_age_seconds` — all `Settings` fields)
 - **DI:** `src/core/dependencies.py` · **Tests:** `tests/reconciler/test_reconciler.py`
   (+ the gone-sub cancel in `tests/memberships/test_payment_sync_cancel.py`)
 
