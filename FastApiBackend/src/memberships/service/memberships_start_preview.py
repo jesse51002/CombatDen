@@ -95,7 +95,7 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
         Raises:
             ValueError: If Phase A validation fails.
         """
-        parent, plan_prices = await self._validation.validate(request)
+        payer, plan_prices = await self._validation.validate(request)
 
         states = [
             MemberMembershipsStartItemState(
@@ -114,7 +114,7 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
             s.plan_type == PlanType.recurring for s in states
         )
 
-        start_date = gym_today(parent.timezone)
+        start_date = gym_today(payer.timezone)
         try:
             await self._stage(request, plan_prices, states, start_date)
 

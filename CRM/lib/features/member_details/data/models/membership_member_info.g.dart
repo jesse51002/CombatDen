@@ -10,6 +10,7 @@ MembershipMemberInfo _$MembershipMemberInfoFromJson(
   Map<String, dynamic> json,
 ) => MembershipMemberInfo(
   itemId: json['item_id'] as String,
+  paidByMemberId: json['paid_by_member_id'] as String,
   endDate: json['end_date'] == null
       ? null
       : DateTime.parse(json['end_date'] as String),

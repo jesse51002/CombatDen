@@ -1,6 +1,6 @@
 """Builder service: produce the desired ``SyncParams`` from the DB.
 
-Reads the family's active recurring memberships (each carrying its discounts),
+Reads the PAYER's active recurring memberships (each carrying its discounts),
 groups them into consolidated lines by price, delegates discount-coupon
 resolution to ``PaymentSyncDiscounts``, and assembles the monthly subscription
 bucket — the full desired state the reconciler converges Stripe onto. This
@@ -18,9 +18,9 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionDesiredItem,
     SubscriptionItemDiscount,
 )
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import gym_today
+from src.shared.payer_profile import PayerProfile
 from src.sync.service.sync_discounts import (
     PaymentSyncDiscounts,
 )
@@ -53,7 +53,7 @@ class PaymentSyncBuilder:
 
     async def build_sync_params(
         self,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_account_id: str,
         preview: bool = False,
     ) -> SyncParams:
@@ -63,23 +63,24 @@ class PaymentSyncBuilder:
         ``preview_add`` rows (and drops ``preview_remove``) while the real path
         sees neither — the only difference between the two builds.
 
-        Derives the desired subscription state entirely from the DB — the active
-        recurring memberships, each carrying its applied discounts (cancelled
-        rows excluded by the read) — never from imperative add/cancel lists.
-        Groups the memberships into consolidated lines by ``price_id`` and hands
-        them to ``PaymentSyncDiscounts``, which resolves each line's coupons
-        (find-or-create, percent→dollar) and returns the per-price coupon lists
-        plus the ``applied_discount_id → coupon_id`` links; the bucket items
-        carry the coupons. Shared by the real (``update_payments_recurring``) and
-        preview sync paths — so preview reflects discounts. Performs **no DB
-        writes** (coupon find-or-create is an idempotent gym-wide Stripe op; the
-        link writeback is the orchestrator's, real path only). The paying parent
-        + gym Stripe account are resolved upstream and passed in.
+        Derives the desired subscription state entirely from the DB — the
+        PAYER's active recurring memberships (every row whose
+        ``paid_by_member_id`` is this payer), each carrying its applied
+        discounts (cancelled rows excluded by the read) — never from imperative
+        add/cancel lists. Groups the memberships into consolidated lines by
+        ``price_id`` and hands them to ``PaymentSyncDiscounts``, which resolves
+        each line's coupons (find-or-create, percent→dollar) and returns the
+        per-price coupon lists plus the ``applied_discount_id → coupon_id``
+        links; the bucket items carry the coupons. Shared by the real
+        (``update_payments_recurring``) and preview sync paths — so preview
+        reflects discounts. Performs **no DB writes** (coupon find-or-create is
+        an idempotent gym-wide Stripe op; the link writeback is the
+        orchestrator's, real path only). The payer + gym Stripe account are
+        resolved upstream and passed in.
         """
-        today = gym_today(parent.timezone)
-        family_ids = await self._queries.get_family_ids(parent)
+        today = gym_today(payer.timezone)
         memberships = await self._queries.get_active_memberships(
-            family_ids,
+            payer.member_id,
             today,
             preview,
         )
@@ -89,12 +90,12 @@ class PaymentSyncBuilder:
         bucket = self._build_bucket(
             groups,
             resolved.coupons_by_price,
-            parent.stripe_sub_id_month,
+            payer.stripe_sub_id_month,
         )
 
         return SyncParams(
             bucket=bucket,
-            parent=parent,
+            payer=payer,
             stripe_account_id=stripe_account_id,
             coupon_links=resolved.links,
             membership_post_discount_amounts=resolved.membership_amounts,
@@ -125,10 +126,10 @@ class PaymentSyncBuilder:
     ) -> IntervalBucket:
         """Build the monthly subscription bucket from the grouped memberships.
 
-        One desired item per price group: quantity = number of memberships on the
-        line, discounts = the coupons the discount service resolved for that price
-        (empty when the line has none). All recurring plans are monthly, so there
-        is exactly one bucket.
+        One desired item per price group: quantity = number of the payer's
+        memberships on the line, discounts = the coupons the discount service
+        resolved for that price (empty when the line has none). All recurring
+        plans are monthly, so there is exactly one bucket.
         """
         items: list[PaymentsSubscriptionDesiredItem] = []
         for price_id, memberships in groups.items():

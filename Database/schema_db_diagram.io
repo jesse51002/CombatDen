@@ -445,6 +445,7 @@ Table gym_discount_values_unfiltered {
 Table member_memberships_unfiltered {
   item_id uuid [primary key, default: `uuid_generate_v4()`]
   member_id uuid [not null]
+  paid_by_member_id uuid [not null, note: 'who PAYS this row: the resolved parent or a self-paying linked member; the sync groups by this (one subscription per payer); immutable (trigger) — payer change = cancel-old + insert-new; FK (paid_by_member_id, gym_id) -> members(member_id, gym_id)']
   gym_id uuid [not null]
   plan_id uuid [not null, note: 'immutable (trigger)']
   price_id uuid [not null]
@@ -584,6 +585,7 @@ Ref: gym_discounts_unfiltered.gym_id > gyms.gym_id
 // member_billing_profile_unfiltered FKs merged into `members` (see members refs above).
 
 Ref: member_memberships_unfiltered.member_id > members.member_id
+Ref: member_memberships_unfiltered.paid_by_member_id > members.member_id
 Ref: member_memberships_unfiltered.gym_id > gyms.gym_id
 Ref: member_memberships_unfiltered.plan_id > membership_plans_unfiltered.plan_id
 Ref: member_memberships_unfiltered.price_id > membership_plan_prices_unfiltered.price_id

@@ -5,6 +5,7 @@ import 'package:crm/features/member_details/data/models/payments_invoice_preview
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 
 /// The one shared invoice viewer. Takes up to three optional invoices —
 /// [dueNow] (charged today), [recurring] (the steady-state monthly), and
@@ -48,7 +49,12 @@ class InvoicePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final due = dueNow;
     final rec = recurring;
-    if (due == null && rec == null) {
+    // Show the recurring section when there's a new invoice OR a "before"
+    // to compare against. A "before" with no "after" means the change
+    // removed the last membership — the subscription ends, so the new
+    // monthly is $0 (not an empty "nothing to show").
+    final showRecurring = rec != null || _comparative;
+    if (due == null && !showRecurring) {
       return Text(
         emptyLabel,
         style: DesignConstants.pSmall.copyWith(
@@ -66,25 +72,38 @@ class InvoicePreview extends StatelessWidget {
             headerCaption: dueNowLabel,
             strongHeaderCaption: true,
           ),
-        if (rec != null)
+        if (showRecurring)
           InvoiceBreakdown(
-            data: _comparative
-                ? comparisonBreakdownFromPair(
-                    current: recurringPrev,
-                    next: rec,
-                    fallbackCurrentMonthly: recurringFallbackMonthly,
-                  )
-                : previewInvoiceBreakdown(rec, amountSuffix: '/mo'),
+            data: _recurringData(rec),
             // "Then, each month" reads as a sequence after a due-now
             // charge; with no due-now it's just the monthly payment.
             headerCaption:
                 due != null ? 'Then, each month' : 'Monthly Payment',
             strongHeaderCaption: true,
-            headerMeta: rec.nextPaymentAt == null
+            headerMeta: rec?.nextPaymentAt == null
                 ? null
-                : formatDay(rec.nextPaymentAt),
+                : formatDay(rec!.nextPaymentAt),
           ),
       ],
+    );
+  }
+
+  /// The recurring breakdown: the new invoice (comparison vs plain), or —
+  /// when there is no new invoice but a "before" exists — the
+  /// subscription-ending $0 comparison.
+  InvoiceBreakdownData _recurringData(PreviewInvoice? rec) {
+    if (rec != null) {
+      return _comparative
+          ? comparisonBreakdownFromPair(
+              current: recurringPrev,
+              next: rec,
+              fallbackCurrentMonthly: recurringFallbackMonthly,
+            )
+          : previewInvoiceBreakdown(rec, amountSuffix: '/mo');
+    }
+    return endingBreakdown(
+      current: recurringPrev,
+      fallbackCurrentMonthly: recurringFallbackMonthly,
     );
   }
 }

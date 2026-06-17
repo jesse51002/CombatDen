@@ -21,12 +21,18 @@ MEMBERS_PER_GYM = 100
 AUTH_MEMBERS_PER_GYM = 5
 # Linked-account families (mirrors the original CRM seed). ~LINKED_FAMILY_FRACTION
 # of each gym's members are partitioned into families: a paying parent (root)
-# plus 1-MAX_LINKED_CHILDREN_PER_PARENT children covered under it. Children carry
-# no membership of their own (cardless, paid for by the parent). Set the fraction
-# to 0 to skip linked families entirely. (Distinct from AUTH_MEMBERS_PER_GYM —
-# the original seed's LINKED_MEMBERS_PER_GYM was actually the auth-login count.)
+# plus 1-MAX_LINKED_CHILDREN_PER_PARENT children linked under it. Every child
+# carries their own recurring membership; ~CHILD_SELF_PAY_FRACTION of children
+# SELF-PAY it (their own card + own subscription, billed to them), the rest are
+# paid by the parent. Set the fraction to 0 to skip linked families entirely.
+# (Distinct from AUTH_MEMBERS_PER_GYM — the original seed's LINKED_MEMBERS_PER_GYM
+# was actually the auth-login count.)
 LINKED_FAMILY_FRACTION = 0.5
 MAX_LINKED_CHILDREN_PER_PARENT = 5
+# Of the linked children, the fraction who pay for their OWN membership
+# (paid_by_member_id = themselves) on their own card, rather than the parent
+# paying. The link stays — it is the authorization layer, not the billing key.
+CHILD_SELF_PAY_FRACTION = 0.5
 PLANS_PER_GYM = 7
 # Regular discount presets created per gym (the catalog members can be given).
 # Must be <= len(DISCOUNT_NAMES) in api_creation/discounts.py.

@@ -10,19 +10,29 @@ import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/info_table.dart';
 
 /// Status / type / billing cycle / cost / usage / dates for
-/// the **selected covered member** ([coveredMemberId]) on the
-/// current membership. Everything reads atomically for that one
-/// member: their status, their cost, their class usage. The
-/// outdated-price prompt lives in its own card outside this
-/// table; cash payment lives in the Invoices card.
+/// the viewed member ([coveredMemberId]) on the current
+/// membership. Everything reads atomically for that one member:
+/// their status, their cost, their class usage. When the member
+/// is in a linked relationship, [payerName] is set and a
+/// "Paid by" row (a small avatar + the payer's name) leads the
+/// table so it stands out; the outdated-price prompt lives in
+/// its own card.
 class MembershipDetailsTable extends StatelessWidget {
   final MembershipInfo membership;
   final String coveredMemberId;
+
+  /// The payer's display name + photo, for the leading "Paid by"
+  /// row. Null for an unlinked solo member (the row is omitted —
+  /// a solo always pays their own way).
+  final String? payerName;
+  final String? payerPhotoUrl;
 
   const MembershipDetailsTable({
     super.key,
     required this.membership,
     required this.coveredMemberId,
+    this.payerName,
+    this.payerPhotoUrl,
   });
 
   MembershipStatus get _status =>
@@ -46,6 +56,14 @@ class MembershipDetailsTable extends StatelessWidget {
 
     return InfoTable(
       rows: [
+        if (payerName != null)
+          (
+            membershipLabel('Paid by:'),
+            _PaidByValue(
+              name: payerName!,
+              photoUrl: payerPhotoUrl,
+            ),
+          ),
         (
           membershipLabel('Status:'),
           _StatusCell(
@@ -128,6 +146,51 @@ class MembershipDetailsTable extends StatelessWidget {
     }
     return '${usage.classesUsed}/'
         '${usage.classCount} classes';
+  }
+}
+
+/// The "Paid by" value cell — a small payer avatar followed by
+/// their name, matching the table's value text style.
+class _PaidByValue extends StatelessWidget {
+  final String name;
+  final String? photoUrl;
+
+  const _PaidByValue({required this.name, this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial =
+        name.isNotEmpty ? name[0].toUpperCase() : '?';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        CircleAvatar(
+          radius: DesignConstants.iconSizeLarge / 2,
+          backgroundColor: DesignConstants.backgroundColor,
+          backgroundImage:
+              photoUrl != null ? NetworkImage(photoUrl!) : null,
+          child: photoUrl == null
+              ? Text(
+                  initial,
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                )
+              : null,
+        ),
+        Flexible(
+          child: Text(
+            name,
+            style: DesignConstants.h2.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 }
 

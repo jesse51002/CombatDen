@@ -166,7 +166,9 @@ def seed() -> None:
         # memberships (their item_ids are the real backend item_ids; the
         # windows are plausible). Attendance is attributed to whichever
         # membership covers each occurrence.
-        pseudo_current = gen_memberships.pseudo_rows_for_current(gym_id, current_records)
+        pseudo_current = gen_memberships.pseudo_rows_for_current(
+            gym_id, current_records, member_plans
+        )
         membership_rows = history_rows + pseudo_current
 
         progress.log("Creating classes...")

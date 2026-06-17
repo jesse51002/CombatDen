@@ -264,6 +264,7 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "member_id",  # identity FK
         "gym_id",  # identity FK, per-gym resource
         "plan_id",  # immutable (trigger: trg_prevent_plan_id_overwrite)
+        "paid_by_member_id",  # immutable payer (trigger: trg_prevent_paid_by_member_id_overwrite)
         "created_at",  # auto-generated timestamp
         # Stripe columns — always set by backend
         "stripe_item_id",

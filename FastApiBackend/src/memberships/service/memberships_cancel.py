@@ -76,10 +76,12 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             gym_today(row["timezone"]),
         )
 
+        payer_member_id = row["paid_by_member_id"]
+
         async def _sync() -> None:
             try:
                 await self._payment_sync.update_payments_recurring(
-                    member_id,
+                    payer_member_id,
                     idempotency_key=idempotency_key,
                     proration_behavior="none",
                 )
@@ -132,7 +134,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         # Stage the membership 'preview_remove' so the preview build drops it
         # (preview=True excludes preview_remove), then restore 'applied'. The
-        # window is bounded by `finally`; the per-parent lock (#25) closes the
+        # window is bounded by `finally`; the per-payer lock (#25) closes the
         # race vs a concurrent real sync (TODO).
         return await staged_preview(
             stage_fn=lambda: self._set_sync_status(
@@ -140,7 +142,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             ),
             cleanup_fn=lambda: self._set_sync_status(item_id, member_id, StripeSyncStatus.applied),
             preview_fn=lambda: self._payment_sync.preview_update_payments_recurring(
-                member_id,
+                row["paid_by_member_id"],
                 proration_behavior="none",
             ),
         )

@@ -11,9 +11,9 @@ from src.payments.schema.payments_members_schema import (
 from src.payments.service.subscription import (
     PaymentsStripeSubscriptionService,
 )
-from src.shared.billing_parent import ParentProfile
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import stripe_ts_to_gym_date
+from src.shared.payer_profile import PayerProfile
 from src.sync.service.sync_queries import (
     PaymentSyncQueries,
 )
@@ -28,8 +28,8 @@ class PaymentSyncWriteback:
     Given the resolved ``SyncParams`` and the live subscription result it writes:
     the per-membership Stripe line id / next_due_date / ``applied`` status, each
     membership's own post-discount price onto ``total_price``, the coupon links
-    (+ ``applied`` on the applied-discount rows), the parent's subscription id,
-    ``deleted`` on cancelled rows confirmed gone, and the parent's monthly
+    (+ ``applied`` on the applied-discount rows), the payer's subscription id,
+    ``deleted`` on cancelled rows confirmed gone, and the payer's monthly
     recurring total from Stripe's upcoming invoice. All writes go through
     ``PaymentSyncQueries``; nothing here is preview-safe — call it only on the
     real path.
@@ -57,13 +57,13 @@ class PaymentSyncWriteback:
         membership row must never block a different step — notably the status
         stamp a caller's verify reads. This method never raises.
         """
-        parent = params.parent
+        payer = params.payer
         new_sub_id = sub_result.stripe_subscription_id if sub_result else None
 
         # Per-membership: stamp the live line id + next_due_date + 'applied'.
         await self._run_step(
             self._apply_membership_rows(params, sub_result),
-            f"apply_membership_rows parent={parent.member_id}",
+            f"apply_membership_rows payer={payer.member_id}",
         )
 
         # Per-membership OWN post-discount price → total_price (computed at
@@ -72,31 +72,31 @@ class PaymentSyncWriteback:
             self._queries.set_membership_post_discount_prices(
                 params.membership_post_discount_amounts
             ),
-            f"set_membership_post_discount_prices parent={parent.member_id}",
+            f"set_membership_post_discount_prices payer={payer.member_id}",
         )
 
         # Coupon links + 'applied' on the contributing applied-discount rows.
         await self._run_step(
             self._apply_coupon_links(params),
-            f"apply_coupon_links parent={parent.member_id}",
+            f"apply_coupon_links payer={payer.member_id}",
         )
 
         # 'deleted' on cancelled rows confirmed gone from the live sub.
         await self._run_step(
-            self._mark_removed_deleted(parent, sub_result),
-            f"mark_removed_deleted parent={parent.member_id}",
+            self._mark_removed_deleted(payer, sub_result),
+            f"mark_removed_deleted payer={payer.member_id}",
         )
 
-        # Parent subscription id (or None when the sub was cancelled).
+        # Payer subscription id (or None when the sub was cancelled).
         await self._run_step(
-            self._queries.update_profile_sub_id(parent.member_id, new_sub_id),
-            f"update_profile_sub_id parent={parent.member_id}",
+            self._queries.update_profile_sub_id(payer.member_id, new_sub_id),
+            f"update_profile_sub_id payer={payer.member_id}",
         )
 
-        # Parent's monthly recurring total from Stripe's upcoming invoice
+        # Payer's monthly recurring total from Stripe's upcoming invoice
         # (already best-effort / never raises internally).
-        await self._sync_parent_monthly_total(
-            parent,
+        await self._sync_payer_monthly_total(
+            payer,
             new_sub_id,
             params.stripe_account_id,
         )
@@ -108,7 +108,7 @@ class PaymentSyncWriteback:
     ) -> None:
         """Run one writeback step best-effort: log on failure, never re-raise.
 
-        Mirrors the swallow-and-log policy already used for the parent
+        Mirrors the swallow-and-log policy already used for the payer
         monthly-total writeback, so a single failed write cannot abort the
         remaining writebacks.
         """
@@ -142,13 +142,13 @@ class PaymentSyncWriteback:
                     exc_info=True,
                 )
 
-    async def _sync_parent_monthly_total(
+    async def _sync_payer_monthly_total(
         self,
-        parent: ParentProfile,
+        payer: PayerProfile,
         stripe_sub_id: str | None,
         stripe_account_id: str,
     ) -> None:
-        """Write the parent's monthly recurring total from the upcoming invoice.
+        """Write the payer's monthly recurring total from the upcoming invoice.
 
         Sums the upcoming invoice's recurring lines (proration already filtered
         out by the mapper) onto ``members.total_monthly_recurring_price``. When
@@ -186,14 +186,14 @@ class PaymentSyncWriteback:
                 max(line.discounted_amount, 0) for line in upcoming.lines
             )
         try:
-            await self._queries.set_parent_monthly_total(
-                parent.member_id,
+            await self._queries.set_payer_monthly_total(
+                payer.member_id,
                 amount,
             )
         except Exception:
             logger.error(
-                "Failed to update total_monthly_recurring_price on parent %s",
-                parent.member_id,
+                "Failed to update total_monthly_recurring_price on payer %s",
+                payer.member_id,
                 exc_info=True,
             )
 
@@ -204,10 +204,10 @@ class PaymentSyncWriteback:
     ) -> None:
         """Map live items → membership rows by price; stamp each row 'applied'.
 
-        A consolidated line (one Stripe item, quantity N) maps to every family
-        membership on that price — they all get the same line id + period end.
-        Each row is stamped under its own guard so one failure does not block
-        the rest (notably the status stamp a caller's verify reads).
+        A consolidated line (one Stripe item, quantity N) maps to every one of
+        the payer's memberships on that price — they all get the same line id +
+        period end. Each row is stamped under its own guard so one failure does
+        not block the rest (notably the status stamp a caller's verify reads).
         """
         items_by_price = {
             item.stripe_price_id: item
@@ -226,7 +226,7 @@ class PaymentSyncWriteback:
                     line.stripe_subscription_item_id,
                     stripe_ts_to_gym_date(
                         line.current_period_end,
-                        params.parent.timezone,
+                        params.payer.timezone,
                     ),
                 )
             except Exception:
@@ -240,12 +240,11 @@ class PaymentSyncWriteback:
 
     async def _mark_removed_deleted(
         self,
-        parent: ParentProfile,
+        payer: PayerProfile,
         sub_result: PaymentsSubscriptionResponse | None,
     ) -> None:
-        """Stamp 'deleted' on cancelled rows whose line is gone from the sub."""
-        family_ids = await self._queries.get_family_ids(parent)
-        cancelled = await self._queries.get_cancelled_recurring(family_ids)
+        """Stamp 'deleted' on the payer's cancelled rows gone from the sub."""
+        cancelled = await self._queries.get_cancelled_recurring(payer.member_id)
         if not cancelled:
             return
         live_item_ids = {

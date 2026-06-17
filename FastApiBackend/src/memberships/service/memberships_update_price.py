@@ -65,11 +65,13 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
 
         proration_behavior = "always_invoice" if prorate else "none"
 
+        payer_member_id = row["paid_by_member_id"]
+
         if row["price_id"] == active_price["price_id"]:
             # Already on the active price — no DB change to make. Re-sync
             # defensively (idempotent); nothing to verify or revert.
             await self._payment_sync.update_payments_recurring(
-                member_id,
+                payer_member_id,
                 idempotency_key=idempotency_key,
                 proration_behavior=proration_behavior,
             )
@@ -78,8 +80,8 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         old_price_id = row["price_id"]
         old_total_price = row["price"]
 
-        # Pre-sync: converge the family to a clean DB↔Stripe baseline first.
-        await self._pre_sync_payments(member_id)
+        # Pre-sync: converge the payer to a clean DB↔Stripe baseline first.
+        await self._pre_sync_payments(payer_member_id)
 
         # ── DB-first: write new price + stage 'migrating', THEN converge Stripe ──
         # 'migrating' lets the writeback move the (otherwise immutable)
@@ -102,7 +104,7 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
 
         await sync_or_revert(
             sync_fn=lambda: self._payment_sync.update_payments_recurring(
-                member_id,
+                payer_member_id,
                 idempotency_key=idempotency_key,
                 proration_behavior=proration_behavior,
             ),
@@ -144,7 +146,7 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
         if row["price_id"] == active_price["price_id"]:
             # Already on the active price — nothing to stage; preview as-is.
             return await self._payment_sync.preview_update_payments_recurring(
-                member_id,
+                row["paid_by_member_id"],
                 proration_behavior=proration_behavior,
             )
 
@@ -153,7 +155,7 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
 
         # Temporarily flip the row to the new price so the preview build groups it
         # under the new line, then restore. Status stays 'applied' (dry-run, no
-        # real migration). Window bounded by `finally`; the per-parent lock (#25)
+        # real migration). Window bounded by `finally`; the per-payer lock (#25)
         # closes the race vs a concurrent real sync (TODO).
         return await staged_preview(
             stage_fn=lambda: self._crm_update_price(
@@ -171,7 +173,7 @@ class MemberMembershipsUpdatePrice(MemberMembershipsBase):
                 StripeSyncStatus.applied,
             ),
             preview_fn=lambda: self._payment_sync.preview_update_payments_recurring(
-                member_id,
+                row["paid_by_member_id"],
                 proration_behavior=proration_behavior,
             ),
         )

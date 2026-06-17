@@ -1,9 +1,13 @@
 """Link / unlink a member to a paying parent account.
 
-Linking sets ``members.account_linked_to_id`` (and NULLs the child's
-stripe/card/freeze fields, required by the ``linked_account_no_stripe`` DB
-check); unlinking clears it. Both REQUIRE the target member to have zero active
-recurring memberships (``_assert_no_active_recurring``).
+Linking sets ``members.account_linked_to_id``; unlinking clears it. The link
+is the AUTHORIZATION layer only — who is allowed to pay for whom — never the
+billing key (billing is per payer via
+``member_memberships.paid_by_member_id``). A member's own billing state
+(card, payment method, freeze window, sub id) survives both ops: a linked
+member may self-pay, so linking never wipes their billing identity. Both ops
+REQUIRE the target member to have zero active recurring memberships
+(``_assert_no_active_recurring``).
 
 These are **pure DB changes — no Stripe sync.** Because a member with no active
 recurring memberships contributes no membership line and no applied-discount rows
@@ -70,9 +74,8 @@ class MemberMembershipsLinked:
         """Link a member to a paying parent account.
 
         Validates the child is not already linked and has no active recurring
-        memberships, then sets ``account_linked_to_id`` and NULLs all
-        stripe/card/freeze fields (required by the ``linked_account_no_stripe``
-        DB check).
+        memberships, then sets ``account_linked_to_id`` — a pure relationship
+        change; the member's own billing state is per-payer and untouched.
 
         Pure DB change — no Stripe sync: the child has no active recurring
         memberships, so the family's consolidated subscription is unaffected (see
@@ -244,8 +247,8 @@ class MemberMembershipsLinked:
         member_id: UUID,
         parent_member_id: UUID,
     ) -> None:
-        """Set ``account_linked_to_id`` on the child (also NULLs its stripe/card
-        fields, per the ``linked_account_no_stripe`` DB check)."""
+        """Set ``account_linked_to_id`` on the child (relationship only —
+        the child's own billing state is per-payer and survives)."""
         sql = load_sql(SQL_DIR / "member_memberships_link.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(

@@ -25,7 +25,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from src.core.config import LOCK_TTL_SECONDS
+from src.core.config import settings
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
@@ -44,14 +44,17 @@ class ResourceLock:
         self,
         key: str,
         token: UUID,
-        ttl_seconds: int = LOCK_TTL_SECONDS,
+        ttl_seconds: int | None = None,
     ) -> bool:
         """Try once to take the lease for ``key``; True iff acquired.
 
         Non-blocking: a single atomic ``INSERT ... ON CONFLICT`` that succeeds
         only when the lease is free or expired. Returns ``False`` immediately
-        when another operation holds a live lease.
+        when another operation holds a live lease. ``ttl_seconds`` defaults to
+        ``settings.lock_ttl_seconds``.
         """
+        if ttl_seconds is None:
+            ttl_seconds = settings.lock_ttl_seconds
         sql = load_sql(SQL_DIR / "acquire_resource_lock.sql")
         row = await self._db_pool.execute_with_retry(
             sql,
@@ -82,7 +85,7 @@ class ResourceLock:
     async def try_lock(
         self,
         key: str,
-        ttl_seconds: int = LOCK_TTL_SECONDS,
+        ttl_seconds: int | None = None,
     ) -> AsyncGenerator[bool]:
         """Single-shot non-blocking lock as a context manager.
 

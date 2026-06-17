@@ -21,7 +21,7 @@ from uuid import uuid4
 from schema.membership_plan import DurationUnit
 
 import src.shared.db_schema_path  # noqa: F401
-from src.shared.billing_parent import ParentProfile
+from src.shared.payer_profile import PayerProfile
 from src.sync.service.sync_writeback import PaymentSyncWriteback
 from src.sync.sync_schema import (
     ActiveMembershipRow,
@@ -32,14 +32,14 @@ from src.sync.sync_schema import (
 
 def _params(memberships: list[ActiveMembershipRow] | None = None) -> SyncParams:
     """A minimal SyncParams with one coupon link to write back."""
-    parent = ParentProfile(
+    payer = PayerProfile(
         member_id=uuid4(),
         gym_id=uuid4(),
         stripe_customer_id="cus_test",
     )
     return SyncParams(
         bucket=IntervalBucket(interval=DurationUnit.month, items=[]),
-        parent=parent,
+        payer=payer,
         stripe_account_id="acct_test",
         coupon_links={uuid4(): "pct_1000_ongoing"},
         membership_post_discount_amounts={},
@@ -54,11 +54,10 @@ def _writeback() -> tuple[PaymentSyncWriteback, AsyncMock]:
         subscription_service=AsyncMock(),
     )
     queries = AsyncMock()
-    # _mark_removed_deleted reads these; no cancelled rows → early return.
-    queries.get_family_ids.return_value = []
+    # _mark_removed_deleted reads this; no cancelled rows → early return.
     queries.get_cancelled_recurring.return_value = {}
     wb._queries = queries
-    # _sync_parent_monthly_total only fetches when there is a sub id; keep the
+    # _sync_payer_monthly_total only fetches when there is a sub id; keep the
     # upcoming-invoice read harmless if it is reached.
     wb._subscription_service.fetch_upcoming_invoice = AsyncMock(
         return_value=SimpleNamespace(lines=[]),
@@ -79,7 +78,7 @@ async def test_mirror_step_failure_does_not_block_later_steps() -> None:
     # Every step AFTER the failing one still ran.
     queries.set_applied_discount_coupon_id.assert_awaited()
     queries.update_profile_sub_id.assert_awaited()
-    queries.set_parent_monthly_total.assert_awaited()
+    queries.set_payer_monthly_total.assert_awaited()
 
 
 async def test_coupon_link_failure_does_not_block_later_steps() -> None:
@@ -90,7 +89,7 @@ async def test_coupon_link_failure_does_not_block_later_steps() -> None:
     await wb.write(_params(), sub_result=None)
 
     queries.update_profile_sub_id.assert_awaited()
-    queries.set_parent_monthly_total.assert_awaited()
+    queries.set_payer_monthly_total.assert_awaited()
 
 
 async def test_membership_row_stamp_failure_is_isolated() -> None:
@@ -121,7 +120,7 @@ async def test_membership_row_stamp_failure_is_isolated() -> None:
     # The stamp was attempted and failed, but the rest still ran.
     queries.apply_membership_sync.assert_awaited()
     queries.update_profile_sub_id.assert_awaited()
-    queries.set_parent_monthly_total.assert_awaited()
+    queries.set_payer_monthly_total.assert_awaited()
 
 
 async def test_write_never_raises_even_if_every_step_fails() -> None:
@@ -131,9 +130,9 @@ async def test_write_never_raises_even_if_every_step_fails() -> None:
         "apply_membership_sync",
         "set_membership_post_discount_prices",
         "set_applied_discount_coupon_id",
-        "get_family_ids",
+        "get_cancelled_recurring",
         "update_profile_sub_id",
-        "set_parent_monthly_total",
+        "set_payer_monthly_total",
     ):
         getattr(queries, method).side_effect = RuntimeError("boom")
 

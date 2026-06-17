@@ -60,6 +60,7 @@ async def test_charge_card_creates_paid_invoice(
         await memberships_service.charge_card(
             MemberMembershipsChargeCardRequest(
                 member_id=member.member_id,
+                paid_by_member_id=member.member_id,
                 gym_id=gym_id,
                 amount_cents=1234,
                 reason="Pro-shop T-shirt",
@@ -108,6 +109,7 @@ async def test_charge_card_with_cash_marks_invoice_paid_out_of_band(
         await memberships_service.charge_card(
             MemberMembershipsChargeCardRequest(
                 member_id=member.member_id,
+                paid_by_member_id=member.member_id,
                 gym_id=gym_id,
                 amount_cents=2500,
                 reason="Late fee",
@@ -161,6 +163,7 @@ async def test_charge_card_is_idempotent_on_repeat(
         shared_key = uuid4()
         request_fn = lambda: MemberMembershipsChargeCardRequest(  # noqa: E731
             member_id=member.member_id,
+            paid_by_member_id=member.member_id,
             gym_id=gym_id,
             amount_cents=4200,
             reason="Duplicate fire",
@@ -211,6 +214,7 @@ async def test_charge_card_gym_mismatch_raises(
             await memberships_service.charge_card(
                 MemberMembershipsChargeCardRequest(
                     member_id=member.member_id,
+                    paid_by_member_id=member.member_id,
                     gym_id=wrong_gym_id,
                     amount_cents=1000,
                     reason="Should fail",

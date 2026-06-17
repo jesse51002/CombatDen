@@ -147,10 +147,22 @@ class AppDialog extends StatelessWidget {
         vertical: DesignConstants.paddingBig,
       ),
       child: expanded
-          ? SizedBox(
-              width: maxWidth,
-              height: _expandedHeight(context),
-              child: content,
+          ? LayoutBuilder(
+              builder: (context, constraints) {
+                final height = _expandedHeight(context);
+                final sized = SizedBox(
+                  width: maxWidth,
+                  height: height,
+                  child: content,
+                );
+                // On a viewport too short for the fixed
+                // workflow height, scroll the whole surface
+                // rather than forcing the body to a negative
+                // height (which renders blank).
+                return height <= constraints.maxHeight
+                    ? sized
+                    : SingleChildScrollView(child: sized);
+              },
             )
           : ConstrainedBox(
               constraints:
@@ -160,14 +172,21 @@ class AppDialog extends StatelessWidget {
     );
   }
 
-  /// The expanded dialog's fixed height: a generous
-  /// fraction of the viewport, never taller than what the
-  /// inset padding leaves available.
+  /// The expanded dialog's height: a generous fraction of the
+  /// viewport, never taller than what the inset padding leaves
+  /// available — but floored at [DesignConstants
+  /// .dialogMinExpandedHeight] so the fixed chrome always fits
+  /// and the scrolling body never goes negative. When the floor
+  /// exceeds the viewport the whole surface scrolls (see build).
   double _expandedHeight(BuildContext context) {
     final viewport = MediaQuery.sizeOf(context).height;
-    return math.min(
+    final fraction = math.min(
       viewport * DesignConstants.dialogHeightFractionWide,
       viewport - DesignConstants.paddingBig * 2,
+    );
+    return math.max(
+      fraction,
+      DesignConstants.dialogMinExpandedHeight,
     );
   }
 }

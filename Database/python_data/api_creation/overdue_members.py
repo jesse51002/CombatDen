@@ -135,6 +135,8 @@ def create_overdue(
         client.table("member_memberships_unfiltered").insert(
             {
                 "member_id": str(member_id),
+                # A standalone overdue member pays for their own membership.
+                "paid_by_member_id": str(member_id),
                 "gym_id": str(gym_id),
                 "plan_id": str(plan.plan_id),
                 "price_id": str(plan.price_id),
