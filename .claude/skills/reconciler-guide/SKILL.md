@@ -5,10 +5,12 @@ description: >-
   router-less `reconciler` domain in FastApiBackend/src/reconciler/ that runs the
   billing engine on a clock (twice daily, APScheduler in the app lifespan) so
   drift on IDLE members self-heals. Covers ReconcilerService (the thin
-  orchestrator running the three step-services in order; the generic ResourceLock
-  the orphan cleanup uses), the three modular step-services run in order —
+  orchestrator running the four step-services in order; the generic ResourceLock
+  the orphan cleanup uses), the four modular step-services run in order —
   InvoiceFetchSweep (missed-webhook backfill that reuses the webhook handler
-  record() seam), OrphanCleanupSweep (lock-guarded delete of stranded not_added
+  record() seam), StaleTaskSweep (re-runs unfinished tracked tasks whose
+  in-process run died — the tasks domain's crash recovery, moved here),
+  OrphanCleanupSweep (lock-guarded delete of stranded not_added
   rows), PaymentPushSweep (CRM→Stripe converge via the existing bulk_payment_sync,
   whose sync now self-heals a gone subscription natively) — how a gone sub is
   cancelled inside the sync (PaymentSyncCancel, owned by sync-guide), the
@@ -20,7 +22,8 @@ description: >-
   fetcher / the webhook handle→record seam, the synthetic failed-charge key, or
   ask how/when the reconciler runs. Trigger on "reconciler", "scheduled sweep",
   "twice daily", "APScheduler", "ResourceLock", "OrphanCleanupSweep",
-  "PaymentPushSweep", "InvoiceFetchSweep", "customer.subscription.deleted",
+  "PaymentPushSweep", "InvoiceFetchSweep", "StaleTaskSweep",
+  "stale-task recovery", "customer.subscription.deleted",
   "record seam", "synthetic charge key", "self-heal a gone sub", "dunning",
   "skip-if-equal", or any change to src/reconciler/. The payment-sync ENGINE the
   push step calls — including the gone-sub cancel (PaymentSyncCancel) — lives in
@@ -79,7 +82,7 @@ billing logic — every step reuses existing services.
   and `shutdown(wait=False)` on stop. The root test conftest sets
   `reconciler_enabled=False` so booting the app in a test never starts it.
 - **Orchestrator** — `ReconcilerService.run() -> ReconcilerRunResult` runs the
-  three steps in order and returns each one's `SweepResult`
+  four steps in order and returns each one's `SweepResult`
   (`processed / changed / skipped / errors`).
 - **No reconciler-wide lock.** Safety is the per-paying-family `PayingMemberLock`
   that **every payment op already holds** (and that the orphan cleanup checks
@@ -100,17 +103,30 @@ billing logic — every step reuses existing services.
 
 ---
 
-## 3. The three step-services — run order
+## 3. The four step-services — run order
 
 Each step is its **own service**; the orchestrator is thin. The order is
 deliberate:
 
 1. **`InvoiceFetchSweep`** (§5) — refresh dates/charges first, so the
    date-derived "overdue" view is current before anything reads it.
-2. **`OrphanCleanupSweep`** — remove stranded `not_added` rows.
-3. **`PaymentPushSweep`** — final CRM→Stripe converge over the now-clean set;
+2. **`StaleTaskSweep`** — re-run unfinished tracked tasks (`src/tasks/`) whose
+   in-process run died, advancing their state + converging before the push.
+3. **`OrphanCleanupSweep`** — remove stranded `not_added` rows.
+4. **`PaymentPushSweep`** — final CRM→Stripe converge over the now-clean set;
    this is also what cancels a gone sub (§4).
 
+- **`StaleTaskSweep`** (`reconciler_stale_task_sweep.py`) — tracked-task crash
+  recovery, **moved out of `src/tasks/` into the reconciler** (the tasks domain
+  no longer has its own scheduler). Lists every unfinished task
+  (`tasks_list_unfinished.sql`, pending/running) and calls
+  `TasksExecutor.run_task(id)` on each; the executor's atomic claims decide what
+  is actually runnable (a `pending` item, or a `running` claim older than
+  `TASK_STALE_RUNNING_SECONDS` left by a dead process), so a still-live
+  in-process run is never disturbed. A genuinely `failed` task (out of attempts)
+  is no longer "unfinished" → not re-run here; the push step converges whatever
+  it left. The recovery loop lives in the reconciler; the tasks engine only owns
+  running ONE task.
 - **`OrphanCleanupSweep`** — lists orphaned `not_added` rows
   (`stripe_item_id IS NULL`, from `reconciler_orphan_memberships.sql`). Per row:
   resolve the paying parent, **non-blocking** `ResourceLock.try_lock` on the
@@ -291,8 +307,8 @@ write-reduction.
 ## Diagram
 
 `FastApiBackend/reconciler.mermaid` is the step-by-step flow (scheduler →
-invoice-fetch → orphan-cleanup → push, with the record seam and the external
-actors). Keep it in sync with this skill (same `mermaid-creation` rules: TB,
+invoice-fetch → stale-task recovery → orphan-cleanup → push, with the record
+seam and the external actors). Keep it in sync with this skill (same `mermaid-creation` rules: TB,
 sibling-only edges, fixed palette, `check_siblings.py` validation). The engine the
 push step calls — including the gone-sub cancel — is in `payment_sync.mermaid` /
 `sync-guide`; the whole-backend graph is `architecture.mermaid`.

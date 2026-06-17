@@ -57,7 +57,7 @@ deliberately decoupled:
 The load-bearing seam between them is **price-version pinning** (§3, §7): a
 membership stores a concrete `price_id`, and a plan re-pricing does **not** move
 existing members — they stay on their pinned price until an explicit opt-in
-upgrade (`update_price`) or a bulk plan migration. This is the same
+upgrade (`update_price`) or the per-plan reprice batch. This is the same
 "editing a template never silently re-bills holders" predictability guarantee
 `discounts-guide` describes for discount versions.
 
@@ -223,18 +223,17 @@ price (`_extract_active_price`) and to resolved linked-discount amounts; the lis
 SQL also computes `enrolled_count` from `member_memberships_status` where
 `status = 'active'`. `list_prices` returns **all** price versions of one plan
 (`membership_plans_list_prices.sql`, active first), each with a per-price
-`member_count` over the same active-membership set the migrate uses — so the CRM
-edit form can show the active price plus any older version that still has members
-to migrate forward.
+`member_count` over the same active-membership set the per-plan reprice upgrades —
+so the CRM edit form can show the active price plus any older version that still
+has members to upgrade forward.
 
-**Member migration via bulk sync** (`MembershipPlansPrice.migrate_all_members` /
-`migrate_members`): the deliberate, opt-in way to move members onto the current
-price. It collects affected `member_id`s (`migrate_all` uses
-`membership_plans_get_affected_members.sql` for active members on the plan;
-`migrate_members` takes an explicit list) and queues a background
-`bulk_payment_sync` through the sync engine. This is the **one** place a
-template change fans out to many members — and it is intentional and explicit,
-never silent drift.
+**Moving members to the active price is the per-plan reprice batch** —
+`POST /api/v1/member_memberships/reprice-plan` → `MembershipRepriceTaskHandler.create_batch`
+(`src/tasks/`) auto-discovers every live recurring membership on the plan not on
+its active price (`src/tasks/sql/membership_reprice_targets.sql`) and runs ONE
+tracked task that reprices each (cancel old row + insert successor at the active
+price — see the reprice op in §6). This is the **one** place a plan-template
+change fans out to many members — explicit and tracked, never silent drift.
 
 ---
 
@@ -341,7 +340,7 @@ preview) and lock **two** families inside the op, so the facade delegates them b
 | --- | --- |
 | **start** (`memberships_start.py`, `MemberMembershipsStart.start(request)`) | **ONE list-based op:** a payer + a list of N membership items (each `member_id` + `price_id` + its `discount_ids` + inline `custom_discounts`); a single membership is just a one-item list. The op **never links** — every non-payer item member must ALREADY be linked to the payer (validation rejects otherwise with a "link them first" error), which is what lets the whole request run under the payer's single family lock (the facade locks payer + all item members). **Phase A** validates everything up-front in the shared `MemberMembershipsStartValidation` (payer is top-level/in-gym/unfrozen → links → plan/price rows → per-member no-existing → discounts live & not `custom`); any failure rejects with nothing written or billed. **Phase B (pure DB):** one multi-row pending insert (NULL `stripe_item_id`, `not_added`) + per-item minted customs + applied discounts — **discounts at creation**, so the first (one-time: the only) invoice is discounted; the start is the one flow allowed to apply a custom (`allow_custom=True`, single-use DB-enforced — `discounts-guide`); any failure undoes everything (nothing billed). **At most two charges:** **Phase C** = ONE consolidated one-time invoice for the `one_time`/`trial` group via `PaymentSyncOneTime.charge_one_time` (one line per membership, item-level coupons; a **trial is a $0 line** on the same invoice; writeback stamps `stripe_item_id` = invoice LINE id + `stripe_one_time_invoice_id` + post-discount `total_price` + `applied`); **Phase D** = ONE recurring converge for the recurring group via `update_payments_recurring` (writeback stamps `stripe_item_id` + next_due_date + `applied`). The recurring first charge is **verified synchronously now**: the engine sends the create/add card path `error_if_incomplete` (cash → `pay_first_invoice_out_of_band`, paid out of band), so a **declining card fails the recurring group** — the create 402s leaving no subscription (or an add 402s + Stripe rolls the item change back, leaving the existing sub untouched), the group's pending rows are cleaned, and the failure surfaces as `failed` in the breakdown rather than a `created` row hiding an `incomplete` sub. Only the monthly RENEWALS after the first charge stay async (Stripe dunning → the `invoice.payment_failed` webhook). Idempotency sub-keys are `uuid5(request_key, PlanType.<group>.value)`, so a client retry dedups BOTH charges at Stripe. **Failure granularity is the charge group** (same-group items share fate); a charge failure is **data, not an exception** — it surfaces in the per-membership breakdown `MemberMembershipsStartResponse` (`results[]` with per-item `status`/`item_id`/`error`, `charge_count`, `multiple_charges`), and a **successfully billed one-time row is NEVER un-billed** (kept + flagged for reconciliation if its writeback was unconfirmed). |
 | **cancel** (`cancel.py`) | recurring-only; idempotent if already cancelled. **DB-first:** set `cancel_date = GREATEST(next_due_date, gym-today)` (status stays `applied`, `member_memberships_cancel.sql`) — the membership stays active through the paid period — then sync (drops the line, stamps `deleted`); verify it flipped to `deleted`, else revert by clearing `cancel_date` (`member_memberships_uncancel.sql`, allowed because the membership isn't `deleted` yet). `stripe_item_id` kept intact. Returns the resolved `cancel_date`. |
-| **reprice** (`memberships_reprice.py` — `MemberMembershipsReprice`) | the price upgrade. **Two entry points; tasks are ONLY for the batch.** The op `reprice(member_id, old_item_id, prorate, target_price_id=None) -> successor item_id` is **fully TASK-AGNOSTIC and standalone** (imports nothing from `src/tasks`) and handles its own failure like every other DB-first op: under the family lock it validates → resolves the target (`target_price_id=None` → the plan's `is_active` price via `member_memberships_get_active_price.sql`; **given** → that exact price **as-is**, fetched by id via `member_memberships_get_price.sql`, **NOT re-checked against the plan's *current* active price** — the batch pins active-at-discovery; a newer price created before the item runs must NOT divert/fail the upgrade, and a deactivated CRM price keeps a usable Stripe price since `plans_price.py` never archives one) → `_pre_sync_payments` → ONE txn (cancel old row **effective today** via `member_memberships_cancel_immediate.sql` + insert successor (`not_added`) + COPY live applied discounts via `applied_discounts/copy_applied_discounts.sql`) → convergent sync → **verify successor `applied` AND old row `deleted`, else REVERT** (delete the copies via `applied_discounts/delete_copied_discounts.sql` → delete the pending successor → clear the old row's `cancel_date`; skipped if the successor's line already stamped — known-residual doctrine) and raise. **A membership already on the target is a no-op** — returns the row's own id, touches nothing, bills nothing (no defensive re-sync; the reconciler converges any drift). • **SINGLE** (`PUT /price`, the member-detail upgrade): a DIRECT, synchronous call (`memberships_service.update_price` → `reprice` with no target → plan active); returns the successor id (== input on a no-op). NOT a task. • **BATCH** (`POST /reprice-plan`, "upgrade everyone on a plan"): the ONLY task workflow — `find_plan_reprice_targets(gym_id, plan_id)` (`member_memberships_plan_reprice_targets.sql`) auto-discovers every live recurring membership on the plan not on its active price (excluding any already mid-task), then `MembershipRepriceTaskHandler.create_batch` (`src/tasks/service/tasks_membership_reprice_handler.py`) makes ONE `membership_reprice` task with an item per membership (pinning the active price) and the router fires the background run; the CRM polls `GET /tasks/{id}`. `execute_item` runs `reprice` per item + records the successor onto `task_items.new_item_id`; a failed item retries (3×) then fails, the membership untouched (re-running the batch picks it up). The third pure method is `preview_reprice` (the staged dry-run). Old applied-discount rows stay pinned to the old row as records; consumed `once` discounts are never re-granted. |
+| **reprice** (`memberships_reprice.py` — `MemberMembershipsReprice`) | the price upgrade. **Two entry points; tasks are ONLY for the batch.** The op `reprice(member_id, old_item_id, prorate, target_price_id=None) -> successor item_id` is **fully TASK-AGNOSTIC and standalone** (imports nothing from `src/tasks`) and handles its own failure like every other DB-first op: under the family lock it validates → resolves the target (`target_price_id=None` → the plan's `is_active` price via `member_memberships_get_active_price.sql`; **given** → that exact price **as-is**, fetched by id via `member_memberships_get_price.sql`, **NOT re-checked against the plan's *current* active price** — the batch pins active-at-discovery; a newer price created before the item runs must NOT divert/fail the upgrade, and a deactivated CRM price keeps a usable Stripe price since `plans_price.py` never archives one) → `_pre_sync_payments` → ONE txn (cancel old row **effective today** via `member_memberships_cancel_immediate.sql` + insert successor (`not_added`) + COPY live applied discounts via `applied_discounts/copy_applied_discounts.sql`) → convergent sync → **verify successor `applied` AND old row `deleted`, else REVERT** (delete the copies via `applied_discounts/delete_copied_discounts.sql` → delete the pending successor → clear the old row's `cancel_date`; skipped if the successor's line already stamped — known-residual doctrine) and raise. **A membership already on the target is a no-op** — returns the row's own id, touches nothing, bills nothing (no defensive re-sync; the reconciler converges any drift). • **SINGLE** (`PUT /price`, the member-detail upgrade): a DIRECT, synchronous call (`memberships_service.update_price` → `reprice` with no target → plan active); returns the successor id (== input on a no-op). NOT a task. • **BATCH** (`POST /reprice-plan`, "upgrade everyone on a plan"): the ONLY task workflow — `MembershipRepriceTaskHandler.create_batch` (`src/tasks/service/tasks_membership_reprice_handler.py`) **discovers the targets itself** (`src/tasks/sql/membership_reprice_targets.sql` — every live recurring membership on the plan not on its active price, excluding any already mid-task; the discovery lives in the **tasks layer**, NOT the reprice op) and makes ONE `membership_reprice` task with an item per membership (pinning the active price), and the router fires the background run; the CRM polls `GET /tasks/{id}`. `execute_item` runs `reprice` per item + records the successor onto `task_items.new_item_id`; a failed item retries (3×) then fails, the membership untouched (re-running the batch picks it up). **There is no reprice preview.** Old applied-discount rows stay pinned to the old row as records; consumed `once` discounts are never re-granted. |
 | **freeze / unfreeze** (`freeze.py`) | **account-level** (not per-membership). `freeze` pauses Stripe billing and sets `freeze_start_date`/`freeze_end_date` on the parent `members` row (`member_memberships_freeze_profile.sql`); `unfreeze` resumes and clears them (`member_memberships_unfreeze_profile.sql`). Operates on the resolved parent account, so it covers all the account's memberships at once. |
 | **mark_paid_cash** (`mark_paid_cash.py`) | recurring-only; finds the subscription's open Stripe invoice and pays it **out of band** (no card charge). Stripe's `invoice.paid` webhook records the CRM invoice, and the `invoice_payment.paid` webhook records the cash charge (the InvoicePayment is `out_of_band`). Cash is a backup — future cycles still auto-charge the card. |
 | **charge_card** (`charge_card.py`) | ad-hoc, **outside any subscription**: create a one-off Stripe invoice for `amount_cents` + `reason`; `paid_cash=true` routes it out of band instead of charging the card. The `invoice.paid` + `invoice_payment.paid` webhooks persist the CRM invoice + charge rows. |
@@ -362,14 +361,15 @@ three-way split: **`one_time`** (the consolidated one-time invoice, from
 charged now when `prorate=True`) and **`recurring`** (the steady-state per-cycle
 invoice) — the latter two unpacked from `preview_update_payments_recurring`'s
 `DueNowVsRecurringPreview`. Each is `None` when the request has no membership in
-that group. (Cancel / update_price previews deliberately keep the two-way
-`DueNowVsRecurringPreview`.) Two rules shape what it returns:
+that group. (The cancel and discount previews deliberately keep the two-way
+`DueNowVsRecurringPreview`; reprice has no preview.) Two rules shape what it
+returns:
 
 - **`due_now` is absent (`None`) when `request.prorate` is false.** With no
   proration the engine's split reuses the steady-state recurring figure as
   `due_now`; that amount is **not** actually due now, so the start preview
-  suppresses it. Scoped to the start preview only — the shared engine split,
-  cancel, and update_price previews keep the reuse.
+  suppresses it. Scoped to the start preview only — the shared engine split
+  and the cancel / discount previews keep the reuse.
 - **The `one_time` half contains only the one-time lines.**
   `PaymentSyncOneTime.preview_one_time` previews at the customer level, so for
   a payer with a live subscription Stripe mixes the subscription's upcoming
@@ -384,11 +384,11 @@ that group. (Cancel / update_price previews deliberately keep the two-way
 
 - **Plans are templates, memberships are instances.** Editing a template (rename,
   re-price) never silently re-bills holders. The only fan-out to existing members
-  is the explicit `migrate_*` bulk sync (§4).
+  is the explicit per-plan reprice batch (§4).
 - **Price-version pinning.** A membership is frozen to its `price_id`. A plan
   re-price mints a new active price version (§3); existing memberships stay on
-  their old version until `update_price` (per-member opt-in) or a bulk migration
-  moves them. This is the membership analogue of the discount-version pinning
+  their old version until `update_price` (per-member opt-in) or the per-plan
+  reprice batch moves them. This is the membership analogue of the discount-version pinning
   `discounts-guide` documents, and the same predictability guarantee:
   "what is this member paying, and on which exact price/discount version" is a
   local, provable fact, never the side effect of someone editing a template.
@@ -425,8 +425,6 @@ that group. (Cancel / update_price previews deliberately keep the two-way
 | `GET /{plan_id}` | get one plan with its active price |
 | `GET /{plan_id}/prices` | list every price version with per-price `member_count` (active first) |
 | `POST /price` | set a new active price (201) |
-| `POST /migrate` | **not implemented yet** — returns 501 (stubbed pending the migration work; the `migrate_members` service method still exists) |
-| `POST /migrate-all` | **not implemented yet** — returns 501 (stubbed pending the migration work; the `migrate_all_members` service method still exists) |
 
 **Memberships** — `memberships_router.py`, prefix
 `/api/v1/member_memberships`:
@@ -437,10 +435,10 @@ that group. (Cancel / update_price previews deliberately keep the two-way
 | `POST /` | start the payer's family memberships in one call — list of items in, per-membership breakdown out (`MemberMembershipsStartResponse`); ≤2 charges (201) |
 | `POST /freeze` | freeze the account (204) |
 | `POST /unfreeze` | unfreeze the account (204) |
-| `PUT /price` | upgrade to the plan's active price (204) |
+| `PUT /price` | reprice ONE membership to the plan's active price — direct/synchronous; returns the successor `item_id` (200) |
+| `POST /reprice-plan` | batch-upgrade every member on a plan to its active price as a tracked task; returns `task_id` to poll (202) |
 | `POST /preview` | preview a start — three-way `one_time / due_now / recurring` split (staged, discounted) |
 | `POST /cancel/preview` | preview a cancel |
-| `POST /price/preview` | preview a price update |
 | `POST /discounts/add` | add applied-discount row(s) to the membership; `preview` bool in the body runs a dry-run instead of committing |
 | `POST /discounts/remove` | remove applied discount(s); `preview` bool in the body runs a dry-run instead of committing |
 | `POST /mark-paid-cash` | pay the open invoice out of band (204) |

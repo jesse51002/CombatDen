@@ -60,13 +60,11 @@ class Settings(BaseSettings):
     # Logging Configuration
     log_level: str = "DEBUG"
 
-    # Scheduled reconciler (twice-daily billing safety-net sweep)
+    # Scheduled reconciler (twice-daily billing safety-net sweep). Its run now
+    # also recovers stale tasks (re-runs unfinished tasks whose in-process
+    # execution died) — see src/reconciler/.
     reconciler_enabled: bool = True
     reconciler_cron_hours: list[int] = [2, 14]  # UTC hours, twice daily
-
-    # Tracked background tasks (src/tasks/): crash-recovery sweep that re-runs
-    # unfinished tasks whose in-process execution died.
-    tasks_sweep_enabled: bool = True
 
 
 # Billing cycle anchor constants
@@ -91,12 +89,11 @@ BULK_SYNC_MAX_RETRIES: Final[int] = 3
 # retry: up to TASK_ITEM_MAX_ATTEMPTS attempts, TASK_ITEM_RETRY_DELAY_SECONDS
 # between them (most failures are a transient busy family). A 'running' claim
 # older than TASK_STALE_RUNNING_SECONDS belongs to a dead process (every live
-# attempt finishes well under LOCK_MAX_HOLD_SECONDS) and may be reclaimed by
-# the sweep, which runs every TASK_SWEEP_INTERVAL_MINUTES.
+# attempt finishes well under LOCK_MAX_HOLD_SECONDS) and may be reclaimed when
+# the reconciler's stale-task recovery re-runs it (see src/reconciler/).
 TASK_ITEM_MAX_ATTEMPTS: Final[int] = 3
 TASK_ITEM_RETRY_DELAY_SECONDS: Final[int] = 10
 TASK_STALE_RUNNING_SECONDS: Final[int] = 120
-TASK_SWEEP_INTERVAL_MINUTES: Final[int] = 5
 
 # Scheduled reconciler — see src/reconciler/. No reconciler-wide lock: safety is
 # the per-paying-family PayingMemberLock every payment op already holds, so

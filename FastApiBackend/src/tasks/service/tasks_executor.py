@@ -77,9 +77,9 @@ class TasksExecutor:
     async def run_task(self, task_id: UUID) -> None:
         """Run every runnable item of a task, sequentially, then finalize.
 
-        Safe to call concurrently (in-process run + crash-recovery sweep):
-        the atomic claims guarantee each attempt has exactly one owner; an
-        item another run owns is skipped.
+        Safe to call concurrently (the in-process background run + the
+        reconciler's stale-task recovery): the atomic claims guarantee each
+        attempt has exactly one owner; an item another run owns is skipped.
         """
         items = await self._queries.get_items_for_task(task_id)
         if not items:
@@ -101,24 +101,6 @@ class TasksExecutor:
         for item in items:
             await self._run_item(task_id, item, handler)
         await self._queries.finalize_task_status(task_id)
-
-    async def sweep_stale(self) -> None:
-        """Crash recovery: re-run every unfinished task.
-
-        Items still 'pending' are claimed normally; a 'running' item whose
-        claim is older than ``TASK_STALE_RUNNING_SECONDS`` belongs to a dead
-        process and is reclaimed. Items a live run owns are untouched.
-        """
-        task_ids = await self._queries.list_unfinished_task_ids()
-        for task_id in task_ids:
-            try:
-                await self.run_task(task_id)
-            except Exception:
-                logger.error(
-                    "Task sweep run failed: task_id=%s",
-                    task_id,
-                    exc_info=True,
-                )
 
     # ── Private ────────────────────────────────────────────────
 

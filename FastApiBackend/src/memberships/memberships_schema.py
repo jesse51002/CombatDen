@@ -244,19 +244,6 @@ class MemberMembershipsBatchRepriceResponse(BaseModel):
     membership_count: int
 
 
-class BatchRepriceTarget(BaseModel):
-    """One membership the per-plan batch will reprice.
-
-    Returned by ``MemberMembershipsReprice.find_plan_reprice_targets`` —
-    member + the membership row to replace + the plan's active price pinned
-    as the target. The task handler maps each to a task item.
-    """
-
-    member_id: UUID
-    old_item_id: UUID
-    target_price_id: UUID
-
-
 class MemberMembershipsAddDiscountsRequest(BaseModel):
     """Add applied-discount rows to a membership (or preview the addition).
 

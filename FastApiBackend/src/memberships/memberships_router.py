@@ -639,69 +639,6 @@ async def preview_cancel_membership(
 
 
 @member_memberships_router.post(
-    "/price/preview",
-    response_model=DueNowVsRecurringPreview | None,
-    summary="Preview updating a membership's price",
-    description=(
-        "Dry-run of the update-price endpoint: runs every "
-        "validation and returns the Stripe invoice preview for "
-        "the post-swap subscription state."
-    ),
-    responses={
-        200: {"description": "Preview retrieved successfully"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
-    },
-)
-@inject
-async def preview_update_membership_price(
-    request: MemberMembershipsUpdatePriceRequest,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    memberships_service: MemberMembershipsService = Depends(
-        Provide[DependencyInjector.member_memberships_service]
-    ),
-) -> DueNowVsRecurringPreview | None:
-    """Preview what updating a membership's price would charge."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(request.member_id, user_payload)
-
-    try:
-        return await memberships_service.preview_update_price(
-            item_id=request.item_id,
-            member_id=request.member_id,
-            prorate=request.prorate,
-        )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except PaymentsStripeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to preview update membership price: item_id=%s, member_id=%s",
-            request.item_id,
-            request.member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to preview membership price update",
-        ) from None
-
-
-@member_memberships_router.post(
     "/discounts/add",
     response_model=DueNowVsRecurringPreview | None,
     summary="Add applied-discount rows to a membership (or preview)",

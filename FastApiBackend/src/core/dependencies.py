@@ -71,6 +71,9 @@ from src.reconciler.service.reconciler.reconciler_payment_push_sweep import (
 from src.reconciler.service.reconciler.reconciler_service import (
     ReconcilerService,
 )
+from src.reconciler.service.reconciler.reconciler_stale_task_sweep import (
+    StaleTaskSweep,
+)
 from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
 )
@@ -379,7 +382,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         gym_stripe_service=gym_stripe_service,
         stripe_membership_service=payments_membership_service,
         stripe_price_service=payments_price_service,
-        payment_sync_service=payment_sync_service,
         discounts_service=discounts_service,
     )
 
@@ -461,9 +463,18 @@ class DependencyInjector(containers.DeclarativeContainer):
         ),
         refund_handler=stripe_webhook_refund_handler,
     )
+    # Stale-task recovery: the reconciler re-runs unfinished tracked tasks
+    # whose in-process execution died (the recovery loop lives in the
+    # reconciler; the tasks engine only knows how to run ONE task).
+    reconciler_stale_task_sweep = providers.Factory(
+        StaleTaskSweep,
+        db_pool=db_pool,
+        tasks_executor=tasks_executor,
+    )
     reconciler_service = providers.Factory(
         ReconcilerService,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
         payment_push_sweep=reconciler_payment_push_sweep,
         invoice_fetch_sweep=reconciler_invoice_fetch_sweep,
+        stale_task_sweep=reconciler_stale_task_sweep,
     )

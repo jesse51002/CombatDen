@@ -1,11 +1,12 @@
--- Per-plan batch reprice discovery: every LIVE membership on this plan that
--- is not already on the plan's active price, that the batch should upgrade.
--- "Live" = applied (synced) and not cancelled; recurring only (one-time
--- memberships are terminal charges, never repriced). Memberships already
--- referenced by an UNFINISHED task item are skipped (a re-run of the batch
--- won't double-task them). Returns the plan's active price id as the pinned
--- target (identical for every row — ≤1 active price per plan). Reads the
--- unfiltered base (service-role).
+-- The membership_reprice batch's work discovery (a tasks-side cross-domain
+-- read, like the reconciler's member_memberships sweeps): every LIVE
+-- membership on the plan that the batch should upgrade to the plan's active
+-- price. "Live" = applied (synced) and not cancelled; recurring only
+-- (one-time memberships are terminal charges, never repriced). Memberships
+-- already referenced by an UNFINISHED task item are skipped (a re-run won't
+-- double-task them). Returns the plan's active price id as the pinned target
+-- (identical for every row — ≤1 active price per plan). Reads the unfiltered
+-- base (service-role).
 SELECT
     mm.item_id,
     mm.member_id,

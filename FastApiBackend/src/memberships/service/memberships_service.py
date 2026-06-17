@@ -277,19 +277,6 @@ class MemberMembershipsService:
             prorate=prorate,
         )
 
-    async def preview_update_price(
-        self,
-        item_id: UUID,
-        member_id: UUID,
-        prorate: bool = False,
-    ) -> DueNowVsRecurringPreview | None:
-        """Preview repricing a membership to the plan's active price."""
-        return await self._reprice.preview_reprice(
-            item_id=item_id,
-            member_id=member_id,
-            prorate=prorate,
-        )
-
     # ── Apply Discounts (add / remove applied-discount rows) ───────────────
 
     async def add_discounts(

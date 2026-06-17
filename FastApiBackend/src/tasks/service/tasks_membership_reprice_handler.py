@@ -2,18 +2,19 @@
 
 The tasks engine is generic; this is the one place that knows a
 ``membership_reprice`` task drives ``MemberMembershipsReprice``. It both
-CREATES the per-plan BATCH task (``create_batch`` — discover via the reprice
-op, then enqueue one item per membership) and RUNS one of its items
-(``execute_item`` — call the reprice op, record the successor). Tasks are
-ONLY for the batch; the single member-detail upgrade calls the reprice op
-directly. The dependency points one way only: tasks → memberships;
-``src.memberships`` imports nothing from ``src.tasks``.
+CREATES the per-plan BATCH task (``create_batch`` — discover the plan's
+upgrade targets here in the tasks layer, then enqueue one item per membership)
+and RUNS one of its items (``execute_item`` — call the reprice op, record the
+successor). Tasks are ONLY for the batch; the single member-detail upgrade
+calls the reprice op directly. The dependency points one way only: tasks →
+memberships; ``src.memberships`` imports nothing from ``src.tasks``.
 """
 
 import logging
 from uuid import UUID
 
 from schema.task import TaskType
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 import src.shared.db_schema_path  # noqa: F401
@@ -21,6 +22,8 @@ from src.memberships.service.memberships_reprice import (
     MemberMembershipsReprice,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.sql_loader import load_sql
+from src.tasks import SQL_DIR
 from src.tasks.service.tasks_queries import TasksQueries
 from src.tasks.service.tasks_service import TasksService
 from src.tasks.tasks_schema import TaskItemCreate, TaskItemResponse
@@ -60,10 +63,7 @@ class MembershipRepriceTaskHandler:
             ``(task_id, membership_count)`` — ``(None, 0)`` when nothing
             needs upgrading (no task is created).
         """
-        targets = await self._reprice.find_plan_reprice_targets(
-            gym_id,
-            plan_id,
-        )
+        targets = await self._find_reprice_targets(gym_id, plan_id)
         if not targets:
             return None, 0
         task_id = await self._tasks.create_task(
@@ -71,15 +71,37 @@ class MembershipRepriceTaskHandler:
             TaskType.membership_reprice,
             [
                 TaskItemCreate(
-                    member_id=t.member_id,
-                    old_item_id=t.old_item_id,
-                    target_price_id=t.target_price_id,
+                    member_id=UUID(str(t["member_id"])),
+                    old_item_id=UUID(str(t["item_id"])),
+                    target_price_id=UUID(str(t["target_price_id"])),
                     prorate=prorate,
                 )
                 for t in targets
             ],
         )
         return task_id, len(targets)
+
+    async def _find_reprice_targets(
+        self,
+        gym_id: UUID,
+        plan_id: UUID,
+    ) -> list[dict]:
+        """Discover the plan's memberships to upgrade to its active price.
+
+        Every LIVE (applied, not cancelled) recurring membership on the plan
+        whose price is not the plan's active one, minus any already referenced
+        by an unfinished task item. Read-only; the plan's active price is the
+        pinned target for all (≤1 active price per plan). Empty when nothing
+        needs upgrading (incl. a plan with no active price). A tasks-side
+        cross-domain read, like the reconciler's member_memberships sweeps.
+        """
+        sql = load_sql(SQL_DIR / "membership_reprice_targets.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"gym_id": str(gym_id), "plan_id": str(plan_id)},
+            )
+            return [dict(r) for r in result.mappings().fetchall()]
 
     async def execute_item(self, item: TaskItemResponse) -> None:
         """Run one claimed reprice item; raises on failure (retried).

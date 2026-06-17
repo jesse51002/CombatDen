@@ -177,24 +177,6 @@ class MembershipPlanPriceRequest(BaseModel):
     _v_price = field_validator("price")(_validate_price)
 
 
-# ── Migrate ──────────────────────────────────────────────────
-
-
-class MembershipPlanMigrateAllRequest(BaseModel):
-    """Migrate ALL active members on a plan to the current price."""
-
-    plan_id: UUID
-    gym_id: UUID
-
-
-class MembershipPlanMigrateRequest(BaseModel):
-    """Migrate specific members to the current active price."""
-
-    plan_id: UUID
-    gym_id: UUID
-    member_ids: list[UUID]
-
-
 # ── Response ─────────────────────────────────────────────────
 
 
@@ -215,7 +197,7 @@ class MembershipPlanPriceWithCount(MembershipPlanPriceResponse):
 
     Drives the edit-mode price list: the active price plus any older
     version that still has members (``member_count > 0``) the gym can
-    migrate onto the current price.
+    upgrade onto the current price (via the per-plan reprice).
     """
 
     member_count: int
