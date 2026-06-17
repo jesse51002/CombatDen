@@ -61,10 +61,19 @@ class EditMemberRequested extends MemberDetailEvent {
 
 class UpdateCardRequested extends MemberDetailEvent {
   final String paymentMethodId;
-  const UpdateCardRequested(this.paymentMethodId);
+
+  /// The member whose saved card is being set. Null targets
+  /// the currently viewed member; the start-memberships
+  /// wizard sets it to the payer so the card can be edited
+  /// from any launching page (e.g. a linked child's).
+  final String? targetMemberId;
+  const UpdateCardRequested(
+    this.paymentMethodId, {
+    this.targetMemberId,
+  });
 
   @override
-  List<Object?> get props => [paymentMethodId];
+  List<Object?> get props => [paymentMethodId, targetMemberId];
 }
 
 class UnlinkPaymentRequested extends MemberDetailEvent {

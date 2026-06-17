@@ -214,6 +214,10 @@ def build_member_memberships_service(
         payer_resolver=payer_resolver,
     )
     discounts_svc = DiscountsService(db_pool)
+    management_svc = build_member_management_service(
+        db_pool,
+        stripe_client,
+    )
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -225,6 +229,7 @@ def build_member_memberships_service(
         one_time_svc,
         discounts_svc,
         build_memberships_reprice(db_pool, stripe_client),
+        management_svc,
     )
 
 

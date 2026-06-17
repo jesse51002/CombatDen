@@ -75,6 +75,7 @@ class PaymentSyncOneTime:
         payer_member_id: UUID,
         idempotency_key: UUID,
         paid_with_cash: bool = False,
+        payment_method_id: str | None = None,
     ) -> None:
         """Charge the payer's PENDING one-time memberships on ONE invoice.
 
@@ -86,6 +87,11 @@ class PaymentSyncOneTime:
         an empty invoice). Returns ``None`` — the caller reads the DB (the
         ``applied`` status) to confirm. One-time memberships are terminal, so
         re-running finds no ``not_added`` rows and charges nothing again.
+
+        ``payment_method_id`` charges a SPECIFIC one-off card (entered at
+        checkout) instead of the payer's saved default — the payment service
+        attaches → pays → detaches it (a one-off is never kept; saving a card as
+        the default is a separate up-front step). Ignored on a cash settle.
         """
         payer, stripe_account_id = await self._payer.resolve_payer_with_account(
             payer_member_id,
@@ -93,7 +99,12 @@ class PaymentSyncOneTime:
         plan = await self._build_plan(payer, stripe_account_id)
         if not plan.items:
             return
-        result = await self._execute(plan, idempotency_key, paid_with_cash)
+        result = await self._execute(
+            plan,
+            idempotency_key,
+            paid_with_cash,
+            payment_method_id,
+        )
         await self._writeback(plan, result)
 
     async def preview_one_time(
@@ -247,13 +258,16 @@ class PaymentSyncOneTime:
         plan: OneTimeInvoicePlan,
         idempotency_key: UUID,
         paid_with_cash: bool,
+        payment_method_id: str | None = None,
     ) -> PaymentsInvoicePaymentResponse:
         """Charge the assembled invoice — one price line per membership.
 
         One consolidated invoice on the payer's customer (invoice-level metadata =
         payer + gym; per-membership provenance rides each line's ``stripe_item_id``
         after the writeback). ``line_item_ids`` / ``line_amounts`` come back in the
-        same order as ``plan.items``.
+        same order as ``plan.items``. When ``payment_method_id`` is set the payment
+        service attaches that one-off card, charges it, and detaches it — the
+        payer's saved default is never touched.
         """
         request = PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=plan.payer.stripe_customer_id,
@@ -263,6 +277,7 @@ class PaymentSyncOneTime:
                 gym_id=plan.payer.gym_id,
             ),
             paid_out_of_band=paid_with_cash,
+            payment_method_id=payment_method_id,
             idempotency_key=str(idempotency_key),
         )
         return await self._payments.create_invoice_payment(

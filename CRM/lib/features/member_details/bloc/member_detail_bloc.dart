@@ -199,7 +199,7 @@ class MemberDetailBloc
       actionLabel: 'Update card',
       emit: emit,
       action: () => _repository.updateMemberCard(
-        s.member.memberId,
+        event.targetMemberId ?? s.member.memberId,
         event.paymentMethodId,
       ),
     );
