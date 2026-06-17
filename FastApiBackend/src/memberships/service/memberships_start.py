@@ -144,24 +144,24 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 "default card",
             )
 
+        # Promote the card to the payer's saved default FIRST — before any
+        # pre-sync, insert, or charge. The one-time invoice and the recurring
+        # converge both bill the saved default, so it has to already be the new
+        # card. This is NOT best-effort: if it fails it RAISES, aborting the
+        # whole start with nothing written or charged — never leaving a
+        # membership applied while billing the old card.
+        if payment is not None and payment.set_default:
+            await self._set_default_card(
+                request.payer_member_id,
+                payment.payment_method_id,
+            )
+
         # Pre-sync only when a recurring converge will run: converge the
         # payer's family to a clean DB↔Stripe baseline BEFORE inserting.
         if recurring:
             await self._pre_sync_payments(request.payer_member_id)
 
         await self._insert_all(request, payer, plan_prices, states)
-
-        # Promote the card to the payer's saved default UP-FRONT (before any
-        # charge) when asked, so it bills the one-time invoice AND the
-        # recurring converge below. Recurring can only bill the saved default,
-        # so the card has to be the default before the converge runs. If a
-        # charge later fails the default already changed — that's accepted
-        # (staff re-edit the card), never reverted.
-        if payment is not None and payment.set_default:
-            await self._set_default_card(
-                request.payer_member_id,
-                payment.payment_method_id,
-            )
 
         if one_time:
             await self._charge_one_time_group(request, one_time)
@@ -284,29 +284,20 @@ class MemberMembershipsStart(MemberMembershipsBase):
         payer_member_id: UUID,
         payment_method_id: str,
     ) -> None:
-        """Promote the one-off card to the payer's saved default — best effort.
+        """Promote the card to the payer's saved default (attach → set default
+        → detach the old default → write the members card cache).
 
-        Reuses ``MembersManagementService.update_card`` (set customer default →
-        detach the old default → write the members card cache). The card is
-        already attached (the charge kept it), so the attach inside update_card
-        is a no-op. A failure here must NOT un-bill the successful charge, so it
-        is logged and swallowed — the card simply stays attached as a
-        non-default method and staff can re-save it from the member page.
+        Called FIRST in ``start()``, before any insert or charge. It is **not**
+        best-effort: any failure propagates so the whole start aborts with
+        nothing written or charged — never a membership left billing the old
+        card. ``update_card`` is the same path the member page uses.
         """
-        try:
-            await self._members_management.update_card(
-                payer_member_id,
-                MembersBillingUpdateCardRequest(
-                    payment_method_id=payment_method_id,
-                ),
-            )
-        except Exception:
-            logger.warning(
-                "One-off card charged but promoting it to member %s's "
-                "default failed; it stays attached (non-default).",
-                payer_member_id,
-                exc_info=True,
-            )
+        await self._members_management.update_card(
+            payer_member_id,
+            MembersBillingUpdateCardRequest(
+                payment_method_id=payment_method_id,
+            ),
+        )
 
     async def _converge_recurring_group(
         self,

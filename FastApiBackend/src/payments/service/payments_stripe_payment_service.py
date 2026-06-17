@@ -210,7 +210,11 @@ class PaymentsStripePaymentService:
                 stripe_account_id,
                 idempotency_key=idempotency_key,
             )
-        except stripe.StripeError:
+        except Exception:
+            # ANY failure here (Stripe error, network timeout, unexpected
+            # None) must stay swallowed — the invoice is already paid, so
+            # raising would wrongly read as a charge failure and a caller
+            # could un-bill a billed invoice.
             logger.warning(
                 "Failed to detach one-off payment method %s after a "
                 "successful charge; it remains attached (non-default).",
