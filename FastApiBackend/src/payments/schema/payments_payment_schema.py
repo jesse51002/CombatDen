@@ -46,6 +46,12 @@ class PaymentsInvoicePaymentCreateRequest(BaseModel):
     carry their own). ``description`` is the INVOICE-level description (the
     header line on the hosted invoice/receipt) — distinct from each item's
     line-level ``description``.
+
+    ``payment_method_id`` charges a SPECIFIC one-off card (entered at checkout)
+    instead of the customer's default: the service attaches it, pays with it,
+    then detaches it — never touching the saved default. (Saving a card as the
+    default is a separate, up-front ``update_customer`` step, not this path.)
+    It is mutually exclusive with ``paid_out_of_band``.
     """
 
     stripe_customer_id: str
@@ -54,7 +60,18 @@ class PaymentsInvoicePaymentCreateRequest(BaseModel):
     currency: str = "usd"
     description: str | None = None
     paid_out_of_band: bool = False
+    payment_method_id: str | None = None
     idempotency_key: str
+
+    @model_validator(mode="after")
+    def _pm_not_with_cash(self) -> Self:
+        """A specific card and an out-of-band (cash) settle are exclusive."""
+        if self.payment_method_id is not None and self.paid_out_of_band:
+            raise ValueError(
+                "payment_method_id cannot be combined with "
+                "paid_out_of_band (a cash settle charges no card)"
+            )
+        return self
 
 
 class PaymentsInvoicePaymentPreviewRequest(BaseModel):

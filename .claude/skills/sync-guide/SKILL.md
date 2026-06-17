@@ -904,13 +904,23 @@ The deep difference from the recurring engine: a one-time membership is
 re-derive-and-converge loop and no self-heal, because there is nothing to keep
 converging. This is why it is a separate service, not a mode of the reconciler.
 
-### `charge_one_time(payer_member_id, idempotency_key, paid_with_cash=False) -> None`
+### `charge_one_time(payer_member_id, idempotency_key, paid_with_cash=False, payment_method_id=None) -> None`
 
 The real path. Resolves the payer's own profile, builds the desired invoice,
 charges it once on the payer's customer, writes back. **A no-op when the payer
 has no pending one-time memberships** (never cuts an empty invoice). Returns `None` — the caller reads
 the DB (`applied`) to confirm. Re-running finds no `not_added` rows and charges
 nothing again (terminal).
+
+`payment_method_id` charges a **specific** one-off card (entered at checkout)
+instead of the payer's saved default — the payment service attaches → pays →
+detaches it without touching the saved default (see `payments-guide`); a one-off
+is always detached, there is no keep-attached option. The start op passes a
+`payment_method_id` here **only** for a one-off card (not saved): when the
+checkout card is being saved as the default it is promoted up-front (before this
+charge) so the one-time invoice just bills the new saved default — no explicit
+`payment_method_id`. Pass-through only and ignored on a cash settle;
+`preview_one_time` is unaffected (a payment method never changes the amount).
 
 1. **Read the payer's PENDING non-recurring memberships** (`_build_plan` ->
    `PaymentSyncQueries.get_active_one_time(payer_member_id, today, preview=False)`,

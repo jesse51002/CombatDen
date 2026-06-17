@@ -32,6 +32,9 @@ from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 
 import src.shared.db_schema_path  # noqa: F401
+from src.members.schema.members_billing_schema import (
+    MembersBillingUpdateCardRequest,
+)
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItemState,
     MemberMembershipsStartRequest,
@@ -49,6 +52,9 @@ from src.shared.gym_timezone import gym_today
 if TYPE_CHECKING:
     from src.discounts.service.discounts_service import (
         DiscountsService,
+    )
+    from src.members.service.management.members_management_service import (
+        MembersManagementService,
     )
     from src.memberships.service.memberships_discounts import (  # noqa: E501
         MemberMembershipsDiscounts,
@@ -79,6 +85,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         update_discounts: MemberMembershipsDiscounts,
         discounts_service: DiscountsService,
         validation: MemberMembershipsStartValidation,
+        members_management_service: MembersManagementService,
     ) -> None:
         super().__init__(
             db_pool,
@@ -89,6 +96,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self._update_discounts = update_discounts
         self._discounts = discounts_service
         self._validation = validation
+        self._members_management = members_management_service
 
     async def start(
         self,
@@ -124,6 +132,29 @@ class MemberMembershipsStart(MemberMembershipsBase):
         recurring = [
             s for s in states if s.plan_type == PlanType.recurring
         ]
+
+        # A card on a request that includes a recurring membership MUST be
+        # saved as the default — recurring can only bill the payer's saved
+        # default. Reject loudly before anything is written.
+        payment = request.payment
+        if payment is not None and recurring and not payment.set_default:
+            raise ValueError(
+                "a card on a request with a recurring membership must set "
+                "set_default — recurring memberships always bill the saved "
+                "default card",
+            )
+
+        # Promote the card to the payer's saved default FIRST — before any
+        # pre-sync, insert, or charge. The one-time invoice and the recurring
+        # converge both bill the saved default, so it has to already be the new
+        # card. This is NOT best-effort: if it fails it RAISES, aborting the
+        # whole start with nothing written or charged — never leaving a
+        # membership applied while billing the old card.
+        if payment is not None and payment.set_default:
+            await self._set_default_card(
+                request.payer_member_id,
+                payment.payment_method_id,
+            )
 
         # Pre-sync only when a recurring converge will run: converge the
         # payer's family to a clean DB↔Stripe baseline BEFORE inserting.
@@ -216,7 +247,19 @@ class MemberMembershipsStart(MemberMembershipsBase):
         billed (per-step Stripe idempotency) → the whole group fails and is
         cleaned up. After a successful charge an unconfirmed writeback marks
         the row failed but KEEPS it — its line is billed; never un-bill.
+
+        A one-off card (``payment`` set, NOT ``set_default``) is charged
+        directly (attach → pay → detach). When ``set_default`` the card was
+        already promoted to the payer's default up-front in ``start()``, so the
+        one-time invoice just bills the saved default like any other charge —
+        no explicit payment method here.
         """
+        payment = request.payment
+        one_off_pm = (
+            payment.payment_method_id
+            if payment is not None and not payment.set_default
+            else None
+        )
         try:
             await self._payment_sync_one_time.charge_one_time(
                 request.payer_member_id,
@@ -227,6 +270,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     request.idempotency_key, PlanType.one_time.value,
                 ),
                 paid_with_cash=request.paid_with_cash,
+                payment_method_id=one_off_pm,
             )
         except Exception as exc:
             await self._fail_group(
@@ -234,6 +278,26 @@ class MemberMembershipsStart(MemberMembershipsBase):
             )
             return
         await self._verify_group(group, keep_unverified=True)
+
+    async def _set_default_card(
+        self,
+        payer_member_id: UUID,
+        payment_method_id: str,
+    ) -> None:
+        """Promote the card to the payer's saved default (attach → set default
+        → detach the old default → write the members card cache).
+
+        Called FIRST in ``start()``, before any insert or charge. It is **not**
+        best-effort: any failure propagates so the whole start aborts with
+        nothing written or charged — never a membership left billing the old
+        card. ``update_card`` is the same path the member page uses.
+        """
+        await self._members_management.update_card(
+            payer_member_id,
+            MembersBillingUpdateCardRequest(
+                payment_method_id=payment_method_id,
+            ),
+        )
 
     async def _converge_recurring_group(
         self,

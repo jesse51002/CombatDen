@@ -57,6 +57,9 @@ if TYPE_CHECKING:
     from src.discounts.service.discounts_service import (
         DiscountsService,
     )
+    from src.members.service.management.members_management_service import (
+        MembersManagementService,
+    )
     from src.memberships.service.memberships_reprice import (
         MemberMembershipsReprice,
     )
@@ -98,6 +101,7 @@ class MemberMembershipsService:
         payment_sync_one_time: PaymentSyncOneTime,
         discounts_service: DiscountsService,
         reprice_service: MemberMembershipsReprice,
+        members_management_service: MembersManagementService,
     ) -> None:
         # Every lifecycle op is wrapped in the payer concurrency lock (held
         # across its pre-sync + DB write + sync) so no two ops converge the
@@ -136,6 +140,7 @@ class MemberMembershipsService:
             update_discounts=self._update_discounts,
             discounts_service=discounts_service,
             validation=self._start_validation,
+            members_management_service=members_management_service,
         )
         self._start_preview = MemberMembershipsStartPreview(
             *deps,

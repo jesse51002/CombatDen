@@ -10,13 +10,16 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/one_time_card_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_footer.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step.dart';
@@ -105,6 +108,15 @@ class _StartMembershipsWizardState
 
   bool _prorate = true;
   bool _paidWithCash = false;
+
+  /// A one-off card captured for the one-time charge (null =
+  /// the saved default pays it). Kept across a cash toggle;
+  /// only carried on PAY when not paying cash.
+  CustomCardCapture? _customCard;
+
+  /// True while editing one member's lineup from review —
+  /// the discounts step then returns straight to review.
+  bool _editReturnsToReview = false;
   MemberMembershipsStartRequest? _previewRequest;
   MemberMembershipsStartPreview? _preview;
 
@@ -227,18 +239,43 @@ class _StartMembershipsWizardState
   List<MembershipDraft> get _currentDrafts =>
       _drafts[_currentMember?.memberId] ?? const [];
 
+  bool get _hasRecurring =>
+      hasRecurringDrafts(_configMembers, _drafts);
+
+  bool get _hasOneTime =>
+      hasOneTimeDrafts(_configMembers, _drafts);
+
+  /// The wire request. The one-off card rides on PAY only
+  /// ([forPay]) — never on a preview — and only when paying
+  /// by card for a PURELY one-time cart (no recurring, which
+  /// always bills the saved default).
   MemberMembershipsStartRequest? _buildRequest(
-    String idempotencyKey,
-  ) =>
-      buildStartRequest(
-        idempotencyKey: idempotencyKey,
-        payerMemberId: _payer.memberId,
-        gymId: widget.member.gymId,
-        prorate: _prorate,
-        paidWithCash: _paidWithCash,
-        configMembers: _configMembers,
-        drafts: _drafts,
-      );
+    String idempotencyKey, {
+    bool forPay = false,
+  }) {
+    final card = _customCard;
+    final useCard = forPay &&
+        !_paidWithCash &&
+        _hasOneTime &&
+        !_hasRecurring &&
+        card != null;
+    return buildStartRequest(
+      idempotencyKey: idempotencyKey,
+      payerMemberId: _payer.memberId,
+      gymId: widget.member.gymId,
+      prorate: _prorate,
+      paidWithCash: _paidWithCash,
+      configMembers: _configMembers,
+      drafts: _drafts,
+      // A one-off card is never saved as the default (set_default
+      // stays false) — it pays today's one-time invoice only.
+      payment: useCard
+          ? MemberMembershipsStartPayment(
+              paymentMethodId: card.pmId,
+            )
+          : null,
+    );
+  }
 
   // ----- Step transitions -----
 
@@ -253,7 +290,13 @@ class _StartMembershipsWizardState
         case StartMembershipsStep.plans:
           _step = StartMembershipsStep.discounts;
         case StartMembershipsStep.discounts:
-          if (_memberIndex + 1 < _configMembers.length) {
+          if (_editReturnsToReview) {
+            // Finished editing this one member — straight
+            // back to review, no walk to the next member.
+            _editReturnsToReview = false;
+            _step = StartMembershipsStep.review;
+          } else if (_memberIndex + 1 <
+              _configMembers.length) {
             _memberIndex++;
             _step = StartMembershipsStep.plans;
           } else {
@@ -281,7 +324,12 @@ class _StartMembershipsWizardState
         case StartMembershipsStep.members:
           _step = StartMembershipsStep.payer;
         case StartMembershipsStep.plans:
-          if (_memberIndex == 0) {
+          if (_editReturnsToReview) {
+            // Back mid-edit abandons the edit and returns
+            // to review.
+            _editReturnsToReview = false;
+            _step = StartMembershipsStep.review;
+          } else if (_memberIndex == 0) {
             _step = StartMembershipsStep.members;
           } else {
             _memberIndex--;
@@ -311,7 +359,7 @@ class _StartMembershipsWizardState
   void _onPay() {
     // The idempotency key is generated at PAY press; a
     // retry of the same press dedups at Stripe.
-    final req = _buildRequest(const Uuid().v4());
+    final req = _buildRequest(const Uuid().v4(), forPay: true);
     if (req == null) return;
     _bloc.add(StartMembershipsRequested(req));
     setState(
@@ -328,6 +376,15 @@ class _StartMembershipsWizardState
     if (result == null) return;
     final items = retryItemsFor(result.failed, _drafts);
     if (items.isEmpty) return;
+    // A retry re-bills the same one-off card (Stripe keeps it
+    // attached after a decline so it can be reused) — only for
+    // a purely one-time cart, the only shape that can hold a
+    // custom card.
+    final card = _customCard;
+    final useCard = !_paidWithCash &&
+        _hasOneTime &&
+        !_hasRecurring &&
+        card != null;
     _bloc.add(StartMembershipsRequested(
       MemberMembershipsStartRequest(
         payerMemberId: _payer.memberId,
@@ -335,6 +392,11 @@ class _StartMembershipsWizardState
         idempotencyKey: const Uuid().v4(),
         prorate: _prorate,
         paidWithCash: _paidWithCash,
+        payment: useCard
+            ? MemberMembershipsStartPayment(
+                paymentMethodId: card.pmId,
+              )
+            : null,
         memberships: items,
       ),
     ));
@@ -373,6 +435,54 @@ class _StartMembershipsWizardState
     if (memberId != widget.member.memberId) {
       widget.onViewMember?.call(memberId);
     }
+  }
+
+  // ----- Review-step edit / remove -----
+
+  /// Edit one member's lineup: jump back into their plans
+  /// step; the discounts step then returns to review.
+  void _onEditMember(String memberId) {
+    final i = _configMembers
+        .indexWhere((m) => m.memberId == memberId);
+    if (i < 0) return;
+    setState(() {
+      _memberIndex = i;
+      _editReturnsToReview = true;
+      _step = StartMembershipsStep.plans;
+    });
+  }
+
+  /// Remove one membership draft from review. When it was the
+  /// member's last draft, drop the member from the run too.
+  void _onRemoveDraft(String memberId, String planId) {
+    setState(() {
+      final remaining = [
+        for (final d in _drafts[memberId] ?? const <MembershipDraft>[])
+          if (d.plan.planId != planId) d,
+      ];
+      if (remaining.isEmpty) {
+        _drafts.remove(memberId);
+        _selectedMemberIds.remove(memberId);
+      } else {
+        _drafts[memberId] = remaining;
+      }
+    });
+  }
+
+  // ----- One-off card (one-time charge) -----
+
+  Future<void> _onAddOrChangeCustomCard() async {
+    // A pure one-off — never saved, never the default. It pays
+    // today's one-time invoice once; no card on file is needed.
+    final captured = await OneTimeCardDialog.show(
+      context: context,
+    );
+    if (captured == null || !mounted) return;
+    setState(() => _customCard = captured);
+  }
+
+  void _onRemoveCustomCard() {
+    setState(() => _customCard = null);
   }
 
   // ----- Selection mutations -----
@@ -469,21 +579,10 @@ class _StartMembershipsWizardState
   }
 
   Future<void> _onAddNewCard() async {
-    // The update-card flow acts on the bloc's VIEWED
-    // member, so it only applies when the payer launched
-    // the wizard from their own page (a linked member's
-    // own card is added from their page the same way).
-    if (widget.member.memberId != _payer.memberId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Update the card from ${_payer.name}’s '
-            'page.',
-          ),
-        ),
-      );
-      return;
-    }
+    // The saved card always belongs to the PAYER. Target
+    // them explicitly so it can be added/replaced from any
+    // launching page (e.g. a linked child's), then re-read
+    // the payer detail once the mutation lands.
     final s = _bloc.state;
     final tokenBefore =
         s is MemberDetailLoaded ? s.refreshToken : -1;
@@ -491,6 +590,7 @@ class _StartMembershipsWizardState
       context: context,
       memberName: _payer.name,
       card: _payerDetail?.cardOnFile,
+      targetMemberId: _payer.memberId,
     );
     if (!mounted) return;
     await _awaitBlocSettle(tokenBefore);
@@ -530,13 +630,22 @@ class _StartMembershipsWizardState
       case StartMembershipsStep.plans:
         return _currentDrafts.isNotEmpty;
       case StartMembershipsStep.discounts:
-      case StartMembershipsStep.review:
         return true;
+      case StartMembershipsStep.review:
+        // At least one draft must remain (remove can empty
+        // the lineup entirely).
+        return _configMembers.any(
+          (m) =>
+              (_drafts[m.memberId] ?? const []).isNotEmpty,
+        );
       case StartMembershipsStep.preview:
         return _previewRequest != null;
       case StartMembershipsStep.payment:
+        // Cash, a saved card, or — for a one-time-only cart
+        // with no saved card — the one-off card alone.
         return _paidWithCash ||
-            _payerDetail?.cardOnFile != null;
+            _payerDetail?.cardOnFile != null ||
+            (!_hasRecurring && _customCard != null);
       case StartMembershipsStep.results:
         return !_isStarting;
     }
@@ -594,10 +703,9 @@ class _StartMembershipsWizardState
             preview: _preview,
             prorate: _prorate,
             paidWithCash: _paidWithCash,
-            hasRecurring: hasRecurringDrafts(
-              _configMembers,
-              _drafts,
-            ),
+            hasRecurring: _hasRecurring,
+            hasOneTime: _hasOneTime,
+            customCard: _customCard,
             payerCardOnFile: _payerDetail?.cardOnFile,
             memberNames: memberNamesOf(_configMembers),
             planNames: planNamesOf(_drafts),
@@ -612,6 +720,11 @@ class _StartMembershipsWizardState
             onPaidWithCashChanged: (v) =>
                 setState(() => _paidWithCash = v),
             onAddNewCard: _onAddNewCard,
+            onAddOrChangeCustomCard:
+                _onAddOrChangeCustomCard,
+            onRemoveCustomCard: _onRemoveCustomCard,
+            onEditMember: _onEditMember,
+            onRemoveDraft: _onRemoveDraft,
             onRetryFailed: _onRetryFailed,
             onViewMember: _onViewMember,
             onBackToPayment: () => setState(
@@ -623,6 +736,7 @@ class _StartMembershipsWizardState
             step: _step,
             hasNextMember: _memberIndex + 1 <
                 _configMembers.length,
+            isEditing: _editReturnsToReview,
             canAdvance: _canAdvance,
             isStarting: _isStarting,
             onNext: _next,

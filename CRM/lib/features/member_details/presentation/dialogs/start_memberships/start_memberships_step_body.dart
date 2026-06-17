@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_discounts_step.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_members_step.dart';
@@ -56,6 +57,8 @@ class StartMembershipsStepBody extends StatelessWidget {
   final bool prorate;
   final bool paidWithCash;
   final bool hasRecurring;
+  final bool hasOneTime;
+  final CustomCardCapture? customCard;
   final CardOnFile? payerCardOnFile;
   final Map<String, String> memberNames;
   final Map<String, String> planNames;
@@ -78,6 +81,14 @@ class StartMembershipsStepBody extends StatelessWidget {
   final ValueChanged<bool> onProrateChanged;
   final ValueChanged<bool> onPaidWithCashChanged;
   final VoidCallback onAddNewCard;
+  final VoidCallback onAddOrChangeCustomCard;
+  final VoidCallback onRemoveCustomCard;
+
+  /// Review-step actions: edit jumps the wizard back into
+  /// [memberId]'s plans/discounts; remove drops one draft.
+  final ValueChanged<String> onEditMember;
+  final void Function(String memberId, String planId)
+      onRemoveDraft;
   final VoidCallback onRetryFailed;
   final VoidCallback onBackToPayment;
   final ValueChanged<String> onViewMember;
@@ -103,6 +114,8 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.prorate,
     required this.paidWithCash,
     required this.hasRecurring,
+    required this.hasOneTime,
+    required this.customCard,
     required this.payerCardOnFile,
     required this.memberNames,
     required this.planNames,
@@ -115,6 +128,10 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.onProrateChanged,
     required this.onPaidWithCashChanged,
     required this.onAddNewCard,
+    required this.onAddOrChangeCustomCard,
+    required this.onRemoveCustomCard,
+    required this.onEditMember,
+    required this.onRemoveDraft,
     required this.onRetryFailed,
     required this.onBackToPayment,
     required this.onViewMember,
@@ -215,6 +232,8 @@ class StartMembershipsStepBody extends StatelessWidget {
           members: configMembers,
           draftsByMember: draftsByMember,
           discountsFuture: discountsFuture,
+          onEditMember: onEditMember,
+          onRemoveDraft: onRemoveDraft,
         );
       case StartMembershipsStep.preview:
         final req = previewRequest;
@@ -243,6 +262,11 @@ class StartMembershipsStepBody extends StatelessWidget {
           prorate: prorate,
           onProrateChanged: onProrateChanged,
           hasRecurring: hasRecurring,
+          hasOneTime: hasOneTime,
+          customCard: customCard,
+          onAddOrChangeCustomCard:
+              onAddOrChangeCustomCard,
+          onRemoveCustomCard: onRemoveCustomCard,
           preview: preview,
           onAddNewCard: onAddNewCard,
         );

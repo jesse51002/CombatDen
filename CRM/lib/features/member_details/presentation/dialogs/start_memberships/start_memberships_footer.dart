@@ -16,6 +16,11 @@ class StartMembershipsFooter extends StatelessWidget {
   /// configuring after the current one — drives the
   /// discounts step's "Next member" vs "Review" label.
   final bool hasNextMember;
+
+  /// True while editing one member's lineup from the review
+  /// step — the discounts step then returns straight to
+  /// review instead of walking to the next member.
+  final bool isEditing;
   final bool canAdvance;
   final bool isStarting;
   final VoidCallback onNext;
@@ -26,6 +31,7 @@ class StartMembershipsFooter extends StatelessWidget {
     super.key,
     required this.step,
     required this.hasNextMember,
+    required this.isEditing,
     required this.canAdvance,
     required this.isStarting,
     required this.onNext,
@@ -46,6 +52,7 @@ class StartMembershipsFooter extends StatelessWidget {
       case StartMembershipsStep.plans:
         return 'Next';
       case StartMembershipsStep.discounts:
+        if (isEditing) return 'Back to review';
         return hasNextMember ? 'Next member' : 'Review';
       case StartMembershipsStep.review:
         return 'Preview charges';

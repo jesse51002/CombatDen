@@ -300,6 +300,16 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
     )
 
+    # ── Members billing/management ──────────────────────────────
+    # Defined before member_memberships_service because the start op
+    # injects it to promote a one-off checkout card to the saved default.
+    members_management_service = providers.Factory(
+        MembersManagementService,
+        db_pool=db_pool,
+        payments_members_service=payments_members_service,
+        subscription_service=payments_subscription_service,
+    )
+
     # ── Reprice operation (memberships — task-agnostic) ──────────
     # The append-only reprice op (cancel old row + insert successor in one
     # txn, then the convergent sync, DB-first verify-or-revert). Pure
@@ -347,6 +357,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         payment_sync_one_time=payment_sync_one_time,
         discounts_service=discounts_service,
         reprice_service=memberships_reprice,
+        members_management_service=members_management_service,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────
@@ -369,12 +380,6 @@ class DependencyInjector(containers.DeclarativeContainer):
     members_payments_service = providers.Factory(
         MembersPaymentsService,
         db_pool=db_pool,
-    )
-    members_management_service = providers.Factory(
-        MembersManagementService,
-        db_pool=db_pool,
-        payments_members_service=payments_members_service,
-        subscription_service=payments_subscription_service,
     )
 
 

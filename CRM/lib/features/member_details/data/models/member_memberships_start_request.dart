@@ -1,7 +1,7 @@
-import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 
 part 'member_memberships_start_request.g.dart';
 
@@ -22,11 +22,15 @@ part 'member_memberships_start_request.g.dart';
   createFactory: false,
   explicitToJson: true,
 )
-class MemberMembershipsStartRequest extends Equatable {
+class MemberMembershipsStartRequest {
   final String payerMemberId;
   final String gymId;
   final bool prorate;
   final bool paidWithCash;
+
+  /// An optional card entered at checkout. Set only on PAY,
+  /// never on a preview.
+  final MemberMembershipsStartPayment? payment;
   final String idempotencyKey;
   final List<MemberMembershipsStartItem> memberships;
 
@@ -37,6 +41,7 @@ class MemberMembershipsStartRequest extends Equatable {
     required this.memberships,
     this.prorate = true,
     this.paidWithCash = false,
+    this.payment,
   });
 
   MemberMembershipsStartRequest copyWith({
@@ -44,6 +49,7 @@ class MemberMembershipsStartRequest extends Equatable {
     String? gymId,
     bool? prorate,
     bool? paidWithCash,
+    MemberMembershipsStartPayment? payment,
     String? idempotencyKey,
     List<MemberMembershipsStartItem>? memberships,
   }) {
@@ -53,6 +59,7 @@ class MemberMembershipsStartRequest extends Equatable {
       gymId: gymId ?? this.gymId,
       prorate: prorate ?? this.prorate,
       paidWithCash: paidWithCash ?? this.paidWithCash,
+      payment: payment ?? this.payment,
       idempotencyKey:
           idempotencyKey ?? this.idempotencyKey,
       memberships: memberships ?? this.memberships,
@@ -61,14 +68,4 @@ class MemberMembershipsStartRequest extends Equatable {
 
   Map<String, dynamic> toJson() =>
       _$MemberMembershipsStartRequestToJson(this);
-
-  @override
-  List<Object?> get props => [
-        payerMemberId,
-        gymId,
-        prorate,
-        paidWithCash,
-        idempotencyKey,
-        memberships,
-      ];
 }

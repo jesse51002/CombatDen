@@ -1,5 +1,6 @@
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
@@ -96,6 +97,18 @@ bool hasRecurringDrafts(
       ),
     );
 
+/// Whether any configured draft is a one-time / trial plan
+/// (non-recurring) — gates the one-off-card option.
+bool hasOneTimeDrafts(
+  List<StartMembershipParticipant> members,
+  Map<String, List<MembershipDraft>> drafts,
+) =>
+    members.any(
+      (m) => (drafts[m.memberId] ?? const []).any(
+        (d) => d.plan.planType != PlanType.recurring,
+      ),
+    );
+
 Map<String, String> memberNamesOf(
   List<StartMembershipParticipant> members,
 ) =>
@@ -120,6 +133,7 @@ MemberMembershipsStartRequest? buildStartRequest({
   required bool paidWithCash,
   required List<StartMembershipParticipant> configMembers,
   required Map<String, List<MembershipDraft>> drafts,
+  MemberMembershipsStartPayment? payment,
 }) {
   final items = <MemberMembershipsStartItem>[];
   for (final m in configMembers) {
@@ -136,6 +150,7 @@ MemberMembershipsStartRequest? buildStartRequest({
     idempotencyKey: idempotencyKey,
     prorate: prorate,
     paidWithCash: paidWithCash,
+    payment: payment,
     memberships: items,
   );
 }
