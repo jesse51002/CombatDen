@@ -66,6 +66,9 @@ from src.reconciler.service.reconciler.reconciler_payment_push_sweep import (
 from src.reconciler.service.reconciler.reconciler_service import (
     ReconcilerService,
 )
+from src.reconciler.service.reconciler.reconciler_subscription_orphan_sweep import (
+    SubscriptionOrphanSweep,
+)
 from src.rewards.service.rewards_redemption_service import (
     RewardsRedemptionService,
 )
@@ -414,9 +417,16 @@ class DependencyInjector(containers.DeclarativeContainer):
         ),
         refund_handler=stripe_webhook_refund_handler,
     )
+    reconciler_subscription_orphan_sweep = providers.Factory(
+        SubscriptionOrphanSweep,
+        db_pool=db_pool,
+        stripe_client=stripe_client,
+        subscription_service=payments_subscription_service,
+    )
     reconciler_service = providers.Factory(
         ReconcilerService,
         orphan_cleanup_sweep=reconciler_orphan_cleanup_sweep,
         payment_push_sweep=reconciler_payment_push_sweep,
         invoice_fetch_sweep=reconciler_invoice_fetch_sweep,
+        subscription_orphan_sweep=reconciler_subscription_orphan_sweep,
     )

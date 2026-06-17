@@ -224,10 +224,16 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    | update_price | write new `price_id` + stage `migrating` | row flips `migrating → applied` | restore old `price_id`/`total_price`, reset `applied` |
    | freeze / unfreeze | write / clear the freeze window | — (no membership-row status) | restore / re-clear the freeze window |
    | link / unlink | set / clear `account_linked_to_id` | — (child has no recurring) | unlink / re-link |
+   | add_discounts | insert applied-discount rows (`not_added`) | every inserted row flips `not_added → applied` | delete the inserted rows |
+   | remove_discounts | delete applied-discount rows (snapshot first) | — (no row left to stamp) | re-insert from the pre-delete snapshot |
 
    Callers whose DB change does not map to a single membership-row status
-   transition (freeze, link) pass `verify_fn=None` and get the achievable
-   guarantee: **revert-on-exception**.
+   transition (freeze, link, remove_discounts) pass `verify_fn=None` and get the
+   achievable guarantee: **revert-on-exception**. The discount callers verify /
+   revert the **applied-discount** rows rather than a membership row: add confirms
+   every inserted row reached `applied` and deletes them otherwise; remove can't
+   verify a hard-deleted row, so it snapshots the rows first and re-inserts them on
+   a failed sync.
 
 **Immutability is keyed on the real Stripe state, not a transient flag** — and the
 two columns differ on purpose:
@@ -295,7 +301,12 @@ sequence is:
    the coupon links (+ `applied` on the applied-discount rows), `deleted` on
    cancelled rows confirmed gone from the live sub, the parent's sub id, each
    membership's own post-discount price onto `total_price`, and the parent's
-   monthly total from Stripe's upcoming invoice.
+   monthly total from Stripe's upcoming invoice. **Each step is independently
+   guarded** — a failure in one is logged at ERROR and never aborts the others
+   (`write` never raises), so the writeback persists everything it *can* and any
+   step that didn't land self-heals on the next sync / reconciler run; notably one
+   bad coupon or membership row can't block the status stamp a caller's verify
+   reads (§8).
 
 Returns **`None`** — the sync writes everything it owns back to the DB; callers
 read the DB (the `applied` status) to confirm it landed, and use
@@ -710,11 +721,16 @@ from the Stripe invoice — it is the amount the discount math computed.
 `PaymentSyncWriteback._sync_payer_monthly_total` reads the **upcoming invoice**
 (`fetch_upcoming_invoice`, payments-guide) and sums its recurring lines onto the
 payer's monthly total (the payer's own `members` row); when `stripe_sub_id` is
-`None` (fully cancelled) it zeroes that total. **Writeback failures are logged at ERROR and never re-raised** —
-Stripe is authoritative and a later mutation / the reconciler re-corrects the
-mirror. (`update_stripe_item_id.sql` also exists in this folder; the membership
-lifecycle callers use it to write back a new line's `stripe_item_id` — owned by
-`memberships-guide`.)
+`None` (fully cancelled) it zeroes that total. **`write` is best-effort per step:
+every writeback runs under its own guard (`_run_step` for the single calls;
+per-iteration `try` inside `_apply_membership_rows` / `_apply_coupon_links`), so a
+failure is logged at ERROR and never re-raised and never aborts the remaining
+writebacks** — Stripe is authoritative and a later mutation / the reconciler
+re-corrects the mirror. (This is why a transient coupon-link failure can no longer
+block the `deleted`/`applied` stamp a caller's verify reads — the historical
+cancel-revert bug.) (`update_stripe_item_id.sql` also exists in this folder; the
+membership lifecycle callers use it to write back a new line's `stripe_item_id` —
+owned by `memberships-guide`.)
 
 ---
 
@@ -782,7 +798,7 @@ directly.
 
 > **Deep source of truth: the `reconciler-guide` skill + `reconciler.mermaid`.**
 > This section is the engine-side summary; that skill owns the sweep mechanics
-> (orchestrator, the three step-services, the record seam).
+> (orchestrator, the four step-services, the record seam).
 
 A twice-daily sweep that runs the engine on a clock, independent of user activity,
 closing the "self-heals only when a member is touched" gap. It is **load-bearing**,
@@ -793,10 +809,11 @@ settles promptly via `settle_once_discounts` (§6); the sweep is the backstop fo
 missed webhook).
 
 It lives in `src/reconciler/` (router-less), is started by APScheduler in the app
-lifespan, and is a thin orchestrator (`ReconcilerService.run`) that runs three
-step-services in order — invoice-fetch -> orphan-cleanup -> push (no
-reconciler-wide lock — safety is the per-family `PayingMemberLock` every payment op
-already holds):
+lifespan, and is a thin orchestrator (`ReconcilerService.run`) that runs four
+step-services in order — invoice-fetch -> orphan-cleanup -> push ->
+subscription-orphans (cancel live Stripe subs with no live DB link; runs last so
+push re-links real subs first — owned by `reconciler-guide`) (no reconciler-wide
+lock — safety is the per-family `PayingMemberLock` every payment op already holds):
 
 - **`InvoiceFetchSweep`** — missed-webhook backstop. Per gym Connect account it
   lists the configured lookback of invoices / payments / refunds and re-records each
@@ -863,8 +880,12 @@ compare-desired-vs-actual **skip-if-equal** guard on the push path — today
 - **`bulk_payment_sync` swallows per-membership errors** —
   `PaymentsResourceNotFoundError` and any `Exception` are logged at ERROR and the
   loop continues, so one member's broken Stripe state doesn't abort the batch.
-- **Price writeback never raises** — Stripe is authoritative; a failed mirror is
-  re-corrected by the next mutation or the reconciler.
+- **Writeback is best-effort per step; `write` never raises** — every step runs
+  under its own guard (`_run_step` + per-iteration `try` in the row/coupon loops),
+  so one failed write (a price, a coupon link, a status stamp) is logged at ERROR
+  and never aborts the rest. Stripe is authoritative; a failed mirror is re-corrected
+  by the next mutation or the reconciler, and the caller's verify/revert still
+  catches an un-stamped `applied`/`deleted` status independently.
 
 ---
 
