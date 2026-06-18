@@ -1,8 +1,6 @@
-"""Groups membership rows by plan for the CRM member detail carousel."""
+"""Builds the per-membership cards + overview for the CRM member detail."""
 
-from collections import defaultdict
 from datetime import date
-from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -10,14 +8,9 @@ from pydantic import BaseModel, ConfigDict
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
 from src.members.schema.members_billing_schema import (
     BillingMembershipInfo,
-    BillingMembershipMemberInfo,
-    BillingPayingForMember,
 )
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
-)
-from src.members.service.member_details.members_billing_supplementary import (
-    MembersBillingSupplementary,
 )
 from src.members.service.members_status_mapping import (
     is_membership_overdue,
@@ -28,174 +21,125 @@ from src.memberships.memberships_schema import (
 from src.shared.formatters import format_minor_units
 
 
-class OverviewKind(StrEnum):
-    """Which payer-role sentence the member's overview line uses.
-
-    A member is exactly one of these — the roles are mutually exclusive
-    under the payer model (a root account pays for self/others; a linked
-    child is paid for and pays for nobody).
-    """
-
-    self_pay = "self_pay"  # pays only their own membership(s)
-    pays_for_others = "pays_for_others"  # pays >=1 OTHER member's membership
-    beneficiary = "beneficiary"  # >=1 own membership paid by someone else
-
-
 class MembershipOverviewContext(BaseModel):
     """Resolved inputs for the profile-header overview string.
 
-    The detail service computes this from the membership rows (it owns the
-    payer math); the grouper only formats it. ``total`` is already scoped
-    to ``kind`` (what the viewed member pays for ``pays_for_others``,
-    their own active-recurring sum otherwise), in minor units.
+    The detail service computes this from the viewed member's own
+    membership rows (it owns the scan); the grouper only formats it.
+    ``total`` is the member's own active-recurring monthly sum, in minor
+    units.
     """
 
     model_config = ConfigDict(frozen=True)
 
-    kind: OverviewKind
     total: int
     has_trial: bool
     has_cancelled: bool
     has_frozen: bool
     has_overdue: bool
-    paying_count: int  # active recurring count in the scanned scope
-    members_paid_for_count: int  # distinct members the viewer pays for
-    own_payer_ids: frozenset[UUID]  # payers of the viewer's own memberships
-    viewed_member_id: UUID
+    paying_count: int  # active recurring count among the member's own
 
 
 class MembersBillingGrouper:
-    """Groups membership rows by plan_id for the membership carousel.
+    """Builds the member-detail carousel cards + the overview string.
 
-    Also handles linked-account filtering and overview string generation.
+    The carousel is scoped to the viewed member and ``member_details.sql``
+    returns one row per (member, plan), so each row becomes exactly one
+    membership card — there is no cross-member grouping.
     """
 
-    def group_by_plan(
+    def build_membership_cards(
         self,
         membership_rows: list,
-        supplementary: MembersBillingSupplementary,
         usage_lookup: dict[tuple[UUID, UUID], MembershipUsage],
-        target_member_id: UUID,
         today: date,
     ) -> list[BillingMembershipInfo]:
-        """Group membership rows by plan_id.
+        """Build one card per membership row.
 
         Args:
-            membership_rows: Rows with membership data.
-            supplementary: For discount and profile lookups.
+            membership_rows: The viewed member's own membership rows.
             usage_lookup: (member_id, plan_id) -> per-cycle class usage.
-            target_member_id: The member whose profile is being viewed,
-                used to pin them to the top of each card's paying_for list.
             today: The gym's local current date, used to derive overdue.
 
         Returns:
-            List of BillingMembershipInfo, one per unique plan.
+            One BillingMembershipInfo per row.
         """
-        plan_rows: dict[UUID, list] = defaultdict(list)
-        for row in membership_rows:
-            plan_rows[row["plan_id"]].append(row)
+        return [
+            self._build_card(row, usage_lookup, today)
+            for row in membership_rows
+        ]
 
-        grouped: list[BillingMembershipInfo] = []
-        for plan_id, rows in plan_rows.items():
-            representative = rows[0]
+    def _build_card(
+        self,
+        row: dict,
+        usage_lookup: dict[tuple[UUID, UUID], MembershipUsage],
+        today: date,
+    ) -> BillingMembershipInfo:
+        """Build a single membership card from one row.
 
-            paying_for = self._build_paying_for(
-                rows,
-                supplementary,
-                usage_lookup,
-                plan_id,
-                target_member_id,
+        ``total_price`` is the membership's own post-discount share kept as
+        stored regardless of status (the status badge conveys frozen /
+        cancelled). The per-cycle class usage is inlined directly onto the
+        card, defaulting to None / 0 when the member has no usage row.
+
+        Args:
+            row: One ``member_details.sql``-shaped membership row.
+            usage_lookup: (member_id, plan_id) -> per-cycle class usage.
+            today: The gym's local current date, used to derive overdue.
+
+        Returns:
+            The membership card.
+        """
+        usage = usage_lookup.get((row["member_id"], row["plan_id"]))
+        return BillingMembershipInfo(
+            plan_id=row["plan_id"],
+            plan_name=row["plan_name"],
+            plan_type=row["plan_type"],
+            status=self._display_status(
+                row["membership_status"],
+                row["next_due_date"],
                 today,
-            )
-
-            # Each row's total_price is now that membership's OWN post-discount
-            # share, so the plan-level total is the SUM across the plan's rows.
-            # Only active (billing) memberships count — a frozen membership is
-            # paused and a cancelled/ended one keeps a stale total_price, so
-            # including them would overstate what the plan currently bills.
-            total_price = sum(
-                row["total_price"] or 0
-                for row in rows
-                if row["membership_status"] == CrmMemberStatus.active
-            )
-            all_discounts = self._collect_plan_discounts(rows)
-
-            members = {
-                row["member_id"]: BillingMembershipMemberInfo(
-                    item_id=row["item_id"],
-                    paid_by_member_id=row["paid_by_member_id"],
-                    end_date=row["membership_end_date"],
-                    cancel_date=row["membership_cancel_date"],
-                    on_outdated_price=bool(row["on_outdated_price"]),
-                    base_cost=row["base_cost"],
-                    total_price=row["total_price"] or 0,
-                )
-                for row in rows
-            }
-
-            grouped.append(
-                BillingMembershipInfo(
-                    plan_id=plan_id,
-                    plan_name=representative["plan_name"],
-                    plan_type=representative["plan_type"],
-                    status=self._display_status(
-                        representative["membership_status"],
-                        representative["next_due_date"],
-                        today,
-                    ),
-                    base_cost=representative["base_cost"],
-                    current_active_price=representative[
-                        "current_active_price"
-                    ],
-                    duration_amount=representative["duration_amount"],
-                    duration_unit=representative["duration_unit"],
-                    total_price=total_price,
-                    last_paid_date=representative["last_paid_date"],
-                    next_due_date=representative["next_due_date"],
-                    start_date=representative["membership_start_date"],
-                    freeze_start_date=representative["freeze_start_date"],
-                    freeze_end_date=representative["freeze_end_date"],
-                    paying_for=paying_for,
-                    discounts=all_discounts,
-                    members=members,
-                )
-            )
-
-        return grouped
+            ),
+            item_id=row["item_id"],
+            paid_by_member_id=row["paid_by_member_id"],
+            base_cost=row["base_cost"],
+            current_active_price=row["current_active_price"],
+            on_outdated_price=bool(row["on_outdated_price"]),
+            duration_amount=row["duration_amount"],
+            duration_unit=row["duration_unit"],
+            total_price=row["total_price"] or 0,
+            last_paid_date=row["last_paid_date"],
+            next_due_date=row["next_due_date"],
+            start_date=row["membership_start_date"],
+            end_date=row["membership_end_date"],
+            cancel_date=row["membership_cancel_date"],
+            freeze_start_date=row["freeze_start_date"],
+            freeze_end_date=row["freeze_end_date"],
+            class_count=(usage.class_count if usage is not None else None),
+            classes_used=(usage.classes_used if usage is not None else 0),
+            classes_remaining=(
+                usage.classes_remaining if usage is not None else None
+            ),
+            discounts=self._collect_discounts(row),
+        )
 
     def build_membership_overview(
         self,
         ctx: MembershipOverviewContext,
-        supplementary: MembersBillingSupplementary,
     ) -> str:
-        """Build the profile-header membership overview string.
+        """Build the profile-header overview string for the viewed member.
 
-        Three payer-role sentences (see :class:`OverviewKind`):
-
-        - ``self_pay``  → ``Paying $X/mo for N Membership(s)``
-        - ``pays_for_others`` → ``Paying $X/mo across N members``
-        - ``beneficiary`` → ``$X/mo worth of memberships (Paid by …)``
-
-        Salient account states (frozen / overdue / trial / cancelled)
-        short-circuit the price phrase and keep their existing strings;
-        the beneficiary ``(Paid by …)`` suffix is appended in every state.
+        ``Paying $X/mo for N Membership(s)`` in the normal paying state;
+        salient account states (frozen / overdue / trial / cancelled)
+        short-circuit the price phrase and keep their existing strings, with
+        the count suffix appended when something is still active.
 
         Args:
-            ctx: Resolved payer-role inputs from the detail service.
-            supplementary: For payer-name lookups.
+            ctx: Resolved overview inputs from the detail service.
 
         Returns:
             The overview string.
         """
-        if ctx.kind == OverviewKind.pays_for_others:
-            return self._overview_pays_for_others(ctx)
-        if ctx.kind == OverviewKind.beneficiary:
-            return self._overview_beneficiary(ctx, supplementary)
-        return self._overview_self_pay(ctx)
-
-    def _overview_self_pay(self, ctx: MembershipOverviewContext) -> str:
-        """``Paying $X/mo for N Membership(s)`` — the viewer pays only
-        their own memberships. Salient states keep the count suffix."""
         state = self._state_phrase(ctx)
         suffix = self._count_suffix(ctx.paying_count)
         if state is None:
@@ -204,29 +148,6 @@ class MembersBillingGrouper:
             return f"{state}{suffix}"
         return state
 
-    def _overview_pays_for_others(self, ctx: MembershipOverviewContext) -> str:
-        """``Paying $X/mo across N members`` — the viewer pays for >=1
-        other member (self counted when they also hold a membership)."""
-        members = ctx.members_paid_for_count
-        state = self._state_phrase(ctx)
-        across = f" across {members} members" if members > 0 else ""
-        if state is None:
-            return f"Paying {format_minor_units(ctx.total)}/mo{across}"
-        return f"{state}{across}"
-
-    def _overview_beneficiary(
-        self,
-        ctx: MembershipOverviewContext,
-        supplementary: MembersBillingSupplementary,
-    ) -> str:
-        """``$X/mo worth of memberships (Paid by …)`` — >=1 of the
-        viewer's own memberships is paid by someone else."""
-        suffix = self._paid_by_suffix(ctx, supplementary)
-        state = self._state_phrase(ctx)
-        if state is None:
-            return f"{format_minor_units(ctx.total)}/mo worth of memberships {suffix}"
-        return f"{state} {suffix}"
-
     def _count_suffix(self, paying_count: int) -> str:
         """`` for N Membership(s)`` suffix, or empty when nothing active."""
         if paying_count <= 0:
@@ -234,33 +155,13 @@ class MembersBillingGrouper:
         label = "Membership" if paying_count == 1 else "Memberships"
         return f" for {paying_count} {label}"
 
-    def _paid_by_suffix(
-        self,
-        ctx: MembershipOverviewContext,
-        supplementary: MembersBillingSupplementary,
-    ) -> str:
-        """``(Paid by self / <name>)`` — self listed first, then payers.
-
-        A linked child has at most one non-self payer (their linked
-        parent), so the ordering is deterministic.
-        """
-        names: list[str] = []
-        if ctx.viewed_member_id in ctx.own_payer_ids:
-            names.append("self")
-        for payer_id in ctx.own_payer_ids:
-            if payer_id == ctx.viewed_member_id:
-                continue
-            profile = supplementary.profiles_dict.get(payer_id)
-            names.append(profile.first_name if profile else "Primary")
-        return f"(Paid by {' / '.join(names)})"
-
     def _state_phrase(self, ctx: MembershipOverviewContext) -> str | None:
         """Salient account-state string, or ``None`` for normal paying.
 
-        Returns ``None`` only for the normal positive-paying state so each
-        payer-role builder can supply its own price phrasing; every other
-        state (frozen / overdue / active-without-total / trial / cancelled /
-        none) returns its display string directly.
+        Returns ``None`` only for the normal positive-paying state so the
+        caller supplies the price phrasing; every other state (frozen /
+        overdue / active-without-total / trial / cancelled / none) returns
+        its display string directly.
         """
         if ctx.has_frozen:
             return "Account is Frozen"
@@ -301,78 +202,25 @@ class MembersBillingGrouper:
             return CrmMemberStatus.overdue
         return CrmMemberStatus(raw_status)
 
-    def _build_paying_for(
+    def _collect_discounts(
         self,
-        rows: list,
-        supplementary: MembersBillingSupplementary,
-        usage_lookup: dict[tuple[UUID, UUID], MembershipUsage],
-        plan_id: UUID,
-        target_member_id: UUID,
-        today: date,
-    ) -> list[BillingPayingForMember]:
-        """Build the paying_for list for a plan group.
-
-        Args:
-            rows: All membership rows sharing the same plan.
-            supplementary: For profile lookups.
-            usage_lookup: (member_id, plan_id) -> per-cycle class usage.
-            plan_id: The plan to look up usage for.
-            target_member_id: The queried member, pinned to index 0.
-            today: The gym's local current date, used to derive overdue.
-
-        Returns:
-            BillingPayingForMember list, queried member first.
-        """
-        paying_for: list[BillingPayingForMember] = []
-        for row in rows:
-            uid = row["member_id"]
-            profile = supplementary.profiles_dict.get(uid)
-
-            fields: dict = {
-                "member_id": uid,
-                "status": self._display_status(
-                    row["membership_status"],
-                    row["next_due_date"],
-                    today,
-                ),
-                "first_name": (profile.first_name if profile else row["first_name"]),
-                "last_name": (profile.last_name if profile else row["last_name"]),
-                "photo_url": (profile.photo_url if profile else row.get("photo_url")),
-            }
-
-            usage = usage_lookup.get((uid, plan_id))
-            if usage is not None:
-                fields["class_count"] = usage.class_count
-                fields["classes_used"] = usage.classes_used
-                fields["classes_remaining"] = usage.classes_remaining
-
-            paying_for.append(BillingPayingForMember(**fields))
-
-        paying_for.sort(key=lambda p: p.member_id != target_member_id)
-        return paying_for
-
-    def _collect_plan_discounts(
-        self,
-        rows: list,
+        row: dict,
     ) -> list[MemberMembershipsAppliedDiscount]:
-        """Collect every active applied-discount row across a plan's rows.
+        """Collect the active applied-discount rows for one membership.
 
-        Each row carries an ``applied_discounts`` JSONB list built by
-        ``member_details.sql`` from the membership's applied-discount rows
-        (already filtered to currently-active ones), each resolved to its
-        pinned value version. Applied-discount rows are item-scoped, so they
-        are NOT de-duplicated — the CRM groups them under each covered member
-        by ``item_id`` and removes one by ``applied_discount_id``.
+        ``member_details.sql`` builds the ``applied_discounts`` JSONB list
+        per item (already filtered to currently-active rows), each resolved
+        to its pinned value version. Applied-discount rows are item-scoped,
+        so they are NOT de-duplicated — the CRM removes one by
+        ``applied_discount_id``.
 
         Args:
-            rows: Membership rows sharing the same plan.
+            row: One membership row.
 
         Returns:
-            One MemberMembershipsAppliedDiscount per active applied-discount row.
+            One MemberMembershipsAppliedDiscount per active applied-discount.
         """
-        discounts: list[MemberMembershipsAppliedDiscount] = []
-        for row in rows:
-            for applied in row["applied_discounts"] or []:
-                discounts.append(MemberMembershipsAppliedDiscount(**applied))
-        return discounts
-
+        return [
+            MemberMembershipsAppliedDiscount(**applied)
+            for applied in row["applied_discounts"] or []
+        ]

@@ -32,7 +32,6 @@ from src.members.service.member_details.member_details_cycle_counts_bridge impor
 from src.members.service.member_details.members_billing_grouper import (
     MembersBillingGrouper,
     MembershipOverviewContext,
-    OverviewKind,
 )
 from src.members.service.member_details.members_billing_supplementary import (
     MembersBillingSupplementary,
@@ -105,8 +104,9 @@ class MembersBillingDetailService:
         streak_weeks = await self._streak_service.get_streak(member_id, gym_id)
 
         # The query returns the viewed member + every member they PAY FOR
-        # (paid_by_member_id), so the payer math (overview / pays_for) sees the
-        # funded memberships. The carousel shows ONLY the viewed member's own.
+        # (paid_by_member_id) so `pays_for` (the freeze-impact roster) can see
+        # the funded memberships. The carousel and overview are scoped to the
+        # viewed member's OWN rows only.
         all_membership_rows = [r for r in rows if r["plan_id"] is not None]
         own_membership_rows = [
             r for r in all_membership_rows if r["member_id"] == member_id
@@ -117,24 +117,17 @@ class MembersBillingDetailService:
             [member_id],
         )
 
-        grouped = self._grouper.group_by_plan(
+        grouped = self._grouper.build_membership_cards(
             own_membership_rows,
-            supplementary,
             usage_lookup,
-            member_id,
             today,
         )
 
         overview_ctx = self._build_overview_context(
-            member_id,
             own_membership_rows,
-            all_membership_rows,
             today,
         )
-        overview = self._grouper.build_membership_overview(
-            overview_ctx,
-            supplementary,
-        )
+        overview = self._grouper.build_membership_overview(overview_ctx)
 
         pays_for = self._build_pays_for(member_id, all_membership_rows)
 
@@ -306,75 +299,38 @@ class MembersBillingDetailService:
 
     def _build_overview_context(
         self,
-        member_id: UUID,
         own_rows: list,
-        all_rows: list,
         today: date,
     ) -> MembershipOverviewContext:
-        """Resolve the payer-role inputs for the profile-header overview.
+        """Resolve the overview inputs for the viewed member's own rows.
 
-        Decides which of the three :class:`OverviewKind` sentences the
-        member gets — ``pays_for_others`` when they bill >=1 other member,
-        ``beneficiary`` when someone else pays >=1 of their own, else
-        ``self_pay`` — and scopes the total / flags / counts to that role.
+        Scoped to the member's own memberships — ``total`` is their own
+        active-recurring monthly sum and the flags / count are scanned over
+        the same rows.
 
         Args:
-            member_id: The queried member.
-            own_rows: The queried member's OWN membership rows.
-            all_rows: Every family membership row (for the payer math).
+            own_rows: The viewed member's OWN membership rows.
             today: The gym's local date, for the overdue derivation.
 
         Returns:
             The resolved overview context.
         """
-        own_payer_ids = frozenset(
-            r["paid_by_member_id"]
-            for r in own_rows
-            if self._is_current_recurring(r)
-        )
-
-        paid_for_rows = [
-            r for r in all_rows if r["paid_by_member_id"] == member_id
-        ]
-        members_paid_for = {
-            r["member_id"]
-            for r in paid_for_rows
-            if self._is_current_recurring(r)
-        }
-        pays_for_others = bool(members_paid_for - {member_id})
-
-        if pays_for_others:
-            kind = OverviewKind.pays_for_others
-            scope_rows = paid_for_rows
-            total = self._member_paying_total(paid_for_rows)
-        elif own_payer_ids - {member_id}:
-            kind = OverviewKind.beneficiary
-            scope_rows = own_rows
-            total = self._member_paying_total(own_rows)
-        else:
-            kind = OverviewKind.self_pay
-            scope_rows = own_rows
-            total = self._member_paying_total(own_rows)
-
+        total = self._member_paying_total(own_rows)
         (
             has_trial,
             has_cancelled,
             has_frozen,
             has_overdue,
             paying_count,
-        ) = self._scan_membership_flags(scope_rows, today)
+        ) = self._scan_membership_flags(own_rows, today)
 
         return MembershipOverviewContext(
-            kind=kind,
             total=total,
             has_trial=has_trial,
             has_cancelled=has_cancelled,
             has_frozen=has_frozen,
             has_overdue=has_overdue,
             paying_count=paying_count,
-            members_paid_for_count=len(members_paid_for),
-            own_payer_ids=own_payer_ids,
-            viewed_member_id=member_id,
         )
 
     def _build_pays_for(

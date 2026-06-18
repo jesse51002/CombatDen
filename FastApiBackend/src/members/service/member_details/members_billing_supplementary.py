@@ -40,7 +40,6 @@ class MembersBillingSupplementary:
         self._db_pool = db_pool
         self._gym_id = gym_id
         self._member_id = member_id
-        self._profiles: dict[UUID, BillingLinkedAccount] = {}
         self._rewards: dict[UUID, BillingRewardCard] = {}
         self._redeemed_rewards: list[BillingRewardCard] = []
         self._authorized_payers: list[BillingLinkedAccount] = []
@@ -55,7 +54,6 @@ class MembersBillingSupplementary:
         }
 
         async with self._db_pool.session() as session:
-            self._profiles = await self._fetch_profiles(session, gym_params)
             self._rewards = await self._fetch_rewards(session, gym_params)
             self._redeemed_rewards = await self._fetch_reward_redemptions(
                 session,
@@ -71,25 +69,6 @@ class MembersBillingSupplementary:
                 member_params,
                 "member_details_authorized_to_pay_for.sql",
             )
-
-    async def _fetch_profiles(
-        self,
-        session: AsyncSession,
-        params: dict[str, str],
-    ) -> dict[UUID, BillingLinkedAccount]:
-        """Load gym billing profiles into lookup dict."""
-        sql = load_sql(_DETAILS_SQL / "member_details_linked_profiles.sql")
-        result = await session.execute(text(sql), params)
-        profiles: dict[UUID, BillingLinkedAccount] = {}
-        for row in result.mappings().all():
-            profile = BillingLinkedAccount(
-                member_id=row["member_id"],
-                first_name=row["first_name"],
-                last_name=row["last_name"],
-                photo_url=row["photo_url"],
-            )
-            profiles[row["member_id"]] = profile
-        return profiles
 
     async def _fetch_rewards(
         self,
@@ -150,11 +129,6 @@ class MembersBillingSupplementary:
             )
             for row in result.mappings().all()
         ]
-
-    @property
-    def profiles_dict(self) -> dict[UUID, BillingLinkedAccount]:
-        """Return the raw profiles lookup dict."""
-        return self._profiles
 
     @property
     def redeemed_rewards(self) -> list[BillingRewardCard]:
