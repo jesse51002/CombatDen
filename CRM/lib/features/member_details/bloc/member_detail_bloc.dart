@@ -481,6 +481,7 @@ class MemberDetailBloc
         memberId: s.member.memberId,
         chargeId: event.chargeId,
         amount: event.amount,
+        idempotencyKey: const Uuid().v4(),
       ),
     );
   }
