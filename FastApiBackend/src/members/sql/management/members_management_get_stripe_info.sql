@@ -7,6 +7,7 @@ SELECT
     mbp.phone,
     mbp.stripe_customer_id,
     mbp.stripe_payment_method_id,
+    mbp.stripe_sub_id_month,
     g.stripe_account_id
 FROM members mbp
 JOIN gyms g ON g.gym_id = mbp.gym_id

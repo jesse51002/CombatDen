@@ -47,6 +47,11 @@ Additional mark_paid_cash boundary tests (scenarios 4–9):
    ``mark_paid_cash`` the resolved invoice must carry
    ``out_of_band=true`` payment (confirming the cash path, not a
    card charge).
+
+10. ``test_mark_paid_cash_canceled_membership_rejected`` — a
+    membership whose ``cancel_date`` has passed (Stripe canceled the
+    sub) cannot be marked paid; ``mark_paid_cash`` raises
+    ``ValueError`` before any Stripe call.
 """
 
 from uuid import uuid4
@@ -59,6 +64,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
 )
+from src.shared.gym_timezone import gym_today
 from src.shared.sql_loader import load_sql
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.stripe_assertions import snapshot_billing_state
@@ -964,5 +970,78 @@ async def test_mark_paid_cash_out_of_band_confirmed(
             f"Invoice {open_invoice_id} has PaymentIntent {payment_intent!r} after "
             f"mark_paid_cash — a card was charged, not cash out-of-band."
         )
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+async def test_mark_paid_cash_canceled_membership_rejected(
+    memberships_service,
+    db_pool,
+    gym_id,
+    created,
+):
+    """A canceled membership cannot be marked paid in cash.
+
+    Once a membership's ``cancel_date`` has passed — e.g. Stripe's
+    dunning canceled the subscription and the cancel-sync stamped it —
+    staff must not be able to 'rescue' it with cash. They create a new
+    membership from scratch instead. The guard fires before any Stripe
+    call, so no invoice is touched.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
+        gym_id,
+        plan_type="recurring",
+        plan_name="Canceled Cash Test",
+        price_cents=5000,
+    )
+
+    try:
+        await memberships_service.start(
+            MemberMembershipsStartRequest(
+                payer_member_id=member.member_id,
+                gym_id=gym_id,
+                idempotency_key=uuid4(),
+                memberships=[
+                    MemberMembershipsStartItem(
+                        member_id=member.member_id,
+                        price_id=plan.price_id,
+                    ),
+                ],
+            )
+        )
+
+        mm_row = await _get_membership_row(db_pool, member.member_id, plan.plan_id)
+        item_id = mm_row["item_id"]
+
+        # Stamp the membership canceled-effective-today (what the
+        # cancel-sync writes when Stripe cancels a delinquent sub).
+        async with db_pool.session() as session:
+            tz_row = (
+                (
+                    await session.execute(
+                        text("SELECT timezone FROM gyms WHERE gym_id = :g"),
+                        {"g": str(gym_id)},
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+            await session.execute(
+                text(
+                    "UPDATE member_memberships_unfiltered "
+                    "SET cancel_date = :d WHERE item_id = :i"
+                ),
+                {"d": gym_today(tz_row["timezone"]), "i": str(item_id)},
+            )
+            await session.commit()
+
+        with pytest.raises(ValueError, match="canceled"):
+            await memberships_service.mark_paid_cash(
+                item_id=item_id,
+                member_id=member.member_id,
+                idempotency_key=uuid4(),
+            )
     finally:
         await delete_member_data(db_pool, member.member_id)

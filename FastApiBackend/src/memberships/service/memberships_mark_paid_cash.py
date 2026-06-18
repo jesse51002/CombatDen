@@ -19,6 +19,7 @@ from src.memberships.service.memberships_base import (
     MemberMembershipsBase,
 )
 from src.shared.database import DirectDatabasePool
+from src.shared.gym_timezone import gym_today
 
 if TYPE_CHECKING:
     from src.payments.service.payments_stripe_payment_service import (
@@ -70,9 +71,9 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
             member_id: The member who owns the membership row.
 
         Raises:
-            ValueError: If the membership is not recurring, not
-                linked to a Stripe subscription, or has no open
-                invoice on that subscription.
+            ValueError: If the membership is not recurring, is
+                canceled, not linked to a Stripe subscription, or has
+                no open invoice on that subscription.
             PaymentsStripeError: If Stripe returns an error.
         """
         membership = await self._get_membership(item_id, member_id)
@@ -82,6 +83,15 @@ class MemberMembershipsMarkPaidCash(MemberMembershipsBase):
             raise ValueError("mark-paid-cash only applies to recurring memberships")
         if not membership["stripe_item_id"]:
             raise ValueError(f"Membership {item_id} is not linked to a Stripe subscription")
+
+        cancel_date = membership["cancel_date"]
+        if cancel_date is not None and cancel_date <= gym_today(
+            membership["timezone"]
+        ):
+            raise ValueError(
+                "Cannot mark a canceled membership paid; "
+                "create a new membership instead"
+            )
 
         payer = await self._payer_resolver.resolve_payer(
             membership["paid_by_member_id"],
