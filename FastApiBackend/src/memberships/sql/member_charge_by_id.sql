@@ -15,11 +15,17 @@ SELECT
     c.stripe_charge_id,
     c.payment_method_type,
     c.card_last_four,
+    -- Only SUCCEEDED refunds reduce the refundable balance. Today every refund
+    -- row is written succeeded (the service and the webhook never write a
+    -- pending/failed refund), so this guard is a no-op now — it makes the
+    -- invariant explicit so a future failed/cancelled refund row can't silently
+    -- undercount the balance.
     COALESCE((
         SELECT -SUM(r.amount)
         FROM member_charges r
         WHERE r.refunds_charge_id = c.charge_id
           AND r.kind = 'refund'
+          AND r.status = 'succeeded'
     ), 0) AS already_refunded
 FROM member_charges c
 WHERE c.charge_id = :charge_id
