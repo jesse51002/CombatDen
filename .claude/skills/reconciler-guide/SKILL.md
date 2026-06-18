@@ -271,6 +271,18 @@ When a sync finds Stripe ≠ CRM, the winner depends on the kind of difference:
     **date-derived** (`next_due_date < today`), not Stripe-derived, and the
     failed-charge row + fresh dates come from the invoice fetcher.
 
+**How long `past_due` lasts before Stripe cancels.** Stripe runs its
+**dunning/retry window** and then auto-cancels the delinquent sub (firing
+`customer.subscription.deleted` → the cancel path above). **On the current
+configuration that window is ~1 month**, so a member who never pays flips to
+`canceled` roughly a month after the first failed renewal — only then does the
+cancel-sync null the sub id, the membership read `cancelled`, and the
+canceled-membership rules engage (`mark_paid_cash` rejects it; `list_invoices`
+stops surfacing its now-stale invoice). The window is **day-based and a
+per-connected-account Dashboard setting** (Settings → Billing → Revenue
+recovery — Dashboard-only, **no API**), not a literal calendar month, so
+changing it is a Stripe config change, never code.
+
 ---
 
 ## 7. Idempotency & safety properties

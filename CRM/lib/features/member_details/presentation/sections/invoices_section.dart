@@ -5,7 +5,7 @@ import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
-import 'package:crm/features/member_details/presentation/dialogs/coming_soon_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/mark_paid_cash_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
@@ -29,11 +29,22 @@ class InvoicePayer {
   /// member they fund (the upcoming-invoice preview carries no date).
   final DateTime? nextDueDate;
 
+  /// The `item_id` of a representative membership funded by this payer,
+  /// used as the handle for marking an open invoice paid in cash.
+  /// Null when the payer funds no resolvable recurring membership.
+  final String? cashItemId;
+
+  /// The covered member id whose membership [cashItemId] belongs to.
+  /// Null when [cashItemId] is null.
+  final String? cashMemberId;
+
   const InvoicePayer({
     required this.memberId,
     required this.name,
     this.photoUrl,
     this.nextDueDate,
+    this.cashItemId,
+    this.cashMemberId,
   });
 }
 
@@ -184,8 +195,7 @@ class _InvoicesSectionState extends State<InvoicesSection> {
             if (pi.picked != null)
               _InvoiceBody(
                 invoice: pi.picked!,
-                payerName: pi.payer.name,
-                payerPhotoUrl: pi.payer.photoUrl,
+                payer: pi.payer,
               ),
         ];
         if (bodies.isEmpty) return const SizedBox.shrink();
@@ -226,13 +236,11 @@ class _InvoicesSectionState extends State<InvoicesSection> {
 /// stacks one of these per payer.
 class _InvoiceBody extends StatelessWidget {
   final _PickedInvoice invoice;
-  final String payerName;
-  final String? payerPhotoUrl;
+  final InvoicePayer payer;
 
   const _InvoiceBody({
     required this.invoice,
-    required this.payerName,
-    required this.payerPhotoUrl,
+    required this.payer,
   });
 
   /// The money this card shows, through the shared breakdown widget.
@@ -248,8 +256,41 @@ class _InvoiceBody extends StatelessWidget {
     );
   }
 
+  Widget? _cashAction(BuildContext context) {
+    if (invoice.overdue && payer.cashItemId != null) {
+      return AppOutlineButton(
+        fullWidth: true,
+        text: 'Mark paid with cash',
+        borderRadius: DesignConstants.radiusSmall,
+        onPressed: () => MarkPaidCashDialog.show(
+          context: context,
+          amount: invoice.amount,
+          currency: invoice.currency,
+          itemId: payer.cashItemId!,
+          coveredMemberId: payer.cashMemberId!,
+          payerName: payer.name,
+        ),
+      );
+    }
+    if (!invoice.overdue) {
+      final dateNote = invoice.date != null
+          ? 'Cash payment available once this invoice opens on '
+            '${formatDay(invoice.date)}'
+          : 'Cash payment available once this invoice opens';
+      return Text(
+        dateNote,
+        style: DesignConstants.pSmall.copyWith(
+          color: DesignConstants.text2nd,
+        ),
+      );
+    }
+    // overdue but payer.cashItemId == null — no action.
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final action = _cashAction(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
@@ -260,13 +301,13 @@ class _InvoiceBody extends StatelessWidget {
             CircleAvatar(
               radius: DesignConstants.iconSizeMedium,
               backgroundColor: DesignConstants.backgroundColor,
-              backgroundImage: payerPhotoUrl != null
-                  ? NetworkImage(payerPhotoUrl!)
+              backgroundImage: payer.photoUrl != null
+                  ? NetworkImage(payer.photoUrl!)
                   : null,
-              child: payerPhotoUrl == null
+              child: payer.photoUrl == null
                   ? Text(
-                      payerName.isNotEmpty
-                          ? payerName[0].toUpperCase()
+                      payer.name.isNotEmpty
+                          ? payer.name[0].toUpperCase()
                           : '?',
                       style: DesignConstants.pSmall.copyWith(
                         color: DesignConstants.text,
@@ -289,7 +330,7 @@ class _InvoiceBody extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    payerName,
+                    payer.name,
                     style: DesignConstants.h3,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -308,18 +349,7 @@ class _InvoiceBody extends StatelessWidget {
           ],
         ),
         InvoiceBreakdown(data: _money),
-        AppOutlineButton(
-          fullWidth: true,
-          text: 'Mark paid with cash',
-          borderRadius: DesignConstants.radiusSmall,
-          onPressed: () => ComingSoonDialog.show(
-            context: context,
-            title: 'Mark paid with cash',
-            message:
-                'Marking an invoice paid with cash is '
-                'coming soon.',
-          ),
-        ),
+        ?action,
       ],
     );
   }

@@ -45,6 +45,12 @@ class MemberDetailGrid extends StatelessWidget {
   List<InvoicePayer> get _invoicePayers {
     final order = <String>[];
     final dueByPayer = <String, DateTime?>{};
+
+    // For each payer, capture ONE representative funded (itemId, coveredMemberId)
+    // so the cash mark-paid action has a handle to the open invoice.
+    final cashItemIdByPayer = <String, String>{};
+    final cashMemberIdByPayer = <String, String>{};
+
     for (final m in member.memberships) {
       if (m.planType?.toLowerCase() != 'recurring') continue;
       final payerId = m.paidByFor(member.memberId);
@@ -60,6 +66,17 @@ class MemberDetailGrid extends StatelessWidget {
           dueByPayer[payerId] = due;
         }
       }
+      // Capture the first funded membership we find for this payer.
+      if (!cashItemIdByPayer.containsKey(payerId)) {
+        // Find the covered member whose membership is paid by payerId.
+        for (final entry in m.members.entries) {
+          if (entry.value.paidByMemberId == payerId) {
+            cashItemIdByPayer[payerId] = entry.value.itemId;
+            cashMemberIdByPayer[payerId] = entry.key;
+            break;
+          }
+        }
+      }
     }
     return [
       for (final id in order)
@@ -68,6 +85,8 @@ class MemberDetailGrid extends StatelessWidget {
           name: _payerNameFor(id),
           photoUrl: _payerPhotoFor(id),
           nextDueDate: dueByPayer[id],
+          cashItemId: cashItemIdByPayer[id],
+          cashMemberId: cashMemberIdByPayer[id],
         ),
     ];
   }
