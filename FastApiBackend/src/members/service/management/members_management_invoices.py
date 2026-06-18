@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 _MANAGEMENT_SQL = SQL_DIR / "management"
 
+# Stripe invoice status for an outstanding (finalized, unpaid) invoice.
+_OPEN_INVOICE_STATUS = "open"
+
 
 class MembersManagementInvoices(MembersManagementBase):
     """List Stripe invoices and fetch the upcoming invoice for a member."""
@@ -61,7 +64,12 @@ class MembersManagementInvoices(MembersManagementBase):
             starting_after: Cursor for pagination (invoice ID).
 
         Returns:
-            List of invoice details from Stripe.
+            Invoice details from Stripe. An OPEN invoice belonging to a
+            subscription other than the payer's current monthly sub is
+            omitted: a canceled recurring membership leaves a stale,
+            uncollectible invoice on the dead sub (the cancel-sync nulls
+            ``stripe_sub_id_month``), and it must never surface as
+            overdue. One-off invoices and the live sub's invoices stay.
 
         Raises:
             ValueError: If the member has no Stripe customer
@@ -75,12 +83,30 @@ class MembersManagementInvoices(MembersManagementBase):
         if not info["stripe_account_id"]:
             raise ValueError(f"Gym {info['gym_id']} has no Stripe account configured")
 
-        return await self._payments.list_invoices(
+        invoices = await self._payments.list_invoices(
             stripe_customer_id=info["stripe_customer_id"],
             stripe_account_id=info["stripe_account_id"],
             limit=limit,
             starting_after=starting_after,
         )
+
+        # Drop an OPEN invoice that belongs to a DEAD subscription — one
+        # whose id is not the payer's current monthly sub. Canceling a
+        # recurring membership nulls stripe_sub_id_month (cancel-sync), so
+        # the canceled sub's lingering, uncollectible invoice no longer
+        # matches and never surfaces as overdue (the member re-enrolls
+        # instead). One-off invoices (no subscription) and the live sub's
+        # own invoices are kept.
+        current_sub = info["stripe_sub_id_month"]
+        return [
+            inv
+            for inv in invoices
+            if not (
+                inv.status == _OPEN_INVOICE_STATUS
+                and inv.stripe_subscription_id is not None
+                and inv.stripe_subscription_id != current_sub
+            )
+        ]
 
     async def get_upcoming_invoice(
         self,

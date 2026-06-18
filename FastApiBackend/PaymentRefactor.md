@@ -139,3 +139,62 @@ cancel + recreate, never an in-place re-anchor.
 **Open questions:** where the chosen anchor lives (per member? per membership? gym
 default + override?); how it interacts with first-invoice proration; and the
 per-interval anchor shape (day-of-month vs day-of-week vs date) under §2.
+
+## 5. Prepay — mark a FUTURE invoice paid early in cash (tabled)
+
+> A member pays cash now for their NEXT (not-yet-open) invoice; their card must
+> not charge for it, while mid-cycle changes (adding a membership) must still
+> bill normally. Tabled 2026-06-17: it cannot be made predictable without
+> re-architecting the sync engine, and isn't worth that now. Today's stopgap —
+> cash settles only an OPEN/overdue invoice (the existing `mark_paid_cash`
+> out-of-band path, now wired into the CRM Invoices card); upcoming invoices
+> show when they open. So "prepay" today = wait until the invoice opens, then
+> mark it cash.
+
+### Why it's hard
+Future subscription invoices don't exist in Stripe yet, and a payer is billed as
+ONE consolidated subscription. So "this one future slice is prepaid but
+everything else bills normally" has no clean expression. Mechanisms explored,
+each rejected:
+
+1. **`once` dollar-off coupon** (apply an `amount_off` `once` coupon sized to the
+   cash). A pending coupon lands on whatever invoice Stripe cuts next, not the
+   renewal you meant. Coupons here are **item-scoped** (`sync_builder.py` attaches
+   them per consolidated price line), so a *different-plan* add is safe — but a
+   *same-plan* family add consolidates onto the **shared quantity line** and, with
+   `prorate`, its immediate proration invoice consumes the coupon. An `amount_off`
+   `once` coupon **forfeits the excess**, and `PaymentSyncOnceDiscounts`
+   permanently stamps it consumed → cash taken AND the real renewal charges the
+   card. Fails for exactly the family "whole bill" scope.
+2. **`pause_collection` + mark the renewal paid when it opens.** `pause_collection`
+   is **subscription-wide**, so it blocks charging for any membership added during
+   the prepaid window. Breaks mid-cycle adds.
+3. **Prebilling (`billing_schedules`).** Stripe's native "bill in advance," but
+   (a) it **errors on `amount_off` coupons** ("amount_off coupons … return an
+   error when used with a subscription that has billing_schedules configured") —
+   the discount engine mints an `amount_off` coupon for **every** dollar discount,
+   so any member with a dollar discount can't be prebilled; and (b) it stores
+   `billing_schedules` as **subscription state the sync engine doesn't model** —
+   the sync's per-mutation `Subscription.modify` (Stripe's pass-what-you-want-to-
+   keep semantics) would likely wipe it, and a prebilled/skipped period would
+   confuse `next_due_date`, the once-settle, and the reconciler. (Flexible billing
+   mode itself is available and is NOT the blocker — the sync collision is.)
+4. **Stripe customer credit balance — the recommended path when revisited.** A
+   per-customer credit auto-applies to upcoming invoices, **charges the card for
+   the remainder**, and **carries leftovers forward (no forfeiture)** — so it
+   survives mid-cycle adds with no pause, and is **orthogonal to the sync engine**
+   (it lives on the customer, not the subscription, so the sync never touches or
+   wipes it). Caveat: it's **customer-wide** — applies to the next finalized
+   invoice, can't be pinned to a specific one — which is benign because remainders
+   carry, and matches the per-payer "whole bill" scope. (Billing Credits / credit
+   grants were also checked and ruled out: metered/usage prices only.)
+
+### What it takes (when revisited, via customer balance)
+- A payments primitive to add a credit
+  (`POST /v1/customers/{id}/balance_transactions`, negative `amount` → a
+  `CustomerBalanceTransaction`).
+- A CRM record of the cash receipt at prepay time (the credit itself is not a
+  Stripe charge, so it won't arrive via the `invoice_payment.paid` webhook).
+- Webhook handling so a balance-covered future invoice records cleanly
+  (`starting_balance`/`ending_balance`, reduced/zero card charge) instead of
+  looking like an underpayment.
