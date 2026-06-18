@@ -358,6 +358,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         discounts_service=discounts_service,
         reprice_service=memberships_reprice,
         members_management_service=members_management_service,
+        waivers_service=waivers_service,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────

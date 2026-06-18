@@ -104,8 +104,8 @@ Three properties fall out of "re-derive from scratch every time":
 - **The desired state is a pure function of the payer's own memberships.** A sync
   is scoped to ONE payer (`paid_by_member_id`): its desired state is every active
   membership that payer bills, computed deterministically — no cross-member
-  reshuffle, no family read. (`account_linked_to_id` is the authorization layer —
-  who may pay for whom — never the billing key.)
+  reshuffle, no family read. (`member_authorized_payers` is the authorization
+  layer — who may pay for whom — never the billing key.)
 - **The one gap:** it only self-heals **when a payer is actively touched.** Drift
   on an *idle* payer persists until the next operation on them. The scheduled
   reconciler (§10) closes that gap — and is now load-bearing for two
@@ -202,7 +202,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    any DB change.
 1. **Write the desired state to the DB** — insert the pending membership
    (`not_added`), set `cancel_date`, write the new `price_id`, write the freeze
-   window, or set `account_linked_to_id`.
+   window, or insert a `member_authorized_payers` row.
 2. **Call the param-less sync** (`update_payments_recurring`, or
    `PaymentSyncFreeze.sync_freeze_state` for freeze) — it re-derives the desired
    state from that DB write and converges Stripe, then writes back
@@ -224,7 +224,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    | cancel | set `cancel_date` (status stays `applied`) | row flips `applied → deleted` | clear `cancel_date` |
    | reprice (`MemberMembershipsReprice` — standalone, task-agnostic) | ONE txn: cancel old row effective today + insert successor at the new price (`not_added`) + copy live applied discounts | successor flips `not_added → applied` AND old row flips `applied → deleted` | delete the discount copies → delete the pending successor → clear the old row's `cancel_date` (still clearable pre-`deleted`); skipped if the successor's line already stamped (known-residual doctrine — the re-sync/reconciler finishes the converge) |
    | freeze / unfreeze | write / clear the freeze window | — (no membership-row status) | restore / re-clear the freeze window |
-   | link / unlink | set / clear `account_linked_to_id` | — (child has no recurring) | unlink / re-link |
+   | authorize / de-authorize payer | insert / delete `member_authorized_payers` (+ a signature row on authorize, one atomic txn) | — (no sync) | txn rollback |
    | add_discounts | insert applied-discount rows (`not_added`) | every inserted row flips `not_added → applied` | delete the inserted rows |
    | remove_discounts | delete applied-discount rows (snapshot first) | — (no row left to stamp) | re-insert from the pre-delete snapshot |
 
@@ -354,7 +354,7 @@ re-running the query. The `PayerProfile` model lives in
 
 The payer is whoever a membership row's `paid_by_member_id` names — the resolved
 parent for a parent-paid line, or a self-paying linked member. There is **no
-`resolve_parent` / family resolution anywhere in billing**: `account_linked_to_id`
+`resolve_parent` / family resolution anywhere in billing**: `member_authorized_payers`
 is the **authorization layer only** (who may pay for whom — validated by the
 callers), never a billing key. The old `resolve_parent` / `resolve` delegates and
 `resolve_parent.sql` / `get_family_ids.sql` are **deleted**.

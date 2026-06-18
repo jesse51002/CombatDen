@@ -6,8 +6,9 @@ new immutable row in gym_waiver_versions, and a member signs a SPECIFIC version
 pointer to the current version; the wording lives on the versions table so the
 exact signed text is preserved for the legal record.
 
-Phase 1 exposes catalog CRUD + version history + read-only signature tracking.
-The front-desk clickwrap signing capture (the INSERT path) is Phase 2.
+This exposes catalog CRUD + version history + read-only signature tracking; the
+signing-capture INSERT (`WaiversSignatures.record_signature`) is recorded
+atomically by the authorized-payer link flow (memberships).
 """
 
 from __future__ import annotations
@@ -134,11 +135,22 @@ class MemberWaiverStatusRow(BaseModel):
     signed_current_version: bool = False
 
 
-# Re-exported so the signing-capture (Phase 2) and any consumer can reference the
-# capture-method enum from this module.
+class WaiverDefaultInfo(BaseModel):
+    """A gym's default authorized-payer waiver + its current version — the
+    target the payer signs when an authorized-payer link is created."""
+
+    gym_id: UUID
+    waiver_id: UUID
+    version_id: UUID
+    content_hash: str
+
+
+# Re-exported so the signing-capture (link flow) and any consumer can reference
+# the capture-method enum from this module.
 __all__ = [
     "MemberWaiverStatusRow",
     "WaiverCreateRequest",
+    "WaiverDefaultInfo",
     "WaiverResponse",
     "WaiverSignatoryRow",
     "WaiverSignatureType",

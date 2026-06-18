@@ -134,17 +134,18 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         self,
         request: MemberMembershipsStartRequest,
     ) -> None:
-        """Every member exists, is in the gym, and is linked to THIS payer.
+        """Every non-payer member exists, is in the gym, and has THIS payer as
+        an authorized payer.
 
         This IS the payer-authorization rule: a payer may bill their own
-        memberships and those of members linked to them — nothing else. The
-        start op never links — an unlinked or differently-linked member is
-        rejected with a "link them first" error. The payer's own items need
-        no link check (self-pay is always allowed).
+        memberships and those of members who have authorized them — nothing
+        else. The start op never authorizes — a member who has not authorized
+        the payer is rejected with an "authorize them first" error. The payer's
+        own items need no check (self-pay is always allowed).
 
         Raises:
-            ValueError: If a member is missing, in another gym, unlinked,
-                or linked to a different payer.
+            ValueError: If a member is missing, in another gym, or has not
+                authorized the payer.
         """
         member_ids = {
             item.member_id
@@ -154,11 +155,14 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
         if not member_ids:
             return
 
-        sql = load_sql(SQL_DIR / "member_memberships_start_account_links.sql")
+        sql = load_sql(SQL_DIR / "member_authorized_payers_check_batch.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
-                {"member_ids": [str(uid) for uid in member_ids]},
+                {
+                    "member_ids": [str(uid) for uid in member_ids],
+                    "payer_member_id": str(request.payer_member_id),
+                },
             )
             rows = {UUID(str(r["member_id"])): r for r in result.mappings()}
 
@@ -170,18 +174,11 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
                 raise ValueError(
                     f"Member {member_id} is not in gym {request.gym_id}",
                 )
-            linked_to = row["account_linked_to_id"]
-            if linked_to is None:
+            if not row["authorized"]:
                 raise ValueError(
-                    f"Member {member_id} is not linked to payer "
-                    f"{request.payer_member_id} — link them first, then start "
-                    f"(the start op never links accounts)",
-                )
-            if UUID(str(linked_to)) != request.payer_member_id:
-                raise ValueError(
-                    f"Member {member_id} is linked to a different paying "
-                    f"account ({linked_to}) — unlink them first or use that "
-                    f"account as the payer",
+                    f"Member {member_id} has not authorized payer "
+                    f"{request.payer_member_id} — authorize them first, then "
+                    f"start (the start op never authorizes payers)",
                 )
 
     async def _check_discounts(

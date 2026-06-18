@@ -337,9 +337,29 @@ class MemberMembershipsRemoveDiscountsRequest(BaseModel):
 
 
 class MembersBillingLinkRequest(BaseModel):
-    """Link an existing member to a paying parent account."""
+    """Authorize a payer for a member, signing the gym's default waiver.
 
-    parent_member_id: UUID
+    The payer (``payer_member_id``) is the signer: ``signer_name`` is their
+    typed legal name and ``consent_acknowledged`` must be True (a valid
+    e-signature). The signature + the authorization are recorded atomically.
+    """
+
+    payer_member_id: UUID
+    signer_name: str
+    consent_acknowledged: bool
+
+    @field_validator("signer_name")
+    @classmethod
+    def _check_signer_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("signer_name cannot be empty")
+        return v
+
+
+class MembersBillingLinkCheckRequest(BaseModel):
+    """Pre-flight check whether a payer can be authorized for a member."""
+
+    payer_member_id: UUID
 
 
 class MembersBillingLinkCheckResponse(BaseModel):

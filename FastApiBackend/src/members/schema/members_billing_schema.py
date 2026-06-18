@@ -271,7 +271,7 @@ class MemberBillingDetailResponse(BaseModel):
     """Full member detail response for the CRM Specific Member screen.
 
     Extends the standard MemberDetailResponse with billing data:
-    memberships, payment history, linked accounts, and card on file.
+    memberships, payment history, authorization rosters, and card on file.
     """
 
     member_id: UUID
@@ -281,11 +281,13 @@ class MemberBillingDetailResponse(BaseModel):
     photo_url: str | None = None
     account_status: str | None = None
     membership_overview: str
-    linked_to_account: UUID | None = None
     total_monthly_recurring_price: int
     total_membership_count: int
     personal_info: BillingPersonalInfo
-    linked_accounts: list[BillingLinkedAccount] = []
+    # Authorization rosters (who MAY pay for whom — many-to-many), distinct from
+    # `pays_for` (the actual billing relationship via paid_by_member_id).
+    authorized_payers: list[BillingLinkedAccount] = []
+    authorized_to_pay_for: list[BillingLinkedAccount] = []
     # Every member (the viewed member included) whose recurring
     # memberships the viewed member funds — what a freeze on this member
     # would pause. Empty when they pay for nobody / nothing recurring.

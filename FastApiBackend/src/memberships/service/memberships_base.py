@@ -281,34 +281,33 @@ class MemberMembershipsBase:
     ) -> None:
         """Validate a payer is authorized to bill for a member.
 
-        The payer must be the member themselves (self-pay) or the member's
-        linked parent — ``account_linked_to_id`` is the authorization layer
-        (paying for someone else requires that member be linked to you).
-        Shared by every membership op that takes an explicit payer
-        (``charge_card`` today; store / drop-in later). The start op enforces
-        the same rule in batch via its own ``_check_links``.
+        The payer must be the member themselves (self-pay) or one of the
+        member's authorized payers (``member_authorized_payers`` — paying for
+        someone else requires being an authorized payer for them). Shared by
+        every membership op that takes an explicit payer (``charge_card``). The
+        start op enforces the same rule in batch via its own ``_check_links``.
 
         Raises:
-            ValueError: If the member is missing, or the payer is neither the
-                member nor the member's linked parent.
+            ValueError: If the payer is neither the member nor one of the
+                member's authorized payers.
         """
         if paid_by_member_id == member_id:
             return
-        sql = load_sql(SQL_DIR / "member_memberships_start_account_links.sql")
+        sql = load_sql(SQL_DIR / "member_authorized_payers_get.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
-                {"member_ids": [str(member_id)]},
+                {
+                    "member_id": str(member_id),
+                    "payer_member_id": str(paid_by_member_id),
+                },
             )
             row = result.mappings().fetchone()
         if row is None:
-            raise ValueError(f"Member {member_id} not found")
-        linked_to = row["account_linked_to_id"]
-        if linked_to is None or UUID(str(linked_to)) != paid_by_member_id:
             raise ValueError(
                 f"Payer {paid_by_member_id} is not authorized for member "
-                f"{member_id} — the payer must be the member or their "
-                f"linked parent",
+                f"{member_id} — the payer must be the member or one of their "
+                f"authorized payers",
             )
 
     async def _crm_insert(

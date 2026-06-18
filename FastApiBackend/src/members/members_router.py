@@ -41,6 +41,7 @@ from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
 from src.memberships.memberships_schema import (
+    MembersBillingLinkCheckRequest,
     MembersBillingLinkCheckResponse,
     MembersBillingLinkRequest,
 )
@@ -473,18 +474,18 @@ async def unlink_member_payment(
 
 @members_router.put(
     "/{member_id}/link",
-    summary="Link member to a parent account",
+    summary="Authorize a payer for a member",
     description=(
-        "Links an existing member to a paying parent account. The child must "
-        "have zero active recurring memberships. This is a relationship change "
-        "only — the link authorizes who may pay for whom (billing itself is "
-        "per payer via paid_by_member_id); the member's own billing state "
-        "(card, freeze window, sub id) is untouched, no subscription is "
-        "re-billed and no charges are issued."
+        "Authorizes a payer (payer_member_id) to pay for this member. The payer "
+        "signs the gym's default authorized-payer waiver (signer_name + "
+        "consent_acknowledged), and the signature + the authorization are "
+        "recorded atomically. A member may have many authorized payers. This is "
+        "the authorization layer (who may pay for whom; billing is per payer via "
+        "paid_by_member_id) — no subscription is re-billed and no charges issue."
     ),
     responses={
-        200: {"description": "Member linked successfully"},
-        400: {"description": "Child is already linked or has active recurring memberships"},
+        200: {"description": "Payer authorized successfully"},
+        400: {"description": "Payer invalid / different gym / already authorized / no consent"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
@@ -507,7 +508,9 @@ async def link_member_account(
     try:
         await memberships_service.link_account(
             member_id,
-            request.parent_member_id,
+            request.payer_member_id,
+            signer_name=request.signer_name,
+            consent_acknowledged=request.consent_acknowledged,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -534,16 +537,15 @@ async def link_member_account(
 
 @members_router.delete(
     "/{member_id}/link",
-    summary="Unlink member from a parent account",
+    summary="De-authorize a payer for a member",
     description=(
-        "Unlinks a member from their paying parent account by clearing "
-        "account_linked_to_id on the child. The child must have zero active "
-        "recurring memberships, so this is a relationship change only — no "
-        "subscription is re-billed and no charges are issued."
+        "Removes a payer (payer_member_id, a query parameter) as an authorized "
+        "payer for this member. The signature record is kept (append-only "
+        "audit). No subscription is re-billed and no charges are issued."
     ),
     responses={
-        200: {"description": "Member unlinked successfully"},
-        400: {"description": "Child is not linked or has active recurring memberships"},
+        200: {"description": "Payer de-authorized successfully"},
+        400: {"description": "That payer is not authorized for this member"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
@@ -552,18 +554,19 @@ async def link_member_account(
 @inject
 async def unlink_member_account(
     member_id: UUID,
+    payer_member_id: UUID,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> None:
-    """Unlink a member from their paying parent account."""
+    """Remove a payer's authorization for a member."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        await memberships_service.unlink_account(member_id)
+        await memberships_service.unlink_account(member_id, payer_member_id)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -605,21 +608,21 @@ async def unlink_member_account(
 @inject
 async def check_link_member_account(
     member_id: UUID,
-    request: MembersBillingLinkRequest,
+    request: MembersBillingLinkCheckRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> MembersBillingLinkCheckResponse:
-    """Check whether a member can be linked to a parent account."""
+    """Check whether a payer can be authorized for a member."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
         return await memberships_service.check_link_account(
             member_id,
-            request.parent_member_id,
+            request.payer_member_id,
         )
     except ValueError as exc:
         error_msg = str(exc)

@@ -1,19 +1,20 @@
 WITH target_profile AS (
-    SELECT mbp.member_id, mbp.gym_id, mbp.account_linked_to_id
+    SELECT mbp.member_id, mbp.gym_id
     FROM member_billing_profile mbp
     WHERE mbp.member_id = :member_id
 ),
-primary_id AS (
-    SELECT COALESCE(t.account_linked_to_id, t.member_id) AS id
-    FROM target_profile t
-),
 family_group AS (
-    SELECT mbp.member_id
-    FROM member_billing_profile mbp
-    JOIN target_profile t ON mbp.gym_id = t.gym_id
-    CROSS JOIN primary_id pi
-    WHERE mbp.member_id = pi.id
-       OR mbp.account_linked_to_id = pi.id
+    -- The viewed member, plus every member they PAY FOR
+    -- (member_memberships.paid_by_member_id), so the payer math behind the
+    -- overview line + the "pays for" list can see those funded memberships.
+    -- Authorization rosters (who may pay for whom) are separate junction reads.
+    SELECT t.member_id
+    FROM target_profile t
+    UNION
+    SELECT DISTINCT mm.member_id
+    FROM member_memberships_status mm
+    JOIN target_profile t ON t.gym_id = mm.gym_id
+    WHERE mm.paid_by_member_id = :member_id
 ),
 latest_memberships AS (
     SELECT DISTINCT ON (member_id, gym_id, plan_id) *
@@ -35,7 +36,6 @@ SELECT
     mbp.emergency_contact_email,
     m.last_class,
     m.points_balance,
-    mbp.account_linked_to_id,
     mbp.total_monthly_recurring_price,
     mbp.card_brand,
     mbp.card_last_four,

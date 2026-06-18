@@ -11,10 +11,13 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.shared.database import DirectDatabasePool
 from src.waivers.schema.waivers_schema import (
     MemberWaiverStatusRow,
     WaiverCreateRequest,
+    WaiverDefaultInfo,
     WaiverResponse,
     WaiverSignatoryRow,
     WaiverUpdateRequest,
@@ -121,3 +124,40 @@ class WaiversService:
     ) -> list[MemberWaiverStatusRow]:
         """List every gym waiver and a member's sign status for each."""
         return await self._signatures.list_member_status(member_id, gym_id)
+
+    # ── Signing capture (used by the authorized-payer link flow) ──
+
+    async def get_default_waiver_for_member(
+        self,
+        member_id: UUID,
+    ) -> WaiverDefaultInfo:
+        """Resolve a member's gym default authorized-payer waiver + version."""
+        return await self._signatures.get_default_waiver_for_member(member_id)
+
+    async def record_signature(
+        self,
+        session: AsyncSession,
+        *,
+        gym_id: UUID,
+        signer_member_id: UUID,
+        waiver_id: UUID,
+        waiver_version_id: UUID,
+        signer_name: str,
+        consent_acknowledged: bool,
+        content_hash: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> UUID:
+        """Record an e-signature in the caller's transaction; return its id."""
+        return await self._signatures.record_signature(
+            session,
+            gym_id=gym_id,
+            signer_member_id=signer_member_id,
+            waiver_id=waiver_id,
+            waiver_version_id=waiver_version_id,
+            signer_name=signer_name,
+            consent_acknowledged=consent_acknowledged,
+            content_hash=content_hash,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )

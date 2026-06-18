@@ -17,37 +17,41 @@ _DETAILS_SQL = SQL_DIR / "member_details"
 
 
 class MembersBillingSupplementary:
-    """Fetches supplementary data and provides per-member lookups.
+    """Request-scoped loader for one member-detail page's supplementary data.
 
-    Executes batch queries for discounts, linked profiles, transactions,
-    and rewards, then exposes resolver methods.
+    NOT a shared service: construct a fresh one per request with the
+    ``(gym_id, member_id)`` it is scoped to, ``await load()`` once, then read
+    the results via the accessors. Holding the scope on the instance (rather
+    than passing it to a method on a long-lived object) is what makes the
+    per-request statefulness correct by construction.
 
     Args:
         db_pool: Database connection pool.
+        gym_id: The gym this loader is scoped to.
+        member_id: The member this loader is scoped to.
     """
 
-    def __init__(self, db_pool: DirectDatabasePool) -> None:
-        self._db_pool = db_pool
-        self._profiles: dict[UUID, BillingLinkedAccount] = {}
-        self._rewards: dict[UUID, BillingRewardCard] = {}
-        self._redeemed_rewards: list[BillingRewardCard] = []
-
-    async def fetch_all(
+    def __init__(
         self,
+        db_pool: DirectDatabasePool,
         gym_id: UUID,
         member_id: UUID,
     ) -> None:
-        """Execute all supplementary queries and build lookups.
+        self._db_pool = db_pool
+        self._gym_id = gym_id
+        self._member_id = member_id
+        self._profiles: dict[UUID, BillingLinkedAccount] = {}
+        self._rewards: dict[UUID, BillingRewardCard] = {}
+        self._redeemed_rewards: list[BillingRewardCard] = []
+        self._authorized_payers: list[BillingLinkedAccount] = []
+        self._authorized_to_pay_for: list[BillingLinkedAccount] = []
 
-        Args:
-            gym_id: The gym to fetch data for.
-            member_id: The member to fetch data for.
-        """
-        self._reset()
-        gym_params = {"gym_id": str(gym_id)}
+    async def load(self) -> None:
+        """Execute all supplementary queries for this loader's gym + member."""
+        gym_params = {"gym_id": str(self._gym_id)}
         member_params = {
-            "gym_id": str(gym_id),
-            "member_id": str(member_id),
+            "gym_id": str(self._gym_id),
+            "member_id": str(self._member_id),
         }
 
         async with self._db_pool.session() as session:
@@ -57,12 +61,16 @@ class MembersBillingSupplementary:
                 session,
                 member_params,
             )
-
-    def _reset(self) -> None:
-        """Clear all internal lookup state."""
-        self._profiles.clear()
-        self._rewards.clear()
-        self._redeemed_rewards.clear()
+            self._authorized_payers = await self._fetch_roster(
+                session,
+                member_params,
+                "member_details_authorized_payers.sql",
+            )
+            self._authorized_to_pay_for = await self._fetch_roster(
+                session,
+                member_params,
+                "member_details_authorized_to_pay_for.sql",
+            )
 
     async def _fetch_profiles(
         self,
@@ -124,29 +132,24 @@ class MembersBillingSupplementary:
             )
         return redeemed
 
-    def get_family_profiles(
+    async def _fetch_roster(
         self,
-        family_ids: set[UUID],
-        exclude_id: UUID,
+        session: AsyncSession,
+        params: dict[str, str],
+        sql_file: str,
     ) -> list[BillingLinkedAccount]:
-        """Get BillingLinkedAccount objects for family members.
-
-        Args:
-            family_ids: All member_ids in the family group.
-            exclude_id: The queried user's ID to exclude.
-
-        Returns:
-            BillingLinkedAccount list for all family members except
-            the excluded user.
-        """
-        accounts = []
-        for uid in family_ids:
-            if uid == exclude_id:
-                continue
-            profile = self._profiles.get(uid)
-            if profile:
-                accounts.append(profile)
-        return accounts
+        """Load an authorization roster (junction → profiles) in order."""
+        sql = load_sql(_DETAILS_SQL / sql_file)
+        result = await session.execute(text(sql), params)
+        return [
+            BillingLinkedAccount(
+                member_id=row["member_id"],
+                first_name=row["first_name"],
+                last_name=row["last_name"],
+                photo_url=row["photo_url"],
+            )
+            for row in result.mappings().all()
+        ]
 
     @property
     def profiles_dict(self) -> dict[UUID, BillingLinkedAccount]:
@@ -157,3 +160,13 @@ class MembersBillingSupplementary:
     def redeemed_rewards(self) -> list[BillingRewardCard]:
         """Return all recently redeemed rewards for the member."""
         return self._redeemed_rewards
+
+    @property
+    def authorized_payers(self) -> list[BillingLinkedAccount]:
+        """Members authorized to pay for the viewed member."""
+        return self._authorized_payers
+
+    @property
+    def authorized_to_pay_for(self) -> list[BillingLinkedAccount]:
+        """Members the viewed member is authorized to pay for."""
+        return self._authorized_to_pay_for

@@ -65,7 +65,6 @@ class MembersBillingDetailService:
         cycle_counts_service: ClassesCycleCountsService,
     ) -> None:
         self._db_pool = db_pool
-        self._supplementary = MembersBillingSupplementary(db_pool)
         self._grouper = MembersBillingGrouper()
         self._streak_service = streak_service
         self._cycle_counts_bridge = MemberDetailsCycleCountsBridge(
@@ -94,37 +93,38 @@ class MembersBillingDetailService:
             raise ValueError(f"No billing profile found for member_id={member_id}")
 
         target_row = self._find_target_profile(rows, member_id)
-        parent_row = self._find_parent_profile(rows, target_row)
         gym_id = target_row["gym_id"]
         today = target_row["gym_today"]
 
-        await self._supplementary.fetch_all(gym_id, member_id)
+        supplementary = MembersBillingSupplementary(
+            self._db_pool,
+            gym_id,
+            member_id,
+        )
+        await supplementary.load()
         streak_weeks = await self._streak_service.get_streak(member_id, gym_id)
 
-        family_ids = {row["member_id"] for row in rows}
+        # The query returns the viewed member + every member they PAY FOR
+        # (paid_by_member_id), so the payer math (overview / pays_for) sees the
+        # funded memberships. The carousel shows ONLY the viewed member's own.
         all_membership_rows = [r for r in rows if r["plan_id"] is not None]
-        # The carousel shows ONLY the viewed member's own memberships; the
-        # full family set is still kept (``all_membership_rows``) for the
-        # payer math behind the overview line. Linked-account navigation is
-        # served by ``family_ids`` below — unaffected by this filter.
         own_membership_rows = [
             r for r in all_membership_rows if r["member_id"] == member_id
         ]
 
         usage_lookup = await self._cycle_counts_bridge.fetch_usage(
             gym_id,
-            list(family_ids),
+            [member_id],
         )
 
         grouped = self._grouper.group_by_plan(
             own_membership_rows,
-            self._supplementary,
+            supplementary,
             usage_lookup,
             member_id,
             today,
         )
 
-        linked_to_id = target_row["account_linked_to_id"]
         overview_ctx = self._build_overview_context(
             member_id,
             own_membership_rows,
@@ -133,26 +133,22 @@ class MembersBillingDetailService:
         )
         overview = self._grouper.build_membership_overview(
             overview_ctx,
-            self._supplementary,
+            supplementary,
         )
 
-        linked_accounts = self._supplementary.get_family_profiles(
-            family_ids,
-            member_id,
-        )
         pays_for = self._build_pays_for(member_id, all_membership_rows)
 
         return self._build_response(
             member_id=member_id,
             gym_id=gym_id,
             target_row=target_row,
-            parent_row=parent_row,
             membership_rows=own_membership_rows,
             grouped=grouped,
             overview=overview,
-            linked_to_account=linked_to_id,
-            linked_accounts=linked_accounts,
+            authorized_payers=supplementary.authorized_payers,
+            authorized_to_pay_for=supplementary.authorized_to_pay_for,
             pays_for=pays_for,
+            redeemed_rewards=supplementary.redeemed_rewards,
             streak_weeks=streak_weeks,
             # Per-payer semantics: the QUERIED member's own row carries what
             # THEY pay monthly (the sync writes each payer's own total; a
@@ -187,13 +183,13 @@ class MembersBillingDetailService:
         member_id: UUID,
         gym_id: UUID,
         target_row: dict,
-        parent_row: dict,
         membership_rows: list,
         grouped: list,
         overview: str,
-        linked_to_account: UUID | None,
-        linked_accounts: list,
+        authorized_payers: list,
+        authorized_to_pay_for: list,
         pays_for: list,
+        redeemed_rewards: list,
         streak_weeks: int,
         total_monthly_recurring_price: int,
         today: date,
@@ -211,7 +207,6 @@ class MembersBillingDetailService:
                 today,
             ),
             membership_overview=overview,
-            linked_to_account=linked_to_account,
             total_monthly_recurring_price=total_monthly_recurring_price,
             total_membership_count=len(membership_rows),
             personal_info=BillingPersonalInfo(
@@ -222,7 +217,8 @@ class MembersBillingDetailService:
                 emergency_contact_phone=(target_row["emergency_contact_phone"]),
                 emergency_contact_email=(target_row["emergency_contact_email"]),
             ),
-            linked_accounts=linked_accounts,
+            authorized_payers=authorized_payers,
+            authorized_to_pay_for=authorized_to_pay_for,
             pays_for=pays_for,
             memberships=grouped,
             retention=BillingRetention(
@@ -232,8 +228,8 @@ class MembersBillingDetailService:
                 videos_watched=0,
             ),
             rank=self._build_rank(target_row),
-            recently_redeemed_rewards=(self._supplementary.redeemed_rewards),
-            card_on_file=self._build_card_on_file(parent_row),
+            recently_redeemed_rewards=redeemed_rewards,
+            card_on_file=self._build_card_on_file(target_row),
         )
 
     def _find_target_profile(self, rows: list, member_id: UUID) -> dict:
@@ -253,30 +249,6 @@ class MembersBillingDetailService:
             if row["member_id"] == member_id:
                 return row
         raise ValueError(f"No profile found for member_id={member_id}")
-
-    def _find_parent_profile(self, rows: list, target_row: dict) -> dict:
-        """Find the parent account row for the queried user.
-
-        If the target is a linked (child) account, returns the row for its
-        parent; otherwise returns the target row itself.
-
-        Args:
-            rows: All query result rows (the full family group).
-            target_row: The queried user's profile row.
-
-        Returns:
-            The parent account's profile row.
-
-        Raises:
-            ValueError: If the target is linked but no parent row is present.
-        """
-        linked_to_id = target_row["account_linked_to_id"]
-        if linked_to_id is None:
-            return target_row
-        for row in rows:
-            if row["member_id"] == linked_to_id:
-                return row
-        raise ValueError(f"No parent profile found for linked_to_id={linked_to_id}")
 
     def _scan_membership_flags(
         self,
@@ -463,19 +435,19 @@ class MembersBillingDetailService:
             "membership_status"
         ] in (MembershipDbStatus.active, MembershipDbStatus.frozen)
 
-    def _build_card_on_file(self, parent_row: dict) -> BillingCardOnFile | None:
-        """Build the BillingCardOnFile for the paying account.
+    def _build_card_on_file(self, row: dict) -> BillingCardOnFile | None:
+        """Build the BillingCardOnFile for the viewed member's own card.
 
         Args:
-            parent_row: The paying account's profile row.
+            row: The viewed member's profile row.
 
         Returns:
-            BillingCardOnFile when the parent has a saved card, else None.
+            BillingCardOnFile when the member has a saved card, else None.
         """
-        brand = parent_row["card_brand"]
-        last_four = parent_row["card_last_four"]
-        exp_month = parent_row["card_exp_month"]
-        exp_year = parent_row["card_exp_year"]
+        brand = row["card_brand"]
+        last_four = row["card_last_four"]
+        exp_month = row["card_exp_month"]
+        exp_year = row["card_exp_year"]
         if brand is None or last_four is None or exp_month is None or exp_year is None:
             return None
         return BillingCardOnFile(

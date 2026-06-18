@@ -78,6 +78,9 @@ if TYPE_CHECKING:
     from src.sync.service.sync_service import (
         PaymentSyncService,
     )
+    from src.waivers.service.waivers.waivers_service import (
+        WaiversService,
+    )
 
 
 class MemberMembershipsService:
@@ -102,6 +105,7 @@ class MemberMembershipsService:
         discounts_service: DiscountsService,
         reprice_service: MemberMembershipsReprice,
         members_management_service: MembersManagementService,
+        waivers_service: WaiversService,
     ) -> None:
         # Every lifecycle op is wrapped in the payer concurrency lock (held
         # across its pre-sync + DB write + sync) so no two ops converge the
@@ -160,8 +164,14 @@ class MemberMembershipsService:
             payer_resolver=payer_resolver,
         )
         # link / unlink is a pure DB change (no sync) and owns its OWN two-family
-        # locking, so it takes only db_pool + the lock — not the sync deps above.
-        self._linked = MemberMembershipsLinked(db_pool, paying_lock)
+        # locking, so it takes db_pool + the lock — not the sync deps above —
+        # plus the waivers service (authorizing a payer signs the gym's default
+        # authorized-payer waiver in the same transaction).
+        self._linked = MemberMembershipsLinked(
+            db_pool,
+            paying_lock,
+            waivers_service,
+        )
 
     # ── Cancel ─────────────────────────────────────────────────
 
@@ -332,34 +342,51 @@ class MemberMembershipsService:
                 preview=preview,
             )
 
-    # ── Linked account (link / unlink / check) ─────────────────
+    # ── Authorized payer (authorize / de-authorize / check) ────
     #
-    # Delegated BARE — no ``self._paying_lock.lock(...)`` wrap: link / unlink lock
-    # TWO accounts (member + parent) internally, and the lock is
-    # non-reentrant. These are pure DB changes (no Stripe sync).
+    # Delegated BARE — no ``self._paying_lock.lock(...)`` wrap: these lock TWO
+    # accounts (member + payer) internally, and the lock is non-reentrant. They
+    # are pure DB changes (no Stripe sync); authorizing also signs the gym's
+    # default waiver in the same transaction.
 
     async def link_account(
         self,
         member_id: UUID,
-        parent_member_id: UUID,
+        payer_member_id: UUID,
+        *,
+        signer_name: str,
+        consent_acknowledged: bool,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> None:
-        """Link an existing member to a paying parent account."""
-        await self._linked.link_account(member_id, parent_member_id)
+        """Authorize a payer for a member (gated by signing the gym waiver)."""
+        await self._linked.link_account(
+            member_id,
+            payer_member_id,
+            signer_name=signer_name,
+            consent_acknowledged=consent_acknowledged,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
     async def unlink_account(
         self,
         member_id: UUID,
+        payer_member_id: UUID,
     ) -> None:
-        """Unlink a member from their paying parent account."""
-        await self._linked.unlink_account(member_id)
+        """Remove a payer's authorization for a member."""
+        await self._linked.unlink_account(member_id, payer_member_id)
 
     async def check_link_account(
         self,
         member_id: UUID,
-        parent_member_id: UUID,
+        payer_member_id: UUID,
     ) -> MembersBillingLinkCheckResponse:
-        """Check whether a member can be linked to a parent account."""
-        return await self._linked.check_link_account(member_id, parent_member_id)
+        """Check whether a payer can be authorized for a member."""
+        return await self._linked.check_link_account(
+            member_id,
+            payer_member_id,
+        )
 
     # ── Private ────────────────────────────────────────────────
 

@@ -1,10 +1,11 @@
 """Groups membership rows by plan for the CRM member detail carousel."""
 
 from collections import defaultdict
-from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
 
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
 from src.members.schema.members_billing_schema import (
@@ -40,15 +41,16 @@ class OverviewKind(StrEnum):
     beneficiary = "beneficiary"  # >=1 own membership paid by someone else
 
 
-@dataclass(frozen=True)
-class MembershipOverviewContext:
+class MembershipOverviewContext(BaseModel):
     """Resolved inputs for the profile-header overview string.
 
-    The detail service computes this from the family rows (it owns the
+    The detail service computes this from the membership rows (it owns the
     payer math); the grouper only formats it. ``total`` is already scoped
     to ``kind`` (what the viewed member pays for ``pays_for_others``,
     their own active-recurring sum otherwise), in minor units.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     kind: OverviewKind
     total: int
