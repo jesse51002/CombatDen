@@ -72,6 +72,7 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.waivers.service.waivers.waivers_service import WaiversService
 
 # ── Payment services namespace ──────────────────────────────────
 
@@ -218,6 +219,7 @@ def build_member_memberships_service(
         db_pool,
         stripe_client,
     )
+    waivers_svc = WaiversService(db_pool)
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -230,6 +232,7 @@ def build_member_memberships_service(
         discounts_svc,
         build_memberships_reprice(db_pool, stripe_client),
         management_svc,
+        waivers_svc,
     )
 
 
