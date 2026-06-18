@@ -340,13 +340,19 @@ class PaymentsStripePaymentService:
         request: PaymentsRefundRequest,
         stripe_account_id: str,
     ) -> PaymentsRefundResponse:
-        """Refund a PaymentIntent (full or partial)."""
+        """Refund a charge (full or partial).
+
+        Refunds by the original charge id (``ch_…``) — what the CRM stores and
+        what the ``refund.*`` webhook keys on — so no PaymentIntent lookup is
+        needed. The response carries the refund's ``status`` / ``currency`` /
+        ``created`` so the caller can record it without a second Stripe read.
+        """
         opts = self._client.connect_opts(
             stripe_account_id, idempotency_key=request.idempotency_key
         )
 
         params = RefundCreateParams(
-            payment_intent=request.stripe_payment_intent_id,
+            charge=request.stripe_charge_id,
         )
         if request.amount is not None:
             params["amount"] = request.amount
@@ -358,9 +364,11 @@ class PaymentsStripePaymentService:
 
         return PaymentsRefundResponse(
             stripe_refund_id=refund.id,
-            stripe_payment_intent_id=request.stripe_payment_intent_id,
+            stripe_charge_id=request.stripe_charge_id,
             amount=refund.amount,
             status=refund.status,
+            currency=refund.currency,
+            created=refund.created,
         )
 
     # ── Pay Out of Band ──────────────────────────────────────────

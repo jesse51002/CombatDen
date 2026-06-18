@@ -17,15 +17,9 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 /// Shows a historical [PaymentRecord] as a full invoice via
 /// the shared [InvoiceBreakdown]. A refund affordance is
 /// rendered only for a succeeded, non-refund charge; it
-/// routes through a [BillingConfirmationDialog] and then
-/// dispatches [RefundChargeRequested].
-///
-/// NOTE: the merged contract has no refund endpoint — the
-/// repository's refund call targets an assumed path that
-/// will 404 until the backend ships it. The frozen
-/// [RefundChargeRequested] event exists, so the seam is
-/// wired; a real failure surfaces through the bloc's
-/// `actionError` path.
+/// routes through the shared [RefundChargeDialog] and then
+/// dispatches [RefundChargeRequested]. A failure surfaces
+/// through the bloc's `actionError` path.
 class PaymentInvoiceDialog extends StatelessWidget {
   final PaymentRecord payment;
 

@@ -14,14 +14,10 @@ import 'package:crm/shared/widgets/custom_text_field.dart';
 import 'package:crm/shared/widgets/filter_pills.dart';
 
 /// Refunds a prior [PaymentRecord] — full or partial. The
-/// partial branch takes an amount (capped at the original
-/// charge) and dispatches [RefundChargeRequested] with it;
-/// full leaves the amount null. The `amount` seam already
-/// runs end-to-end through the bloc + repository.
-///
-/// NOTE: the backend refund endpoint isn't built yet, so the
-/// call may 404 — the warning flags this and the bloc's
-/// `actionError` path surfaces a real failure.
+/// partial branch takes an amount (capped at the refundable
+/// remainder) and dispatches [RefundChargeRequested] with it;
+/// full leaves the amount null. The bloc reloads the member on
+/// success and surfaces a failure via its `actionError` path.
 class RefundChargeDialog extends StatefulWidget {
   final PaymentRecord charge;
 
@@ -146,14 +142,6 @@ class _RefundChargeDialogState extends State<RefundChargeDialog> {
                 color: DesignConstants.badRed,
               ),
             ),
-          Text(
-            'Refunds are not yet enabled on the backend, so '
-            'this may not complete. You will see an error if '
-            'it could not be processed.',
-            style: DesignConstants.pSmall.copyWith(
-              color: DesignConstants.text2nd,
-            ),
-          ),
         ],
       ),
       actions: AppDialogActions(

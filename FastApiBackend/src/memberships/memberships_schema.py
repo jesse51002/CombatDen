@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from schema.gym_discount import DiscountType
+from schema.member_charge import ChargeStatus
 from schema.membership_plan import PlanType
 
 import src.shared.db_schema_path  # noqa: F401
@@ -233,6 +234,38 @@ class MemberMembershipsChargeCardRequest(BaseModel):
     reason: str = Field(..., min_length=1)
     paid_cash: bool = False
     idempotency_key: UUID
+
+
+class MemberMembershipsRefundRequest(BaseModel):
+    """Refund a prior charge on a member's payment history.
+
+    ``member_id`` is the member whose billing history the refund was launched
+    from (the auth + gym-scope anchor). ``charge_id`` is the ``member_charges``
+    row to refund (a succeeded payment). ``amount`` is positive minor units;
+    ``None`` refunds the full remaining balance (the charge minus anything
+    already refunded). ``idempotency_key`` is minted per submission by the CRM so
+    a retried request dedups the Stripe refund.
+    """
+
+    member_id: UUID
+    charge_id: UUID
+    amount: int | None = None
+    idempotency_key: str
+
+
+class MemberMembershipsRefundResponse(BaseModel):
+    """Outcome of a refund: the recorded refund row's id, the minor units
+    refunded, the method ('card' / 'cash'), and the refund status.
+
+    ``refund_charge_id`` is ``None`` for a Stripe refund that comes back
+    ``pending`` — no row is written until the ``refund.*`` webhook confirms it
+    succeeded.
+    """
+
+    refund_charge_id: UUID | None = None
+    refunded_amount: int
+    payment_method: str
+    status: ChargeStatus
 
 
 class MemberMembershipsUpdatePriceRequest(BaseModel):
