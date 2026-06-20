@@ -313,7 +313,7 @@ changing it is a Stripe config change, never code.
 The one deferred optimization (tracked in `PaymentRefactor.md` §1): a
 **compare-desired-vs-actual, skip-if-equal** guard on the push sweep. Today
 `execute_sync` issues a Stripe `update` for an in-sync sub every run — harmless
-at `proration_behavior="none"` (no charge), but wasteful. This guard is purely a
+at `proration_behavior=no_charge` (no charge), but wasteful. This guard is purely a
 write-reduction.
 
 ---

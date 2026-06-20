@@ -13,7 +13,7 @@ memberships; ``src.memberships`` imports nothing from ``src.tasks``.
 import logging
 from uuid import UUID
 
-from schema.task import TaskType
+from schema.task import ProrationBehavior, TaskType
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
@@ -49,7 +49,7 @@ class MembershipRepriceTaskHandler:
         self,
         gym_id: UUID,
         plan_id: UUID,
-        prorate: bool,
+        proration_behavior: ProrationBehavior,
     ) -> tuple[UUID | None, int]:
         """Discover the plan's memberships to upgrade + create ONE task.
 
@@ -74,7 +74,7 @@ class MembershipRepriceTaskHandler:
                     member_id=UUID(str(t["member_id"])),
                     old_item_id=UUID(str(t["item_id"])),
                     target_price_id=UUID(str(t["target_price_id"])),
-                    prorate=prorate,
+                    proration_behavior=proration_behavior,
                 )
                 for t in targets
             ],
@@ -128,7 +128,9 @@ class MembershipRepriceTaskHandler:
             member_id=item.member_id,
             old_item_id=item.old_item_id,
             target_price_id=item.target_price_id,
-            prorate=bool(item.prorate),
+            proration_behavior=(
+                item.proration_behavior or ProrationBehavior.no_charge
+            ),
         )
 
         session: AsyncSession

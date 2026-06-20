@@ -9,6 +9,7 @@ first and assert no invoices were generated.
 from uuid import uuid4
 
 import pytest
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 from src.memberships.memberships_schema import (
@@ -50,7 +51,7 @@ async def test_start_recurring_membership(
     connect_opts,
     created,
 ):
-    """Starting a recurring membership with the default ``prorate=True``
+    """Starting a recurring membership with the default ``proration_behavior=prorate_to_anchor``
     must cut an immediate prorated invoice and auto-charge it — not
     defer the first charge to the next anchor date.
 
@@ -521,7 +522,7 @@ async def test_start_recurring_prorate_false_no_immediate_invoice(
     connect_opts,
     created,
 ):
-    """``prorate=False`` must NOT generate an invoice at start time —
+    """``proration_behavior=no_charge`` must NOT generate an invoice at start time —
     the subscription starts and waits for the next anchor-date
     billing cycle. The start→anchor window is effectively free to
     the member.
@@ -542,7 +543,7 @@ async def test_start_recurring_prorate_false_no_immediate_invoice(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=False,
+                proration_behavior=ProrationBehavior.no_charge,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=member.member_id,
@@ -564,7 +565,7 @@ async def test_start_recurring_prorate_false_no_immediate_invoice(
             connect_opts,
         )
         assert sub.status == "active", (
-            f"prorate=False sub {sub.id} is {sub.status}, expected active"
+            f"proration_behavior=no_charge sub {sub.id} is {sub.status}, expected active"
         )
         assert_subscription_item_price(sub, plan.stripe_price_id)
 
@@ -585,7 +586,7 @@ async def test_start_recurring_cash_prorate_true_pays_out_of_band(
     connect_opts,
     created,
 ):
-    """Cash + ``prorate=True`` must cut the immediate prorated
+    """Cash + ``proration_behavior=prorate_to_anchor`` must cut the immediate prorated
     invoice and mark it paid out of band (not auto-charge the
     card). The invoice carries the ``crm_paid_with_cash`` metadata
     tag so the downstream ``invoice.paid`` webhook can record the
@@ -607,7 +608,7 @@ async def test_start_recurring_cash_prorate_true_pays_out_of_band(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=True,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -657,8 +658,8 @@ async def test_start_recurring_cash_prorate_false_no_invoice(
     connect_opts,
     created,
 ):
-    """Cash + ``prorate=False`` must behave the same as card +
-    ``prorate=False``: no immediate invoice, sub active, next bill
+    """Cash + ``proration_behavior=no_charge`` must behave the same as card +
+    ``proration_behavior=no_charge``: no immediate invoice, sub active, next bill
     at the anchor date. Locks in the cash/card symmetry — cash is
     not supposed to force an immediate charge when the caller said
     "don't prorate."
@@ -679,7 +680,7 @@ async def test_start_recurring_cash_prorate_false_no_invoice(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=False,
+                proration_behavior=ProrationBehavior.no_charge,
                 paid_with_cash=True,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -702,7 +703,7 @@ async def test_start_recurring_cash_prorate_false_no_invoice(
             connect_opts,
         )
         assert sub.status == "active", (
-            f"Cash prorate=False sub {sub.id} is {sub.status}, expected active"
+            f"Cash proration_behavior=no_charge sub {sub.id} is {sub.status}, expected active"
         )
         assert_subscription_item_price(sub, plan.stripe_price_id)
 

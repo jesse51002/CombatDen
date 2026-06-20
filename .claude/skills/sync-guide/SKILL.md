@@ -121,8 +121,8 @@ payer resolution inject the shared `PayerResolver` directly — not via
 
 | method | what it does | callers |
 | --- | --- | --- |
-| `update_payments_recurring(payer_member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior="none") -> None` | the real sync for ONE payer: resolve payer → settle once → build (re-derive bucket **and resolve coupons**) → execute → **`PaymentSyncWriteback`** persists the full sync-owned state (§3). Returns **None** — callers read the DB (the `applied` status) | every membership mutation |
-| `preview_update_payments_recurring(payer_member_id, proration_behavior="none")` | the dry run: resolve payer → **settle once-discounts** (same as real) → same DB-derived discount-aware build → assemble a **`DueNowVsRecurringPreview`** split via `PaymentSyncStripe.preview_execute_sync` (proration `none` → `recurring`; `always_invoice` → `due_now` when prorating, else `due_now` reuses `recurring`). Skips the convergence writeback (§9) | every CRM preview (start / cancel / price / discounts) |
+| `update_payments_recurring(payer_member_id, idempotency_key, pay_first_invoice_out_of_band=False, proration_behavior=ProrationBehavior.no_charge) -> None` | the real sync for ONE payer: resolve payer → settle once → build (re-derive bucket **and resolve coupons**) → execute → **`PaymentSyncWriteback`** persists the full sync-owned state (§3). Returns **None** — callers read the DB (the `applied` status) | every membership mutation |
+| `preview_update_payments_recurring(payer_member_id, proration_behavior=ProrationBehavior.no_charge)` | the dry run: resolve payer → **settle once-discounts** (same as real) → same DB-derived discount-aware build → assemble a **`DueNowVsRecurringPreview`** split via `PaymentSyncStripe.preview_execute_sync` (`no_charge` → `recurring`; `prorate_to_anchor` → `due_now` when prorating, else `due_now` reuses `recurring`). Skips the convergence writeback (§9) | every CRM preview (start / cancel / price / discounts) |
 | `settle_once_discounts(payer_member_id)` | a thin wrapper: resolve payer → `PaymentSyncOnceDiscounts.sync_once_discounts` — stamp a consumed `once` discount's `end_date` promptly, on its own, with no full sync (§6) | the `invoice.paid` webhook (`payments-guide`), best-effort |
 | `bulk_payment_sync(payer_member_ids)` | loop payers, fresh `uuid4()` idempotency key each, call `update_payments_recurring` | reprice fan-out; the scheduled reconciler (§10) |
 
@@ -135,9 +135,11 @@ service (§12), which the start op calls for non-recurring memberships.
 derived purely from the DB on every call — `update_payments_recurring` takes only
 a `payer_member_id` (the payer whose subscription to converge — a membership
 row's `paid_by_member_id`), an idempotency key, the out-of-band-first-
-invoice flag, and an explicit `proration_behavior` (`"none"` / `"always_invoice"`,
-default `"none"` — proration is a first-class param now, no longer inferred from a
-per-item `prorate`). What to bill is whatever the DB says is active *right now*,
+invoice flag, and an explicit `proration_behavior` — the `ProrationBehavior` enum
+(`prorate_to_anchor` / `no_charge`, default `no_charge`; converted to Stripe's
+`always_invoice` / `none` only at the SDK boundary via `proration_behavior_to_stripe`).
+Proration is a first-class param, never inferred from a per-item flag (the old
+`member_memberships.prorate` column is dropped). What to bill is whatever the DB says is active *right now*,
 never a caller-supplied delta. (This is the load-bearing shape: a caller writes
 its mutation to the DB **first**, then calls the sync, which reads that DB and
 converges Stripe to it.)
@@ -192,7 +194,7 @@ Every lifecycle caller follows the same shape — the `sync_or_revert` helper in
    the reprice executor). Call the sync once FIRST (`_pre_sync_payments` on
    `MemberMembershipsBase`), with a **fresh** idempotency key and default (no)
    proration, to converge the payer's DB↔Stripe state **before mutating**. It
-   exists for one reason: a prorating op (`always_invoice`) must not **bill for
+   exists for one reason: a prorating op (`prorate_to_anchor`) must not **bill for
    drift** — an un-synced/pending item that converges in the same call would be
    charged by accident. So it guards only the ops that can immediately invoice.
    The non-billing ops (`cancel`, `freeze`/unfreeze, `update_discounts`) **do not
@@ -644,13 +646,15 @@ as the subscription-lifecycle dispatcher, not a freeze handler.
 
 - **bucket has items** → `_sync_bucket`: **update** if `existing_sub_id` is set,
   else **create**. The `proration_behavior` is an **explicit param** threaded from
-  `update_payments_recurring` (`"none"` / `"always_invoice"`, default `"none"`) —
-  passed straight to both the create and update Stripe requests — the caller
-  chooses `proration_behavior` **explicitly**, never inferred from a per-item
-  flag. Every subscription carries `StripeSubscriptionMetadata(member_id,
-  gym_id)`. `pay_first_invoice_out_of_band` (the **cash flag**) is threaded to
-  **both** branches now. On **create** it drives the out-of-band first-invoice
-  pay (only when `proration_behavior == "always_invoice"`); on **update** it
+  `update_payments_recurring` (the `ProrationBehavior` enum — `prorate_to_anchor`
+  / `no_charge`, default `no_charge`) — passed straight to both the create and
+  update Stripe requests (which convert it to Stripe's `always_invoice` / `none`
+  at the SDK boundary) — the caller chooses `proration_behavior` **explicitly**,
+  never inferred from a per-item flag. Every subscription carries
+  `StripeSubscriptionMetadata(member_id, gym_id)`. `pay_first_invoice_out_of_band`
+  (the **cash flag**) is threaded to **both** branches now. On **create** it
+  drives the out-of-band first-invoice pay (only when `proration_behavior ==
+  ProrationBehavior.prorate_to_anchor`); on **update** it
   pays nothing out of band but is still passed through as the card-vs-cash
   signal. In `payments-guide` that flag selects `payment_behavior`: a **card**
   op (flag False) is sent `error_if_incomplete` on both create and update, so a
@@ -734,7 +738,7 @@ owned by `memberships-guide`.)
 
 ## 9. Preview = discount-aware + settles, but no convergence writeback
 
-`preview_update_payments_recurring(payer_member_id, proration_behavior="none")`
+`preview_update_payments_recurring(payer_member_id, proration_behavior=ProrationBehavior.no_charge)`
 resolves the payer + gym account (`PayerResolver.resolve_payer_with_account`) and
 runs the **exact same** `PaymentSyncBuilder.build_sync_params` (the payer's
 memberships-with-discounts, group by price, discount resolution, bucket — all
@@ -768,19 +772,19 @@ cancel, price-change, discounts add/remove). It delegates to
 **assembles the split** by calling a private `_run_preview` (the actual one-shot
 Stripe preview) up to twice:
 
-- **`recurring`** ← `_run_preview(..., "none")` — the steady-state next full cycle
-  (proration filtered out by `none`), so the recurring line is always present (a
-  single `always_invoice` preview carries only proration lines, so the recurring
+- **`recurring`** ← `_run_preview(..., ProrationBehavior.no_charge)` — the steady-state next full cycle
+  (proration filtered out by `no_charge`), so the recurring line is always present (a
+  single `prorate_to_anchor` preview carries only proration lines, so the recurring
   figure can't come from it).
-- **`due_now`** ← `_run_preview(..., "always_invoice")` when the caller prorates;
+- **`due_now`** ← `_run_preview(..., ProrationBehavior.prorate_to_anchor)` when the caller prorates;
   otherwise `due_now` **reuses the `recurring` result** ("same thing twice") — a
   non-prorating change charges nothing extra now. (The **start preview** consumes
   this split but suppresses that reused `due_now`: it returns `due_now=None` when
-  `request.prorate` is false, since the reused recurring figure is not actually due
+  `request.proration_behavior` is `no_charge`, since the reused recurring figure is not actually due
   now — owned by `memberships-guide`. The shared engine split, cancel, and
   update_price previews keep the reuse semantics.)
 
-So it's **one** Stripe preview call for a `none` surface, **two** for a prorating
+So it's **one** Stripe preview call for a `no_charge` surface, **two** for a prorating
 one. Returns `None` for a pure cancellation / no-op (empty bucket — no upcoming
 invoice). Freeze/unfreeze is intentionally unsupported in preview (a
 `pause_collection` change produces no invoice). The idempotency key is a throwaway

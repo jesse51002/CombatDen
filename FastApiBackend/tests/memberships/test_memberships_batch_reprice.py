@@ -15,7 +15,7 @@ runs them in the background, and returns the task id. These cover:
 
 from uuid import UUID
 
-from schema.task import TaskType
+from schema.task import ProrationBehavior, TaskType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -93,7 +93,8 @@ async def test_batch_upgrades_all_plan_members(
         )
 
         task_id, count = await batch_reprice_plan(
-            db_pool, stripe_client, gym_id, plan.plan_id, prorate=False,
+            db_pool, stripe_client, gym_id, plan.plan_id,
+            proration_behavior=ProrationBehavior.no_charge,
         )
         assert count == 2
         assert task_id is not None
@@ -169,7 +170,7 @@ async def test_batch_skips_membership_already_in_task(
                     member_id=member.member_id,
                     old_item_id=item_id,
                     target_price_id=plan.price_id,
-                    prorate=False,
+                    proration_behavior=ProrationBehavior.no_charge,
                 ),
             ],
         )
@@ -227,7 +228,8 @@ async def test_batch_item_lock_busy_retries_then_resubmit(
 
         async with paying_lock.lock([member.member_id]):
             task_id, count = await batch_reprice_plan(
-                db_pool, stripe_client, gym_id, plan.plan_id, prorate=False,
+                db_pool, stripe_client, gym_id, plan.plan_id,
+                proration_behavior=ProrationBehavior.no_charge,
             )
             assert count == 1
             assert await await_task_terminal(db_pool, task_id) == "failed"
@@ -245,7 +247,8 @@ async def test_batch_item_lock_busy_retries_then_resubmit(
 
         # Re-run the batch (the failed item no longer guards the row).
         task_2, count2 = await batch_reprice_plan(
-            db_pool, stripe_client, gym_id, plan.plan_id, prorate=False,
+            db_pool, stripe_client, gym_id, plan.plan_id,
+            proration_behavior=ProrationBehavior.no_charge,
         )
         assert count2 == 1
         assert await await_task_terminal(db_pool, task_2) == "completed"

@@ -318,9 +318,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     request.idempotency_key, PlanType.recurring.value,
                 ),
                 pay_first_invoice_out_of_band=request.paid_with_cash,
-                proration_behavior=(
-                    "always_invoice" if request.prorate else "none"
-                ),
+                proration_behavior=request.proration_behavior,
             )
         except Exception as exc:
             await self._fail_group(

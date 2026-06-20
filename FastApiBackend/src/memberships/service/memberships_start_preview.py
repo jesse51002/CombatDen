@@ -11,9 +11,9 @@ real sync from observing it.
 
 The response is the three-way split: ``one_time`` (the consolidated
 one-time invoice), ``due_now`` (the recurring proration charged now, only
-when ``prorate=True`` — ``None`` otherwise, since a non-prorating start
-charges nothing extra now), ``recurring`` (the steady-state per-cycle
-invoice).
+when ``proration_behavior`` is ``prorate_to_anchor`` — ``None`` otherwise,
+since a ``no_charge`` start charges nothing extra now), ``recurring`` (the
+steady-state per-cycle invoice).
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from uuid import UUID
 
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
+from schema.task import ProrationBehavior
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships.memberships_schema import (
@@ -128,9 +129,7 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
             split = (
                 await self._payment_sync.preview_update_payments_recurring(
                     request.payer_member_id,
-                    proration_behavior=(
-                        "always_invoice" if request.prorate else "none"
-                    ),
+                    proration_behavior=request.proration_behavior,
                 )
                 if has_recurring
                 else None
@@ -138,14 +137,16 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
         finally:
             await self._cleanup(states)
 
-        # With ``prorate=False`` the engine charges nothing extra now, so its
+        # With ``no_charge`` the engine charges nothing extra now, so its
         # ``due_now`` just reuses the steady-state recurring figure ("same
         # thing twice"). That recurring amount is NOT due now, so surfacing it
         # as ``due_now`` here would mislead — the start preview reports
-        # ``due_now=None`` for a non-prorating start.
-        due_now = (
-            split.due_now if (split and request.prorate) else None
+        # ``due_now=None`` for a ``no_charge`` start.
+        prorating = (
+            request.proration_behavior
+            == ProrationBehavior.prorate_to_anchor
         )
+        due_now = split.due_now if (split and prorating) else None
         return MemberMembershipsStartPreviewResponse(
             one_time=one_time,
             due_now=due_now,

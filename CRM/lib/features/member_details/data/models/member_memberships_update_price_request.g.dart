@@ -13,7 +13,7 @@ Map<String, dynamic> _$MemberMembershipsUpdatePriceRequestToJson(
   'hash_code': instance.hashCode,
   'item_id': instance.itemId,
   'member_id': instance.memberId,
-  'prorate': instance.prorate,
+  'proration_behavior': instance.prorationBehavior,
   'idempotency_key': instance.idempotencyKey,
   'props': instance.props,
 };

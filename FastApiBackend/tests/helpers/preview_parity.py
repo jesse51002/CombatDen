@@ -3,7 +3,7 @@ was cut (or will be cut at the next renewal) for the same operation.
 
 Standalone module — no pytest imports, no fixture dependencies.
 
-Typical flow for an immediate-billing op (e.g. start, prorate=True
+Typical flow for an immediate-billing op (e.g. start, proration_behavior=prorate_to_anchor
 update_price, one-time charge):
 
     before = await snapshot_billing_state(stripe_client, customer_id, opts)
@@ -14,7 +14,7 @@ update_price, one-time charge):
     )
     assert_preview_matches_invoice(preview, invoice)
 
-Typical flow for a next-cycle op (e.g. prorate=False update_price,
+Typical flow for a next-cycle op (e.g. proration_behavior=no_charge update_price,
 cancel-from-multi, discount change, link/unlink):
 
     preview = await service.preview_X(...)
