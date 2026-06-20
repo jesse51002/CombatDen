@@ -9,10 +9,10 @@ loosening the assertion.
 
 Two billing shapes are covered:
 
-* Immediate-billing operations (one-time charge, prorate=True
+* Immediate-billing operations (one-time charge, proration_behavior=prorate_to_anchor
   recurring start / price change) — fetch the new invoice cut by
   the operation itself.
-* Next-cycle operations (prorate=False, cancel, discount change)
+* Next-cycle operations (proration_behavior=no_charge, cancel, discount change)
   — advance a Stripe Test Clock past the period boundary and
   compare to the renewal invoice.
 """

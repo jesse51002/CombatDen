@@ -9,7 +9,7 @@ flowchart TB
     r_rew["<b>rewards</b> · /api/v1/rewards · 7 routes<br/>GET /<br/>GET /{reward_id}<br/>POST /<br/>PUT /{reward_id}<br/>DELETE /{reward_id}<br/>POST /{reward_id}/redeem<br/>GET /redemptions"]
     r_waiver["<b>waivers</b> · /api/v1/waivers · 8 routes<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /{waiver_id}<br/>GET /{waiver_id}/versions<br/>GET /{waiver_id}/signatures<br/>GET /signatures/by-member/{member_id}"]
     r_disc["<b>discounts</b> · /api/v1/discounts · 4 routes<br/>(coupon-free presets)<br/>GET /<br/>POST /<br/>PUT /<br/>DELETE /"]
-    r_mm["<b>memberships</b> · /api/v1/member_memberships · 12 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price (single, direct)<br/>POST /reprice-plan (batch → task)<br/>POST /preview<br/>POST /cancel/preview<br/>POST /discounts/add (preview bool)<br/>POST /discounts/remove (preview bool)<br/>POST /mark-paid-cash<br/>POST /charge-card"]
+    r_mm["<b>memberships</b> · /api/v1/member_memberships · 13 routes<br/>DELETE /<br/>POST /freeze<br/>POST /unfreeze<br/>POST /<br/>PUT /price (single, direct)<br/>POST /reprice-plan (batch → task)<br/>POST /preview<br/>POST /cancel/preview<br/>POST /discounts/add (preview bool)<br/>POST /discounts/remove (preview bool)<br/>POST /mark-paid-cash<br/>POST /charge-card<br/>POST /refund"]
     r_plan["<b>plans</b> · /api/v1/membership_plans · 7 routes<br/>POST /<br/>PUT /<br/>DELETE /<br/>GET /<br/>GET /{plan_id}<br/>GET /{plan_id}/prices<br/>POST /price"]
     r_hook["<b>stripe_webhooks</b> · /api/v1/stripe · 1 route<br/>POST /webhooks"]
     r_task["<b>tasks</b> · /api/v1/tasks · 2 routes<br/>(read-only polling for tracked background ops)<br/>GET /ongoing<br/>GET /{task_id}"]
@@ -25,6 +25,7 @@ flowchart TB
     members_billing_detail_service["MembersBillingDetailService"]
     members_payments_service["MembersPaymentsService"]
     members_management_service["MembersManagementService"]
+    member_memberships_refund_service["MemberMembershipsRefund<br/>src/memberships/ · card → Stripe refund + record; cash → record only"]
     payment_sync_service["PaymentSyncService — src/sync/ · declarative reconciler<br/>orchestrates: Builder→Discounts (coupons at build), Freeze,<br/>OnceDiscounts settle, Stripe (execute), Writeback · -> None"]
     payment_sync_one_time["PaymentSyncOneTime — src/sync/ · one-shot one-time engine<br/>ONE consolidated invoice for pending one_time/trial memberships<br/>(start's non-recurring path) · reuses Discounts.resolve · NOT a converge"]
     payer_resolver["PayerResolver<br/>shared payer resolution (paid_by_member_id)"]
@@ -68,6 +69,7 @@ flowchart TB
     r_mem --> members_billing_detail_service
     r_mem --> members_payments_service
     r_mem --> members_management_service
+    r_mm --> member_memberships_refund_service
     r_gym --> gyms_service
     r_cls --> checkin_service
     r_cls --> streak_service
@@ -95,6 +97,8 @@ flowchart TB
     members_billing_detail_service --> streak_service
     members_billing_detail_service --> cycle_counts_service
     members_management_service --> Payments
+    member_memberships_refund_service -->|"card refund"| Payments
+    member_memberships_refund_service --> gym_stripe_service
     gyms_service --> gyms_stripe_connect_service
     gyms_stripe_connect_service --> Payments
     member_memberships_service --> payment_sync_service
@@ -134,7 +138,7 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe ext;
   class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task route;
-  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,resource_lock,tasks_service,tasks_executor,memberships_reprice,membership_reprice_task_handler svc;
+  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,resource_lock,tasks_service,tasks_executor,memberships_reprice,membership_reprice_task_handler svc;
   class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

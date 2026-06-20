@@ -569,25 +569,28 @@ class MemberRepository {
     );
   }
 
-  /// Issues a refund for a prior charge.
+  /// Issues a refund for a prior charge — full or partial.
   ///
-  /// NOTE: there is NO refund endpoint in the merged
-  /// `Database/openapi.json` contract. This call targets
-  /// an assumed `POST /api/v1/members/{member_id}/refund`
-  /// that the backend does not yet expose — it will 404
-  /// until the endpoint exists. Kept so the bloc's refund
-  /// flow has a repository seam, but DO NOT treat the
-  /// path as contract-backed.
+  /// `POST /api/v1/member_memberships/refund` — refunds the
+  /// [chargeId] charge for [amount] minor units (full remaining
+  /// balance when [amount] is null). A card charge is reversed
+  /// through Stripe; a cash charge is recorded as a cash refund.
+  /// [memberId] is the beneficiary whose history the refund was
+  /// launched from (auth + gym scope); [idempotencyKey] dedupes a
+  /// retried submission's Stripe refund. Mirrors `chargeCard`.
   Future<void> refundCharge({
     required String memberId,
     required String chargeId,
+    required String idempotencyKey,
     int? amount,
   }) async {
     await _apiClient.post(
-      '/api/v1/members/$memberId/refund',
+      '/api/v1/member_memberships/refund',
       data: {
+        'member_id': memberId,
         'charge_id': chargeId,
         'amount': ?amount,
+        'idempotency_key': idempotencyKey,
       },
     );
   }

@@ -74,7 +74,6 @@ def create_history(
                     cancel_date=h.cancel_date,
                     last_paid_date=h.last_paid_date,
                     next_due_date=None,
-                    prorate=True,
                     total_price=h.total_price,
                     stripe_item_id=f"si_{uuid.uuid4().hex[:24]}",
                     # Direct-inserted (not via the API), so stamp the Stripe-sync
@@ -139,7 +138,6 @@ def pseudo_rows_for_current(
                 cancel_date=None,
                 last_paid_date=last_paid,
                 next_due_date=next_due,
-                prorate=True,
                 total_price=rec.total_price,
                 stripe_item_id=rec.stripe_item_id,
             )

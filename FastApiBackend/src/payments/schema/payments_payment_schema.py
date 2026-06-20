@@ -104,17 +104,32 @@ class PaymentsInvoicePaymentResponse(BaseModel):
 
 
 class PaymentsRefundRequest(BaseModel):
-    """Refund a PaymentIntent (full or partial)."""
+    """Refund a charge (full or partial).
 
-    stripe_payment_intent_id: str
+    Refunds by the original ``stripe_charge_id`` (``ch_…``) — the identifier the
+    CRM stores on ``member_charges`` and the one the ``refund.*`` webhook keys
+    on — so no PaymentIntent lookup is needed. ``amount`` is positive minor
+    units; ``None`` refunds the full remaining balance.
+    """
+
+    stripe_charge_id: str
     amount: int | None = None
     idempotency_key: str
 
 
 class PaymentsRefundResponse(BaseModel):
-    """Stripe Refund details."""
+    """Stripe Refund details.
+
+    Carries everything the caller needs to record the refund as a
+    ``member_charges`` row without a second Stripe read: the refund id, the
+    original charge, the minor-units actually refunded, the Stripe refund
+    ``status`` (``succeeded`` for a card refund, ``pending`` for an async one),
+    the currency, and the Stripe ``created`` unix timestamp.
+    """
 
     stripe_refund_id: str
-    stripe_payment_intent_id: str
+    stripe_charge_id: str
     amount: int
     status: str
+    currency: str
+    created: int

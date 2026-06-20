@@ -2,6 +2,7 @@ import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_price_response.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/memberships/data/models/discount_create_request.dart';
 import 'package:crm/features/memberships/data/models/discount_update_request.dart';
 import 'package:crm/features/memberships/data/models/member_waiver_status.dart';
@@ -112,14 +113,14 @@ class MembershipsRepository {
   Future<MemberMembershipsRepriceAllResponse> repriceAllOnPlan(
     String planId,
     String gymId, {
-    bool prorate = false,
+    ProrationBehavior prorationBehavior = ProrationBehavior.noCharge,
   }) async {
     final response = await _apiClient.post(
       '/api/v1/member_memberships/reprice-plan',
       data: MemberMembershipsRepriceAllRequest(
         planId: planId,
         gymId: gymId,
-        prorate: prorate,
+        prorationBehavior: prorationBehavior,
       ).toJson(),
     );
     return MemberMembershipsRepriceAllResponse.fromJson(

@@ -1,6 +1,9 @@
 -- Money movement. Payments and refunds both live here.
 --   kind='payment':  amount >= 0, stripe_charge_id set (or cash), no parent
---   kind='refund':   amount <= 0, stripe_refund_id set, refunds_charge_id set
+--   kind='refund':   amount <= 0, stripe_refund_id set (or cash), parent set
+-- A refund mirrors its parent payment: a card refund carries a stripe_refund_id;
+-- a cash refund carries none (payment_method_type='cash'), exactly as a cash
+-- payment carries no stripe_charge_id.
 -- Retry attempts become multiple rows sharing one invoice_id: each failed
 -- attempt is its own row with status='failed'; the successful attempt (if any)
 -- is another row with status='succeeded'.
@@ -63,7 +66,7 @@ CREATE TABLE member_charges (
     CONSTRAINT refund_amount_nonpos
         CHECK (kind <> 'refund' OR amount <= 0),
     CONSTRAINT refund_has_refund_id
-        CHECK (kind <> 'refund' OR stripe_refund_id IS NOT NULL),
+        CHECK (kind <> 'refund' OR stripe_refund_id IS NOT NULL OR payment_method_type = 'cash'),
     CONSTRAINT refund_has_parent
         CHECK (kind <> 'refund' OR refunds_charge_id IS NOT NULL),
     CONSTRAINT refund_has_no_charge_id

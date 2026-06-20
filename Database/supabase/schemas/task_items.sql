@@ -7,8 +7,18 @@
 -- convergent sync).
 --
 -- Op parameters are TYPED columns (not JSONB): membership_reprice uses
--- target_price_id + prorate. A future task_type adds its own nullable
--- columns.
+-- target_price_id + proration_behavior. A future task_type adds its own
+-- nullable columns.
+
+-- How the reprice's recurring charge is handled relative to the billing
+-- anchor. The same enum the request layer + sync engine speak end-to-end;
+-- mapped to Stripe's proration_behavior only at the Stripe SDK boundary.
+-- task_items is the sole table that stores it (declared here, its owner).
+CREATE TYPE proration_behavior AS ENUM (
+    'prorate_to_anchor',
+    'no_charge'
+);
+
 CREATE TABLE task_items (
     task_item_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     task_id UUID NOT NULL CONSTRAINT fk_task_item_task REFERENCES tasks(task_id),
@@ -31,7 +41,7 @@ CREATE TABLE task_items (
     target_price_id UUID
         CONSTRAINT fk_task_item_target_price
         REFERENCES membership_plan_prices_unfiltered(price_id),
-    prorate BOOLEAN,
+    proration_behavior proration_behavior,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     started_at TIMESTAMPTZ,

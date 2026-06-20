@@ -15,6 +15,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
@@ -106,7 +107,8 @@ class _StartMembershipsWizardState
   late final _discountsFuture =
       _repository.listGymDiscounts(widget.member.gymId);
 
-  bool _prorate = true;
+  ProrationBehavior _prorationBehavior =
+      ProrationBehavior.prorateToAnchor;
   bool _paidWithCash = false;
 
   /// A one-off card captured for the one-time charge (null =
@@ -252,6 +254,7 @@ class _StartMembershipsWizardState
   MemberMembershipsStartRequest? _buildRequest(
     String idempotencyKey, {
     bool forPay = false,
+    ProrationBehavior? prorationOverride,
   }) {
     final card = _customCard;
     final useCard = forPay &&
@@ -263,7 +266,7 @@ class _StartMembershipsWizardState
       idempotencyKey: idempotencyKey,
       payerMemberId: _payer.memberId,
       gymId: widget.member.gymId,
-      prorate: _prorate,
+      prorationBehavior: prorationOverride ?? _prorationBehavior,
       paidWithCash: _paidWithCash,
       configMembers: _configMembers,
       drafts: _drafts,
@@ -349,9 +352,18 @@ class _StartMembershipsWizardState
   }
 
   void _enterPreview() {
-    // The preview stages the SAME request shape; its key
-    // is a throwaway (PAY mints a fresh one).
-    _previewRequest = _buildRequest(const Uuid().v4());
+    // The preview stages the SAME request shape; its key is a
+    // throwaway (PAY mints a fresh one). It is ALWAYS previewed at
+    // `prorate_to_anchor` so the response carries the full split
+    // (due_now + recurring). Toggling the proration choice on the
+    // preview step then suppresses due_now locally — no re-fetch —
+    // because `no_charge` is exactly this split minus due_now (the
+    // recurring/one-time figures are identical). PAY still submits
+    // the chosen `_prorationBehavior`.
+    _previewRequest = _buildRequest(
+      const Uuid().v4(),
+      prorationOverride: ProrationBehavior.prorateToAnchor,
+    );
     _preview = null;
     _step = StartMembershipsStep.preview;
   }
@@ -390,7 +402,7 @@ class _StartMembershipsWizardState
         payerMemberId: _payer.memberId,
         gymId: widget.member.gymId,
         idempotencyKey: const Uuid().v4(),
-        prorate: _prorate,
+        prorationBehavior: _prorationBehavior,
         paidWithCash: _paidWithCash,
         payment: useCard
             ? MemberMembershipsStartPayment(
@@ -402,27 +414,15 @@ class _StartMembershipsWizardState
     ));
   }
 
-  /// Prorate changes the due-now amount, so the totals
-  /// echoed on the payment step are re-previewed (still a
-  /// dry run — nothing committed).
-  void _onProrateChanged(bool v) {
+  /// The proration choice (selected ON the preview step) only
+  /// changes WHICH already-fetched lines show: the preview was
+  /// loaded once with the full split (due_now + recurring), so a
+  /// toggle is a pure local re-derive (due_now suppressed for
+  /// no_charge) — NO request rebuild and NO re-fetch, so the
+  /// breakdown never blanks. PAY submits the chosen behavior.
+  void _onProrationChanged(ProrationBehavior v) {
     setState(() {
-      _prorate = v;
-      _preview = null;
-      _previewRequest =
-          _buildRequest(const Uuid().v4());
-    });
-    final req = _previewRequest;
-    if (req == null) return;
-    _repository
-        .previewStartMemberships(req)
-        .then((p) {
-      if (mounted && _prorate == v) {
-        setState(() => _preview = p);
-      }
-    }).catchError((_) {
-      // The echo stays empty; the preview step remains
-      // the authoritative reload path.
+      _prorationBehavior = v;
     });
   }
 
@@ -704,7 +704,7 @@ class _StartMembershipsWizardState
             discountsFuture: _discountsFuture,
             previewRequest: _previewRequest,
             preview: _preview,
-            prorate: _prorate,
+            prorationBehavior: _prorationBehavior,
             paidWithCash: _paidWithCash,
             hasRecurring: _hasRecurring,
             hasOneTime: _hasOneTime,
@@ -719,7 +719,7 @@ class _StartMembershipsWizardState
             onDraftChanged: _updateDraft,
             onPreviewLoaded: (p) =>
                 setState(() => _preview = p),
-            onProrateChanged: _onProrateChanged,
+            onProrationChanged: _onProrationChanged,
             onPaidWithCashChanged: (v) =>
                 setState(() => _paidWithCash = v),
             onAddNewCard: _onAddNewCard,

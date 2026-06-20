@@ -50,7 +50,6 @@ class MemberMembershipCreate(SeedModel):
     cancel_date: date | None = None
     last_paid_date: date | None = None
     next_due_date: date | None = None
-    prorate: bool = True
     total_price: int
 
     stripe_item_id: str | None = None

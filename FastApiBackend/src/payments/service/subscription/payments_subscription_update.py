@@ -15,6 +15,7 @@ from src.payments.schema.payments_members_schema import (
 )
 from src.payments.service.payments_stripe_mappers import (
     map_preview_invoice,
+    proration_behavior_to_stripe,
 )
 from src.payments.service.subscription.payments_subscription_base import (
     PaymentsSubscriptionBase,
@@ -71,7 +72,9 @@ class PaymentsSubscriptionUpdate(PaymentsSubscriptionBase):
 
         update_params = SubscriptionUpdateParams(
             items=items,
-            proration_behavior=request.proration_behavior,
+            proration_behavior=proration_behavior_to_stripe(
+                request.proration_behavior
+            ),
         )
         update_params["metadata"] = request.metadata.to_stripe_metadata()
 

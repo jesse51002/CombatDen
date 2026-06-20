@@ -17,7 +17,7 @@ TaskItem _$TaskItemFromJson(Map<String, dynamic> json) => TaskItem(
   oldItemId: json['old_item_id'] as String?,
   newItemId: json['new_item_id'] as String?,
   targetPriceId: json['target_price_id'] as String?,
-  prorate: json['prorate'] as bool?,
+  prorationBehavior: TaskItem._prorationOrNull(json['proration_behavior']),
   createdAt: DateTime.parse(json['created_at'] as String),
   startedAt: json['started_at'] == null
       ? null

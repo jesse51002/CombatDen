@@ -81,7 +81,7 @@ async def _one_time_price(membership_service, stripe_account_id, created, unit_a
 # ── Tests ───────────────────────────────────────────────────────
 
 
-async def _paid_invoice_pi(
+async def _paid_invoice_charge_id(
     payment_service,
     customer_id,
     price_id,
@@ -89,7 +89,7 @@ async def _paid_invoice_pi(
     stripe_account_id,
     connect_opts,
 ):
-    """Pay an invoice and return its PaymentIntent id."""
+    """Pay an invoice and return its Stripe charge id (``ch_…``)."""
     resp = await payment_service.create_invoice_payment(
         PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=customer_id,
@@ -111,7 +111,12 @@ async def _paid_invoice_pi(
     )
     payments = invoice.payments.data if invoice.payments else []
     assert payments, f"Invoice {invoice.id} has no payments"
-    return payments[0].payment.payment_intent
+    pi_id = payments[0].payment.payment_intent
+    pi = await stripe_client.client.v1.payment_intents.retrieve_async(
+        pi_id,
+        options=connect_opts,
+    )
+    return pi.latest_charge
 
 
 async def test_create_invoice_payment(
@@ -263,7 +268,7 @@ async def test_refund_full_payment(
         created,
         unit_amount=3000,
     )
-    pi_id = await _paid_invoice_pi(
+    charge_id = await _paid_invoice_charge_id(
         payment_service,
         customer_id,
         price_id,
@@ -274,13 +279,14 @@ async def test_refund_full_payment(
 
     resp = await payment_service.refund_payment(
         PaymentsRefundRequest(
-            stripe_payment_intent_id=pi_id,
+            stripe_charge_id=charge_id,
             idempotency_key=str(uuid4()),
         ),
         stripe_account_id,
     )
 
     assert resp.stripe_refund_id.startswith("re_")
+    assert resp.stripe_charge_id == charge_id
     assert resp.amount == 3000
     assert resp.status == "succeeded"
 
@@ -290,7 +296,7 @@ async def test_refund_full_payment(
     )
     assert refund.status == "succeeded"
     assert refund.amount == 3000
-    assert refund.payment_intent == pi_id
+    assert refund.charge == charge_id
 
 
 async def test_refund_partial_payment(
@@ -315,7 +321,7 @@ async def test_refund_partial_payment(
         created,
         unit_amount=5000,
     )
-    pi_id = await _paid_invoice_pi(
+    charge_id = await _paid_invoice_charge_id(
         payment_service,
         customer_id,
         price_id,
@@ -326,7 +332,7 @@ async def test_refund_partial_payment(
 
     resp = await payment_service.refund_payment(
         PaymentsRefundRequest(
-            stripe_payment_intent_id=pi_id,
+            stripe_charge_id=charge_id,
             amount=2000,
             idempotency_key=str(uuid4()),
         ),

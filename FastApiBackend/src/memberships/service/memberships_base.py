@@ -319,7 +319,7 @@ class MemberMembershipsBase:
 
         Each row dict carries: member_id, paid_by_member_id, gym_id, plan_id,
         price_id, start_date, end_date, last_paid_date, next_due_date,
-        stripe_item_id, prorate, total_price, and optionally sync_status (default
+        stripe_item_id, total_price, and optionally sync_status (default
         ``not_added`` — the real start's pending row; the start preview
         passes ``preview_add`` so the dry-run sees it but the real path
         never bills it). All rows appear atomically, or none.
@@ -340,7 +340,6 @@ class MemberMembershipsBase:
             "last_paid_dates": [r["last_paid_date"] for r in rows],
             "next_due_dates": [r["next_due_date"] for r in rows],
             "stripe_item_ids": [r["stripe_item_id"] for r in rows],
-            "prorates": [r["prorate"] for r in rows],
             "total_prices": [r["total_price"] for r in rows],
             "sync_statuses": [
                 r.get("sync_status", StripeSyncStatus.not_added).value
@@ -400,7 +399,6 @@ class MemberMembershipsBase:
                 "last_paid_date": start_date,
                 "next_due_date": None,
                 "stripe_item_id": None,
-                "prorate": request.prorate,
                 "total_price": plan_price["price"],
                 "sync_status": sync_status,
             })

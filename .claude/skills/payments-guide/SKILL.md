@@ -217,7 +217,11 @@ back to active because the DB says it's current.
   `payment_method_id` is mutually exclusive with `paid_out_of_band`
   (model-validated). A `$0` invoice auto-pays at finalize and skips the pay step
   entirely, so a one-off card is never attached for a zero-total charge.
-- `refund_payment` — refund a PaymentIntent (full or partial).
+- `refund_payment` — refund a **charge** (full or partial), by the original
+  `stripe_charge_id` (what `member_charges` stores and what the `refund.*`
+  webhook keys on — no PaymentIntent lookup). The response carries the refund's
+  `status` / `currency` / `created` so a caller can record the row without a
+  second Stripe read.
 - `pay_open_subscription_invoice_out_of_band` — find the subscription's single
   open invoice, stamp `crm_paid_with_cash="true"` on it, and `invoices.pay` with
   `paid_out_of_band=True`. Stripe then fires the normal `invoice.paid` webhook,
@@ -324,7 +328,7 @@ Stripe silently dunns. The split is keyed on `pay_first_invoice_out_of_band`
   `$0`/no-immediate-charge first invoice has nothing to collect, so it's a no-op
   there.
 - **Create, cash path** (`pay_first_invoice_out_of_band` +
-  `proration_behavior="always_invoice"`) → `payment_behavior="default_incomplete"`
+  `proration_behavior=prorate_to_anchor`) → `payment_behavior="default_incomplete"`
   + the existing `_pay_first_invoice_out_of_band` (mark the open first invoice
   paid out of band, no card charge). Unchanged.
 - **Update, card path** (`pay_first_invoice_out_of_band` False) →
@@ -334,7 +338,13 @@ Stripe silently dunns. The split is keyed on `pay_first_invoice_out_of_band`
   leaving the member added behind an open unpaid proration invoice. The cash path
   (`pay_first_invoice_out_of_band` True) is **excluded**: its open proration
   invoice is settled later via `mark_paid_cash`, so it must not error. A
-  `proration_behavior="none"` update generates no invoice → no-op.
+  `proration_behavior=no_charge` update generates no invoice → no-op.
+
+> The `proration_behavior` on the subscription request schemas is the
+> `ProrationBehavior` enum (`prorate_to_anchor` / `no_charge`) — the single
+> vocabulary the request layer + sync engine speak. It is converted to Stripe's
+> own `proration_behavior` string (`always_invoice` / `none`) ONLY at the SDK
+> boundary, by `proration_behavior_to_stripe` in `payments_stripe_mappers.py`.
 
 Only the monthly **renewals** after the first charge stay asynchronous (Stripe
 dunning → the `invoice.payment_failed` webhook). The preview paths don't read
@@ -558,6 +568,19 @@ makes the create/update overlap and any replay idempotent. If no parent payment
 row exists it **logs an error and acks** (can't insert a refund — `invoice_id` is
 NOT NULL — needs manual reconciliation, not a retry).
 
+> **The refund endpoint already writes the row; the webhook is the residual
+> catch-all.** A staff-initiated refund (`POST /api/v1/member_memberships/refund`,
+> §9, `MemberMembershipsRefund`) calls `refund_payment` and, when the returned
+> refund is `succeeded`, writes the negative `member_charges` row **itself** in
+> the request (its own `member_refund_insert.sql`, also `ON CONFLICT DO NOTHING`
+> on `stripe_refund_id`). So this handler is a no-op for that common case. It
+> still earns its keep for the two cases the endpoint can't see synchronously: an
+> **async refund** that comes back `pending` (the endpoint writes nothing; the
+> later `refund.updated` records it on success) and a refund **initiated from the
+> Stripe Dashboard** (no endpoint call at all). A **cash** refund never produces
+> a Stripe event, so only the endpoint writes it (negative cash row, no
+> `stripe_refund_id`).
+
 **`account.updated` → `AccountUpdatedHandler`** (`account_updated_handler.py`)
 writes:
 
@@ -617,7 +640,7 @@ invoice (`paid_for`), not here. The CHECK constraints (the contract):
 | `payment_has_no_refund_id` | payment → `stripe_refund_id IS NULL` |
 | `payment_has_no_parent` | payment → `refunds_charge_id IS NULL` |
 | `refund_amount_nonpos` | refund → `amount <= 0` |
-| `refund_has_refund_id` | refund → `stripe_refund_id IS NOT NULL` |
+| `refund_has_refund_id` | refund → `stripe_refund_id IS NOT NULL` **OR** `payment_method_type = 'cash'` (a cash refund carries no Stripe id, mirroring `payment_has_charge_id`) |
 | `refund_has_parent` | refund → `refunds_charge_id IS NOT NULL` |
 | `refund_has_no_charge_id` | refund → `stripe_charge_id IS NULL` |
 
@@ -681,19 +704,39 @@ Stripe-incomplete state. Don't claim these tables hide incomplete records.
 
 ## 9. Endpoints that touch payments
 
-This guide owns the inbound webhook endpoint plus the two members-router card
-endpoints that call the §3 primitives (the members router otherwise belongs to
-its own domain):
+This guide owns the inbound webhook endpoint plus the members-router card
+endpoints and the member_memberships refund endpoint that call the §3 primitives
+(those routers otherwise belong to their own domains):
 
 | method + path | calls into |
 | --- | --- |
 | `POST /api/v1/stripe/webhooks` | the webhook ingestion (§5–§6) |
 | `PUT /api/v1/members/{member_id}/card` | `update_card` → `PaymentsStripeMembersService.update_customer` (card swap only; raises if the member has no Stripe customer — `create_customer` runs once at member creation, never here) |
 | `DELETE /api/v1/members/{member_id}/payment` | `unlink_payment` → `unlink_customer_card` + cancel recurring subs (Stripe customer link preserved) |
+| `POST /api/v1/member_memberships/refund` | `MemberMembershipsRefund.refund_charge` (sibling of charge-card; standalone, not on the `MemberMembershipsService` facade) → loads the charge by PK (gym-scoped, `memberships/sql/member_charge_by_id.sql`), validates the refundable balance, then for a card charge calls `refund_payment` and records the succeeded negative row (`memberships/sql/member_refund_insert.sql`); a cash charge records a negative cash row with no Stripe call (§6) |
 
-The subscription / invoice / refund primitives have **no direct endpoint** — they
-are called by the sync engine and the membership/members/plans services
-(`sync-guide` / `memberships-guide` own those call sites).
+> **⚠️ Refund assumes ONE succeeded charge per invoice — it would break down with
+> multiple.** The refund operates at the **charge** level: it loads a single
+> `member_charges` row by PK and computes the refundable balance as *that
+> charge's* `amount` minus the refunds linked to *that charge*
+> (`refunds_charge_id`). The CRM, by contrast, surfaces payment history **one row
+> per invoice** — the invoice total as the row amount, `refunded_amount` summed
+> across the invoice's charges, picking a representative *succeeded* charge for
+> the row's `charge_id`. These two only line up **because each invoice is paid by
+> exactly one succeeded charge today** (Stripe invoice → one PaymentIntent → one
+> charge; failed retries carry `status='failed'` and aren't refundable, so the
+> representative succeeded charge's `amount` *equals* the invoice total). The day
+> we allow **multiple succeeded charges on one invoice** (split / partial
+> payments), this breaks: the UI would offer an invoice-total refund the single
+> representative charge can't satisfy, and the backend's per-charge
+> `already_refunded` would disagree with the CRM's per-invoice `refunded_amount`.
+> Before supporting multi-charge invoices, rework the refund to aggregate across
+> the invoice's charges (refund at invoice granularity), not the lone charge PK.
+
+The subscription / invoice primitives have **no direct endpoint** — they are
+called by the sync engine and the membership/members/plans services
+(`sync-guide` / `memberships-guide` own those call sites). The refund primitive
+is the exception: the refund endpoint above is its one caller.
 
 ---
 
