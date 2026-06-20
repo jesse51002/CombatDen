@@ -26,6 +26,7 @@ self-FK cleared — ``delete_member_data`` handles both per member).
 from uuid import uuid4
 
 import pytest
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -160,7 +161,7 @@ async def test_recurring_family_one_converge_per_line_discounts(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=payer.member_id,
@@ -295,7 +296,7 @@ async def test_mixed_one_time_and_recurring_two_charges(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=member.member_id,
@@ -723,7 +724,7 @@ async def test_mixed_cart_recurring_card_fails_at_billing(
     """A declining card FAILS the recurring group — never reports success.
 
     Setup: payer with a $0 one-time membership + a paid recurring membership in
-    ONE request (``prorate=True``, NOT cash). The payer's card-on-file is
+    ONE request (``proration_behavior=prorate_to_anchor``, NOT cash). The payer's card-on-file is
     ``tok_chargeCustomerFail`` (attaches cleanly, fails every charge).
 
     With ``payment_behavior='error_if_incomplete'`` on the card create path,
@@ -765,7 +766,7 @@ async def test_mixed_cart_recurring_card_fails_at_billing(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=False,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -849,7 +850,8 @@ async def test_single_recurring_start_declining_card_fails(
     """A lone recurring start on a declining card fails with no charge.
 
     The simplest decline case: ONE recurring membership, no one-time sibling,
-    declining card, ``prorate=True``, NOT cash. The create 402s, so the result
+    declining card, ``proration_behavior=prorate_to_anchor``, NOT cash. The create 402s,
+    so the result
     row is ``failed``, the pending membership row is cleaned (no rows remain),
     no subscription is left on the customer, and no charge succeeded.
     """
@@ -871,7 +873,7 @@ async def test_single_recurring_start_declining_card_fails(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=False,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -956,7 +958,7 @@ async def test_cash_recurring_start_with_declining_card_succeeds(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=True,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -1026,7 +1028,8 @@ async def test_add_to_existing_sub_card_declines_fails_and_reverts(
 
     Start a healthy recurring family (payer on a good card), then swap the
     payer's card to a declining one and add a SECOND recurring membership (a
-    linked child) with ``prorate=True``. The add generates a proration invoice;
+    linked child) with ``proration_behavior=prorate_to_anchor``. The add generates a
+    proration invoice;
     with ``error_if_incomplete`` on the update card path Stripe 402s and rolls
     the item change back. So:
       * the add result is ``failed`` with the decline error;
@@ -1062,7 +1065,7 @@ async def test_add_to_existing_sub_card_declines_fails_and_reverts(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=False,
                 memberships=[
                     MemberMembershipsStartItem(
@@ -1096,7 +1099,7 @@ async def test_add_to_existing_sub_card_declines_fails_and_reverts(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 paid_with_cash=False,
                 memberships=[
                     MemberMembershipsStartItem(

@@ -337,7 +337,7 @@ class MemberDetailBloc
         MemberMembershipsUpdatePriceRequest(
           itemId: event.itemId,
           memberId: event.memberId,
-          prorate: event.prorate,
+          prorationBehavior: event.prorationBehavior,
           idempotencyKey: const Uuid().v4(),
         ),
       ),
@@ -481,6 +481,7 @@ class MemberDetailBloc
         memberId: s.member.memberId,
         chargeId: event.chargeId,
         amount: event.amount,
+        idempotencyKey: const Uuid().v4(),
       ),
     );
   }

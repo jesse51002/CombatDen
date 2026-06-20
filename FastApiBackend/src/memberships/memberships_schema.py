@@ -7,7 +7,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from schema.gym_discount import DiscountType
+from schema.member_charge import ChargeStatus
 from schema.membership_plan import PlanType
+from schema.task import ProrationBehavior
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import DiscountValue
@@ -77,8 +79,9 @@ class MemberMembershipsStartRequest(BaseModel):
     The payer (``payer_member_id``) is identity-only — it need not appear in
     ``memberships``. Every non-payer member must ALREADY be linked to this
     payer (linking is a separate, prior operation; the start op never links).
-    ``prorate`` applies to the recurring converge only; ``paid_with_cash``
-    is request-level (the consolidated one-time invoice is one charge). The
+    ``proration_behavior`` applies to the recurring converge only;
+    ``paid_with_cash`` is request-level (the consolidated one-time invoice is
+    one charge). The
     single ``idempotency_key`` deterministically derives one sub-key per
     charge group (one-time invoice / recurring converge), so a client retry
     of the same request dedups both charges at Stripe.
@@ -94,7 +97,9 @@ class MemberMembershipsStartRequest(BaseModel):
 
     payer_member_id: UUID
     gym_id: UUID
-    prorate: bool = True
+    proration_behavior: ProrationBehavior = (
+        ProrationBehavior.prorate_to_anchor
+    )
     paid_with_cash: bool = False
     payment: MemberMembershipsStartPayment | None = None
     idempotency_key: UUID
@@ -192,8 +197,9 @@ class MemberMembershipsStartPreviewResponse(BaseModel):
     ``one_time`` — the consolidated one-time invoice (all one-time
     memberships, one charge), the one-time lines ONLY (the payer's live
     subscription lines are stripped). ``due_now`` — the recurring proration
-    invoice charged immediately; present ONLY when ``prorate=True`` and
-    ``None`` otherwise (a non-prorating start charges nothing extra now).
+    invoice charged immediately; present ONLY when ``proration_behavior`` is
+    ``prorate_to_anchor`` and ``None`` otherwise (a ``no_charge`` start
+    charges nothing extra now).
     ``recurring`` — the steady-state recurring invoice each cycle going
     forward. Each is ``None`` when the request has no memberships in that
     group.
@@ -234,6 +240,38 @@ class MemberMembershipsChargeCardRequest(BaseModel):
     idempotency_key: UUID
 
 
+class MemberMembershipsRefundRequest(BaseModel):
+    """Refund a prior charge on a member's payment history.
+
+    ``member_id`` is the member whose billing history the refund was launched
+    from (the auth + gym-scope anchor). ``charge_id`` is the ``member_charges``
+    row to refund (a succeeded payment). ``amount`` is positive minor units;
+    ``None`` refunds the full remaining balance (the charge minus anything
+    already refunded). ``idempotency_key`` is minted per submission by the CRM so
+    a retried request dedups the Stripe refund.
+    """
+
+    member_id: UUID
+    charge_id: UUID
+    amount: int | None = None
+    idempotency_key: str
+
+
+class MemberMembershipsRefundResponse(BaseModel):
+    """Outcome of a refund: the recorded refund row's id, the minor units
+    refunded, the method ('card' / 'cash'), and the refund status.
+
+    ``refund_charge_id`` is ``None`` for a Stripe refund that comes back
+    ``pending`` — no row is written until the ``refund.*`` webhook confirms it
+    succeeded.
+    """
+
+    refund_charge_id: UUID | None = None
+    refunded_amount: int
+    payment_method: str
+    status: ChargeStatus
+
+
 class MemberMembershipsUpdatePriceRequest(BaseModel):
     """Reprice ONE membership onto its plan's currently active price.
 
@@ -248,7 +286,7 @@ class MemberMembershipsUpdatePriceRequest(BaseModel):
 
     item_id: UUID
     member_id: UUID
-    prorate: bool = False
+    proration_behavior: ProrationBehavior = ProrationBehavior.no_charge
     idempotency_key: UUID
 
 
@@ -270,7 +308,7 @@ class MemberMembershipsBatchRepriceRequest(BaseModel):
 
     plan_id: UUID
     gym_id: UUID
-    prorate: bool = False
+    proration_behavior: ProrationBehavior = ProrationBehavior.no_charge
 
 
 class MemberMembershipsBatchRepriceResponse(BaseModel):

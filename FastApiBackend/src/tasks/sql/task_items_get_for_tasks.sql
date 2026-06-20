@@ -10,7 +10,7 @@ SELECT
     old_item_id,
     new_item_id,
     target_price_id,
-    prorate,
+    proration_behavior::text AS proration_behavior,
     created_at,
     started_at,
     finished_at

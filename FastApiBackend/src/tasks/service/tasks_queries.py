@@ -62,7 +62,12 @@ class TasksQueries:
                         str(i.target_price_id) if i.target_price_id else None
                         for i in items
                     ],
-                    "prorates": [i.prorate for i in items],
+                    "proration_behaviors": [
+                        i.proration_behavior.value
+                        if i.proration_behavior is not None
+                        else None
+                        for i in items
+                    ],
                 },
             )
             await session.commit()

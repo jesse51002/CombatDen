@@ -1,4 +1,5 @@
-"""Integration: the start-preview one-time leak fix + the prorate=False due_now rule.
+"""Integration: the start-preview one-time leak fix + the proration_behavior=no_charge
+due_now rule.
 
 Two bugs are guarded here, both in ``MemberMembershipsStartPreview.preview``:
 
@@ -9,7 +10,7 @@ Two bugs are guarded here, both in ``MemberMembershipsStartPreview.preview``:
    the subscription-derived lines (those carrying a ``stripe_subscription_item_id``
    and/or ``is_proration``) and recomputes the totals from the kept one-time lines.
 
-2. **``due_now`` must be absent when ``prorate=False``.** With no proration the
+2. **``due_now`` must be absent when ``proration_behavior=no_charge``.** With no proration the
    engine's ``due_now`` reuses the steady-state recurring figure, which is NOT due
    now — the start preview reports ``due_now=None`` in that case.
 
@@ -19,6 +20,7 @@ Real Stripe test Connect account; every test cleans up exactly what it creates.
 from uuid import uuid4
 
 import pytest
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -116,7 +118,7 @@ async def test_one_time_preview_excludes_existing_subscription_lines(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=payer.member_id,
@@ -137,7 +139,7 @@ async def test_one_time_preview_excludes_existing_subscription_lines(
                 payer_member_id=payer.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=payer.member_id,
@@ -194,7 +196,7 @@ async def test_one_time_preview_excludes_existing_subscription_lines(
         await delete_member_data(db_pool, payer.member_id)
 
 
-# ── Test 2 — prorate=False start preview → due_now is None ──────────
+# ── Test 2 — proration_behavior=no_charge start preview → due_now is None ──────────
 
 
 async def test_prorate_false_start_preview_due_now_is_none(
@@ -225,7 +227,7 @@ async def test_prorate_false_start_preview_due_now_is_none(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=False,
+                proration_behavior=ProrationBehavior.no_charge,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=member.member_id,
@@ -236,7 +238,7 @@ async def test_prorate_false_start_preview_due_now_is_none(
         )
 
         assert preview.due_now is None, (
-            "prorate=False start preview must report due_now=None"
+            "proration_behavior=no_charge start preview must report due_now=None"
         )
         assert preview.recurring is not None
         assert preview.recurring.amount_due == plan.price_cents
@@ -249,7 +251,7 @@ async def test_prorate_false_start_preview_due_now_is_none(
         await delete_member_data(db_pool, member.member_id)
 
 
-# ── Test 3 — prorate=True start preview → due_now present + real ────
+# ── Test 3 — proration_behavior=prorate_to_anchor start preview → due_now present + real ────
 
 
 async def test_prorate_true_start_preview_due_now_present(
@@ -280,7 +282,7 @@ async def test_prorate_true_start_preview_due_now_present(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=member.member_id,
@@ -291,7 +293,7 @@ async def test_prorate_true_start_preview_due_now_present(
         )
 
         assert preview.due_now is not None, (
-            "prorate=True start preview must carry a due_now proration"
+            "proration_behavior=prorate_to_anchor start preview must carry a due_now proration"
         )
         assert preview.due_now.amount_due >= 0
         assert preview.due_now.amount_due <= plan.price_cents, (
@@ -351,7 +353,7 @@ async def test_mixed_cart_preview_split_is_disjoint(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=True,
+                proration_behavior=ProrationBehavior.prorate_to_anchor,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=member.member_id,

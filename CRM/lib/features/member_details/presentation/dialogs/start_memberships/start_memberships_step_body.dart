@@ -8,6 +8,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
@@ -54,7 +55,7 @@ class StartMembershipsStepBody extends StatelessWidget {
   final Future<List<DiscountResponse>> discountsFuture;
   final MemberMembershipsStartRequest? previewRequest;
   final MemberMembershipsStartPreview? preview;
-  final bool prorate;
+  final ProrationBehavior prorationBehavior;
   final bool paidWithCash;
   final bool hasRecurring;
   final bool hasOneTime;
@@ -78,7 +79,7 @@ class StartMembershipsStepBody extends StatelessWidget {
   ) onDraftChanged;
   final ValueChanged<MemberMembershipsStartPreview>
       onPreviewLoaded;
-  final ValueChanged<bool> onProrateChanged;
+  final ValueChanged<ProrationBehavior> onProrationChanged;
   final ValueChanged<bool> onPaidWithCashChanged;
   final VoidCallback onAddNewCard;
   final VoidCallback onAddOrChangeCustomCard;
@@ -111,7 +112,7 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.discountsFuture,
     required this.previewRequest,
     required this.preview,
-    required this.prorate,
+    required this.prorationBehavior,
     required this.paidWithCash,
     required this.hasRecurring,
     required this.hasOneTime,
@@ -125,7 +126,7 @@ class StartMembershipsStepBody extends StatelessWidget {
     required this.onPlanToggle,
     required this.onDraftChanged,
     required this.onPreviewLoaded,
-    required this.onProrateChanged,
+    required this.onProrationChanged,
     required this.onPaidWithCashChanged,
     required this.onAddNewCard,
     required this.onAddOrChangeCustomCard,
@@ -253,14 +254,16 @@ class StartMembershipsStepBody extends StatelessWidget {
           // baseline for the recurring card's before→after.
           currentMonthly: payerDetail?.totalMonthlyRecurringPrice,
           onLoaded: onPreviewLoaded,
+          prorationBehavior: prorationBehavior,
+          onProrationChanged: onProrationChanged,
+          hasRecurring: hasRecurring,
+          anchorDate: preview?.recurring?.nextPaymentAt,
         );
       case StartMembershipsStep.payment:
         return StartPaymentStep(
           cardOnFile: payerCardOnFile,
           paidWithCash: paidWithCash,
           onPaidWithCashChanged: onPaidWithCashChanged,
-          prorate: prorate,
-          onProrateChanged: onProrateChanged,
           hasRecurring: hasRecurring,
           hasOneTime: hasOneTime,
           customCard: customCard,
@@ -268,6 +271,7 @@ class StartMembershipsStepBody extends StatelessWidget {
               onAddOrChangeCustomCard,
           onRemoveCustomCard: onRemoveCustomCard,
           preview: preview,
+          prorationBehavior: prorationBehavior,
           onAddNewCard: onAddNewCard,
         );
       case StartMembershipsStep.results:

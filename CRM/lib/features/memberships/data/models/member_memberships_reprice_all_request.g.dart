@@ -11,5 +11,5 @@ Map<String, dynamic> _$MemberMembershipsRepriceAllRequestToJson(
 ) => <String, dynamic>{
   'plan_id': instance.planId,
   'gym_id': instance.gymId,
-  'prorate': instance.prorate,
+  'proration_behavior': instance.prorationBehavior,
 };

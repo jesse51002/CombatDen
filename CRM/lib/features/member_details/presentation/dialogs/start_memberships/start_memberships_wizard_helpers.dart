@@ -6,6 +6,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plan_rules.dart'
@@ -129,7 +130,7 @@ MemberMembershipsStartRequest? buildStartRequest({
   required String idempotencyKey,
   required String payerMemberId,
   required String gymId,
-  required bool prorate,
+  required ProrationBehavior prorationBehavior,
   required bool paidWithCash,
   required List<StartMembershipParticipant> configMembers,
   required Map<String, List<MembershipDraft>> drafts,
@@ -152,7 +153,7 @@ MemberMembershipsStartRequest? buildStartRequest({
     payerMemberId: payerMemberId,
     gymId: gymId,
     idempotencyKey: idempotencyKey,
-    prorate: prorate,
+    prorationBehavior: prorationBehavior,
     paidWithCash: paidWithCash,
     payment: payment,
     memberships: items,

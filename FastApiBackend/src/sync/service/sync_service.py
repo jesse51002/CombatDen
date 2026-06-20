@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Literal
 from uuid import UUID, uuid4
+
+from schema.task import ProrationBehavior
 
 import src.shared.db_schema_path  # noqa: F401
 from src.core.config import settings
@@ -80,7 +81,7 @@ class PaymentSyncService:
         payer_member_id: UUID,
         idempotency_key: UUID,
         pay_first_invoice_out_of_band: bool = False,
-        proration_behavior: Literal["none", "always_invoice"] = "none",
+        proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
     ) -> None:
         """Sync a payer's recurring memberships with Stripe.
 
@@ -175,7 +176,7 @@ class PaymentSyncService:
     async def preview_update_payments_recurring(
         self,
         payer_member_id: UUID,
-        proration_behavior: Literal["none", "always_invoice"] = "none",
+        proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
     ) -> DueNowVsRecurringPreview | None:
         """Preview what a recurring sync would charge, as a split.
 
