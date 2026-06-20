@@ -1,15 +1,18 @@
 -- Paginated payment history for the member-detail screen.
 --
--- Returns one row per INVOICE that is this member's "stuff", by two paths:
---   1. an invoice the member actually PAID a charge on (c.member_id =
---      :member_id) — even for something they no longer / never held as a
---      membership (ad-hoc charges, a since-cancelled plan, paying for someone
---      else's membership); and
+-- Returns one row per INVOICE that is this member's "stuff", by three paths:
+--   1. an invoice the member PAID (c.paid_by_member_id = :member_id) — even for
+--      something they no longer / never held as a membership (ad-hoc charges, a
+--      since-cancelled plan, paying for someone else); and
 --   2. an invoice for a MEMBERSHIP the member has ever held — any line item
 --      whose item_id is one of the member's member_memberships item_ids (so a
 --      parent's payment for THIS member's membership shows here, and pre-link
---      membership invoices stay findable after they're linked).
+--      membership invoices stay findable after they're linked); and
+--   3. an invoice that was FOR the member — their id is in the invoice's
+--      paid_for beneficiary list (a parent paying for this member shows here,
+--      so the charge is findable + refundable from this member's page).
 -- A paying parent's UNRELATED invoices never leak onto this member's page.
+-- The row's payer label is the invoice's paid_by_member_id; "For …" is paid_for.
 --
 -- ONE row per invoice: every charge against the invoice (each retry, the
 -- success, and any refunds — there can be several payments, e.g. a refund then
@@ -39,12 +42,22 @@ relevant_invoices AS (
     WHERE c.gym_id = ctx.gym_id
       AND c.kind = 'payment'
       AND (
-          c.member_id = :member_id
+          -- I paid for it.
+          c.paid_by_member_id = :member_id
+          -- A membership I have ever held was on it (keeps pre-link /
+          -- historical invoices findable independent of the paid_for snapshot).
           OR EXISTS (
               SELECT 1
               FROM member_invoice_line_items li
               WHERE li.invoice_id = c.invoice_id
                 AND li.item_id IN (SELECT item_id FROM member_items)
+          )
+          -- The bill was FOR me (my id is in the invoice's paid_for list).
+          OR EXISTS (
+              SELECT 1
+              FROM member_invoices inv
+              WHERE inv.invoice_id = c.invoice_id
+                AND jsonb_exists(inv.paid_for, :member_id_text)
           )
       )
 ),
@@ -60,7 +73,7 @@ rep_charge AS (
         c.currency,
         c.payment_method_type,
         c.charge_time,
-        c.member_id,
+        c.paid_by_member_id,
         c.gym_id
     FROM member_charges c
     WHERE c.invoice_id IN (SELECT invoice_id FROM relevant_invoices)
@@ -90,10 +103,28 @@ SELECT
            AND r.kind = 'refund'),
         0
     ) AS refunded_amount,
-    rc.member_id AS paid_by_member_id,
+    rc.paid_by_member_id AS paid_by_member_id,
     pm.first_name AS paid_by_first_name,
     pm.last_name AS paid_by_last_name,
     pmbp.photo_url AS paid_by_photo_url,
+    -- Beneficiaries: who the bill was FOR (the invoice's paid_for, resolved to
+    -- names) so the row can show "For X, Y". Usually just the payer themselves.
+    COALESCE(
+        (SELECT jsonb_agg(jsonb_build_object(
+            'member_id', bm.member_id,
+            'first_name', bm.first_name,
+            'last_name', bm.last_name,
+            'photo_url', bm.photo_url
+         ) ORDER BY bm.first_name, bm.last_name)
+         FROM member_invoices inv2
+         CROSS JOIN LATERAL
+             jsonb_array_elements_text(inv2.paid_for) AS pf(mid)
+         JOIN members bm
+             ON bm.member_id = CAST(pf.mid AS UUID)
+            AND bm.gym_id = rc.gym_id
+         WHERE inv2.invoice_id = rc.invoice_id),
+        '[]'::jsonb
+    ) AS paid_for,
     COALESCE(
         (SELECT jsonb_agg(jsonb_build_object(
             'line_item_id', li.line_item_id,
@@ -135,8 +166,8 @@ SELECT
     ) AS attempts
 FROM rep_charge rc
 LEFT JOIN members pm
-    ON pm.member_id = rc.member_id AND pm.gym_id = rc.gym_id
+    ON pm.member_id = rc.paid_by_member_id AND pm.gym_id = rc.gym_id
 LEFT JOIN member_billing_profile pmbp
-    ON pmbp.member_id = rc.member_id AND pmbp.gym_id = rc.gym_id
+    ON pmbp.member_id = rc.paid_by_member_id AND pmbp.gym_id = rc.gym_id
 ORDER BY rc.charge_time DESC, rc.charge_id
 LIMIT :limit OFFSET :offset

@@ -591,6 +591,9 @@ class _StartMembershipsWizardState
       memberName: _payer.name,
       card: _payerDetail?.cardOnFile,
       targetMemberId: _payer.memberId,
+      // Removing a card mid-checkout makes no sense; removal
+      // lives on the member profile behind its own confirmation.
+      allowRemove: false,
     );
     if (!mounted) return;
     await _awaitBlocSettle(tokenBefore);

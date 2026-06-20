@@ -2,9 +2,10 @@
 
 A standalone read so the (potentially long) charge history is fetched on
 demand and windowed, rather than bundled into the member-detail response.
-Attributed by membership: returns the charges whose invoice covers one of
-the memberships this member has ever held (by membership item_id), plus the
-member's own directly-billed invoices — each labelled with who was charged.
+Returns the invoices the member PAID (paid_by_member_id), the invoices a
+membership they have ever held was on (by membership item_id), and the
+invoices that were FOR them (their id in the invoice's paid_for) — each row
+labelled with the payer (paid_by_*) and the beneficiaries (paid_for).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from src.members.schema.members_billing_schema import (
     BillingDiscountInfo,
     BillingInvoiceAttempt,
     BillingLineItemRecord,
+    BillingPaidForMember,
     BillingPaymentRecord,
 )
 from src.shared.database import DirectDatabasePool
@@ -54,6 +56,10 @@ class MembersPaymentsService:
         sql = load_sql(_PAYMENTS_SQL)
         params = {
             "member_id": str(member_id),
+            # Separate text-typed bind for the paid_for JSONB membership check
+            # (jsonb_exists wants text; reusing :member_id, used in uuid
+            # comparisons, would make asyncpg deduce conflicting types for it).
+            "member_id_text": str(member_id),
             "limit": limit,
             "offset": offset,
         }
@@ -95,6 +101,15 @@ class MembersPaymentsService:
             )
             for at in (row["attempts"] or [])
         ]
+        paid_for = [
+            BillingPaidForMember(
+                member_id=UUID(pf["member_id"]),
+                first_name=pf["first_name"],
+                last_name=pf["last_name"],
+                photo_url=pf.get("photo_url"),
+            )
+            for pf in (row["paid_for"] or [])
+        ]
         return BillingPaymentRecord(
             charge_id=row["charge_id"],
             invoice_id=row["invoice_id"],
@@ -110,6 +125,7 @@ class MembersPaymentsService:
             paid_by_first_name=row["paid_by_first_name"],
             paid_by_last_name=row["paid_by_last_name"],
             paid_by_photo_url=row["paid_by_photo_url"],
+            paid_for=paid_for,
             line_items=line_items,
             applied_discounts=applied,
             attempts=attempts,

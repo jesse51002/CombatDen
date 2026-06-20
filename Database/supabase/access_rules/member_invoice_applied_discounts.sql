@@ -8,9 +8,12 @@ CREATE POLICY "Users and gym staff can view applied discounts"
     USING (
         EXISTS (
             SELECT 1 FROM member_invoices inv
-            JOIN members m ON m.member_id = inv.member_id
+            JOIN members m ON m.user_id = auth.uid()
             WHERE inv.invoice_id = member_invoice_applied_discounts.invoice_id
-            AND m.user_id = auth.uid()
+            AND (
+                m.member_id = inv.paid_by_member_id
+                OR inv.paid_for ? m.member_id::text
+            )
         )
         OR is_gym_admin_or_owner(member_invoice_applied_discounts.gym_id)
     );

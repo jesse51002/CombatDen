@@ -10,7 +10,9 @@ payment(s) arrive on the separate ``invoice_payment.paid`` event, covered by
 ``test_invoice_payment_paid.py``.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
@@ -26,7 +28,8 @@ async def _fetch_invoice(db_pool, stripe_invoice_id: str) -> dict | None:
     async with db_pool.session() as session:
         result = await session.execute(
             text(
-                "SELECT status, total_amount, currency, member_id "
+                "SELECT status, total_amount, currency, "
+                "paid_by_member_id, paid_for "
                 "FROM member_invoices "
                 "WHERE stripe_invoice_id = :id"
             ),
@@ -90,7 +93,10 @@ async def test_invoice_paid_writes_invoice_and_dates(
     assert invoice["status"] == "paid"
     assert invoice["total_amount"] == 5000
     assert invoice["currency"] == "usd"
-    assert str(invoice["member_id"]) == str(webhook_fixture.member_id)
+    # Subscription invoice: payer = the membership's paid_by_member_id (the
+    # fixture self-pays, so == member_id) and paid_for lists the owner.
+    assert str(invoice["paid_by_member_id"]) == str(webhook_fixture.member_id)
+    assert [str(m) for m in invoice["paid_for"]] == [str(webhook_fixture.member_id)]
 
     # The charge is the invoice_payment.paid handler's job, not this one.
     assert await _charges_for_invoice(db_pool, event["data"]["object"]["id"]) == 0
@@ -248,11 +254,16 @@ async def test_invoice_paid_one_time_payment_records_invoice(
     gym_id,
     webhook_fixture,
 ):
-    """A one-time-payment invoice (no subscription item, carries
-    ``crm_one_time_payment`` + ``member_id`` + ``gym_id`` in root metadata)
-    records the invoice resolved from metadata, WITHOUT touching membership
-    dates. Its charge arrives on ``invoice_payment.paid``.
+    """An ad-hoc one-time invoice (no subscription item, carries
+    ``crm_one_time_payment`` + ``paid_by_member_id`` + ``paid_for`` in root
+    metadata) records the invoice resolved from metadata, WITHOUT touching
+    membership dates. Its charge arrives on ``invoice_payment.paid``.
+
+    The payer and beneficiary differ here (a parent paying for a child), so
+    this also proves the payer/beneficiary split round-trips: paid_for is a
+    JSON-array string in metadata and lands as a JSONB list on the row.
     """
+    beneficiary_id = uuid4()
     paid_at = int(datetime(2026, 4, 10, 12, 0, tzinfo=UTC).timestamp())
     event = make_invoice_paid_event(
         stripe_account_id=stripe_account_id,
@@ -261,7 +272,8 @@ async def test_invoice_paid_one_time_payment_records_invoice(
         paid_at=paid_at,
         metadata={
             "crm_one_time_payment": "true",
-            "member_id": str(webhook_fixture.member_id),
+            "paid_by_member_id": str(webhook_fixture.member_id),
+            "paid_for": json.dumps([str(beneficiary_id)]),
             "gym_id": str(gym_id),
         },
     )
@@ -272,7 +284,8 @@ async def test_invoice_paid_one_time_payment_records_invoice(
     assert invoice is not None
     assert invoice["status"] == "paid"
     assert invoice["total_amount"] == 2500
-    assert str(invoice["member_id"]) == str(webhook_fixture.member_id)
+    assert str(invoice["paid_by_member_id"]) == str(webhook_fixture.member_id)
+    assert [str(m) for m in invoice["paid_for"]] == [str(beneficiary_id)]
 
     # The one-time branch must NOT advance membership dates.
     dates = await _fetch_membership_dates(db_pool, webhook_fixture.item_id)

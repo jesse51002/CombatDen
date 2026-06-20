@@ -540,7 +540,10 @@ class MemberRepository {
   /// units with [reason] as the invoice description /
   /// line-item name. When [paidCash] is true the invoice
   /// is marked paid out of band instead of charging the
-  /// saved card. [idempotencyKey] dedupes retries.
+  /// saved card. When [paymentMethodId] is set, that one-off
+  /// card is billed (attached, charged once, detached)
+  /// instead of the payer's saved default. [idempotencyKey]
+  /// dedupes retries.
   Future<void> chargeCard({
     required String memberId,
     required String paidByMemberId,
@@ -549,6 +552,7 @@ class MemberRepository {
     required String reason,
     required String idempotencyKey,
     bool paidCash = false,
+    String? paymentMethodId,
   }) async {
     await _apiClient.post(
       '/api/v1/member_memberships/charge-card',
@@ -559,6 +563,7 @@ class MemberRepository {
         'amount_cents': amount,
         'reason': reason,
         'paid_cash': paidCash,
+        'payment_method_id': ?paymentMethodId,
         'idempotency_key': idempotencyKey,
       },
     );

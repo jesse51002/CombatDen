@@ -14,7 +14,8 @@ typed field on the relevant subclass.
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Any, get_origin
 
 from pydantic import BaseModel, ConfigDict
 
@@ -28,14 +29,18 @@ class BaseStripeMetadata(BaseModel):
         """Serialize to Stripe's ``dict[str, str]`` metadata shape.
 
         UUIDs become their string form; bools become ``"true"`` /
-        ``"false"``; ``None`` values are dropped so Stripe does not
-        receive the literal string ``"None"``.
+        ``"false"``; list fields become a JSON-array string (Stripe
+        metadata values are strings only, so e.g. ``paid_for`` rides as
+        ``'["<uuid>", ...]'``); ``None`` values are dropped so Stripe does
+        not receive the literal string ``"None"``.
         """
         dumped = self.model_dump(exclude_none=True, mode="json")
         out: dict[str, str] = {}
         for key, value in dumped.items():
             if isinstance(value, bool):
                 out[key] = "true" if value else "false"
+            elif isinstance(value, list):
+                out[key] = json.dumps(value)
             else:
                 out[key] = str(value)
         return out
@@ -48,8 +53,10 @@ class BaseStripeMetadata(BaseModel):
         """Parse Stripe's ``dict[str, str]`` back into the typed envelope.
 
         Bool fields (discovered via ``cls.model_fields``) are coerced
-        from Stripe's ``"true"`` / ``"false"`` string convention. Other
-        fields are handed to Pydantic for validation/coercion.
+        from Stripe's ``"true"`` / ``"false"`` string convention; list
+        fields are JSON-decoded back from their array string (the inverse
+        of ``to_stripe_metadata``). Other fields are handed to Pydantic
+        for validation/coercion.
         """
         raw = raw or {}
         normalized: dict[str, Any] = dict(raw)
@@ -57,6 +64,9 @@ class BaseStripeMetadata(BaseModel):
             if field_name not in normalized:
                 continue
             annotation = info.annotation
+            value = normalized[field_name]
             if annotation is bool or annotation == (bool | None):
-                normalized[field_name] = str(normalized[field_name]).lower() == "true"
+                normalized[field_name] = str(value).lower() == "true"
+            elif get_origin(annotation) is list and isinstance(value, str):
+                normalized[field_name] = json.loads(value)
         return cls.model_validate(normalized)

@@ -239,15 +239,38 @@ class ChargeCardRequested extends MemberDetailEvent {
   /// charge dialog.
   final String paidByMemberId;
 
+  /// An optional one-off card (a Stripe `pm_...`) entered at
+  /// checkout: billed once then detached, leaving the payer's
+  /// saved default untouched. Null bills the saved default.
+  final String? paymentMethodId;
+
+  /// When true the charge is settled OUT OF BAND (cash): the
+  /// invoice is marked paid without charging any card. Mutually
+  /// exclusive with [paymentMethodId].
+  final bool paidCash;
+
   const ChargeCardRequested({
     required this.amount,
     required this.description,
     required this.paidByMemberId,
+    this.paymentMethodId,
+    this.paidCash = false,
   });
 
   @override
-  List<Object?> get props =>
-      [amount, description, paidByMemberId];
+  List<Object?> get props => [
+        amount,
+        description,
+        paidByMemberId,
+        paymentMethodId,
+        paidCash,
+      ];
+}
+
+/// Clears the charge-card outcome (error) when the charge
+/// dialog opens, so a prior charge's failure doesn't flash.
+class ChargeCardOutcomeCleared extends MemberDetailEvent {
+  const ChargeCardOutcomeCleared();
 }
 
 /// NOTE: refund has no backend endpoint in the merged

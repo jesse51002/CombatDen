@@ -1,5 +1,6 @@
 """Handler for Stripe ``invoice.payment_failed`` events."""
 
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -67,8 +68,10 @@ class InvoicePaymentFailedHandler:
         if not stripe_invoice_id:
             raise ValueError("invoice.payment_failed event is missing invoice id")
 
-        member_id = await self._resolve_member_id(session, invoice, gym_id)
-        if member_id is None:
+        paid_by_member_id, paid_for = await self._resolve_attribution(
+            session, invoice, gym_id
+        )
+        if paid_by_member_id is None:
             subscription_item_ids = [
                 item_id
                 for line in self._lines(invoice)
@@ -86,25 +89,37 @@ class InvoicePaymentFailedHandler:
             session,
             invoice,
             gym_id,
-            member_id,
+            paid_by_member_id,
+            paid_for,
         )
         await self._insert_failed_charge(
             session,
             invoice,
             gym_id,
-            member_id,
+            paid_by_member_id,
             invoice_row["invoice_id"],
         )
 
     # ── Helpers ────────────────────────────────────────────────
 
-    async def _resolve_member_id(
+    async def _resolve_attribution(
         self,
         session: AsyncSession,
         invoice: dict[str, Any],
         gym_id: UUID,
-    ) -> UUID | None:
+    ) -> tuple[UUID | None, list[UUID]]:
+        """Resolve ``(paid_by_member_id, paid_for)`` from the failed
+        invoice's subscription-item lines.
+
+        A failed renewal is always a subscription invoice, so attribution
+        comes from the line → ``member_memberships`` match: the payer is
+        the membership's ``paid_by_member_id`` (one per Stripe sub), and
+        ``paid_for`` is the distinct set of owners billed on the invoice.
+        """
         membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
+        paid_by_member_id: UUID | None = None
+        paid_for: list[UUID] = []
+        seen: set[UUID] = set()
         for line in self._lines(invoice):
             stripe_item_id = line_subscription_item(line)
             if not stripe_item_id:
@@ -117,22 +132,30 @@ class InvoicePaymentFailedHandler:
                 },
             )
             row = result.mappings().fetchone()
-            if row is not None:
-                return row["member_id"]
-        return None
+            if row is None:
+                continue
+            owner = UUID(str(row["member_id"]))
+            if owner not in seen:
+                seen.add(owner)
+                paid_for.append(owner)
+            if paid_by_member_id is None:
+                paid_by_member_id = UUID(str(row["paid_by_member_id"]))
+        return paid_by_member_id, paid_for
 
     async def _upsert_invoice(
         self,
         session: AsyncSession,
         invoice: dict[str, Any],
         gym_id: UUID,
-        member_id: UUID,
+        paid_by_member_id: UUID,
+        paid_for: list[UUID],
     ) -> dict[str, Any]:
         upsert_sql = load_sql(SQL_DIR / "member_invoice_upsert.sql")
         created_ts = invoice.get("created")
         params = {
             "gym_id": str(gym_id),
-            "member_id": str(member_id),
+            "paid_by_member_id": str(paid_by_member_id),
+            "paid_for": json.dumps([str(m) for m in paid_for]),
             "status": INVOICE_STATUS_OPEN,
             "total_amount": int(invoice.get("amount_due") or invoice.get("total") or 0),
             "currency": invoice.get("currency", "usd"),
@@ -152,7 +175,7 @@ class InvoicePaymentFailedHandler:
         session: AsyncSession,
         invoice: dict[str, Any],
         gym_id: UUID,
-        member_id: UUID,
+        paid_by_member_id: UUID,
         invoice_id: UUID,
     ) -> None:
         # Deterministic synthetic charge id (see FAILED_CHARGE_KEY_PREFIX):
@@ -168,7 +191,7 @@ class InvoicePaymentFailedHandler:
         params = {
             "invoice_id": str(invoice_id),
             "gym_id": str(gym_id),
-            "member_id": str(member_id),
+            "paid_by_member_id": str(paid_by_member_id),
             "kind": CHARGE_KIND_PAYMENT,
             "status": CHARGE_STATUS_FAILED,
             "amount": int(invoice.get("amount_due") or 0),

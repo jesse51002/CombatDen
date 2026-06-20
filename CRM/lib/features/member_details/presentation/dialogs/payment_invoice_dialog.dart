@@ -6,6 +6,7 @@ import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
 import 'package:crm/features/member_details/data/models/invoice_attempt.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
+import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/refund_charge_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
@@ -48,6 +49,23 @@ class PaymentInvoiceDialog extends StatelessWidget {
   }
 
   bool get _isRefund => payment.kind == ChargeKind.refund;
+
+  /// "Paid by {payer} · For {beneficiaries}" — the who-paid / who-for
+  /// attribution. The "For" clause is shown only when the bill was for
+  /// someone other than the payer (otherwise it's redundant). Null when
+  /// there's nothing meaningful to show.
+  String? get _attributionLabel {
+    final payer = payment.paidByName;
+    final others = payment.paidFor
+        .where((m) => m.memberId != payment.paidByMemberId)
+        .map((m) => m.name)
+        .where((n) => n.isNotEmpty)
+        .toList();
+    final parts = <String>[];
+    if (payer.isNotEmpty) parts.add('Paid by $payer');
+    if (others.isNotEmpty) parts.add('For ${others.join(', ')}');
+    return parts.isEmpty ? null : parts.join('  ·  ');
+  }
 
   /// Refundable only when this is a succeeded payment (not
   /// already a refund, not pending/failed) with an
@@ -153,17 +171,32 @@ class PaymentInvoiceDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final attribution = _attributionLabel;
     return AppDialog(
       title: _isRefund ? 'Refund' : 'Invoice',
-      body: InvoiceBreakdown(
-        data: _data,
-        headerCaption: _isRefund ? 'Refund' : 'Payment',
-        headerMeta: formatDay(payment.chargeTime),
-        strongHeaderCaption: true,
-        statusLabel: payment.status.displayLabel,
-        statusTone: _statusTone,
-        onRefundPressed:
-            _canRefund ? () => _onRefund(context) : null,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          if (attribution != null)
+            Text(
+              attribution,
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          InvoiceBreakdown(
+            data: _data,
+            headerCaption: _isRefund ? 'Refund' : 'Payment',
+            headerMeta: formatDay(payment.chargeTime),
+            strongHeaderCaption: true,
+            statusLabel: payment.status.displayLabel,
+            statusTone: _statusTone,
+            onRefundPressed:
+                _canRefund ? () => _onRefund(context) : null,
+          ),
+        ],
       ),
     );
   }

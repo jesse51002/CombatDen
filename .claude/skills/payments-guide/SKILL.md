@@ -108,8 +108,9 @@ Each Stripe resource we create is written with a **typed metadata envelope** so
 an inbound event can be correlated back to CRM rows. All models subclass
 `BaseStripeMetadata` (`schema/metadata/stripe_metadata_base.py`,
 `extra="forbid"`): `to_stripe_metadata()` serializes to Stripe's `dict[str,str]`
-(UUIDs → str, bools → `"true"`/`"false"`, `None` dropped) and
-`from_stripe_metadata()` parses it back, coercing bools.
+(UUIDs → str, bools → `"true"`/`"false"`, **list fields → a JSON-array string**
+so e.g. `paid_for` rides as `'["<uuid>", …]'`, `None` dropped) and
+`from_stripe_metadata()` parses it back, coercing bools and JSON-decoding lists.
 
 | model (file in `schema/metadata/`) | written on | pinned fields |
 | --- | --- | --- |
@@ -118,7 +119,7 @@ an inbound event can be correlated back to CRM rows. All models subclass
 | `StripePriceMetadata` | price create | `crm_price_id`, `plan_id`, `gym_id` |
 | `StripeSubscriptionMetadata` | sub create/update/freeze/migration | `member_id`, `gym_id`, `crm_paid_with_cash` (default `False`) |
 | `StripeMembershipOneTimeMetadata` | one-time membership invoice (invoice-level) | `member_id` (bill owner / payer), `gym_id`, `plan_id` (**optional** — `None` on a consolidated multi-plan invoice), `crm_one_time_payment=True`, `type="membership_one_time"`, `crm_paid_with_cash` |
-| `StripeAdHocInvoiceMetadata` | ad-hoc charge-card invoice | `member_id`, `gym_id`, `crm_one_time_payment=True`, `crm_paid_with_cash` |
+| `StripeAdHocInvoiceMetadata` | ad-hoc charge-card invoice | `paid_by_member_id` (payer), `paid_for` (beneficiary list, JSON-array string), `gym_id`, `crm_one_time_payment=True`, `crm_paid_with_cash` |
 
 The metadata is the **write-side guard**; the webhook is a pure reader and pulls
 only a small set of flow-control keys off the raw envelope (§6).
@@ -451,7 +452,10 @@ into the `stripe_event_payload JSONB` column on every invoice/charge write.
 **`invoice.paid` → `InvoicePaidHandler`** (`invoice_paid_handler.py`) writes:
 
 - **`member_invoices`** — upsert to `status='paid'` (`member_invoice_upsert.sql`,
-  `ON CONFLICT (stripe_invoice_id) DO UPDATE`), returning `invoice_id`.
+  `ON CONFLICT (stripe_invoice_id) DO UPDATE`), returning `invoice_id`. The
+  `paid_by_member_id` (payer) + `paid_for` (beneficiary list) come from the
+  resolution below and are **insert-only** (set once by the first writer, not
+  updated on conflict — mirroring the old `member_id`).
 - **`member_invoice_line_items`** — one row per Stripe invoice line
   (`member_invoice_line_item_insert.sql`, idempotent `ON CONFLICT (line_item_id)`,
   PK = the Stripe line id): `name` (the line description), `amount` (line total),
@@ -466,13 +470,20 @@ It does **not** write `member_charges` — the succeeded charge is recorded by t
 `invoice_payment.paid` handler (below). This handler owns the bill; that one owns
 the money movement.
 
-Member resolution: one-time invoices carry `member_id` directly in metadata
-(gated on `crm_one_time_payment="true"`, read from the invoice root via
-`invoice_metadata`); subscription invoices resolve by matching a line's
-`subscription_item` (read via `line_subscription_item`) against `member_memberships`
-(`membership_by_stripe_item.sql`). If no member resolves **and** lines reference
-sub-items, it raises **`SubscriptionItemPendingError`** (the create-flow hasn't
-committed `stripe_item_id` yet) → 200 + background retry.
+Attribution resolution (`_resolve_attribution` → `(paid_by_member_id, paid_for,
+settle_payer)`): **one-time** invoices read it straight from metadata —
+`paid_by_member_id` + `paid_for` (the ad-hoc charge-card shape), falling back to
+the legacy single `member_id` (the bill owner, with `paid_for=[owner]`) when those
+keys are absent, so a one-time **membership** invoice still attributes to its bill
+owner until that build path stamps the split. **Subscription** invoices resolve by
+matching each line's `subscription_item` (`line_subscription_item` →
+`membership_by_stripe_item.sql`) against `member_memberships`: the payer is the
+membership's `paid_by_member_id` (one Stripe sub = one payer) and `paid_for` is the
+**distinct set of owners** billed on the invoice. `settle_payer` is the payer for
+subscription invoices (drives the once-discount settle) and `None` for one-time. If
+no payer resolves **and** lines reference sub-items, it raises
+**`SubscriptionItemPendingError`** (the create-flow hasn't committed
+`stripe_item_id` yet) → 200 + background retry.
 
 **`invoice_payment.paid` → `InvoicePaymentPaidHandler`**
 (`invoice_payment_paid_handler.py`) — the **charge recorder**. Stripe fires one
@@ -480,10 +491,11 @@ committed `stripe_item_id` yet) → 200 + background retry.
 so it gets no charge — correct). Writes one **`member_charges`** `kind='payment'`,
 `status='succeeded'` row (`member_charge_insert.sql`):
 
-- Resolves the invoice + member from the already-recorded `member_invoices` row
-  (`member_invoice_by_stripe_id.sql`). If the row isn't there yet (the
-  `invoice.paid` event lost the race), it raises **`InvoiceNotYetRecordedError`**
-  → 200 + retry until it lands.
+- Resolves the invoice + its `paid_by_member_id` (payer) from the already-recorded
+  `member_invoices` row (`member_invoice_by_stripe_id.sql`) and writes the charge
+  attributed to that payer. If the row isn't there yet (the `invoice.paid` event
+  lost the race), it raises **`InvoiceNotYetRecordedError`** → 200 + retry until it
+  lands.
 - The `ch_…` id comes from the InvoicePayment's `payment.payment_intent` →
   retrieves the PaymentIntent (read-only, on the connected account) and reads
   `latest_charge`. An `out_of_band` payment is recorded as cash
@@ -578,15 +590,25 @@ Their `immutable_columns.py` frozensets exist
 invoice). Column `status` (enum `invoice_status`) ∈ `open` / `paid`. `total_amount INTEGER CHECK
 (>= 0)`. `stripe_invoice_id` / `stripe_payment_intent_id` are `UNIQUE` and
 nullable (cash). `stripe_event_payload JSONB`. Composite `UNIQUE (invoice_id,
-gym_id)` is the FK target for children; member FK is composite `(member_id,
-gym_id)`.
+gym_id)` is the FK target for children. **Payer vs. beneficiaries are two
+separate columns** (there is no single `member_id`): `paid_by_member_id` — the one
+member whose Stripe customer/card was billed (composite FK `(paid_by_member_id,
+gym_id)` → `members`, indexed `(paid_by_member_id, gym_id, invoice_time DESC)`) —
+and `paid_for JSONB NOT NULL DEFAULT '[]'` — the list of beneficiary member_id
+strings this bill was FOR (usually just `[payer]`; a parent paying for a child
+lists the child; a consolidated family invoice lists every owner; GIN-indexed).
+So a payment surfaces on the payer's page (`paid_by_member_id`) AND every
+beneficiary's page (`paid_for ? member_id`); the member-sees-own RLS and the
+payment-history query both read it that way.
 
 **`member_charges`** — money movement (payments **and** refunds). Column `kind`
 (enum `charge_kind`) ∈ `payment` / `refund`; column `status` (enum
 `charge_status`) ∈ `pending` / `succeeded` / `failed`.
 `amount INTEGER` is **signed**. `stripe_charge_id` / `stripe_refund_id` both
-`UNIQUE`; `refunds_charge_id` is a self-FK to the refunded payment row. The CHECK
-constraints (the contract):
+`UNIQUE`; `refunds_charge_id` is a self-FK to the refunded payment row. It carries
+the payer as `paid_by_member_id` (composite FK + index, mirroring the invoice; a
+refund row copies its parent payment's payer) — the beneficiary set lives on the
+invoice (`paid_for`), not here. The CHECK constraints (the contract):
 
 | constraint | rule |
 | --- | --- |

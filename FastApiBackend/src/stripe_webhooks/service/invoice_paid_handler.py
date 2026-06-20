@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -118,14 +119,16 @@ class InvoicePaidHandler:
         raw_metadata = invoice_metadata(invoice)
         is_one_time = raw_metadata.get("crm_one_time_payment") == STRIPE_METADATA_TRUE
 
-        member_id, payer_member_id = await self._resolve_member_id(
-            session,
-            invoice,
-            gym_id,
-            raw_metadata=raw_metadata,
-            is_one_time=is_one_time,
+        paid_by_member_id, paid_for, settle_payer = (
+            await self._resolve_attribution(
+                session,
+                invoice,
+                gym_id,
+                raw_metadata=raw_metadata,
+                is_one_time=is_one_time,
+            )
         )
-        if member_id is None:
+        if paid_by_member_id is None:
             subscription_item_ids = [
                 item_id
                 for line in self._lines(invoice)
@@ -143,7 +146,8 @@ class InvoicePaidHandler:
             session,
             invoice,
             gym_id,
-            member_id,
+            paid_by_member_id,
+            paid_for,
         )
         invoice_id: UUID = invoice_row["invoice_id"]
 
@@ -151,8 +155,8 @@ class InvoicePaidHandler:
 
         if not is_one_time:
             await self._update_memberships(session, invoice, gym_id)
-            if payer_member_id is not None:
-                await self._settle_once_discounts(payer_member_id, gym_id)
+            if settle_payer is not None:
+                await self._settle_once_discounts(settle_payer, gym_id)
 
         await self._capture_discounts(
             session,
@@ -164,7 +168,7 @@ class InvoicePaidHandler:
 
     # ── Helpers ────────────────────────────────────────────────
 
-    async def _resolve_member_id(
+    async def _resolve_attribution(
         self,
         session: AsyncSession,
         invoice: dict[str, Any],
@@ -172,28 +176,29 @@ class InvoicePaidHandler:
         *,
         raw_metadata: dict[str, str],
         is_one_time: bool,
-    ) -> tuple[UUID | None, UUID | None]:
-        """Find the (member_id, payer_member_id) for this invoice.
+    ) -> tuple[UUID | None, list[UUID], UUID | None]:
+        """Resolve ``(paid_by_member_id, paid_for, settle_payer)``.
 
-        ``member_id`` is the OWNER/beneficiary (invoice + charge
-        attribution); ``payer_member_id`` is the membership's
-        ``paid_by_member_id`` — whose subscription billed it, the target
-        of the once-discount settle. One-time invoices carry ``member_id``
-        directly in metadata (no subscription item to look up; no settle
-        runs, so the payer is ``None``). Subscription invoices are
-        resolved by matching any line's ``subscription_item`` against
-        ``member_memberships``.
+        ``paid_by_member_id`` is the payer (whose customer/card was
+        billed); ``paid_for`` is the list of beneficiary member_ids the
+        bill was FOR; ``settle_payer`` is the payer to run the
+        once-discount settle for — subscription invoices only, ``None``
+        for one-time.
+
+        One-time invoices carry attribution in metadata (see
+        ``_attribution_from_metadata``). Subscription invoices are
+        resolved by matching each line's ``subscription_item`` against
+        ``member_memberships``: the payer is the membership's
+        ``paid_by_member_id`` (one Stripe subscription = one payer), and
+        ``paid_for`` is the distinct set of owners billed on the invoice.
         """
         if is_one_time:
-            member_id_str = raw_metadata.get("member_id")
-            if not member_id_str:
-                raise ValueError(
-                    "invoice.paid one-time invoice is missing member_id "
-                    f"in metadata (stripe_invoice_id={invoice.get('id')})"
-                )
-            return UUID(member_id_str), None
+            return self._attribution_from_metadata(raw_metadata, invoice)
 
         membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
+        paid_by_member_id: UUID | None = None
+        paid_for: list[UUID] = []
+        seen: set[UUID] = set()
         for line in self._lines(invoice):
             stripe_item_id = line_subscription_item(line)
             if not stripe_item_id:
@@ -206,22 +211,63 @@ class InvoicePaidHandler:
                 },
             )
             row = result.mappings().fetchone()
-            if row is not None:
-                return row["member_id"], row["paid_by_member_id"]
-        return None, None
+            if row is None:
+                continue
+            owner = UUID(str(row["member_id"]))
+            if owner not in seen:
+                seen.add(owner)
+                paid_for.append(owner)
+            if paid_by_member_id is None:
+                paid_by_member_id = UUID(str(row["paid_by_member_id"]))
+        return paid_by_member_id, paid_for, paid_by_member_id
+
+    @staticmethod
+    def _attribution_from_metadata(
+        raw_metadata: dict[str, str],
+        invoice: dict[str, Any],
+    ) -> tuple[UUID, list[UUID], None]:
+        """Attribution for a one-time invoice, read from its metadata.
+
+        Reads ``paid_by_member_id`` + ``paid_for`` — both one-time write
+        paths now stamp them (ad-hoc charge-card via
+        ``StripeAdHocInvoiceMetadata``; one-time membership via
+        ``StripeMembershipOneTimeMetadata``). Falls back to the legacy
+        single ``member_id`` (the bill owner, ``paid_for=[owner]``) only
+        for an in-flight invoice created before this split shipped.
+        ``settle_payer`` is always ``None`` (one-time runs no settle).
+        """
+        payer_str = (
+            raw_metadata.get("paid_by_member_id")
+            or raw_metadata.get("member_id")
+        )
+        if not payer_str:
+            raise ValueError(
+                "invoice.paid one-time invoice is missing "
+                "paid_by_member_id/member_id in metadata "
+                f"(stripe_invoice_id={invoice.get('id')})"
+            )
+        paid_by_member_id = UUID(payer_str)
+        paid_for_raw = raw_metadata.get("paid_for")
+        if paid_for_raw:
+            paid_for = [UUID(m) for m in json.loads(paid_for_raw)]
+        else:
+            paid_for = [paid_by_member_id]
+        return paid_by_member_id, paid_for, None
 
     async def _upsert_invoice(
         self,
         session: AsyncSession,
         invoice: dict[str, Any],
         gym_id: UUID,
-        member_id: UUID,
+        paid_by_member_id: UUID,
+        paid_for: list[UUID],
     ) -> dict[str, Any]:
         upsert_sql = load_sql(SQL_DIR / "member_invoice_upsert.sql")
         paid_at_ts = invoice.get("status_transitions", {}).get("paid_at") or invoice.get("created")
         params = {
             "gym_id": str(gym_id),
-            "member_id": str(member_id),
+            "paid_by_member_id": str(paid_by_member_id),
+            "paid_for": json.dumps([str(m) for m in paid_for]),
             "status": INVOICE_STATUS_PAID,
             "total_amount": int(invoice.get("amount_paid") or invoice.get("total") or 0),
             "currency": invoice.get("currency", "usd"),

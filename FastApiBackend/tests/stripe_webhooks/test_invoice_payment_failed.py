@@ -22,7 +22,7 @@ async def _fetch_invoice(db_pool, stripe_invoice_id: str) -> dict | None:
     async with db_pool.session() as session:
         result = await session.execute(
             text(
-                "SELECT status, total_amount, currency, member_id "
+                "SELECT status, total_amount, currency, paid_by_member_id "
                 "FROM member_invoices "
                 "WHERE stripe_invoice_id = :id"
             ),
@@ -37,7 +37,7 @@ async def _fetch_failed_charges(db_pool, gym_id) -> list[dict]:
         result = await session.execute(
             text(
                 "SELECT kind, status, amount, currency, "
-                "stripe_charge_id, member_id "
+                "stripe_charge_id, paid_by_member_id "
                 "FROM member_charges "
                 "WHERE gym_id = :gym_id AND status = 'failed' "
                 "ORDER BY charge_time"
@@ -82,7 +82,7 @@ async def test_invoice_payment_failed_writes_failed_charge(
     assert invoice is not None
     assert invoice["status"] == "open"
     assert invoice["total_amount"] == 5000
-    assert str(invoice["member_id"]) == str(webhook_fixture.member_id)
+    assert str(invoice["paid_by_member_id"]) == str(webhook_fixture.member_id)
 
     # One failed charge row with the synthetic per-attempt charge key.
     charges = await _fetch_failed_charges(db_pool, gym_id)
@@ -94,7 +94,7 @@ async def test_invoice_payment_failed_writes_failed_charge(
     assert charge["currency"] == "usd"
     invoice_id = event["data"]["object"]["id"]
     assert charge["stripe_charge_id"] == f"failed_attempt:{invoice_id}:1"
-    assert str(charge["member_id"]) == str(webhook_fixture.member_id)
+    assert str(charge["paid_by_member_id"]) == str(webhook_fixture.member_id)
 
 
 async def test_invoice_payment_failed_does_not_touch_membership_dates(

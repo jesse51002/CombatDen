@@ -96,7 +96,8 @@ async def _paid_invoice_pi(
             items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
             idempotency_key=str(uuid4()),
             metadata=StripeMembershipOneTimeMetadata(
-                member_id=uuid4(),
+                paid_by_member_id=uuid4(),
+                paid_for=[uuid4()],
                 gym_id=uuid4(),
                 plan_id=uuid4(),
             ),
@@ -137,7 +138,8 @@ async def test_create_invoice_payment(
             items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
             idempotency_key=str(uuid4()),
             metadata=StripeMembershipOneTimeMetadata(
-                member_id=uuid4(),
+                paid_by_member_id=uuid4(),
+                paid_for=[uuid4()],
                 gym_id=uuid4(),
                 plan_id=uuid4(),
             ),
@@ -187,7 +189,8 @@ async def test_create_invoice_payment_zero_amount(
             items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
             idempotency_key=str(uuid4()),
             metadata=StripeMembershipOneTimeMetadata(
-                member_id=uuid4(),
+                paid_by_member_id=uuid4(),
+                paid_for=[uuid4()],
                 gym_id=uuid4(),
                 plan_id=uuid4(),
             ),

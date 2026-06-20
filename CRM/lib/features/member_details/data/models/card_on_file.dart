@@ -3,14 +3,15 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'card_on_file.g.dart';
 
-/// Saved card details for the paying account.
+/// The member's OWN saved card, surfaced once at the response
+/// root rather than per membership.
 ///
-/// Mirrors the merged `BillingCardOnFile` schema. Only
-/// the parent account in a linked family can hold a card
-/// (enforced by the `linked_account_no_stripe` check
-/// constraint in the database), so these fields are
-/// surfaced once at the response root rather than per
-/// membership.
+/// Mirrors the merged `BillingCardOnFile` schema. Per-payer
+/// billing: this is the queried member's own card (their Stripe
+/// customer's default), never a linked parent's — so a
+/// payer-scoped read (the charge dialog / start wizard fetching
+/// the chosen payer's billing) shows the card that will actually
+/// be charged. Null when the member has no saved card of their own.
 @JsonSerializable(
   fieldRename: FieldRename.snake,
   createToJson: false,

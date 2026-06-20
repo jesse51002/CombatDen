@@ -51,6 +51,7 @@ void main() {
         reason: any(named: 'reason'),
         idempotencyKey: any(named: 'idempotencyKey'),
         paidCash: any(named: 'paidCash'),
+        paymentMethodId: any(named: 'paymentMethodId'),
       ),
     ).thenAnswer((_) async {});
   });
@@ -113,5 +114,141 @@ void main() {
         ),
       ).called(1);
     },
+  );
+
+  blocTest<MemberDetailBloc, MemberDetailState>(
+    'charge_card threads a one-off payment_method_id to the repository',
+    build: () => MemberDetailBloc(repository: repo),
+    seed: () => MemberDetailLoaded(
+      member: buildMember(),
+      allMembers: const [],
+      filteredMembers: const [],
+    ),
+    act: (bloc) => bloc.add(
+      const ChargeCardRequested(
+        amount: 3300,
+        description: 'One-off card',
+        paidByMemberId: childId,
+        paymentMethodId: 'pm_123',
+      ),
+    ),
+    verify: (_) {
+      verify(
+        () => repo.chargeCard(
+          memberId: childId,
+          paidByMemberId: childId,
+          gymId: gymId,
+          amount: 3300,
+          reason: 'One-off card',
+          idempotencyKey: any(named: 'idempotencyKey'),
+          paidCash: any(named: 'paidCash'),
+          paymentMethodId: 'pm_123',
+        ),
+      ).called(1);
+    },
+  );
+
+  blocTest<MemberDetailBloc, MemberDetailState>(
+    'charge_card out-of-band threads paid_cash to the repository',
+    build: () => MemberDetailBloc(repository: repo),
+    seed: () => MemberDetailLoaded(
+      member: buildMember(),
+      allMembers: const [],
+      filteredMembers: const [],
+    ),
+    act: (bloc) => bloc.add(
+      const ChargeCardRequested(
+        amount: 2000,
+        description: 'Cash drop-in',
+        paidByMemberId: childId,
+        paidCash: true,
+      ),
+    ),
+    verify: (_) {
+      verify(
+        () => repo.chargeCard(
+          memberId: childId,
+          paidByMemberId: childId,
+          gymId: gymId,
+          amount: 2000,
+          reason: 'Cash drop-in',
+          idempotencyKey: any(named: 'idempotencyKey'),
+          paidCash: true,
+          paymentMethodId: any(named: 'paymentMethodId'),
+        ),
+      ).called(1);
+    },
+  );
+
+  // The charge runs on its OWN state channel (isChargingCard /
+  // chargeCardSuccess / chargeCardError) so the dialog owns the
+  // outcome — it never touches isMutating / actionError (which would
+  // fire the screen-level overlay + error dialog).
+  blocTest<MemberDetailBloc, MemberDetailState>(
+    'charge_card success bumps chargeCardSuccess, not isMutating/actionError',
+    build: () => MemberDetailBloc(repository: repo),
+    seed: () => MemberDetailLoaded(
+      member: buildMember(),
+      allMembers: const [],
+      filteredMembers: const [],
+    ),
+    act: (bloc) => bloc.add(
+      const ChargeCardRequested(
+        amount: 1000,
+        description: 'Tee',
+        paidByMemberId: childId,
+      ),
+    ),
+    expect: () => [
+      isA<MemberDetailLoaded>()
+          .having((s) => s.isChargingCard, 'isChargingCard', true)
+          .having((s) => s.isMutating, 'isMutating', false)
+          .having((s) => s.actionError, 'actionError', null),
+      isA<MemberDetailLoaded>()
+          .having((s) => s.isChargingCard, 'isChargingCard', false)
+          .having((s) => s.chargeCardSuccess, 'chargeCardSuccess', 1)
+          .having((s) => s.refreshToken, 'refreshToken', 1)
+          .having((s) => s.isMutating, 'isMutating', false)
+          .having((s) => s.actionError, 'actionError', null),
+    ],
+  );
+
+  blocTest<MemberDetailBloc, MemberDetailState>(
+    'charge_card failure lands on chargeCardError, not actionError',
+    build: () {
+      when(
+        () => repo.chargeCard(
+          memberId: any(named: 'memberId'),
+          paidByMemberId: any(named: 'paidByMemberId'),
+          gymId: any(named: 'gymId'),
+          amount: any(named: 'amount'),
+          reason: any(named: 'reason'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+          paidCash: any(named: 'paidCash'),
+          paymentMethodId: any(named: 'paymentMethodId'),
+        ),
+      ).thenThrow(Exception('card declined'));
+      return MemberDetailBloc(repository: repo);
+    },
+    seed: () => MemberDetailLoaded(
+      member: buildMember(),
+      allMembers: const [],
+      filteredMembers: const [],
+    ),
+    act: (bloc) => bloc.add(
+      const ChargeCardRequested(
+        amount: 1000,
+        description: 'Tee',
+        paidByMemberId: childId,
+      ),
+    ),
+    expect: () => [
+      isA<MemberDetailLoaded>()
+          .having((s) => s.isChargingCard, 'isChargingCard', true),
+      isA<MemberDetailLoaded>()
+          .having((s) => s.isChargingCard, 'isChargingCard', false)
+          .having((s) => s.chargeCardError, 'chargeCardError', isNotNull)
+          .having((s) => s.actionError, 'actionError', null),
+    ],
   );
 }

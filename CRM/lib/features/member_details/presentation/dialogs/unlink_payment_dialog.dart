@@ -20,23 +20,30 @@ class UnlinkPaymentDialog {
     final bloc = context.read<MemberDetailBloc>();
     final confirmed = await BillingConfirmationDialog.show(
       context: context,
-      title: 'Remove payment method',
+      title: 'Remove card',
       summary:
-          'Remove the payment method on '
-          '$memberName’s account?',
+          'Remove the saved card on $memberName’s account? '
+          'It is deleted from the account entirely — there is '
+          'no undo.',
       confirmLabel: 'Remove card',
       confirmColor: DesignConstants.badRed,
       effects: [
         BillingEffect(
           icon: Symbols.credit_card_off_sharp,
           text: cardLabel == null
-              ? 'The saved card will be detached.'
-              : '$cardLabel will be detached.',
+              ? 'The saved card is removed from the account.'
+              : '$cardLabel is removed from the account.',
+        ),
+        BillingEffect(
+          icon: Symbols.payments_sharp,
+          text: 'Until a new card is added, payments can '
+              'only be taken in cash.',
         ),
       ],
       warning:
-          'Recurring memberships cannot be charged until '
-          'a new card is added.',
+          'EVERY recurring membership on this account becomes '
+          'unpayable by card until a new card is added — until '
+          'then their bills can only be settled in cash.',
     );
 
     if (!confirmed) return;
