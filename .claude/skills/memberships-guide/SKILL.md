@@ -292,10 +292,10 @@ order:
 
 1. `cancelled` — `cancel_date <= gym-today`
 2. `ended` — `end_date <= gym-today`
-3. `frozen` — the **account's** freeze window (`freeze_start_date`/`freeze_end_date`)
-   covers today. Freeze lives on `members` (the paying account), resolved through
-   `COALESCE(account_linked_to_id, member_id)`, so a child account inherits its
-   parent's freeze. This is why **freeze is account-level, not membership-level**.
+3. `frozen` — the **paying account's** freeze window (`freeze_start_date`/`freeze_end_date`)
+   covers today. Freeze lives on `members`, resolved through the membership's
+   `paid_by_member_id` (the paying account), so a membership inherits its payer's
+   freeze. This is why **freeze is account-level, not membership-level**.
 4. `active` — otherwise.
 
 All "today" comparisons use the gym's timezone (`now() AT TIME ZONE g.timezone`).

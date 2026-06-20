@@ -44,7 +44,6 @@ class MembersBillingProfileResponse(BaseModel):
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None
-    account_linked_to_id: UUID | None = None
     stripe_customer_id: str | None = None
     stripe_payment_method_id: str | None = None
     card_brand: str | None = None

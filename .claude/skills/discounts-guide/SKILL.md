@@ -151,8 +151,8 @@ flow passes its id in `discount_ids` (to the start op at creation, or to
 discount's **active** value version. Editing the linked discount mints a new
 version, so future family applications get it — like a regular discount. The
 `linked` tag keeps it out of the regular per-membership discount picker (which
-lists only `preset`); family billing via `members.account_linked_to_id` is
-unchanged.
+lists only `preset`); the family-billing model (per-membership
+`paid_by_member_id`, authorized via `member_authorized_payers`) is unchanged.
 
 **The thing we never want here:** a cross-member recalculation of discounts.
 Recomputing a family-wide assignment on every membership change is what produced

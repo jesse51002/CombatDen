@@ -9,7 +9,6 @@ SELECT
     mbp.emergency_contact_name,
     mbp.emergency_contact_phone,
     mbp.emergency_contact_email,
-    mbp.account_linked_to_id,
     mbp.stripe_customer_id,
     mbp.stripe_payment_method_id,
     mbp.card_brand,

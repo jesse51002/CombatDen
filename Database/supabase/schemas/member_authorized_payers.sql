@@ -3,7 +3,7 @@
 -- A member (member_id, the one being paid for) may have MANY authorized payers
 -- (payer_member_id, who is allowed to bill that member's memberships), and any
 -- member may be an authorized payer for others while also having their own. This
--- replaces the single-parent members.account_linked_to_id link — multi-level
+-- many-to-many model replaces the old single-parent link — multi-level
 -- composes cleanly because billing is per-membership.
 --
 -- This is NOT the billing key. member_memberships.paid_by_member_id is who

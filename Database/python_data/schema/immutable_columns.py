@@ -51,7 +51,6 @@ MEMBERS: frozenset[str] = frozenset(
         "card_exp_year",
         "freeze_start_date",  # managed by backend freeze/unfreeze logic
         "freeze_end_date",  # managed by backend freeze/unfreeze logic
-        "account_linked_to_id",  # set by backend linking logic, not client
     }
 )
 

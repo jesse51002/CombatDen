@@ -21,8 +21,8 @@ class PayerResolver:
     payer's own profile (their own customer / sub / freeze window) — the payer
     is whoever a membership row's ``paid_by_member_id`` names, or an explicit
     request payer. There is NO follow-the-link resolution anywhere in billing:
-    ``account_linked_to_id`` is the authorization layer only (who may pay for
-    whom — validated by the callers), never a billing key.
+    the ``member_authorized_payers`` junction is the authorization layer only
+    (who may pay for whom — validated by the callers), never a billing key.
 
     This is the one place the lookup lives — billing-touching services depend
     on this resolver rather than re-running the query.

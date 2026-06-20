@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 # explicitly for defensive cleanup if a charge ever outlives its invoice.
 # ``member_membership_applied_discounts_unfiltered`` (applied-discount rows)
 # FK both the membership (item_id) and the member, so it is deleted first.
+# ``member_authorized_payers`` FKs both members (member_id + payer_member_id)
+# and a signature row, and ``member_waiver_signatures`` FKs members, so both go
+# before ``members`` — the junction before the signatures it points at. The
+# gym-config waivers themselves (gym_waivers / _versions) are left intact.
 _GYM_TABLES = (
     "stripe_webhook_events",
     "member_charges",
@@ -35,6 +39,8 @@ _GYM_TABLES = (
     "membership_plan_prices_unfiltered",
     "gym_discounts_unfiltered",
     "membership_plans_unfiltered",
+    "member_authorized_payers",
+    "member_waiver_signatures",
     "members",
 )
 
@@ -47,16 +53,11 @@ async def delete_all_gym_data(db_pool: DirectDatabasePool, gym_id: UUID) -> None
     Linked discounts dissolved into applied-discount rows on
     ``member_membership_applied_discounts`` (no preset entity, no
     ``linked_discount_num`` ordering trigger), so the applied-discounts table is
-    deleted first like any other child. ``account_linked_to_id`` (the
-    family-billing self-link) is cleared before the members delete so the
-    self-FK doesn't block.
+    deleted first like any other child. The family link lives in
+    ``member_authorized_payers`` (in ``_GYM_TABLES`` before ``members``, ahead
+    of the ``member_waiver_signatures`` it references); gym-config waivers stay.
     """
     async with db_pool.session() as session:
-        await session.execute(
-            text("UPDATE members SET account_linked_to_id = NULL WHERE gym_id = :gym_id"),
-            {"gym_id": str(gym_id)},
-        )
-
         for table in _GYM_TABLES:
             await session.execute(
                 text(f"DELETE FROM {table} WHERE gym_id = :gym_id"),  # noqa: S608
@@ -123,6 +124,20 @@ async def delete_member_data(
         )
         await session.execute(
             text("DELETE FROM member_memberships_unfiltered WHERE member_id = :id"),
+            {"id": str(member_id)},
+        )
+        # Authorization rows + waiver signatures FK the member (the junction also
+        # FKs the signature it points at, so it goes first). Cover both roles:
+        # the member as payee (member_id) and as payer (payer_member_id).
+        await session.execute(
+            text(
+                "DELETE FROM member_authorized_payers "
+                "WHERE member_id = :id OR payer_member_id = :id"
+            ),
+            {"id": str(member_id)},
+        )
+        await session.execute(
+            text("DELETE FROM member_waiver_signatures WHERE member_id = :id"),
             {"id": str(member_id)},
         )
         await session.execute(

@@ -272,7 +272,7 @@ sequence is:
 
 1. **Resolve payer + gym Stripe account** (`PayerResolver.resolve_payer_with_account`,
    §4) — one call returns `(PayerProfile, stripe_account_id)`: a **direct** lookup
-   of the payer's own row (no `account_linked_to_id` follow), then look up the
+   of the payer's own row (no link-follow to a parent account), then look up the
    gym's Connect account. Everything below operates on this one payer.
 2. **Finalize once discounts** (`PaymentSyncOnceDiscounts.sync_once_discounts`,
    §6) — a **pre-sync DB settle**: detect any `once` discount Stripe has already

@@ -100,7 +100,6 @@ Table members {
   emergency_contact_email varchar
   freeze_start_date date [note: 'nullable; must pair with freeze_end_date']
   freeze_end_date date [note: 'nullable']
-  account_linked_to_id uuid [note: 'nullable; self-FK (account_linked_to_id, gym_id) -> members(member_id, gym_id)']
   stripe_customer_id varchar [note: 'immutable once set (trigger); member_billing_profile view filters WHERE NOT NULL']
   stripe_sub_id_month varchar
   stripe_payment_method_id varchar
@@ -320,7 +319,6 @@ Ref: gym_employees.gym_id > gyms.gym_id
 Ref: members.user_id > auth_users.id
 Ref: members.gym_id > gyms.gym_id
 Ref: members.current_rank_id > gym_ranks.rank_id
-Ref: members.account_linked_to_id > members.member_id
 
 Ref: gym_ranks.gym_id > gyms.gym_id
 

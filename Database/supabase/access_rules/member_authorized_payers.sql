@@ -1,8 +1,7 @@
 -- The authorization layer (who may pay for whom). Backend-managed: rows are
 -- created via the link endpoint after a waiver is signed, and deleted via
--- unlink — both at service_role (mirrors how the former
--- members.account_linked_to_id was service_role-managed). Clients never write
--- directly. Gym staff and the two involved members can read.
+-- unlink — both at service_role. Clients never write directly. Gym staff and
+-- the two involved members can read.
 
 -- Enable Row Level Security
 ALTER TABLE member_authorized_payers ENABLE ROW LEVEL SECURITY;

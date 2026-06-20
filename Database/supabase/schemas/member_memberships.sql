@@ -27,8 +27,8 @@ CREATE TABLE member_memberships_unfiltered (
     -- subscription bills this row. Always populated — for a normal family
     -- membership it is the resolved paying parent; for a self-paying linked
     -- member it is that member. The payment sync groups memberships by this
-    -- column (one subscription per payer); account_linked_to_id on members is
-    -- the authorization layer only (who is ALLOWED to pay for whom), never the
+    -- column (one subscription per payer); the member_authorized_payers junction
+    -- is the authorization layer only (who is ALLOWED to pay for whom), never the
     -- billing key. Immutable once set — changing the payer is cancel-old +
     -- insert-new (the append-only model), never an in-place edit.
     paid_by_member_id UUID NOT NULL CONSTRAINT fk_membership_payer REFERENCES members(member_id),
