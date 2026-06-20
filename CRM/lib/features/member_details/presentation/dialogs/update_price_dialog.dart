@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
+import 'package:crm/features/member_details/presentation/widgets/proration_selector.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
 /// Migrates a member's membership to the plan's current
 /// active price. The merged contract takes no target price
-/// id — only `item_id`, `member_id`, and a prorate flag —
-/// so this dialog only offers the prorate choice and
+/// id — only `item_id`, `member_id`, and a proration choice
+/// — so this dialog only offers the proration choice and
 /// dispatches [UpdatePriceRequested].
 class UpdatePriceDialog extends StatefulWidget {
   final MembershipInfo membership;
@@ -56,7 +57,8 @@ class UpdatePriceDialog extends StatefulWidget {
 }
 
 class _UpdatePriceDialogState extends State<UpdatePriceDialog> {
-  bool _prorate = false;
+  ProrationBehavior _prorationBehavior =
+      ProrationBehavior.noCharge;
 
   void _submit() {
     final itemId =
@@ -69,7 +71,7 @@ class _UpdatePriceDialogState extends State<UpdatePriceDialog> {
           UpdatePriceRequested(
             itemId: itemId,
             memberId: widget.coveredMemberId,
-            prorate: _prorate,
+            prorationBehavior: _prorationBehavior,
           ),
         );
     Navigator.of(context).pop();
@@ -92,9 +94,10 @@ class _UpdatePriceDialogState extends State<UpdatePriceDialog> {
               color: DesignConstants.text,
             ),
           ),
-          _ProrateToggle(
-            value: _prorate,
-            onChanged: (v) => setState(() => _prorate = v),
+          ProrationSelector(
+            value: _prorationBehavior,
+            onChanged: (v) =>
+                setState(() => _prorationBehavior = v),
           ),
         ],
       ),
@@ -104,80 +107,6 @@ class _UpdatePriceDialogState extends State<UpdatePriceDialog> {
         secondaryLabel: 'Cancel',
         secondaryOnPressed: () =>
             Navigator.of(context).pop(),
-      ),
-    );
-  }
-}
-
-class _ProrateToggle extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _ProrateToggle({
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => onChanged(!value),
-      borderRadius: BorderRadius.circular(
-        DesignConstants.radiusSmall,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(
-          DesignConstants.spacingMedium,
-        ),
-        decoration: BoxDecoration(
-          color: DesignConstants.backgroundColor,
-          borderRadius: BorderRadius.circular(
-            DesignConstants.radiusSmall,
-          ),
-          border: Border.all(
-            color: value
-                ? DesignConstants.primaryColor
-                : DesignConstants.divider,
-            width: value ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          spacing: DesignConstants.spacingMedium,
-          children: [
-            Icon(
-              value
-                  ? Symbols.check_box_sharp
-                  : Symbols.check_box_outline_blank_sharp,
-              size: DesignConstants.iconSizeLarge,
-              weight: DesignConstants.iconWeight,
-              color: value
-                  ? DesignConstants.primaryColor
-                  : DesignConstants.text3rd,
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                spacing: DesignConstants.spacingTiny,
-                children: [
-                  Text(
-                    'Prorate the change',
-                    style: DesignConstants.p.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    'Charge or credit the difference for '
-                    'the remainder of this cycle now.',
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

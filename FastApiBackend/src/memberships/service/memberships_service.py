@@ -10,8 +10,10 @@ from datetime import date
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
+import src.shared.db_schema_path  # noqa: F401
 from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsChargeCardRequest,
@@ -292,14 +294,16 @@ class MemberMembershipsService:
         self,
         item_id: UUID,
         member_id: UUID,
-        prorate: bool = False,
+        proration_behavior: ProrationBehavior = (
+            ProrationBehavior.no_charge
+        ),
     ) -> UUID:
         """Reprice ONE membership to its plan's active price; returns the
         successor row id (== ``item_id`` when it was already on the price)."""
         return await self._reprice.reprice(
             member_id=member_id,
             old_item_id=item_id,
-            prorate=prorate,
+            proration_behavior=proration_behavior,
         )
 
     # ── Apply Discounts (add / remove applied-discount rows) ───────────────

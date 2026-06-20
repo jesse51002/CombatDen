@@ -11,7 +11,7 @@ Standalone module — no pytest imports, no fixture dependencies.
 from dataclasses import dataclass
 from uuid import UUID
 
-from schema.task import TaskType
+from schema.task import ProrationBehavior, TaskType
 
 from src.discounts.service.discounts_service import DiscountsService
 from src.members.service.management.members_management_service import (
@@ -293,7 +293,7 @@ async def batch_reprice_plan(
     stripe_client: PaymentsStripeClient,
     gym_id: UUID,
     plan_id: UUID,
-    prorate: bool = False,
+    proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
 ) -> tuple[UUID | None, int]:
     """Run a per-plan batch reprice exactly as ``POST /reprice-plan`` does.
 
@@ -304,7 +304,7 @@ async def batch_reprice_plan(
     """
     handler = build_membership_reprice_task_handler(db_pool, stripe_client)
     executor = build_tasks_executor(db_pool, stripe_client)
-    task_id, count = await handler.create_batch(gym_id, plan_id, prorate)
+    task_id, count = await handler.create_batch(gym_id, plan_id, proration_behavior)
     if task_id is not None:
         executor.start_in_background(task_id)
     return task_id, count

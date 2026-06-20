@@ -28,6 +28,7 @@ from src.payments.schema.payments_members_schema import (
 )
 from src.payments.service.payments_stripe_mappers import (
     map_preview_invoice,
+    proration_behavior_to_stripe,
 )
 from src.payments.service.subscription.payments_subscription_base import (
     PaymentsSubscriptionBase,
@@ -86,7 +87,7 @@ class PaymentsSubscriptionCreate(PaymentsSubscriptionBase):
         items = self._build_create_items(consolidated)
 
         proration_behavior: Literal["none", "always_invoice"] = (
-            request.proration_behavior
+            proration_behavior_to_stripe(request.proration_behavior)
         )
 
         create_params = SubscriptionCreateParams(

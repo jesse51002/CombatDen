@@ -98,7 +98,6 @@ async def _insert_pending_one_time(
         "last_paid_dates": [start_date],
         "next_due_dates": [None],
         "stripe_item_ids": [None],
-        "prorates": [True],
         "total_prices": [total_price],
         "sync_statuses": [StripeSyncStatus.not_added.value],
     }

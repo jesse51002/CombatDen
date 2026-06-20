@@ -26,3 +26,19 @@ class TaskStatus(StrEnum):
     running = "running"
     completed = "completed"
     failed = "failed"
+
+
+class ProrationBehavior(StrEnum):
+    """Mirrors the Postgres `proration_behavior` enum.
+
+    How a membership's first (or repriced) recurring charge is handled
+    relative to the billing anchor (the date the next full cycle bills).
+    `prorate_to_anchor` invoices the partial period from today through the
+    anchor immediately; `no_charge` charges nothing now — the membership
+    still starts and the first full bill lands on the anchor. Maps to
+    Stripe's `proration_behavior` (`always_invoice` / `none`) only at the
+    Stripe SDK boundary.
+    """
+
+    prorate_to_anchor = "prorate_to_anchor"
+    no_charge = "no_charge"

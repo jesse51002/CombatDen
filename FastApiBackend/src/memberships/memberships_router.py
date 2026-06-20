@@ -17,6 +17,8 @@ from src.memberships.memberships_schema import (
     MemberMembershipsChargeCardRequest,
     MemberMembershipsFreezeRequest,
     MemberMembershipsMarkPaidCashRequest,
+    MemberMembershipsRefundRequest,
+    MemberMembershipsRefundResponse,
     MemberMembershipsRemoveDiscountsRequest,
     MemberMembershipsStartPreviewResponse,
     MemberMembershipsStartRequest,
@@ -24,6 +26,9 @@ from src.memberships.memberships_schema import (
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
     MemberMembershipsUpdatePriceResponse,
+)
+from src.memberships.service.memberships_refund import (
+    MemberMembershipsRefund,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -388,7 +393,7 @@ async def update_membership_price(
     """Reprice one membership to its plan's active price (direct; 200 + id).
 
     Args:
-        request: Update price request with prorate flag.
+        request: Update price request with proration_behavior.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
@@ -403,7 +408,7 @@ async def update_membership_price(
         new_item_id = await memberships_service.update_price(
             item_id=request.item_id,
             member_id=request.member_id,
-            prorate=request.prorate,
+            proration_behavior=request.proration_behavior,
         )
         return MemberMembershipsUpdatePriceResponse(item_id=new_item_id)
     except MembershipInTaskError as exc:
@@ -476,7 +481,7 @@ async def batch_reprice_plan(
     """Batch-reprice a plan's members to its active price (202 + task_id).
 
     Args:
-        request: Batch reprice request (plan_id, gym_id, prorate).
+        request: Batch reprice request (plan_id, gym_id, proration_behavior).
         credentials: Bearer token credentials.
         auth: Injected auth service.
         reprice_task_handler: Injected membership_reprice task handler.
@@ -489,7 +494,7 @@ async def batch_reprice_plan(
         task_id, count = await reprice_task_handler.create_batch(
             gym_id=request.gym_id,
             plan_id=request.plan_id,
-            prorate=request.prorate,
+            proration_behavior=request.proration_behavior,
         )
         if task_id is not None:
             tasks_executor.start_in_background(task_id)
@@ -928,4 +933,73 @@ async def charge_member_card(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to charge member card",
+        ) from None
+
+
+@member_memberships_router.post(
+    "/refund",
+    response_model=MemberMembershipsRefundResponse,
+    summary="Refund a prior charge (card via Stripe, or cash)",
+    description=(
+        "Refunds a prior succeeded charge on a member's payment "
+        "history (full or partial). A card charge is reversed "
+        "through Stripe and recorded immediately; a cash charge is "
+        "recorded as a cash refund with no Stripe call."
+    ),
+    responses={
+        200: {"description": "Refund processed"},
+        400: {"description": "Charge is not refundable or amount invalid"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member or charge not found"},
+        502: {"description": "Stripe error"},
+    },
+)
+@inject
+async def refund_charge(
+    request: MemberMembershipsRefundRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    refund_service: MemberMembershipsRefund = Depends(
+        Provide[DependencyInjector.member_memberships_refund_service]
+    ),
+) -> MemberMembershipsRefundResponse:
+    """Refund a prior charge for a member (card via Stripe, or cash)."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(request.member_id, user_payload)
+
+    try:
+        return await refund_service.refund_charge(request)
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        logger.error(
+            "Stripe error refunding charge: member_id=%s, charge_id=%s",
+            request.member_id,
+            request.charge_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to refund charge: member_id=%s, charge_id=%s",
+            request.member_id,
+            request.charge_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to refund charge",
         ) from None

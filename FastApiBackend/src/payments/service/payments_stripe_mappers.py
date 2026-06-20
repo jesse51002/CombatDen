@@ -1,9 +1,30 @@
-import stripe
+from typing import Literal
 
+import stripe
+from schema.task import ProrationBehavior
+
+import src.shared.db_schema_path  # noqa: F401
 from src.payments.schema.payments_invoice_schema import (
     PreviewInvoice,
     PreviewInvoiceLine,
 )
+
+
+def proration_behavior_to_stripe(
+    behavior: ProrationBehavior,
+) -> Literal["none", "always_invoice"]:
+    """Map our ``ProrationBehavior`` to Stripe's ``proration_behavior``.
+
+    The ONLY place the enum becomes a Stripe string: ``prorate_to_anchor``
+    invoices the partial period from today through the billing anchor
+    immediately (``always_invoice``); ``no_charge`` bills nothing now
+    (``none``) and the first full charge lands on the anchor.
+    """
+    return (
+        "always_invoice"
+        if behavior is ProrationBehavior.prorate_to_anchor
+        else "none"
+    )
 
 
 def map_preview_invoice(

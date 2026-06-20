@@ -30,6 +30,9 @@ from src.members.service.member_details.members_billing_detail_service import (
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
+from src.memberships.service.memberships_refund import (
+    MemberMembershipsRefund,
+)
 from src.memberships.service.memberships_reprice import (
     MemberMembershipsReprice,
 )
@@ -359,6 +362,12 @@ class DependencyInjector(containers.DeclarativeContainer):
         reprice_service=memberships_reprice,
         members_management_service=members_management_service,
         waivers_service=waivers_service,
+    )
+    member_memberships_refund_service = providers.Factory(
+        MemberMembershipsRefund,
+        db_pool=db_pool,
+        payment_service=payments_payment_service,
+        gym_stripe_service=gym_stripe_service,
     )
 
     # ── Members CRM list / counts (OG, membership-derived) ───────

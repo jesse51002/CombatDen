@@ -1,8 +1,10 @@
 """Stripe create/update/cancel operations for the payment sync flow."""
 
-from typing import Literal
 from uuid import UUID, uuid4
 
+from schema.task import ProrationBehavior
+
+import src.shared.db_schema_path  # noqa: F401
 from src.payments.schema.metadata.stripe_subscription_metadata import (
     StripeSubscriptionMetadata,
 )
@@ -43,7 +45,7 @@ class PaymentSyncStripe:
         stripe_account_id: str,
         idempotency_key: UUID,
         pay_first_invoice_out_of_band: bool = False,
-        proration_behavior: Literal["none", "always_invoice"] = "none",
+        proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
     ) -> PaymentsSubscriptionResponse | None:
         """Create, update, or cancel the monthly subscription.
 
@@ -92,7 +94,7 @@ class PaymentSyncStripe:
         bucket: IntervalBucket,
         payer: PayerProfile,
         stripe_account_id: str,
-        proration_behavior: Literal["none", "always_invoice"] = "none",
+        proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
     ) -> DueNowVsRecurringPreview | None:
         """Preview the sync as a due-now / recurring split.
 
@@ -107,8 +109,8 @@ class PaymentSyncStripe:
             bucket: Desired subscription state.
             payer: The payer profile (customer + metadata source).
             stripe_account_id: The gym's Stripe Connect account ID.
-            proration_behavior: ``always_invoice`` to also fetch the
-                immediate (prorated) ``due_now`` invoice; ``none`` to
+            proration_behavior: ``prorate_to_anchor`` to also fetch the
+                immediate (prorated) ``due_now`` invoice; ``no_charge`` to
                 reuse the recurring preview as ``due_now``.
 
         Returns:
@@ -119,11 +121,14 @@ class PaymentSyncStripe:
             return None
 
         recurring = await self._run_preview(
-            bucket, payer, stripe_account_id, "none"
+            bucket, payer, stripe_account_id, ProrationBehavior.no_charge
         )
-        if proration_behavior == "always_invoice":
+        if proration_behavior == ProrationBehavior.prorate_to_anchor:
             due_now = await self._run_preview(
-                bucket, payer, stripe_account_id, "always_invoice"
+                bucket,
+                payer,
+                stripe_account_id,
+                ProrationBehavior.prorate_to_anchor,
             )
         else:
             due_now = recurring
@@ -137,7 +142,7 @@ class PaymentSyncStripe:
         bucket: IntervalBucket,
         payer: PayerProfile,
         stripe_account_id: str,
-        proration_behavior: Literal["none", "always_invoice"],
+        proration_behavior: ProrationBehavior,
     ) -> PreviewInvoice:
         """One Stripe invoice preview at a given proration behavior.
 
@@ -187,7 +192,7 @@ class PaymentSyncStripe:
         *,
         idempotency_key: UUID,
         pay_first_invoice_out_of_band: bool = False,
-        proration_behavior: Literal["none", "always_invoice"] = "none",
+        proration_behavior: ProrationBehavior = ProrationBehavior.no_charge,
     ) -> PaymentsSubscriptionResponse:
         """Create or update the subscription for this bucket.
 

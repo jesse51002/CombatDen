@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/tasks/data/models/task_enums.dart';
 
 part 'task_item.g.dart';
@@ -19,7 +20,8 @@ class TaskItem extends Equatable {
   final String? oldItemId;
   final String? newItemId;
   final String? targetPriceId;
-  final bool? prorate;
+  @JsonKey(fromJson: _prorationOrNull)
+  final ProrationBehavior? prorationBehavior;
   final DateTime createdAt;
   final DateTime? startedAt;
   final DateTime? finishedAt;
@@ -35,7 +37,7 @@ class TaskItem extends Equatable {
     this.oldItemId,
     this.newItemId,
     this.targetPriceId,
-    this.prorate,
+    this.prorationBehavior,
     required this.createdAt,
     this.startedAt,
     this.finishedAt,
@@ -43,6 +45,11 @@ class TaskItem extends Equatable {
 
   factory TaskItem.fromJson(Map<String, dynamic> json) =>
       _$TaskItemFromJson(json);
+
+  static ProrationBehavior? _prorationOrNull(Object? value) =>
+      value == null
+          ? null
+          : ProrationBehavior.fromJson(value as String);
 
   @override
   List<Object?> get props => [
@@ -56,7 +63,7 @@ class TaskItem extends Equatable {
         oldItemId,
         newItemId,
         targetPriceId,
-        prorate,
+        prorationBehavior,
         createdAt,
         startedAt,
         finishedAt,

@@ -15,6 +15,9 @@ from src.payments.schema.payments_members_schema import (
     PaymentsSubscriptionPriceMigrationRequest,
     PaymentsSubscriptionPriceMigrationResponse,
 )
+from src.payments.service.payments_stripe_mappers import (
+    proration_behavior_to_stripe,
+)
 from src.payments.service.subscription.payments_subscription_base import (
     PaymentsSubscriptionBase,
 )
@@ -115,7 +118,9 @@ class PaymentsSubscriptionMigration(PaymentsSubscriptionBase):
                                 price=request.new_stripe_price_id,
                             ),
                         ],
-                        proration_behavior=request.proration_behavior,
+                        proration_behavior=proration_behavior_to_stripe(
+                            request.proration_behavior
+                        ),
                     ),
                     options=write_opts,
                 )

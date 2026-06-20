@@ -146,7 +146,6 @@ def create_overdue(
                 .date()
                 .isoformat(),
                 "stripe_item_id": sub_item_id,
-                "prorate": True,
                 "total_price": plan.base_cost,
                 # Direct insert (not via the API) of a live membership — stamp
                 # 'applied' so it's visible through the client-facing

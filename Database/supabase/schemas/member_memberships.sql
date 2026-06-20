@@ -44,7 +44,6 @@ CREATE TABLE member_memberships_unfiltered (
     -- id so the membership still points back to its invoice. NULL for recurring
     -- (no single invoice). Service-role writeback, immutable once set.
     stripe_one_time_invoice_id VARCHAR,
-    prorate BOOLEAN NOT NULL DEFAULT true,
 
     -- This membership's OWN post-discount price (minor units): the plan price
     -- minus THIS member's own discounts. Service_role writeback: computed at

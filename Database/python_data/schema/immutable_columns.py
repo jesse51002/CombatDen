@@ -314,7 +314,7 @@ TASK_ITEMS: frozenset[str] = frozenset(
         "old_item_id",
         "new_item_id",
         "target_price_id",
-        "prorate",
+        "proration_behavior",
         "created_at",
         "started_at",
         "finished_at",
