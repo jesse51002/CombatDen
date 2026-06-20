@@ -36,7 +36,7 @@ def _charge_row(
     return {
         "charge_id": uuid4(),
         "invoice_id": uuid4(),
-        "charge_member_id": uuid4(),
+        "charge_paid_by_member_id": uuid4(),
         "gym_id": uuid4(),
         "kind": kind,
         "status": status,
