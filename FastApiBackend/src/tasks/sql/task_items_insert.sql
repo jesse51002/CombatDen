@@ -5,7 +5,7 @@ INSERT INTO task_items (
     member_id,
     old_item_id,
     target_price_id,
-    prorate
+    proration_behavior
 )
 SELECT
     CAST(:task_id AS UUID),
@@ -13,11 +13,11 @@ SELECT
     member_id,
     old_item_id,
     target_price_id,
-    prorate
+    proration_behavior
 FROM unnest(
     CAST(:member_ids AS UUID[]),
     CAST(:old_item_ids AS UUID[]),
     CAST(:target_price_ids AS UUID[]),
-    CAST(:prorates AS BOOLEAN[])
-) AS t(member_id, old_item_id, target_price_id, prorate)
+    CAST(:proration_behaviors AS proration_behavior[])
+) AS t(member_id, old_item_id, target_price_id, proration_behavior)
 RETURNING task_item_id

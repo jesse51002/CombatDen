@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 
 /// Events for the MemberDetailBloc.
 sealed class MemberDetailEvent extends Equatable {
@@ -151,20 +152,21 @@ class CancelMembershipRequested extends MemberDetailEvent {
 /// Migrate a membership item to the plan's current active
 /// price. NOTE: the merged contract does not accept a
 /// target price id — only `item_id`, `member_id`, and
-/// `prorate`.
+/// `proration_behavior`.
 class UpdatePriceRequested extends MemberDetailEvent {
   final String itemId;
   final String memberId;
-  final bool prorate;
+  final ProrationBehavior prorationBehavior;
 
   const UpdatePriceRequested({
     required this.itemId,
     required this.memberId,
-    this.prorate = false,
+    this.prorationBehavior = ProrationBehavior.noCharge,
   });
 
   @override
-  List<Object?> get props => [itemId, memberId, prorate];
+  List<Object?> get props =>
+      [itemId, memberId, prorationBehavior];
 }
 
 class FreezeAccountRequested extends MemberDetailEvent {

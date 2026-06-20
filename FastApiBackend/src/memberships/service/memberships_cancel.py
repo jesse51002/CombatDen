@@ -6,6 +6,7 @@ from uuid import UUID
 
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -83,7 +84,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 await self._payment_sync.update_payments_recurring(
                     payer_member_id,
                     idempotency_key=idempotency_key,
-                    proration_behavior="none",
+                    proration_behavior=ProrationBehavior.no_charge,
                 )
             except PaymentsResourceNotFoundError:
                 # Stripe no longer has the line — the cancel is already true on
@@ -143,7 +144,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             cleanup_fn=lambda: self._set_sync_status(item_id, member_id, StripeSyncStatus.applied),
             preview_fn=lambda: self._payment_sync.preview_update_payments_recurring(
                 row["paid_by_member_id"],
-                proration_behavior="none",
+                proration_behavior=ProrationBehavior.no_charge,
             ),
         )
 

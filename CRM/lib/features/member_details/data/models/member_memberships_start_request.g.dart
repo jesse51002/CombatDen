@@ -11,7 +11,7 @@ Map<String, dynamic> _$MemberMembershipsStartRequestToJson(
 ) => <String, dynamic>{
   'payer_member_id': instance.payerMemberId,
   'gym_id': instance.gymId,
-  'prorate': instance.prorate,
+  'proration_behavior': instance.prorationBehavior.toJson(),
   'paid_with_cash': instance.paidWithCash,
   'payment': instance.payment?.toJson(),
   'idempotency_key': instance.idempotencyKey,

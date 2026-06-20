@@ -15,6 +15,7 @@ halves are flat ``PreviewInvoice`` objects.
 from uuid import UUID, uuid4
 
 import pytest
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 from src.memberships.memberships_schema import (
@@ -253,7 +254,7 @@ async def test_preview_start_no_prorate_due_now_is_none(
     connect_opts,
     created,
 ):
-    """prorate=False start preview: due_now is None, recurring present.
+    """proration_behavior=no_charge start preview: due_now is None, recurring present.
 
     When not prorating, nothing extra is charged now. The engine's split
     reuses the steady-state recurring figure as ``due_now`` ("same thing
@@ -278,7 +279,7 @@ async def test_preview_start_no_prorate_due_now_is_none(
                 payer_member_id=member.member_id,
                 gym_id=gym_id,
                 idempotency_key=uuid4(),
-                prorate=False,
+                proration_behavior=ProrationBehavior.no_charge,
                 memberships=[
                     MemberMembershipsStartItem(
                         member_id=member.member_id,
@@ -290,7 +291,7 @@ async def test_preview_start_no_prorate_due_now_is_none(
 
         _assert_valid_split(preview)
         assert preview.due_now is None, (
-            "prorate=False start preview must report due_now=None"
+            "proration_behavior=no_charge start preview must report due_now=None"
         )
         assert preview.recurring is not None
         assert preview.recurring.amount_due == plan.price_cents, (

@@ -67,7 +67,6 @@ class CurrentMembership:
     """
 
     plan: PlanRecord
-    prorate: bool = True
     cancel_after_start: bool = False
     discount_ids: list[uuid.UUID] = field(default_factory=list)
     custom_discount: dict | None = None

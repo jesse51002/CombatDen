@@ -7,12 +7,12 @@ next renewal invoice bills the expected amount.
 
 Three flows are covered:
 
-1. ``prorate=False`` — no invoice created mid-cycle, next cycle bills
+1. ``proration_behavior=no_charge`` — no invoice created mid-cycle, next cycle bills
    the new price.
-2. ``prorate=True`` (upgrade) — an immediate prorated invoice IS cut
+2. ``proration_behavior=prorate_to_anchor`` (upgrade) — an immediate prorated invoice IS cut
    at edit time (Stripe ``always_invoice`` behavior), and the next
    cycle bills a plain full-price invoice with no residual proration.
-3. ``prorate=False`` downgrade — no invoice created, next cycle bills
+3. ``proration_behavior=no_charge`` downgrade — no invoice created, next cycle bills
    the cheaper price.
 """
 
@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 from src.memberships.memberships_schema import (
@@ -145,7 +146,7 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
     connect_opts,
     created,
 ):
-    """prorate=False swaps the item and defers the new amount to
+    """proration_behavior=no_charge swaps the item and defers the new amount to
     the next cycle — no mid-cycle invoice is generated."""
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
@@ -193,7 +194,7 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
         await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            prorate=False,
+            proration_behavior=ProrationBehavior.no_charge,
         )
 
         # Stripe side: item points at new price, no mid-cycle invoice.
@@ -237,7 +238,7 @@ async def test_update_price_mid_cycle_no_double_charge_prorate_none(
         old_line = _invoice_line_for_price(invoice, plan.stripe_price_id)
         assert old_line is None, (
             f"Next-cycle invoice {invoice.id} still has a line at the "
-            f"old price {plan.stripe_price_id} (prorate=False should have "
+            f"old price {plan.stripe_price_id} (proration_behavior=no_charge should have "
             f"swapped cleanly)"
         )
     finally:
@@ -256,7 +257,7 @@ async def test_update_price_mid_cycle_with_prorate_true(
     connect_opts,
     created,
 ):
-    """prorate=True creates a prorated invoice mid-cycle, and the next
+    """proration_behavior=prorate_to_anchor creates a prorated invoice mid-cycle, and the next
     cycle settles at the new full price with no residual proration."""
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
@@ -301,7 +302,7 @@ async def test_update_price_mid_cycle_with_prorate_true(
         await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            prorate=True,
+            proration_behavior=ProrationBehavior.prorate_to_anchor,
         )
 
         # Stripe side: item swapped to new price.
@@ -317,8 +318,9 @@ async def test_update_price_mid_cycle_with_prorate_true(
             index=idx,
         )
 
-        # With proration_behavior="always_invoice", Stripe cuts a
-        # standalone invoice for the proration delta at edit time.
+        # With proration_behavior=prorate_to_anchor (→ Stripe
+        # "always_invoice"), Stripe cuts a standalone invoice for the
+        # proration delta at edit time.
         # We assert on that immediate invoice here; the renewal
         # invoice later is a plain full-cycle bill at the new price.
         immediate = await assert_immediate_prorated_invoice(
@@ -379,7 +381,7 @@ async def test_update_price_to_cheaper_tier_mid_cycle(
     connect_opts,
     created,
 ):
-    """Downgrade with prorate=False — no mid-cycle invoice, next
+    """Downgrade with proration_behavior=no_charge — no mid-cycle invoice, next
     cycle bills at the cheaper price."""
     clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
     member = None
@@ -424,7 +426,7 @@ async def test_update_price_to_cheaper_tier_mid_cycle(
         await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            prorate=False,
+            proration_behavior=ProrationBehavior.no_charge,
         )
 
         sub = await fetch_subscription(

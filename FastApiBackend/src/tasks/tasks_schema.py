@@ -10,7 +10,7 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
-from schema.task import TaskStatus, TaskType
+from schema.task import ProrationBehavior, TaskStatus, TaskType
 
 import src.shared.db_schema_path  # noqa: F401
 
@@ -21,7 +21,7 @@ class TaskItemCreate(BaseModel):
     member_id: UUID
     old_item_id: UUID | None = None
     target_price_id: UUID | None = None
-    prorate: bool | None = None
+    proration_behavior: ProrationBehavior | None = None
 
 
 class TaskItemResponse(BaseModel):
@@ -37,7 +37,7 @@ class TaskItemResponse(BaseModel):
     old_item_id: UUID | None = None
     new_item_id: UUID | None = None
     target_price_id: UUID | None = None
-    prorate: bool | None = None
+    proration_behavior: ProrationBehavior | None = None
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None

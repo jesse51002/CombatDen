@@ -393,7 +393,7 @@ async def update_membership_price(
     """Reprice one membership to its plan's active price (direct; 200 + id).
 
     Args:
-        request: Update price request with prorate flag.
+        request: Update price request with proration_behavior.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
@@ -408,7 +408,7 @@ async def update_membership_price(
         new_item_id = await memberships_service.update_price(
             item_id=request.item_id,
             member_id=request.member_id,
-            prorate=request.prorate,
+            proration_behavior=request.proration_behavior,
         )
         return MemberMembershipsUpdatePriceResponse(item_id=new_item_id)
     except MembershipInTaskError as exc:
@@ -481,7 +481,7 @@ async def batch_reprice_plan(
     """Batch-reprice a plan's members to its active price (202 + task_id).
 
     Args:
-        request: Batch reprice request (plan_id, gym_id, prorate).
+        request: Batch reprice request (plan_id, gym_id, proration_behavior).
         credentials: Bearer token credentials.
         auth: Injected auth service.
         reprice_task_handler: Injected membership_reprice task handler.
@@ -494,7 +494,7 @@ async def batch_reprice_plan(
         task_id, count = await reprice_task_handler.create_batch(
             gym_id=request.gym_id,
             plan_id=request.plan_id,
-            prorate=request.prorate,
+            proration_behavior=request.proration_behavior,
         )
         if task_id is not None:
             tasks_executor.start_in_background(task_id)

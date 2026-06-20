@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit, PlanType
+from schema.task import ProrationBehavior
 
 from src.payments.schema.metadata.stripe_customer_metadata import (
     StripeCustomerMetadata,
@@ -236,7 +237,7 @@ async def test_update_subscription_add_item(
                 ),
                 PaymentsSubscriptionDesiredItem(stripe_price_id=price2),
             ],
-            proration_behavior="none",
+            proration_behavior=ProrationBehavior.no_charge,
             idempotency_key=str(uuid4()),
             metadata=_subscription_metadata(),
             gym_timezone="America/Chicago",
@@ -298,7 +299,7 @@ async def test_update_subscription_remove_item(
                     stripe_item_id=keep_item.stripe_subscription_item_id,
                 ),
             ],
-            proration_behavior="none",
+            proration_behavior=ProrationBehavior.no_charge,
             idempotency_key=str(uuid4()),
             metadata=_subscription_metadata(),
             gym_timezone="America/Chicago",
@@ -532,9 +533,9 @@ async def test_preview_create_subscription(
     )
     price_id = await _setup_price(membership_service, stripe_account_id, created)
 
-    # prorate=False so the preview reflects a plain full-cycle
+    # proration_behavior=no_charge so the preview reflects a plain full-cycle
     # invoice at the anchor date (no partial-period proration).
-    # Default prorate=True would trigger ``always_invoice`` and
+    # Default proration_behavior=prorate_to_anchor would trigger ``always_invoice`` and
     # return the prorated partial-period amount instead, which
     # depends on wall-clock time and is not deterministic here.
     resp = await subscription_service.preview_create_subscription(
@@ -543,7 +544,7 @@ async def test_preview_create_subscription(
             items=[
                 PaymentsSubscriptionDesiredItem(
                     stripe_price_id=price_id,
-                    prorate=False,
+                    proration_behavior=ProrationBehavior.no_charge,
                 ),
             ],
             idempotency_key=str(uuid4()),

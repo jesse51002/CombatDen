@@ -10,7 +10,7 @@ no-op). The tests assert:
    (trigger-immutable), and the successor row is ``applied`` on the new
    price with a fresh Stripe line.
 2. The Stripe subscription carries the new price; the old price is gone.
-3. No surprise invoice was created (``prorate=False`` path).
+3. No surprise invoice was created (``proration_behavior=no_charge`` path).
 4. An invalid (cancelled) reprice raises and mutates nothing; a no-op
    (already on the active price) returns the row's own id unchanged.
 """
@@ -18,6 +18,7 @@ no-op). The tests assert:
 from uuid import UUID, uuid4
 
 import pytest
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -129,7 +130,7 @@ async def test_update_price_tier(
         new_item_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            prorate=False,
+            proration_behavior=ProrationBehavior.no_charge,
         )
         assert new_item_id != item_id
 
@@ -150,7 +151,7 @@ async def test_update_price_tier(
 
         # Stripe side: the subscription must now carry the new price
         # id on exactly one item, and no new invoice may have been
-        # created (prorate=False is the existing contract).
+        # created (proration_behavior=no_charge is the existing contract).
         sub = await fetch_subscription(
             stripe_client,
             profile.stripe_sub_id_month,
@@ -293,7 +294,7 @@ async def test_reprice_one_member_off_shared_consolidated_line(
         new_item_id = await memberships_service.update_price(
             item_id=child_item_id,
             member_id=child.member_id,
-            prorate=False,
+            proration_behavior=ProrationBehavior.no_charge,
         )
 
         # Old row: cancelled + deleted, identity untouched; sibling intact.
@@ -386,7 +387,7 @@ async def test_same_day_double_reprice(
         second_item_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            prorate=False,
+            proration_behavior=ProrationBehavior.no_charge,
         )
 
         price_v3 = await plans_service.set_price(
@@ -399,7 +400,7 @@ async def test_same_day_double_reprice(
         third_item_id = await memberships_service.update_price(
             item_id=second_item_id,
             member_id=member.member_id,
-            prorate=False,
+            proration_behavior=ProrationBehavior.no_charge,
         )
 
         second_row = await _get_membership_row(db_pool, second_item_id)
@@ -461,7 +462,7 @@ async def test_reprice_to_now_inactive_pinned_price(
             member_id=member.member_id,
             old_item_id=item_id,
             target_price_id=v2.price_id,
-            prorate=False,
+            proration_behavior=ProrationBehavior.no_charge,
         )
 
         old_row = await _get_membership_row(db_pool, item_id)
@@ -548,7 +549,8 @@ async def test_update_price_noop_unchanged(
     """Already on the plan's active price → a true no-op.
 
     ``update_price`` returns the membership's own id, touches nothing, and
-    bills nothing even with prorate=True (the no-op returns before any sync).
+    bills nothing even with proration_behavior=prorate_to_anchor (the no-op returns before
+    any sync).
     """
     pm_id = await created.payment_method()
     member = await created.member(gym_id, payment_method_id=pm_id)
@@ -576,7 +578,7 @@ async def test_update_price_noop_unchanged(
         new_item_id = await memberships_service.update_price(
             item_id=item_id,
             member_id=member.member_id,
-            prorate=True,
+            proration_behavior=ProrationBehavior.prorate_to_anchor,
         )
         # No-op: the returned id IS the row itself; nothing changed.
         assert new_item_id == item_id

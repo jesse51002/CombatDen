@@ -20,6 +20,7 @@ from datetime import date
 from uuid import UUID, uuid4
 
 from schema.member_membership import StripeSyncStatus
+from schema.task import ProrationBehavior
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,7 +57,7 @@ class MemberMembershipsReprice(MemberMembershipsBase):
         self,
         member_id: UUID,
         old_item_id: UUID,
-        prorate: bool,
+        proration_behavior: ProrationBehavior,
         target_price_id: UUID | None = None,
     ) -> UUID:
         """Run one reprice (DB-first); returns the successor row's item_id.
@@ -126,16 +127,13 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 old_item_id,
                 target_price_id,
                 target_price,
-                prorate,
             )
 
             await sync_or_revert(
                 sync_fn=lambda: self._payment_sync.update_payments_recurring(
                     payer_id,
                     idempotency_key=uuid4(),
-                    proration_behavior=(
-                        "always_invoice" if prorate else "none"
-                    ),
+                    proration_behavior=proration_behavior,
                 ),
                 revert_fn=lambda: self._revert_db_phase(
                     member_id,
@@ -198,7 +196,6 @@ class MemberMembershipsReprice(MemberMembershipsBase):
         old_item_id: UUID,
         target_price_id: UUID,
         target_price: dict,
-        prorate: bool,
     ) -> UUID:
         """Write the reprice's desired state in ONE transaction.
 
@@ -221,7 +218,6 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 member_id,
                 target_price_id,
                 target_price,
-                prorate,
                 today,
             )
             await self._copy_applied_discounts(
@@ -324,7 +320,6 @@ class MemberMembershipsReprice(MemberMembershipsBase):
         member_id: UUID,
         target_price_id: UUID,
         target_price: dict,
-        prorate: bool,
         today: date,
     ) -> UUID:
         """Insert the successor row (pending add) on the shared session."""
@@ -342,7 +337,6 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 "last_paid_dates": [today],
                 "next_due_dates": [None],
                 "stripe_item_ids": [None],
-                "prorates": [prorate],
                 "total_prices": [target_price["price"]],
                 "sync_statuses": [StripeSyncStatus.not_added.value],
             },

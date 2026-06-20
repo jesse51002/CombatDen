@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import stripe
-from schema.task import TaskType
+from schema.task import ProrationBehavior, TaskType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -87,7 +87,7 @@ async def test_in_task_guard_blocks_then_lifts(
                     member_id=member.member_id,
                     old_item_id=item_id,
                     target_price_id=plan.price_id,
-                    prorate=False,
+                    proration_behavior=ProrationBehavior.no_charge,
                 ),
             ],
         )
@@ -186,7 +186,7 @@ async def test_reprice_reverts_on_failed_converge(
                 member_id=member.member_id,
                 old_item_id=item_id,
                 target_price_id=new_price.price_id,
-                prorate=False,
+                proration_behavior=ProrationBehavior.no_charge,
             )
 
         # Fully reverted: old row live and untouched, no successor row,

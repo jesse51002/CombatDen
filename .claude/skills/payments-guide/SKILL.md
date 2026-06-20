@@ -327,7 +327,7 @@ Stripe silently dunns. The split is keyed on `pay_first_invoice_out_of_band`
   `$0`/no-immediate-charge first invoice has nothing to collect, so it's a no-op
   there.
 - **Create, cash path** (`pay_first_invoice_out_of_band` +
-  `proration_behavior="always_invoice"`) → `payment_behavior="default_incomplete"`
+  `proration_behavior=prorate_to_anchor`) → `payment_behavior="default_incomplete"`
   + the existing `_pay_first_invoice_out_of_band` (mark the open first invoice
   paid out of band, no card charge). Unchanged.
 - **Update, card path** (`pay_first_invoice_out_of_band` False) →
@@ -337,7 +337,13 @@ Stripe silently dunns. The split is keyed on `pay_first_invoice_out_of_band`
   leaving the member added behind an open unpaid proration invoice. The cash path
   (`pay_first_invoice_out_of_band` True) is **excluded**: its open proration
   invoice is settled later via `mark_paid_cash`, so it must not error. A
-  `proration_behavior="none"` update generates no invoice → no-op.
+  `proration_behavior=no_charge` update generates no invoice → no-op.
+
+> The `proration_behavior` on the subscription request schemas is the
+> `ProrationBehavior` enum (`prorate_to_anchor` / `no_charge`) — the single
+> vocabulary the request layer + sync engine speak. It is converted to Stripe's
+> own `proration_behavior` string (`always_invoice` / `none`) ONLY at the SDK
+> boundary, by `proration_behavior_to_stripe` in `payments_stripe_mappers.py`.
 
 Only the monthly **renewals** after the first charge stay asynchronous (Stripe
 dunning → the `invoice.payment_failed` webhook). The preview paths don't read
