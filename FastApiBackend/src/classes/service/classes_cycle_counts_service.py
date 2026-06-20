@@ -75,7 +75,9 @@ class ClassesCycleCountsService:
 
             user_memberships[uid].append(
                 MembershipUsage(
+                    item_id=row["item_id"],
                     plan_id=row["plan_id"],
+                    start_date=row["start_date"],
                     plan_type=PlanType(row["plan_type"]),
                     status=row["status"],
                     class_count=class_count,

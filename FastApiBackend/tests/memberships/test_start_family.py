@@ -657,28 +657,27 @@ async def test_phase_a_custom_discount_by_id_rejects(
         await delete_member_data(db_pool, victim.member_id)
 
 
-def test_request_rejects_duplicate_member_price_pairs(gym_id):
-    """3f: duplicate (member_id, price_id) items fail at request construction.
+def test_request_allows_duplicate_member_price_pairs(gym_id):
+    """3f: duplicate (member_id, price_id) items are ACCEPTED at construction.
 
-    The pydantic ``_validate_memberships`` validator rejects the duplicate
-    pair before any service code runs — no DB / Stripe involvement at all.
+    N identical one_time / trial items is how a member buys N copies of the
+    same pack, so the request model no longer rejects duplicate pairs. The
+    recurring "one per plan in one request" rule moved to
+    MemberMembershipsStartValidation, where plan types are known
+    (see tests/memberships/test_start_request_schema.py for that guard).
     """
     member_id = uuid4()
     price_id = uuid4()
-    with pytest.raises(ValueError, match="duplicate"):
-        MemberMembershipsStartRequest(
-            payer_member_id=member_id,
-            gym_id=gym_id,
-            idempotency_key=uuid4(),
-            memberships=[
-                MemberMembershipsStartItem(
-                    member_id=member_id, price_id=price_id
-                ),
-                MemberMembershipsStartItem(
-                    member_id=member_id, price_id=price_id
-                ),
-            ],
-        )
+    request = MemberMembershipsStartRequest(
+        payer_member_id=member_id,
+        gym_id=gym_id,
+        idempotency_key=uuid4(),
+        memberships=[
+            MemberMembershipsStartItem(member_id=member_id, price_id=price_id),
+            MemberMembershipsStartItem(member_id=member_id, price_id=price_id),
+        ],
+    )
+    assert len(request.memberships) == 2
 
 
 # ── Helper: stand a member up on a good card, then swap to a failing one ──

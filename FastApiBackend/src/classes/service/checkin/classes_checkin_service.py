@@ -30,7 +30,7 @@ from src.classes.schema.classes_schema import (
 )
 from src.classes.service.checkin.classes_checkin_plan_selector import (
     build_breakdown,
-    select_best_plan,
+    select_best_membership,
     should_end_membership,
 )
 from src.classes.service.checkin.classes_checkin_queries import (
@@ -98,23 +98,17 @@ class ClassesCheckinService:
             class_id,
             [m.plan_id for m in active],
         )
-        chosen_plan_id = select_best_plan(active, eligible)
-        if chosen_plan_id is None:
+        chosen = select_best_membership(active, eligible)
+        if chosen is None:
             breakdown = build_breakdown(active, eligible, None)
             return self._rejected(request, breakdown)
 
-        item_id = await self._queries.resolve_item_id(request, chosen_plan_id)
-        if item_id is None:
-            breakdown = build_breakdown(active, eligible, None)
-            return self._rejected(request, breakdown)
-
-        chosen = next(m for m in active if m.plan_id == chosen_plan_id)
         should_end = should_end_membership(chosen)
 
         log_id, already = await self._writer.write_checkin(
             request,
-            chosen_plan_id,
-            item_id,
+            chosen.plan_id,
+            chosen.item_id,
             should_end,
         )
 
@@ -122,8 +116,8 @@ class ClassesCheckinService:
             return self._already_checked_in(
                 request,
                 log_id,
-                chosen_plan_id,
-                item_id,
+                chosen.plan_id,
+                chosen.item_id,
             )
 
         return CheckinResponse(
@@ -131,9 +125,9 @@ class ClassesCheckinService:
             member_id=request.member_id,
             class_history_id=request.class_history_id,
             already_checked_in=False,
-            chosen_plan_id=chosen_plan_id,
-            chosen_item_id=item_id,
-            memberships=build_breakdown(active, eligible, chosen_plan_id),
+            chosen_plan_id=chosen.plan_id,
+            chosen_item_id=chosen.item_id,
+            memberships=build_breakdown(active, eligible, chosen.item_id),
         )
 
     async def _active_memberships(

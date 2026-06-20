@@ -22,8 +22,14 @@ class ClassesCycleCountsRequest(BaseModel):
 class MembershipUsage(BaseModel):
     """Class usage for a single membership within the current billing cycle.
 
+    Usage is keyed per membership (``item_id``), not per plan, so a member
+    holding two packs on the same plan gets a separate bucket for each.
+
     Attributes:
+        item_id: The membership row — the consumption bucket.
         plan_id: The membership plan.
+        start_date: When this membership started (the oldest pack with
+            capacity is drained first).
         plan_type: Trial, one_time, or recurring.
         status: Membership status (active, frozen, ended, cancelled).
         class_count: Max classes allowed (None = unlimited).
@@ -35,7 +41,9 @@ class MembershipUsage(BaseModel):
             otherwise).
     """
 
+    item_id: UUID
     plan_id: UUID
+    start_date: date
     plan_type: PlanType
     status: str
     class_count: int | None

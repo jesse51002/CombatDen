@@ -9,9 +9,12 @@ this IDENTICAL validation first — it lives in its own class so that stays
 structural, not copy-paste. Any failure rejects the whole request with
 nothing written and nothing billed.
 
-Order: payer → link/gym state → price/plan rows → per-member duplicate
-check → discounts. The request model already rejected an empty list and
-intra-request (member_id, price_id) duplicates.
+Order: payer → link/gym state → price/plan rows → intra-request recurring
+duplicate check → per-member existing-recurring check → discounts. The
+request model only rejected an empty list — intra-request duplicates are
+allowed (N identical one_time / trial items is how a member buys N copies of
+a pack); the recurring "one per plan in one request" rule is enforced here,
+where plan types are known.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from schema.gym_discount import DiscountType
+from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -88,6 +92,8 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
                     f"Plan price {price_id} missing stripe_price_id",
                 )
 
+        self._check_no_recurring_duplicates(request, plan_prices)
+
         plans_by_member: dict[UUID, list[UUID]] = {}
         for item in request.memberships:
             plans_by_member.setdefault(item.member_id, []).append(
@@ -100,6 +106,35 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
 
         await self._check_discounts(request)
         return payer, plan_prices
+
+    def _check_no_recurring_duplicates(
+        self,
+        request: MemberMembershipsStartRequest,
+        plan_prices: dict[UUID, dict],
+    ) -> None:
+        """Reject two RECURRING items on the same plan in one request.
+
+        One_time / trial packs may repeat freely (N copies = N packs), but a
+        member cannot start two recurring memberships of the same plan at once
+        (the DB trigger trg_recurring_no_active_memberships would reject the
+        second insert anyway — this surfaces it early, before any write).
+
+        Raises:
+            ValueError: On the first duplicate recurring (member, plan).
+        """
+        seen: set[tuple[UUID, UUID]] = set()
+        for item in request.memberships:
+            row = plan_prices[item.price_id]
+            if row["plan_type"] != PlanType.recurring:
+                continue
+            key = (item.member_id, row["plan_id"])
+            if key in seen:
+                raise ValueError(
+                    "Duplicate recurring membership in one request: "
+                    f"member_id={item.member_id}, "
+                    f"plan_id={row['plan_id']}"
+                )
+            seen.add(key)
 
     async def _resolve_payer(
         self,

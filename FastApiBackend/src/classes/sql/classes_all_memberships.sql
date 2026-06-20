@@ -1,11 +1,15 @@
--- Per-membership class usage within the current billing cycle.
--- Counts member_attendance rows (attributed to a plan via plan_id) whose
--- class_history.occurred_at falls inside the membership's billing window
--- [last_paid_date | start_date, next_due_date | today+1).
+-- Per-membership (item) class usage within the current billing cycle.
+-- Counts member_attendance rows (attributed to a specific membership via
+-- item_id) whose class_history.occurred_at falls inside that membership's
+-- billing window [last_paid_date | start_date, next_due_date | today+1).
+-- Keyed by item_id so a member holding two packs on the same plan gets a
+-- separate count per pack; a single pack per plan is unchanged.
 SELECT
     ms.member_id,
+    ms.item_id,
     ms.plan_id,
     ms.gym_id,
+    ms.start_date,
     ms.last_paid_date,
     ms.next_due_date,
     ms.end_date,
@@ -19,17 +23,13 @@ JOIN membership_plans mp
     AND mp.gym_id  = ms.gym_id
 LEFT JOIN (
     SELECT
-        ma.member_id,
-        ma.plan_id,
-        ma.gym_id,
+        ma.item_id,
         COUNT(*) AS classes_used
     FROM member_attendance ma
     JOIN class_history ch
         ON  ch.class_history_id = ma.class_history_id
     JOIN member_memberships_status mm
-        ON  mm.member_id = ma.member_id
-        AND mm.gym_id    = ma.gym_id
-        AND mm.plan_id   = ma.plan_id
+        ON  mm.item_id = ma.item_id
     JOIN gyms g2 ON g2.gym_id = ma.gym_id
     WHERE ma.gym_id = :gym_id
       AND ma.member_id = ANY(CAST(:member_ids AS uuid[]))
@@ -38,10 +38,8 @@ LEFT JOIN (
               mm.next_due_date,
               (now() AT TIME ZONE g2.timezone)::date + INTERVAL '1 day'
           )
-    GROUP BY ma.member_id, ma.plan_id, ma.gym_id
+    GROUP BY ma.item_id
 ) counts
-    ON  counts.member_id = ms.member_id
-    AND counts.plan_id   = ms.plan_id
-    AND counts.gym_id    = ms.gym_id
+    ON counts.item_id = ms.item_id
 WHERE ms.gym_id = :gym_id
   AND ms.member_id = ANY(CAST(:member_ids AS uuid[]))

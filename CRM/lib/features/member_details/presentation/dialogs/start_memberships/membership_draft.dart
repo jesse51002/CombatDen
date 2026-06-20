@@ -11,13 +11,10 @@ import 'package:crm/features/member_details/data/models/membership_plan_response
 class MembershipDraft {
   final MembershipPlanResponse plan;
 
-  /// One-time / trial purchase count from the stepper.
-  /// UI-only today — [toItem] always emits ONE item.
-  // TODO(known placeholder): count is display-only — the
-  // backend rejects duplicate (member, price) items until
-  // PaymentRefactor.md §10 ships, when count N maps to N
-  // duplicate items in `memberships`. DELETE this comment
-  // (and the single-item cap in toItem) when implemented.
+  /// One-time / trial purchase count from the stepper. The
+  /// request builder emits [count] identical wire items (N
+  /// copies of the pack); [toItem] returns the single shape
+  /// each copy uses. Always 1 for recurring (no stepper).
   final int count;
 
   /// Preset discount ids picked for this membership.
@@ -101,8 +98,9 @@ class MembershipDraft {
     return cents < 0 ? 0 : cents;
   }
 
-  /// The wire item for this draft, or null when the plan
-  /// has no active price (it shouldn't be selectable).
+  /// The wire item shape for this draft (one copy), or null
+  /// when the plan has no active price (it shouldn't be
+  /// selectable). The request builder repeats it [count] times.
   MemberMembershipsStartItem? toItem(String memberId) {
     final priceId = plan.activePrice?.priceId;
     if (priceId == null) return null;

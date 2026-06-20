@@ -118,13 +118,12 @@ class MemberMembershipsStartRequest(BaseModel):
         cls,
         value: list[MemberMembershipsStartItem],
     ) -> list[MemberMembershipsStartItem]:
+        # Intra-request duplicates are allowed here: N identical one_time /
+        # trial items is how a member buys N copies of the same pack. The
+        # recurring-only "no two of the same plan in one request" guard lives
+        # in MemberMembershipsStartValidation, where plan types are known.
         if not value:
             raise ValueError("memberships must not be empty")
-        pairs = [(item.member_id, item.price_id) for item in value]
-        if len(pairs) != len(set(pairs)):
-            raise ValueError(
-                "memberships must not contain duplicate (member_id, price_id) pairs",
-            )
         return value
 
 

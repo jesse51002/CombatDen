@@ -247,14 +247,17 @@ class MemberMembershipsBase:
         gym_id: UUID,
         plan_ids: list[UUID],
     ) -> None:
-        """Ensure ONE member has no active/frozen membership on these plans.
+        """Ensure ONE member has no active/frozen RECURRING membership here.
 
-        The check is inherently per-member: one member_id, batched only
-        across that member's requested plan ids.
+        Only recurring plans are one-active-per-plan; one_time / trial packs
+        are allowed to stack, so the query filters to recurring plans (see
+        member_memberships_check_existing.sql). The check is inherently
+        per-member: one member_id, batched only across that member's
+        requested plan ids.
 
         Raises:
-            ValueError: If an active or frozen membership already exists on
-                any of the plans.
+            ValueError: If an active or frozen recurring membership already
+                exists on any of the plans.
         """
         sql = load_sql(SQL_DIR / "member_memberships_check_existing.sql")
         params = {
@@ -269,7 +272,7 @@ class MemberMembershipsBase:
         for plan_id in plan_ids:
             if plan_id in existing:
                 raise ValueError(
-                    f"Active membership already exists: "
+                    f"Active recurring membership already exists: "
                     f"member_id={member_id}, gym_id={gym_id}, "
                     f"plan_id={plan_id}"
                 )

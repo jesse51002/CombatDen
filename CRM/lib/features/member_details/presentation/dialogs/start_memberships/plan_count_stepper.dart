@@ -4,14 +4,9 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// Quantity stepper for a checked one_time / trial plan.
-/// The count multiplies the displayed class allowance.
-///
-// TODO(known placeholder): increment is disabled ("coming
-// soon") — the backend rejects duplicate (member, price)
-// items until PaymentRefactor.md §10 ships, so the count is
-// capped at 1 for submission. DELETE this comment (and
-// enable increment) when §10 lands and count N maps to N
-// duplicate items.
+/// The count multiplies the displayed class allowance and
+/// maps to N identical wire items (N copies of the pack) when
+/// the request is built. No upper cap.
 class PlanCountStepper extends StatelessWidget {
   final int count;
   final ValueChanged<int> onChanged;
@@ -35,16 +30,9 @@ class PlanCountStepper extends StatelessWidget {
               : null,
         ),
         Text('$count', style: DesignConstants.h3),
-        Tooltip(
-          message: 'Multiple purchases per run are '
-              'coming soon',
-          child: _StepButton(
-            icon: Symbols.add_sharp,
-            // Capped at 1 until duplicates are accepted
-            // (PaymentRefactor.md §10) — see the class
-            // comment.
-            onPressed: null,
-          ),
+        _StepButton(
+          icon: Symbols.add_sharp,
+          onPressed: () => onChanged(count + 1),
         ),
       ],
     );
