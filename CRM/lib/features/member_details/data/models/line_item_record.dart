@@ -21,6 +21,12 @@ class LineItemRecord extends Equatable {
   final String? stripeProductId;
   final String? itemId;
 
+  /// The member this line was FOR (a membership line resolves its owner;
+  /// a custom/ad-hoc line has none) — lets the UI label "Plan · Owner".
+  final String? ownerMemberId;
+  final String? ownerFirstName;
+  final String? ownerLastName;
+
   const LineItemRecord({
     required this.lineItemId,
     required this.itemType,
@@ -29,7 +35,14 @@ class LineItemRecord extends Equatable {
     this.quantity = 1,
     this.stripeProductId,
     this.itemId,
+    this.ownerMemberId,
+    this.ownerFirstName,
+    this.ownerLastName,
   });
+
+  /// The owner's display name, or '' when this line has no owner.
+  String get ownerName =>
+      '${ownerFirstName ?? ''} ${ownerLastName ?? ''}'.trim();
 
   factory LineItemRecord.fromJson(
     Map<String, dynamic> json,
@@ -45,5 +58,8 @@ class LineItemRecord extends Equatable {
         quantity,
         stripeProductId,
         itemId,
+        ownerMemberId,
+        ownerFirstName,
+        ownerLastName,
       ];
 }

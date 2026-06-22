@@ -212,7 +212,12 @@ class BillingRewardCard(BaseModel):
 
 
 class BillingLineItemRecord(BaseModel):
-    """A single line item on an invoice."""
+    """A single line item on an invoice.
+
+    ``owner_*`` name the member this line was FOR (a membership line resolves
+    its owner; a custom/ad-hoc line has none), so the UI can label each line
+    "Plan · Owner" on a consolidated family invoice.
+    """
 
     line_item_id: str
     item_type: LineItemType
@@ -221,6 +226,9 @@ class BillingLineItemRecord(BaseModel):
     quantity: int = 1
     stripe_product_id: str | None = None
     item_id: UUID | None = None
+    owner_member_id: UUID | None = None
+    owner_first_name: str | None = None
+    owner_last_name: str | None = None
 
 
 class BillingInvoiceAttempt(BaseModel):

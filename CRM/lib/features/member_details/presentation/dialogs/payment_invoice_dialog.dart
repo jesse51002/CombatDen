@@ -5,6 +5,7 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
 import 'package:crm/features/member_details/data/models/invoice_attempt.dart';
+import 'package:crm/features/member_details/data/models/line_item_record.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/refund_charge_dialog.dart';
@@ -78,9 +79,7 @@ class PaymentInvoiceDialog extends StatelessWidget {
         ? payment.lineItems
             .map(
               (l) => InvoiceLineItem(
-                description: l.quantity > 1
-                    ? '${l.name} ×${l.quantity}'
-                    : l.name,
+                description: _lineDescription(l),
                 amount: l.amount,
               ),
             )
@@ -117,6 +116,15 @@ class PaymentInvoiceDialog extends StatelessWidget {
           )
           .toList(),
     );
+  }
+
+  /// "{Plan} ×{qty}" with the owner appended ("· {owner}") on a line that
+  /// has one (membership lines), so a consolidated family invoice shows who
+  /// each line is for. A custom/ad-hoc line (no owner) shows just its name.
+  String _lineDescription(LineItemRecord l) {
+    final base = l.quantity > 1 ? '${l.name} ×${l.quantity}' : l.name;
+    final owner = l.ownerName;
+    return owner.isNotEmpty ? '$base · $owner' : base;
   }
 
   /// "•••• 4242" for a card, "Cash" for cash, else the method
