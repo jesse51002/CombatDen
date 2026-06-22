@@ -51,11 +51,7 @@ class PaymentInvoiceDialog extends StatelessWidget {
   /// there's nothing meaningful to show.
   String? get _attributionLabel {
     final payer = payment.paidByName;
-    final others = payment.paidFor
-        .where((m) => m.memberId != payment.paidByMemberId)
-        .map((m) => m.name)
-        .where((n) => n.isNotEmpty)
-        .toList();
+    final others = _beneficiaryNames;
     final parts = <String>[];
     if (payer.isNotEmpty) parts.add('Paid by $payer');
     if (others.isNotEmpty) parts.add('For ${others.join(', ')}');
@@ -118,14 +114,25 @@ class PaymentInvoiceDialog extends StatelessWidget {
     );
   }
 
-  /// "{Plan} ×{qty}" with the owner appended ("· {owner}") on a line that
-  /// has one (membership lines), so a consolidated family invoice shows who
-  /// each line is for. A custom/ad-hoc line (no owner) shows just its name.
+  /// "{Plan} ×{qty}" with who the line was FOR appended ("· {names}").
+  /// A membership line carries its own single owner; a custom/ad-hoc line has
+  /// none, so it falls back to the invoice's beneficiaries (`paid_for`,
+  /// excluding the payer) — which can be **multiple** people on one line.
   String _lineDescription(LineItemRecord l) {
     final base = l.quantity > 1 ? '${l.name} ×${l.quantity}' : l.name;
-    final owner = l.ownerName;
-    return owner.isNotEmpty ? '$base · $owner' : base;
+    final forWhom = l.ownerName.isNotEmpty
+        ? l.ownerName
+        : _beneficiaryNames.join(', ');
+    return forWhom.isNotEmpty ? '$base · $forWhom' : base;
   }
+
+  /// The invoice's beneficiaries (`paid_for`) other than the payer — the
+  /// people a non-membership line was for. May be several.
+  List<String> get _beneficiaryNames => payment.paidFor
+      .where((m) => m.memberId != payment.paidByMemberId)
+      .map((m) => m.name)
+      .where((n) => n.isNotEmpty)
+      .toList();
 
   /// "•••• 4242" for a card, "Cash" for cash, else the method
   /// type (or "—" when we never captured one — e.g. a failed
