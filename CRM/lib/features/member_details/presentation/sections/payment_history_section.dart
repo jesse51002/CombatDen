@@ -18,9 +18,11 @@ const int _kPageSize = 20;
 /// Account-level payment history in its own full-width card.
 /// Fetched on demand and paginated (a separate request from the
 /// member detail) — read-only side read with its own state, like
-/// the Waivers / Invoices sections. Attributed by membership: the
-/// charges that paid for any membership this member has held, plus
-/// their own direct charges, each row labelled with who was charged.
+/// the Waivers / Invoices sections. Returns the invoices this member
+/// PAID, the invoices a membership they have ever held was on, and
+/// the invoices that were FOR them (the payer's `paid_for`) — so a
+/// charge a parent made for this member shows here. The "Paid by"
+/// column names the payer; the invoice popup adds who it was "For".
 /// Each row opens the full invoice (via [PaymentInvoiceDialog]);
 /// "Show more" loads the next page.
 class PaymentHistorySection extends StatefulWidget {

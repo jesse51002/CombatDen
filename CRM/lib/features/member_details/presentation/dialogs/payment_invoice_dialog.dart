@@ -5,7 +5,9 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
 import 'package:crm/features/member_details/data/models/invoice_attempt.dart';
+import 'package:crm/features/member_details/data/models/line_item_record.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
+import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/refund_charge_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
@@ -43,6 +45,19 @@ class PaymentInvoiceDialog extends StatelessWidget {
 
   bool get _isRefund => payment.kind == ChargeKind.refund;
 
+  /// "Paid by {payer} · For {beneficiaries}" — the who-paid / who-for
+  /// attribution. The "For" clause is shown only when the bill was for
+  /// someone other than the payer (otherwise it's redundant). Null when
+  /// there's nothing meaningful to show.
+  String? get _attributionLabel {
+    final payer = payment.paidByName;
+    final others = _beneficiaryNames;
+    final parts = <String>[];
+    if (payer.isNotEmpty) parts.add('Paid by $payer');
+    if (others.isNotEmpty) parts.add('For ${others.join(', ')}');
+    return parts.isEmpty ? null : parts.join('  ·  ');
+  }
+
   /// Refundable only when this is a succeeded payment (not
   /// already a refund, not pending/failed) with an
   /// un-refunded balance left.
@@ -60,9 +75,7 @@ class PaymentInvoiceDialog extends StatelessWidget {
         ? payment.lineItems
             .map(
               (l) => InvoiceLineItem(
-                description: l.quantity > 1
-                    ? '${l.name} ×${l.quantity}'
-                    : l.name,
+                description: _lineDescription(l),
                 amount: l.amount,
               ),
             )
@@ -100,6 +113,26 @@ class PaymentInvoiceDialog extends StatelessWidget {
           .toList(),
     );
   }
+
+  /// "{Plan} ×{qty}" with who the line was FOR appended ("· {names}").
+  /// A membership line carries all its co-owners (`ownerLabel`, already
+  /// comma-joined); a custom/ad-hoc line has none, so it falls back to the
+  /// invoice's beneficiaries (`paid_for`, excluding the payer) — either way
+  /// this can be **multiple** people on one line.
+  String _lineDescription(LineItemRecord l) {
+    final base = l.quantity > 1 ? '${l.name} ×${l.quantity}' : l.name;
+    final owner = l.ownerLabel ?? '';
+    final forWhom = owner.isNotEmpty ? owner : _beneficiaryNames.join(', ');
+    return forWhom.isNotEmpty ? '$base · $forWhom' : base;
+  }
+
+  /// The invoice's beneficiaries (`paid_for`) other than the payer — the
+  /// people a non-membership line was for. May be several.
+  List<String> get _beneficiaryNames => payment.paidFor
+      .where((m) => m.memberId != payment.paidByMemberId)
+      .map((m) => m.name)
+      .where((n) => n.isNotEmpty)
+      .toList();
 
   /// "•••• 4242" for a card, "Cash" for cash, else the method
   /// type (or "—" when we never captured one — e.g. a failed
@@ -147,17 +180,32 @@ class PaymentInvoiceDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final attribution = _attributionLabel;
     return AppDialog(
       title: _isRefund ? 'Refund' : 'Invoice',
-      body: InvoiceBreakdown(
-        data: _data,
-        headerCaption: _isRefund ? 'Refund' : 'Payment',
-        headerMeta: formatDay(payment.chargeTime),
-        strongHeaderCaption: true,
-        statusLabel: payment.status.displayLabel,
-        statusTone: _statusTone,
-        onRefundPressed:
-            _canRefund ? () => _onRefund(context) : null,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          if (attribution != null)
+            Text(
+              attribution,
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          InvoiceBreakdown(
+            data: _data,
+            headerCaption: _isRefund ? 'Refund' : 'Payment',
+            headerMeta: formatDay(payment.chargeTime),
+            strongHeaderCaption: true,
+            statusLabel: payment.status.displayLabel,
+            statusTone: _statusTone,
+            onRefundPressed:
+                _canRefund ? () => _onRefund(context) : null,
+          ),
+        ],
       ),
     );
   }

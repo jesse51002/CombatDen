@@ -284,6 +284,9 @@ class DesignConstants {
   // negative height; on a viewport too short for this the whole surface
   // scrolls instead of rendering blank.
   static const double dialogMinExpandedHeight = 560.0;
+  // Fixed height for a dialog's transient processing/spinner step so the
+  // surface doesn't jump in size as it moves form -> processing -> result.
+  static const double dialogProcessingHeight = 160.0;
 
   // Geist — the landing page's typeface (LandingPage/hifi/ds.jsx `sans`).
   static final TextStyle baseFont = GoogleFonts.geist(

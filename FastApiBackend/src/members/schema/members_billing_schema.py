@@ -85,6 +85,15 @@ class BillingPayingForMember(BillingLinkedAccount):
     classes_remaining: int | None = None
 
 
+class BillingPaidForMember(BillingLinkedAccount):
+    """A beneficiary an invoice was paid FOR (the invoice's paid_for).
+
+    Usually just the payer themselves; a parent paying for a child (or a
+    consolidated family invoice) lists each beneficiary, so a payment shows
+    on — and is refundable from — each of their pages.
+    """
+
+
 class BillingPaysForMembership(BaseModel):
     """One active recurring membership the viewed member funds."""
 
@@ -203,7 +212,13 @@ class BillingRewardCard(BaseModel):
 
 
 class BillingLineItemRecord(BaseModel):
-    """A single line item on an invoice."""
+    """A single line item on an invoice.
+
+    ``owner_label`` names the member(s) this line was FOR, comma-joined — a
+    membership line resolves all co-owners on its (possibly consolidated)
+    Stripe item; a custom/ad-hoc line has none. Lets the UI label each line
+    "Plan · Owner A, Owner B" on a consolidated family invoice.
+    """
 
     line_item_id: str
     item_type: LineItemType
@@ -212,6 +227,7 @@ class BillingLineItemRecord(BaseModel):
     quantity: int = 1
     stripe_product_id: str | None = None
     item_id: UUID | None = None
+    owner_label: str | None = None
 
 
 class BillingInvoiceAttempt(BaseModel):
@@ -234,9 +250,9 @@ class BillingInvoiceAttempt(BaseModel):
 class BillingPaymentRecord(BaseModel):
     """A single charge (payment or refund) against an invoice.
 
-    ``paid_by_*`` identify the account that was charged (the payer) so the
-    member-detail history can label each row — the charges are attributed to
-    the member by membership, so the payer may be a paying parent.
+    ``paid_by_*`` identify the account that was charged (the payer); ``paid_for``
+    lists who the bill was FOR (the beneficiaries — usually just the payer). A
+    parent paying for a child shows on both pages, each correctly labelled.
     """
 
     charge_id: UUID
@@ -253,13 +269,19 @@ class BillingPaymentRecord(BaseModel):
     paid_by_first_name: str
     paid_by_last_name: str
     paid_by_photo_url: str | None = None
+    paid_for: list[BillingPaidForMember] = []
     line_items: list[BillingLineItemRecord] = []
     applied_discounts: list[BillingDiscountInfo] = []
     attempts: list[BillingInvoiceAttempt] = []
 
 
 class BillingCardOnFile(BaseModel):
-    """Saved card details for the paying account."""
+    """The member's OWN saved card (their Stripe customer's default).
+
+    Per-payer billing: this is the queried member's own card, never a
+    linked parent's — a payer-scoped read shows the card that will be
+    charged. None when the member has no saved card of their own.
+    """
 
     brand: str
     last_four: str

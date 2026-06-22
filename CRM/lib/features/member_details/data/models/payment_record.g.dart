@@ -22,6 +22,11 @@ PaymentRecord _$PaymentRecordFromJson(Map<String, dynamic> json) =>
       paidByFirstName: json['paid_by_first_name'] as String? ?? '',
       paidByLastName: json['paid_by_last_name'] as String? ?? '',
       paidByPhotoUrl: json['paid_by_photo_url'] as String?,
+      paidFor:
+          (json['paid_for'] as List<dynamic>?)
+              ?.map((e) => PaidForMember.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
       lineItems:
           (json['line_items'] as List<dynamic>?)
               ?.map((e) => LineItemRecord.fromJson(e as Map<String, dynamic>))

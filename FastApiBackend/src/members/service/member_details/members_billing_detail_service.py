@@ -94,7 +94,6 @@ class MembersBillingDetailService:
             raise ValueError(f"No billing profile found for member_id={member_id}")
 
         target_row = self._find_target_profile(rows, member_id)
-        parent_row = self._find_parent_profile(rows, target_row)
         gym_id = target_row["gym_id"]
         today = target_row["gym_today"]
 
@@ -146,7 +145,6 @@ class MembersBillingDetailService:
             member_id=member_id,
             gym_id=gym_id,
             target_row=target_row,
-            parent_row=parent_row,
             membership_rows=own_membership_rows,
             grouped=grouped,
             overview=overview,
@@ -187,7 +185,6 @@ class MembersBillingDetailService:
         member_id: UUID,
         gym_id: UUID,
         target_row: dict,
-        parent_row: dict,
         membership_rows: list,
         grouped: list,
         overview: str,
@@ -233,7 +230,7 @@ class MembersBillingDetailService:
             ),
             rank=self._build_rank(target_row),
             recently_redeemed_rewards=(self._supplementary.redeemed_rewards),
-            card_on_file=self._build_card_on_file(parent_row),
+            card_on_file=self._build_card_on_file(target_row),
         )
 
     def _find_target_profile(self, rows: list, member_id: UUID) -> dict:
@@ -253,30 +250,6 @@ class MembersBillingDetailService:
             if row["member_id"] == member_id:
                 return row
         raise ValueError(f"No profile found for member_id={member_id}")
-
-    def _find_parent_profile(self, rows: list, target_row: dict) -> dict:
-        """Find the parent account row for the queried user.
-
-        If the target is a linked (child) account, returns the row for its
-        parent; otherwise returns the target row itself.
-
-        Args:
-            rows: All query result rows (the full family group).
-            target_row: The queried user's profile row.
-
-        Returns:
-            The parent account's profile row.
-
-        Raises:
-            ValueError: If the target is linked but no parent row is present.
-        """
-        linked_to_id = target_row["account_linked_to_id"]
-        if linked_to_id is None:
-            return target_row
-        for row in rows:
-            if row["member_id"] == linked_to_id:
-                return row
-        raise ValueError(f"No parent profile found for linked_to_id={linked_to_id}")
 
     def _scan_membership_flags(
         self,
@@ -463,19 +436,25 @@ class MembersBillingDetailService:
             "membership_status"
         ] in (MembershipDbStatus.active, MembershipDbStatus.frozen)
 
-    def _build_card_on_file(self, parent_row: dict) -> BillingCardOnFile | None:
-        """Build the BillingCardOnFile for the paying account.
+    def _build_card_on_file(self, member_row: dict) -> BillingCardOnFile | None:
+        """Build the BillingCardOnFile for the member's OWN saved card.
+
+        Per-payer billing: each member's ``card_on_file`` is THEIR OWN
+        saved card (their own Stripe customer's default), never a linked
+        parent's — so a payer-scoped read (the charge dialog / start
+        wizard fetching the chosen payer's billing) shows the card that
+        will actually be charged. A member with no own card reads None.
 
         Args:
-            parent_row: The paying account's profile row.
+            member_row: The queried member's OWN profile row.
 
         Returns:
-            BillingCardOnFile when the parent has a saved card, else None.
+            BillingCardOnFile when the member has a saved card, else None.
         """
-        brand = parent_row["card_brand"]
-        last_four = parent_row["card_last_four"]
-        exp_month = parent_row["card_exp_month"]
-        exp_year = parent_row["card_exp_year"]
+        brand = member_row["card_brand"]
+        last_four = member_row["card_last_four"]
+        exp_month = member_row["card_exp_month"]
+        exp_year = member_row["card_exp_year"]
         if brand is None or last_four is None or exp_month is None or exp_year is None:
             return None
         return BillingCardOnFile(

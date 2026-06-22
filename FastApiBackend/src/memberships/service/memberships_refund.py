@@ -181,14 +181,14 @@ class MemberMembershipsRefund:
     ) -> UUID | None:
         """Insert the negative refund row; return its PK (None on conflict).
 
-        ``member_id`` carries the parent's member (the payer who was charged),
-        matching how the webhook records a refund.
+        ``paid_by_member_id`` carries the payer (the parent charge's payer who
+        was charged), matching how the webhook records a refund.
         """
         sql = load_sql(SQL_DIR / "member_refund_insert.sql")
         params = {
             "invoice_id": str(charge["invoice_id"]),
             "gym_id": str(charge["gym_id"]),
-            "member_id": str(charge["charge_member_id"]),
+            "paid_by_member_id": str(charge["charge_paid_by_member_id"]),
             "kind": ChargeKind.refund.value,
             "status": ChargeStatus.succeeded.value,
             "amount": -amount,

@@ -60,7 +60,8 @@ async def _seed_payment_charge(
         await session.execute(
             text(
                 "INSERT INTO member_invoices "
-                "(invoice_id, gym_id, member_id, status, total_amount, currency)"
+                "(invoice_id, gym_id, paid_by_member_id, status, "
+                " total_amount, currency)"
                 " VALUES (:i, :g, :m, 'paid', :a, 'usd')"
             ),
             {"i": str(invoice_id), "g": str(GYM), "m": str(member_id), "a": amount},
@@ -68,9 +69,9 @@ async def _seed_payment_charge(
         await session.execute(
             text(
                 "INSERT INTO member_charges "
-                "(charge_id, invoice_id, gym_id, member_id, kind, status, "
-                " amount, currency, payment_method_type, card_last_four, "
-                " stripe_charge_id) VALUES "
+                "(charge_id, invoice_id, gym_id, paid_by_member_id, kind, "
+                " status, amount, currency, payment_method_type, "
+                " card_last_four, stripe_charge_id) VALUES "
                 "(:c, :i, :g, :m, 'payment', 'succeeded', :a, 'usd', :pmt, "
                 " :l4, :ch)"
             ),
@@ -176,7 +177,10 @@ async def test_card_refund_hits_stripe_and_records_row(
             items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
             idempotency_key=str(uuid4()),
             metadata=StripeMembershipOneTimeMetadata(
-                member_id=member.member_id, gym_id=GYM, plan_id=uuid4()
+                paid_by_member_id=member.member_id,
+                paid_for=[member.member_id],
+                gym_id=GYM,
+                plan_id=uuid4(),
             ),
         ),
         stripe_account_id,

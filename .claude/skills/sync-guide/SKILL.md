@@ -949,10 +949,13 @@ charge) so the one-time invoice just bills the new saved default — no explicit
    `coupons_by_price.get(item_id, [])` becomes its line's item-level coupons.
 4. **Execute ONE consolidated invoice** (`_execute` ->
    `PaymentsStripePaymentService.create_invoice_payment`) on the **payer's**
-   customer: invoice-level metadata = payer + gym
-   (`StripeMembershipOneTimeMetadata`); one item per membership (price +
-   item-level coupons); `paid_out_of_band = paid_with_cash`. The response's
-   `line_item_ids` / `line_amounts` come back in `plan.items` order.
+   customer: invoice-level metadata = `paid_by_member_id` (the payer) +
+   `paid_for` (the distinct beneficiary owners across the lines, via
+   `_beneficiaries`) + gym (`StripeMembershipOneTimeMetadata`), so the webhook
+   attributes the bill to the payer **and** each beneficiary; one item per
+   membership (price + item-level coupons); `paid_out_of_band = paid_with_cash`.
+   The response's `line_item_ids` / `line_amounts` come back in `plan.items`
+   order.
 5. **Write back per row** (`_writeback`, mapping `plan.items[i]` <->
    `result.line_item_ids[i]` / `line_amounts[i]` by order, `strict=True` so a
    line-count mismatch fails loud) — `PaymentSyncQueries.apply_one_time_membership_sync`
