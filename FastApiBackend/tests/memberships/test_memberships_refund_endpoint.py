@@ -177,7 +177,10 @@ async def test_card_refund_hits_stripe_and_records_row(
             items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
             idempotency_key=str(uuid4()),
             metadata=StripeMembershipOneTimeMetadata(
-                member_id=member.member_id, gym_id=GYM, plan_id=uuid4()
+                paid_by_member_id=member.member_id,
+                paid_for=[member.member_id],
+                gym_id=GYM,
+                plan_id=uuid4(),
             ),
         ),
         stripe_account_id,
