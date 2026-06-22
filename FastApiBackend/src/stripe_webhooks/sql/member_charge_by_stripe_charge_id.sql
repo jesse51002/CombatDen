@@ -1,6 +1,6 @@
 SELECT charge_id,
        invoice_id,
-       member_id,
+       paid_by_member_id,
        gym_id,
        payment_method_type,
        card_last_four

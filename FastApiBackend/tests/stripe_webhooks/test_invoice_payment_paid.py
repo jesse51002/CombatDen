@@ -52,7 +52,7 @@ async def _fetch_charge_for_invoice(db_pool, stripe_invoice_id: str) -> dict | N
     async with db_pool.session() as session:
         result = await session.execute(
             text(
-                "SELECT kind, status, amount, currency, member_id, "
+                "SELECT kind, status, amount, currency, paid_by_member_id, "
                 "payment_method_type, card_last_four, stripe_charge_id "
                 "FROM member_charges "
                 "WHERE invoice_id = ("
@@ -114,7 +114,7 @@ async def test_card_payment_records_succeeded_charge(
     assert charge["payment_method_type"] is None
     assert charge["card_last_four"] is None
     assert charge["stripe_charge_id"] == fake_charge_id_for(pi)
-    assert str(charge["member_id"]) == str(webhook_fixture.member_id)
+    assert str(charge["paid_by_member_id"]) == str(webhook_fixture.member_id)
 
 
 async def test_card_payment_captures_method_and_last_four(

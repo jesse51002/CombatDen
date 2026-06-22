@@ -48,7 +48,7 @@ class InvoicePaymentPaidHandler:
     """Apply an ``invoice_payment.paid`` event to the CRM database.
 
     Inserts a ``member_charges`` ``payment`` row (``status='succeeded'``) for
-    the payment, attributed to the same member as the recorded invoice. The
+    the payment, attributed to the invoice's payer (``paid_by_member_id``). The
     Stripe charge id is resolved from the payment's PaymentIntent
     (``latest_charge``); an out-of-band payment is recorded as cash with no
     charge id. The PaymentIntent retrieve is a read-only Stripe call on the
@@ -128,7 +128,7 @@ class InvoicePaymentPaidHandler:
             session,
             invoice_payment=invoice_payment,
             gym_id=gym_id,
-            member_id=invoice_row["member_id"],
+            paid_by_member_id=invoice_row["paid_by_member_id"],
             invoice_id=invoice_row["invoice_id"],
             amount=amount_paid,
             stripe_charge_id=charge_id,
@@ -222,7 +222,7 @@ class InvoicePaymentPaidHandler:
         *,
         invoice_payment: dict[str, Any],
         gym_id: UUID,
-        member_id: UUID,
+        paid_by_member_id: UUID,
         invoice_id: UUID,
         amount: int,
         stripe_charge_id: str | None,
@@ -239,7 +239,7 @@ class InvoicePaymentPaidHandler:
             {
                 "invoice_id": str(invoice_id),
                 "gym_id": str(gym_id),
-                "member_id": str(member_id),
+                "paid_by_member_id": str(paid_by_member_id),
                 "kind": CHARGE_KIND_PAYMENT,
                 "status": CHARGE_STATUS_SUCCEEDED,
                 "amount": amount,

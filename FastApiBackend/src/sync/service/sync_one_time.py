@@ -253,6 +253,24 @@ class PaymentSyncOneTime:
             for item in plan.items
         ]
 
+    @staticmethod
+    def _beneficiaries(plan: OneTimeInvoicePlan) -> list[UUID]:
+        """Distinct beneficiary owners across the invoice's membership lines.
+
+        The payer (``plan.payer.member_id``) bills one or more memberships,
+        each owned by a member (often the payer, sometimes a linked child).
+        ``paid_for`` is that distinct owner set, in line order, so a one-time
+        membership invoice surfaces on each beneficiary's page (not just the
+        payer's).
+        """
+        seen: set[UUID] = set()
+        out: list[UUID] = []
+        for item in plan.items:
+            if item.member_id not in seen:
+                seen.add(item.member_id)
+                out.append(item.member_id)
+        return out
+
     async def _execute(
         self,
         plan: OneTimeInvoicePlan,
@@ -263,17 +281,18 @@ class PaymentSyncOneTime:
         """Charge the assembled invoice — one price line per membership.
 
         One consolidated invoice on the payer's customer (invoice-level metadata =
-        payer + gym; per-membership provenance rides each line's ``stripe_item_id``
-        after the writeback). ``line_item_ids`` / ``line_amounts`` come back in the
-        same order as ``plan.items``. When ``payment_method_id`` is set the payment
-        service attaches that one-off card, charges it, and detaches it — the
-        payer's saved default is never touched.
+        the payer + the distinct beneficiary owners + gym; per-membership provenance
+        rides each line's ``stripe_item_id`` after the writeback). ``line_item_ids``
+        / ``line_amounts`` come back in the same order as ``plan.items``. When
+        ``payment_method_id`` is set the payment service attaches that one-off card,
+        charges it, and detaches it — the payer's saved default is never touched.
         """
         request = PaymentsInvoicePaymentCreateRequest(
             stripe_customer_id=plan.payer.stripe_customer_id,
             items=self._to_item_specs(plan),
             metadata=StripeMembershipOneTimeMetadata(
-                member_id=plan.payer.member_id,
+                paid_by_member_id=plan.payer.member_id,
+                paid_for=self._beneficiaries(plan),
                 gym_id=plan.payer.gym_id,
             ),
             paid_out_of_band=paid_with_cash,

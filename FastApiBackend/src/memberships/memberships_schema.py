@@ -230,6 +230,12 @@ class MemberMembershipsChargeCardRequest(BaseModel):
     member themselves or their linked parent (chosen in the CRM).
     ``paid_cash`` routes the invoice through the out-of-band
     payment path instead of charging the card.
+
+    ``payment_method_id`` is an optional one-off card (a Stripe
+    PaymentMethod ``pm_...``) entered at checkout: it is attached to
+    the payer's customer, billed once, then detached — the payer's
+    saved default is left untouched. ``None`` bills the payer's saved
+    default. It is card-only (mutually exclusive with ``paid_cash``).
     """
 
     member_id: UUID
@@ -238,7 +244,18 @@ class MemberMembershipsChargeCardRequest(BaseModel):
     amount_cents: int = Field(..., gt=0)
     reason: str = Field(..., min_length=1)
     paid_cash: bool = False
+    payment_method_id: str | None = None
     idempotency_key: UUID
+
+    @model_validator(mode="after")
+    def _validate_payment(self) -> Self:
+        """A one-off card and a cash settle are mutually exclusive."""
+        if self.payment_method_id is not None and self.paid_cash:
+            raise ValueError(
+                "payment_method_id cannot be combined with paid_cash "
+                "(a cash settle charges no card)",
+            )
+        return self
 
 
 class MemberMembershipsRefundRequest(BaseModel):

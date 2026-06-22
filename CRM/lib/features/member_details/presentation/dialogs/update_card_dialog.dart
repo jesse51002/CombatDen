@@ -36,11 +36,19 @@ class UpdateCardDialog extends StatefulWidget {
   /// from any launching page.
   final String? targetMemberId;
 
+  /// Whether to offer the destructive "Remove card" action.
+  /// True on the member profile (the management surface);
+  /// false in checkout flows (start / charge), where removing
+  /// a card mid-purchase makes no sense — removal lives on the
+  /// profile, behind its own confirmation.
+  final bool allowRemove;
+
   const UpdateCardDialog({
     super.key,
     required this.memberName,
     this.card,
     this.targetMemberId,
+    this.allowRemove = true,
   });
 
   /// Resolves `true` only when the user taps "Remove card";
@@ -50,6 +58,7 @@ class UpdateCardDialog extends StatefulWidget {
     required String memberName,
     CardOnFile? card,
     String? targetMemberId,
+    bool allowRemove = true,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -60,6 +69,7 @@ class UpdateCardDialog extends StatefulWidget {
           memberName: memberName,
           card: card,
           targetMemberId: targetMemberId,
+          allowRemove: allowRemove,
         ),
       ),
     );
@@ -161,10 +171,13 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
         secondaryOnPressed: _submitting
             ? null
             : () => Navigator.of(context).pop(),
-        destructiveLabel: card == null ? null : 'Remove card',
-        destructiveOnPressed: _submitting
+        destructiveLabel: (card == null || !widget.allowRemove)
             ? null
-            : () => Navigator.of(context).pop(true),
+            : 'Remove card',
+        destructiveOnPressed:
+            (_submitting || !widget.allowRemove)
+                ? null
+                : () => Navigator.of(context).pop(true),
       ),
     );
   }

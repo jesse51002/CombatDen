@@ -6,6 +6,7 @@ import 'package:crm/features/member_details/data/models/charge_status.dart';
 import 'package:crm/features/member_details/data/models/invoice_applied_discount.dart';
 import 'package:crm/features/member_details/data/models/invoice_attempt.dart';
 import 'package:crm/features/member_details/data/models/line_item_record.dart';
+import 'package:crm/features/member_details/data/models/paid_for_member.dart';
 
 part 'payment_record.g.dart';
 
@@ -45,6 +46,12 @@ class PaymentRecord extends Equatable {
   final String paidByLastName;
   final String? paidByPhotoUrl;
 
+  /// Who the bill was FOR — the beneficiaries. Usually just the payer
+  /// themselves; a charge for someone else (or a family invoice) lists
+  /// each beneficiary, so it shows on each of their pages.
+  @JsonKey(defaultValue: [])
+  final List<PaidForMember> paidFor;
+
   @JsonKey(defaultValue: [])
   final List<LineItemRecord> lineItems;
   @JsonKey(defaultValue: [])
@@ -70,6 +77,7 @@ class PaymentRecord extends Equatable {
     this.paidByFirstName = '',
     this.paidByLastName = '',
     this.paidByPhotoUrl,
+    this.paidFor = const [],
     this.lineItems = const [],
     this.appliedDiscounts = const [],
     this.attempts = const [],
@@ -111,6 +119,7 @@ class PaymentRecord extends Equatable {
         paidByFirstName,
         paidByLastName,
         paidByPhotoUrl,
+        paidFor,
         lineItems,
         appliedDiscounts,
         attempts,

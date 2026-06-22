@@ -93,7 +93,8 @@ def _custom_pm_request(customer_id, price_id, pm_id):
         items=[PaymentsInvoiceItemSpec(stripe_price_id=price_id)],
         idempotency_key=str(uuid4()),
         metadata=StripeMembershipOneTimeMetadata(
-            member_id=uuid4(),
+            paid_by_member_id=uuid4(),
+            paid_for=[uuid4()],
             gym_id=uuid4(),
             plan_id=uuid4(),
         ),
@@ -151,7 +152,8 @@ def test_custom_pm_and_cash_are_mutually_exclusive():
             items=[PaymentsInvoiceItemSpec(amount=1000, description="x")],
             idempotency_key=str(uuid4()),
             metadata=StripeAdHocInvoiceMetadata(
-                member_id=uuid4(),
+                paid_by_member_id=uuid4(),
+                paid_for=[uuid4()],
                 gym_id=uuid4(),
             ),
             payment_method_id="pm_x",

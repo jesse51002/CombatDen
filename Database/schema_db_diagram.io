@@ -493,7 +493,8 @@ Table member_membership_applied_discounts_unfiltered {
 Table member_invoices {
   invoice_id uuid [primary key, default: `uuid_generate_v4()`]
   gym_id uuid [not null]
-  member_id uuid [not null]
+  paid_by_member_id uuid [not null, note: 'the payer (billed customer)']
+  paid_for jsonb [not null, default: '[]', note: 'beneficiary member_id list']
   status varchar [not null, default: 'open', note: 'enum: open | paid']
   total_amount integer [not null, note: 'CHECK >= 0']
   currency char(3) [not null, default: 'usd']
@@ -504,8 +505,9 @@ Table member_invoices {
 
   indexes {
     (invoice_id, gym_id) [unique]
-    (member_id, gym_id, invoice_time)
+    (paid_by_member_id, gym_id, invoice_time)
     (gym_id, invoice_time)
+    paid_for [type: gin]
   }
 }
 
@@ -544,7 +546,7 @@ Table member_charges {
   charge_id uuid [primary key, default: `uuid_generate_v4()`]
   invoice_id uuid [not null]
   gym_id uuid [not null]
-  member_id uuid [not null]
+  paid_by_member_id uuid [not null, note: 'the payer (billed customer)']
   kind varchar [not null, note: 'enum: payment | refund']
   status varchar [not null, note: 'enum: pending | succeeded | failed']
   amount integer [not null, note: 'signed: payment >= 0, refund <= 0']
@@ -559,7 +561,7 @@ Table member_charges {
 
   indexes {
     invoice_id
-    (member_id, gym_id, charge_time)
+    (paid_by_member_id, gym_id, charge_time)
     (gym_id, charge_time)
   }
 }
@@ -596,7 +598,7 @@ Ref: member_membership_applied_discounts_unfiltered.value_id > gym_discount_valu
 Ref: gym_discount_values_unfiltered.discount_id > gym_discounts_unfiltered.discount_id
 Ref: gym_discount_values_unfiltered.gym_id > gyms.gym_id
 
-Ref: member_invoices.member_id > members.member_id
+Ref: member_invoices.paid_by_member_id > members.member_id
 Ref: member_invoices.gym_id > gyms.gym_id
 
 Ref: member_invoice_line_items.invoice_id > member_invoices.invoice_id
@@ -609,7 +611,7 @@ Ref: member_invoice_applied_discounts.discount_id > gym_discounts_unfiltered.dis
 
 Ref: member_charges.invoice_id > member_invoices.invoice_id
 Ref: member_charges.gym_id > gyms.gym_id
-Ref: member_charges.member_id > members.member_id
+Ref: member_charges.paid_by_member_id > members.member_id
 Ref: member_charges.refunds_charge_id > member_charges.charge_id
 
 Ref: stripe_webhook_events.gym_id > gyms.gym_id

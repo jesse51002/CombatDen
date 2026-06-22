@@ -879,8 +879,10 @@ async def mark_membership_paid_cash(
         "with ``reason`` as the description and line-item name, "
         "then pays it. If ``paid_cash`` is true the invoice is "
         "marked paid out of band instead of charging the card. "
-        "The existing ``invoice.paid`` webhook writes the CRM "
-        "invoice and charge rows."
+        "An optional ``payment_method_id`` bills a one-off card "
+        "(attached, billed once, detached) instead of the payer's "
+        "saved default. The existing ``invoice.paid`` webhook writes "
+        "the CRM invoice and charge rows."
     ),
     responses={
         204: {"description": "Card charged successfully"},
