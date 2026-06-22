@@ -79,13 +79,7 @@ class MembersPaymentsService:
                 quantity=li.get("quantity") or 1,
                 stripe_product_id=li.get("stripe_product_id"),
                 item_id=(UUID(li["item_id"]) if li.get("item_id") else None),
-                owner_member_id=(
-                    UUID(li["owner_member_id"])
-                    if li.get("owner_member_id")
-                    else None
-                ),
-                owner_first_name=li.get("owner_first_name"),
-                owner_last_name=li.get("owner_last_name"),
+                owner_label=li.get("owner_label"),
             )
             for li in (row["line_items"] or [])
         ]

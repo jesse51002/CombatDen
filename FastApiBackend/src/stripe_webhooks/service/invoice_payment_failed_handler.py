@@ -114,9 +114,10 @@ class InvoicePaymentFailedHandler:
         A failed renewal is always a subscription invoice, so attribution
         comes from the line → ``member_memberships`` match: the payer is
         the membership's ``paid_by_member_id`` (one per Stripe sub), and
-        ``paid_for`` is the distinct set of owners billed on the invoice.
+        ``paid_for`` is the distinct set of owners billed on the invoice
+        (a consolidated line maps to several co-owners, all collected).
         """
-        membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
+        membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
         paid_by_member_id: UUID | None = None
         paid_for: list[UUID] = []
         seen: set[UUID] = set()
@@ -131,15 +132,13 @@ class InvoicePaymentFailedHandler:
                     "gym_id": str(gym_id),
                 },
             )
-            row = result.mappings().fetchone()
-            if row is None:
-                continue
-            owner = UUID(str(row["member_id"]))
-            if owner not in seen:
-                seen.add(owner)
-                paid_for.append(owner)
-            if paid_by_member_id is None:
-                paid_by_member_id = UUID(str(row["paid_by_member_id"]))
+            for row in result.mappings().all():
+                owner = UUID(str(row["member_id"]))
+                if owner not in seen:
+                    seen.add(owner)
+                    paid_for.append(owner)
+                if paid_by_member_id is None:
+                    paid_by_member_id = UUID(str(row["paid_by_member_id"]))
         return paid_by_member_id, paid_for
 
     async def _upsert_invoice(

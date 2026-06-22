@@ -191,11 +191,13 @@ class InvoicePaidHandler:
         ``member_memberships``: the payer is the membership's
         ``paid_by_member_id`` (one Stripe subscription = one payer), and
         ``paid_for`` is the distinct set of owners billed on the invoice.
+        A consolidated line (quantity > 1) maps to **multiple** memberships
+        (co-owners on one price), so every owner is collected — not just one.
         """
         if is_one_time:
             return self._attribution_from_metadata(raw_metadata, invoice)
 
-        membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
+        membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
         paid_by_member_id: UUID | None = None
         paid_for: list[UUID] = []
         seen: set[UUID] = set()
@@ -210,15 +212,13 @@ class InvoicePaidHandler:
                     "gym_id": str(gym_id),
                 },
             )
-            row = result.mappings().fetchone()
-            if row is None:
-                continue
-            owner = UUID(str(row["member_id"]))
-            if owner not in seen:
-                seen.add(owner)
-                paid_for.append(owner)
-            if paid_by_member_id is None:
-                paid_by_member_id = UUID(str(row["paid_by_member_id"]))
+            for row in result.mappings().all():
+                owner = UUID(str(row["member_id"]))
+                if owner not in seen:
+                    seen.add(owner)
+                    paid_for.append(owner)
+                if paid_by_member_id is None:
+                    paid_by_member_id = UUID(str(row["paid_by_member_id"]))
         return paid_by_member_id, paid_for, paid_by_member_id
 
     @staticmethod
@@ -298,7 +298,7 @@ class InvoicePaidHandler:
         lines (proration credits) are skipped — the schema requires
         ``amount >= 0``.
         """
-        membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
+        membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
         insert_sql = load_sql(SQL_DIR / "member_invoice_line_item_insert.sql")
 
         for line in self._lines(invoice):
@@ -320,10 +320,14 @@ class InvoicePaidHandler:
                         "gym_id": str(gym_id),
                     },
                 )
-                row = result.mappings().fetchone()
-                if row is not None:
+                rows = result.mappings().all()
+                if rows:
+                    # The line is ONE row with ONE item_id; a consolidated item
+                    # has several co-owners, so store the first as the line's
+                    # representative. The read path resolves every co-owner of
+                    # the line for display via the shared stripe_item.
                     item_type = LINE_ITEM_TYPE_MEMBERSHIP
-                    item_id = str(row["item_id"])
+                    item_id = str(rows[0]["item_id"])
 
             await session.execute(
                 text(insert_sql),
@@ -361,7 +365,7 @@ class InvoicePaidHandler:
         invoice: dict[str, Any],
         gym_id: UUID,
     ) -> None:
-        membership_sql = load_sql(SQL_DIR / "membership_by_stripe_item.sql")
+        membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
         update_sql = load_sql(SQL_DIR / "member_memberships_update_payment_dates.sql")
         gym_timezone = await get_gym_timezone(session, gym_id)
         paid_at_ts = invoice.get("status_transitions", {}).get("paid_at") or invoice.get("created")
@@ -383,8 +387,8 @@ class InvoicePaidHandler:
                     "gym_id": str(gym_id),
                 },
             )
-            row = result.mappings().fetchone()
-            if row is None:
+            rows = result.mappings().all()
+            if not rows:
                 logger.warning(
                     "invoice.paid: no membership for stripe_item_id=%s gym_id=%s",
                     stripe_item_id,
@@ -399,15 +403,18 @@ class InvoicePaidHandler:
                 else None
             )
 
-            await session.execute(
-                text(update_sql),
-                {
-                    "item_id": str(row["item_id"]),
-                    "gym_id": str(gym_id),
-                    "last_paid_date": last_paid_date,
-                    "next_due_date": next_due_date,
-                },
-            )
+            # A consolidated item bills several co-owners — advance the dates
+            # on every one, not just the first.
+            for row in rows:
+                await session.execute(
+                    text(update_sql),
+                    {
+                        "item_id": str(row["item_id"]),
+                        "gym_id": str(gym_id),
+                        "last_paid_date": last_paid_date,
+                        "next_due_date": next_due_date,
+                    },
+                )
 
     async def _settle_once_discounts(
         self,

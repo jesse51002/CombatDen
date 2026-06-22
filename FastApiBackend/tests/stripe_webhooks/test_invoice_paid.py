@@ -21,6 +21,8 @@ from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
 from src.stripe_webhooks.stripe_webhooks_exceptions import (
     SubscriptionItemPendingError,
 )
+from tests.helpers.cleanup import delete_member_data
+from tests.helpers.data_factory import create_member
 from tests.stripe_webhooks.event_builders import make_invoice_paid_event
 
 
@@ -245,6 +247,67 @@ async def test_invoice_paid_advances_two_different_period_ends(
 
     # Proximity sanity — the delta is roughly a month.
     assert dates_2["next_due_date"] - dates_1["next_due_date"] >= timedelta(days=28)
+
+
+async def test_invoice_paid_consolidated_item_records_all_co_owners(
+    stripe_webhooks_service,
+    db_pool,
+    stripe_account_id,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    webhook_fixture,
+):
+    """A consolidated Stripe item (quantity > 1) is shared by MULTIPLE
+    memberships — co-owners billed at one price. ``paid_for`` must list
+    EVERY owner, not just the first.
+
+    Regression: the resolver used ``LIMIT 1`` on the stripe-item lookup, so
+    a second person on a shared item was silently dropped from paid_for (and
+    their payment dates never advanced).
+    """
+    # A second member with a membership on the SAME stripe_item_id (co-owner),
+    # cloning the fixture membership's payer/plan/price.
+    co_owner = await create_member(
+        db_pool, stripe_client, gym_id, connect_opts,
+        first_name="Co", last_name="Owner",
+    )
+    try:
+        async with db_pool.session() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO member_memberships_unfiltered ("
+                    " member_id, paid_by_member_id, gym_id, plan_id, price_id,"
+                    " start_date, stripe_item_id, total_price, "
+                    " stripe_sync_status) "
+                    "SELECT :member_id, paid_by_member_id, gym_id, plan_id, "
+                    " price_id, CURRENT_DATE, stripe_item_id, total_price, "
+                    " 'applied' "
+                    "FROM member_memberships_unfiltered WHERE item_id = :base"
+                ),
+                {
+                    "member_id": str(co_owner.member_id),
+                    "base": str(webhook_fixture.item_id),
+                },
+            )
+            await session.commit()
+
+        event = make_invoice_paid_event(
+            stripe_account_id=stripe_account_id,
+            stripe_item_ids=[webhook_fixture.stripe_item_id],
+            amount_paid=10000,
+        )
+        await stripe_webhooks_service.handle_event(event)
+
+        invoice = await _fetch_invoice(db_pool, event["data"]["object"]["id"])
+        assert invoice is not None
+        paid_for = {str(m) for m in invoice["paid_for"]}
+        assert paid_for == {
+            str(webhook_fixture.member_id),
+            str(co_owner.member_id),
+        }, f"paid_for must list BOTH co-owners, got {paid_for}"
+    finally:
+        await delete_member_data(db_pool, co_owner.member_id)
 
 
 async def test_invoice_paid_one_time_payment_records_invoice(

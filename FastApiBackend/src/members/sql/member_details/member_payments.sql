@@ -125,9 +125,11 @@ SELECT
          WHERE inv2.invoice_id = rc.invoice_id),
         '[]'::jsonb
     ) AS paid_for,
-    -- Each line's owner (the member the line is FOR): a membership line
-    -- resolves item_id -> member_memberships -> members; a custom/ad-hoc line
-    -- has no item_id, so the owner is NULL. Lets the UI show "Plan · Owner".
+    -- Each line's owner(s) — the member(s) the line is FOR, comma-joined.
+    -- A membership line can be a CONSOLIDATED item (quantity > 1) shared by
+    -- several co-owners at one price, so resolve the line's membership ->
+    -- its Stripe item -> EVERY membership on that item -> their members (not
+    -- just one). A custom/ad-hoc line has no item_id, so owner_label is NULL.
     COALESCE(
         (SELECT jsonb_agg(jsonb_build_object(
             'line_item_id', li.line_item_id,
@@ -137,15 +139,21 @@ SELECT
             'quantity', li.quantity,
             'stripe_product_id', li.stripe_product_id,
             'item_id', li.item_id,
-            'owner_member_id', owner.member_id,
-            'owner_first_name', owner.first_name,
-            'owner_last_name', owner.last_name
+            'owner_label', (
+                SELECT string_agg(
+                    DISTINCT om.first_name || ' ' || om.last_name, ', ')
+                FROM member_memberships_unfiltered lm
+                JOIN member_memberships_unfiltered sib
+                    ON sib.stripe_item_id = lm.stripe_item_id
+                   AND sib.gym_id = rc.gym_id
+                JOIN members om
+                    ON om.member_id = sib.member_id
+                   AND om.gym_id = rc.gym_id
+                WHERE lm.item_id = li.item_id
+                  AND lm.gym_id = rc.gym_id
+            )
          ) ORDER BY li.line_item_id)
          FROM member_invoice_line_items li
-         LEFT JOIN member_memberships_unfiltered mm
-             ON mm.item_id = li.item_id AND mm.gym_id = rc.gym_id
-         LEFT JOIN members owner
-             ON owner.member_id = mm.member_id AND owner.gym_id = rc.gym_id
          WHERE li.invoice_id = rc.invoice_id),
         '[]'::jsonb
     ) AS line_items,

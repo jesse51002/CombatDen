@@ -115,14 +115,14 @@ class PaymentInvoiceDialog extends StatelessWidget {
   }
 
   /// "{Plan} ×{qty}" with who the line was FOR appended ("· {names}").
-  /// A membership line carries its own single owner; a custom/ad-hoc line has
-  /// none, so it falls back to the invoice's beneficiaries (`paid_for`,
-  /// excluding the payer) — which can be **multiple** people on one line.
+  /// A membership line carries all its co-owners (`ownerLabel`, already
+  /// comma-joined); a custom/ad-hoc line has none, so it falls back to the
+  /// invoice's beneficiaries (`paid_for`, excluding the payer) — either way
+  /// this can be **multiple** people on one line.
   String _lineDescription(LineItemRecord l) {
     final base = l.quantity > 1 ? '${l.name} ×${l.quantity}' : l.name;
-    final forWhom = l.ownerName.isNotEmpty
-        ? l.ownerName
-        : _beneficiaryNames.join(', ');
+    final owner = l.ownerLabel ?? '';
+    final forWhom = owner.isNotEmpty ? owner : _beneficiaryNames.join(', ');
     return forWhom.isNotEmpty ? '$base · $forWhom' : base;
   }
 

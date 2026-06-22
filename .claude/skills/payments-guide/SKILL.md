@@ -474,7 +474,9 @@ into the `stripe_event_payload JSONB` column on every invoice/charge write.
   else is `custom`. Negative (proration-credit) lines are skipped (`amount >= 0`).
 - **`member_memberships`** — for each billed sub-item, updates `last_paid_date` +
   `next_due_date` (`member_memberships_update_payment_dates.sql`, writes to
-  `member_memberships_unfiltered`). **Skipped for one-time invoices.**
+  `member_memberships_unfiltered`) on **every** membership the item bills — a
+  consolidated item (quantity > 1) maps to several co-owners, all advanced.
+  **Skipped for one-time invoices.**
 
 It does **not** write `member_charges` — the succeeded charge is recorded by the
 `invoice_payment.paid` handler (below). This handler owns the bill; that one owns
@@ -487,9 +489,11 @@ the legacy single `member_id` (the bill owner, with `paid_for=[owner]`) when tho
 keys are absent, so a one-time **membership** invoice still attributes to its bill
 owner until that build path stamps the split. **Subscription** invoices resolve by
 matching each line's `subscription_item` (`line_subscription_item` →
-`membership_by_stripe_item.sql`) against `member_memberships`: the payer is the
+`memberships_by_stripe_item.sql`) against `member_memberships`: the payer is the
 membership's `paid_by_member_id` (one Stripe sub = one payer) and `paid_for` is the
-**distinct set of owners** billed on the invoice. `settle_payer` is the payer for
+**distinct set of owners** billed on the invoice — gathering **all** memberships
+per item (a consolidated quantity>1 item is shared by several co-owners; the SQL
+is intentionally **un-`LIMIT`ed** so the second person isn't dropped). `settle_payer` is the payer for
 subscription invoices (drives the once-discount settle) and `None` for one-time. If
 no payer resolves **and** lines reference sub-items, it raises
 **`SubscriptionItemPendingError`** (the create-flow hasn't committed
@@ -773,7 +777,7 @@ is the exception: the refund endpoint above is its one caller.
 - **Webhook SQL:** `src/stripe_webhooks/sql/` (`gym_by_stripe_account.sql`,
   `stripe_webhook_events_insert.sql`, `member_invoice_upsert.sql`,
   `member_charge_insert.sql`, `member_charge_by_stripe_charge_id.sql`,
-  `member_invoice_by_stripe_id.sql`, `membership_by_stripe_item.sql`,
+  `member_invoice_by_stripe_id.sql`, `memberships_by_stripe_item.sql`,
   `member_memberships_update_payment_dates.sql`, `gyms_set_onboarding_status.sql`).
 - **Schema:** `Database/supabase/schemas/member_invoices.sql`,
   `member_charges.sql`, `member_invoice_line_items.sql`,
