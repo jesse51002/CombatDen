@@ -12,3 +12,6 @@ SELECT item_id,
 FROM member_memberships
 WHERE stripe_item_id = :stripe_item_id
   AND gym_id = :gym_id
+-- Stable order so the line-item's representative item_id (rows[0]) is
+-- deterministic across runs, not left to Postgres heap order.
+ORDER BY member_id

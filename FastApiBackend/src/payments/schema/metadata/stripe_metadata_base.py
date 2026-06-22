@@ -15,7 +15,7 @@ typed field on the relevant subclass.
 from __future__ import annotations
 
 import json
-from typing import Any, get_origin
+from typing import Any, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict
 
@@ -54,9 +54,9 @@ class BaseStripeMetadata(BaseModel):
 
         Bool fields (discovered via ``cls.model_fields``) are coerced
         from Stripe's ``"true"`` / ``"false"`` string convention; list
-        fields are JSON-decoded back from their array string (the inverse
-        of ``to_stripe_metadata``). Other fields are handed to Pydantic
-        for validation/coercion.
+        fields (incl. ``list[T] | None``) are JSON-decoded back from their
+        array string (the inverse of ``to_stripe_metadata``). Other fields
+        are handed to Pydantic for validation/coercion.
         """
         raw = raw or {}
         normalized: dict[str, Any] = dict(raw)
@@ -67,6 +67,14 @@ class BaseStripeMetadata(BaseModel):
             value = normalized[field_name]
             if annotation is bool or annotation == (bool | None):
                 normalized[field_name] = str(value).lower() == "true"
-            elif get_origin(annotation) is list and isinstance(value, str):
+            elif isinstance(value, str) and cls._is_list_field(annotation):
                 normalized[field_name] = json.loads(value)
         return cls.model_validate(normalized)
+
+    @staticmethod
+    def _is_list_field(annotation: Any) -> bool:
+        """True for a ``list[...]`` field, including ``list[...] | None``."""
+        return any(
+            get_origin(candidate) is list
+            for candidate in (annotation, *get_args(annotation))
+        )

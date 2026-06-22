@@ -9,6 +9,7 @@ import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/charge_card_payment_step.dart';
+import 'package:crm/features/member_details/presentation/dialogs/member_detail_bloc_settle.dart';
 import 'package:crm/features/member_details/presentation/dialogs/charge_card_success_view.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/one_time_card_dialog.dart';
@@ -167,24 +168,6 @@ class _ChargeCardDialogState extends State<ChargeCardDialog> {
     }
   }
 
-  /// Waits for an in-flight bloc mutation (the card edit) to land
-  /// before re-reading the payer detail.
-  Future<void> _awaitBlocSettle(int tokenBefore) async {
-    try {
-      await _bloc.stream
-          .firstWhere(
-            (st) =>
-                st is MemberDetailLoaded &&
-                !st.isMutating &&
-                (st.refreshToken != tokenBefore ||
-                    st.actionError != null),
-          )
-          .timeout(const Duration(seconds: 30));
-    } catch (_) {
-      // Timed out / closed — fall through to the refetch.
-    }
-  }
-
   void _onPayerSelected(StartMembershipParticipant p) {
     if (p.memberId == _payer.memberId) return;
     setState(() {
@@ -216,7 +199,7 @@ class _ChargeCardDialogState extends State<ChargeCardDialog> {
       allowRemove: false,
     );
     if (!mounted) return;
-    await _awaitBlocSettle(tokenBefore);
+    await awaitMemberDetailSettle(_bloc, tokenBefore);
     if (!mounted) return;
     _memberDetails.remove(_payer.memberId);
     await _loadPayerDetail();
@@ -401,7 +384,7 @@ class _ChargeProcessing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 160,
+      height: DesignConstants.dialogProcessingHeight,
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

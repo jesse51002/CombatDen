@@ -251,4 +251,41 @@ void main() {
           .having((s) => s.actionError, 'actionError', null),
     ],
   );
+
+  // The charge (money) succeeded; only the follow-up member-detail refresh
+  // failed. That must NOT surface as a charge error — otherwise staff see a
+  // "failed" charge and re-charge a card that was already billed.
+  blocTest<MemberDetailBloc, MemberDetailState>(
+    'charge_card success stands when the post-charge refresh throws '
+    '(no false chargeCardError)',
+    build: () {
+      // chargeCard succeeds (the setUp stub); the refresh throws.
+      when(() => repo.getMemberDetail(any()))
+          .thenThrow(Exception('member refresh unreachable'));
+      return MemberDetailBloc(repository: repo);
+    },
+    seed: () => MemberDetailLoaded(
+      member: buildMember(),
+      allMembers: const [],
+      filteredMembers: const [],
+    ),
+    act: (bloc) => bloc.add(
+      const ChargeCardRequested(
+        amount: 1000,
+        description: 'Tee',
+        paidByMemberId: childId,
+      ),
+    ),
+    expect: () => [
+      isA<MemberDetailLoaded>()
+          .having((s) => s.isChargingCard, 'isChargingCard', true),
+      isA<MemberDetailLoaded>()
+          .having((s) => s.isChargingCard, 'isChargingCard', false)
+          .having((s) => s.chargeCardSuccess, 'chargeCardSuccess', 1)
+          .having((s) => s.chargeCardError, 'chargeCardError', null),
+    ],
+    verify: (_) {
+      verify(() => repo.getMemberDetail(any())).called(1);
+    },
+  );
 }

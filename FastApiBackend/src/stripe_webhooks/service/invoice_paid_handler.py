@@ -15,6 +15,9 @@ from src.shared.gym_timezone import get_gym_timezone, stripe_ts_to_gym_date
 from src.shared.paying_member_lock import LockBusyError
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
+from src.stripe_webhooks.service.stripe_attribution import (
+    resolve_subscription_attribution,
+)
 from src.stripe_webhooks.service.stripe_invoice_fields import (
     invoice_metadata,
     line_subscription_item,
@@ -197,28 +200,10 @@ class InvoicePaidHandler:
         if is_one_time:
             return self._attribution_from_metadata(raw_metadata, invoice)
 
-        membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
-        paid_by_member_id: UUID | None = None
-        paid_for: list[UUID] = []
-        seen: set[UUID] = set()
-        for line in self._lines(invoice):
-            stripe_item_id = line_subscription_item(line)
-            if not stripe_item_id:
-                continue
-            result = await session.execute(
-                text(membership_sql),
-                {
-                    "stripe_item_id": stripe_item_id,
-                    "gym_id": str(gym_id),
-                },
-            )
-            for row in result.mappings().all():
-                owner = UUID(str(row["member_id"]))
-                if owner not in seen:
-                    seen.add(owner)
-                    paid_for.append(owner)
-                if paid_by_member_id is None:
-                    paid_by_member_id = UUID(str(row["paid_by_member_id"]))
+        paid_by_member_id, paid_for = await resolve_subscription_attribution(
+            session, self._lines(invoice), gym_id
+        )
+        # On a subscription invoice the payer is also the once-settle target.
         return paid_by_member_id, paid_for, paid_by_member_id
 
     @staticmethod

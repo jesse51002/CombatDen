@@ -479,27 +479,39 @@ class MemberDetailBloc
         paidCash: event.paidCash,
         idempotencyKey: const Uuid().v4(),
       );
-      final refreshed = await _repository.getMemberDetail(
-        s.member.memberId,
-      );
-      emit(s.copyWith(
-        member: refreshed,
-        isChargingCard: false,
-        chargeCardSuccess: s.chargeCardSuccess + 1,
-        refreshToken: s.refreshToken + 1,
-      ));
     } catch (e, stackTrace) {
-      log(
-        'Charge card failed',
-        error: e,
-        stackTrace: stackTrace,
-      );
+      log('Charge card failed', error: e, stackTrace: stackTrace);
       emit(s.copyWith(
         isChargingCard: false,
         chargeCardError: e is ServerException
             ? (e.detail ?? e.message)
             : e.toString(),
       ));
+      return;
+    }
+
+    // The charge SUCCEEDED — money is taken. Commit success now so a failure
+    // of the follow-up refresh can never make a real charge look failed (which
+    // would tempt staff to re-charge). The refresh is best-effort: it just
+    // updates the member behind the still-open success step; Payment History
+    // refetches independently off the bumped refreshToken.
+    emit(s.copyWith(
+      isChargingCard: false,
+      chargeCardSuccess: s.chargeCardSuccess + 1,
+      refreshToken: s.refreshToken + 1,
+    ));
+    try {
+      final refreshed = await _repository.getMemberDetail(s.member.memberId);
+      final current = state;
+      if (current is MemberDetailLoaded) {
+        emit(current.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Charge succeeded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
     }
   }
 

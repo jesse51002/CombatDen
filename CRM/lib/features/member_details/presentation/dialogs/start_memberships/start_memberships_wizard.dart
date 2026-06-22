@@ -19,6 +19,7 @@ import 'package:crm/features/member_details/data/models/proration_behavior.dart'
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
+import 'package:crm/features/member_details/presentation/dialogs/member_detail_bloc_settle.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/one_time_card_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
@@ -573,7 +574,7 @@ class _StartMembershipsWizardState
       candidates: candidates,
     );
     if (linkedId == null || !mounted) return;
-    await _awaitBlocSettle(tokenBefore);
+    await awaitMemberDetailSettle(_bloc, tokenBefore);
     if (!mounted) return;
     await _loadPayerDetail(alsoSelect: linkedId);
   }
@@ -596,29 +597,9 @@ class _StartMembershipsWizardState
       allowRemove: false,
     );
     if (!mounted) return;
-    await _awaitBlocSettle(tokenBefore);
+    await awaitMemberDetailSettle(_bloc, tokenBefore);
     if (!mounted) return;
     await _loadPayerDetail();
-  }
-
-  /// Waits for an in-flight bloc mutation (link / card
-  /// update) to land before re-reading the payer detail.
-  Future<void> _awaitBlocSettle(int tokenBefore) async {
-    try {
-      await _bloc.stream
-          .firstWhere(
-            (st) =>
-                st is MemberDetailLoaded &&
-                !st.isMutating &&
-                (st.refreshToken != tokenBefore ||
-                    st.actionError != null),
-          )
-          .timeout(const Duration(seconds: 30));
-    } catch (_) {
-      // Timed out / stream closed — fall through to the
-      // refetch; worst case the family list is briefly
-      // stale.
-    }
   }
 
   // ----- Footer -----

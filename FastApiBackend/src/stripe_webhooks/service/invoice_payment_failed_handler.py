@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.sql_loader import load_sql
 from src.stripe_webhooks import SQL_DIR
+from src.stripe_webhooks.service.stripe_attribution import (
+    resolve_subscription_attribution,
+)
 from src.stripe_webhooks.service.stripe_invoice_fields import (
     line_subscription_item,
 )
@@ -112,34 +115,15 @@ class InvoicePaymentFailedHandler:
         invoice's subscription-item lines.
 
         A failed renewal is always a subscription invoice, so attribution
-        comes from the line → ``member_memberships`` match: the payer is
-        the membership's ``paid_by_member_id`` (one per Stripe sub), and
+        comes from the line → ``member_memberships`` match (the same shared
+        resolver the ``invoice.paid`` handler uses): the payer is the
+        membership's ``paid_by_member_id`` (one per Stripe sub), and
         ``paid_for`` is the distinct set of owners billed on the invoice
         (a consolidated line maps to several co-owners, all collected).
         """
-        membership_sql = load_sql(SQL_DIR / "memberships_by_stripe_item.sql")
-        paid_by_member_id: UUID | None = None
-        paid_for: list[UUID] = []
-        seen: set[UUID] = set()
-        for line in self._lines(invoice):
-            stripe_item_id = line_subscription_item(line)
-            if not stripe_item_id:
-                continue
-            result = await session.execute(
-                text(membership_sql),
-                {
-                    "stripe_item_id": stripe_item_id,
-                    "gym_id": str(gym_id),
-                },
-            )
-            for row in result.mappings().all():
-                owner = UUID(str(row["member_id"]))
-                if owner not in seen:
-                    seen.add(owner)
-                    paid_for.append(owner)
-                if paid_by_member_id is None:
-                    paid_by_member_id = UUID(str(row["paid_by_member_id"]))
-        return paid_by_member_id, paid_for
+        return await resolve_subscription_attribution(
+            session, self._lines(invoice), gym_id
+        )
 
     async def _upsert_invoice(
         self,
