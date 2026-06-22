@@ -6,7 +6,7 @@
 SELECT
     c.charge_id,
     c.invoice_id,
-    c.member_id AS charge_member_id,
+    c.paid_by_member_id AS charge_paid_by_member_id,
     c.gym_id,
     c.kind,
     c.status,

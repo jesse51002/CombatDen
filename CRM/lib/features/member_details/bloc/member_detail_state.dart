@@ -52,6 +52,23 @@ class MemberDetailLoaded extends MemberDetailState {
   /// the wizard is open.
   final String? startError;
 
+  /// True while the charge-card POST is in flight. Separate
+  /// from [isMutating] so the charge dialog owns its own
+  /// loading + success treatment (mirrors
+  /// [isStartingMemberships]).
+  final bool isChargingCard;
+
+  /// Monotonic token bumped once a charge succeeds. The charge
+  /// dialog watches it to flip to its success step; the
+  /// confirmation is rendered from the dialog's own retained
+  /// amount / card / reason, so no result payload is needed.
+  final int chargeCardSuccess;
+
+  /// The last charge-card failure. Kept off [actionError] so
+  /// the screen-level error dialog doesn't swallow it while
+  /// the charge dialog is open (mirrors [startError]).
+  final String? chargeCardError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -70,6 +87,9 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isStartingMemberships = false,
     this.startResult,
     this.startError,
+    this.isChargingCard = false,
+    this.chargeCardSuccess = 0,
+    this.chargeCardError,
     this.refreshToken = 0,
   });
 
@@ -95,6 +115,10 @@ class MemberDetailLoaded extends MemberDetailState {
     MemberMembershipsStartResponse? startResult,
     String? startError,
     bool clearStartOutcome = false,
+    bool? isChargingCard,
+    int? chargeCardSuccess,
+    String? chargeCardError,
+    bool clearChargeOutcome = false,
     int? refreshToken,
   }) {
     return MemberDetailLoaded(
@@ -117,6 +141,12 @@ class MemberDetailLoaded extends MemberDetailState {
       startError: clearStartOutcome
           ? null
           : (startError ?? this.startError),
+      isChargingCard: isChargingCard ?? this.isChargingCard,
+      chargeCardSuccess:
+          chargeCardSuccess ?? this.chargeCardSuccess,
+      chargeCardError: clearChargeOutcome
+          ? null
+          : (chargeCardError ?? this.chargeCardError),
       refreshToken: refreshToken ?? this.refreshToken,
     );
   }
@@ -133,6 +163,9 @@ class MemberDetailLoaded extends MemberDetailState {
         isStartingMemberships,
         startResult,
         startError,
+        isChargingCard,
+        chargeCardSuccess,
+        chargeCardError,
         refreshToken,
       ];
 }

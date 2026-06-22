@@ -6,7 +6,9 @@ Stripe customer — the member themselves or their linked parent (the
 self-or-parent authorization rule). The existing ``invoice.paid`` webhook
 persists the CRM invoice and charge rows once Stripe settles the
 payment. When ``paid_cash=True`` the invoice is marked paid out of
-band in Stripe instead of charging the card.
+band in Stripe instead of charging the card. When a one-off
+``payment_method_id`` is supplied, it is attached to the payer's
+customer, billed once, then detached (the saved default is untouched).
 """
 
 from __future__ import annotations
@@ -72,7 +74,11 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
         PAYER's own Stripe customer, validates the request's ``gym_id``
         matches, then delegates to the payment service to create +
         finalize + pay the invoice. When ``paid_cash=True`` the invoice
-        is paid out of band (no card charge).
+        is paid out of band (no card charge). When
+        ``payment_method_id`` is set, that one-off card is attached to
+        the payer's customer, billed once, then detached (the saved
+        default is untouched); otherwise the payer's saved default is
+        billed.
 
         Args:
             request: Charge-card request (beneficiary + explicit payer).
@@ -98,7 +104,11 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
         )
 
         metadata = StripeAdHocInvoiceMetadata(
-            member_id=request.member_id,
+            # The payer is billed; the charge is FOR the request's member
+            # (the beneficiary) — usually the same person, but a parent can
+            # pay for a child. Both surface on the right page via the webhook.
+            paid_by_member_id=request.paid_by_member_id,
+            paid_for=[request.member_id],
             gym_id=payer.gym_id,
         )
 
@@ -114,6 +124,10 @@ class MemberMembershipsChargeCard(MemberMembershipsBase):
             # The reason lands on BOTH the invoice header and the line item.
             description=request.reason,
             paid_out_of_band=request.paid_cash,
+            # An optional one-off card: attached to the payer's customer,
+            # billed once, then detached (the saved default is untouched).
+            # None bills the payer's saved default.
+            payment_method_id=request.payment_method_id,
             idempotency_key=str(request.idempotency_key),
         )
 

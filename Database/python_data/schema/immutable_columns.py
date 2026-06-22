@@ -342,7 +342,8 @@ MEMBER_MEMBERSHIP_APPLIED_DISCOUNTS: frozenset[str] = frozenset(
 MEMBER_INVOICES: frozenset[str] = frozenset(
     {
         "invoice_id",  # PK, auto-generated UUID
-        "member_id",  # identity FK
+        "paid_by_member_id",  # identity FK — the payer
+        "paid_for",  # beneficiary member_id list, set by backend at record time
         "gym_id",  # identity FK, per-gym resource
         "invoice_time",  # auto-generated timestamp
         # Stripe columns — always set by backend
@@ -368,7 +369,7 @@ MEMBER_CHARGES: frozenset[str] = frozenset(
     {
         "charge_id",  # PK, auto-generated UUID
         "invoice_id",  # identity FK
-        "member_id",  # identity FK
+        "paid_by_member_id",  # identity FK — the payer
         "gym_id",  # identity FK, per-gym resource
         "kind",  # set at creation
         "charge_time",  # auto-generated timestamp

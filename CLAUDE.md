@@ -4,6 +4,16 @@
 
 When a decision has more than one reasonable answer, ask and wait for the user's explicit response. Never assume, recommend-and-proceed, or defer the choice unilaterally. Presenting researched options is encouraged; making the choice for the user is not.
 
+## Don't silently inherit existing problems
+
+When you find a bug, anti-pattern, wrong behavior, or stale rule that **already exists** in the codebase — a pre-existing gap, a flawed pattern other code follows, a confusing UX, a data inconsistency — **do not quietly follow, mirror, or accept it.** Surface it and propose a fix, even when it's strictly "out of scope" for the task at hand.
+
+- **Flag it plainly** the moment you notice it: what's wrong, where, and why it matters.
+- **Propose a concrete fix** and let the user decide (per *No assumptions*: present, then wait). Don't unilaterally expand scope — but don't bury the issue either.
+- **Default to fixing the root cause, not inheriting it.** If new code would have to reproduce an existing bug to stay "consistent" with the old code, that is the signal to fix the root cause — not to copy the bug forward.
+
+"It's pre-existing," "the other code does it too," or "it already worked this way" is **never** a reason to ship the same problem again or to gloss over it. Naming the problem and offering the fix is the default; silently accepting it is the failure mode this rule exists to prevent.
+
 ## Skills
 
 All skills live in one place: `.claude/skills/` at the codebase root. This is the single, centralized place to look — skills for every subsystem (FastApi backend, CRM, services, data models) live here together, not scattered in per-system `.claude/` folders. Before starting any task, check this directory for a relevant skill and use it.

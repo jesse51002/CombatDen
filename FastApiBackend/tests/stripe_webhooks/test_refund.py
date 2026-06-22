@@ -57,7 +57,7 @@ async def _fetch_refund_rows(db_pool, gym_id) -> list[dict]:
         result = await session.execute(
             text(
                 "SELECT charge_id, kind, status, amount, currency, "
-                "stripe_refund_id, refunds_charge_id, member_id "
+                "stripe_refund_id, refunds_charge_id, paid_by_member_id "
                 "FROM member_charges "
                 "WHERE gym_id = :gym_id AND kind = 'refund' "
                 "ORDER BY charge_time"
@@ -112,7 +112,7 @@ async def test_refund_created_records_refund(
     assert r["currency"] == "usd"
     assert r["stripe_refund_id"] is not None
     assert str(r["refunds_charge_id"]) == str(parent_charge_id)
-    assert str(r["member_id"]) == str(webhook_fixture.member_id)
+    assert str(r["paid_by_member_id"]) == str(webhook_fixture.member_id)
 
 
 async def test_two_partial_refunds_record_two_rows(

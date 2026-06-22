@@ -16,7 +16,11 @@ CREATE TABLE member_charges (
         CONSTRAINT fk_charge_invoice
         REFERENCES member_invoices(invoice_id) ON DELETE CASCADE,
     gym_id UUID NOT NULL CONSTRAINT fk_charge_gym REFERENCES gyms(gym_id),
-    member_id UUID NOT NULL,
+
+    -- The payer: whose Stripe customer/card was billed (mirrors the invoice's
+    -- paid_by_member_id). The beneficiary set lives on the invoice (paid_for),
+    -- not here. A refund row copies its parent payment's payer.
+    paid_by_member_id UUID NOT NULL,
 
     kind charge_kind NOT NULL,
     status charge_status NOT NULL,
@@ -44,8 +48,8 @@ CREATE TABLE member_charges (
         FOREIGN KEY (invoice_id, gym_id)
         REFERENCES member_invoices (invoice_id, gym_id),
 
-    CONSTRAINT fk_charge_member_gym
-        FOREIGN KEY (member_id, gym_id)
+    CONSTRAINT fk_charge_payer_gym
+        FOREIGN KEY (paid_by_member_id, gym_id)
         REFERENCES members (member_id, gym_id),
 
     -- Payment rules
@@ -72,8 +76,8 @@ CREATE TABLE member_charges (
 CREATE INDEX idx_charges_invoice
     ON member_charges (invoice_id);
 
-CREATE INDEX idx_charges_member_gym_time
-    ON member_charges (member_id, gym_id, charge_time DESC);
+CREATE INDEX idx_charges_payer_gym_time
+    ON member_charges (paid_by_member_id, gym_id, charge_time DESC);
 
 CREATE INDEX idx_charges_gym_time
     ON member_charges (gym_id, charge_time DESC);

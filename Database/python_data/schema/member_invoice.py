@@ -13,7 +13,11 @@ class InvoiceStatus(StrEnum):
 class MemberInvoiceCreate(SeedModel):
     invoice_id: UUID
     gym_id: UUID
-    member_id: UUID
+    # The payer (whose customer/card was billed) + the beneficiaries the
+    # bill was FOR (usually just [payer]; a parent billing a child's
+    # membership lists the child). There is no single conflated member_id.
+    paid_by_member_id: UUID
+    paid_for: list[UUID]
     status: InvoiceStatus = InvoiceStatus.open
     total_amount: int
     currency: str = "usd"

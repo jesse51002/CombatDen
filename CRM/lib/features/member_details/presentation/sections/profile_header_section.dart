@@ -193,14 +193,7 @@ class _ActionButtonsRow extends StatelessWidget {
           label: 'Charge Card',
           onPressed: () => ChargeCardDialog.show(
             context: context,
-            memberName: member.fullName,
-            payers: _chargePayersFor(member),
-            // A linked member defaults to their parent
-            // paying (the common case); staff can switch
-            // to self-pay in the dialog.
-            initialPayerId: member.linkedToAccount ??
-                member.memberId,
-            card: member.cardOnFile,
+            member: member,
           ),
         ),
         _ActionButton(
@@ -246,28 +239,6 @@ class _ActionButtonsRow extends StatelessWidget {
     );
   }
 
-  /// The valid payers for an ad-hoc charge: the member
-  /// themselves (self-pay) plus their linked parent.
-  List<ChargeCardPayer> _chargePayersFor(
-    MemberDetailResponse member,
-  ) {
-    final parentId = member.linkedToAccount;
-    final parents = member.linkedAccounts
-        .where((a) => a.memberId == parentId);
-    return [
-      ChargeCardPayer(
-        memberId: member.memberId,
-        name: '${member.fullName} (self)',
-      ),
-      if (parentId != null)
-        ChargeCardPayer(
-          memberId: parentId,
-          name: parents.isEmpty
-              ? 'Linked account'
-              : parents.first.fullName,
-        ),
-    ];
-  }
 }
 
 class _ActionButton extends StatelessWidget {

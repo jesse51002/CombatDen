@@ -391,19 +391,25 @@ class MembersBillingDetailService:
             "membership_status"
         ] in (MembershipDbStatus.active, MembershipDbStatus.frozen)
 
-    def _build_card_on_file(self, row: dict) -> BillingCardOnFile | None:
-        """Build the BillingCardOnFile for the viewed member's own card.
+    def _build_card_on_file(self, member_row: dict) -> BillingCardOnFile | None:
+        """Build the BillingCardOnFile for the member's OWN saved card.
+
+        Per-payer billing: each member's ``card_on_file`` is THEIR OWN
+        saved card (their own Stripe customer's default), never a linked
+        parent's — so a payer-scoped read (the charge dialog / start
+        wizard fetching the chosen payer's billing) shows the card that
+        will actually be charged. A member with no own card reads None.
 
         Args:
-            row: The viewed member's profile row.
+            member_row: The queried member's OWN profile row.
 
         Returns:
             BillingCardOnFile when the member has a saved card, else None.
         """
-        brand = row["card_brand"]
-        last_four = row["card_last_four"]
-        exp_month = row["card_exp_month"]
-        exp_year = row["card_exp_year"]
+        brand = member_row["card_brand"]
+        last_four = member_row["card_last_four"]
+        exp_month = member_row["card_exp_month"]
+        exp_year = member_row["card_exp_year"]
         if brand is None or last_four is None or exp_month is None or exp_year is None:
             return None
         return BillingCardOnFile(

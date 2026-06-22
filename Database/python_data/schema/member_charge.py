@@ -20,7 +20,9 @@ class MemberChargeCreate(SeedModel):
     charge_id: UUID
     invoice_id: UUID
     gym_id: UUID
-    member_id: UUID
+    # The payer (mirrors the invoice's paid_by_member_id); the beneficiary
+    # set lives on the invoice (paid_for), not here.
+    paid_by_member_id: UUID
     kind: ChargeKind
     status: ChargeStatus
     amount: int  # signed: payment >= 0, refund <= 0

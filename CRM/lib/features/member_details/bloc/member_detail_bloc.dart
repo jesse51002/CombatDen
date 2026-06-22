@@ -48,6 +48,7 @@ class MemberDetailBloc
     on<RemoveDiscountsRequested>(_onRemoveDiscounts);
 
     on<ChargeCardRequested>(_onChargeCard);
+    on<ChargeCardOutcomeCleared>(_onChargeCardOutcomeCleared);
     on<RefundChargeRequested>(_onRefundCharge);
   }
 
@@ -448,24 +449,79 @@ class MemberDetailBloc
 
   // ----- Charges / refunds -----
 
+  /// The charge dialog's mutation. Unlike [_runMutation] the
+  /// outcome must reach the dialog's in-dialog success / error
+  /// steps, so it lands on `isChargingCard` /
+  /// `chargeCardSuccess` / `chargeCardError` instead of
+  /// `isMutating` / `actionError` — the screen-level overlay
+  /// and error dialog must not fire while the dialog is open
+  /// (mirrors [_onStartMemberships]). Member detail is
+  /// re-fetched on success so Payment History refreshes behind
+  /// the still-open success step.
   Future<void> _onChargeCard(
     ChargeCardRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
-    await _runMutation(
-      actionLabel: 'Charge card',
-      emit: emit,
-      action: () => _repository.chargeCard(
+    emit(s.copyWith(
+      isChargingCard: true,
+      clearChargeOutcome: true,
+    ));
+    try {
+      await _repository.chargeCard(
         memberId: s.member.memberId,
         paidByMemberId: event.paidByMemberId,
         gymId: s.member.gymId,
         amount: event.amount,
         reason: event.description,
+        paymentMethodId: event.paymentMethodId,
+        paidCash: event.paidCash,
         idempotencyKey: const Uuid().v4(),
-      ),
-    );
+      );
+    } catch (e, stackTrace) {
+      log('Charge card failed', error: e, stackTrace: stackTrace);
+      emit(s.copyWith(
+        isChargingCard: false,
+        chargeCardError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    // The charge SUCCEEDED — money is taken. Commit success now so a failure
+    // of the follow-up refresh can never make a real charge look failed (which
+    // would tempt staff to re-charge). The refresh is best-effort: it just
+    // updates the member behind the still-open success step; Payment History
+    // refetches independently off the bumped refreshToken.
+    emit(s.copyWith(
+      isChargingCard: false,
+      chargeCardSuccess: s.chargeCardSuccess + 1,
+      refreshToken: s.refreshToken + 1,
+    ));
+    try {
+      final refreshed = await _repository.getMemberDetail(s.member.memberId);
+      final current = state;
+      if (current is MemberDetailLoaded) {
+        emit(current.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Charge succeeded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  void _onChargeCardOutcomeCleared(
+    ChargeCardOutcomeCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearChargeOutcome: true));
   }
 
   Future<void> _onRefundCharge(

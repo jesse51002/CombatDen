@@ -1,15 +1,19 @@
 -- Enable Row Level Security
 ALTER TABLE member_invoices ENABLE ROW LEVEL SECURITY;
 
--- Policy: Users can read their own invoices OR gym staff can read invoices from their gyms
+-- Policy: a member reads an invoice they PAID (paid_by_member_id) or that was
+-- FOR them (their id is in paid_for); gym staff read their gym's invoices.
 CREATE POLICY "Users and gym staff can view invoices"
     ON member_invoices
     FOR SELECT
     USING (
         EXISTS (
             SELECT 1 FROM members
-            WHERE members.member_id = member_invoices.member_id
-            AND members.user_id = auth.uid()
+            WHERE members.user_id = auth.uid()
+            AND (
+                members.member_id = member_invoices.paid_by_member_id
+                OR member_invoices.paid_for ? members.member_id::text
+            )
         )
         OR is_gym_admin_or_owner(member_invoices.gym_id)
     );

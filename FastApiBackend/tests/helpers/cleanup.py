@@ -81,8 +81,11 @@ async def delete_member_data(
     removed before the memberships and the member row.
     """
     async with db_pool.session() as session:
+        # Billing rows are keyed by the PAYER (paid_by_member_id, the FK that
+        # blocks the member delete); the beneficiary set lives on the invoice's
+        # paid_for JSONB (no FK), so deleting by payer is what frees the row.
         await session.execute(
-            text("DELETE FROM member_charges WHERE member_id = :id"),
+            text("DELETE FROM member_charges WHERE paid_by_member_id = :id"),
             {"id": str(member_id)},
         )
         # Invoice line items can reference THIS member's memberships from
@@ -99,7 +102,7 @@ async def delete_member_data(
             {"id": str(member_id)},
         )
         await session.execute(
-            text("DELETE FROM member_invoices WHERE member_id = :id"),
+            text("DELETE FROM member_invoices WHERE paid_by_member_id = :id"),
             {"id": str(member_id)},
         )
         await session.execute(
