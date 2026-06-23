@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 
+from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit, PlanType
 
 from src.payments.schema.metadata.stripe_customer_metadata import (
@@ -13,6 +14,7 @@ from src.payments.schema.metadata.stripe_membership_one_time_metadata import (
 from src.payments.schema.metadata.stripe_product_metadata import (
     StripeProductMetadata,
 )
+from src.payments.schema.payments_discount_schema import PaymentsCouponValue
 from src.payments.schema.payments_members_schema import (
     PaymentsCustomerCreateRequest,
 )
@@ -348,3 +350,122 @@ async def test_refund_partial_payment(
     )
     assert refund.amount == 2000
     assert refund.status == "succeeded"
+
+
+# ── Mixed (percent + dollar) discounts on ONE invoice item ──────
+
+
+async def _once_coupon(discount_service, account, created, *, pct=None, dollars=None):
+    """Find-or-create a once-mode coupon and register it for cleanup."""
+    cid = await discount_service.find_or_create_for_value(
+        PaymentsCouponValue(
+            discount_mode=DiscountMode.once,
+            percentage_off=pct,
+            dollar_off=dollars,
+        ),
+        account,
+    )
+    created.track_coupon(cid)
+    return cid
+
+
+async def test_preview_invoice_payment_mixed_discounts(
+    payment_service,
+    members_service,
+    membership_service,
+    discount_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+    created,
+):
+    """Percent + dollar coupons on ONE invoice line (qty 4): both apply.
+
+    Regression guard for the mixed-discount false alarm. A percent and a dollar
+    value never merge into a single coupon, so this is the first case that sends
+    TWO item-level coupons on a one-time line. Stripe applies both and reports
+    each in ``discount_amounts``, so ``post_discount_amount`` nets correctly:
+    100.00 gross, 20% -> 80.00, then -5.00 -> 75.00.
+    """
+    customer_id = await _customer_with_card(
+        members_service, stripe_client, stripe_account_id, connect_opts, created,
+    )
+    price_id = await _one_time_price(
+        membership_service, stripe_account_id, created, unit_amount=2500,
+    )
+    pct = await _once_coupon(
+        discount_service, stripe_account_id, created, pct=20.0,
+    )
+    dol = await _once_coupon(
+        discount_service, stripe_account_id, created, dollars=500,
+    )
+
+    resp = await payment_service.preview_invoice_payment(
+        PaymentsInvoicePaymentPreviewRequest(
+            stripe_customer_id=customer_id,
+            items=[
+                PaymentsInvoiceItemSpec(
+                    stripe_price_id=price_id,
+                    quantity=4,
+                    coupon_ids=[pct, dol],
+                ),
+            ],
+        ),
+        stripe_account_id,
+    )
+
+    assert resp.amount_due == 7500
+    assert len(resp.lines) == 1
+    assert resp.lines[0].amount == 10000
+    assert resp.lines[0].discounted_amount == 7500
+
+
+async def test_create_invoice_payment_mixed_discounts(
+    payment_service,
+    members_service,
+    membership_service,
+    discount_service,
+    stripe_client,
+    stripe_account_id,
+    connect_opts,
+    created,
+):
+    """The CHARGE with mixed coupons (qty 4): Stripe charges the net AND
+    ``_order_lines`` records the net line amount (the ``total_price`` mirror)."""
+    customer_id = await _customer_with_card(
+        members_service, stripe_client, stripe_account_id, connect_opts, created,
+    )
+    price_id = await _one_time_price(
+        membership_service, stripe_account_id, created, unit_amount=2500,
+    )
+    pct = await _once_coupon(
+        discount_service, stripe_account_id, created, pct=20.0,
+    )
+    dol = await _once_coupon(
+        discount_service, stripe_account_id, created, dollars=500,
+    )
+
+    resp = await payment_service.create_invoice_payment(
+        PaymentsInvoicePaymentCreateRequest(
+            stripe_customer_id=customer_id,
+            items=[
+                PaymentsInvoiceItemSpec(
+                    stripe_price_id=price_id,
+                    quantity=4,
+                    coupon_ids=[pct, dol],
+                ),
+            ],
+            idempotency_key=str(uuid4()),
+            metadata=StripeMembershipOneTimeMetadata(
+                paid_by_member_id=uuid4(),
+                paid_for=[uuid4()],
+                gym_id=uuid4(),
+                plan_id=uuid4(),
+            ),
+        ),
+        stripe_account_id,
+    )
+
+    assert resp.status == "paid"
+    assert resp.amount_paid == 7500
+    assert resp.line_amounts == [7500]
