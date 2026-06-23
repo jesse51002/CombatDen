@@ -10,11 +10,11 @@ structural, not copy-paste. Any failure rejects the whole request with
 nothing written and nothing billed.
 
 Order: payer → link/gym state → price/plan rows → intra-request recurring
-duplicate check → per-member existing-recurring check → discounts. The
-request model only rejected an empty list — intra-request duplicates are
-allowed (N identical one_time / trial items is how a member buys N copies of
-a pack); the recurring "one per plan in one request" rule is enforced here,
-where plan types are known.
+duplicate check → recurring-quantity check → per-member existing-recurring
+check → discounts. The request model rejects duplicate ``(member_id, price_id)``
+items (buying N of a pack is ONE item with ``quantity = N``, never N duplicate
+items); the recurring "two on the same plan, at different prices, in one
+request" rule is enforced here, where plan types are known.
 """
 
 from __future__ import annotations

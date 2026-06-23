@@ -26,6 +26,7 @@ self-FK cleared — ``delete_member_data`` handles both per member).
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 from schema.task import ProrationBehavior
 from sqlalchemy import text
 
@@ -658,27 +659,31 @@ async def test_phase_a_custom_discount_by_id_rejects(
         await delete_member_data(db_pool, victim.member_id)
 
 
-def test_request_allows_duplicate_member_price_pairs(gym_id):
-    """3f: duplicate (member_id, price_id) items are ACCEPTED at construction.
+def test_request_rejects_duplicate_member_price_pairs(gym_id):
+    """3f: duplicate (member_id, price_id) items are REJECTED at construction.
 
-    N identical one_time / trial items is how a member buys N copies of the
-    same pack, so the request model no longer rejects duplicate pairs. The
-    recurring "one per plan in one request" rule moved to
-    MemberMembershipsStartValidation, where plan types are known
-    (see tests/memberships/test_start_request_schema.py for that guard).
+    Buying N of the same pack is ONE item with quantity = N, never N duplicate
+    items. (Two DIFFERENT prices of the same plan stay distinct items; the
+    recurring "one per plan in one request" guard lives in
+    MemberMembershipsStartValidation, where plan types are known — see
+    tests/memberships/test_start_request_schema.py.)
     """
     member_id = uuid4()
     price_id = uuid4()
-    request = MemberMembershipsStartRequest(
-        payer_member_id=member_id,
-        gym_id=gym_id,
-        idempotency_key=uuid4(),
-        memberships=[
-            MemberMembershipsStartItem(member_id=member_id, price_id=price_id),
-            MemberMembershipsStartItem(member_id=member_id, price_id=price_id),
-        ],
-    )
-    assert len(request.memberships) == 2
+    with pytest.raises(ValidationError):
+        MemberMembershipsStartRequest(
+            payer_member_id=member_id,
+            gym_id=gym_id,
+            idempotency_key=uuid4(),
+            memberships=[
+                MemberMembershipsStartItem(
+                    member_id=member_id, price_id=price_id,
+                ),
+                MemberMembershipsStartItem(
+                    member_id=member_id, price_id=price_id,
+                ),
+            ],
+        )
 
 
 # ── Helper: stand a member up on a good card, then swap to a failing one ──

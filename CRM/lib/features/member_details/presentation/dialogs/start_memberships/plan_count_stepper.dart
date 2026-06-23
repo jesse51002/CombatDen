@@ -4,9 +4,9 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 
 /// Quantity stepper for a checked one_time / trial plan.
-/// The count multiplies the displayed class allowance and
-/// maps to N identical wire items (N copies of the pack) when
-/// the request is built. No upper cap.
+/// The count multiplies the displayed class allowance and is
+/// sent as the wire item's `quantity` (ONE item, not N copies)
+/// when the request is built. No upper cap.
 class PlanCountStepper extends StatelessWidget {
   final int count;
   final ValueChanged<int> onChanged;

@@ -60,6 +60,22 @@ def test_select_prefers_trial_over_recurring():
     assert chosen is trial
 
 
+def test_select_prefers_one_time_over_recurring():
+    """A limited one_time pack drains before the unlimited recurring plan.
+
+    The recurring plan always has capacity, so if it ranked first a member's
+    paid pack would never get consumed — limited packs must win.
+    """
+    pack = _usage(uuid4(), PlanType.one_time, class_count=10, classes_used=0)
+    recurring = _usage(
+        uuid4(), PlanType.recurring, class_count=None, classes_used=0,
+    )
+    eligible = {pack.plan_id, recurring.plan_id}
+
+    chosen = select_best_membership([recurring, pack], eligible)
+    assert chosen is pack
+
+
 def test_select_skips_ineligible_plan():
     """A plan not in the eligible set is never chosen even with capacity."""
     trial = _usage(uuid4(), PlanType.trial, class_count=5, classes_used=0)

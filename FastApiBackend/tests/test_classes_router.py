@@ -114,6 +114,7 @@ def test_checkin_rejected_when_no_plan_covers(
     body = resp.json()
     assert body["log_id"] is None
     assert body["chosen_plan_id"] is None
+    assert body["chosen_item_id"] is None
     assert body["already_checked_in"] is False
 
 

@@ -18,8 +18,8 @@ from src.classes.schema.classes_schema import CheckinMembershipBreakdown
 
 _PLAN_TYPE_PRIORITY: dict[PlanType, int] = {
     PlanType.trial: 0,
-    PlanType.recurring: 1,
-    PlanType.one_time: 2,
+    PlanType.one_time: 1,
+    PlanType.recurring: 2,
 }
 
 _UNLIMITED = float("inf")
@@ -30,10 +30,13 @@ def _sort_memberships_by_priority(
 ) -> list[MembershipUsage]:
     """Order candidates by selection priority.
 
-    Type (trial < recurring < one_time), then class_count ascending
-    (unlimited last), then the OLDEST pack first (start_date, then item_id) so
-    two packs on the same plan drain one fully before the next — matching the
-    attendance attribution order.
+    Type (trial < one_time < recurring) — drain the limited trial / one_time
+    packs before the unlimited recurring plan, so a pack a member paid for
+    actually gets used (an unlimited recurring plan always has capacity and
+    would otherwise win every time). Then class_count ascending (unlimited
+    last), then the OLDEST pack first (start_date, then item_id) so two packs on
+    the same plan drain one fully before the next — matching the attendance
+    attribution order.
     """
     return sorted(
         memberships,
