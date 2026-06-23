@@ -47,7 +47,7 @@ class MemberDetailBloc
     on<UpdateCardRequested>(_onUpdateCard);
     on<UnlinkPaymentRequested>(_onUnlinkPayment);
     on<LinkParentRequested>(_onLinkParent);
-    on<UnlinkParentRequested>(_onUnlinkParent);
+    on<RemoveAuthorizationRequested>(_onRemoveAuthorization);
 
     on<StartMembershipsRequested>(_onStartMemberships);
     on<StartMembershipsCleared>(
@@ -270,16 +270,16 @@ class MemberDetailBloc
     );
   }
 
-  Future<void> _onUnlinkParent(
-    UnlinkParentRequested event,
+  Future<void> _onRemoveAuthorization(
+    RemoveAuthorizationRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
     await _runMutation(
-      actionLabel: 'De-authorize payer',
+      actionLabel: 'Remove authorization',
       emit: emit,
-      action: () => _repository.unlinkMemberAccount(
+      action: () => _repository.removeAuthorization(
         event.memberId,
         event.payerMemberId,
       ),

@@ -1,24 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
-import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
-import 'package:crm/features/member_details/presentation/dialogs/link_parent_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/unlink_parent_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/payment_authorizations_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 
 /// Authorized-payer block for the profile header.
 ///
-/// Many-to-many: a member can have many authorized payers (who may
-/// pay for them) AND be authorized to pay for many others. Both
-/// directions render here — "Authorized Payers" (with per-payer
-/// Remove + an Add that runs the sign-waiver flow) and "Authorized
-/// to pay for" (display-only chips; manage each from that member's
-/// own page). Each chip navigates via [onLinkedAccountTap].
+/// At-a-glance, read-only: shows both directions of the member's payment
+/// authorizations — "Authorized Payers" (who may pay for them) and "Authorized
+/// to pay for" (who they may pay for). Editing (add / remove) happens in the
+/// "Modify Payment Authorizations" popup. Each chip navigates via
+/// [onLinkedAccountTap].
 class LinkedAccountsSection extends StatelessWidget {
   final MemberDetailResponse member;
   final ValueChanged<String>? onLinkedAccountTap;
@@ -40,12 +34,6 @@ class LinkedAccountsSection extends StatelessWidget {
             title: 'Authorized Payers',
             accounts: member.authorizedPayers,
             onTap: onLinkedAccountTap,
-            onRemove: (account) => UnlinkParentDialog.show(
-              context: context,
-              payeeMemberId: member.memberId,
-              payerMemberId: account.memberId,
-              payerName: account.fullName,
-            ),
           ),
         if (member.authorizedToPayFor.isNotEmpty)
           _Roster(
@@ -57,41 +45,26 @@ class LinkedAccountsSection extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 360),
           child: AppOutlineButton(
             fullWidth: true,
-            text: 'Add Authorized Payer',
+            text: 'Modify Payment Authorizations',
             borderRadius: DesignConstants.radiusSmall,
-            onPressed: () => _openLink(context),
+            onPressed: () => PaymentAuthorizationsDialog.show(context),
           ),
         ),
       ],
     );
   }
-
-  void _openLink(BuildContext context) {
-    final state = context.read<MemberDetailBloc>().state;
-    if (state is! MemberDetailLoaded) return;
-    LinkParentDialog.show(
-      context: context,
-      subjectMemberId: member.memberId,
-      subjectName: member.fullName,
-      candidates: state.allMembers,
-    );
-  }
 }
 
-/// A titled roster of authorized-payer chips. [onRemove], when set,
-/// adds a Remove affordance to each chip (the Authorized Payers
-/// direction); display-only otherwise.
+/// A titled, read-only roster of authorized-payer chips.
 class _Roster extends StatelessWidget {
   final String title;
   final List<LinkedAccount> accounts;
   final ValueChanged<String>? onTap;
-  final ValueChanged<LinkedAccount>? onRemove;
 
   const _Roster({
     required this.title,
     required this.accounts,
     this.onTap,
-    this.onRemove,
   });
 
   @override
@@ -109,11 +82,8 @@ class _Roster extends StatelessWidget {
               .map(
                 (a) => _LinkedAccountChip(
                   account: a,
-                  onTap: onTap != null
-                      ? () => onTap!(a.memberId)
-                      : null,
-                  onRemove:
-                      onRemove != null ? () => onRemove!(a) : null,
+                  onTap:
+                      onTap != null ? () => onTap!(a.memberId) : null,
                 ),
               )
               .toList(),
@@ -126,12 +96,10 @@ class _Roster extends StatelessWidget {
 class _LinkedAccountChip extends StatelessWidget {
   final LinkedAccount account;
   final VoidCallback? onTap;
-  final VoidCallback? onRemove;
 
   const _LinkedAccountChip({
     required this.account,
     this.onTap,
-    this.onRemove,
   });
 
   @override
@@ -168,8 +136,7 @@ class _LinkedAccountChip extends StatelessWidget {
               child: account.photoUrl == null
                   ? Text(
                       account.firstName.isNotEmpty
-                          ? account.firstName[0]
-                              .toUpperCase()
+                          ? account.firstName[0].toUpperCase()
                           : '?',
                       style: DesignConstants.pSmall.copyWith(
                         color: DesignConstants.text,
@@ -187,23 +154,6 @@ class _LinkedAccountChip extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (onRemove != null)
-              Semantics(
-                label: 'Remove ${account.fullName}',
-                button: true,
-                child: InkWell(
-                  onTap: onRemove,
-                  borderRadius: BorderRadius.circular(
-                    DesignConstants.radiusBig,
-                  ),
-                  child: Icon(
-                    Symbols.close_sharp,
-                    size: DesignConstants.iconSizeSmall,
-                    weight: DesignConstants.iconWeight,
-                    color: DesignConstants.text2nd,
-                  ),
-                ),
-              ),
           ],
         ),
       ),

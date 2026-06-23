@@ -21,6 +21,7 @@ import 'package:crm/features/member_details/data/models/members_management_updat
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
+import 'package:crm/features/member_details/data/models/remove_authorization_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
@@ -208,17 +209,34 @@ class MemberRepository {
     );
   }
 
-  /// `DELETE /api/v1/members/{member_id}/link?payer_member_id=…` — remove
-  /// [payerMemberId] as an authorized payer for the member. A pure DB change
-  /// (the signature audit row is kept); the endpoint returns no body, so
-  /// callers refetch member detail afterward.
-  Future<void> unlinkMemberAccount(
+  /// `POST /api/v1/members/{member_id}/link/remove/preview` — what removing
+  /// [payerMemberId] as a payer for [memberId] would cancel (pair-scoped): the
+  /// member's live recurring memberships that payer funds + the monthly that
+  /// stops. Read-only; shown before confirming.
+  Future<RemoveAuthorizationPreview> previewRemoveAuthorization(
     String memberId,
     String payerMemberId,
   ) async {
-    await _apiClient.delete(
-      '/api/v1/members/$memberId/link'
-      '?payer_member_id=$payerMemberId',
+    final response = await _apiClient.post(
+      '/api/v1/members/$memberId/link/remove/preview',
+      data: {'payer_member_id': payerMemberId},
+    );
+    return RemoveAuthorizationPreview.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `POST /api/v1/members/{member_id}/link/remove` — cancels [memberId]'s live
+  /// recurring memberships that [payerMemberId] funds, then de-authorizes the
+  /// pair (the signature audit row is kept). The endpoint returns no body, so
+  /// callers refetch member detail afterward.
+  Future<void> removeAuthorization(
+    String memberId,
+    String payerMemberId,
+  ) async {
+    await _apiClient.post(
+      '/api/v1/members/$memberId/link/remove',
+      data: {'payer_member_id': payerMemberId},
     );
   }
 

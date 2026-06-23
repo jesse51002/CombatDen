@@ -116,8 +116,9 @@ class _StartLinkMemberDialogState
         .toList();
   }
 
-  /// Select step → check eligibility, fetch the payee's gym default
-  /// waiver, then advance to the sign step.
+  /// Select step → fetch the payee's gym default waiver and advance
+  /// to the sign step. No eligibility check — adding is unconditional;
+  /// the signed waiver is the only gate.
   Future<void> _continueToSign() async {
     final payee = _selected;
     if (payee == null || _checking) return;
@@ -126,19 +127,6 @@ class _StartLinkMemberDialogState
       _checkError = null;
     });
     try {
-      final check = await _repository.checkLinkMemberAccount(
-        payee.memberId,
-        widget.payerMemberId,
-      );
-      if (!mounted) return;
-      if (!check.canLink) {
-        setState(() {
-          _checking = false;
-          _checkError = check.error ??
-              'This member cannot be authorized.';
-        });
-        return;
-      }
       final waiver = await _repository.getAuthorizedPayerWaiver(
         payee.memberId,
       );
@@ -158,7 +146,7 @@ class _StartLinkMemberDialogState
       if (!mounted) return;
       setState(() {
         _checking = false;
-        _checkError = 'We couldn’t verify this link. '
+        _checkError = 'We couldn’t load the waiver. '
             'Please try again.';
       });
     }

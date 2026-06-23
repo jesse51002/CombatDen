@@ -108,12 +108,15 @@ class LinkParentRequested extends MemberDetailEvent {
       ];
 }
 
-/// De-authorize a payer for a member. [memberId] is the payee;
-/// [payerMemberId] is the payer whose authorization is removed.
-class UnlinkParentRequested extends MemberDetailEvent {
+/// Remove a payer's authorization for a member, cascading a pair-scoped
+/// cancel. [memberId] is the payee; [payerMemberId] is the payer being
+/// removed. The backend cancels the member's live recurring memberships that
+/// payer funds, then de-authorizes the pair. Preview the impact first
+/// (MemberRepository.previewRemoveAuthorization).
+class RemoveAuthorizationRequested extends MemberDetailEvent {
   final String memberId;
   final String payerMemberId;
-  const UnlinkParentRequested({
+  const RemoveAuthorizationRequested({
     required this.memberId,
     required this.payerMemberId,
   });
