@@ -25,8 +25,10 @@ class MemberDetailGrid extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
 
-  /// Bumped by the bloc on every member mutation; threaded to the
-  /// Invoices card so it re-fetches after a discount / membership change.
+  /// Bumped by the bloc on every member mutation (and on each tick of
+  /// the post-charge invoice poll); threaded to the Invoices card and
+  /// the Payment history card so both re-fetch after a discount /
+  /// membership / charge change.
   final int refreshToken;
 
   const MemberDetailGrid({
@@ -123,6 +125,7 @@ class MemberDetailGrid extends StatelessWidget {
         PaymentHistorySection(
           memberId: member.memberId,
           gymId: member.gymId,
+          refreshKey: refreshToken,
         ),
       ],
     );
