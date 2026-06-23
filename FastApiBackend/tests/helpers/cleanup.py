@@ -81,6 +81,23 @@ async def delete_member_data(
     removed before the memberships and the member row.
     """
     async with db_pool.session() as session:
+        # The ``stripe listen`` forwarding process can deliver an ``invoice.paid``
+        # webhook to the running backend at any point, writing a new
+        # ``member_invoice_line_items`` row that FKs the test membership via
+        # ``fk_line_item_membership_gym``. That concurrent INSERT races the
+        # membership DELETE below and causes a FK violation even if we deleted
+        # line items earlier in this transaction — because all our deletes are
+        # in one transaction, the membership row remains visible (READ COMMITTED)
+        # to the webhook's separate connection until we commit.
+        #
+        # Fix: acquire an exclusive lock on ``member_invoice_line_items``
+        # before deleting any rows. This blocks any concurrent INSERT/UPDATE
+        # from the backend until we commit. When our commit lands the membership
+        # is gone, so a blocked webhook retries later, resolves no member, and
+        # returns early — a harmless logged error on the backend, not a bug.
+        await session.execute(
+            text("LOCK TABLE member_invoice_line_items IN EXCLUSIVE MODE")
+        )
         # Billing rows are keyed by the PAYER (paid_by_member_id, the FK that
         # blocks the member delete); the beneficiary set lives on the invoice's
         # paid_for JSONB (no FK), so deleting by payer is what frees the row.
