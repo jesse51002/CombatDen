@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/data/models/membership_member_info.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_target.dart';
 
 /// One selectable membership row in the cancel checklist —
@@ -24,7 +24,7 @@ class CancelMembershipRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final exit = target.member.exitDate;
+    final exit = target.membership.exitDate;
     final alreadyCancelling =
         exit?.kind == MembershipExitKind.cancelling;
     final dateFmt = DateFormat('MMM d, yyyy');

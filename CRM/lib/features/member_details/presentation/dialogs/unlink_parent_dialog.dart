@@ -7,44 +7,50 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
 
-/// Confirms unlinking an account from its parent payer, then
-/// dispatches [UnlinkParentRequested].
+/// Confirms removing [payerName] as an authorized payer for the
+/// payee, then dispatches [UnlinkParentRequested].
 ///
-/// When [childMemberId] is null the currently-viewed member
-/// is unlinked from their parent; when set, the given child
-/// is unlinked from the currently-viewed parent (the
-/// manage-linked-accounts flow).
+/// De-authorization is authorization-layer only: it revokes the
+/// "may pay" permission for future memberships. Memberships the
+/// payer already funds keep their billing (the signature audit row
+/// is also kept).
 class UnlinkParentDialog {
   UnlinkParentDialog._();
 
   static Future<void> show({
     required BuildContext context,
-    required String subjectName,
-    String? childMemberId,
+    required String payeeMemberId,
+    required String payerMemberId,
+    required String payerName,
   }) async {
     final bloc = context.read<MemberDetailBloc>();
     final confirmed = await BillingConfirmationDialog.show(
       context: context,
-      title: 'Unlink account',
+      title: 'Remove authorized payer',
       summary:
-          'Unlink $subjectName from the paying account?',
-      confirmLabel: 'Unlink',
+          'Remove $payerName as an authorized payer for this '
+          'member?',
+      confirmLabel: 'Remove',
       confirmColor: DesignConstants.badRed,
       effects: const [
         BillingEffect(
           icon: Symbols.link_off_sharp,
           text:
-              'They will bill independently going forward.',
+              'They can no longer be set as the payer for new '
+              'memberships.',
         ),
       ],
       warning:
-          'Any linked-account discount on the shared plan '
-          'will be re-evaluated.',
+          'Memberships they already pay for are unaffected — '
+          'change those from the membership itself.',
     );
 
     if (!confirmed) return;
     bloc.add(
-      UnlinkParentRequested(childMemberId: childMemberId),
+      UnlinkParentRequested(
+        memberId: payeeMemberId,
+        payerMemberId: payerMemberId,
+      ),
     );
   }
 }

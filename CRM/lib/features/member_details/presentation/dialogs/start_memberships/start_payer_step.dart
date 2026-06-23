@@ -35,15 +35,14 @@ class StartPayerStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parentId = member.linkedToAccount;
     return StartMembershipParticipantStep(
       member: member,
       selectedMemberId: selectedMemberId,
       onSelected: onSelected,
       payerMemberId: payerMemberId,
-      // Only the member and their linked parent are valid
-      // payers; siblings / children are excluded here.
-      linkedAccountIds: parentId != null ? {parentId} : const {},
+      // Only the member and their authorized payers are valid
+      // payers; other members are excluded here.
+      candidates: member.authorizedPayers,
       subtitleBuilder: (p) => p.memberId == member.memberId
           ? 'Member getting Membership'
           : 'Authorized Payer',

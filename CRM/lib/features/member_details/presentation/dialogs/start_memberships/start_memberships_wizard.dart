@@ -139,43 +139,24 @@ class _StartMembershipsWizardState
     _initPayer();
   }
 
-  /// The DEFAULT payer is the top-level paying account: the
-  /// viewed member when they are not linked to anyone,
-  /// otherwise the account they are linked to. The payer
-  /// step lets staff switch to any family member (a linked
-  /// member self-pays their own memberships).
+  /// The DEFAULT payer is the viewed member (self-pay). The payer
+  /// step lets staff switch to any of the member's authorized payers
+  /// (a member may have many).
   void _initPayer() {
     final viewed = widget.member;
-    final parentId = viewed.linkedToAccount;
     _memberDetails[viewed.memberId] = viewed;
-    if (parentId == null) {
-      _payer = StartMembershipParticipant(
-        memberId: viewed.memberId,
-        name: viewed.fullName,
-        photoUrl: viewed.photoUrl,
-        isPayer: true,
-      );
-      _payerDetail = viewed;
-      // The payer's own page already carries their detail, but the
-      // linked children's details still need fetching — without this
-      // the children's "Already has" block and already-on-plan guard
-      // silently have no data in the payer-launched flow.
-      _loadFamilyDetails(viewed);
-    } else {
-      final parents = viewed.linkedAccounts
-          .where((a) => a.memberId == parentId);
-      _payer = StartMembershipParticipant(
-        memberId: parentId,
-        name: parents.isEmpty
-            ? 'Paying account'
-            : parents.first.fullName,
-        photoUrl: parents.isEmpty
-            ? null
-            : parents.first.photoUrl,
-        isPayer: true,
-      );
-      _loadPayerDetail();
-    }
+    _payer = StartMembershipParticipant(
+      memberId: viewed.memberId,
+      name: viewed.fullName,
+      photoUrl: viewed.photoUrl,
+      isPayer: true,
+    );
+    _payerDetail = viewed;
+    // The viewed member's own page already carries their detail, but
+    // the details of the people they may pay for still need fetching —
+    // without this the "Already has" block and already-on-plan guard
+    // silently have no data in the payer-launched flow.
+    _loadFamilyDetails(viewed);
     // Sensible default: the member whose page launched the
     // wizard is getting the membership.
     _selectedMemberIds.add(viewed.memberId);
@@ -208,7 +189,7 @@ class _StartMembershipsWizardState
   Future<void> _loadFamilyDetails(
     MemberDetailResponse payerDetail,
   ) async {
-    for (final a in payerDetail.linkedAccounts) {
+    for (final a in payerDetail.authorizedToPayFor) {
       if (_memberDetails.containsKey(a.memberId)) {
         continue;
       }
@@ -559,7 +540,7 @@ class _StartMembershipsWizardState
         : const <MemberSummary>[];
     final family = <String>{
       _payer.memberId,
-      ...?_payerDetail?.linkedAccounts
+      ...?_payerDetail?.authorizedToPayFor
           .map((a) => a.memberId),
     };
     final candidates = roster

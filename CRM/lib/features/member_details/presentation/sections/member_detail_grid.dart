@@ -55,8 +55,7 @@ class MemberDetailGrid extends StatelessWidget {
 
     for (final m in member.memberships) {
       if (m.planType?.toLowerCase() != 'recurring') continue;
-      final payerId = m.paidByFor(member.memberId);
-      if (payerId == null) continue;
+      final payerId = m.paidByMemberId;
       final due = m.nextDueDate;
       if (!dueByPayer.containsKey(payerId)) {
         order.add(payerId);
@@ -69,15 +68,11 @@ class MemberDetailGrid extends StatelessWidget {
         }
       }
       // Capture the first funded membership we find for this payer.
+      // Each card is the viewed member's own membership, so the cash
+      // handle is its item id + the viewed member.
       if (!cashItemIdByPayer.containsKey(payerId)) {
-        // Find the covered member whose membership is paid by payerId.
-        for (final entry in m.members.entries) {
-          if (entry.value.paidByMemberId == payerId) {
-            cashItemIdByPayer[payerId] = entry.value.itemId;
-            cashMemberIdByPayer[payerId] = entry.key;
-            break;
-          }
-        }
+        cashItemIdByPayer[payerId] = m.itemId;
+        cashMemberIdByPayer[payerId] = member.memberId;
       }
     }
     return [
@@ -95,15 +90,15 @@ class MemberDetailGrid extends StatelessWidget {
 
   String _payerNameFor(String id) {
     if (id == member.memberId) return member.fullName;
-    for (final a in member.linkedAccounts) {
+    for (final a in member.authorizedPayers) {
       if (a.memberId == id) return a.fullName;
     }
-    return 'Linked account';
+    return 'Authorized payer';
   }
 
   String? _payerPhotoFor(String id) {
     if (id == member.memberId) return member.photoUrl;
-    for (final a in member.linkedAccounts) {
+    for (final a in member.authorizedPayers) {
       if (a.memberId == id) return a.photoUrl;
     }
     return null;

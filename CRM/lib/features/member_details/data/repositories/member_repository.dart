@@ -1,5 +1,6 @@
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
+import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
@@ -153,49 +154,71 @@ class MemberRepository {
     );
   }
 
-  /// `PUT /api/v1/members/{member_id}/link` — link the
-  /// member to a paying parent account. A pure DB change
-  /// (the member has no active recurring memberships, so
-  /// nothing is re-billed); the endpoint returns no body,
+  /// `GET /api/v1/members/{member_id}/authorized-payer-waiver` — the gym's
+  /// default authorized-payer waiver (id + version + body) the payer must sign
+  /// to be authorized for this member. The sign dialog renders [body] before
+  /// linking.
+  Future<AuthorizedPayerWaiver> getAuthorizedPayerWaiver(
+    String memberId,
+  ) async {
+    final response = await _apiClient.get(
+      '/api/v1/members/$memberId/authorized-payer-waiver',
+    );
+    return AuthorizedPayerWaiver.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// `PUT /api/v1/members/{member_id}/link` — authorize [payerMemberId] to pay
+  /// for the member. The payer signs the gym's default authorized-payer waiver
+  /// in the same call ([signerName] + [consentAcknowledged]); the signature and
+  /// the authorization are recorded atomically. A pure DB change (the
+  /// authorization layer — nothing is re-billed); the endpoint returns no body,
   /// so callers refetch member detail afterward.
   Future<void> linkMemberAccount(
-    String memberId,
-    String parentMemberId,
-  ) async {
+    String memberId, {
+    required String payerMemberId,
+    required String signerName,
+    required bool consentAcknowledged,
+  }) async {
     await _apiClient.put(
       '/api/v1/members/$memberId/link',
       data: MembersManagementLinkRequest(
-        parentMemberId: parentMemberId,
+        payerMemberId: payerMemberId,
+        signerName: signerName,
+        consentAcknowledged: consentAcknowledged,
       ).toJson(),
     );
   }
 
-  /// `POST /api/v1/members/{member_id}/link/check`.
+  /// `POST /api/v1/members/{member_id}/link/check` — read-only eligibility for
+  /// authorizing [payerMemberId] (no signature). Returns can_link + an error
+  /// string when blocked.
   Future<MembersManagementLinkCheckResponse>
       checkLinkMemberAccount(
     String memberId,
-    String parentMemberId,
+    String payerMemberId,
   ) async {
     final response = await _apiClient.post(
       '/api/v1/members/$memberId/link/check',
-      data: MembersManagementLinkRequest(
-        parentMemberId: parentMemberId,
-      ).toJson(),
+      data: {'payer_member_id': payerMemberId},
     );
     return MembersManagementLinkCheckResponse.fromJson(
       response.data as Map<String, dynamic>,
     );
   }
 
-  /// `DELETE /api/v1/members/{member_id}/link` — unlink the
-  /// member from their paying parent account. A pure DB
-  /// change; the endpoint returns no body, so callers
-  /// refetch member detail afterward.
+  /// `DELETE /api/v1/members/{member_id}/link?payer_member_id=…` — remove
+  /// [payerMemberId] as an authorized payer for the member. A pure DB change
+  /// (the signature audit row is kept); the endpoint returns no body, so
+  /// callers refetch member detail afterward.
   Future<void> unlinkMemberAccount(
     String memberId,
+    String payerMemberId,
   ) async {
     await _apiClient.delete(
-      '/api/v1/members/$memberId/link',
+      '/api/v1/members/$memberId/link'
+      '?payer_member_id=$payerMemberId',
     );
   }
 

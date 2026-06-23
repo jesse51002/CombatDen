@@ -259,11 +259,13 @@ class MemberDetailBloc
     final s = state;
     if (s is! MemberDetailLoaded) return;
     await _runMutation(
-      actionLabel: 'Link parent',
+      actionLabel: 'Authorize payer',
       emit: emit,
       action: () => _repository.linkMemberAccount(
-        event.childMemberId ?? s.member.memberId,
-        event.parentMemberId,
+        event.memberId,
+        payerMemberId: event.payerMemberId,
+        signerName: event.signerName,
+        consentAcknowledged: event.consentAcknowledged,
       ),
     );
   }
@@ -275,10 +277,11 @@ class MemberDetailBloc
     final s = state;
     if (s is! MemberDetailLoaded) return;
     await _runMutation(
-      actionLabel: 'Unlink parent',
+      actionLabel: 'De-authorize payer',
       emit: emit,
       action: () => _repository.unlinkMemberAccount(
-        event.childMemberId ?? s.member.memberId,
+        event.memberId,
+        event.payerMemberId,
       ),
     );
   }

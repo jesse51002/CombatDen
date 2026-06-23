@@ -37,12 +37,18 @@ class MemberDetailResponse extends Equatable {
   final String? photoUrl;
   final String? accountStatus;
   final String membershipOverview;
-  final String? linkedToAccount;
   final int totalMonthlyRecurringPrice;
   final int totalMembershipCount;
   final PersonalInfo personalInfo;
+
+  /// Members authorized to pay for this member (many-to-many) — who MAY pay
+  /// for them. Distinct from [paysFor] (the actual billing relationship).
   @JsonKey(defaultValue: [])
-  final List<LinkedAccount> linkedAccounts;
+  final List<LinkedAccount> authorizedPayers;
+
+  /// Members this member is authorized to pay for (the reverse direction).
+  @JsonKey(defaultValue: [])
+  final List<LinkedAccount> authorizedToPayFor;
 
   /// Every member (the viewed member included) whose recurring
   /// memberships this member funds — what a freeze on them would pause.
@@ -64,11 +70,11 @@ class MemberDetailResponse extends Equatable {
     this.photoUrl,
     this.accountStatus,
     required this.membershipOverview,
-    this.linkedToAccount,
     required this.totalMonthlyRecurringPrice,
     required this.totalMembershipCount,
     required this.personalInfo,
-    this.linkedAccounts = const [],
+    this.authorizedPayers = const [],
+    this.authorizedToPayFor = const [],
     this.paysFor = const [],
     this.memberships = const [],
     required this.retention,
@@ -97,11 +103,11 @@ class MemberDetailResponse extends Equatable {
         photoUrl,
         accountStatus,
         membershipOverview,
-        linkedToAccount,
         totalMonthlyRecurringPrice,
         totalMembershipCount,
         personalInfo,
-        linkedAccounts,
+        authorizedPayers,
+        authorizedToPayFor,
         paysFor,
         memberships,
         retention,

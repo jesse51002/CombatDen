@@ -72,7 +72,7 @@ class _CancelMembershipDialogState
     final id = _selectedItemId;
     if (id == null) return null;
     for (final t in _targets) {
-      if (t.member.itemId == id) return t;
+      if (t.membership.itemId == id) return t;
     }
     return null;
   }
@@ -82,10 +82,9 @@ class _CancelMembershipDialogState
     super.initState();
     // Open on the membership the carousel was showing, when it is a
     // cancellable target for this member.
-    final itemId = widget
-        .initialMembership?.members[widget.member.memberId]?.itemId;
+    final itemId = widget.initialMembership?.itemId;
     if (itemId != null &&
-        _targets.any((t) => t.member.itemId == itemId)) {
+        _targets.any((t) => t.membership.itemId == itemId)) {
       _selectedItemId = itemId;
     }
   }
@@ -95,9 +94,7 @@ class _CancelMembershipDialogState
     final out = <CancelTarget>[];
     for (final m in widget.member.memberships) {
       if (!_isRecurring(m)) continue;
-      final info = m.members[widget.member.memberId];
-      if (info == null) continue;
-      out.add(CancelTarget(membership: m, member: info));
+      out.add(CancelTarget(membership: m));
     }
     return out;
   }
@@ -145,16 +142,16 @@ class _CancelMembershipDialogState
               // recurring invoice drops the cancelled membership, shown
               // as a current → new comparison against the payer's sub.
               loadPreview: () => _repository.previewCancelMembership(
-                selected.member.itemId,
+                selected.membership.itemId,
                 widget.member.memberId,
               ),
               loadCurrent: () => _repository.getUpcomingInvoice(
-                selected.member.paidByMemberId,
+                selected.membership.paidByMemberId,
               ),
               showDueNow: false,
               recurringFallbackMonthly:
                   widget.member.totalMonthlyRecurringPrice,
-              refreshKey: selected.member.itemId,
+              refreshKey: selected.membership.itemId,
               emptyLabel: 'No change to recurring billing.',
               errorLabel:
                   'Could not load the cancellation preview.',
@@ -184,7 +181,7 @@ class _CancelMembershipDialogState
     if (target == null) return;
     context.read<MemberDetailBloc>().add(
           CancelMembershipRequested(
-            itemId: target.member.itemId,
+            itemId: target.membership.itemId,
             memberId: widget.member.memberId,
           ),
         );
@@ -201,7 +198,7 @@ class _CancelMembershipDialogState
       }.contains(m.status);
 
   static DateTime _accessUntil(CancelTarget t) =>
-      t.member.exitDate?.date ??
+      t.membership.exitDate?.date ??
       t.membership.nextDueDate ??
       t.membership.startDate;
 }

@@ -42,15 +42,14 @@ class StartMembersStep extends StatelessWidget {
         child: Center(child: AppSpinner()),
       );
     }
-    // A linked payer (their detail carries a
-    // linkedToAccount) can bill only their own
-    // memberships — single-level linking means nobody can
-    // be linked TO them.
-    final payerIsLinked = detail.linkedToAccount != null;
+    // A linked payer (someone authorized to be paid for but
+    // not themselves a paying account) can bill only their
+    // own memberships — they have no members they cover.
+    final payerIsLinked = detail.authorizedPayers.isNotEmpty;
     final candidates = <StartMembershipParticipant>[
       payer,
       if (!payerIsLinked)
-        ...detail.linkedAccounts.map(
+        ...detail.authorizedToPayFor.map(
           (a) => StartMembershipParticipant(
             memberId: a.memberId,
             name: a.fullName,
@@ -72,7 +71,7 @@ class StartMembersStep extends StatelessWidget {
               style: DesignConstants.h2,
             ),
             Text(
-              detail.linkedToAccount != null
+              detail.authorizedPayers.isNotEmpty
                   ? 'A linked member pays for their own '
                       'memberships only.'
                   : 'Pick everyone to enroll in this '
@@ -96,7 +95,7 @@ class StartMembersStep extends StatelessWidget {
                 onTap: () => onToggle(c.memberId),
               ),
             ),
-            if (detail.linkedToAccount == null)
+            if (detail.authorizedPayers.isEmpty)
               StartLinkFirstTile(onTap: onLinkFirst),
           ],
         ),

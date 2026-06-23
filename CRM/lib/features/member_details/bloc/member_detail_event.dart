@@ -81,33 +81,45 @@ class UnlinkPaymentRequested extends MemberDetailEvent {
   const UnlinkPaymentRequested();
 }
 
+/// Authorize a payer for a member (the sign-gated link).
+/// [memberId] is the payee (the link's path member); [payerMemberId]
+/// is authorized to pay for them AND is the waiver signer. The same
+/// event serves both add directions — authorizing a payer for the
+/// viewed member (payee = viewed) or authorizing the viewed member
+/// to pay for someone (payer = viewed).
 class LinkParentRequested extends MemberDetailEvent {
-  final String parentMemberId;
-
-  /// When null, links the currently viewed member to the
-  /// chosen parent. When set, links the given child to
-  /// the chosen parent (manage-linked-accounts flow).
-  final String? childMemberId;
-  const LinkParentRequested(
-    this.parentMemberId, {
-    this.childMemberId,
+  final String memberId;
+  final String payerMemberId;
+  final String signerName;
+  final bool consentAcknowledged;
+  const LinkParentRequested({
+    required this.memberId,
+    required this.payerMemberId,
+    required this.signerName,
+    required this.consentAcknowledged,
   });
 
   @override
-  List<Object?> get props =>
-      [parentMemberId, childMemberId];
+  List<Object?> get props => [
+        memberId,
+        payerMemberId,
+        signerName,
+        consentAcknowledged,
+      ];
 }
 
+/// De-authorize a payer for a member. [memberId] is the payee;
+/// [payerMemberId] is the payer whose authorization is removed.
 class UnlinkParentRequested extends MemberDetailEvent {
-  /// When null, unlinks the currently viewed member from
-  /// their parent. When set, unlinks the given child from
-  /// the currently viewed parent (manage-linked-accounts
-  /// flow).
-  final String? childMemberId;
-  const UnlinkParentRequested({this.childMemberId});
+  final String memberId;
+  final String payerMemberId;
+  const UnlinkParentRequested({
+    required this.memberId,
+    required this.payerMemberId,
+  });
 
   @override
-  List<Object?> get props => [childMemberId];
+  List<Object?> get props => [memberId, payerMemberId];
 }
 
 // ----- Membership mutations -----

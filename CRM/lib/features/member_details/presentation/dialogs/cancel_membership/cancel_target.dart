@@ -1,15 +1,14 @@
 import 'package:crm/features/member_details/data/models/membership_info.dart';
-import 'package:crm/features/member_details/data/models/membership_member_info.dart';
 
-/// A cancellable (membership, covered-member slice) pair for
-/// one person — the unit the cancel checklist renders and the
-/// dialog resolves a `member_memberships.item_id` from.
+/// A cancellable membership for the viewed member — the unit the
+/// cancel checklist renders and the dialog resolves a
+/// `member_memberships.item_id` from. The member-detail page is
+/// member-centric, so each card is the viewed member's own
+/// membership and every field reads flat off it.
 class CancelTarget {
   final MembershipInfo membership;
-  final MembershipMemberInfo member;
 
   const CancelTarget({
     required this.membership,
-    required this.member,
   });
 }

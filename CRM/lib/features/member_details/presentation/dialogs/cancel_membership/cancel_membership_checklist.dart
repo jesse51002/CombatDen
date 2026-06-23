@@ -51,8 +51,8 @@ class CancelMembershipChecklist extends StatelessWidget {
                 (t) => CancelMembershipRow(
                   target: t,
                   selected:
-                      selectedItemId == t.member.itemId,
-                  onTap: () => onSelect(t.member.itemId),
+                      selectedItemId == t.membership.itemId,
+                  onTap: () => onSelect(t.membership.itemId),
                 ),
               )
               .toList(),
