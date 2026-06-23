@@ -338,6 +338,11 @@ class MemberMembershipsReprice(MemberMembershipsBase):
                 "next_due_dates": [None],
                 "stripe_item_ids": [None],
                 "total_prices": [target_price["price"]],
+                # Reprice is recurring-only, and a recurring membership is
+                # always quantity 1 (enforced by trg_recurring_quantity_must_be_one),
+                # so the successor carries that invariant. (member_memberships_insert.sql
+                # gained the required `quantities` param with the class-pack feature.)
+                "quantities": [1],
                 "sync_statuses": [StripeSyncStatus.not_added.value],
             },
         )
