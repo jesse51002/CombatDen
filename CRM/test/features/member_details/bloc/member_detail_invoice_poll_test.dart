@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bloc_test/bloc_test.dart';
 import 'package:crm/features/member_details/bloc/invoice_poller.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
@@ -42,16 +44,17 @@ void main() {
   const memberId = 'member-1';
   const gymId = 'gym-1';
 
-  MemberDetailResponse buildMember() => const MemberDetailResponse(
+  MemberDetailResponse buildMember({String firstName = 'Kid'}) =>
+      MemberDetailResponse(
         memberId: memberId,
         gymId: gymId,
-        firstName: 'Kid',
+        firstName: firstName,
         lastName: 'Smith',
         membershipOverview: '1 membership',
         totalMonthlyRecurringPrice: 5000,
         totalMembershipCount: 1,
-        personalInfo: PersonalInfo(),
-        retention: Retention(
+        personalInfo: const PersonalInfo(),
+        retention: const Retention(
           classStreakWeeks: 0,
           pointsBalance: 0,
           videosWatched: 0,
@@ -214,5 +217,41 @@ void main() {
       isA<MemberDetailLoaded>()
           .having((s) => s.refreshToken, 'refreshToken', 1),
     ],
+  );
+
+  // Bloc processes events concurrently, so two ticks can overlap. A
+  // slower (older) tick's re-fetch must never overwrite a newer one's.
+  blocTest<MemberDetailBloc, MemberDetailState>(
+    'a slow earlier tick does NOT overwrite a newer tick (newest wins)',
+    build: () {
+      final gate = Completer<void>();
+      var calls = 0;
+      when(() => repo.getMemberDetail(any())).thenAnswer((_) async {
+        calls++;
+        if (calls == 1) {
+          // The first (older) tick is held until the second has landed.
+          await gate.future;
+          return buildMember(firstName: 'Stale');
+        }
+        return buildMember(firstName: 'Fresh');
+      });
+      // Release the first tick only after the second has emitted.
+      Future<void>.delayed(const Duration(milliseconds: 20))
+          .then((_) => gate.complete());
+      return build();
+    },
+    seed: seedState,
+    act: (bloc) async {
+      bloc.add(const InvoicePollRequested()); // tick 1 — held
+      await Future<void>.delayed(Duration.zero);
+      bloc.add(const InvoicePollRequested()); // tick 2 — resolves first
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+    },
+    verify: (bloc) {
+      final st = bloc.state as MemberDetailLoaded;
+      // Only tick 2 emitted; the stale tick 1 was dropped.
+      expect(st.member.firstName, 'Fresh');
+      expect(st.refreshToken, 1);
+    },
   );
 }

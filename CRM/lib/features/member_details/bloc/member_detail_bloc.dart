@@ -25,6 +25,13 @@ class MemberDetailBloc
   /// charge mid-window resets the schedule — only one sequence runs.
   final InvoicePoller _poller;
 
+  /// Monotonic per-tick sequence. Bloc processes events concurrently,
+  /// so two ticks whose re-fetches overlap could otherwise let the
+  /// slower (older) response overwrite the newer one. Each tick claims
+  /// the next number and only emits if still the latest — newest-wins,
+  /// so a stale re-fetch can never clobber a fresher one.
+  int _pollSeq = 0;
+
   MemberDetailBloc({
     required MemberRepository repository,
     InvoicePoller? poller,
@@ -591,10 +598,15 @@ class MemberDetailBloc
   ) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
+    final seq = ++_pollSeq;
     try {
       final refreshed = await _repository.getMemberDetail(
         s.member.memberId,
       );
+      // A newer tick started while this one's fetch was in flight —
+      // drop this (now older) result so it can't overwrite the fresher
+      // one.
+      if (seq != _pollSeq) return;
       final current = state;
       if (current is MemberDetailLoaded) {
         emit(current.copyWith(
@@ -608,6 +620,7 @@ class MemberDetailBloc
         error: e,
         stackTrace: stackTrace,
       );
+      if (seq != _pollSeq) return;
       final current = state;
       if (current is MemberDetailLoaded) {
         emit(current.copyWith(
