@@ -72,11 +72,11 @@ class StartMembersStep extends StatelessWidget {
             ),
             Text(
               detail.authorizedPayers.isNotEmpty
-                  ? 'A linked member pays for their own '
-                      'memberships only.'
+                  ? 'A member with an authorized payer pays for '
+                      'their own memberships only.'
                   : 'Pick everyone to enroll in this '
-                      'run — the payer themselves and '
-                      'members already linked to them.',
+                      'run — the payer themselves and the '
+                      'members they’re authorized to pay for.',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),

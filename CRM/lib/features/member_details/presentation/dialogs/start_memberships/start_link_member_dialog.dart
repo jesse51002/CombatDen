@@ -178,7 +178,7 @@ class _StartLinkMemberDialogState
     return AppDialog(
       title: isSign
           ? 'Sign authorized-payer waiver'
-          : 'Link a member to ${widget.payerName}',
+          : 'Add someone ${widget.payerName} pays for',
       body: isSign ? _signBody() : _selectBody(),
       actions: isSign
           ? AppDialogActions(

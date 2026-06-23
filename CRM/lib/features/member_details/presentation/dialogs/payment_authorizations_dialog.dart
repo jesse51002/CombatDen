@@ -76,6 +76,7 @@ class _PaymentAuthorizationsDialogState
             isPay ? member.authorizedToPayFor : member.authorizedPayers;
         return AppDialog(
           title: 'Payment authorizations',
+          maxWidth: DesignConstants.dialogContentMaxWidth,
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: DesignConstants.spacingLarge,
@@ -83,8 +84,8 @@ class _PaymentAuthorizationsDialogState
               const _Description(),
               ViewSwitcher(
                 labels: const [
-                  'Authorized to pay',
-                  'Authorized to receive payment',
+                  'Can Pay For',
+                  'Can Receive Payments',
                 ],
                 selectedIndex: _section,
                 onSelected: (i) => setState(() => _section = i),
@@ -226,13 +227,12 @@ class _Description extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      'Payment authorizations control who may pay for whom. An authorized '
-      'payer can be set as the payer on this member’s memberships; this '
-      'member can be set as the payer for anyone they’re authorized to pay '
-      'for. Adding requires the payer to sign the gym’s waiver. Removing a '
-      'relationship cancels the recurring memberships funded across it.',
-      style: DesignConstants.pSmall.copyWith(
+      'Control who can pay for whom. Adding needs the payer to sign the gym’s '
+      'waiver; removing a relationship cancels the recurring memberships it '
+      'funds.',
+      style: DesignConstants.h3.copyWith(
         color: DesignConstants.text2nd,
+        fontWeight: FontWeight.w400,
       ),
     );
   }
