@@ -150,7 +150,8 @@ class _StartLinkMemberDialogState
           waiver.body,
           readOnly: true,
         );
-        _signerName.text = widget.payerName;
+        // Never pre-fill the signature — the payer must type their
+        // own name; a pre-filled field is not a signature.
         _step = _LinkStep.sign;
       });
     } catch (_) {
