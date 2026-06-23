@@ -26,6 +26,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
     MemberMembershipsUpdatePriceResponse,
+    PayerInvoiceChange,
 )
 from src.memberships.service.memberships_refund import (
     MemberMembershipsRefund,
@@ -583,14 +584,12 @@ async def preview_start_membership(
 
 @member_memberships_router.post(
     "/cancel/preview",
-    response_model=DueNowVsRecurringPreview | None,
+    response_model=list[PayerInvoiceChange],
     summary="Preview cancelling a membership",
     description=(
-        "Dry-run of the cancel endpoint: runs every validation "
-        "and returns the Stripe invoice preview for the "
-        "post-cancel subscription state. Returns null for the "
-        "last active membership (pure cancellation has no "
-        "upcoming invoice)."
+        "Dry-run of the cancel endpoint: a per-payer list of the post-cancel "
+        "subscription state (current → new). A single cancel has one payer, so "
+        "one entry; a payer with no billing change is omitted (empty list)."
     ),
     responses={
         200: {"description": "Preview retrieved successfully"},
@@ -607,8 +606,8 @@ async def preview_cancel_membership(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> DueNowVsRecurringPreview | None:
-    """Preview what cancelling a membership would charge."""
+) -> list[PayerInvoiceChange]:
+    """Preview what cancelling a membership would charge (per-payer list)."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 

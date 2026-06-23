@@ -21,8 +21,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsStartRequest,
     MemberMembershipsStartResponse,
     MembersBillingLinkCheckResponse,
-    RemoveAuthorizationMembership,
-    RemoveAuthorizationPreview,
+    PayerInvoiceChange,
 )
 from src.memberships.service.memberships_cancel import (
     MemberMembershipsCancel,
@@ -192,19 +191,21 @@ class MemberMembershipsService:
         """
         payer_id = await self._get_payer_for_item(item_id)
         async with self._paying_lock.lock([payer_id]):
-            return await self._cancel.cancel(
-                item_id, member_id, idempotency_key,
+            dates = await self._cancel.cancel(
+                [item_id], member_id, idempotency_key,
             )
+            return dates[item_id]
 
     async def preview_cancel(
         self,
         item_id: UUID,
         member_id: UUID,
-    ) -> DueNowVsRecurringPreview | None:
-        """Preview what cancelling a membership would charge."""
+    ) -> list[PayerInvoiceChange]:
+        """Preview what cancelling a membership would charge (per-payer list;
+        a single cancel is one payer → a one-entry list)."""
         payer_id = await self._get_payer_for_item(item_id)
         async with self._paying_lock.lock([payer_id]):
-            return await self._cancel.preview_cancel(item_id, member_id)
+            return await self._cancel.preview_cancel([item_id], member_id)
 
     # ── Freeze / Unfreeze ──────────────────────────────────────
 
@@ -398,25 +399,21 @@ class MemberMembershipsService:
         self,
         member_id: UUID,
         payer_member_id: UUID,
-    ) -> RemoveAuthorizationPreview:
-        """Preview what removing the (member, payer) authorization cancels.
+    ) -> list[PayerInvoiceChange]:
+        """Cost preview for removing the (member, payer) authorization.
 
-        Pair-scoped: lists ``member_id``'s live recurring memberships funded by
-        ``payer_member_id`` and the monthly that stops. Read-only.
+        Pair-scoped: the payer's recurring bill after cancelling every live
+        recurring membership ``payer_member_id`` funds for ``member_id``
+        (current → new), via the SAME per-payer cancel preview a single cancel
+        uses. Always one payer here (pair-scoped), so a one-entry list — or
+        empty when there is nothing to cancel.
         """
         rows = await self._pair_cancellable(member_id, payer_member_id)
-        memberships = [
-            RemoveAuthorizationMembership(
-                item_id=row["item_id"],
-                plan_name=row["plan_name"],
-                total_price=row["total_price"],
-            )
-            for row in rows
-        ]
-        return RemoveAuthorizationPreview(
-            memberships=memberships,
-            total_monthly=sum(m.total_price for m in memberships),
-        )
+        item_ids = [UUID(str(row["item_id"])) for row in rows]
+        if not item_ids:
+            return []
+        async with self._paying_lock.lock([payer_member_id]):
+            return await self._cancel.preview_cancel(item_ids, member_id)
 
     async def remove_authorization(
         self,
@@ -427,7 +424,7 @@ class MemberMembershipsService:
 
         Pair-scoped and billing-critical: under the two-account lock, cancels
         every live recurring membership ``payer_member_id`` funds for
-        ``member_id`` (the existing per-membership cancel converges Stripe), then
+        ``member_id`` in ONE converge (``cancel_many`` — one payer sync), then
         deletes the ``member_authorized_payers`` row (the signature audit row
         persists). Memberships paid by other payers, and this payer's
         memberships for other members, are untouched.
@@ -440,12 +437,9 @@ class MemberMembershipsService:
         """
         async with self._paying_lock.lock([member_id, payer_member_id]):
             rows = await self._pair_cancellable(member_id, payer_member_id)
-            for row in rows:
-                await self._cancel.cancel(
-                    UUID(str(row["item_id"])),
-                    member_id,
-                    uuid4(),
-                )
+            item_ids = [UUID(str(row["item_id"])) for row in rows]
+            if item_ids:
+                await self._cancel.cancel(item_ids, member_id, uuid4())
             del_sql = load_sql(
                 SQL_DIR / "member_authorized_payers_delete.sql",
             )

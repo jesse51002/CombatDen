@@ -13,7 +13,10 @@ from schema.task import ProrationBehavior
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import DiscountValue
-from src.payments.schema.payments_invoice_schema import PreviewInvoice
+from src.payments.schema.payments_invoice_schema import (
+    DueNowVsRecurringPreview,
+    PreviewInvoice,
+)
 
 
 class MemberMembershipsCancelResponse(BaseModel):
@@ -454,29 +457,28 @@ class MembersBillingRemoveAuthorizationRequest(BaseModel):
     Pair-scoped: cancels the path member's live recurring memberships that
     ``payer_member_id`` funds, then de-authorizes the pair. Memberships paid by
     OTHER payers — and the payer's memberships for OTHER members — are untouched.
+    The preview reuses the standard cancel cost preview (a per-payer list of
+    ``PayerInvoiceChange``; pair-scoped, so always a single entry).
     """
 
     payer_member_id: UUID
 
 
-class RemoveAuthorizationMembership(BaseModel):
-    """One membership that removing an authorization would cancel."""
+class PayerInvoiceChange(BaseModel):
+    """One payer's billing change from a (possibly batched) cancel — their
+    subscription's recurring bill current → new.
 
-    item_id: UUID
-    plan_name: str
-    total_price: int
-
-
-class RemoveAuthorizationPreview(BaseModel):
-    """What removing an authorization will cancel (shown before confirming).
-
-    Lists every live recurring membership the path member holds that the payer
-    funds, plus the summed monthly that stops. An empty list means the
-    authorization can be removed with no billing impact.
+    A LIST of these is the cancel / remove-authorization cost preview: one entry
+    per affected payer. A single membership cancel yields a one-entry list (a
+    member's memberships may be funded by different payers, so a multi-cancel can
+    change several payers' bills at once). ``preview`` is the standard
+    current → new recurring comparison for that payer's subscription.
     """
 
-    memberships: list[RemoveAuthorizationMembership] = []
-    total_monthly: int = 0
+    payer_member_id: UUID
+    payer_first_name: str
+    payer_last_name: str
+    preview: DueNowVsRecurringPreview
 
 
 class MemberMembershipsAppliedDiscount(BaseModel):

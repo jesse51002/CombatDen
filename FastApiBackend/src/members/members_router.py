@@ -45,7 +45,7 @@ from src.memberships.memberships_schema import (
     MembersBillingLinkCheckResponse,
     MembersBillingLinkRequest,
     MembersBillingRemoveAuthorizationRequest,
-    RemoveAuthorizationPreview,
+    PayerInvoiceChange,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -657,12 +657,13 @@ async def check_link_member_account(
 
 @members_router.post(
     "/{member_id}/link/remove/preview",
-    response_model=RemoveAuthorizationPreview,
+    response_model=list[PayerInvoiceChange],
     summary="Preview removing a payer's authorization (pair-scoped cancel)",
     description=(
-        "Read-only. Lists the path member's live recurring memberships that "
-        "payer_member_id funds — these are what removing the authorization will "
-        "cancel — plus the summed monthly that stops. Empty = no billing impact."
+        "Read-only cost preview: the payer's recurring bill after cancelling "
+        "the path member's memberships that payer_member_id funds (current → "
+        "new), via the same per-payer cancel preview. Pair-scoped, so a single "
+        "entry — empty when there's no billing impact."
     ),
     responses={
         200: {"description": "Preview computed"},
@@ -680,7 +681,7 @@ async def preview_remove_authorization(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> RemoveAuthorizationPreview:
+) -> list[PayerInvoiceChange]:
     """Preview the cascading cancel of removing a payer's authorization."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)

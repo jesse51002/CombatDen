@@ -121,13 +121,15 @@ async def test_remove_authorization_cancels_only_the_pair(
         b_paid_by_p = await _item_id_for(db_pool, member_b.member_id, plan.plan_id)
         a_self = await _item_id_for(db_pool, member_a.member_id, plan_self.plan_id)
 
-        # Preview lists exactly the pair's membership (A, paid by P).
+        # Preview is a per-payer cost preview: pair-scoped → exactly one
+        # entry, for the payer P whose subscription loses A's line.
         preview = await memberships_service.preview_remove_authorization(
             member_a.member_id,
             payer.member_id,
         )
-        assert [m.item_id for m in preview.memberships] == [a_paid_by_p]
-        assert preview.total_monthly == preview.memberships[0].total_price
+        assert len(preview) == 1
+        assert preview[0].payer_member_id == payer.member_id
+        assert preview[0].preview is not None
 
         payer_profile = await get_profile_stripe_ids(
             db_pool, payer.member_id, gym_id
@@ -177,8 +179,7 @@ async def test_remove_authorization_no_memberships_just_deauthorizes(
         preview = await memberships_service.preview_remove_authorization(
             member.member_id, payer.member_id
         )
-        assert preview.memberships == []
-        assert preview.total_monthly == 0
+        assert preview == []
 
         await memberships_service.remove_authorization(
             member.member_id, payer.member_id
