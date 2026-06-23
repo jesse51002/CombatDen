@@ -11,7 +11,7 @@ fully, then the roadmap at `~/.claude/plans/parsed-mapping-lighthouse.md`.
   the seed runs (it created **22 real sign-gated authorized-payer links**), and the relevant
   integration tests pass (member-detail/grouper/2C SQL/waivers/start-auth).
 - **REMAINING:** **Piece 3 (CRM/Flutter)** and **Piece 4 (per-membership anchor freeze)** —
-  both NOT started. Plus: a **flake-fix sub-agent is in-flight** (see §7).
+  both NOT started. (The flake-fix sub-agent is DONE + committed — see §7.)
 - Branch is **current with `thru @ 9aac5193` (#32)**, clean tree, **nothing pushed**.
 
 ---
@@ -142,15 +142,20 @@ re-apply over thru.** The routine (mostly auto-merges; you hand-resolve ~4 files
   `w_default` node. Verify NO `account_linked_to_id` reappears in live code (grep), keep it purged.
 - After resolving: ruff + `pytest tests/members/test_member_billing_overdue.py` + full `--collect-only`.
 
-## 7. IN-FLIGHT: flake-fix sub-agent (review when it returns)
-A Sonnet sub-agent (`a44d97d361740048a`) is fixing **2 pre-existing thru timing-flakes** (NOT this
-feature; both pass on re-run): `test_phase_a_linked_child_self_pays_own_membership` (teardown FK
-race — a `member_invoice_line_items` write races `delete_member_data`) + `test_mixed_cart_recurring_card_fails_at_billing`
-(120s `TimeoutError`). It was told to find the ROOT CAUSE, fix deterministically WITHOUT masking
-(per the never-write-around-bugs rule), and prove 5/5 loop passes. **WHEN IT RETURNS:** review its
-root-cause + loop results; if legit (test-only, no masking) commit the fixes; if it found a real
-production bug, surface that instead. If the next agent is post-compaction and the result was lost,
-just re-run the 2 tests in a 5× loop to assess.
+## 7. DONE: flake-fix (2 pre-existing thru timing-flakes) — committed `38e33b3a`
+Both flakes (`test_phase_a_linked_child_self_pays_own_membership` + `test_mixed_cart_recurring_card_fails_at_billing`)
+shared ONE root cause: the `stripe listen` forwarder delivers `invoice.paid` to the live backend,
+whose handler INSERTs a `member_invoice_line_items` row FK'd to the test membership
+(`fk_line_item_membership_gym`), racing the membership DELETE in `delete_member_data`. Because all
+teardown deletes are one txn, the membership stays visible (READ COMMITTED) to the webhook's
+connection until commit, so deleting line items earlier in the same txn didn't help.
+**Fix (test-only, `tests/helpers/cleanup.py`):** `LOCK TABLE member_invoice_line_items IN EXCLUSIVE
+MODE` at the start of the teardown txn — a concurrent webhook either commits first (our DELETE
+catches it) or blocks until our commit (membership gone → backend FK violation → Stripe retry → no
+member → harmless early return). **Not masking a bug** — the production webhook path is untouched and
+already handles the FK-violation retry. Verified: test_phase_a 5/5 isolated, test_start_family 12/12
+together (107s), test_mixed_cart 5/5 (~11s each). Reviewed (diff confined to cleanup.py, ruff clean)
+before commit.
 
 ## 8. CROSS-CUTTING NOTES
 - **Reprice #32 regression (fixed, flag to #32's owner):** thru's #32 added a REQUIRED `quantities`
