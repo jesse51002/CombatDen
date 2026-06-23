@@ -8,9 +8,4 @@ part of 'members_management_update_card_request.dart';
 
 Map<String, dynamic> _$MembersManagementUpdateCardRequestToJson(
   MembersManagementUpdateCardRequest instance,
-) => <String, dynamic>{
-  'stringify': instance.stringify,
-  'hash_code': instance.hashCode,
-  'payment_method_id': instance.paymentMethodId,
-  'props': instance.props,
-};
+) => <String, dynamic>{'payment_method_id': instance.paymentMethodId};

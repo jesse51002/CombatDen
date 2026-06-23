@@ -58,7 +58,7 @@ class MembersBillingGrouper:
 
         Args:
             membership_rows: The viewed member's own membership rows.
-            usage_lookup: (member_id, plan_id) -> per-cycle class usage.
+            usage_lookup: (member_id, item_id) -> per-cycle class usage.
             today: The gym's local current date, used to derive overdue.
 
         Returns:
@@ -84,13 +84,13 @@ class MembersBillingGrouper:
 
         Args:
             row: One ``member_details.sql``-shaped membership row.
-            usage_lookup: (member_id, plan_id) -> per-cycle class usage.
+            usage_lookup: (member_id, item_id) -> per-cycle class usage.
             today: The gym's local current date, used to derive overdue.
 
         Returns:
             The membership card.
         """
-        usage = usage_lookup.get((row["member_id"], row["plan_id"]))
+        usage = usage_lookup.get((row["member_id"], row["item_id"]))
         return BillingMembershipInfo(
             plan_id=row["plan_id"],
             plan_name=row["plan_name"],

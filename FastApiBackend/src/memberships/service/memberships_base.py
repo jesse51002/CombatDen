@@ -247,14 +247,17 @@ class MemberMembershipsBase:
         gym_id: UUID,
         plan_ids: list[UUID],
     ) -> None:
-        """Ensure ONE member has no active/frozen membership on these plans.
+        """Ensure ONE member has no active/frozen RECURRING membership here.
 
-        The check is inherently per-member: one member_id, batched only
-        across that member's requested plan ids.
+        Only recurring plans are one-active-per-plan; one_time / trial packs
+        are allowed to stack, so the query filters to recurring plans (see
+        member_memberships_check_existing.sql). The check is inherently
+        per-member: one member_id, batched only across that member's
+        requested plan ids.
 
         Raises:
-            ValueError: If an active or frozen membership already exists on
-                any of the plans.
+            ValueError: If an active or frozen recurring membership already
+                exists on any of the plans.
         """
         sql = load_sql(SQL_DIR / "member_memberships_check_existing.sql")
         params = {
@@ -269,7 +272,7 @@ class MemberMembershipsBase:
         for plan_id in plan_ids:
             if plan_id in existing:
                 raise ValueError(
-                    f"Active membership already exists: "
+                    f"Active recurring membership already exists: "
                     f"member_id={member_id}, gym_id={gym_id}, "
                     f"plan_id={plan_id}"
                 )
@@ -313,19 +316,30 @@ class MemberMembershipsBase:
     async def _crm_insert(
         self,
         rows: list[dict],
-    ) -> dict[tuple[UUID, UUID], UUID]:
+    ) -> list[UUID]:
         """Insert membership rows in ONE multi-row statement.
 
         Each row dict carries: member_id, paid_by_member_id, gym_id, plan_id,
         price_id, start_date, end_date, last_paid_date, next_due_date,
-        stripe_item_id, total_price, and optionally sync_status (default
-        ``not_added`` — the real start's pending row; the start preview
-        passes ``preview_add`` so the dry-run sees it but the real path
-        never bills it). All rows appear atomically, or none.
+        stripe_item_id, total_price, quantity, and optionally sync_status
+        (default ``not_added`` — the real start's pending row; the start preview
+        passes ``preview_add`` so the dry-run sees it but the real path never
+        bills it). All rows appear atomically, or none. The DB generates each
+        row's ``item_id`` (PK default); we return them via ``RETURNING``.
 
         Returns:
-            The generated item_id per (member_id, plan_id) — unique within
-            a request (the request validator rejects duplicates).
+            The DB-generated item_ids in the SAME order as ``rows`` — matched
+            back to each row by ``(member_id, price_id)``, which the request
+            dedup (``_validate_memberships``) guarantees is unique within one
+            request. The mapping is therefore **order-independent**: it does NOT
+            rely on ``RETURNING`` streaming in insert order (a PostgreSQL
+            implementation detail for ``INSERT … SELECT FROM unnest()``, not a
+            contract), so a re-planned insert can never misroute an id. One
+            DISTINCT id per row; raises if two rows collapse onto one key (the
+            dedup should make that impossible). NOTE: ``(member, plan)`` is NOT
+            unique (a 5-pack + a 10-pack of one plan share it) — ``price_id`` is
+            the disambiguator, so this key is safe where ``(member, plan)`` was
+            the original collapse bug.
         """
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
@@ -340,6 +354,7 @@ class MemberMembershipsBase:
             "next_due_dates": [r["next_due_date"] for r in rows],
             "stripe_item_ids": [r["stripe_item_id"] for r in rows],
             "total_prices": [r["total_price"] for r in rows],
+            "quantities": [r["quantity"] for r in rows],
             "sync_statuses": [
                 r.get("sync_status", StripeSyncStatus.not_added).value
                 for r in rows
@@ -347,14 +362,22 @@ class MemberMembershipsBase:
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
-            ids = {
-                (UUID(str(r["member_id"])), UUID(str(r["plan_id"]))): UUID(
+            by_key = {
+                (UUID(str(r["member_id"])), UUID(str(r["price_id"]))): UUID(
                     str(r["item_id"]),
                 )
                 for r in result.mappings()
             }
             await session.commit()
-        return ids
+        if len(by_key) != len(rows):
+            # Two rows shared (member_id, price_id) — the request dedup should
+            # make this impossible. Fail loud instead of silently collapsing
+            # two rows onto one id (the original stacked-pack bug).
+            raise RuntimeError(
+                f"member_memberships insert collapsed rows: {len(rows)} rows "
+                f"but {len(by_key)} distinct (member_id, price_id) keys",
+            )
+        return [by_key[(r["member_id"], r["price_id"])] for r in rows]
 
     def _build_pending_rows(
         self,
@@ -398,7 +421,10 @@ class MemberMembershipsBase:
                 "last_paid_date": start_date,
                 "next_due_date": None,
                 "stripe_item_id": None,
-                "total_price": plan_price["price"],
+                # Pre-discount line total for this row; the sync overwrites it
+                # with the post-discount price once the row is on Stripe.
+                "total_price": plan_price["price"] * item.quantity,
+                "quantity": item.quantity,
                 "sync_status": sync_status,
             })
         return rows
@@ -414,6 +440,120 @@ class MemberMembershipsBase:
                 {"item_ids": [str(item_id) for item_id in item_ids]},
             )
             await session.commit()
+
+    async def _sweep_stale_preview_rows(
+        self,
+        payer_member_id: UUID,
+    ) -> None:
+        """Normalize ALL stale ``preview_*`` rows for the payer before staging.
+
+        Preview rows are always transient — staged then cleaned up in the
+        preview's ``finally``. Any that survive are leaks from a crashed /
+        killed preview and represent two distinct fault shapes:
+
+        - ``preview_add`` rows are STAGED-NEW: safe to DELETE (nothing real
+          is ever ``preview_add``).
+        - ``preview_remove`` rows are REAL rows temporarily HIDDEN: must be
+          RESTORED to ``applied``, NEVER deleted (deleting loses real billing
+          state).
+
+        FK-safe order (all four ops run in ONE transaction):
+
+        1. Restore ``preview_remove`` applied-discount rows → ``applied``
+           (discount FK children; restore before the membership restore).
+        2. Restore ``preview_remove`` membership rows → ``applied``
+           (membership FK parents of the discount rows restored above).
+        3. Delete ``preview_add`` applied-discount rows
+           (FK children; delete before the membership rows that own them).
+        4. Delete ``preview_add`` membership rows
+           (FK parents; delete last).
+
+        Scoped to the payer (``paid_by_member_id``) throughout, so a
+        concurrent preview of another payer is untouched. A non-zero sweep
+        is logged at WARNING — the self-heal must never silently hide a leak:
+        if it recurs, a prior preview is crashing before its ``finally``
+        cleanup and that is a bug worth investigating.
+        """
+        restore_disc_sql = load_sql(
+            SQL_DIR / "member_memberships_sweep_preview_restore_discounts.sql",
+        )
+        restore_mem_sql = load_sql(
+            SQL_DIR / "member_memberships_sweep_preview_restore.sql",
+        )
+        del_disc_sql = load_sql(
+            SQL_DIR / "member_memberships_sweep_preview_discounts.sql",
+        )
+        del_mem_sql = load_sql(
+            SQL_DIR / "member_memberships_sweep_preview.sql",
+        )
+        params = {"payer_member_id": str(payer_member_id)}
+        async with self._db_pool.session() as session:
+            # Op 1: restore preview_remove applied-discount rows → applied
+            res_disc = await session.execute(text(restore_disc_sql), params)
+            restored_disc = res_disc.mappings().all()
+            # Op 2: restore preview_remove membership rows → applied
+            res_mem = await session.execute(text(restore_mem_sql), params)
+            restored_mem = res_mem.mappings().all()
+            # Op 3: delete preview_add applied-discount rows (FK child first)
+            del_disc_result = await session.execute(text(del_disc_sql), params)
+            deleted_disc = del_disc_result.mappings().all()
+            # Op 4: delete preview_add membership rows
+            del_result = await session.execute(text(del_mem_sql), params)
+            deleted_mem = del_result.mappings().all()
+            await session.commit()
+
+        any_swept = (
+            restored_disc or restored_mem or deleted_disc or deleted_mem
+        )
+        if any_swept:
+            logger.warning(
+                "Preview self-heal for payer %s: restored %d preview_remove "
+                "applied-discount row(s), restored %d preview_remove "
+                "membership row(s), deleted %d leaked preview_add "
+                "applied-discount row(s), deleted %d leaked preview_add "
+                "membership row(s). Preview staging is supposed to clean "
+                "itself up in a finally, so a non-zero sweep means a prior "
+                "preview crashed/leaked — investigate if this recurs. "
+                "Restored discount ids: %s. "
+                "Restored membership rows: %s. "
+                "Deleted discount rows: %s. "
+                "Deleted membership rows: %s.",
+                payer_member_id,
+                len(restored_disc),
+                len(restored_mem),
+                len(deleted_disc),
+                len(deleted_mem),
+                [str(r["applied_discount_id"]) for r in restored_disc],
+                [
+                    {
+                        "item_id": str(r["item_id"]),
+                        "member_id": str(r["member_id"]),
+                        "plan_id": str(r["plan_id"]),
+                        "price_id": str(r["price_id"]),
+                        "start_date": str(r["start_date"]),
+                        "created_at": str(r["created_at"]),
+                    }
+                    for r in restored_mem
+                ],
+                [
+                    {
+                        "applied_discount_id": str(r["applied_discount_id"]),
+                        "item_id": str(r["item_id"]),
+                    }
+                    for r in deleted_disc
+                ],
+                [
+                    {
+                        "item_id": str(r["item_id"]),
+                        "member_id": str(r["member_id"]),
+                        "plan_id": str(r["plan_id"]),
+                        "price_id": str(r["price_id"]),
+                        "start_date": str(r["start_date"]),
+                        "created_at": str(r["created_at"]),
+                    }
+                    for r in deleted_mem
+                ],
+            )
 
     # ── Static Helpers ─────────────────────────────────────────
 

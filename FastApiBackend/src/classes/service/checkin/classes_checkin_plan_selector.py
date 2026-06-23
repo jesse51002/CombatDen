@@ -1,9 +1,11 @@
 """Pure selection + breakdown logic for the gated class check-in.
 
 No DB or Stripe — these functions decide which active membership covers a
-class (trial -> one_time -> recurring, then lowest class_count first),
-whether a trial / punch-card plan auto-ends once depleted, and shape the
-per-membership usage breakdown returned with the check-in result.
+class (trial -> one_time -> recurring, then lowest class_count first, then the
+oldest pack within an equal tier so two packs on the same plan drain one fully
+before the next), whether a trial / punch-card membership auto-ends once
+depleted, and shape the per-membership usage breakdown returned with the
+check-in result.
 """
 
 from uuid import UUID
@@ -12,67 +14,73 @@ from schema.membership_plan import PlanType
 
 import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
-from src.classes.schema.classes_plan_type import PlanInfo
 from src.classes.schema.classes_schema import CheckinMembershipBreakdown
 
 _PLAN_TYPE_PRIORITY: dict[PlanType, int] = {
     PlanType.trial: 0,
-    PlanType.recurring: 1,
-    PlanType.one_time: 2,
+    PlanType.one_time: 1,
+    PlanType.recurring: 2,
 }
 
 _UNLIMITED = float("inf")
 
 
-def _sort_plans_by_priority(plans: list[PlanInfo]) -> list[PlanInfo]:
-    """Sort by type priority (trial < one_time < recurring), then by
-    class_count ascending (unlimited last)."""
+def _sort_memberships_by_priority(
+    memberships: list[MembershipUsage],
+) -> list[MembershipUsage]:
+    """Order candidates by selection priority.
+
+    Type (trial < one_time < recurring) — drain the limited trial / one_time
+    packs before the unlimited recurring plan, so a pack a member paid for
+    actually gets used (an unlimited recurring plan always has capacity and
+    would otherwise win every time). Then class_count ascending (unlimited
+    last), then the OLDEST pack first (start_date, then item_id) so two packs on
+    the same plan drain one fully before the next — matching the attendance
+    attribution order.
+    """
     return sorted(
-        plans,
-        key=lambda p: (
-            _PLAN_TYPE_PRIORITY[p.plan_type],
-            p.class_count if p.class_count is not None else _UNLIMITED,
+        memberships,
+        key=lambda m: (
+            _PLAN_TYPE_PRIORITY[m.plan_type],
+            m.class_count if m.class_count is not None else _UNLIMITED,
+            m.start_date,
+            m.item_id,
         ),
     )
 
 
-def select_best_plan(
+def select_best_membership(
     memberships: list[MembershipUsage],
     eligible_plan_ids: set[UUID],
-) -> UUID | None:
-    """Select the best eligible plan with remaining capacity.
+) -> MembershipUsage | None:
+    """Select the best eligible membership with remaining capacity.
 
     Args:
         memberships: Active memberships with usage.
         eligible_plan_ids: Plans that cover this class.
 
     Returns:
-        The plan_id to charge, or None if none qualifies.
+        The membership row to charge, or None if none qualifies.
     """
-    candidates: list[PlanInfo] = []
+    candidates: list[MembershipUsage] = []
     for m in memberships:
         if m.plan_id not in eligible_plan_ids:
             continue
         if m.class_count is not None and m.classes_used >= m.class_count:
             continue
-        candidates.append(
-            PlanInfo(
-                plan_id=m.plan_id,
-                plan_type=m.plan_type,
-                class_count=m.class_count,
-            )
-        )
+        candidates.append(m)
 
     if not candidates:
         return None
 
-    return _sort_plans_by_priority(candidates)[0].plan_id
+    return _sort_memberships_by_priority(candidates)[0]
 
 
 def should_end_membership(membership: MembershipUsage) -> bool:
     """Trial and one_time plans end when their last class is used.
 
-    Recurring and unlimited plans never auto-end.
+    Recurring and unlimited plans never auto-end. ``classes_used`` is the
+    membership's OWN count (per item_id), so a depleted pack ends only itself.
     """
     if membership.plan_type == PlanType.recurring:
         return False
@@ -84,14 +92,18 @@ def should_end_membership(membership: MembershipUsage) -> bool:
 def build_breakdown(
     memberships: list[MembershipUsage],
     eligible_plan_ids: set[UUID],
-    chosen_plan_id: UUID | None,
+    chosen_item_id: UUID | None,
 ) -> list[CheckinMembershipBreakdown]:
     """Build the per-membership breakdown, incrementing the charged
-    plan's usage by 1 to reflect the just-inserted check-in."""
+    membership's usage by 1 to reflect the just-inserted check-in.
+
+    Matched on ``item_id``, so with two packs on the same plan only the one
+    that was actually charged shows the +1.
+    """
     result: list[CheckinMembershipBreakdown] = []
     for m in memberships:
         classes_used = m.classes_used
-        if m.plan_id == chosen_plan_id:
+        if m.item_id == chosen_item_id:
             classes_used += 1
 
         remaining = None
@@ -100,6 +112,7 @@ def build_breakdown(
 
         result.append(
             CheckinMembershipBreakdown(
+                item_id=m.item_id,
                 plan_id=m.plan_id,
                 plan_type=m.plan_type,
                 class_count=m.class_count,

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/features/member_details/bloc/invoice_poller.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
@@ -19,9 +20,23 @@ class MemberDetailBloc
     extends Bloc<MemberDetailEvent, MemberDetailState> {
   final MemberRepository _repository;
 
+  /// Drives the post-charge invoice poll (5/10/15/30/60s). Each
+  /// charge / start / refund / mark-paid-cash restarts it, so a new
+  /// charge mid-window resets the schedule — only one sequence runs.
+  final InvoicePoller _poller;
+
+  /// Monotonic per-tick sequence. Bloc processes events concurrently,
+  /// so two ticks whose re-fetches overlap could otherwise let the
+  /// slower (older) response overwrite the newer one. Each tick claims
+  /// the next number and only emits if still the latest — newest-wins,
+  /// so a stale re-fetch can never clobber a fresher one.
+  int _pollSeq = 0;
+
   MemberDetailBloc({
     required MemberRepository repository,
+    InvoicePoller? poller,
   })  : _repository = repository,
+        _poller = poller ?? InvoicePoller(),
         super(const MemberDetailInitial()) {
     on<MemberDetailRequested>(_onDetailRequested);
     on<MemberSearchChanged>(_onSearchChanged);
@@ -50,6 +65,8 @@ class MemberDetailBloc
     on<ChargeCardRequested>(_onChargeCard);
     on<ChargeCardOutcomeCleared>(_onChargeCardOutcomeCleared);
     on<RefundChargeRequested>(_onRefundCharge);
+
+    on<InvoicePollRequested>(_onInvoicePoll);
   }
 
   // ----- Load + UI handlers -----
@@ -135,10 +152,16 @@ class MemberDetailBloc
   /// Standard mutation flow: mark `isMutating`, run
   /// [action], refresh member detail on success, surface
   /// the error message on failure.
+  ///
+  /// When [pollInvoices] is true (the refund / mark-paid-cash
+  /// actions, which settle an invoice asynchronously via a Stripe
+  /// webhook), the post-charge invoice poll starts on success so the
+  /// settled invoice surfaces without a manual reload.
   Future<void> _runMutation({
     required String actionLabel,
     required Emitter<MemberDetailState> emit,
     required Future<void> Function() action,
+    bool pollInvoices = false,
   }) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
@@ -153,19 +176,27 @@ class MemberDetailBloc
       final refreshed = await _repository.getMemberDetail(
         s.member.memberId,
       );
-      emit(s.copyWith(
+      // Re-read state post-await: a page/search change that arrived
+      // during the awaits must survive the mutation refresh, not be
+      // clobbered by the stale pre-await snapshot.
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         member: refreshed,
         isMutating: false,
         clearActionError: true,
-        refreshToken: s.refreshToken + 1,
+        refreshToken: current.refreshToken + 1,
       ));
+      if (pollInvoices) _startInvoicePolling();
     } catch (e, stackTrace) {
       log(
         '$actionLabel failed',
         error: e,
         stackTrace: stackTrace,
       );
-      emit(s.copyWith(
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         isMutating: false,
         actionError: e.toString(),
       ));
@@ -278,19 +309,28 @@ class MemberDetailBloc
       final refreshed = await _repository.getMemberDetail(
         s.member.memberId,
       );
-      emit(s.copyWith(
+      // Re-read state post-await (see [_runMutation]).
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         member: refreshed,
         isStartingMemberships: false,
         startResult: result,
-        refreshToken: s.refreshToken + 1,
+        refreshToken: current.refreshToken + 1,
       ));
+      // The POST didn't throw, so memberships (and their first
+      // invoices) may have been created — poll even on a partial
+      // failure, where some items succeeded.
+      _startInvoicePolling();
     } catch (e, stackTrace) {
       log(
         'Start memberships failed',
         error: e,
         stackTrace: stackTrace,
       );
-      emit(s.copyWith(
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         isStartingMemberships: false,
         startError: e is ServerException
             ? (e.detail ?? e.message)
@@ -393,6 +433,7 @@ class MemberDetailBloc
     await _runMutation(
       actionLabel: 'Mark paid cash',
       emit: emit,
+      pollInvoices: true,
       action: () => _repository.markMembershipPaidCash(
         MemberMembershipsMarkPaidCashRequest(
           itemId: event.itemId,
@@ -481,7 +522,9 @@ class MemberDetailBloc
       );
     } catch (e, stackTrace) {
       log('Charge card failed', error: e, stackTrace: stackTrace);
-      emit(s.copyWith(
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         isChargingCard: false,
         chargeCardError: e is ServerException
             ? (e.detail ?? e.message)
@@ -493,18 +536,24 @@ class MemberDetailBloc
     // The charge SUCCEEDED — money is taken. Commit success now so a failure
     // of the follow-up refresh can never make a real charge look failed (which
     // would tempt staff to re-charge). The refresh is best-effort: it just
-    // updates the member behind the still-open success step; Payment History
-    // refetches independently off the bumped refreshToken.
-    emit(s.copyWith(
+    // updates the member behind the still-open success step; the Invoices card
+    // and Payment History refetch independently off the bumped refreshToken.
+    // Re-read state post-await (see [_runMutation]).
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    emit(committed.copyWith(
       isChargingCard: false,
-      chargeCardSuccess: s.chargeCardSuccess + 1,
-      refreshToken: s.refreshToken + 1,
+      chargeCardSuccess: committed.chargeCardSuccess + 1,
+      refreshToken: committed.refreshToken + 1,
     ));
+    // The invoice lands in our DB asynchronously (Stripe webhook), so
+    // start the dumb 5/10/15/30/60s poll to surface it without a reload.
+    _startInvoicePolling();
     try {
       final refreshed = await _repository.getMemberDetail(s.member.memberId);
-      final current = state;
-      if (current is MemberDetailLoaded) {
-        emit(current.copyWith(member: refreshed));
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
       }
     } catch (e, stackTrace) {
       log(
@@ -533,6 +582,7 @@ class MemberDetailBloc
     await _runMutation(
       actionLabel: 'Refund charge',
       emit: emit,
+      pollInvoices: true,
       action: () => _repository.refundCharge(
         memberId: s.member.memberId,
         chargeId: event.chargeId,
@@ -540,5 +590,66 @@ class MemberDetailBloc
         idempotencyKey: const Uuid().v4(),
       ),
     );
+  }
+
+  // ----- Invoice polling -----
+
+  /// Starts (or restarts) the post-charge invoice poll. Each tick is
+  /// dispatched back onto the bloc so its handler can emit.
+  void _startInvoicePolling() {
+    _poller.start(() {
+      if (!isClosed) add(const InvoicePollRequested());
+    });
+  }
+
+  /// One poll tick: a dumb re-read of the billing surfaces. Re-fetches
+  /// member detail and bumps `refreshToken` (exactly like a mutation's
+  /// success tail) so the Invoices card and Payment history re-load and
+  /// a webhook-delivered invoice appears. No "did an invoice arrive"
+  /// check. The refresh is best-effort — on a fetch failure the token
+  /// is still bumped so the self-fetching sections retry their own
+  /// reads.
+  Future<void> _onInvoicePoll(
+    InvoicePollRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    final seq = ++_pollSeq;
+    try {
+      final refreshed = await _repository.getMemberDetail(
+        s.member.memberId,
+      );
+      // A newer tick started while this one's fetch was in flight —
+      // drop this (now older) result so it can't overwrite the fresher
+      // one.
+      if (seq != _pollSeq) return;
+      final current = state;
+      if (current is MemberDetailLoaded) {
+        emit(current.copyWith(
+          member: refreshed,
+          refreshToken: current.refreshToken + 1,
+        ));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Invoice poll refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (seq != _pollSeq) return;
+      final current = state;
+      if (current is MemberDetailLoaded) {
+        emit(current.copyWith(
+          refreshToken: current.refreshToken + 1,
+        ));
+      }
+    }
+  }
+
+  @override
+  Future<void> close() {
+    _poller.cancel();
+    return super.close();
   }
 }

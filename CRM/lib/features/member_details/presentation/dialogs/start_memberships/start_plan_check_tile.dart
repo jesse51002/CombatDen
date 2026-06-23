@@ -100,13 +100,7 @@ class StartPlanCheckTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                formatMinorUnits(
-                  plan.activePrice!.price,
-                  currency: 'USD',
-                ),
-                style: DesignConstants.h2,
-              ),
+              _priceReadout(),
             ],
           ),
           if (disabled)
@@ -144,6 +138,39 @@ class StartPlanCheckTile extends StatelessWidget {
         DesignConstants.radiusSmall,
       ),
       child: wrapped,
+    );
+  }
+
+  /// The header price: the plan price, or — when the quantity
+  /// is > 1 (stacked one_time / trial packs) — the TOTAL with an
+  /// `N × unit` breakdown below. No discounts at the selection
+  /// step, so this is the plain plan price (LiveDiscountedPrice
+  /// carries the discounted readout on later steps).
+  Widget _priceReadout() {
+    final unit = plan.activePrice!.price;
+    final count = draft?.count ?? 1;
+    if (count <= 1) {
+      return Text(
+        formatMinorUnits(unit, currency: 'USD'),
+        style: DesignConstants.h2,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      spacing: DesignConstants.spacingTiny,
+      children: [
+        Text(
+          formatMinorUnits(unit * count, currency: 'USD'),
+          style: DesignConstants.h2,
+        ),
+        Text(
+          '$count × ${formatMinorUnits(unit, currency: 'USD')}',
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.text2nd,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -60,6 +60,11 @@ class ActiveMembershipRow(BaseModel):
     stripe_price_id: str
     price: int
     stripe_item_id: str | None = None
+    # How many units this single row bills as. One-time / trial packs stack as
+    # quantity > 1 (one row -> one invoice line carrying that quantity). Recurring
+    # is always 1 (DB-enforced) and the recurring build ignores it — the recurring
+    # line quantity is the number of memberships on the price group, not this.
+    quantity: int = 1
     # Recurring rows always carry the plan's interval; a one-time row may leave it
     # None (a one-time plan can have no duration). Carried as metadata only — the
     # bucket interval is fixed monthly, so nothing in the build reads it.
@@ -178,12 +183,15 @@ class OneTimeInvoiceItem(BaseModel):
     writeback maps each returned line id + amount back to this ``item_id``.
     ``coupon_ids`` are the membership's item-level coupons, already ordered
     percent→dollar by the resolver (``DISCOUNT_APPLICATION_ORDER``).
+    ``quantity`` is how many units this line bills (a one_time / trial pack
+    bought N at once is ONE line carrying quantity = N).
     """
 
     item_id: UUID
     member_id: UUID
     plan_id: UUID
     stripe_price_id: str
+    quantity: int = 1
     coupon_ids: list[str] = []
 
 

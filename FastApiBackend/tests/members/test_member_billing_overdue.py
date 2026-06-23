@@ -136,9 +136,13 @@ def test_one_card_per_row():
     assert len(cards) == 2
 
 
-def _usage(plan_id, **overrides) -> MembershipUsage:
+def _usage(*, item_id, plan_id, **overrides) -> MembershipUsage:
+    # Usage is keyed per membership (item_id), not per plan — a stacked /
+    # separately-bought pack on the same plan gets its own bucket (#32).
     defaults = {
+        "item_id": item_id,
         "plan_id": plan_id,
+        "start_date": date(2026, 1, 1),
         "plan_type": PlanType.recurring,
         "status": "active",
         "class_count": 12,
@@ -154,7 +158,11 @@ def _usage(plan_id, **overrides) -> MembershipUsage:
 def test_card_inlines_cycle_usage():
     grouper = MembersBillingGrouper()
     row = _membership_row(status="active", next_due=FUTURE)
-    lookup = {(row["member_id"], row["plan_id"]): _usage(row["plan_id"])}
+    lookup = {
+        (row["member_id"], row["item_id"]): _usage(
+            item_id=row["item_id"], plan_id=row["plan_id"]
+        )
+    }
 
     cards = grouper.build_membership_cards([row], lookup, TODAY)
 

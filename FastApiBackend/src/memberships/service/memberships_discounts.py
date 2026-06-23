@@ -93,6 +93,10 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
         apply_date = gym_today(row["timezone"])
 
         if preview:
+            # Self-heal: restore any stale preview_remove/preview_add rows for
+            # this payer left by a prior crashed preview, before staging ours.
+            await self._sweep_stale_preview_rows(payer_member_id)
+
             staged: list[UUID] = []
 
             async def _stage() -> None:
@@ -173,6 +177,10 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
         payer_member_id = row["paid_by_member_id"]
 
         if preview:
+            # Self-heal: restore any stale preview_remove/preview_add rows for
+            # this payer left by a prior crashed preview, before staging ours.
+            await self._sweep_stale_preview_rows(payer_member_id)
+
             async def _stage() -> None:
                 await self._set_applied_discounts_status(
                     member_id, applied_ids, StripeSyncStatus.preview_remove,

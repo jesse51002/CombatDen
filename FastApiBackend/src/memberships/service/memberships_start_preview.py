@@ -117,6 +117,11 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
 
         start_date = gym_today(payer.timezone)
         try:
+            # Self-heal first: drop any leaked preview_add rows for this payer
+            # left by a crashed/killed prior preview, BEFORE staging our own or
+            # reading the engine previews — else those stale rows inflate the
+            # figures. Safe + payer-scoped (nothing real is ever preview_add).
+            await self._sweep_stale_preview_rows(request.payer_member_id)
             await self._stage(request, plan_prices, states, start_date)
 
             one_time = (
@@ -174,9 +179,12 @@ class MemberMembershipsStartPreview(MemberMembershipsBase):
             start_date,
             sync_status=StripeSyncStatus.preview_add,
         )
-        inserted = await self._crm_insert(rows)
-        for state in states:
-            state.item_id = inserted[(state.member_id, state.plan_id)]
+        # Each staged row gets its OWN id positionally (rows ↔ states order),
+        # so the finally-cleanup deletes EVERY preview_add row. A (member,
+        # plan) lookup would collapse N stacked rows to one id and leak N-1.
+        item_ids = await self._crm_insert(rows)
+        for state, item_id in zip(states, item_ids, strict=True):
+            state.item_id = item_id
 
         for item, state in zip(request.memberships, states, strict=True):
             state.minted_ids = await self._discounts.mint_custom_discounts(

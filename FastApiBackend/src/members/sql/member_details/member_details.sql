@@ -16,11 +16,24 @@ family_group AS (
     JOIN target_profile t ON t.gym_id = mm.gym_id
     WHERE mm.paid_by_member_id = :member_id
 ),
+-- Collapse RECURRING reprice history to the current row (one card per plan),
+-- but keep EACH one_time / trial pack DISTINCT by item_id — stacked or
+-- separately-bought packs on the same plan are different memberships and must
+-- each surface, not collapse to the most recent. So the DISTINCT-ON key is the
+-- plan for recurring, the item for one_time / trial (CASE: NULL vs item_id).
 latest_memberships AS (
-    SELECT DISTINCT ON (member_id, gym_id, plan_id) *
-    FROM member_memberships_status
-    ORDER BY member_id, gym_id, plan_id,
-             start_date DESC, created_at DESC
+    SELECT DISTINCT ON (
+        mms.member_id, mms.gym_id, mms.plan_id,
+        CASE WHEN mp.plan_type = 'recurring'
+             THEN NULL::uuid ELSE mms.item_id END
+    ) mms.*
+    FROM member_memberships_status mms
+    JOIN membership_plans mp
+        ON mp.plan_id = mms.plan_id AND mp.gym_id = mms.gym_id
+    ORDER BY mms.member_id, mms.gym_id, mms.plan_id,
+             CASE WHEN mp.plan_type = 'recurring'
+                  THEN NULL::uuid ELSE mms.item_id END,
+             mms.start_date DESC, mms.created_at DESC
 )
 SELECT
     m.member_id,

@@ -940,10 +940,15 @@ charge) so the one-time invoice just bills the new saved default — no explicit
 2. **Group ONE-per-membership** (`_group_per_membership`, keyed by `item_id`).
    A Stripe **invoice** has no one-item-per-price constraint like a subscription,
    so each membership is its **own** invoice line (its own line id + its own
-   item-level discount). There is **no consolidation and no /quantity averaging**
-   — a singleton group makes `PaymentSyncDiscounts.resolve`'s /quantity a no-op
-   (**/1**), so each membership keeps its exact discount and `resolve` is reused
-   unchanged.
+   item-level discount), **carrying that membership's `quantity`** — a one_time /
+   trial pack bought N at once is ONE row with `quantity = N`, billed as one line
+   of N units (so a fixed-$ coupon applies **once** to the line, a percent to the
+   unit×N amount, and Stripe's line amount = the post-discount line total the
+   writeback reads). There is **no consolidation and no discount-/quantity
+   averaging across memberships** — a singleton group makes
+   `PaymentSyncDiscounts.resolve`'s ÷(member count) a no-op (**/1**), so each
+   membership keeps its exact discount and `resolve` is reused unchanged (the
+   line `quantity` rides the Stripe item, independent of the discount math).
 3. **Resolve coupons** — `PaymentSyncDiscounts.resolve(groups, stripe_account_id)`
    (the same idempotent gym-wide find-or-create as recurring). Each membership's
    `coupons_by_price.get(item_id, [])` becomes its line's item-level coupons.

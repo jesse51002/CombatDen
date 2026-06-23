@@ -24,15 +24,23 @@ const int _kPageSize = 20;
 /// charge a parent made for this member shows here. The "Paid by"
 /// column names the payer; the invoice popup adds who it was "For".
 /// Each row opens the full invoice (via [PaymentInvoiceDialog]);
-/// "Show more" loads the next page.
+/// "Show more" loads the next page. Reloads from page 1 whenever
+/// [refreshKey] changes — bumped on every billing change (and on each
+/// tick of the post-charge invoice poll) so a webhook-delivered
+/// invoice surfaces here without a manual reload.
 class PaymentHistorySection extends StatefulWidget {
   final String memberId;
   final String gymId;
+
+  /// Bumped by the bloc on every billing change (the member-detail
+  /// `refreshToken`). A change reloads the table from page 1.
+  final int refreshKey;
 
   const PaymentHistorySection({
     super.key,
     required this.memberId,
     required this.gymId,
+    required this.refreshKey,
   });
 
   @override
@@ -49,6 +57,11 @@ class _PaymentHistorySectionState
   String? _error;
   int _offset = 0;
 
+  /// Bumped on every [_reload] so an in-flight page fetch from a
+  /// superseded load discards its result instead of appending stale
+  /// rows onto the freshly-reset list.
+  int _loadGen = 0;
+
   @override
   void initState() {
     super.initState();
@@ -56,8 +69,17 @@ class _PaymentHistorySectionState
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant PaymentHistorySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshKey != widget.refreshKey) {
+      _reload();
+    }
+  }
+
   Future<void> _load() async {
     if (_loading || !_hasMore) return;
+    final gen = _loadGen;
     setState(() {
       _loading = true;
       _error = null;
@@ -68,7 +90,7 @@ class _PaymentHistorySectionState
         limit: _kPageSize,
         offset: _offset,
       );
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _payments.addAll(page);
         _offset += page.length;
@@ -76,12 +98,27 @@ class _PaymentHistorySectionState
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _error = e.toString();
         _loading = false;
       });
     }
+  }
+
+  /// Resets pagination and re-fetches page 1. Bumping [_loadGen]
+  /// orphans any in-flight [_load] so it can't append onto the
+  /// cleared list.
+  void _reload() {
+    setState(() {
+      _loadGen++;
+      _payments.clear();
+      _offset = 0;
+      _hasMore = true;
+      _error = null;
+      _loading = false;
+    });
+    _load();
   }
 
   @override

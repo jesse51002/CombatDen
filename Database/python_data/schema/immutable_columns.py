@@ -282,6 +282,7 @@ MEMBER_MEMBERSHIPS: frozenset[str] = frozenset(
         "stripe_one_time_invoice_id",  # one-time consolidated invoice id (writeback)
         "stripe_sync_status",  # sync writeback (Stripe-convergence confirmation)
         "price_id",  # immutable (trigger: trg_prevent_price_id_overwrite); reprice = new row
+        "quantity",  # set at INSERT, immutable after; recurring forced = 1 (trigger: trg_recurring_quantity_must_be_one)
     }
 )
 

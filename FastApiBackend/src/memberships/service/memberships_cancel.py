@@ -133,6 +133,10 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         self._validate_cancel(row, item_id, member_id)
 
+        # Self-heal: restore any stale preview_remove/preview_add rows for this
+        # payer left by a prior crashed preview, before staging our own.
+        await self._sweep_stale_preview_rows(row["paid_by_member_id"])
+
         # Stage the membership 'preview_remove' so the preview build drops it
         # (preview=True excludes preview_remove), then restore 'applied'. The
         # window is bounded by `finally`; the per-payer lock (#25) closes the

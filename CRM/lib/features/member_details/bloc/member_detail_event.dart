@@ -289,3 +289,14 @@ class RefundChargeRequested extends MemberDetailEvent {
   @override
   List<Object?> get props => [chargeId, amount];
 }
+
+// ----- Invoice polling -----
+
+/// One tick of the post-charge invoice poll. Dispatched by the
+/// `InvoicePoller`'s timers (not the UI) after a charge / start /
+/// refund / mark-paid-cash, on a fixed 5/10/15/30/60s schedule. Its
+/// handler dumbly re-reads the billing surfaces (bumps `refreshToken`)
+/// so a webhook-delivered invoice appears without a manual reload.
+class InvoicePollRequested extends MemberDetailEvent {
+  const InvoicePollRequested();
+}

@@ -53,6 +53,17 @@ CREATE TABLE member_memberships_unfiltered (
     -- plan total by summing the rows.
     total_price INTEGER NOT NULL CHECK (total_price >= 0),
 
+    -- How many identical units this membership bills as. one_time / trial packs
+    -- STACK: buying N at checkout is ONE row with quantity = N, billed as one
+    -- Stripe invoice line carrying that quantity (so a fixed-$ coupon applies
+    -- once to the line, not N times) and granting class_count * quantity classes
+    -- in one bucket. RECURRING is always 1 (one subscription item per plan) —
+    -- enforced by trg_recurring_quantity_must_be_one. Set at INSERT, immutable
+    -- after (a quantity change is cancel-old + insert-new, the append-only
+    -- model). Buying ANOTHER pack later is a separate row with its own quantity.
+    quantity INTEGER NOT NULL DEFAULT 1
+        CONSTRAINT member_membership_quantity_positive CHECK (quantity > 0),
+
     -- Stripe-sync confirmation (service_role writeback). 'not_added' (default)
     -- = pending: the row is asking the sync to add it to Stripe; the sync stamps
     -- `applied` once Stripe confirms (and `deleted` when it removes the row).
@@ -237,6 +248,34 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_recurring_no_end_date
     BEFORE INSERT OR UPDATE OF end_date ON member_memberships_unfiltered
     FOR EACH ROW EXECUTE FUNCTION check_recurring_no_end_date();
+
+-- Trigger: recurring memberships must have quantity = 1 (one subscription item
+-- per plan); only one_time / trial packs may stack via quantity > 1. A pure
+-- per-row invariant like check_recurring_no_end_date — it never queries other
+-- rows, so it fires on every insert/update of quantity, preview rows included
+-- (a recurring preview row must still be quantity = 1).
+CREATE OR REPLACE FUNCTION check_recurring_quantity_is_one()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_plan_type VARCHAR;
+BEGIN
+    IF NEW.quantity <> 1 THEN
+        SELECT plan_type INTO v_plan_type
+        FROM membership_plans_unfiltered
+        WHERE plan_id = NEW.plan_id;
+
+        IF v_plan_type = 'recurring' THEN
+            RAISE EXCEPTION 'recurring memberships must have quantity = 1'
+                USING CONSTRAINT = 'recurring_quantity_must_be_one';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_recurring_quantity_must_be_one
+    BEFORE INSERT OR UPDATE OF quantity ON member_memberships_unfiltered
+    FOR EACH ROW EXECUTE FUNCTION check_recurring_quantity_is_one();
 
 -- Trigger: inserting a recurring membership requires all existing memberships
 -- for the same user+gym to be ended or cancelled. Preview-staged rows

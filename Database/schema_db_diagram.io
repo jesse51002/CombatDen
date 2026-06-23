@@ -473,6 +473,7 @@ Table member_memberships_unfiltered {
   stripe_item_id varchar [note: 'immutable once set EXCEPT while migrating (price migration moves the line); never nulled (historical line record)']
   stripe_one_time_invoice_id varchar [note: 'ONE-TIME only: the consolidated invoice (in_) this membership was billed on; stripe_item_id holds the per-membership LINE id, this holds the shared invoice id; NULL for recurring; immutable once set']
   total_price integer [not null, note: 'CHECK >= 0']
+  quantity integer [not null, default: 1, note: 'CHECK > 0; how many units this row bills as. one_time/trial packs stack as ONE row with quantity = N (one Stripe line with that quantity, $-coupon applies once, class_count*quantity classes); recurring forced = 1 (trigger); set at INSERT, immutable after']
   stripe_sync_status stripe_sync_status [not null, default: 'not_added', note: 'not_added = pending; sync stamps applied/deleted; migrating = price migration ONLY (unlocks the stripe_item_id move); client view hides not_added/preview_*; orthogonal to lifecycle status view']
   created_at timestamptz [not null, default: `now()`]
 

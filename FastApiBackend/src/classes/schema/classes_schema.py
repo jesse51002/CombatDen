@@ -19,11 +19,12 @@ class CheckinMembershipBreakdown(BaseModel):
     """Usage breakdown for one of the member's active memberships.
 
     Attributes:
+        item_id: The membership row (the bucket this usage belongs to).
         plan_id: The membership plan.
         plan_type: Trial, one_time, or recurring.
         class_count: Max classes allowed (None = unlimited).
         classes_used: Classes used this cycle (post-checkin for the
-            charged plan).
+            charged membership).
         classes_remaining: Classes left (None = unlimited).
         is_eligible: Whether this plan covers the checked-in class.
         renew_date: Next renewal / due date (recurring plans; None
@@ -32,6 +33,7 @@ class CheckinMembershipBreakdown(BaseModel):
             otherwise).
     """
 
+    item_id: UUID
     plan_id: UUID
     plan_type: PlanType
     class_count: int | None

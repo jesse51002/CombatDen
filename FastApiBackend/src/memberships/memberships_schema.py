@@ -48,10 +48,19 @@ class MemberMembershipsStartItem(BaseModel):
     existing preset / linked discounts; ``custom_discounts`` are inline
     values minted as ``custom`` discounts. Both land before the charge, so
     the first (one-time: only) invoice is discounted.
+
+    ``quantity`` is how many identical units this one item buys. one_time /
+    trial packs STACK via ``quantity`` (one row billed as a single Stripe line
+    with that quantity, so a fixed-$ coupon applies once, not N times, and the
+    pack grants ``class_count * quantity`` classes). Recurring must be
+    ``quantity == 1`` (enforced in MemberMembershipsStartValidation, where plan
+    types are known, and again by the DB trigger). Buying ANOTHER pack of the
+    same plan is a SEPARATE item, not a higher quantity on this one.
     """
 
     member_id: UUID
     price_id: UUID
+    quantity: int = Field(1, gt=0)
     discount_ids: list[UUID] = []
     custom_discounts: list[DiscountValue] = []
 
@@ -123,13 +132,24 @@ class MemberMembershipsStartRequest(BaseModel):
         cls,
         value: list[MemberMembershipsStartItem],
     ) -> list[MemberMembershipsStartItem]:
+        # No two items may share the same (member_id, price_id): buying N of
+        # the same pack is ONE item with quantity = N, never N duplicate items.
+        # (Two DIFFERENT prices of the same plan are still two distinct items —
+        # the recurring-only same-plan guard lives in
+        # MemberMembershipsStartValidation, where plan types are known.)
         if not value:
             raise ValueError("memberships must not be empty")
-        pairs = [(item.member_id, item.price_id) for item in value]
-        if len(pairs) != len(set(pairs)):
-            raise ValueError(
-                "memberships must not contain duplicate (member_id, price_id) pairs",
-            )
+        seen: set[tuple[UUID, UUID]] = set()
+        for item in value:
+            key = (item.member_id, item.price_id)
+            if key in seen:
+                raise ValueError(
+                    "Duplicate (member_id, price_id) in one request: use "
+                    "quantity to buy multiple of the same pack, not repeated "
+                    f"items (member_id={item.member_id}, "
+                    f"price_id={item.price_id})",
+                )
+            seen.add(key)
         return value
 
 

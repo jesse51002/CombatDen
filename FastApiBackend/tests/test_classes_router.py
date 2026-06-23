@@ -47,6 +47,7 @@ def test_checkin_records_when_a_plan_covers_the_class(
         chosen_item_id=item_id,
         memberships=[
             CheckinMembershipBreakdown(
+                item_id=item_id,
                 plan_id=plan_id,
                 plan_type="recurring",
                 class_count=None,
@@ -113,6 +114,7 @@ def test_checkin_rejected_when_no_plan_covers(
     body = resp.json()
     assert body["log_id"] is None
     assert body["chosen_plan_id"] is None
+    assert body["chosen_item_id"] is None
     assert body["already_checked_in"] is False
 
 

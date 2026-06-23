@@ -207,9 +207,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
         """
         start_date = gym_today(payer.timezone)
         rows = self._build_pending_rows(request, plan_prices, start_date)
-        inserted = await self._crm_insert(rows)
-        for state in states:
-            state.item_id = inserted[(state.member_id, state.plan_id)]
+        # rows are built in request.memberships order, same as states, so each
+        # state takes its OWN row's id positionally. A (member, plan) lookup
+        # would collapse N stacked-pack rows to one id and strand the rest.
+        item_ids = await self._crm_insert(rows)
+        for state, item_id in zip(states, item_ids, strict=True):
+            state.item_id = item_id
 
         try:
             for item, state in zip(

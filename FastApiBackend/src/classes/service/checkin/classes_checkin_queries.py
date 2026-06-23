@@ -88,27 +88,3 @@ class ClassesCheckinQueries:
                 .all()
             )
         return {row["plan_id"] for row in rows}
-
-    async def resolve_item_id(
-        self,
-        request: CheckinRequest,
-        plan_id: UUID,
-    ) -> UUID | None:
-        """Pick the concrete active membership row to charge for a plan."""
-        sql = load_sql(SQL_DIR / "select_membership_item.sql")
-        async with self._db_pool.session() as session:
-            row = (
-                (
-                    await session.execute(
-                        text(sql),
-                        {
-                            "member_id": str(request.member_id),
-                            "gym_id": str(request.gym_id),
-                            "plan_id": str(plan_id),
-                        },
-                    )
-                )
-                .mappings()
-                .fetchone()
-            )
-        return row["item_id"] if row else None

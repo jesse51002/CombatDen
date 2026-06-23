@@ -9,9 +9,12 @@ this IDENTICAL validation first — it lives in its own class so that stays
 structural, not copy-paste. Any failure rejects the whole request with
 nothing written and nothing billed.
 
-Order: payer → link/gym state → price/plan rows → per-member duplicate
-check → discounts. The request model already rejected an empty list and
-intra-request (member_id, price_id) duplicates.
+Order: payer → link/gym state → price/plan rows → intra-request recurring
+duplicate check → recurring-quantity check → per-member existing-recurring
+check → discounts. The request model rejects duplicate ``(member_id, price_id)``
+items (buying N of a pack is ONE item with ``quantity = N``, never N duplicate
+items); the recurring "two on the same plan, at different prices, in one
+request" rule is enforced here, where plan types are known.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from schema.gym_discount import DiscountType
+from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -88,6 +92,9 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
                     f"Plan price {price_id} missing stripe_price_id",
                 )
 
+        self._check_no_recurring_duplicates(request, plan_prices)
+        self._check_recurring_quantity(request, plan_prices)
+
         plans_by_member: dict[UUID, list[UUID]] = {}
         for item in request.memberships:
             plans_by_member.setdefault(item.member_id, []).append(
@@ -100,6 +107,68 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
 
         await self._check_discounts(request)
         return payer, plan_prices
+
+    def _check_no_recurring_duplicates(
+        self,
+        request: MemberMembershipsStartRequest,
+        plan_prices: dict[UUID, dict],
+    ) -> None:
+        """Reject two RECURRING items on the same plan in one request.
+
+        Exact duplicate items (same member + same price) are already blocked
+        structurally by MemberMembershipsStartItem's request validator. This
+        guard adds the case that one can't see: two recurring items on the same
+        PLAN at DIFFERENT prices (e.g. monthly + annual of plan A) — same
+        (member, plan), different price_id. A member can hold only one active
+        recurring membership per plan, and a BEFORE-INSERT row trigger can't be
+        relied on to catch two siblings inserted in the SAME multi-row INSERT,
+        so this surfaces it early, before any write. (one_time / trial stack via
+        quantity, not repeated items, so they have no equivalent restriction.)
+
+        Raises:
+            ValueError: On the first duplicate recurring (member, plan).
+        """
+        seen: set[tuple[UUID, UUID]] = set()
+        for item in request.memberships:
+            row = plan_prices[item.price_id]
+            if row["plan_type"] != PlanType.recurring:
+                continue
+            key = (item.member_id, row["plan_id"])
+            if key in seen:
+                raise ValueError(
+                    "Duplicate recurring membership in one request: "
+                    f"member_id={item.member_id}, "
+                    f"plan_id={row['plan_id']}"
+                )
+            seen.add(key)
+
+    def _check_recurring_quantity(
+        self,
+        request: MemberMembershipsStartRequest,
+        plan_prices: dict[UUID, dict],
+    ) -> None:
+        """Reject quantity > 1 on a RECURRING item.
+
+        A recurring membership is one subscription item per plan, so it must be
+        quantity == 1; only one_time / trial packs may stack via quantity > 1.
+        The DB trigger trg_recurring_quantity_must_be_one enforces the same
+        invariant — this surfaces it early, before any write, with a clear
+        message.
+
+        Raises:
+            ValueError: On the first recurring item whose quantity != 1.
+        """
+        for item in request.memberships:
+            row = plan_prices[item.price_id]
+            if (
+                row["plan_type"] == PlanType.recurring
+                and item.quantity != 1
+            ):
+                raise ValueError(
+                    "Recurring membership must have quantity == 1 "
+                    f"(member_id={item.member_id}, "
+                    f"plan_id={row['plan_id']}, quantity={item.quantity})",
+                )
 
     async def _resolve_payer(
         self,

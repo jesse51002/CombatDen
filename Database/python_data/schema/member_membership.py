@@ -51,6 +51,10 @@ class MemberMembershipCreate(SeedModel):
     last_paid_date: date | None = None
     next_due_date: date | None = None
     total_price: int
+    # How many identical units this membership bills as (one_time / trial packs
+    # stack as one row with quantity = N). Recurring is always 1 (DB trigger
+    # trg_recurring_quantity_must_be_one enforces it).
+    quantity: int = 1
 
     stripe_item_id: str | None = None
     stripe_sync_status: StripeSyncStatus = StripeSyncStatus.not_added
