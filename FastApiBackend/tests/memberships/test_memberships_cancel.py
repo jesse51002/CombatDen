@@ -11,14 +11,13 @@ import pytest
 import stripe
 from sqlalchemy import text
 
-from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
 )
-from src.shared.sql_loader import load_sql
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import get_profile_stripe_ids
+from tests.helpers.db_writes import authorize_payer
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
     fetch_subscription,
@@ -226,16 +225,7 @@ async def test_cancel_one_of_shared_consolidated_line(
     child = await created.member(gym_id)
     plan = await created.plan(gym_id)
 
-    link_sql = load_sql(SQL_DIR / "member_memberships_link.sql")
-    async with db_pool.session() as session:
-        await session.execute(
-            text(link_sql),
-            {
-                "member_id": str(child.member_id),
-                "parent_member_id": str(payer.member_id),
-            },
-        )
-        await session.commit()
+    await authorize_payer(db_pool, child.member_id, payer.member_id)
 
     try:
         await memberships_service.start(

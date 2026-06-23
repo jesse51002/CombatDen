@@ -42,6 +42,7 @@ from src.shared.sql_loader import load_sql
 from src.sync.service.sync_discounts import PaymentSyncDiscounts
 from src.sync.service.sync_one_time import PaymentSyncOneTime
 from tests.helpers.db_reads import get_applied_discounts
+from tests.helpers.db_writes import authorize_payer
 
 _SEEDED_GYM_TZ = "America/Chicago"
 
@@ -99,6 +100,7 @@ async def _insert_pending_one_time(
         "next_due_dates": [None],
         "stripe_item_ids": [None],
         "total_prices": [total_price],
+        "quantities": [1],
         "sync_statuses": [StripeSyncStatus.not_added.value],
     }
     async with db_pool.session() as session:
@@ -139,19 +141,8 @@ async def test_family_sweep_one_invoice_two_lines(
     payer = await created.member(gym_id, payment_method_id=pm_id)
     child = await created.member(gym_id, first_name="Child", last_name="Sweep")
 
-    # Link the child to the payer (NULLs the child's card; child rides the
-    # payer's invoice). Allowed: the child has no active recurring memberships
-    # (a pending one-time row is not recurring).
-    link_sql = load_sql(SQL_DIR / "member_memberships_link.sql")
-    async with db_pool.session() as session:
-        await session.execute(
-            text(link_sql),
-            {
-                "member_id": str(child.member_id),
-                "parent_member_id": str(payer.member_id),
-            },
-        )
-        await session.commit()
+    # Authorize the payer to pay for the child (sign-gated junction row).
+    await authorize_payer(db_pool, child.member_id, payer.member_id)
 
     plan = await created.plan(
         gym_id,

@@ -32,17 +32,16 @@ from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import DiscountValue
-from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
 )
-from src.shared.sql_loader import load_sql
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_applied_discounts,
     get_profile_stripe_ids,
 )
+from tests.helpers.db_writes import authorize_payer
 from tests.helpers.stripe_assertions import fetch_subscription
 
 # The single seeded gym is America/Chicago (tests/seed_constants.py).
@@ -50,18 +49,9 @@ _SEEDED_GYM_TZ = "America/Chicago"
 
 
 async def _link_child(db_pool, child_id, parent_id) -> None:
-    """Link a child to the payer via the production link SQL (NULLs the
-    child's own card/sub so it rides the payer's invoice)."""
-    link_sql = load_sql(SQL_DIR / "member_memberships_link.sql")
-    async with db_pool.session() as session:
-        await session.execute(
-            text(link_sql),
-            {
-                "member_id": str(child_id),
-                "parent_member_id": str(parent_id),
-            },
-        )
-        await session.commit()
+    """Authorize ``parent_id`` to pay for ``child_id`` via the production
+    authorization service (sign-gated, inserts the junction row)."""
+    await authorize_payer(db_pool, child_id, parent_id)
 
 
 async def _read_membership_row(db_pool, item_id) -> dict:
@@ -504,7 +494,7 @@ async def test_phase_a_member_unlinked_rejects(
     plan = await created.plan(gym_id)
 
     try:
-        with pytest.raises(ValueError, match="link them first"):
+        with pytest.raises(ValueError, match="authorize them first"):
             await memberships_service.start(
                 MemberMembershipsStartRequest(
                     payer_member_id=payer.member_id,
@@ -554,7 +544,7 @@ async def test_phase_a_member_linked_to_other_payer_rejects(
     try:
         await _link_child(db_pool, child.member_id, other_payer.member_id)
 
-        with pytest.raises(ValueError, match="different paying"):
+        with pytest.raises(ValueError, match="authorize them first"):
             await memberships_service.start(
                 MemberMembershipsStartRequest(
                     payer_member_id=payer.member_id,
