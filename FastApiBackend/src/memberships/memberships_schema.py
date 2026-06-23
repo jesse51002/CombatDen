@@ -448,6 +448,37 @@ class MembersBillingLinkCheckResponse(BaseModel):
     error: str | None = None
 
 
+class MembersBillingRemoveAuthorizationRequest(BaseModel):
+    """Remove a payer's authorization for the path member, cascading a cancel.
+
+    Pair-scoped: cancels the path member's live recurring memberships that
+    ``payer_member_id`` funds, then de-authorizes the pair. Memberships paid by
+    OTHER payers — and the payer's memberships for OTHER members — are untouched.
+    """
+
+    payer_member_id: UUID
+
+
+class RemoveAuthorizationMembership(BaseModel):
+    """One membership that removing an authorization would cancel."""
+
+    item_id: UUID
+    plan_name: str
+    total_price: int
+
+
+class RemoveAuthorizationPreview(BaseModel):
+    """What removing an authorization will cancel (shown before confirming).
+
+    Lists every live recurring membership the path member holds that the payer
+    funds, plus the summed monthly that stops. An empty list means the
+    authorization can be removed with no billing impact.
+    """
+
+    memberships: list[RemoveAuthorizationMembership] = []
+    total_monthly: int = 0
+
+
 class MemberMembershipsAppliedDiscount(BaseModel):
     """A single applied-discount row returned to the client.
 

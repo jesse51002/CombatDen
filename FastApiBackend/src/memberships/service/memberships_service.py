@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from schema.task import ProrationBehavior
 from sqlalchemy import text
@@ -21,6 +21,8 @@ from src.memberships.memberships_schema import (
     MemberMembershipsStartRequest,
     MemberMembershipsStartResponse,
     MembersBillingLinkCheckResponse,
+    RemoveAuthorizationMembership,
+    RemoveAuthorizationPreview,
 )
 from src.memberships.service.memberships_cancel import (
     MemberMembershipsCancel,
@@ -392,7 +394,96 @@ class MemberMembershipsService:
             payer_member_id,
         )
 
+    async def preview_remove_authorization(
+        self,
+        member_id: UUID,
+        payer_member_id: UUID,
+    ) -> RemoveAuthorizationPreview:
+        """Preview what removing the (member, payer) authorization cancels.
+
+        Pair-scoped: lists ``member_id``'s live recurring memberships funded by
+        ``payer_member_id`` and the monthly that stops. Read-only.
+        """
+        rows = await self._pair_cancellable(member_id, payer_member_id)
+        memberships = [
+            RemoveAuthorizationMembership(
+                item_id=row["item_id"],
+                plan_name=row["plan_name"],
+                total_price=row["total_price"],
+            )
+            for row in rows
+        ]
+        return RemoveAuthorizationPreview(
+            memberships=memberships,
+            total_monthly=sum(m.total_price for m in memberships),
+        )
+
+    async def remove_authorization(
+        self,
+        member_id: UUID,
+        payer_member_id: UUID,
+    ) -> None:
+        """Remove the (member, payer) authorization, cascading a cancel.
+
+        Pair-scoped and billing-critical: under the two-account lock, cancels
+        every live recurring membership ``payer_member_id`` funds for
+        ``member_id`` (the existing per-membership cancel converges Stripe), then
+        deletes the ``member_authorized_payers`` row (the signature audit row
+        persists). Memberships paid by other payers, and this payer's
+        memberships for other members, are untouched.
+
+        Locks BOTH accounts itself (like link/unlink), so the facade does NOT
+        wrap this in another lock.
+
+        Raises:
+            ValueError: If no such authorization exists.
+        """
+        async with self._paying_lock.lock([member_id, payer_member_id]):
+            rows = await self._pair_cancellable(member_id, payer_member_id)
+            for row in rows:
+                await self._cancel.cancel(
+                    UUID(str(row["item_id"])),
+                    member_id,
+                    uuid4(),
+                )
+            del_sql = load_sql(
+                SQL_DIR / "member_authorized_payers_delete.sql",
+            )
+            async with self._db_pool.session() as session:
+                result = await session.execute(
+                    text(del_sql),
+                    {
+                        "member_id": str(member_id),
+                        "payer_member_id": str(payer_member_id),
+                    },
+                )
+                if not result.mappings().fetchone():
+                    raise ValueError(
+                        f"Payer {payer_member_id} is not an authorized payer "
+                        f"for member {member_id}",
+                    )
+                await session.commit()
+
     # ── Private ────────────────────────────────────────────────
+
+    async def _pair_cancellable(
+        self,
+        member_id: UUID,
+        payer_member_id: UUID,
+    ) -> list[dict]:
+        """The payee's live recurring memberships funded by this payer."""
+        sql = load_sql(
+            SQL_DIR / "member_memberships_by_authorization_pair.sql",
+        )
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "member_id": str(member_id),
+                    "payer_member_id": str(payer_member_id),
+                },
+            )
+            return [dict(row) for row in result.mappings().all()]
 
     async def _get_payer_for_item(self, item_id: UUID) -> UUID:
         """The membership row's payer — the lock key for item-scoped ops.

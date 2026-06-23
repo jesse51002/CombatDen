@@ -44,6 +44,8 @@ from src.memberships.memberships_schema import (
     MembersBillingLinkCheckRequest,
     MembersBillingLinkCheckResponse,
     MembersBillingLinkRequest,
+    MembersBillingRemoveAuthorizationRequest,
+    RemoveAuthorizationPreview,
 )
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
@@ -650,6 +652,113 @@ async def check_link_member_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to check member link",
+        ) from None
+
+
+@members_router.post(
+    "/{member_id}/link/remove/preview",
+    response_model=RemoveAuthorizationPreview,
+    summary="Preview removing a payer's authorization (pair-scoped cancel)",
+    description=(
+        "Read-only. Lists the path member's live recurring memberships that "
+        "payer_member_id funds — these are what removing the authorization will "
+        "cancel — plus the summed monthly that stops. Empty = no billing impact."
+    ),
+    responses={
+        200: {"description": "Preview computed"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def preview_remove_authorization(
+    member_id: UUID,
+    request: MembersBillingRemoveAuthorizationRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> RemoveAuthorizationPreview:
+    """Preview the cascading cancel of removing a payer's authorization."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await memberships_service.preview_remove_authorization(
+            member_id,
+            request.payer_member_id,
+        )
+    except Exception:
+        logger.error(
+            "Failed to preview remove authorization: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to preview removing the authorization",
+        ) from None
+
+
+@members_router.post(
+    "/{member_id}/link/remove",
+    summary="Remove a payer's authorization (pair-scoped cascading cancel)",
+    description=(
+        "Cancels the path member's live recurring memberships that "
+        "payer_member_id funds (the existing per-membership cancel converges "
+        "Stripe), then de-authorizes the pair. The signature audit row persists. "
+        "Memberships paid by other payers, and this payer's memberships for other "
+        "members, are untouched. Call .../remove/preview first to confirm impact."
+    ),
+    responses={
+        200: {"description": "Authorization removed and memberships cancelled"},
+        400: {"description": "That payer is not authorized for this member"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to update this member"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def remove_authorization(
+    member_id: UUID,
+    request: MembersBillingRemoveAuthorizationRequest,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    memberships_service: MemberMembershipsService = Depends(
+        Provide[DependencyInjector.member_memberships_service]
+    ),
+) -> None:
+    """Remove a payer's authorization, cancelling the pair's memberships."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        await memberships_service.remove_authorization(
+            member_id,
+            request.payer_member_id,
+        )
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to remove authorization: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove the authorization",
         ) from None
 
 
