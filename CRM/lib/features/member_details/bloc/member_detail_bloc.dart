@@ -176,11 +176,16 @@ class MemberDetailBloc
       final refreshed = await _repository.getMemberDetail(
         s.member.memberId,
       );
-      emit(s.copyWith(
+      // Re-read state post-await: a page/search change that arrived
+      // during the awaits must survive the mutation refresh, not be
+      // clobbered by the stale pre-await snapshot.
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         member: refreshed,
         isMutating: false,
         clearActionError: true,
-        refreshToken: s.refreshToken + 1,
+        refreshToken: current.refreshToken + 1,
       ));
       if (pollInvoices) _startInvoicePolling();
     } catch (e, stackTrace) {
@@ -189,7 +194,9 @@ class MemberDetailBloc
         error: e,
         stackTrace: stackTrace,
       );
-      emit(s.copyWith(
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         isMutating: false,
         actionError: e.toString(),
       ));
@@ -302,11 +309,14 @@ class MemberDetailBloc
       final refreshed = await _repository.getMemberDetail(
         s.member.memberId,
       );
-      emit(s.copyWith(
+      // Re-read state post-await (see [_runMutation]).
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         member: refreshed,
         isStartingMemberships: false,
         startResult: result,
-        refreshToken: s.refreshToken + 1,
+        refreshToken: current.refreshToken + 1,
       ));
       // The POST didn't throw, so memberships (and their first
       // invoices) may have been created — poll even on a partial
@@ -318,7 +328,9 @@ class MemberDetailBloc
         error: e,
         stackTrace: stackTrace,
       );
-      emit(s.copyWith(
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         isStartingMemberships: false,
         startError: e is ServerException
             ? (e.detail ?? e.message)
@@ -510,7 +522,9 @@ class MemberDetailBloc
       );
     } catch (e, stackTrace) {
       log('Charge card failed', error: e, stackTrace: stackTrace);
-      emit(s.copyWith(
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
         isChargingCard: false,
         chargeCardError: e is ServerException
             ? (e.detail ?? e.message)
@@ -524,19 +538,22 @@ class MemberDetailBloc
     // would tempt staff to re-charge). The refresh is best-effort: it just
     // updates the member behind the still-open success step; the Invoices card
     // and Payment History refetch independently off the bumped refreshToken.
-    emit(s.copyWith(
+    // Re-read state post-await (see [_runMutation]).
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    emit(committed.copyWith(
       isChargingCard: false,
-      chargeCardSuccess: s.chargeCardSuccess + 1,
-      refreshToken: s.refreshToken + 1,
+      chargeCardSuccess: committed.chargeCardSuccess + 1,
+      refreshToken: committed.refreshToken + 1,
     ));
     // The invoice lands in our DB asynchronously (Stripe webhook), so
     // start the dumb 5/10/15/30/60s poll to surface it without a reload.
     _startInvoicePolling();
     try {
       final refreshed = await _repository.getMemberDetail(s.member.memberId);
-      final current = state;
-      if (current is MemberDetailLoaded) {
-        emit(current.copyWith(member: refreshed));
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
       }
     } catch (e, stackTrace) {
       log(
