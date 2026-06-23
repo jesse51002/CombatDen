@@ -54,6 +54,12 @@ from src.payments.schema.payments_invoice_schema import (
     PreviewInvoice,
 )
 from src.shared.auth import Auth, security
+from src.waivers.schema.waivers_schema import (
+    AuthorizedPayerWaiverResponse,
+)
+from src.waivers.service.waivers.waivers_service import (
+    WaiversService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -644,6 +650,58 @@ async def check_link_member_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to check member link",
+        ) from None
+
+
+@members_router.get(
+    "/{member_id}/authorized-payer-waiver",
+    response_model=AuthorizedPayerWaiverResponse,
+    summary="Get the default authorized-payer waiver a payer must sign",
+    description=(
+        "Returns the member's gym default authorized-payer waiver — its id, "
+        "current version id, name, and body — for the front-desk sign dialog to "
+        "display before authorizing a payer. The link flow records the signature "
+        "against this same current version, so the caller only echoes back the "
+        "signer's name + consent."
+    ),
+    responses={
+        200: {"description": "Default waiver returned"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member or default waiver not found"},
+    },
+)
+@inject
+async def get_authorized_payer_waiver(
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    waivers_service: WaiversService = Depends(
+        Provide[DependencyInjector.waivers_service]
+    ),
+) -> AuthorizedPayerWaiverResponse:
+    """Resolve the default authorized-payer waiver (with body) for a member."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_can_view_member(member_id, user_payload)
+
+    try:
+        return await waivers_service.get_default_waiver_with_body_for_member(
+            member_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to get authorized-payer waiver: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get authorized-payer waiver",
         ) from None
 
 

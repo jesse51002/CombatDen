@@ -145,9 +145,23 @@ class WaiverDefaultInfo(BaseModel):
     content_hash: str
 
 
+class AuthorizedPayerWaiverResponse(BaseModel):
+    """The gym's default authorized-payer waiver a payer must sign to be
+    authorized for a member — identity plus the current version's body for
+    display in the front-desk sign dialog. The link flow records the signature
+    against this same current version internally, so the UI only echoes back
+    the signer's name + consent (not the version id)."""
+
+    waiver_id: UUID
+    version_id: UUID
+    name: str
+    body: str
+
+
 # Re-exported so the signing-capture (link flow) and any consumer can reference
 # the capture-method enum from this module.
 __all__ = [
+    "AuthorizedPayerWaiverResponse",
     "MemberWaiverStatusRow",
     "WaiverCreateRequest",
     "WaiverDefaultInfo",

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.database import DirectDatabasePool
 from src.waivers.schema.waivers_schema import (
+    AuthorizedPayerWaiverResponse,
     MemberWaiverStatusRow,
     WaiverCreateRequest,
     WaiverDefaultInfo,
@@ -133,6 +134,28 @@ class WaiversService:
     ) -> WaiverDefaultInfo:
         """Resolve a member's gym default authorized-payer waiver + version."""
         return await self._signatures.get_default_waiver_for_member(member_id)
+
+    async def get_default_waiver_with_body_for_member(
+        self,
+        member_id: UUID,
+    ) -> AuthorizedPayerWaiverResponse:
+        """Resolve a member's gym default authorized-payer waiver WITH its
+        current body — what the front-desk sign dialog renders before a payer
+        signs. Composes the id resolution (``get_default_waiver_for_member``)
+        with the body read (``get_waiver``)."""
+        default = await self._signatures.get_default_waiver_for_member(member_id)
+        waiver = await self._list.get_waiver(default.waiver_id, default.gym_id)
+        if waiver.current_version is None:
+            raise ValueError(
+                f"Default waiver has no current version: "
+                f"waiver_id={default.waiver_id}"
+            )
+        return AuthorizedPayerWaiverResponse(
+            waiver_id=default.waiver_id,
+            version_id=default.version_id,
+            name=waiver.name,
+            body=waiver.current_version.body,
+        )
 
     async def record_signature(
         self,
