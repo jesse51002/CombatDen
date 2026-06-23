@@ -204,11 +204,20 @@ def _start_family(
         return []
 
     by_member = {str(m.member_id): m for m in to_start}
+    # One-time / trial packs may be STACKED: a member's CurrentMembership.count
+    # (1-3 for class packs, 1 otherwise) becomes that many identical items, so
+    # the start creates that many memberships in one request. The backend
+    # accepts duplicate one-time (member, price) items; recurring stays count 1.
+    items = [
+        _start_item(m)
+        for m in to_start
+        for _ in range(max(1, m.current.count))
+    ]
     payload: dict = {
         "payer_member_id": str(payer.member_id),
         "gym_id": str(gym_id),
         "idempotency_key": str(uuid.uuid4()),
-        "memberships": [_start_item(m) for m in to_start],
+        "memberships": items,
     }
     response = api.post("/api/v1/member_memberships/", json=payload)
     results = (response or {}).get("results", [])
@@ -219,10 +228,10 @@ def _start_family(
             "membership start returned failed results for "
             f"payer_member_id={payer.member_id} gym_id={gym_id}: {results}"
         )
-    if len(results) != len(to_start):
+    if len(results) != len(items):
         raise RuntimeError(
             "membership start result count mismatch for "
-            f"payer_member_id={payer.member_id}: sent {len(to_start)}, "
+            f"payer_member_id={payer.member_id}: sent {len(items)}, "
             f"got {len(results)}: {results}"
         )
 

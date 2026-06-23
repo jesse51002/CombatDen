@@ -1,11 +1,14 @@
 -- Insert a start request's membership rows in ONE multi-row statement (all
--- pending rows appear atomically, or none). stripe_sync_status is
--- parameterized per row so the real start inserts 'not_added' (pending add
--- the engine then converges) while a start PREVIEW inserts 'preview_add'
--- (the preview build sees it; the real path excludes it so it can never
--- bill, and the preview deletes it afterward). Arrays are bound and CAST
--- (never a bind followed directly by a double-colon cast — asyncpg cannot
--- bind that form).
+-- pending rows appear atomically, or none). The DB generates each row's
+-- item_id (PK default uuid_generate_v4()); we RETURNING them in row order so
+-- the caller tracks every row individually — including N duplicate one-time
+-- "stacked pack" items on the same (member, plan), each of which gets its OWN
+-- distinct id. stripe_sync_status is parameterized per row so the real start
+-- inserts 'not_added' (pending add the engine then converges) while a start
+-- PREVIEW inserts 'preview_add' (the preview build sees it; the real path
+-- excludes it so it can never bill, and the preview deletes it afterward).
+-- Arrays are bound and CAST (never a bind followed directly by a double-colon
+-- cast — asyncpg cannot bind that form).
 INSERT INTO member_memberships_unfiltered (
     member_id, paid_by_member_id, gym_id, plan_id, price_id,
     start_date, end_date, last_paid_date, next_due_date,
@@ -34,4 +37,4 @@ FROM unnest(
     start_date, end_date, last_paid_date, next_due_date,
     stripe_item_id, total_price, sync_status
 )
-RETURNING item_id, member_id, plan_id
+RETURNING item_id

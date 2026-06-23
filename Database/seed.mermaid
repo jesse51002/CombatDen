@@ -33,13 +33,15 @@ flowchart TB
   m_life -->|"10%"| m_former["former (history only)"]
   m_life -->|"25%"| m_trial["trial-only"]
   m_life -->|"20%"| m_t2p["trial→paid"]
-  m_life -->|"22%"| m_active["active (~10% cancel at start)"]
-  m_life -->|"15%"| m_resign["re-signup"]
+  m_life -->|"17%"| m_active["active (~10% cancel at start)"]
+  m_life -->|"10%"| m_packs["active class packs<br/>1–3 one-time, stacked"]
+  m_life -->|"10%"| m_resign["re-signup"]
   m_never --> m_frz
   m_former --> m_frz
   m_trial --> m_frz
   m_t2p --> m_frz
   m_active --> m_frz
+  m_packs --> m_frz
   m_resign --> m_frz
 
   m_frz["freeze status (co-occurs)"]
@@ -96,6 +98,7 @@ flowchart TB
   Memberships --> ms_closed["closed ≈50–70"]
   ms_live --> ms_active["active (recurring)"]
   ms_live --> ms_trial["active trial"]
+  ms_live --> ms_packs["active class packs (1–3 one-time)"]
   ms_live --> ms_cancel["cancelled at start ~10%"]
   ms_closed --> ms_ended["ended (trial / drop-in)"]
   ms_closed --> ms_former["former / re-signup history"]
@@ -167,4 +170,4 @@ flowchart TB
   classDef leaf fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
   class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History hub;
   class m_life,m_frz,m_acc,d_amt,d_dur,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
-  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;
+  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_packs,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_packs,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;
