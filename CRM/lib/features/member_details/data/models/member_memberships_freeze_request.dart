@@ -28,10 +28,19 @@ class MemberMembershipsFreezeRequest extends Equatable {
       _$MemberMembershipsFreezeRequestToJson(this);
 
   @override
+  @JsonKey(includeToJson: false)
   List<Object?> get props => [
         memberId,
         gymId,
         freezeMonths,
         idempotencyKey,
       ];
+
+  @override
+  @JsonKey(includeToJson: false)
+  bool? get stringify => super.stringify;
+
+  @override
+  @JsonKey(includeToJson: false)
+  int get hashCode => super.hashCode; // ignore: hash_and_equals
 }

@@ -40,7 +40,12 @@ class MemberMembershipsStartItem extends Equatable {
   Map<String, dynamic> toJson() =>
       _$MemberMembershipsStartItemToJson(this);
 
+  // Keep Equatable's inherited getters out of the request JSON —
+  // json_serializable would otherwise serialize props / stringify /
+  // hashCode into the wire body. Equality + toString are unchanged
+  // (the overrides delegate to Equatable).
   @override
+  @JsonKey(includeToJson: false)
   List<Object?> get props => [
         memberId,
         priceId,
@@ -48,4 +53,12 @@ class MemberMembershipsStartItem extends Equatable {
         discountIds,
         customDiscounts,
       ];
+
+  @override
+  @JsonKey(includeToJson: false)
+  bool? get stringify => super.stringify;
+
+  @override
+  @JsonKey(includeToJson: false)
+  int get hashCode => super.hashCode; // ignore: hash_and_equals
 }

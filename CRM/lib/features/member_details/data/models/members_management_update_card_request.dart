@@ -22,5 +22,14 @@ class MembersManagementUpdateCardRequest extends Equatable {
       _$MembersManagementUpdateCardRequestToJson(this);
 
   @override
+  @JsonKey(includeToJson: false)
   List<Object?> get props => [paymentMethodId];
+
+  @override
+  @JsonKey(includeToJson: false)
+  bool? get stringify => super.stringify;
+
+  @override
+  @JsonKey(includeToJson: false)
+  int get hashCode => super.hashCode; // ignore: hash_and_equals
 }
