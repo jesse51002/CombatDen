@@ -141,10 +141,15 @@ class _CancelMembershipDialogState
               // The cancellation's effect on the paying sub: the
               // recurring invoice drops the cancelled membership, shown
               // as a current → new comparison against the payer's sub.
-              loadPreview: () => _repository.previewCancelMembership(
-                selected.membership.itemId,
-                widget.member.memberId,
-              ),
+              loadPreview: () async {
+                // A single cancel is one payer → a one-entry list.
+                final changes =
+                    await _repository.previewCancelMembership(
+                  selected.membership.itemId,
+                  widget.member.memberId,
+                );
+                return changes.isEmpty ? null : changes.first.preview;
+              },
               loadCurrent: () => _repository.getUpcomingInvoice(
                 selected.membership.paidByMemberId,
               ),

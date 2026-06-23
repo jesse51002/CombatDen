@@ -3,23 +3,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/network/api_client.dart';
-import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
-import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
-import 'package:crm/features/member_details/data/models/remove_authorization_preview.dart';
-import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/link_parent_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/remove_authorization_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
-import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
 
 /// Edit a member's payment authorizations (both directions).
@@ -50,11 +45,8 @@ class PaymentAuthorizationsDialog extends StatefulWidget {
 
 class _PaymentAuthorizationsDialogState
     extends State<PaymentAuthorizationsDialog> {
-  final MemberRepository _repository =
-      MemberRepository(apiClient: ApiClient());
-
-  /// 0 = Authorized to pay (this member is the payer);
-  /// 1 = Authorized to receive payment (others pay for this member).
+  /// 0 = Can Pay For (this member is the payer);
+  /// 1 = Can Receive Payments (others pay for this member).
   int _section = 0;
 
   @override
@@ -115,68 +107,25 @@ class _PaymentAuthorizationsDialogState
     );
   }
 
-  /// Resolve (payee, payer) for the relationship in this section, preview the
-  /// cascading cancel, confirm, then dispatch the remove.
-  Future<void> _onRemove(
+  /// Resolve (payee, payer) for the relationship in this section and open the
+  /// remove dialog (which shows the cost preview, confirms, and dispatches the
+  /// cascading remove). This popup rebuilds live off the bloc afterward.
+  void _onRemove(
     MemberDetailResponse member,
     LinkedAccount account,
     bool isPay,
-  ) async {
-    // "Authorized to pay": this member pays for `account` (payee = account).
-    // "Authorized to receive": `account` pays for this member (payee = member).
+  ) {
+    // "Can Pay For": this member pays for `account` (payee = account).
+    // "Can Receive Payments": `account` pays for this member (payee = member).
     final payeeId = isPay ? account.memberId : member.memberId;
     final payerId = isPay ? member.memberId : account.memberId;
-
-    RemoveAuthorizationPreview preview;
-    try {
-      preview =
-          await _repository.previewRemoveAuthorization(payeeId, payerId);
-    } catch (_) {
-      preview = const RemoveAuthorizationPreview();
-    }
-    if (!mounted) return;
-
-    final effects = preview.memberships.isEmpty
-        ? const [
-            BillingEffect(
-              icon: Symbols.link_off_sharp,
-              text:
-                  'No memberships will be cancelled — this only removes '
-                  'the authorization.',
-            ),
-          ]
-        : preview.memberships
-            .map(
-              (m) => BillingEffect(
-                icon: Symbols.cancel_sharp,
-                text:
-                    'Cancel ${m.planName} '
-                    '(${formatMinorUnits(m.totalPrice)}/mo)',
-              ),
-            )
-            .toList();
-
-    final confirmed = await BillingConfirmationDialog.show(
+    RemoveAuthorizationDialog.show(
       context: context,
-      title: 'Remove authorization',
-      summary:
-          'Remove ${account.fullName} from this relationship? This '
-          'cancels the recurring memberships funded between them.',
-      confirmLabel: 'Remove & cancel',
-      confirmColor: DesignConstants.badRed,
-      effects: effects,
-      warning: preview.memberships.isNotEmpty
-          ? 'Cancelled memberships stop billing after the current cycle.'
-          : null,
+      payeeMemberId: payeeId,
+      payerMemberId: payerId,
+      accountName: account.fullName,
+      fallbackMonthly: member.totalMonthlyRecurringPrice,
     );
-    if (!confirmed || !mounted) return;
-    context.read<MemberDetailBloc>().add(
-          RemoveAuthorizationRequested(
-            memberId: payeeId,
-            payerMemberId: payerId,
-          ),
-        );
-    Navigator.of(context).pop();
   }
 
   /// Open the right sign-gated add flow for the active section. Excludes the

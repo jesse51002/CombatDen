@@ -19,9 +19,9 @@ import 'package:crm/features/member_details/data/models/members_management_respo
 import 'package:crm/features/member_details/data/models/members_management_update_card_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/payer_invoice_change.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
-import 'package:crm/features/member_details/data/models/remove_authorization_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_response.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
@@ -209,11 +209,12 @@ class MemberRepository {
     );
   }
 
-  /// `POST /api/v1/members/{member_id}/link/remove/preview` — what removing
-  /// [payerMemberId] as a payer for [memberId] would cancel (pair-scoped): the
-  /// member's live recurring memberships that payer funds + the monthly that
-  /// stops. Read-only; shown before confirming.
-  Future<RemoveAuthorizationPreview> previewRemoveAuthorization(
+  /// `POST /api/v1/members/{member_id}/link/remove/preview` — cost preview of
+  /// removing [payerMemberId] as a payer for [memberId]: the payer's recurring
+  /// bill after cancelling the memberships they fund (current → new),
+  /// pair-scoped so a one-entry list (empty = no billing change). Read-only;
+  /// shown before confirming.
+  Future<List<PayerInvoiceChange>> previewRemoveAuthorization(
     String memberId,
     String payerMemberId,
   ) async {
@@ -221,9 +222,12 @@ class MemberRepository {
       '/api/v1/members/$memberId/link/remove/preview',
       data: {'payer_member_id': payerMemberId},
     );
-    return RemoveAuthorizationPreview.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    return (response.data as List<dynamic>)
+        .map(
+          (e) =>
+              PayerInvoiceChange.fromJson(e as Map<String, dynamic>),
+        )
+        .toList();
   }
 
   /// `POST /api/v1/members/{member_id}/link/remove` — cancels [memberId]'s live
@@ -361,9 +365,9 @@ class MemberRepository {
     }
   }
 
-  /// `POST /api/v1/member_memberships/cancel/preview`.
-  Future<DueNowVsRecurringPreview?>
-      previewCancelMembership(
+  /// `POST /api/v1/member_memberships/cancel/preview` — per-payer cost preview
+  /// (a single cancel is one payer → a one-entry list; empty = no change).
+  Future<List<PayerInvoiceChange>> previewCancelMembership(
     String itemId,
     String memberId,
   ) async {
@@ -371,10 +375,12 @@ class MemberRepository {
       '/api/v1/member_memberships/cancel/preview'
       '?item_id=$itemId&member_id=$memberId',
     );
-    if (response.data == null) return null;
-    return DueNowVsRecurringPreview.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    return (response.data as List<dynamic>)
+        .map(
+          (e) =>
+              PayerInvoiceChange.fromJson(e as Map<String, dynamic>),
+        )
+        .toList();
   }
 
   /// `PUT /api/v1/member_memberships/price`.
