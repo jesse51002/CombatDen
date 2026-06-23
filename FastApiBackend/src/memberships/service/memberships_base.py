@@ -329,12 +329,18 @@ class MemberMembershipsBase:
         row's ``item_id`` (PK default); we return them via ``RETURNING``.
 
         Returns:
-            The DB-generated item_ids in the SAME order as ``rows`` — one
-            DISTINCT id per row, so multiple rows on the same (member, plan)
-            (e.g. a 5-pack and a 10-pack of the same one-time plan at different
-            prices) each map to their own row (the caller assigns and cleans up
-            each positionally). NEVER collapse by (member, plan): a non-unique
-            key drops same-plan rows' ids and leaks them.
+            The DB-generated item_ids in the SAME order as ``rows`` — matched
+            back to each row by ``(member_id, price_id)``, which the request
+            dedup (``_validate_memberships``) guarantees is unique within one
+            request. The mapping is therefore **order-independent**: it does NOT
+            rely on ``RETURNING`` streaming in insert order (a PostgreSQL
+            implementation detail for ``INSERT … SELECT FROM unnest()``, not a
+            contract), so a re-planned insert can never misroute an id. One
+            DISTINCT id per row; raises if two rows collapse onto one key (the
+            dedup should make that impossible). NOTE: ``(member, plan)`` is NOT
+            unique (a 5-pack + a 10-pack of one plan share it) — ``price_id`` is
+            the disambiguator, so this key is safe where ``(member, plan)`` was
+            the original collapse bug.
         """
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
@@ -357,9 +363,22 @@ class MemberMembershipsBase:
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)
-            item_ids = [UUID(str(r["item_id"])) for r in result.mappings()]
+            by_key = {
+                (UUID(str(r["member_id"])), UUID(str(r["price_id"]))): UUID(
+                    str(r["item_id"]),
+                )
+                for r in result.mappings()
+            }
             await session.commit()
-        return item_ids
+        if len(by_key) != len(rows):
+            # Two rows shared (member_id, price_id) — the request dedup should
+            # make this impossible. Fail loud instead of silently collapsing
+            # two rows onto one id (the original stacked-pack bug).
+            raise RuntimeError(
+                f"member_memberships insert collapsed rows: {len(rows)} rows "
+                f"but {len(by_key)} distinct (member_id, price_id) keys",
+            )
+        return [by_key[(r["member_id"], r["price_id"])] for r in rows]
 
     def _build_pending_rows(
         self,

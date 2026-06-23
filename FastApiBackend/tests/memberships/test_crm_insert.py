@@ -1,19 +1,22 @@
-"""Unit: ``_crm_insert`` returns one DISTINCT id per inserted row.
+"""Unit: ``_crm_insert`` maps each DB-generated id back to its row.
 
 Regression for the same-plan collapse bug: multiple one-time rows on the same
 (member, plan) — e.g. a 5-pack and a 10-pack of one plan at DIFFERENT prices —
 were collapsed into a single ``item_id`` (a dict keyed on the non-unique
 ``(member_id, plan_id)``), so the preview's cleanup deleted only one of the
-staged ``preview_add`` rows (leaking the rest, which then re-surfaced on every
-preview) and the real start stamped only one row's writeback. The DB generates
-a distinct ``item_id`` per row; ``_crm_insert`` must return ALL of them, in row
-order, never deduped. (Buying N of ONE pack is a single row with quantity = N,
-not N rows — so identical (member, plan, price) rows no longer occur; the
-remaining same-(member, plan) case is distinct prices.) Faked session — no
-real DB.
+staged ``preview_add`` rows (leaking the rest) and the real start stamped only
+one row's writeback.
+
+``_crm_insert`` maps each returned id back to its row by ``(member_id,
+price_id)`` — unique within one request via the dedup — so the mapping is
+ORDER-INDEPENDENT (it never trusts ``RETURNING`` to stream in insert order, a
+PostgreSQL implementation detail, not a contract) and it fails loud rather than
+silently collapse if two rows ever share the key. Faked session — no real DB.
 """
 
 from uuid import uuid4
+
+import pytest
 
 import src.shared.db_schema_path  # noqa: F401
 from src.memberships.service.memberships_base import MemberMembershipsBase
@@ -71,27 +74,50 @@ def _row(member: object, plan: object, price: object, quantity: int) -> dict:
     }
 
 
-async def test_crm_insert_keeps_one_id_per_same_plan_row():
-    """3 same-(member, plan) rows at distinct prices -> 3 DISTINCT ids."""
+async def test_crm_insert_maps_ids_by_member_price_in_row_order():
+    """Ids map back by (member, price), so the result is in ROWS order even
+    when the DB streams RETURNING in a DIFFERENT order."""
     member, plan = uuid4(), uuid4()
-    # Same (member, plan), three different prices (e.g. 5-pack / 10-pack /
-    # 20-pack of one one-time plan), each its own quantity.
-    rows = [_row(member, plan, uuid4(), q) for q in (1, 2, 3)]
-    db_ids = [uuid4(), uuid4(), uuid4()]
-    # The DB RETURNING: each row shares the SAME (member, plan) but carries its
-    # OWN item_id. The extra (member, plan) keys make a re-collapse regression
-    # fail loudly (it would dedupe to one id).
+    # Same (member, plan), three DIFFERENT prices (a 5-pack / 10-pack / 20-pack
+    # of one one-time plan); ids[i] belongs to rows[i] (prices[i]).
+    prices = [uuid4(), uuid4(), uuid4()]
+    rows = [_row(member, plan, prices[i], i + 1) for i in range(3)]
+    ids = [uuid4(), uuid4(), uuid4()]
+
+    # The fake RETURNING streams SHUFFLED (2, 0, 1) — each row carries its own
+    # (member_id, price_id), so the mapping does not depend on this order.
     pool = _FakePool([
-        {"item_id": str(i), "member_id": str(member), "plan_id": str(plan)}
-        for i in db_ids
+        {
+            "item_id": str(ids[i]),
+            "member_id": str(member),
+            "price_id": str(prices[i]),
+        }
+        for i in (2, 0, 1)
     ])
 
     base = MemberMembershipsBase(pool, None, None)
     result = await base._crm_insert(rows)
 
-    assert result == db_ids  # all three, in row order
+    assert result == ids  # ROWS order, despite the shuffled RETURNING
     assert len(set(result)) == 3  # NOT collapsed to one
-    # All 3 input rows were sent (same-plan rows are not deduped away), each
-    # carrying its own quantity in order.
-    assert len(pool.session_obj.params["member_ids"]) == 3
     assert pool.session_obj.params["quantities"] == [1, 2, 3]
+
+
+async def test_crm_insert_raises_when_key_collapses():
+    """Two rows sharing (member, price) (the dedup should prevent it) fail loud
+    instead of silently collapsing onto one id."""
+    member, plan, price = uuid4(), uuid4(), uuid4()
+    rows = [_row(member, plan, price, 1), _row(member, plan, price, 1)]
+    # The DB inserted 2 rows; both come back with the SAME (member, price).
+    pool = _FakePool([
+        {
+            "item_id": str(uuid4()),
+            "member_id": str(member),
+            "price_id": str(price),
+        }
+        for _ in range(2)
+    ])
+
+    base = MemberMembershipsBase(pool, None, None)
+    with pytest.raises(RuntimeError, match="collapsed"):
+        await base._crm_insert(rows)

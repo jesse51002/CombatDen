@@ -1,10 +1,13 @@
 -- Insert a start request's membership rows in ONE multi-row statement (all
 -- pending rows appear atomically, or none). The DB generates each row's
--- item_id (PK default uuid_generate_v4()); we RETURNING them in row order so
--- the caller tracks every row individually — including multiple rows on the
--- same (member, plan) (e.g. a 5-pack and a 10-pack of one one-time plan at
--- different prices), each of which gets its OWN distinct id. A one_time / trial
--- pack bought N at once is ONE row with quantity = N (not N rows).
+-- item_id (PK default uuid_generate_v4()); we RETURNING item_id WITH its
+-- (member_id, price_id) so the caller maps each generated id back to its row by
+-- that key (unique within one request via the dedup) — NOT by RETURNING order,
+-- which PostgreSQL streams in insert order for this INSERT … SELECT but does not
+-- contractually guarantee. That covers multiple rows on the same (member, plan)
+-- (e.g. a 5-pack and a 10-pack of one one-time plan at DIFFERENT prices), each
+-- of which gets its OWN distinct id. A one_time / trial pack bought N at once is
+-- ONE row with quantity = N (not N rows).
 -- stripe_sync_status is parameterized per row so the real start inserts
 -- 'not_added' (pending add the engine then converges) while a start PREVIEW
 -- inserts 'preview_add' (the preview build sees it; the real path excludes it
@@ -40,4 +43,4 @@ FROM unnest(
     start_date, end_date, last_paid_date, next_due_date,
     stripe_item_id, total_price, quantity, sync_status
 )
-RETURNING item_id
+RETURNING item_id, member_id, price_id
