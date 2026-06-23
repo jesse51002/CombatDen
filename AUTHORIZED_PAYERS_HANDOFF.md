@@ -10,8 +10,11 @@ fully, then the roadmap at `~/.claude/plans/parsed-mapping-lighthouse.md`.
   the **grouper single-member flatten**. The **migration is written + applied** (you ran it),
   the seed runs (it created **22 real sign-gated authorized-payer links**), and the relevant
   integration tests pass (member-detail/grouper/2C SQL/waivers/start-auth).
-- **REMAINING:** **Piece 3 (CRM/Flutter)** and **Piece 4 (per-membership anchor freeze)** —
-  both NOT started. (The flake-fix sub-agent is DONE + committed — see §7.)
+- **Piece 3 (CRM/Flutter) is DONE + committed** (backend waiver-read endpoint `02e385c5` +
+  CRM rewire `6f35584e`): authorized-payers two-roster UI, two-step pick-payer→sign-waiver link
+  flow, flat membership cards. `flutter analyze` 0/0; 41 tests pass. **NOT yet run: the `qa-crm`
+  screenshot flow** (needs CRM + backend + Video/Theme services up) — recommended next verification.
+- **REMAINING:** **Piece 4 (per-membership anchor freeze)** — NOT started (staged 4a–4e, §9).
 - Branch is **current with `thru @ 9aac5193` (#32)**, clean tree, **nothing pushed**.
 
 ---
@@ -167,20 +170,25 @@ before commit.
 
 ## 9. WHAT'S NEXT (each its own propose→approve→write piece)
 
-### Piece 3 — CRM (Flutter, `CRM/lib/features/...`) — NOT STARTED
-The CRM still consumes the OLD shapes and is **runtime-broken against the new backend** until done:
-- `member_details/data/models/`: `member_detail_response.dart` still reads `linked_to_account`
-  (removed by 2B → now `authorized_payers` + `authorized_to_pay_for`); `membership_info.dart` reads
-  the `members` map + `paying_for` list (removed by the flatten → now flat fields:
-  `item_id`/`paid_by_member_id`/`end_date`/`cancel_date`/`on_outdated_price`/`class_count`/`classes_used`/`classes_remaining`).
-  `members_management_response.dart` has a now-dead `accountLinkedToId` (drop it). Run `build_runner`.
-- New contract: link `PUT /members/{id}/link` `{payer_member_id, signer_name, consent_acknowledged}`;
-  unlink `DELETE …?payer_member_id=`; check `POST …/link/check {payer_member_id}`.
-- `presentation/sections/linked_accounts_section.dart` → render MANY authorized payers + MANY payees
-  (both directions); "Add" runs a **sign-waiver step** (show waiver text + capture signer name +
-  consent) BEFORE creating the link; remove guardrail UI. Reuse `waiver_editor_screen.dart` for the
-  default waiver (flagged undeletable). #30/#31/#32 reworked nearby billing widgets — re-read.
-- Gates: `flutter analyze` + `flutter test`; then the `qa-crm` skill (screenshot the pages).
+### Piece 3 — CRM (Flutter) — DONE + committed (`02e385c5` backend, `6f35584e` CRM)
+Rewired the member-detail feature to the many-to-many model + flat cards. Decisions (user-confirmed):
+- **Waiver display = a DEDICATED backend GET** `GET /api/v1/members/{id}/authorized-payer-waiver`
+  → `{waiver_id, version_id, name, body}` (the link endpoint records the signature internally; this
+  read only feeds the UI). Built backend-first (`02e385c5`).
+- **Scope = authorized-payer waiver ONLY.** The member-detail Waivers section's "Sign waiver"
+  placeholder (for plan/membership waivers — a DIFFERENT waiver, its own missing endpoint) was left
+  as-is; that's a separate future feature.
+- Models: `MemberDetailResponse` → `authorizedPayers` + `authorizedToPayFor` (reuse `LinkedAccount`);
+  `MembershipInfo` flattened (flat `itemId`/`paidByMemberId`/`onOutdatedPrice`/`endDate`/`cancelDate`/
+  class trio + an `exitDate` getter); deleted `membership_member_info` + `paying_for_member`; new
+  `authorized_payer_waiver.dart`; dropped `accountLinkedToId`. `build_runner` ran.
+- UI: `linked_accounts_section` renders BOTH rosters (Authorized Payers = Add + per-payer Remove;
+  Authorized-to-pay-for = display-only, manage from that member's page). `link_parent_dialog` +
+  `start_link_member_dialog` = two-step **pick payer → sign waiver** (waiver rendered read-only via
+  `WaiverMarkdownEditor.controllerFromMarkdown(body, readOnly: true)`; signer name + consent). Charge
+  dialog defaults payer to self + offers authorized payers. ~19 call sites moved to flat fields.
+- Verified: `flutter analyze` 0/0; 41 `flutter test` pass. **NOT run: `qa-crm`** (browser screenshot
+  flow; needs CRM+backend+Video/Theme services up — recommended next verification before merge).
 
 ### Piece 4 — per-membership anchor freeze (billing-critical, finest staging) — NOT STARTED
 Staged a–e, each its own propose/approve/write. RE-READ `sync-guide` + `reconciler-guide` +
