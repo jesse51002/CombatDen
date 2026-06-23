@@ -151,6 +151,10 @@ def _start_item(member: MemberPlan) -> dict:
     item: dict = {
         "member_id": str(member.member_id),
         "price_id": str(current.plan.price_id),
+        # One_time / trial packs STACK via quantity (1-3 for class packs, 1
+        # otherwise); recurring is always 1. The backend bills ONE row of N
+        # units, not N rows.
+        "quantity": max(1, current.count),
         "discount_ids": [str(d) for d in current.discount_ids],
     }
     if current.custom_discount is not None:
@@ -205,14 +209,10 @@ def _start_family(
 
     by_member = {str(m.member_id): m for m in to_start}
     # One-time / trial packs may be STACKED: a member's CurrentMembership.count
-    # (1-3 for class packs, 1 otherwise) becomes that many identical items, so
-    # the start creates that many memberships in one request. The backend
-    # accepts duplicate one-time (member, price) items; recurring stays count 1.
-    items = [
-        _start_item(m)
-        for m in to_start
-        for _ in range(max(1, m.current.count))
-    ]
+    # (1-3 for class packs, 1 otherwise) rides as the item's `quantity`, so the
+    # start creates ONE membership billing that many units (not N rows).
+    # Recurring stays quantity 1.
+    items = [_start_item(m) for m in to_start]
     payload: dict = {
         "payer_member_id": str(payer.member_id),
         "gym_id": str(gym_id),

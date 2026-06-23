@@ -2,8 +2,11 @@
 -- Counts member_attendance rows (attributed to a specific membership via
 -- item_id) whose class_history.occurred_at falls inside that membership's
 -- billing window [last_paid_date | start_date, next_due_date | today+1).
--- Keyed by item_id so a member holding two packs on the same plan gets a
--- separate count per pack; a single pack per plan is unchanged.
+-- The allowance is plan.class_count * the membership's quantity: a stacked
+-- one_time / trial pack bought N at once is ONE row (quantity = N) granting one
+-- combined bucket of class_count * N. NULL class_count (unlimited) stays NULL
+-- (NULL * N = NULL). Keyed by item_id so a SEPARATE membership on the same plan
+-- (e.g. another pack bought later) still gets its own independent bucket.
 SELECT
     ms.member_id,
     ms.item_id,
@@ -15,7 +18,7 @@ SELECT
     ms.end_date,
     ms.status,
     mp.plan_type,
-    mp.class_count,
+    mp.class_count * ms.quantity AS class_count,
     COALESCE(counts.classes_used, 0) AS classes_used
 FROM member_memberships_status ms
 JOIN membership_plans mp

@@ -142,10 +142,9 @@ MemberMembershipsStartRequest? buildStartRequest({
         in drafts[m.memberId] ?? const <MembershipDraft>[]) {
       final item = d.toItem(m.memberId);
       if (item == null) continue;
-      // count copies of the pack (always 1 for recurring).
-      for (var i = 0; i < d.count; i++) {
-        items.add(item);
-      }
+      // ONE item carrying the count as quantity (the pack
+      // stacks via quantity, not repeated items).
+      items.add(item);
     }
   }
   if (items.isEmpty) return null;

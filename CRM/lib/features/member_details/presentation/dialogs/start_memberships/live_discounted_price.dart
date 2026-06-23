@@ -9,9 +9,12 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 /// alone, or — once discounts are added — the original
 /// slashed out next to the UI-computed discounted price
 /// (percents first, then dollars). When the quantity is > 1
-/// (stacked one_time / trial packs) the headline is the TOTAL
-/// with an `N × unit` breakdown below. The Preview step stays
-/// the authoritative figure.
+/// (stacked one_time / trial packs) the headline is the net
+/// line TOTAL, with a `N × unit = gross` line and the
+/// line-level `− $X off` below (a fixed-$ discount applies
+/// ONCE to the whole line, matching the backend's quantity-N
+/// Stripe line — not per unit). The Preview step stays the
+/// authoritative figure.
 class LiveDiscountedPrice extends StatelessWidget {
   final MembershipDraft draft;
   final List<DiscountResponse> presets;
@@ -26,51 +29,46 @@ class LiveDiscountedPrice extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = draft.plan.activePrice?.price ?? 0;
     final hasDiscount = draft.hasDiscounts;
-    final unit =
-        hasDiscount ? draft.discountedPriceCents(presets) : base;
     final count = draft.count;
+    // The LINE total: percents on the whole line, fixed-$ subtracted
+    // ONCE (matching the backend's quantity-N Stripe line). At count
+    // 1 this is the discounted unit price.
+    final net = hasDiscount
+        ? draft.discountedLineTotalCents(presets, count)
+        : base * count;
 
     if (count <= 1) {
-      return _unitReadout(base, unit, hasDiscount);
+      return _unitReadout(base, net, hasDiscount);
     }
 
-    // Stacked packs: TOTAL headline + `N × unit` breakdown.
+    // Stacked packs: net TOTAL headline, the gross `N × unit = gross`
+    // line, and the line-level discount (the fixed-$ applies once, so
+    // there is no clean per-unit discounted figure to show).
+    final gross = base * count;
+    final unitStr = formatMinorUnits(base, currency: 'USD');
+    final grossStr = formatMinorUnits(gross, currency: 'USD');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingTiny,
       children: [
         Text(
-          formatMinorUnits(unit * count, currency: 'USD'),
+          formatMinorUnits(net, currency: 'USD'),
           style: DesignConstants.h2,
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: DesignConstants.spacingTiny,
-          children: [
-            Text(
-              '$count × ',
-              style: DesignConstants.pSmall.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            ),
-            if (hasDiscount)
-              Text(
-                formatMinorUnits(base, currency: 'USD'),
-                style: DesignConstants.pSmall.copyWith(
-                  color: DesignConstants.text3rd,
-                  decoration: TextDecoration.lineThrough,
-                  decorationColor: DesignConstants.text3rd,
-                ),
-              ),
-            Text(
-              formatMinorUnits(unit, currency: 'USD'),
-              style: DesignConstants.pSmall.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            ),
-          ],
+        Text(
+          '$count × $unitStr = $grossStr',
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.text2nd,
+          ),
         ),
+        if (hasDiscount && gross > net)
+          Text(
+            '− ${formatMinorUnits(gross - net, currency: 'USD')} off',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
       ],
     );
   }

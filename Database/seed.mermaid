@@ -34,7 +34,7 @@ flowchart TB
   m_life -->|"25%"| m_trial["trial-only"]
   m_life -->|"20%"| m_t2p["trial→paid"]
   m_life -->|"17%"| m_active["active (~10% cancel at start)"]
-  m_life -->|"10%"| m_packs["active class packs<br/>1–3 one-time, stacked"]
+  m_life -->|"10%"| m_packs["active class pack<br/>1 one-time row · qty 1–3"]
   m_life -->|"10%"| m_resign["re-signup"]
   m_never --> m_frz
   m_former --> m_frz
@@ -98,7 +98,7 @@ flowchart TB
   Memberships --> ms_closed["closed ≈50–70"]
   ms_live --> ms_active["active (recurring)"]
   ms_live --> ms_trial["active trial"]
-  ms_live --> ms_packs["active class packs (1–3 one-time)"]
+  ms_live --> ms_packs["active class pack (one-time · qty 1–3)"]
   ms_live --> ms_cancel["cancelled at start ~10%"]
   ms_closed --> ms_ended["ended (trial / drop-in)"]
   ms_closed --> ms_former["former / re-signup history"]

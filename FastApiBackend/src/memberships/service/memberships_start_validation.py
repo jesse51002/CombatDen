@@ -93,6 +93,7 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
                 )
 
         self._check_no_recurring_duplicates(request, plan_prices)
+        self._check_recurring_quantity(request, plan_prices)
 
         plans_by_member: dict[UUID, list[UUID]] = {}
         for item in request.memberships:
@@ -114,10 +115,15 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
     ) -> None:
         """Reject two RECURRING items on the same plan in one request.
 
-        One_time / trial packs may repeat freely (N copies = N packs), but a
-        member cannot start two recurring memberships of the same plan at once
-        (the DB trigger trg_recurring_no_active_memberships would reject the
-        second insert anyway — this surfaces it early, before any write).
+        Exact duplicate items (same member + same price) are already blocked
+        structurally by MemberMembershipsStartItem's request validator. This
+        guard adds the case that one can't see: two recurring items on the same
+        PLAN at DIFFERENT prices (e.g. monthly + annual of plan A) — same
+        (member, plan), different price_id. A member can hold only one active
+        recurring membership per plan, and a BEFORE-INSERT row trigger can't be
+        relied on to catch two siblings inserted in the SAME multi-row INSERT,
+        so this surfaces it early, before any write. (one_time / trial stack via
+        quantity, not repeated items, so they have no equivalent restriction.)
 
         Raises:
             ValueError: On the first duplicate recurring (member, plan).
@@ -135,6 +141,34 @@ class MemberMembershipsStartValidation(MemberMembershipsBase):
                     f"plan_id={row['plan_id']}"
                 )
             seen.add(key)
+
+    def _check_recurring_quantity(
+        self,
+        request: MemberMembershipsStartRequest,
+        plan_prices: dict[UUID, dict],
+    ) -> None:
+        """Reject quantity > 1 on a RECURRING item.
+
+        A recurring membership is one subscription item per plan, so it must be
+        quantity == 1; only one_time / trial packs may stack via quantity > 1.
+        The DB trigger trg_recurring_quantity_must_be_one enforces the same
+        invariant — this surfaces it early, before any write, with a clear
+        message.
+
+        Raises:
+            ValueError: On the first recurring item whose quantity != 1.
+        """
+        for item in request.memberships:
+            row = plan_prices[item.price_id]
+            if (
+                row["plan_type"] == PlanType.recurring
+                and item.quantity != 1
+            ):
+                raise ValueError(
+                    "Recurring membership must have quantity == 1 "
+                    f"(member_id={item.member_id}, "
+                    f"plan_id={row['plan_id']}, quantity={item.quantity})",
+                )
 
     async def _resolve_payer(
         self,

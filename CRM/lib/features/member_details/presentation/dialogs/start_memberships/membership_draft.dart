@@ -11,10 +11,10 @@ import 'package:crm/features/member_details/data/models/membership_plan_response
 class MembershipDraft {
   final MembershipPlanResponse plan;
 
-  /// One-time / trial purchase count from the stepper. The
-  /// request builder emits [count] identical wire items (N
-  /// copies of the pack); [toItem] returns the single shape
-  /// each copy uses. Always 1 for recurring (no stepper).
+  /// One-time / trial purchase count from the stepper. Sent
+  /// as the wire item's `quantity` (ONE item of `quantity =
+  /// count`, not N copies). Always 1 for recurring (no
+  /// stepper).
   final int count;
 
   /// Preset discount ids picked for this membership.
@@ -72,12 +72,18 @@ class MembershipDraft {
   bool get hasDiscounts =>
       discountIds.isNotEmpty || customDiscounts.isNotEmpty;
 
-  /// UI estimate of this membership's price after the added
-  /// discounts, in cents: percents apply first (compounding
-  /// sequentially), then dollar amounts subtract, floored at
-  /// zero — mirroring the backend's percent→dollar coupon
-  /// order. The Preview step stays the authoritative figure.
-  int discountedPriceCents(List<DiscountResponse> presets) {
+  /// UI estimate of this membership's LINE total after the added
+  /// discounts for [units] units, in cents: percents apply first to
+  /// the line base ([units] × unit price, compounding sequentially),
+  /// then dollar amounts subtract **once** from the line — mirroring
+  /// the backend's quantity-N Stripe line, where a fixed-$ coupon
+  /// applies once to the whole line (not per unit) and a percent
+  /// applies to unit×N. Floored at zero, percent→dollar order. The
+  /// Preview step stays the authoritative figure.
+  int discountedLineTotalCents(
+    List<DiscountResponse> presets,
+    int units,
+  ) {
     final base = plan.activePrice?.price ?? 0;
     final values = <DiscountValue>[
       for (final id in discountIds)
@@ -85,7 +91,7 @@ class MembershipDraft {
           if (d.discountId == id) d.value,
       ...customDiscounts,
     ];
-    var price = base.toDouble();
+    var price = (base * units).toDouble();
     for (final v in values) {
       final pct = v.percentageOff;
       if (pct != null) price *= 1 - pct / 100;
@@ -98,15 +104,16 @@ class MembershipDraft {
     return cents < 0 ? 0 : cents;
   }
 
-  /// The wire item shape for this draft (one copy), or null
-  /// when the plan has no active price (it shouldn't be
-  /// selectable). The request builder repeats it [count] times.
+  /// The wire item for this draft (carrying [count] as
+  /// `quantity`), or null when the plan has no active price
+  /// (it shouldn't be selectable).
   MemberMembershipsStartItem? toItem(String memberId) {
     final priceId = plan.activePrice?.priceId;
     if (priceId == null) return null;
     return MemberMembershipsStartItem(
       memberId: memberId,
       priceId: priceId,
+      quantity: count,
       discountIds: discountIds.toList(),
       customDiscounts: customDiscounts,
     );

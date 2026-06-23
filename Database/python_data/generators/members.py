@@ -65,10 +65,10 @@ class CurrentMembership:
     one custom discount. The draw happens alongside the preset draw in
     ``_assign_custom_discounts``.
 
-    ``count`` is how many identical copies to start. One-time / trial packs may
-    STACK, so a class-pack holder is seeded with ``count`` in 1-3 (the start
-    request carries that many identical items, creating that many memberships).
-    Always 1 for recurring (recurring stays one-active-per-plan).
+    ``count`` is how many units to buy. One-time / trial packs may STACK, so a
+    class-pack holder is seeded with ``count`` in 1-3, sent as the start item's
+    ``quantity`` — ONE membership billing that many units (a single Stripe line),
+    not N rows. Always 1 for recurring (recurring stays one-active-per-plan).
     """
 
     plan: PlanRecord

@@ -322,18 +322,19 @@ class MemberMembershipsBase:
 
         Each row dict carries: member_id, paid_by_member_id, gym_id, plan_id,
         price_id, start_date, end_date, last_paid_date, next_due_date,
-        stripe_item_id, total_price, and optionally sync_status (default
-        ``not_added`` — the real start's pending row; the start preview passes
-        ``preview_add`` so the dry-run sees it but the real path never bills
-        it). All rows appear atomically, or none. The DB generates each row's
-        ``item_id`` (PK default); we return them via ``RETURNING``.
+        stripe_item_id, total_price, quantity, and optionally sync_status
+        (default ``not_added`` — the real start's pending row; the start preview
+        passes ``preview_add`` so the dry-run sees it but the real path never
+        bills it). All rows appear atomically, or none. The DB generates each
+        row's ``item_id`` (PK default); we return them via ``RETURNING``.
 
         Returns:
             The DB-generated item_ids in the SAME order as ``rows`` — one
-            DISTINCT id per row, so N duplicate one-time items on the same
-            (member, plan) each map to their own row (the caller assigns and
-            cleans up each positionally). NEVER collapse by (member, plan): a
-            non-unique key drops the duplicate rows' ids and leaks them.
+            DISTINCT id per row, so multiple rows on the same (member, plan)
+            (e.g. a 5-pack and a 10-pack of the same one-time plan at different
+            prices) each map to their own row (the caller assigns and cleans up
+            each positionally). NEVER collapse by (member, plan): a non-unique
+            key drops same-plan rows' ids and leaks them.
         """
         sql = load_sql(SQL_DIR / "member_memberships_insert.sql")
         params = {
@@ -348,6 +349,7 @@ class MemberMembershipsBase:
             "next_due_dates": [r["next_due_date"] for r in rows],
             "stripe_item_ids": [r["stripe_item_id"] for r in rows],
             "total_prices": [r["total_price"] for r in rows],
+            "quantities": [r["quantity"] for r in rows],
             "sync_statuses": [
                 r.get("sync_status", StripeSyncStatus.not_added).value
                 for r in rows
@@ -401,7 +403,10 @@ class MemberMembershipsBase:
                 "last_paid_date": start_date,
                 "next_due_date": None,
                 "stripe_item_id": None,
-                "total_price": plan_price["price"],
+                # Pre-discount line total for this row; the sync overwrites it
+                # with the post-discount price once the row is on Stripe.
+                "total_price": plan_price["price"] * item.quantity,
+                "quantity": item.quantity,
                 "sync_status": sync_status,
             })
         return rows

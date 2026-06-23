@@ -97,8 +97,10 @@ class PaymentSyncQueries:
         """Parse a raw DB row into an ActiveMembershipRow.
 
         ``duration_unit`` is null-safe: recurring plans always carry it, but a
-        one-time plan can have no duration (the one-time read selects the same
-        columns).
+        one-time plan can have no duration. ``quantity`` is selected only by the
+        one-time read (where one_time / trial packs stack as quantity > 1); the
+        recurring read omits it, so it defaults to 1 — the DB-enforced recurring
+        value, and unused by the recurring build anyway.
         """
         duration_unit = row["duration_unit"]
         return ActiveMembershipRow(
@@ -109,6 +111,7 @@ class PaymentSyncQueries:
             stripe_price_id=row["stripe_price_id"],
             price=row["price"],
             stripe_item_id=row["stripe_item_id"],
+            quantity=row.get("quantity", 1),
             duration_unit=(
                 DurationUnit(duration_unit) if duration_unit else None
             ),
