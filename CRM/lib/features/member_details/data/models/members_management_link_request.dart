@@ -23,5 +23,14 @@ class MembersManagementLinkRequest extends Equatable {
       _$MembersManagementLinkRequestToJson(this);
 
   @override
+  @JsonKey(includeToJson: false)
   List<Object?> get props => [parentMemberId];
+
+  @override
+  @JsonKey(includeToJson: false)
+  bool? get stringify => super.stringify;
+
+  @override
+  @JsonKey(includeToJson: false)
+  int get hashCode => super.hashCode; // ignore: hash_and_equals
 }

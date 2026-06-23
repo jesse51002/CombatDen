@@ -9,11 +9,8 @@ part of 'member_memberships_freeze_request.dart';
 Map<String, dynamic> _$MemberMembershipsFreezeRequestToJson(
   MemberMembershipsFreezeRequest instance,
 ) => <String, dynamic>{
-  'stringify': instance.stringify,
-  'hash_code': instance.hashCode,
   'member_id': instance.memberId,
   'gym_id': instance.gymId,
   'freeze_months': instance.freezeMonths,
   'idempotency_key': instance.idempotencyKey,
-  'props': instance.props,
 };

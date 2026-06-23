@@ -203,6 +203,7 @@ class PaymentSyncOneTime:
                 member_id=membership.member_id,
                 plan_id=membership.plan_id,
                 stripe_price_id=membership.stripe_price_id,
+                quantity=membership.quantity,
                 coupon_ids=[
                     discount.coupon
                     for discount in resolved.coupons_by_price.get(
@@ -244,10 +245,11 @@ class PaymentSyncOneTime:
     def _to_item_specs(
         plan: OneTimeInvoicePlan,
     ) -> list[PaymentsInvoiceItemSpec]:
-        """One invoice-item spec per membership line (price + its coupons)."""
+        """One invoice-item spec per membership line (price + qty + coupons)."""
         return [
             PaymentsInvoiceItemSpec(
                 stripe_price_id=item.stripe_price_id,
+                quantity=item.quantity,
                 coupon_ids=item.coupon_ids,
             )
             for item in plan.items

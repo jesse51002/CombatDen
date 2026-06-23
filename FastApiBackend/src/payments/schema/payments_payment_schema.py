@@ -16,12 +16,16 @@ class PaymentsInvoiceItemSpec(BaseModel):
     a catalog price, an amount line bills a raw cents amount (late fees,
     pro-shop). ``coupon_ids`` attach as **item-level** discounts (ordered
     dollar→percent) so each line is discounted independently. ``description`` is
-    the line label (used mainly for amount lines).
+    the line label (used mainly for amount lines). ``quantity`` multiplies a
+    PRICE line's unit amount (a stacked one_time / trial pack billed as one line
+    of N units); it only applies to price lines, since an ``amount`` line's
+    amount is already the line total, so quantity must stay 1 there.
     """
 
     stripe_price_id: str | None = None
     amount: int | None = Field(default=None, gt=0)
     description: str | None = None
+    quantity: int = Field(default=1, gt=0)
     coupon_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -31,6 +35,17 @@ class PaymentsInvoiceItemSpec(BaseModel):
             raise ValueError(
                 "PaymentsInvoiceItemSpec must set exactly one of "
                 "stripe_price_id / amount"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _quantity_only_on_price(self) -> Self:
+        """quantity > 1 is meaningful only for a price line (it multiplies the
+        unit amount); an amount line's amount is already the total."""
+        if self.amount is not None and self.quantity != 1:
+            raise ValueError(
+                "PaymentsInvoiceItemSpec quantity must be 1 for an amount line "
+                "(quantity multiplies a price line's unit amount only)"
             )
         return self
 

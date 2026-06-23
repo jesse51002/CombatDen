@@ -353,6 +353,84 @@ async def test_one_time_start_with_dollar_off_discount(
 
 
 @pytest.mark.timeout(180)
+async def test_one_time_start_with_mixed_discounts(
+    memberships_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """A stacked pack (quantity > 1) with BOTH a percent AND a dollar discount.
+
+    The whole reason for the Stripe-quantity model: the line is qty=4 × $25 =
+    $100, the percent applies to the line and the fixed-$ applies ONCE to the
+    line (not per unit). 20% then $5 off -> 100*0.8 - 5 = $75. The two coupons
+    (percent + dollar) are distinct item-level discounts on one invoice line —
+    Stripe applies both and reports each in discount_amounts, so the recorded
+    total_price and the charged amount both come out to the net.
+    """
+    pm_id = await created.payment_method()
+    member = await created.member(gym_id, payment_method_id=pm_id)
+    plan = await created.plan(
+        gym_id,
+        plan_type="one_time",
+        price_cents=2500,
+        duration_amount=1,
+        duration_unit="month",
+    )
+    pct = await created.discount(
+        gym_id,
+        name="20% once",
+        percentage_off=20.0,
+        discount_mode="once",
+    )
+    dol = await created.discount(
+        gym_id,
+        name="$5 off once",
+        percentage_off=None,
+        dollar_off=500,
+        discount_mode="once",
+    )
+
+    await memberships_service.start(
+        MemberMembershipsStartRequest(
+            payer_member_id=member.member_id,
+            gym_id=gym_id,
+            idempotency_key=uuid4(),
+            memberships=[
+                MemberMembershipsStartItem(
+                    member_id=member.member_id,
+                    price_id=plan.price_id,
+                    quantity=4,
+                    discount_ids=[pct.discount_id, dol.discount_id],
+                ),
+            ],
+        )
+    )
+
+    # qty 4 * 2500 = 10000 gross; 20% -> 8000; - 500 (once) -> 7500 net.
+    row = await _read_one_time_row(db_pool, member.member_id, gym_id)
+    assert row["status"] == "applied"
+    assert row["total_price"] == 7500
+    invoice = await stripe_client.client.v1.invoices.retrieve_async(
+        row["stripe_one_time_invoice_id"], options=connect_opts
+    )
+    assert invoice.status == "paid"
+    assert invoice.amount_paid == 7500
+
+    # Both discounts snapshot onto the single row, each with its own resolved
+    # coupon (percent + dollar are never merged), consumed at the one charge.
+    snaps = await get_applied_discounts(db_pool, row["item_id"])
+    assert len(snaps) == 2
+    coupons = {s["stripe_coupon_id"] for s in snaps}
+    assert coupons == {"pct_2000_once", "amt_500_once"}
+    for s in snaps:
+        assert s["end_date"] == gym_today(_SEEDED_GYM_TZ)
+        created.track_coupon(s["stripe_coupon_id"])
+
+
+@pytest.mark.timeout(180)
 async def test_one_time_start_with_compound_discounts(
     memberships_service,
     db_pool,

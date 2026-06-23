@@ -239,6 +239,7 @@ class PaymentsStripePaymentService:
             )
             if item.stripe_price_id is not None:
                 params["pricing"] = {"price": item.stripe_price_id}
+                params["quantity"] = item.quantity
             else:
                 params["amount"] = item.amount
                 params["currency"] = request.currency
@@ -321,7 +322,9 @@ class PaymentsStripePaymentService:
     ) -> InvoiceCreatePreviewParamsInvoiceItem:
         """Build one preview invoice-item (price or amount) with item-level
         discounts."""
-        preview_item = InvoiceCreatePreviewParamsInvoiceItem(quantity=1)
+        preview_item = InvoiceCreatePreviewParamsInvoiceItem(
+            quantity=item.quantity,
+        )
         if item.stripe_price_id is not None:
             preview_item["price"] = item.stripe_price_id
         else:

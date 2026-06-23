@@ -13,6 +13,9 @@
 -- read there is no 'applied' inclusion. The PREVIEW path also reads
 -- 'preview_add' (the staged row a start preview cuts then rolls back) via
 -- :statuses. A one-time plan may have no duration, so duration_unit can be NULL.
+-- quantity is how many units this single row bills as: a one_time / trial pack
+-- bought N at once is ONE row with quantity = N, billed as a single invoice
+-- line carrying that quantity (so a fixed-$ coupon applies once to the line).
 SELECT
     mm.item_id,
     mm.member_id,
@@ -21,6 +24,7 @@ SELECT
     mpp.stripe_price_id,
     mpp.price,
     mm.stripe_item_id,
+    mm.quantity,
     mp.duration_unit
 FROM member_memberships_unfiltered mm
 JOIN membership_plans mp

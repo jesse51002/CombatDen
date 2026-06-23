@@ -26,6 +26,7 @@ self-FK cleared — ``delete_member_data`` handles both per member).
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 from schema.task import ProrationBehavior
 from sqlalchemy import text
 
@@ -659,24 +660,27 @@ async def test_phase_a_custom_discount_by_id_rejects(
 
 
 def test_request_rejects_duplicate_member_price_pairs(gym_id):
-    """3f: duplicate (member_id, price_id) items fail at request construction.
+    """3f: duplicate (member_id, price_id) items are REJECTED at construction.
 
-    The pydantic ``_validate_memberships`` validator rejects the duplicate
-    pair before any service code runs — no DB / Stripe involvement at all.
+    Buying N of the same pack is ONE item with quantity = N, never N duplicate
+    items. (Two DIFFERENT prices of the same plan stay distinct items; the
+    recurring "one per plan in one request" guard lives in
+    MemberMembershipsStartValidation, where plan types are known — see
+    tests/memberships/test_start_request_schema.py.)
     """
     member_id = uuid4()
     price_id = uuid4()
-    with pytest.raises(ValueError, match="duplicate"):
+    with pytest.raises(ValidationError):
         MemberMembershipsStartRequest(
             payer_member_id=member_id,
             gym_id=gym_id,
             idempotency_key=uuid4(),
             memberships=[
                 MemberMembershipsStartItem(
-                    member_id=member_id, price_id=price_id
+                    member_id=member_id, price_id=price_id,
                 ),
                 MemberMembershipsStartItem(
-                    member_id=member_id, price_id=price_id
+                    member_id=member_id, price_id=price_id,
                 ),
             ],
         )

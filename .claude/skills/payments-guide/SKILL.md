@@ -191,7 +191,11 @@ back to active because the DB says it's current.
   from a **list of items** (`PaymentsInvoiceItemSpec`), each a **Stripe price XOR
   an ad-hoc amount** (late fees, pro-shop — exactly one set, model-validated) plus
   its own **item-level** discount coupons (`InvoiceItem.discounts`, not
-  invoice-level — so each line is discounted independently). A single charge is
+  invoice-level — so each line is discounted independently). A **price** line may
+  carry a **`quantity`** (a stacked one_time / trial pack billed as one line of N
+  units — quantity multiplies the unit price, so a fixed-$ coupon applies once to
+  the line; model-validated to stay 1 on an `amount` line, whose amount is already
+  the total). A single charge is
   just a one-item list. The create response carries **`line_item_ids` AND
   `line_amounts`** in **request order** (each line mapped from its
   `parent.invoice_item_details.invoice_item`), so a caller maps each item → its

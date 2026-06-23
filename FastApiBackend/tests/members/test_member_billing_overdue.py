@@ -19,6 +19,10 @@ grouper) is covered by the billing-detail integration tests.
 from datetime import date
 from uuid import uuid4
 
+from schema.membership_plan import PlanType
+
+import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
+from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
 )
@@ -151,6 +155,77 @@ def test_plan_total_sums_only_active_member_shares():
     assert grouped[0].total_price == 8000
     assert grouped[0].members[parent["member_id"]].total_price == 5000
     assert grouped[0].members[child["member_id"]].total_price == 3000
+
+
+def _pack_usage(row: dict, used: int) -> MembershipUsage:
+    return MembershipUsage(
+        item_id=row["item_id"],
+        plan_id=row["plan_id"],
+        start_date=row["membership_start_date"],
+        plan_type=PlanType.one_time,
+        status="active",
+        class_count=10,
+        classes_used=used,
+        classes_remaining=10 - used,
+        renew_date=None,
+        end_date=None,
+    )
+
+
+def test_one_time_packs_split_into_per_item_cards():
+    """Two one_time packs on the SAME plan for one member become TWO cards,
+    each carrying its OWN class usage (looked up by item_id, not collapsed)."""
+    grouper = MembersBillingGrouper()
+    member_id = uuid4()
+    plan_id = uuid4()
+    pack_a = _membership_row(
+        status="active", next_due=None, plan_id=plan_id,
+        plan_type="one_time", member_id=member_id,
+        paid_by_member_id=member_id,
+    )
+    pack_b = _membership_row(
+        status="active", next_due=None, plan_id=plan_id,
+        plan_type="one_time", member_id=member_id,
+        paid_by_member_id=member_id,
+    )
+    usage_lookup = {
+        (member_id, pack_a["item_id"]): _pack_usage(pack_a, used=4),
+        (member_id, pack_b["item_id"]): _pack_usage(pack_b, used=1),
+    }
+
+    grouped = grouper.group_by_plan(
+        [pack_a, pack_b],
+        _StubSupplementary(),
+        usage_lookup,
+        member_id,
+        TODAY,
+    )
+
+    # Two separate cards (one per pack), NOT collapsed into one.
+    assert len(grouped) == 2
+    by_item = {g.members[member_id].item_id: g for g in grouped}
+    assert by_item[pack_a["item_id"]].paying_for[0].classes_used == 4
+    assert by_item[pack_b["item_id"]].paying_for[0].classes_used == 1
+
+
+def test_recurring_family_stays_one_card():
+    """A recurring plan shared by two members stays ONE card with both in
+    paying_for (only one_time / trial packs split per item)."""
+    grouper = MembersBillingGrouper()
+    plan_id = uuid4()
+    parent = _membership_row(status="active", next_due=FUTURE, plan_id=plan_id)
+    child = _membership_row(status="active", next_due=FUTURE, plan_id=plan_id)
+
+    grouped = grouper.group_by_plan(
+        [parent, child],
+        _StubSupplementary(),
+        {},
+        parent["member_id"],
+        TODAY,
+    )
+
+    assert len(grouped) == 1
+    assert len(grouped[0].paying_for) == 2
 
 
 class _PayerSupp:

@@ -6,6 +6,9 @@ from datetime import date
 from enum import StrEnum
 from uuid import UUID
 
+from schema.membership_plan import PlanType
+
+import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
 from src.members.schema.members_billing_schema import (
     BillingMembershipInfo,
@@ -63,10 +66,26 @@ class MembershipOverviewContext:
 
 
 class MembersBillingGrouper:
-    """Groups membership rows by plan_id for the membership carousel.
+    """Groups membership rows into cards for the membership carousel.
 
-    Also handles linked-account filtering and overview string generation.
+    Recurring plans group by plan (a family sharing a recurring plan is ONE
+    card); one_time / trial packs group by membership (item_id) so a member
+    can hold several of the same pack, each as its own card. Also handles
+    linked-account filtering and overview string generation.
     """
+
+    @staticmethod
+    def _group_key(row: dict) -> tuple[str, UUID]:
+        """Carousel grouping key.
+
+        Recurring plans group by plan (``("plan", plan_id)``) so a family
+        sharing a recurring plan stays one card; one_time / trial packs group
+        by membership (``("item", item_id)``) so two packs on the same plan
+        each get their own card.
+        """
+        if row["plan_type"] == PlanType.recurring:
+            return ("plan", row["plan_id"])
+        return ("item", row["item_id"])
 
     def group_by_plan(
         self,
@@ -76,32 +95,35 @@ class MembersBillingGrouper:
         target_member_id: UUID,
         today: date,
     ) -> list[BillingMembershipInfo]:
-        """Group membership rows by plan_id.
+        """Group membership rows into carousel cards.
+
+        Recurring plans become one card per plan; one_time / trial packs
+        become one card per membership (see ``_group_key``).
 
         Args:
             membership_rows: Rows with membership data.
             supplementary: For discount and profile lookups.
-            usage_lookup: (member_id, plan_id) -> per-cycle class usage.
+            usage_lookup: (member_id, item_id) -> per-cycle class usage.
             target_member_id: The member whose profile is being viewed,
                 used to pin them to the top of each card's paying_for list.
             today: The gym's local current date, used to derive overdue.
 
         Returns:
-            List of BillingMembershipInfo, one per unique plan.
+            List of BillingMembershipInfo — one per recurring plan, one per
+            one_time / trial membership.
         """
-        plan_rows: dict[UUID, list] = defaultdict(list)
+        groups: dict[tuple[str, UUID], list] = defaultdict(list)
         for row in membership_rows:
-            plan_rows[row["plan_id"]].append(row)
+            groups[self._group_key(row)].append(row)
 
         grouped: list[BillingMembershipInfo] = []
-        for plan_id, rows in plan_rows.items():
+        for rows in groups.values():
             representative = rows[0]
 
             paying_for = self._build_paying_for(
                 rows,
                 supplementary,
                 usage_lookup,
-                plan_id,
                 target_member_id,
                 today,
             )
@@ -133,7 +155,7 @@ class MembersBillingGrouper:
 
             grouped.append(
                 BillingMembershipInfo(
-                    plan_id=plan_id,
+                    plan_id=representative["plan_id"],
                     plan_name=representative["plan_name"],
                     plan_type=representative["plan_type"],
                     status=self._display_status(
@@ -304,17 +326,16 @@ class MembersBillingGrouper:
         rows: list,
         supplementary: MembersBillingSupplementary,
         usage_lookup: dict[tuple[UUID, UUID], MembershipUsage],
-        plan_id: UUID,
         target_member_id: UUID,
         today: date,
     ) -> list[BillingPayingForMember]:
-        """Build the paying_for list for a plan group.
+        """Build the paying_for list for a card's rows.
 
         Args:
-            rows: All membership rows sharing the same plan.
+            rows: The card's membership rows (a recurring plan's family rows,
+                or a single one_time / trial membership).
             supplementary: For profile lookups.
-            usage_lookup: (member_id, plan_id) -> per-cycle class usage.
-            plan_id: The plan to look up usage for.
+            usage_lookup: (member_id, item_id) -> per-cycle class usage.
             target_member_id: The queried member, pinned to index 0.
             today: The gym's local current date, used to derive overdue.
 
@@ -338,7 +359,7 @@ class MembersBillingGrouper:
                 "photo_url": (profile.photo_url if profile else row.get("photo_url")),
             }
 
-            usage = usage_lookup.get((uid, plan_id))
+            usage = usage_lookup.get((uid, row["item_id"]))
             if usage is not None:
                 fields["class_count"] = usage.class_count
                 fields["classes_used"] = usage.classes_used

@@ -1,7 +1,8 @@
 -- Append-only log of member attendance at a specific class instance.
 -- Each row points to a class_history row (the actual occurrence) and is
 -- attributed to the membership/plan that covered the check-in (set once by the
--- gated check-in service; the cycle-count query groups attendance by plan_id).
+-- gated check-in service; the cycle-count query groups attendance by item_id,
+-- so a member holding two packs on the same plan draws each down separately).
 CREATE TABLE member_attendance (
     log_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     member_id UUID NOT NULL,

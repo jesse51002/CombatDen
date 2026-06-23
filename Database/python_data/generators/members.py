@@ -64,10 +64,16 @@ class CurrentMembership:
     before the first charge). A membership may carry both preset discount_ids and
     one custom discount. The draw happens alongside the preset draw in
     ``_assign_custom_discounts``.
+
+    ``count`` is how many units to buy. One-time / trial packs may STACK, so a
+    class-pack holder is seeded with ``count`` in 1-3, sent as the start item's
+    ``quantity`` — ONE membership billing that many units (a single Stripe line),
+    not N rows. Always 1 for recurring (recurring stays one-active-per-plan).
     """
 
     plan: PlanRecord
     cancel_after_start: bool = False
+    count: int = 1
     discount_ids: list[uuid.UUID] = field(default_factory=list)
     custom_discount: dict | None = None
 
@@ -214,6 +220,7 @@ def _assign_lifecycle(
     """
     recurring = _plans_of_type(plans, "recurring")
     trials = _plans_of_type(plans, "trial")
+    one_times = _plans_of_type(plans, "one_time")
     if not recurring:
         return  # nothing to do without at least one recurring plan
 
@@ -248,11 +255,21 @@ def _assign_lifecycle(
         member.current = CurrentMembership(plan=random.choice(recurring))
         return
 
-    if roll < 0.85:
+    if roll < 0.80:
         # Active direct — recurring current, no history.
         member.current = CurrentMembership(
             plan=random.choice(recurring),
             cancel_after_start=random.random() < 0.1,
+        )
+        return
+
+    if roll < 0.90 and one_times:
+        # Active class-pack holder — 1-3 stacked one-time memberships on the
+        # same plan (exercises holding several one-time packs at once). Falls
+        # through to re-signup when the gym has no one-time plan.
+        member.current = CurrentMembership(
+            plan=random.choice(one_times),
+            count=random.randint(1, 3),
         )
         return
 

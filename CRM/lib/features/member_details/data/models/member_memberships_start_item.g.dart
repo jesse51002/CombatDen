@@ -9,11 +9,9 @@ part of 'member_memberships_start_item.dart';
 Map<String, dynamic> _$MemberMembershipsStartItemToJson(
   MemberMembershipsStartItem instance,
 ) => <String, dynamic>{
-  'stringify': instance.stringify,
-  'hash_code': instance.hashCode,
   'member_id': instance.memberId,
   'price_id': instance.priceId,
+  'quantity': instance.quantity,
   'discount_ids': instance.discountIds,
   'custom_discounts': instance.customDiscounts.map((e) => e.toJson()).toList(),
-  'props': instance.props,
 };
