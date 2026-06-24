@@ -484,9 +484,12 @@ class _StartMembershipsWizardState
         isPayer: true,
       );
       _payerDetail = _memberDetails[p.memberId];
+      // Auto-select the member whose page launched the wizard (always a valid
+      // participant for any chosen payer — the payer choices are that member's
+      // authorized payers), not the newly-chosen payer.
       _selectedMemberIds
         ..clear()
-        ..add(p.memberId);
+        ..add(widget.member.memberId);
       _drafts.clear();
       _preview = null;
       _previewRequest = null;
