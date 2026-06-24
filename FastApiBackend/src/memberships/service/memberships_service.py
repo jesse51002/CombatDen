@@ -402,18 +402,21 @@ class MemberMembershipsService:
     ) -> list[PayerInvoiceChange]:
         """Cost preview for removing the (member, payer) authorization.
 
-        Pair-scoped: the payer's recurring bill after cancelling every live
-        recurring membership ``payer_member_id`` funds for ``member_id``
-        (current → new), via the SAME per-payer cancel preview a single cancel
-        uses. Always one payer here (pair-scoped), so a one-entry list — or
-        empty when there is nothing to cancel.
+        Pair-scoped: always returns ONE entry for ``payer_member_id``.
+        ``affected`` is True iff that payer funds any of ``member_id``'s live
+        recurring memberships — in which case ``preview`` is their subscription
+        recurring current → new — and False when the removal cancels nothing for
+        them (no billing change). Same per-payer cancel preview a single cancel
+        uses.
         """
         rows = await self._pair_cancellable(member_id, payer_member_id)
         item_ids = [UUID(str(row["item_id"])) for row in rows]
-        if not item_ids:
-            return []
         async with self._paying_lock.lock([payer_member_id]):
-            return await self._cancel.preview_cancel(item_ids, member_id)
+            return [
+                await self._cancel.preview_payer_change(
+                    item_ids, member_id, payer_member_id
+                )
+            ]
 
     async def remove_authorization(
         self,

@@ -465,20 +465,24 @@ class MembersBillingRemoveAuthorizationRequest(BaseModel):
 
 
 class PayerInvoiceChange(BaseModel):
-    """One payer's billing change from a (possibly batched) cancel — their
-    subscription's recurring bill current → new.
+    """One payer's billing outcome from a (possibly batched) cancel.
 
     A LIST of these is the cancel / remove-authorization cost preview: one entry
-    per affected payer. A single membership cancel yields a one-entry list (a
-    member's memberships may be funded by different payers, so a multi-cancel can
-    change several payers' bills at once). ``preview`` is the standard
-    current → new recurring comparison for that payer's subscription.
+    per payer considered. ``affected`` is a **membership-level** flag — True iff
+    this payer funds at least one of the memberships being cancelled — decided
+    independently of the cost. When ``affected`` is True ``preview`` carries the
+    payer's subscription recurring current → new; when False the operation
+    cancels nothing for this payer (``preview`` is null) and the UI shows no
+    billing change. A single cancel yields a one-entry affected list; a member's
+    memberships may be funded by different payers, so a multi-cancel can change
+    several payers' bills at once.
     """
 
     payer_member_id: UUID
     payer_first_name: str
     payer_last_name: str
-    preview: DueNowVsRecurringPreview
+    affected: bool
+    preview: DueNowVsRecurringPreview | None = None
 
 
 class MemberMembershipsAppliedDiscount(BaseModel):

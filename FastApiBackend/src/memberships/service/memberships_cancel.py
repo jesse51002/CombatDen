@@ -146,12 +146,11 @@ class MemberMembershipsCancel(MemberMembershipsBase):
     ) -> list[PayerInvoiceChange]:
         """Preview cancelling ONE OR MORE of a member's recurring memberships.
 
-        Groups the items by payer and returns, for EACH affected payer, their
-        subscription's recurring bill current → new with that payer's lines
-        dropped (the same staged-preview machinery a single cancel uses). A
-        single cancel is a one-element list → a one-entry result; a payer whose
-        preview has no billing change is omitted. Already-cancelled items are
-        skipped. Read-only (staged then restored).
+        Groups the items by payer and returns one entry per payer that funds any
+        of them — each ``affected`` (membership-level), carrying their
+        subscription recurring current → new. A single cancel is a one-element
+        list → a one-entry affected result. Already-cancelled items are skipped.
+        Read-only (staged then restored).
 
         Raises:
             ValueError: If a membership is not found / non-recurring.
@@ -165,28 +164,43 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             by_payer.setdefault(
                 UUID(str(row["paid_by_member_id"])), []
             ).append(item_id)
-        if not by_payer:
-            return []
+        return [
+            await self.preview_payer_change(payer_items, member_id, payer)
+            for payer, payer_items in by_payer.items()
+        ]
 
-        names = await self._payer_names(list(by_payer.keys()))
-        changes: list[PayerInvoiceChange] = []
-        for payer_member_id, payer_items in by_payer.items():
-            preview = await self._staged_cancel_preview(
-                [(item_id, member_id) for item_id in payer_items],
+    async def preview_payer_change(
+        self,
+        item_ids: list[UUID],
+        member_id: UUID,
+        payer_member_id: UUID,
+    ) -> PayerInvoiceChange:
+        """One payer's preview entry. ``affected`` is **membership-level** — True
+        iff [item_ids] is non-empty (this payer funds ≥1 membership being
+        cancelled), decided independently of cost. When affected, stage those
+        lines and preview the payer's recurring current → new; when not, nothing
+        is cancelled for them (``preview`` None). ALWAYS returns an entry, so a
+        caller can show "no change" for an unaffected payer — e.g. removing an
+        authorization that funds nothing.
+        """
+        affected = len(item_ids) > 0
+        preview = (
+            await self._staged_cancel_preview(
+                [(item_id, member_id) for item_id in item_ids],
                 payer_member_id,
             )
-            if preview is None:
-                continue
-            first, last = names.get(payer_member_id, ("", ""))
-            changes.append(
-                PayerInvoiceChange(
-                    payer_member_id=payer_member_id,
-                    payer_first_name=first,
-                    payer_last_name=last,
-                    preview=preview,
-                )
-            )
-        return changes
+            if affected
+            else None
+        )
+        names = await self._payer_names([payer_member_id])
+        first, last = names.get(payer_member_id, ("", ""))
+        return PayerInvoiceChange(
+            payer_member_id=payer_member_id,
+            payer_first_name=first,
+            payer_last_name=last,
+            affected=affected,
+            preview=preview,
+        )
 
     # ── Private ────────────────────────────────────────────────
 

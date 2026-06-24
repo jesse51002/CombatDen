@@ -122,13 +122,15 @@ async def test_remove_authorization_cancels_only_the_pair(
         a_self = await _item_id_for(db_pool, member_a.member_id, plan_self.plan_id)
 
         # Preview is a per-payer cost preview: pair-scoped → exactly one
-        # entry, for the payer P whose subscription loses A's line.
+        # entry, for the payer P, AFFECTED (funds A's membership) with the
+        # subscription preview present.
         preview = await memberships_service.preview_remove_authorization(
             member_a.member_id,
             payer.member_id,
         )
         assert len(preview) == 1
         assert preview[0].payer_member_id == payer.member_id
+        assert preview[0].affected is True
         assert preview[0].preview is not None
 
         payer_profile = await get_profile_stripe_ids(
@@ -170,7 +172,8 @@ async def test_remove_authorization_no_memberships_just_deauthorizes(
     created,
 ):
     """Removing an authorization with no funded memberships is a clean
-    de-authorize: empty preview, no cancel, the row is gone."""
+    de-authorize: one UNAFFECTED preview entry (no billing change), no cancel,
+    the row is gone."""
     payer = await created.member(gym_id)
     member = await created.member(gym_id)
     await authorize_payer(db_pool, member.member_id, payer.member_id)
@@ -179,7 +182,10 @@ async def test_remove_authorization_no_memberships_just_deauthorizes(
         preview = await memberships_service.preview_remove_authorization(
             member.member_id, payer.member_id
         )
-        assert preview == []
+        assert len(preview) == 1
+        assert preview[0].payer_member_id == payer.member_id
+        assert preview[0].affected is False
+        assert preview[0].preview is None
 
         await memberships_service.remove_authorization(
             member.member_id, payer.member_id
