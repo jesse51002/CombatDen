@@ -123,7 +123,9 @@ async def test_remove_authorization_cancels_only_the_pair(
 
         # Preview is a per-payer cost preview: pair-scoped → exactly one
         # entry, for the payer P, AFFECTED (funds A's membership) with the
-        # subscription preview present.
+        # subscription preview present. The preview MUST surface the funded
+        # membership — the list shows "Cancels: <plan>", so the preview can't
+        # claim "no billing change" for the same pair (the bug this guards).
         preview = await memberships_service.preview_remove_authorization(
             member_a.member_id,
             payer.member_id,
@@ -140,10 +142,17 @@ async def test_remove_authorization_cancels_only_the_pair(
             stripe_client, payer_profile.stripe_customer_id, connect_opts
         )
 
-        await memberships_service.remove_authorization(
+        # remove_authorization returns the cascading cancel's outcome — the
+        # item_id → cancel_date map for what it cancelled (Feature B), so the
+        # caller can show the completion screen. Exactly A's membership paid by
+        # P, and nothing else.
+        cancelled = await memberships_service.remove_authorization(
             member_a.member_id,
             payer.member_id,
+            uuid4(),
         )
+        assert set(cancelled) == {a_paid_by_p}
+        assert cancelled[a_paid_by_p] is not None
 
         # Only A's membership paid by P is cancelled.
         assert await _cancel_date(db_pool, a_paid_by_p) is not None
@@ -187,9 +196,11 @@ async def test_remove_authorization_no_memberships_just_deauthorizes(
         assert preview[0].affected is False
         assert preview[0].preview is None
 
-        await memberships_service.remove_authorization(
-            member.member_id, payer.member_id
+        cancelled = await memberships_service.remove_authorization(
+            member.member_id, payer.member_id, uuid4()
         )
+        # Nothing funded → empty outcome map, but the pair is still removed.
+        assert cancelled == {}
         assert not await _is_authorized(
             db_pool, member.member_id, payer.member_id
         )

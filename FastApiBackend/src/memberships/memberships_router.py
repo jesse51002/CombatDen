@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
+from src.memberships.memberships_exceptions import PartialCancelError
 from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
     MemberMembershipsBatchRepriceRequest,
@@ -126,6 +127,32 @@ async def cancel_membership(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
+        ) from None
+    except PartialCancelError as exc:
+        # A later payer's converge failed AFTER an earlier payer succeeded —
+        # the batch is partial. Log the full succeeded/failed map and surface
+        # it as a STRUCTURED detail so the caller can show the accurate
+        # succeeded/failed split (and re-issue the cancel for the failed
+        # payer's items). A FastAPI HTTPException detail may be a dict — it
+        # serializes as the JSON body's ``detail``.
+        succeeded_item_ids = sorted(str(i) for i in exc.succeeded)
+        failed_item_ids = sorted(str(i) for i in exc.failed_item_ids)
+        logger.error(
+            "Cancel partially applied: member_id=%s succeeded=%s "
+            "failed_payer=%s failed_item_ids=%s",
+            request.member_id,
+            succeeded_item_ids,
+            exc.failed_payer_id,
+            failed_item_ids,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "message": str(exc),
+                "succeeded_item_ids": succeeded_item_ids,
+                "failed_item_ids": failed_item_ids,
+            },
         ) from None
     except ValueError as exc:
         error_msg = str(exc)

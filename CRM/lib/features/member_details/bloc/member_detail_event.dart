@@ -125,6 +125,12 @@ class RemoveAuthorizationRequested extends MemberDetailEvent {
   List<Object?> get props => [memberId, payerMemberId];
 }
 
+/// Clears the remove-authorization outcome when the unlink
+/// dialog closes, so a later remove run opens clean.
+class RemoveAuthorizationOutcomeCleared extends MemberDetailEvent {
+  const RemoveAuthorizationOutcomeCleared();
+}
+
 // ----- Membership mutations -----
 
 /// Fire the one start-memberships POST (the wizard's PAY).
@@ -145,6 +151,12 @@ class StartMembershipsRequested extends MemberDetailEvent {
 /// clean.
 class StartMembershipsCleared extends MemberDetailEvent {
   const StartMembershipsCleared();
+}
+
+/// Clears the cancel-memberships outcome when the cancel
+/// dialog closes, so a later cancel run opens clean.
+class CancelMembershipOutcomeCleared extends MemberDetailEvent {
+  const CancelMembershipOutcomeCleared();
 }
 
 /// Cancel ONE OR MORE memberships in one request (a single cancel is a

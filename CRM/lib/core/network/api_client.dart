@@ -103,12 +103,16 @@ class ApiClient {
         );
       }
       if (e.response != null) {
+        final body = e.response?.data;
         throw ServerException(
           'Server error '
           '${e.response?.statusCode}: '
           '${e.response?.statusMessage}',
           statusCode: e.response?.statusCode,
-          detail: _extractDetail(e.response?.data),
+          detail: _extractDetail(body),
+          data: body is Map
+              ? body.cast<String, dynamic>()
+              : null,
         );
       }
       throw NetworkException(

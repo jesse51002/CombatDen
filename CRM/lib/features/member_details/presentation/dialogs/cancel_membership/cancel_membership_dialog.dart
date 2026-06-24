@@ -6,9 +6,11 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
+import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_complete_list.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_membership_checklist.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_pay_for_others_section.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_preview_list.dart';
@@ -17,6 +19,7 @@ import 'package:crm/features/member_details/presentation/dialogs/cancel_membersh
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
+import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// Disclaimer shown on the review step (and on the remove-authorization
 /// dialog) — explains which invoice is shown and why there may be several.
@@ -33,7 +36,8 @@ const String kBillingPayerDisclaimer =
 /// opens the review step — the disclaimer, the labelled list of what will be
 /// cancelled (each with its subject member), and the per-payer billing
 /// preview — then dispatches one [CancelMembershipRequested] with every
-/// selected item_id.
+/// selected item_id. After the backend responds the dialog shows the
+/// completion step listing which memberships were cancelled and which failed.
 class CancelMembershipDialog extends StatefulWidget {
   final MemberDetailResponse member;
 
@@ -70,12 +74,20 @@ class CancelMembershipDialog extends StatefulWidget {
       _CancelMembershipDialogState();
 }
 
+/// The three phases of the cancel dialog.
+enum _Phase { select, review, complete }
+
 class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
   final MemberRepository _repository =
       MemberRepository(apiClient: ApiClient());
 
   final Set<String> _selected = {};
-  bool _reviewing = false;
+  _Phase _phase = _Phase.select;
+
+  /// Snapshot of the selected targets captured at the moment the user
+  /// confirms — preserved so the completion step can label rows even
+  /// after the selection is cleared.
+  List<CancelTarget> _confirmedTargets = const [];
 
   @override
   void initState() {
@@ -101,6 +113,7 @@ class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
           itemId: m.itemId,
           planName: m.planName,
           subjectName: widget.member.fullName,
+          payerName: widget.member.nameForMember(m.paidByMemberId),
           isOwn: true,
           subtitle: _ownSubtitle(m),
           alreadyCancelling:
@@ -113,7 +126,8 @@ class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
 
   /// The recurring memberships the focused member pays for OTHER people.
   /// Sourced from the already-loaded `paysFor` (members other than the
-  /// focused one); each labelled with its subject member's name.
+  /// focused one); each labelled with its subject member's name. The payer
+  /// for every row in this section is the focused member themselves.
   List<CancelTarget> get _payForOthersTargets {
     final out = <CancelTarget>[];
     for (final p in widget.member.paysFor) {
@@ -124,6 +138,7 @@ class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
             itemId: m.itemId,
             planName: m.planName,
             subjectName: p.fullName,
+            payerName: widget.member.fullName,
             isOwn: false,
             subtitle: 'for ${p.fullName}',
           ),
@@ -148,7 +163,7 @@ class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
       } else {
         _selected.remove(itemId);
       }
-      _reviewing = false;
+      _phase = _Phase.select;
     });
   }
 
@@ -162,7 +177,7 @@ class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
           _selected.remove(t.itemId);
         }
       }
-      _reviewing = false;
+      _phase = _Phase.select;
     });
   }
 
@@ -170,32 +185,110 @@ class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final hasSelection = _selected.isNotEmpty;
-    final reviewing = _reviewing && hasSelection;
-    return AppDialog(
-      title: 'Cancel membership',
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingLarge,
-        children: reviewing ? _reviewBody() : _selectBody(),
-      ),
-      actions: AppDialogActions(
-        primaryLabel: reviewing
-            ? 'Cancel ${_selected.length} '
-                '${_selected.length == 1 ? 'membership' : 'memberships'}'
-            : (hasSelection
-                ? 'Review (${_selected.length})'
-                : 'Review cancellation'),
-        primaryColor: DesignConstants.badRed,
-        primaryOnPressed: !hasSelection
-            ? null
-            : (reviewing ? _confirmCancel : _review),
-        secondaryLabel: reviewing ? 'Back' : 'Cancel',
-        secondaryOnPressed: reviewing
-            ? () => setState(() => _reviewing = false)
-            : () => Navigator.of(context).pop(),
-      ),
+    return BlocConsumer<MemberDetailBloc, MemberDetailState>(
+      listenWhen: (prev, curr) {
+        if (curr is! MemberDetailLoaded) return false;
+        if (prev is! MemberDetailLoaded) return false;
+        // Transition to complete when isCancellingMemberships
+        // flips from true to false with an outcome present.
+        return prev.isCancellingMemberships &&
+            !curr.isCancellingMemberships &&
+            curr.cancelOutcome != null;
+      },
+      listener: (context, state) {
+        setState(() => _phase = _Phase.complete);
+      },
+      builder: (context, blocState) {
+        final isCancelling = blocState is MemberDetailLoaded &&
+            blocState.isCancellingMemberships;
+        final hasSelection = _selected.isNotEmpty;
+
+        return AppDialog(
+          title: 'Cancel membership',
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingLarge,
+            children: _buildBody(
+              blocState: blocState,
+              isCancelling: isCancelling,
+            ),
+          ),
+          actions: _buildActions(
+            hasSelection: hasSelection,
+            isCancelling: isCancelling,
+          ),
+        );
+      },
     );
+  }
+
+  List<Widget> _buildBody({
+    required MemberDetailState blocState,
+    required bool isCancelling,
+  }) {
+    switch (_phase) {
+      case _Phase.select:
+        return _selectBody();
+      case _Phase.review:
+        return _reviewBody();
+      case _Phase.complete:
+        if (isCancelling) {
+          return [
+            Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  vertical: DesignConstants.spacingBig,
+                ),
+                child: const AppSpinner(),
+              ),
+            ),
+          ];
+        }
+        if (blocState is MemberDetailLoaded &&
+            blocState.cancelOutcome != null) {
+          return [
+            CancelCompleteList(
+              targets: _confirmedTargets,
+              outcome: blocState.cancelOutcome!,
+            ),
+          ];
+        }
+        return _selectBody();
+    }
+  }
+
+  Widget _buildActions({
+    required bool hasSelection,
+    required bool isCancelling,
+  }) {
+    switch (_phase) {
+      case _Phase.select:
+        return AppDialogActions(
+          primaryLabel: hasSelection
+              ? 'Review (${_selected.length})'
+              : 'Review cancellation',
+          primaryOnPressed: !hasSelection ? null : _review,
+          secondaryLabel: 'Cancel',
+          secondaryOnPressed: () => Navigator.of(context).pop(),
+        );
+      case _Phase.review:
+        return AppDialogActions(
+          primaryLabel: 'Cancel ${_selected.length} '
+              '${_selected.length == 1 ? 'membership' : 'memberships'}',
+          primaryColor: DesignConstants.badRed,
+          primaryOnPressed: _confirmCancel,
+          isLoading: isCancelling,
+          secondaryLabel: 'Back',
+          secondaryOnPressed: isCancelling
+              ? null
+              : () => setState(() => _phase = _Phase.select),
+        );
+      case _Phase.complete:
+        return AppDialogActions(
+          primaryLabel: 'Done',
+          primaryOnPressed: _close,
+        );
+    }
   }
 
   List<Widget> _selectBody() {
@@ -240,16 +333,27 @@ class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
     ];
   }
 
-  void _review() => setState(() => _reviewing = true);
+  void _review() => setState(() => _phase = _Phase.review);
 
   void _confirmCancel() {
     if (_selected.isEmpty) return;
+    _confirmedTargets = _selectedTargets;
+    // Transition to the loading state of the complete phase
+    // immediately — the BlocConsumer listener will flip to
+    // _Phase.complete once isCancellingMemberships drops.
+    setState(() => _phase = _Phase.complete);
     context.read<MemberDetailBloc>().add(
           CancelMembershipRequested(
             itemIds: _selected.toList(),
             memberId: widget.member.memberId,
           ),
         );
+  }
+
+  void _close() {
+    context
+        .read<MemberDetailBloc>()
+        .add(const CancelMembershipOutcomeCleared());
     Navigator.of(context).pop();
   }
 

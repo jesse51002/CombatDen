@@ -7,6 +7,7 @@ import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/member_details/bloc/invoice_poller.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
+import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
@@ -48,12 +49,18 @@ class MemberDetailBloc
     on<UnlinkPaymentRequested>(_onUnlinkPayment);
     on<LinkParentRequested>(_onLinkParent);
     on<RemoveAuthorizationRequested>(_onRemoveAuthorization);
+    on<RemoveAuthorizationOutcomeCleared>(
+      _onRemoveAuthorizationOutcomeCleared,
+    );
 
     on<StartMembershipsRequested>(_onStartMemberships);
     on<StartMembershipsCleared>(
       _onStartMembershipsCleared,
     );
     on<CancelMembershipRequested>(_onCancelMembership);
+    on<CancelMembershipOutcomeCleared>(
+      _onCancelMembershipOutcomeCleared,
+    );
     on<UpdatePriceRequested>(_onUpdatePrice);
     on<FreezeAccountRequested>(_onFreezeAccount);
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
@@ -276,14 +283,84 @@ class MemberDetailBloc
   ) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
-    await _runMutation(
-      actionLabel: 'Remove authorization',
-      emit: emit,
-      action: () => _repository.removeAuthorization(
+    emit(s.copyWith(
+      isRemovingAuthorization: true,
+      clearRemoveAuthorizationOutcome: true,
+      clearActionError: true,
+    ));
+
+    // Generate the idempotency key ONCE per user action, so a retried
+    // remove-authorization dedups at Stripe (the backend derives the payer's
+    // sub-key from it).
+    CancelOutcome outcome;
+    try {
+      outcome = await _repository.removeAuthorization(
         event.memberId,
         event.payerMemberId,
-      ),
+        const Uuid().v4(),
+      );
+    } catch (e, stackTrace) {
+      // A hard failure (not a structured partial) — the unlink could not be
+      // completed. Surface it on the screen-level error path WITHOUT a
+      // completion outcome, so the dialog doesn't show an empty "done" screen.
+      log(
+        'Remove authorization failed',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isRemovingAuthorization: false,
+        actionError: e.toString(),
+      ));
+      return;
+    }
+
+    // Refresh member detail so the rosters/carousel reflect the unlink (even on
+    // a partial, the de-authorize may not have run). Best-effort: emit the
+    // outcome even if the refresh fails.
+    MemberDetailLoaded? refreshed;
+    try {
+      final detail = await _repository.getMemberDetail(
+        s.member.memberId,
+      );
+      // Re-read state post-await (see [_runMutation]).
+      final current = state;
+      if (current is MemberDetailLoaded) {
+        refreshed = current.copyWith(
+          member: detail,
+          isRemovingAuthorization: false,
+          removeAuthorizationOutcome: outcome,
+          refreshToken: current.refreshToken + 1,
+        );
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Remove authorization: member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final current = state;
+    if (current is! MemberDetailLoaded) return;
+    emit(
+      refreshed ??
+          current.copyWith(
+            isRemovingAuthorization: false,
+            removeAuthorizationOutcome: outcome,
+          ),
     );
+  }
+
+  void _onRemoveAuthorizationOutcomeCleared(
+    RemoveAuthorizationOutcomeCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearRemoveAuthorizationOutcome: true));
   }
 
   // ----- Membership mutations -----
@@ -351,21 +428,88 @@ class MemberDetailBloc
     emit(s.copyWith(clearStartOutcome: true));
   }
 
+  /// The cancel dialog's mutation. Unlike [_runMutation] the
+  /// outcome must reach the dialog's completion step, so it
+  /// lands on `isCancellingMemberships` / `cancelOutcome`
+  /// instead of `isMutating` / `actionError` — the
+  /// screen-level error overlay must not fire while the dialog
+  /// is open (mirrors [_onStartMemberships] / [_onChargeCard]).
+  /// Member detail is always refreshed (even on failure) so the
+  /// carousel reflects the true post-cancel state.
   Future<void> _onCancelMembership(
     CancelMembershipRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
-    await _runMutation(
-      actionLabel: 'Cancel membership',
-      emit: emit,
-      action: () => _repository.cancelMemberships(
+    emit(s.copyWith(
+      isCancellingMemberships: true,
+      clearCancelOutcome: true,
+    ));
+    CancelOutcome outcome;
+    try {
+      outcome = await _repository.cancelMemberships(
         itemIds: event.itemIds,
         memberId: event.memberId,
         idempotencyKey: const Uuid().v4(),
-      ),
+      );
+    } catch (e, stackTrace) {
+      // MembershipInTaskException or unexpected — surface as all-failed.
+      log(
+        'Cancel membership failed',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      outcome = CancelOutcome(
+        succeededItemIds: const [],
+        failedItemIds: event.itemIds,
+      );
+    }
+
+    // Refresh member detail so the carousel reflects the true state
+    // (even on failure, a partial cancel may have landed). Best-effort:
+    // emit the outcome even if the refresh fails.
+    MemberDetailLoaded? refreshed;
+    try {
+      final detail = await _repository.getMemberDetail(
+        s.member.memberId,
+      );
+      // Re-read state post-await (see [_runMutation]).
+      final current = state;
+      if (current is MemberDetailLoaded) {
+        refreshed = current.copyWith(
+          member: detail,
+          isCancellingMemberships: false,
+          cancelOutcome: outcome,
+          refreshToken: current.refreshToken + 1,
+        );
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Cancel: member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final current = state;
+    if (current is! MemberDetailLoaded) return;
+    emit(
+      refreshed ??
+          current.copyWith(
+            isCancellingMemberships: false,
+            cancelOutcome: outcome,
+          ),
     );
+  }
+
+  void _onCancelMembershipOutcomeCleared(
+    CancelMembershipOutcomeCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearCancelOutcome: true));
   }
 
   Future<void> _onUpdatePrice(

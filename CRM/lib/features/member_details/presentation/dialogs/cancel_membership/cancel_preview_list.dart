@@ -83,6 +83,16 @@ class _CancelPreviewListState extends State<CancelPreviewList> {
   }
 
   Widget _payerSection(PayerInvoiceChange change) {
+    // When the preview is null the backend has confirmed this payer's
+    // subscription is fully cancelled (all their memberships are being
+    // removed). Show a clear note rather than an empty or $0 breakdown.
+    if (change.preview == null) {
+      return _NoRemainingInvoice(
+        payerName: change.payerFullName,
+        payerPhotoUrl:
+            widget.member.photoUrlForMember(change.payerMemberId),
+      );
+    }
     return InvoicePreviewSection(
       // The preview half is already fetched; loadCurrent supplies the
       // payer's current recurring bill as the "before".
@@ -96,6 +106,50 @@ class _CancelPreviewListState extends State<CancelPreviewList> {
           widget.member.photoUrlForMember(change.payerMemberId),
       emptyLabel: 'No change to recurring billing.',
       errorLabel: 'Could not load the cancellation preview.',
+    );
+  }
+}
+
+/// Shown when a payer's `preview` is null — all of their funded
+/// memberships are being cancelled, so they will have no remaining
+/// recurring bill.
+class _NoRemainingInvoice extends StatelessWidget {
+  final String payerName;
+  final String? payerPhotoUrl;
+
+  const _NoRemainingInvoice({
+    required this.payerName,
+    this.payerPhotoUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(DesignConstants.spacingMedium),
+      decoration: BoxDecoration(
+        color: DesignConstants.backgroundColor,
+        borderRadius: BorderRadius.circular(
+          DesignConstants.radiusSmall,
+        ),
+        border: Border.all(color: DesignConstants.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingSmall,
+        children: [
+          Text(
+            payerName,
+            style: DesignConstants.h3,
+          ),
+          Text(
+            'No remaining invoice — all of their memberships '
+            'are being cancelled.',
+            style: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

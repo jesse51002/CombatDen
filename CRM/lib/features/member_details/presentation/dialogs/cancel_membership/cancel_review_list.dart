@@ -6,8 +6,8 @@ import 'package:crm/features/member_details/presentation/dialogs/cancel_membersh
 
 /// The review-phase summary: every membership that will be cancelled, each
 /// labelled with WHOSE membership it is (the focused member, or the other
-/// person they pay for). Read-only — confirmation comes from the dialog
-/// footer.
+/// person they pay for) AND who pays for it. Read-only — confirmation comes
+/// from the dialog footer.
 class CancelReviewList extends StatelessWidget {
   final List<CancelTarget> targets;
 
@@ -47,11 +47,24 @@ class CancelReviewList extends StatelessWidget {
           color: DesignConstants.badRed,
         ),
         Expanded(
-          child: Text(
-            '${t.planName} · for ${t.subjectName}',
-            style: DesignConstants.p.copyWith(
-              color: DesignConstants.text2nd,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: DesignConstants.spacingTiny,
+            children: [
+              Text(
+                '${t.planName} · for ${t.subjectName}',
+                style: DesignConstants.p.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+              if (t.payerName != null)
+                Text(
+                  'paid by ${t.payerName}',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text3rd,
+                  ),
+                ),
+            ],
           ),
         ),
       ],

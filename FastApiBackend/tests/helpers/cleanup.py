@@ -11,6 +11,7 @@ test result or blocks the remaining cleanup.
 """
 
 import logging
+from pathlib import Path
 from uuid import UUID
 
 import stripe
@@ -18,8 +19,11 @@ from sqlalchemy import text
 
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.shared.database import DirectDatabasePool
+from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
+
+_SQL_DIR = Path(__file__).resolve().parent / "sql"
 
 # Tables in FK-safe deletion order (children before parents).
 # ``member_charges`` cascades from ``member_invoices`` but is listed
@@ -59,10 +63,10 @@ async def delete_all_gym_data(db_pool: DirectDatabasePool, gym_id: UUID) -> None
     """
     async with db_pool.session() as session:
         for table in _GYM_TABLES:
-            await session.execute(
-                text(f"DELETE FROM {table} WHERE gym_id = :gym_id"),  # noqa: S608
-                {"gym_id": str(gym_id)},
+            sql = load_sql(  # noqa: S608
+                _SQL_DIR / "delete_gym_rows.sql", {"table": table}
             )
+            await session.execute(text(sql), {"gym_id": str(gym_id)})
         await session.commit()
 
 
@@ -96,13 +100,13 @@ async def delete_member_data(
         # is gone, so a blocked webhook retries later, resolves no member, and
         # returns early — a harmless logged error on the backend, not a bug.
         await session.execute(
-            text("LOCK TABLE member_invoice_line_items IN EXCLUSIVE MODE")
+            text(load_sql(_SQL_DIR / "lock_member_invoice_line_items.sql"))
         )
         # Billing rows are keyed by the PAYER (paid_by_member_id, the FK that
         # blocks the member delete); the beneficiary set lives on the invoice's
         # paid_for JSONB (no FK), so deleting by payer is what frees the row.
         await session.execute(
-            text("DELETE FROM member_charges WHERE paid_by_member_id = :id"),
+            text(load_sql(_SQL_DIR / "delete_member_charges.sql")),
             {"id": str(member_id)},
         )
         # Invoice line items can reference THIS member's memberships from
@@ -111,21 +115,15 @@ async def delete_member_data(
         # invoices misses those, so the membership delete below would hit
         # fk_line_item_membership_gym — delete them by membership item_id.
         await session.execute(
-            text(
-                "DELETE FROM member_invoice_line_items WHERE item_id IN "
-                "(SELECT item_id FROM member_memberships_unfiltered "
-                "WHERE member_id = :id)"
-            ),
+            text(load_sql(_SQL_DIR / "delete_member_invoice_line_items_by_membership.sql")),
             {"id": str(member_id)},
         )
         await session.execute(
-            text("DELETE FROM member_invoices WHERE paid_by_member_id = :id"),
+            text(load_sql(_SQL_DIR / "delete_member_invoices.sql")),
             {"id": str(member_id)},
         )
         await session.execute(
-            text(
-                "DELETE FROM member_membership_applied_discounts_unfiltered WHERE member_id = :id"
-            ),
+            text(load_sql(_SQL_DIR / "delete_member_applied_discounts.sql")),
             {"id": str(member_id)},
         )
         # Task records (e.g. a reprice task) FK both the member and their
@@ -133,35 +131,29 @@ async def delete_member_data(
         # items are all removed goes too (tasks are per-gym, not per-member,
         # so only now-empty tasks are deleted).
         await session.execute(
-            text("DELETE FROM task_items WHERE member_id = :id"),
+            text(load_sql(_SQL_DIR / "delete_member_task_items.sql")),
             {"id": str(member_id)},
         )
         await session.execute(
-            text(
-                "DELETE FROM tasks WHERE NOT EXISTS "
-                "(SELECT 1 FROM task_items ti WHERE ti.task_id = tasks.task_id)"
-            ),
+            text(load_sql(_SQL_DIR / "delete_empty_tasks.sql")),
         )
         await session.execute(
-            text("DELETE FROM member_memberships_unfiltered WHERE member_id = :id"),
+            text(load_sql(_SQL_DIR / "delete_member_memberships.sql")),
             {"id": str(member_id)},
         )
         # Authorization rows + waiver signatures FK the member (the junction also
         # FKs the signature it points at, so it goes first). Cover both roles:
         # the member as payee (member_id) and as payer (payer_member_id).
         await session.execute(
-            text(
-                "DELETE FROM member_authorized_payers "
-                "WHERE member_id = :id OR payer_member_id = :id"
-            ),
+            text(load_sql(_SQL_DIR / "delete_member_authorized_payers.sql")),
             {"id": str(member_id)},
         )
         await session.execute(
-            text("DELETE FROM member_waiver_signatures WHERE member_id = :id"),
+            text(load_sql(_SQL_DIR / "delete_member_waiver_signatures.sql")),
             {"id": str(member_id)},
         )
         await session.execute(
-            text("DELETE FROM members WHERE member_id = :id"),
+            text(load_sql(_SQL_DIR / "delete_member.sql")),
             {"id": str(member_id)},
         )
         await session.commit()
@@ -177,13 +169,11 @@ async def delete_plan_data(db_pool: DirectDatabasePool, plan_id: UUID) -> None:
     """
     async with db_pool.session() as session:
         await session.execute(
-            text(
-                "DELETE FROM membership_plan_prices_unfiltered WHERE plan_id = :id"
-            ),
+            text(load_sql(_SQL_DIR / "delete_plan_prices.sql")),
             {"id": str(plan_id)},
         )
         await session.execute(
-            text("DELETE FROM membership_plans_unfiltered WHERE plan_id = :id"),
+            text(load_sql(_SQL_DIR / "delete_plan.sql")),
             {"id": str(plan_id)},
         )
         await session.commit()
@@ -204,13 +194,11 @@ async def delete_discount_preset(
     """
     async with db_pool.session() as session:
         await session.execute(
-            text(
-                "DELETE FROM gym_discount_values_unfiltered WHERE discount_id = :id"
-            ),
+            text(load_sql(_SQL_DIR / "delete_discount_values.sql")),
             {"id": str(discount_id)},
         )
         await session.execute(
-            text("DELETE FROM gym_discounts_unfiltered WHERE discount_id = :id"),
+            text(load_sql(_SQL_DIR / "delete_discount.sql")),
             {"id": str(discount_id)},
         )
         await session.commit()

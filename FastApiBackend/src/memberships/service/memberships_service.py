@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import TYPE_CHECKING
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from schema.task import ProrationBehavior
 from sqlalchemy import text
@@ -450,11 +450,14 @@ class MemberMembershipsService:
         uses.
         """
         rows = await self._pair_cancellable(member_id, payer_member_id)
-        item_ids = [UUID(str(row["item_id"])) for row in rows]
+        items = [
+            (UUID(str(row["item_id"])), UUID(str(row["member_id"])))
+            for row in rows
+        ]
         async with self._paying_lock.lock([payer_member_id]):
             return [
                 await self._cancel.preview_payer_change(
-                    item_ids, member_id, payer_member_id
+                    items, payer_member_id
                 )
             ]
 
@@ -462,27 +465,46 @@ class MemberMembershipsService:
         self,
         member_id: UUID,
         payer_member_id: UUID,
-    ) -> None:
+        idempotency_key: UUID,
+    ) -> dict[UUID, date]:
         """Remove the (member, payer) authorization, cascading a cancel.
 
         Pair-scoped and billing-critical: under the two-account lock, cancels
         every live recurring membership ``payer_member_id`` funds for
-        ``member_id`` in ONE converge (``cancel_many`` — one payer sync), then
-        deletes the ``member_authorized_payers`` row (the signature audit row
-        persists). Memberships paid by other payers, and this payer's
+        ``member_id`` in ONE converge (the cancel list path — one payer sync),
+        then deletes the ``member_authorized_payers`` row (the signature audit
+        row persists). Memberships paid by other payers, and this payer's
         memberships for other members, are untouched.
+
+        ``idempotency_key`` is the caller-supplied, stable key for this action;
+        it threads straight into the cancel path (which derives the payer's
+        Stripe sub-key from it deterministically), so a retry of the same
+        remove-authorization dedups at Stripe rather than minting a fresh key.
 
         Locks BOTH accounts itself (like link/unlink), so the facade does NOT
         wrap this in another lock.
 
+        Returns the cascading cancel's outcome — the same ``item_id ->
+        cancel_date`` map ``cancel`` returns (empty when the relationship funds
+        nothing), so the caller can show which memberships were cancelled, exactly
+        like a direct cancel.
+
         Raises:
             ValueError: If no such authorization exists.
+            PartialCancelError: If the cascading cancel partially applied (one
+                payer converged, a later one failed) — propagated from the cancel
+                path so the caller can surface the succeeded/failed split. The
+                ``member_authorized_payers`` row is left intact (the delete runs
+                only after a full cancel).
         """
         async with self._paying_lock.lock([member_id, payer_member_id]):
             rows = await self._pair_cancellable(member_id, payer_member_id)
             item_ids = [UUID(str(row["item_id"])) for row in rows]
+            cancel_dates: dict[UUID, date] = {}
             if item_ids:
-                await self._cancel.cancel(item_ids, member_id, uuid4())
+                cancel_dates = await self._cancel.cancel(
+                    item_ids, member_id, idempotency_key,
+                )
             del_sql = load_sql(
                 SQL_DIR / "member_authorized_payers_delete.sql",
             )
@@ -500,6 +522,7 @@ class MemberMembershipsService:
                         f"for member {member_id}",
                     )
                 await session.commit()
+        return cancel_dates
 
     # ── Private ────────────────────────────────────────────────
 

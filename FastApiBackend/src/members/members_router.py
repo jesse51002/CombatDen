@@ -40,10 +40,13 @@ from src.members.service.member_details.members_billing_detail_service import (
 from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
+from src.memberships.memberships_exceptions import PartialCancelError
 from src.memberships.memberships_schema import (
+    MemberMembershipsCancelResponse,
     MembersBillingLinkCheckRequest,
     MembersBillingLinkCheckResponse,
     MembersBillingLinkRequest,
+    MembersBillingRemoveAuthorizationPreviewRequest,
     MembersBillingRemoveAuthorizationRequest,
     PayerInvoiceChange,
 )
@@ -675,7 +678,7 @@ async def check_link_member_account(
 @inject
 async def preview_remove_authorization(
     member_id: UUID,
-    request: MembersBillingRemoveAuthorizationRequest,
+    request: MembersBillingRemoveAuthorizationPreviewRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
@@ -705,13 +708,17 @@ async def preview_remove_authorization(
 
 @members_router.post(
     "/{member_id}/link/remove",
+    response_model=MemberMembershipsCancelResponse,
     summary="Remove a payer's authorization (pair-scoped cascading cancel)",
     description=(
         "Cancels the path member's live recurring memberships that "
         "payer_member_id funds (the existing per-membership cancel converges "
         "Stripe), then de-authorizes the pair. The signature audit row persists. "
         "Memberships paid by other payers, and this payer's memberships for other "
-        "members, are untouched. Call .../remove/preview first to confirm impact."
+        "members, are untouched. Returns the cascading cancel's outcome — the "
+        "same item_id → cancel_date map a direct cancel returns (empty when the "
+        "relationship funded nothing) — so the caller can show what was "
+        "cancelled. Call .../remove/preview first to confirm impact."
     ),
     responses={
         200: {"description": "Authorization removed and memberships cancelled"},
@@ -719,6 +726,7 @@ async def preview_remove_authorization(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
+        502: {"description": "Cascading cancel partially applied or Stripe error"},
     },
 )
 @inject
@@ -730,16 +738,48 @@ async def remove_authorization(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> None:
+) -> MemberMembershipsCancelResponse:
     """Remove a payer's authorization, cancelling the pair's memberships."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(member_id, user_payload)
 
     try:
-        await memberships_service.remove_authorization(
+        cancel_dates = await memberships_service.remove_authorization(
             member_id,
             request.payer_member_id,
+            request.idempotency_key,
         )
+        return MemberMembershipsCancelResponse(
+            cancel_dates={
+                str(item_id): cancel_date
+                for item_id, cancel_date in cancel_dates.items()
+            },
+        )
+    except PartialCancelError as exc:
+        # The cascading cancel partially applied (one payer converged, a later
+        # one failed). Mirror the cancel router: log the full succeeded/failed
+        # map and surface it as a STRUCTURED 502 detail so the caller shows the
+        # accurate split. The authorization row is left intact (the de-authorize
+        # runs only after a full cancel).
+        succeeded_item_ids = sorted(str(i) for i in exc.succeeded)
+        failed_item_ids = sorted(str(i) for i in exc.failed_item_ids)
+        logger.error(
+            "Remove-authorization cancel partially applied: member_id=%s "
+            "succeeded=%s failed_payer=%s failed_item_ids=%s",
+            member_id,
+            succeeded_item_ids,
+            exc.failed_payer_id,
+            failed_item_ids,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "message": str(exc),
+                "succeeded_item_ids": succeeded_item_ids,
+                "failed_item_ids": failed_item_ids,
+            },
+        ) from None
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -750,6 +790,11 @@ async def remove_authorization(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg,
+        ) from None
+    except PaymentsStripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(

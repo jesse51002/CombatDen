@@ -1,6 +1,7 @@
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
+import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
@@ -232,16 +233,49 @@ class MemberRepository {
 
   /// `POST /api/v1/members/{member_id}/link/remove` — cancels [memberId]'s live
   /// recurring memberships that [payerMemberId] funds, then de-authorizes the
-  /// pair (the signature audit row is kept). The endpoint returns no body, so
-  /// callers refetch member detail afterward.
-  Future<void> removeAuthorization(
+  /// pair (the signature audit row is kept). [idempotencyKey] is generated once
+  /// per user action and reused on retry, so the cascading cancel dedups at
+  /// Stripe (the backend derives the payer's sub-key from it).
+  ///
+  /// Returns a [CancelOutcome] describing which funded memberships were
+  /// cancelled (mirrors [cancelMemberships], so the unlink flow can show the
+  /// same completion screen):
+  /// - HTTP 200: the cancelled item_ids come from the `cancel_dates` keys (the
+  ///   map is empty when the relationship funded nothing — a clean de-authorize).
+  /// - HTTP 502 partial: the structured `detail`
+  ///   (`{succeeded_item_ids, failed_item_ids}`) carries the real split.
+  /// Any other error (no structured partial, transport failure) rethrows — the
+  /// caller surfaces it rather than showing an empty completion screen.
+  Future<CancelOutcome> removeAuthorization(
     String memberId,
     String payerMemberId,
+    String idempotencyKey,
   ) async {
-    await _apiClient.post(
-      '/api/v1/members/$memberId/link/remove',
-      data: {'payer_member_id': payerMemberId},
-    );
+    try {
+      final response = await _apiClient.post(
+        '/api/v1/members/$memberId/link/remove',
+        data: {
+          'payer_member_id': payerMemberId,
+          'idempotency_key': idempotencyKey,
+        },
+      );
+      // HTTP 200: cancelled item_ids = cancel_dates keys (empty = nothing
+      // funded, just a de-authorize).
+      final data = response.data;
+      final cancelDates = data is Map
+          ? data['cancel_dates'] as Map<String, dynamic>?
+          : null;
+      return CancelOutcome(
+        succeededItemIds: cancelDates?.keys.toList() ?? const [],
+        failedItemIds: const [],
+      );
+    } on ServerException catch (e) {
+      if (e.statusCode == 502) {
+        final partial = _parsePartialCancel(e.data);
+        if (partial != null) return partial;
+      }
+      rethrow;
+    }
   }
 
   /// `GET /api/v1/members/{member_id}/invoices`.
@@ -343,19 +377,47 @@ class MemberRepository {
   /// list). The merged contract takes `item_ids`, `member_id`, and
   /// `idempotency_key` in the request body; the backend groups the
   /// items by payer and converges each payer's subscription once.
-  Future<void> cancelMemberships({
+  ///
+  /// Returns a [CancelOutcome] describing which item_ids succeeded
+  /// and which failed:
+  /// - HTTP 200: all [itemIds] succeeded (from `cancel_dates` keys).
+  /// - HTTP 502 partial: the structured `detail`
+  ///   (`{succeeded_item_ids, failed_item_ids}`) carries the real
+  ///   split — parse it so the completion screen shows which items
+  ///   actually cancelled. If the structured shape is missing, fall
+  ///   back to all-failed.
+  /// - HTTP 409: throws [MembershipInTaskException] (not a cancel
+  ///   outcome — the request was blocked entirely).
+  /// - Other error: all [itemIds] reported as failed.
+  Future<CancelOutcome> cancelMemberships({
     required List<String> itemIds,
     required String memberId,
     required String idempotencyKey,
   }) async {
     try {
-      await _apiClient.delete(
+      final response = await _apiClient.delete(
         '/api/v1/member_memberships/',
         data: {
           'item_ids': itemIds,
           'member_id': memberId,
           'idempotency_key': idempotencyKey,
         },
+      );
+      // HTTP 200: parse succeeded item_ids from cancel_dates keys.
+      final data = response.data;
+      if (data is Map) {
+        final cancelDates =
+            data['cancel_dates'] as Map<String, dynamic>?;
+        final succeeded = cancelDates?.keys.toList() ?? itemIds;
+        return CancelOutcome(
+          succeededItemIds: succeeded,
+          failedItemIds: const [],
+        );
+      }
+      // Unexpected shape — treat all as succeeded (200 was returned).
+      return CancelOutcome(
+        succeededItemIds: itemIds,
+        failedItemIds: const [],
       );
     } on ServerException catch (e) {
       if (e.statusCode == 409) {
@@ -364,8 +426,38 @@ class MemberRepository {
               'This membership is part of an in-progress upgrade task.',
         );
       }
-      rethrow;
+      if (e.statusCode == 502) {
+        final partial = _parsePartialCancel(e.data);
+        if (partial != null) return partial;
+      }
+      // Non-502 / unstructured server error: all items failed.
+      return CancelOutcome(
+        succeededItemIds: const [],
+        failedItemIds: itemIds,
+      );
+    } catch (_) {
+      return CancelOutcome(
+        succeededItemIds: const [],
+        failedItemIds: itemIds,
+      );
     }
+  }
+
+  /// Reads the structured partial-cancel split from a 502 error body
+  /// (`{"detail": {"succeeded_item_ids": [...], "failed_item_ids":
+  /// [...]}}`). Returns null when the body has no structured detail
+  /// (e.g. a full Stripe error whose `detail` is a plain string), so
+  /// the caller falls back to all-failed.
+  CancelOutcome? _parsePartialCancel(Map<String, dynamic>? data) {
+    final detail = data?['detail'];
+    if (detail is! Map) return null;
+    final succeeded = detail['succeeded_item_ids'];
+    final failed = detail['failed_item_ids'];
+    if (succeeded is! List || failed is! List) return null;
+    return CancelOutcome(
+      succeededItemIds: succeeded.map((e) => e.toString()).toList(),
+      failedItemIds: failed.map((e) => e.toString()).toList(),
+    );
   }
 
   /// `POST /api/v1/member_memberships/cancel/preview` — per-payer cost preview
@@ -383,6 +475,7 @@ class MemberRepository {
         'member_id': memberId,
       },
     );
+    if (response.data == null) return [];
     return (response.data as List<dynamic>)
         .map(
           (e) =>

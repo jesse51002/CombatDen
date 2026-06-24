@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
@@ -52,6 +53,29 @@ class MemberDetailLoaded extends MemberDetailState {
   /// the wizard is open.
   final String? startError;
 
+  /// True while the cancel-memberships DELETE is in flight.
+  /// Separate from [isMutating] so the cancel dialog owns its
+  /// own loading + completion treatment (mirrors
+  /// [isStartingMemberships] / [isChargingCard]).
+  final bool isCancellingMemberships;
+
+  /// The outcome of the last cancel-memberships request.
+  /// Rendered by the cancel dialog's completion step;
+  /// cleared via [CancelMembershipOutcomeCleared].
+  final CancelOutcome? cancelOutcome;
+
+  /// True while the remove-authorization POST is in flight.
+  /// Separate from [isMutating] so the remove-authorization
+  /// dialog owns its own loading + completion treatment
+  /// (mirrors [isCancellingMemberships]).
+  final bool isRemovingAuthorization;
+
+  /// The outcome of the last remove-authorization request —
+  /// which funded memberships the cascading cancel cancelled.
+  /// Rendered by the remove-authorization dialog's completion
+  /// step; cleared via [RemoveAuthorizationOutcomeCleared].
+  final CancelOutcome? removeAuthorizationOutcome;
+
   /// True while the charge-card POST is in flight. Separate
   /// from [isMutating] so the charge dialog owns its own
   /// loading + success treatment (mirrors
@@ -87,6 +111,10 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isStartingMemberships = false,
     this.startResult,
     this.startError,
+    this.isCancellingMemberships = false,
+    this.cancelOutcome,
+    this.isRemovingAuthorization = false,
+    this.removeAuthorizationOutcome,
     this.isChargingCard = false,
     this.chargeCardSuccess = 0,
     this.chargeCardError,
@@ -115,6 +143,12 @@ class MemberDetailLoaded extends MemberDetailState {
     MemberMembershipsStartResponse? startResult,
     String? startError,
     bool clearStartOutcome = false,
+    bool? isCancellingMemberships,
+    CancelOutcome? cancelOutcome,
+    bool clearCancelOutcome = false,
+    bool? isRemovingAuthorization,
+    CancelOutcome? removeAuthorizationOutcome,
+    bool clearRemoveAuthorizationOutcome = false,
     bool? isChargingCard,
     int? chargeCardSuccess,
     String? chargeCardError,
@@ -141,6 +175,17 @@ class MemberDetailLoaded extends MemberDetailState {
       startError: clearStartOutcome
           ? null
           : (startError ?? this.startError),
+      isCancellingMemberships: isCancellingMemberships ??
+          this.isCancellingMemberships,
+      cancelOutcome: clearCancelOutcome
+          ? null
+          : (cancelOutcome ?? this.cancelOutcome),
+      isRemovingAuthorization: isRemovingAuthorization ??
+          this.isRemovingAuthorization,
+      removeAuthorizationOutcome: clearRemoveAuthorizationOutcome
+          ? null
+          : (removeAuthorizationOutcome ??
+              this.removeAuthorizationOutcome),
       isChargingCard: isChargingCard ?? this.isChargingCard,
       chargeCardSuccess:
           chargeCardSuccess ?? this.chargeCardSuccess,
@@ -163,6 +208,10 @@ class MemberDetailLoaded extends MemberDetailState {
         isStartingMemberships,
         startResult,
         startError,
+        isCancellingMemberships,
+        cancelOutcome,
+        isRemovingAuthorization,
+        removeAuthorizationOutcome,
         isChargingCard,
         chargeCardSuccess,
         chargeCardError,

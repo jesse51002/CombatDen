@@ -124,8 +124,8 @@ def _resolve_member(
         )
         api.delete(
             "/api/v1/member_memberships/",
-            params={
-                "item_id": existing["item_id"],
+            json={
+                "item_ids": [str(existing["item_id"])],
                 "member_id": str(member.member_id),
                 "idempotency_key": str(uuid.uuid4()),
             },
@@ -244,8 +244,8 @@ def _start_family(
         if member.current is not None and member.current.cancel_after_start:
             api.delete(
                 "/api/v1/member_memberships/",
-                params={
-                    "item_id": str(item_id),
+                json={
+                    "item_ids": [str(item_id)],
                     "member_id": str(member.member_id),
                     "idempotency_key": str(uuid.uuid4()),
                 },

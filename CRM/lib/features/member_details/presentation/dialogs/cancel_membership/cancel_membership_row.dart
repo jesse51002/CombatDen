@@ -5,10 +5,9 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_target.dart';
 
 /// One selectable membership row in the cancel checklist — a checkbox, the
-/// plan name, and a subtitle. The subtitle is the scheduled-exit status for
-/// the focused member's own memberships, or "for {subject}" for a membership
-/// they pay for someone else. A row that is already cancelling is shown for
-/// context but is not selectable.
+/// plan name, a status subtitle (or "for {subject}" for pay-for-others rows),
+/// and a "paid by {payer}" line when the payer name is known. A row that is
+/// already cancelling is shown for context but is not selectable.
 class CancelMembershipRow extends StatelessWidget {
   final CancelTarget target;
   final bool selected;
@@ -81,6 +80,13 @@ class CancelMembershipRow extends StatelessWidget {
                       subtitle,
                       style: DesignConstants.pSmall.copyWith(
                         color: subtitleColor,
+                      ),
+                    ),
+                  if (target.payerName != null)
+                    Text(
+                      'paid by ${target.payerName}',
+                      style: DesignConstants.pSmall.copyWith(
+                        color: DesignConstants.text3rd,
                       ),
                     ),
                 ],

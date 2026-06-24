@@ -382,14 +382,21 @@ class MembersBillingDetailService:
         ]
 
     def _is_current_recurring(self, row: dict) -> bool:
-        """Whether ``row`` is a current (active or frozen) recurring membership.
+        """Whether ``row`` is a current recurring membership that will still bill.
 
         Frozen is paused-but-current, so it still counts toward who-pays-whom
-        even though it bills nothing this cycle.
+        even though it bills nothing this cycle. A membership with a
+        ``cancel_date`` set is already on its way out (its Stripe line is
+        removed and it will never bill again) — even though the status view
+        still reads ``active`` until cancel_date elapses — so it is NOT current
+        and must not show as funded ("Cancels: X").
         """
-        return row["plan_type"] == PlanType.recurring and row[
-            "membership_status"
-        ] in (MembershipDbStatus.active, MembershipDbStatus.frozen)
+        return (
+            row["plan_type"] == PlanType.recurring
+            and row["membership_cancel_date"] is None
+            and row["membership_status"]
+            in (MembershipDbStatus.active, MembershipDbStatus.frozen)
+        )
 
     def _build_card_on_file(self, member_row: dict) -> BillingCardOnFile | None:
         """Build the BillingCardOnFile for the member's OWN saved card.

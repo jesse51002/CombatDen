@@ -492,17 +492,37 @@ class MembersBillingLinkCheckResponse(BaseModel):
     error: str | None = None
 
 
-class MembersBillingRemoveAuthorizationRequest(BaseModel):
+class MembersBillingRemoveAuthorizationPreviewRequest(BaseModel):
+    """Preview removing a payer's authorization for the path member.
+
+    Identifies the relationship by ``payer_member_id`` (the path member is the
+    payee). The preview is **read-only** — it stages nothing on Stripe and
+    mutates no membership row — so it carries NO ``idempotency_key`` (there is no
+    Stripe write to dedup). Returns the per-payer cancel cost preview (a list of
+    ``PayerInvoiceChange``; pair-scoped, so always a single entry).
+    """
+
+    payer_member_id: UUID
+
+
+class MembersBillingRemoveAuthorizationRequest(
+    MembersBillingRemoveAuthorizationPreviewRequest
+):
     """Remove a payer's authorization for the path member, cascading a cancel.
 
     Pair-scoped: cancels the path member's live recurring memberships that
     ``payer_member_id`` funds, then de-authorizes the pair. Memberships paid by
     OTHER payers — and the payer's memberships for OTHER members — are untouched.
-    The preview reuses the standard cancel cost preview (a per-payer list of
-    ``PayerInvoiceChange``; pair-scoped, so always a single entry).
+
+    Adds ``idempotency_key`` to the preview request: it is scoped to this
+    remove-authorization action and threads straight into the cascading cancel's
+    list path (which derives the payer's Stripe key from it deterministically),
+    so a retry of the same action dedups at Stripe instead of minting a fresh,
+    non-idempotent key. The preview needs no such key (read-only), which is why
+    it lives only on the mutating request.
     """
 
-    payer_member_id: UUID
+    idempotency_key: UUID
 
 
 class PayerInvoiceChange(BaseModel):

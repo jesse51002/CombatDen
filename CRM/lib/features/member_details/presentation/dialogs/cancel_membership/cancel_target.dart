@@ -2,7 +2,7 @@
 /// focused member's OWN memberships (`subjectName` is the focused member) or a
 /// membership the focused member PAYS FOR someone else (`subjectName` is that
 /// other person). The dialog resolves a `member_memberships.item_id` from it
-/// and labels it with whose membership it is.
+/// and labels it with whose membership it is and who pays for it.
 class CancelTarget {
   /// The `member_memberships.item_id` to cancel.
   final String itemId;
@@ -13,6 +13,11 @@ class CancelTarget {
   /// Whose membership this is — the focused member, or the other person the
   /// focused member pays for. Used to label the row "for {subjectName}".
   final String subjectName;
+
+  /// Who pays for this membership — the focused member (self-pay) or an
+  /// authorized payer. Null when the payer name cannot be resolved from the
+  /// loaded member detail. Used to label the row "paid by {payerName}".
+  final String? payerName;
 
   /// True when this is one of the focused member's OWN memberships (drives
   /// the "Cancel all memberships" own-scope selection); false for a
@@ -32,6 +37,7 @@ class CancelTarget {
     required this.itemId,
     required this.planName,
     required this.subjectName,
+    this.payerName,
     required this.isOwn,
     this.subtitle,
     this.alreadyCancelling = false,
