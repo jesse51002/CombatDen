@@ -285,6 +285,132 @@ async def test_once_discount_lands_once_then_consumed(
 
 
 @pytest.mark.timeout(180)
+async def test_consumed_once_is_settled_even_with_coexisting_ongoing(
+    memberships_service,
+    payment_sync_service,
+    db_pool,
+    gym_id,
+    stripe_client,
+    connect_opts,
+    created,
+):
+    """A consumed ``once`` is settled even when an ONGOING discount coexists.
+
+    Regression for the once-settle reading the sub's ATTACHED coupons: Stripe
+    leaves a redeemed ``once``'s discount object on the item whenever another
+    discount coexists, so the attached-coupon check misread the consumed ``once``
+    as still pending and re-applied it on every preview/build (e.g. an add-a-
+    membership preview that mysteriously grew an unrelated membership's discount).
+    The settle now reads the NEXT INVOICE's applied coupons, so a consumed
+    ``once`` (absent from the upcoming invoice) is stamped while the coexisting
+    ongoing persists.
+
+    With the prior (attached-coupon) detection this test fails: the once's
+    end_date stays NULL because its discount object lingers next to the ongoing.
+    """
+    clock_id = await create_test_clock(stripe_client, CLOCK_START, connect_opts)
+    member = None
+    try:
+        pm_id = await created.payment_method()
+        member = await created.member(
+            gym_id,
+            payment_method_id=pm_id,
+            test_clock_id=clock_id,
+        )
+        plan = await created.plan(gym_id, price_cents=5000)
+        ongoing = await created.discount(
+            gym_id,
+            name="Ongoing $10 Off",
+            percentage_off=None,
+            dollar_off=1000,
+            discount_mode="ongoing",
+        )
+        once = await created.discount(
+            gym_id,
+            name="Once 20% Off",
+            percentage_off=20.0,
+            discount_mode="once",
+        )
+
+        await _start_membership(memberships_service, member, gym_id, plan)
+        profile = await get_profile_stripe_ids(db_pool, member.member_id, gym_id)
+        item_id = await get_active_membership_item_id(
+            db_pool, member.member_id, gym_id
+        )
+        before = await snapshot_billing_state(
+            stripe_client, profile.stripe_customer_id, connect_opts
+        )
+
+        await memberships_service.add_discounts(
+            item_id=item_id,
+            member_id=member.member_id,
+            discount_ids=[ongoing.discount_id, once.discount_id],
+            idempotency_key=uuid4(),
+        )
+
+        snaps = await get_applied_discounts(db_pool, item_id)
+        assert len(snaps) == 2
+        once_snap = next(s for s in snaps if s["discount_mode"] == "once")
+        assert once_snap["end_date"] is None  # pending
+
+        # Next cycle bills BOTH: 20% once then $10 ongoing -> 5000*0.8 - 1000.
+        invoice = await advance_to_next_cycle_and_fetch_invoice(
+            stripe_client,
+            clock_id,
+            NEXT_CYCLE,
+            profile.stripe_sub_id_month,
+            before,
+            connect_opts,
+        )
+        assert invoice.amount_due == 3000, (
+            f"once+ongoing should bill 3000, got {invoice.amount_due}"
+        )
+
+        # Cycle after: the once is consumed -> ongoing only -> 5000 - 1000.
+        before2 = await snapshot_billing_state(
+            stripe_client, profile.stripe_customer_id, connect_opts
+        )
+        invoice2 = await advance_to_next_cycle_and_fetch_invoice(
+            stripe_client,
+            clock_id,
+            CYCLE_AFTER_NEXT,
+            profile.stripe_sub_id_month,
+            before2,
+            connect_opts,
+        )
+        assert invoice2.amount_due == 4000, (
+            f"Consumed once must not re-apply; expected 4000 (ongoing only), "
+            f"got {invoice2.amount_due}"
+        )
+
+        # The once-settle (run by the next sync) reads the NEXT invoice's applied
+        # coupons; the consumed once is absent even though its discount object
+        # lingers alongside the ongoing -> stamp it; leave the ongoing pending.
+        await payment_sync_service.update_payments_recurring(
+            member.member_id,
+            idempotency_key=uuid4(),
+        )
+
+        snaps_after = await get_applied_discounts(db_pool, item_id)
+        once_after = next(
+            s for s in snaps_after if s["discount_mode"] == "once"
+        )
+        ongoing_after = next(
+            s for s in snaps_after if s["discount_mode"] == "ongoing"
+        )
+        assert once_after["end_date"] is not None, (
+            "Consumed once must be stamped even with a coexisting ongoing"
+        )
+        assert ongoing_after["end_date"] is None, (
+            "The coexisting ongoing (forever) must NOT be stamped"
+        )
+    finally:
+        if member is not None:
+            await delete_member_data(db_pool, member.member_id)
+        await delete_test_clock(stripe_client, clock_id, connect_opts)
+
+
+@pytest.mark.timeout(180)
 async def test_apply_is_idempotent_no_duplicate_applied_row(
     memberships_service,
     db_pool,

@@ -24,14 +24,17 @@ class PaymentSyncOnceDiscounts:
 
     Queries the PAYER's attached-but-unconsumed ``once`` discounts (the DB does
     the ``once`` + no-end_date + has-coupon filtering, scoped by
-    ``paid_by_member_id``), reads the payer's live subscription's coupons — the
-    only thing that can tell a consumed ``once`` from a pending one, since
-    Stripe owns billing outcomes — and stamps the ``end_date`` of every one
-    whose coupon Stripe has already invoiced (dropped from the live set). The
-    candidate set and the live read target the SAME payer subscription, so a
-    coupon live on a different payer's sub can never be mistaken for consumed.
-    After this runs, the convergence's pure ``end_date`` exclusion drops the
-    consumed ones, so it needs no live-Stripe read.
+    ``paid_by_member_id``), reads the coupons Stripe will actually APPLY on the
+    payer's next invoice (``create_preview``) — the only thing that can tell a
+    consumed ``once`` from a pending one, since Stripe owns billing outcomes —
+    and stamps the ``end_date`` of every one whose coupon is NOT on that next
+    invoice (Stripe already redeemed it). Reading the next invoice's APPLIED
+    discounts, not the sub's ATTACHED coupons, is deliberate: Stripe leaves a
+    redeemed ``once``'s discount object on the item (it does whenever another
+    discount coexists), so the attached set misreads a consumed ``once`` as
+    pending. The candidate set and the invoice read target the SAME payer
+    subscription. After this runs, the convergence's pure ``end_date`` exclusion
+    drops the consumed ones, so it needs no live-Stripe read.
 
     Only ``once`` discounts need this — an ongoing discount's lifetime is its
     ``end_date`` (pure date logic, dropped at convergence).
@@ -62,15 +65,17 @@ class PaymentSyncOnceDiscounts:
         if not once_discounts:
             return
 
-        current_coupon_ids = await self._current_coupon_ids(
+        applied_coupon_ids = await self._next_invoice_coupon_ids(
             payer.stripe_sub_id_month,
             stripe_account_id,
         )
-        # Set math: a candidate's coupon missing from the live subscription
-        # means Stripe already invoiced it (consumed). Stamp the whole consumed
-        # set in one query — map the consumed coupons back to their rows
-        # (a coupon can be shared by several same-value `once` discounts).
-        consumed_coupons = {d.stripe_coupon_id for d in once_discounts} - current_coupon_ids
+        # Set math: a candidate's coupon NOT applied on the next invoice means
+        # Stripe already redeemed it (consumed) — Stripe never applies a `once`
+        # twice, so it drops off the upcoming invoice even though its discount
+        # object can linger on the item. Stamp the whole consumed set in one
+        # query — map the consumed coupons back to their rows (a coupon can be
+        # shared by several same-value `once` discounts).
+        consumed_coupons = {d.stripe_coupon_id for d in once_discounts} - applied_coupon_ids
         if not consumed_coupons:
             return
 
@@ -84,24 +89,23 @@ class PaymentSyncOnceDiscounts:
             gym_today(payer.timezone),
         )
 
-    async def _current_coupon_ids(
+    async def _next_invoice_coupon_ids(
         self,
         existing_sub_id: str | None,
         stripe_account_id: str,
     ) -> set[str]:
-        """Read the coupon ids currently on the live subscription.
+        """Coupon ids Stripe will APPLY on the subscription's next invoice.
 
-        Empty when there is no existing subscription (a brand-new sub has no
-        prior discounts, so every ``once`` discount is still pending).
+        A ``once`` whose coupon is attached to the sub but absent here has been
+        redeemed — Stripe won't apply it again — even though its discount object
+        can linger on the item. Empty when there is no existing subscription (a
+        brand-new sub has no prior discounts, so every ``once`` is still
+        pending).
         """
         if not existing_sub_id:
             return set()
 
-        sub = await self._subscriptions.get_subscription(
+        return await self._subscriptions.upcoming_applied_coupon_ids(
             existing_sub_id,
             stripe_account_id,
         )
-        coupon_ids: set[str] = set(sub.discounts)
-        for item in sub.items:
-            coupon_ids.update(item.discounts)
-        return coupon_ids

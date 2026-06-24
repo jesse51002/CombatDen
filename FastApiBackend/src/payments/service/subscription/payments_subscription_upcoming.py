@@ -76,3 +76,50 @@ class PaymentsSubscriptionUpcoming(PaymentsSubscriptionBase):
             currency=preview.currency,
             lines=recurring_lines,
         )
+
+    async def upcoming_applied_coupon_ids(
+        self,
+        stripe_subscription_id: str,
+        stripe_account_id: str,
+    ) -> set[str]:
+        """Coupon ids ACTUALLY APPLIED on the subscription's next invoice.
+
+        The authoritative consumed-vs-pending signal for a ``once`` discount:
+        Stripe will not re-apply a redeemed ``once``, so a ``once`` coupon
+        attached to the sub but ABSENT from the next invoice's applied discounts
+        has been consumed — **even though its discount object lingers on the
+        item** (it does whenever another discount coexists, so the
+        coupon-still-attached check misreads it as pending). Reads
+        ``invoices.create_preview`` and resolves each applied discount to its
+        coupon (handling the dahlia ``discount.source.coupon`` shape).
+
+        Returns an empty set when there is no upcoming invoice (the subscription
+        is deleted / has no next cycle), so an idle or cancelled sub's ``once``
+        discounts settle as done.
+        """
+        opts = self._client.connect_opts_readonly(stripe_account_id)
+        try:
+            invoice = await self._stripe.v1.invoices.create_preview_async(
+                params={
+                    "subscription": stripe_subscription_id,
+                    "expand": [
+                        "lines.data.discount_amounts.discount",
+                        "total_discount_amounts.discount",
+                    ],
+                },
+                options=opts,
+            )
+        except stripe.InvalidRequestError:
+            return set()
+
+        coupon_ids: set[str] = set()
+        for amount in getattr(invoice, "total_discount_amounts", None) or []:
+            cid = self._coupon_id_from_discount(amount.discount)
+            if cid is not None:
+                coupon_ids.add(cid)
+        for line in invoice.lines.data:
+            for amount in getattr(line, "discount_amounts", None) or []:
+                cid = self._coupon_id_from_discount(amount.discount)
+                if cid is not None:
+                    coupon_ids.add(cid)
+        return coupon_ids

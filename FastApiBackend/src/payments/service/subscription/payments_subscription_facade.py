@@ -157,6 +157,18 @@ class PaymentsStripeSubscriptionService:
             stripe_account_id,
         )
 
+    async def upcoming_applied_coupon_ids(
+        self,
+        stripe_subscription_id: str,
+        stripe_account_id: str,
+    ) -> set[str]:
+        """Coupon ids applied on the subscription's next invoice — the
+        authoritative consumed-vs-pending signal for ``once`` discounts."""
+        return await self._upcoming.upcoming_applied_coupon_ids(
+            stripe_subscription_id,
+            stripe_account_id,
+        )
+
     # ── Retrieve ─────────────────────────────────────────────────
 
     async def get_subscription(

@@ -362,18 +362,31 @@ so **we enforce the cutoff ourselves** by dropping the discount on/after the dat
 A `once` discount's whole lifecycle lives in the **sync**, finalized by a
 dedicated pre-sync step — `PaymentSyncOnceDiscounts.sync_once_discounts` — that
 runs **before** the build so the build reads a settled DB. A just-applied `once`
-row has `stripe_coupon_id = NULL` and `end_date = NULL`. The settle reads the live
-subscription's **current** Stripe coupons (via
-`PaymentsStripeSubscriptionService.get_subscription` — the only thing that can tell
-a consumed `once` from a pending one, since Stripe owns billing outcomes):
+row has `stripe_coupon_id = NULL` and `end_date = NULL`. The settle reads the
+coupons Stripe will **actually apply on the next invoice** (via
+`PaymentsStripeSubscriptionService.upcoming_applied_coupon_ids` →
+`invoices.create_preview` — the only thing that can tell a consumed `once` from a
+pending one, since Stripe owns billing outcomes):
 
-- **coupon still present on the sub (or NULL)** → still **pending** → the next
-  build re-resolves it, and **if the consolidated count changed its computed
-  value, the build swaps the coupon and the writeback records the new id.**
-- **coupon absent from the sub** (Stripe already invoiced it) → **consumed → done**
-  → the settle **stamps `end_date = today`** (`mark_once_consumed.sql`,
-  idempotent) and never re-adds it; the `end_date` SQL exclusion handles it from
-  then on, so we stop querying Stripe.
+- **coupon applied on the next invoice (or sub brand-new with no invoice yet)**
+  → still **pending** → the next build re-resolves it, and **if the consolidated
+  count changed its computed value, the build swaps the coupon and the writeback
+  records the new id.**
+- **coupon NOT applied on the next invoice** (Stripe already redeemed it) →
+  **consumed → done** → the settle **stamps `end_date = today`**
+  (`mark_once_consumed.sql`, idempotent) and never re-adds it; the `end_date` SQL
+  exclusion handles it from then on, so we stop querying Stripe.
+
+> **Why the next-invoice's applied coupons, not the sub's attached coupons.**
+> Stripe leaves a **redeemed `once`'s discount object attached to the item**
+> whenever another discount coexists on that membership (e.g. a `once` % alongside
+> an `ongoing` $ off). So "is the coupon still attached to the sub" misreads a
+> consumed `once` as pending — the settle never stamps it and the build re-applies
+> it on every preview/cycle (a start preview would mysteriously inflate an
+> *unrelated* membership's discount). Reading the **upcoming invoice's APPLIED
+> discounts** (`create_preview`) is authoritative: Stripe never re-applies a
+> redeemed `once`, so it's absent there even while its object lingers. Regression
+> guard: `test_consumed_once_is_settled_even_with_coexisting_ongoing`.
 
 So a `once` discount lands on **exactly the next invoice** and is **not**
 re-applied on later cycles; changing the count while pending re-divides correctly.
