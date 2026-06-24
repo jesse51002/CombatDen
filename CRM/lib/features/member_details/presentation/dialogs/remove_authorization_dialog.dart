@@ -133,13 +133,7 @@ class _RemoveAuthorizationDialogState
 
     // Viewed member is the payee → funded rows are their own recurring
     // memberships paid by the payer.
-    return member.memberships
-        .where(
-          (m) =>
-              m.paidByMemberId == widget.payerMemberId &&
-              m.planType?.toLowerCase() == 'recurring' &&
-              !isTerminalStatus(m.status),
-        )
+    return fundedRecurringMemberships(member.memberships, widget.payerMemberId)
         .map(
           (m) => CancelTarget(
             itemId: m.itemId,
@@ -196,10 +190,8 @@ class _RemoveAuthorizationDialogState
 
     if (isRemoving) {
       return const [
-        Padding(
-          padding: EdgeInsets.symmetric(
-            vertical: DesignConstants.spacingBig,
-          ),
+        SizedBox(
+          height: DesignConstants.dialogProcessingHeight,
           child: Center(child: AppSpinner()),
         ),
       ];
@@ -236,7 +228,7 @@ class _RemoveAuthorizationDialogState
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const SizedBox(
-              height: 80,
+              height: DesignConstants.dialogProcessingHeight,
               child: Center(child: AppSpinner()),
             );
           }

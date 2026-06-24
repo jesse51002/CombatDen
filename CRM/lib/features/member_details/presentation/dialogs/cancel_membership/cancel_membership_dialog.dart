@@ -233,14 +233,10 @@ class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
         return _reviewBody();
       case _Phase.complete:
         if (isCancelling) {
-          return [
-            Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  vertical: DesignConstants.spacingBig,
-                ),
-                child: const AppSpinner(),
-              ),
+          return const [
+            SizedBox(
+              height: DesignConstants.dialogProcessingHeight,
+              child: Center(child: AppSpinner()),
             ),
           ];
         }

@@ -50,7 +50,7 @@ class _CancelPreviewListState extends State<CancelPreviewList> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const SizedBox(
-            height: 80,
+            height: DesignConstants.dialogProcessingHeight,
             child: Center(child: AppSpinner()),
           );
         }

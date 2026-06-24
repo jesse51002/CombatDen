@@ -13,8 +13,8 @@ Flow:
        a. Clone the rank ladder into gym_ranks (direct DB).
        b. Plans + prices via the backend (real Stripe products/prices).
        c. Discounts (regular-only presets) via the backend (coupons computed
-          at sync, not on the preset). The catalog randomizes %/$ , once vs
-          ongoing, and duration.
+          at sync, not on the preset). The catalog randomizes %/$ and
+          lifetime (a few billing cycles / a day-week-month span / forever).
        d. Build the per-member billing lifecycle (incl. a random
           0-DISCOUNTS_PER_MEMBERSHIP_MAX discount set per membership), then
           create every member concurrently via the backend (POST /members shell
@@ -112,8 +112,8 @@ def seed() -> None:
             progress.log(f"  {len(plan_records)} plans")
 
             # Discounts (regular presets; coupons computed at sync). The catalog
-            # randomizes %/$ , once/ongoing, and duration; memberships draw a
-            # random subset of it below.
+            # randomizes %/$ and lifetime (cycle / span / forever); memberships
+            # draw a random subset of it below.
             progress.log("Creating discounts...")
             regular_discounts = api_discounts.create_regular(
                 api, client, gym_id, DISCOUNTS_PER_GYM

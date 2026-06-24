@@ -58,7 +58,7 @@ class _PaymentAuthorizationsDialogState
           return const AppDialog(
             title: 'Payment authorizations',
             body: SizedBox(
-              height: 120,
+              height: DesignConstants.dialogProcessingHeight,
               child: Center(child: AppSpinner()),
             ),
           );
@@ -210,13 +210,7 @@ List<String> _fundedPlanNames(
     }
     return const [];
   }
-  return member.memberships
-      .where(
-        (m) =>
-            m.paidByMemberId == account.memberId &&
-            m.planType?.toLowerCase() == 'recurring' &&
-            !isTerminalStatus(m.status),
-      )
+  return fundedRecurringMemberships(member.memberships, account.memberId)
       .map((m) => m.planName)
       .toList();
 }

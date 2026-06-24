@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 
@@ -54,6 +55,24 @@ Widget statusValue(MembershipStatus status) {
 bool isTerminalStatus(MembershipStatus status) =>
     status == MembershipStatus.cancelled ||
     status == MembershipStatus.ended;
+
+/// The live recurring memberships in [memberships] funded by [payerId] —
+/// the exact set a remove-authorization unlink would cancel. Shared by the
+/// payment-authorizations and remove-authorization dialogs so "what counts
+/// as a funded membership" is defined in one place.
+List<MembershipInfo> fundedRecurringMemberships(
+  List<MembershipInfo> memberships,
+  String payerId,
+) {
+  return memberships
+      .where(
+        (m) =>
+            m.paidByMemberId == payerId &&
+            m.planType?.toLowerCase() == 'recurring' &&
+            !isTerminalStatus(m.status),
+      )
+      .toList();
+}
 
 /// Cost display for an explicit amount (minor currency
 /// units) — the selected member's own after-discount total.
