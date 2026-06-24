@@ -247,18 +247,17 @@ back-reference metadata** — a value-coupon is shared across every discount at 
 value. The **deterministic-id + validate-or-replace policy** lives here too, in
 **`find_or_create_for_value(PaymentsCouponValue, account) -> coupon_id`** (+ the
 static `coupon_id_for_value`): the id is the value signature
-`pct_<bps>_<mode>` / `amt_<cents>_<mode>` (`<mode>` = the `DiscountMode` value
-`once`/`ongoing`; `bps = round(percentage_off*100)`, `cents = int(dollar_off)`),
-so the same value always resolves to one shared coupon. An existing coupon is
-**validated** against the value (`_matches_value` on amount + duration — Stripe
-coupons are immutable) and a mismatch is **deleted + recreated** under the same
-id. `<mode>` → Stripe duration via `once`→`once`, `ongoing`→`forever` (the
-arbitrary `end_date` cutoff is enforced in the read, not by Stripe). **This is
-shared infrastructure** — `PaymentSyncDiscounts.resolve` (`sync-guide`) calls it
-for **both** the recurring sync **and** the one-time engine `PaymentSyncOneTime`
-(which feeds it per-membership groups for the one-time invoice), one value→coupon
-mechanism; nothing under `src/sync/` reimplements it. The
-`StripeCouponDuration` enum (`once` / `repeating` / `forever`) lives in
+`pct_<bps>` / `amt_<cents>` (`bps = round(percentage_off*100)`,
+`cents = int(dollar_off)`), so the same value always resolves to one shared
+coupon. An existing coupon is **validated** against the value (`_matches_value` on
+amount + duration — Stripe coupons are immutable) and a mismatch is **deleted +
+recreated** under the same id. All Stripe coupons are created as `forever` — the
+arbitrary `end_date` cutoff is enforced by the applied-discount read, not by
+Stripe. **This is shared infrastructure** — `PaymentSyncDiscounts.resolve`
+(`sync-guide`) calls it for **both** the recurring sync **and** the one-time
+engine `PaymentSyncOneTime` (which feeds it per-membership groups for the one-time
+invoice), one value→coupon mechanism; nothing under `src/sync/` reimplements it.
+The `StripeCouponDuration` enum (`once` / `repeating` / `forever`) lives in
 `schema/payments_enums.py`.
 
 **`payments_stripe_mappers.py`** — a class-less concern module (free functions by
@@ -363,10 +362,9 @@ state to Stripe; this reads it back. **The retrieve expands
 `items.data.discounts`** so each item discount comes back as a `Discount` object
 (not a bare `di_…` id), and the mapped response carries each item's
 currently-attached coupon ids (`items[*].discounts`) **and** the
-subscription-level coupon ids (`discounts`). `sync-guide` reads these to run the
-`once`-consumption gate (a stored coupon still present = pending; absent = Stripe
-already invoiced it). Do not duplicate that gate logic here — this guide only
-exposes the read.
+subscription-level coupon ids (`discounts`). `sync-guide` uses these to verify
+the live coupon state during convergence. Do not duplicate that logic here — this
+guide only exposes the read.
 
 ### Base helpers (the load-bearing primitives)
 
@@ -520,16 +518,8 @@ so it gets no charge — correct). Writes one **`member_charges`** `kind='paymen
   (`payment_method_type='cash'`, no charge id). DI injects `stripe_client` for the
   retrieve.
 
-**Once-discount settle (subscription invoices only).** After a *subscription*
-invoice is paid (member resolved, dates updated), the handler calls
-**`PaymentSyncService.settle_once_discounts(member_id)`** so a `once` discount that
-Stripe just consumed gets its `end_date` stamped **promptly** — instead of lingering
-"pending" until the next manual op or the future reconciler (the engine half is owned
-by `sync-guide` §6). It is **best-effort and isolated**: it runs in its **own DB
-session/transaction** and any exception is caught + logged, never rolling back the
-invoice/charge writes; it is a no-op when the family has no unconsumed `once`. DI
-injects `payment_sync_service` into `InvoicePaidHandler` for this (the only handler
-that depends on the sync engine).
+DI injects `payment_sync_service` into `InvoicePaidHandler` if it is needed by
+any post-payment sync steps.
 
 > **Per-invoice discount audit.** After the invoice + line items are written,
 > `_capture_discounts` captures the invoice's discounts into

@@ -147,21 +147,24 @@ class StartMembershipsCleared extends MemberDetailEvent {
   const StartMembershipsCleared();
 }
 
+/// Cancel ONE OR MORE memberships in one request (a single cancel is a
+/// one-element list). The backend groups [itemIds] by payer and converges
+/// each payer's subscription once.
 class CancelMembershipRequested extends MemberDetailEvent {
-  final String itemId;
+  final List<String> itemIds;
 
-  /// The covered person whose slot on this membership is
-  /// being cancelled — may be the primary member or a
-  /// linked child. Never assume `member.memberId`.
+  /// The focused member the cancel was launched from — the auth + gym-scope
+  /// anchor for the request (the items themselves may be funded for other
+  /// members; the backend resolves each item's own payer).
   final String memberId;
 
   const CancelMembershipRequested({
-    required this.itemId,
+    required this.itemIds,
     required this.memberId,
   });
 
   @override
-  List<Object?> get props => [itemId, memberId];
+  List<Object?> get props => [itemIds, memberId];
 }
 
 /// Migrate a membership item to the plan's current active

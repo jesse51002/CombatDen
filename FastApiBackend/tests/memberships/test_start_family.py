@@ -97,19 +97,17 @@ async def test_recurring_family_one_converge_per_line_discounts(
     Two children share one price; the payer is on a different, cheaper price —
     proving the converge both consolidates the shared price (quantity 2) AND
     keeps a separate line for the payer's price, with each membership carrying
-    its discount. Ongoing discounts are used (not once) because a not-yet-synced
-    membership's once is excluded from the immediate per-line figure — ongoing
-    always counts, so each ``total_price`` writeback reflects its discount at
-    start.
+    its discount. Forever discounts are used so each ``total_price`` writeback
+    reflects the discount immediately without end-date resolution.
 
     Discount choice is deliberate: the payer gets a DISTINCT 10% on its own
-    (qty-1) line, so it keeps its exact ``pct_1000_ongoing`` coupon. The two
+    (qty-1) line, so it keeps its exact ``pct_1000`` coupon. The two
     children share a price AND the SAME 20% discount — a Stripe sub item with
     quantity 2 can carry only one coupon set, so per-member discounts on a
     shared price are blended into ONE line coupon
     (``line_percent = Σ effᵢ / qty``). Giving both children the same 20% keeps
     that blend equal to 20% (``(0.20 + 0.20) / 2 = 0.20``) so the shared line's
-    coupon is unambiguously ``pct_2000_ongoing`` and both per-member writebacks
+    coupon is unambiguously ``pct_2000`` and both per-member writebacks
     are 4000 — proving the consolidation cleanly rather than asserting a
     confusing averaged coupon.
     """
@@ -129,18 +127,15 @@ async def test_recurring_family_one_converge_per_line_discounts(
     )
 
     disc_payer = await created.discount(
-        gym_id, name="Fam payer 10% ongoing", percentage_off=10.0,
-        discount_mode="ongoing",
+        gym_id, name="Fam payer 10%", percentage_off=10.0,
     )
     # Both children share the same 20% so the consolidated qty-2 line's blended
     # coupon is unambiguously 20% (not an averaged-across-distinct-discounts id).
     disc_kid_a = await created.discount(
-        gym_id, name="Fam kid A 20% ongoing", percentage_off=20.0,
-        discount_mode="ongoing",
+        gym_id, name="Fam kid A 20%", percentage_off=20.0,
     )
     disc_kid_b = await created.discount(
-        gym_id, name="Fam kid B 20% ongoing", percentage_off=20.0,
-        discount_mode="ongoing",
+        gym_id, name="Fam kid B 20%", percentage_off=20.0,
     )
 
     try:
@@ -201,7 +196,7 @@ async def test_recurring_family_one_converge_per_line_discounts(
             assert len(snaps) == 1
             assert snaps[0]["stripe_coupon_id"] is not None
 
-        # Coupons are the deterministic per-value ids (pct_<bps>_<mode>). The
+        # Coupons are the deterministic per-value ids (pct_<bps>). The
         # payer's distinct qty-1 line keeps its exact 10%; the two children's
         # consolidated qty-2 line carries the blended 20% (both contributed 20%
         # → (0.20 + 0.20) / 2 = 0.20), so both children's applied-discount rows
@@ -215,11 +210,11 @@ async def test_recurring_family_one_converge_per_line_discounts(
         b_snaps = await get_applied_discounts(
             db_pool, by_member[child_b.member_id].item_id
         )
-        assert payer_snaps[0]["stripe_coupon_id"] == "pct_1000_ongoing"
-        assert a_snaps[0]["stripe_coupon_id"] == "pct_2000_ongoing"
-        assert b_snaps[0]["stripe_coupon_id"] == "pct_2000_ongoing"
-        created.track_coupon("pct_1000_ongoing")
-        created.track_coupon("pct_2000_ongoing")
+        assert payer_snaps[0]["stripe_coupon_id"] == "pct_1000"
+        assert a_snaps[0]["stripe_coupon_id"] == "pct_2000"
+        assert b_snaps[0]["stripe_coupon_id"] == "pct_2000"
+        created.track_coupon("pct_1000")
+        created.track_coupon("pct_2000")
 
         # The payer's single family subscription carries the expected items:
         # one line on the payer's price (qty 1) + ONE consolidated line on the
@@ -273,12 +268,11 @@ async def test_mixed_one_time_and_recurring_two_charges(
         gym_id, plan_name="Monthly", price_cents=5000
     )
     ot_disc = await created.discount(
-        gym_id, name="Mixed 10% once", percentage_off=10.0,
-        discount_mode="once",
+        gym_id, name="Mixed 10% 1-cycle", percentage_off=10.0,
+        duration_amount=1, duration_unit="cycle",
     )
     rec_disc = await created.discount(
-        gym_id, name="Mixed 20% ongoing", percentage_off=20.0,
-        discount_mode="ongoing",
+        gym_id, name="Mixed 20% forever", percentage_off=20.0,
     )
 
     try:
@@ -611,7 +605,9 @@ async def test_phase_a_custom_discount_by_id_rejects(
                         price_id=plan.price_id,
                         custom_discounts=[
                             DiscountValue(
-                                percentage_off=15.0, discount_mode="once"
+                                percentage_off=15.0,
+                                duration_amount=1,
+                                duration_unit="cycle",
                             ),
                         ],
                     ),

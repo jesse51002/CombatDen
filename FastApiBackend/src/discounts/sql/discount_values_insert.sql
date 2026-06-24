@@ -6,7 +6,6 @@ INSERT INTO gym_discount_values_unfiltered (
     gym_id,
     percentage_off,
     dollar_off,
-    discount_mode,
     duration_amount,
     duration_unit,
     end_date,
@@ -16,11 +15,10 @@ INSERT INTO gym_discount_values_unfiltered (
     :gym_id,
     :percentage_off,
     :dollar_off,
-    :discount_mode,
     :duration_amount,
     :duration_unit,
     :end_date,
     true
 )
-RETURNING value_id, percentage_off, dollar_off, discount_mode,
+RETURNING value_id, percentage_off, dollar_off,
           duration_amount, duration_unit, end_date

@@ -260,7 +260,6 @@ GYM_DISCOUNT_VALUES: frozenset[str] = frozenset(
         "gym_id",  # identity FK, per-gym resource
         "percentage_off",  # immutable value
         "dollar_off",  # immutable value
-        "discount_mode",  # immutable lifetime mode
         "duration_amount",  # immutable lifetime spec
         "duration_unit",  # immutable lifetime spec
         "end_date",  # immutable lifetime spec

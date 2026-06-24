@@ -3,8 +3,6 @@
 from enum import IntEnum
 from uuid import UUID
 
-from schema.gym_discount import DiscountMode
-
 from src.payments.schema.payments_discount_schema import (
     PaymentsCouponValue,
 )
@@ -43,9 +41,9 @@ class PaymentSyncDiscounts:
     """Owns the discount math and resolves each line's coupons at build time.
 
     For each consolidated line (a price group of memberships) it aggregates the
-    memberships' discounts into at most one value per mode — percents compound
-    **sequentially within a membership** then average across the line (÷
-    quantity), dollars sum — find-or-creates the deterministic coupon per value
+    memberships' discounts into at most one percent value and one dollar value —
+    percents compound **sequentially within a membership** then average across the
+    line (÷ quantity), dollars sum — find-or-creates the deterministic coupon per value
     on the gym's Connect account, and orders them **percent before dollar**
     (``DISCOUNT_APPLICATION_ORDER``) so Stripe applies them sequentially in that
     order (we do only the percentage-level math; Stripe sequences percent→dollar
@@ -79,11 +77,10 @@ class PaymentSyncDiscounts:
           the builder to attach onto each consolidated line (percent coupon
           first, then dollar, so Stripe sequences percent→dollar).
         - ``links``: ``applied_discount_id → coupon_id`` for the real path to
-          write back (a ``once`` value records its coupon — the consumption
-          handle — on its rows; an ``ongoing`` value on its rows).
+          write back onto each contributing row.
         - ``membership_amounts``: each membership's ``item_id`` → its own
-          post-discount price (plan price with its ongoing discounts always, and
-          its once discounts only once it is on Stripe), for **every** membership.
+          post-discount price (plan price with all its currently active
+          discounts), for **every** membership.
 
         ``coupons_by_price`` / ``links`` are empty when no line carries a
         discount; ``membership_amounts`` always covers every membership.
@@ -103,7 +100,6 @@ class PaymentSyncDiscounts:
             for value in ordered_values:
                 coupon_id = await self._discounts.find_or_create_for_value(
                     PaymentsCouponValue(
-                        discount_mode=value.discount_mode,
                         percentage_off=value.percentage_off,
                         dollar_off=value.dollar_off,
                     ),
@@ -182,8 +178,7 @@ class PaymentSyncDiscounts:
         membership's discounts, so the line coupons and the per-membership figure can
         never disagree about a membership's discounts.
 
-        ``line_values`` — at most one value per mode (``once`` / ``ongoing``,
-        kept separate for their different Stripe durations). Per mode: percents
+        ``line_values`` — at most one percent value and one dollar value. Percents
         compound **sequentially within a membership**
         (``eff = 1 − Π(1 − pⱼ/100)`` — 30% then 20% → 0.44, not 0.50), the
         per-membership effective fractions are **summed across the line** then
@@ -193,71 +188,48 @@ class PaymentSyncDiscounts:
         value's resolved coupon is written back onto only its own rows.
 
         ``membership_amounts`` — ``item_id → that membership's own post-discount
-        price`` (``_post_discount_amount`` on its plan ``price``). It always
-        counts the membership's **ongoing** discounts; it counts a ``once``
-        discount only when the membership is **already on Stripe** (its
-        ``stripe_item_id`` is set), as that once then applies to a future invoice
-        — a not-yet-synced membership (no ``stripe_item_id``) excludes its once.
-        Covers **every** membership; an undiscounted one keeps its full plan
-        price.
+        price`` (``_post_discount_amount`` on its plan ``price``), counting all of
+        the membership's currently active discounts (the read already drops any
+        past its ``end_date``). Covers **every** membership; an undiscounted one
+        keeps its full plan price.
         """
         divisor = len(memberships) if memberships else 1
-        modes = (DiscountMode.once, DiscountMode.ongoing)
-        effective_fraction = {mode: 0.0 for mode in modes}
-        dollar_sum = {mode: 0 for mode in modes}
-        percent_ids: dict[DiscountMode, list[UUID]] = {m: [] for m in modes}
-        dollar_ids: dict[DiscountMode, list[UUID]] = {m: [] for m in modes}
+        effective_fraction = 0.0
+        dollar_sum = 0
+        percent_ids: list[UUID] = []
+        dollar_ids: list[UUID] = []
         membership_amounts: dict[UUID, int] = {}
 
         for membership in memberships:
-            mode_percents: dict[DiscountMode, list[float]] = {
-                m: [] for m in modes
-            }
-            # The per-membership figure counts ongoing discounts always; it counts a
-            # once discount only when the membership is already on Stripe (its
-            # once then applies to a future invoice). A not-yet-synced membership
-            # (no stripe_item_id) excludes its once.
-            count_once = membership.stripe_item_id is not None
-            amount_percents: list[float] = []
-            amount_dollars = 0
+            mem_percents: list[float] = []
+            mem_dollars = 0
             for discount in membership.discounts:
-                mode = discount.discount_mode
-                in_amount = mode is DiscountMode.ongoing or count_once
                 if discount.percentage_off:
-                    percent_ids[mode].append(discount.applied_discount_id)
-                    mode_percents[mode].append(discount.percentage_off)
-                    if in_amount:
-                        amount_percents.append(discount.percentage_off)
+                    percent_ids.append(discount.applied_discount_id)
+                    mem_percents.append(discount.percentage_off)
                 if discount.dollar_off:
-                    dollar_ids[mode].append(discount.applied_discount_id)
-                    dollar_sum[mode] += discount.dollar_off
-                    if in_amount:
-                        amount_dollars += discount.dollar_off
-            for mode in modes:
-                effective_fraction[mode] += (
-                    1 - self._remaining_after_percents(mode_percents[mode])
-                )
+                    dollar_ids.append(discount.applied_discount_id)
+                    mem_dollars += discount.dollar_off
+            effective_fraction += 1 - self._remaining_after_percents(mem_percents)
+            dollar_sum += mem_dollars
             membership_amounts[membership.item_id] = self._post_discount_amount(
-                membership.price, amount_percents, amount_dollars
+                membership.price, mem_percents, mem_dollars
             )
 
         values: list[LineDiscountValue] = []
-        for mode in modes:
-            line_percent = effective_fraction[mode] / divisor * 100
-            if line_percent > 0:
-                values.append(
-                    LineDiscountValue(
-                        discount_mode=mode,
-                        percentage_off=line_percent,
-                        contributing_ids=percent_ids[mode],
-                    )
+        line_percent = effective_fraction / divisor * 100
+        if line_percent > 0:
+            values.append(
+                LineDiscountValue(
+                    percentage_off=line_percent,
+                    contributing_ids=percent_ids,
                 )
-            if dollar_sum[mode] > 0:
-                values.append(
-                    LineDiscountValue(
-                        discount_mode=mode,
-                        dollar_off=dollar_sum[mode],
-                        contributing_ids=dollar_ids[mode],
-                    )
+            )
+        if dollar_sum > 0:
+            values.append(
+                LineDiscountValue(
+                    dollar_off=dollar_sum,
+                    contributing_ids=dollar_ids,
                 )
+            )
         return values, membership_amounts

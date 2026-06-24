@@ -28,9 +28,6 @@ from src.sync.service.sync_builder import (
 from src.sync.service.sync_cancel import (
     PaymentSyncCancel,
 )
-from src.sync.service.sync_once_discounts import (
-    PaymentSyncOnceDiscounts,
-)
 from src.sync.service.sync_stripe import (
     PaymentSyncStripe,
 )
@@ -46,8 +43,7 @@ class PaymentSyncService:
 
     Thin orchestrator over focused sub-services: resolve the PAYER
     (``PayerResolver.resolve_payer`` — the passed id IS the payer; no parent
-    redirect), finalize the once-discount lifecycle
-    (``PaymentSyncOnceDiscounts``), build the desired subscription bucket +
+    redirect), build the desired subscription bucket +
     resolved discount coupons from the payer's rows (``PaymentSyncBuilder`` →
     ``PaymentSyncDiscounts``, at build time so preview reflects discounts), then
     create/update/cancel the payer's Stripe subscription (``PaymentSyncStripe``)
@@ -61,12 +57,10 @@ class PaymentSyncService:
         db_pool: DirectDatabasePool,
         subscription_service: PaymentsStripeSubscriptionService,
         payer_resolver: PayerResolver,
-        once_discounts: PaymentSyncOnceDiscounts,
         builder: PaymentSyncBuilder,
         paying_lock: PayingMemberLock,
     ) -> None:
         self._payer = payer_resolver
-        self._once_discounts = once_discounts
         self._builder = builder
         self._paying_lock = paying_lock
         self._stripe = PaymentSyncStripe(subscription_service)
@@ -89,9 +83,8 @@ class PaymentSyncService:
         active recurring membership whose ``paid_by_member_id`` is this payer,
         each carrying its applied discounts — and converges the payer's
         subscription onto it; there are no imperative add/cancel inputs.
-        Resolves the payer's own profile, finalizes once discounts, computes
-        and attaches each consolidated line's coupon, then reconciles the
-        monthly subscription.
+        Resolves the payer's own profile, computes and attaches each
+        consolidated line's coupon, then reconciles the monthly subscription.
 
         Freeze is out of this path entirely: the explicit freeze/unfreeze
         action owns ``pause_collection`` (via ``PaymentSyncFreeze``), and
@@ -114,17 +107,10 @@ class PaymentSyncService:
         )
 
         try:
-            # ── Finalize once discounts in the DB (pre-sync) ──
-            # Stamps any `once` discount Stripe already invoiced, so the
-            # build below reads the settled DB and the convergence drops
-            # the consumed ones by their stamped end_date.
-            await self._once_discounts.sync_once_discounts(
-                payer,
-                stripe_account_id,
-            )
-
             # The build resolves the discount coupons onto the bucket and
-            # collects the applied-discount→coupon links (real + preview).
+            # collects the applied-discount→coupon links (real + preview). A
+            # discount's lifetime is its resolved end_date (the read drops any
+            # past it), so there is no consumption settle to run first.
             params = await self._builder.build_sync_params(
                 payer,
                 stripe_account_id,
@@ -154,8 +140,8 @@ class PaymentSyncService:
         """Record a gone subscription as a cancellation, then re-raise.
 
         Stripe reports the payer's monthly subscription gone (canceled /
-        not-found) — surfaced by the once-settle live read or by
-        ``execute_sync``'s update/cancel of the existing sub. Record the
+        not-found) — surfaced by ``execute_sync``'s update/cancel of the
+        existing sub. Record the
         cancellation in the CRM — cancel the live recurring memberships this
         payer bills + null the payer's sub id — instead of recreating the sub
         (which would re-bill a member Stripe already let go). Memberships paid
@@ -188,12 +174,9 @@ class PaymentSyncService:
         instead of mutating the subscription. No subscription is created,
         updated, or cancelled.
 
-        The once-discount settle DOES run here, same as the real path:
-        stamping a consumed ``once``'s ``end_date`` is a settled fact
-        (Stripe already invoiced it), not a hypothetical, so the preview
-        must reflect it dropping off. What a dry run skips is the
-        **convergence writeback** (line ids / sync status / sub id / price
-        totals) — none of the sync's own desired-state results are persisted.
+        What a dry run skips is the **convergence writeback** (line ids / sync
+        status / sub id / price totals) — none of the sync's own desired-state
+        results are persisted.
 
         Returns:
             A ``{due_now, recurring}`` split, or ``None`` if the bucket
@@ -205,15 +188,6 @@ class PaymentSyncService:
         )
 
         try:
-            # ── Finalize once discounts in the DB (pre-sync) ──
-            # Stamps any `once` discount Stripe already invoiced, so the
-            # build below reads the settled DB and the convergence drops
-            # the consumed ones by their stamped end_date.
-            await self._once_discounts.sync_once_discounts(
-                payer,
-                stripe_account_id,
-            )
-
             params = await self._builder.build_sync_params(
                 payer,
                 stripe_account_id,
@@ -226,9 +200,8 @@ class PaymentSyncService:
                 proration_behavior,
             )
         except PaymentsResourceNotFoundError as exc:
-            # Same settled-fact rule as the once-settle that runs above: a sub
-            # Stripe has cancelled is reality, not a hypothetical, so even a
-            # preview records the cancellation (then re-raises — there is no
+            # A sub Stripe has cancelled is reality, not a hypothetical, so even
+            # a preview records the cancellation (then re-raises — there is no
             # invoice to preview against a gone sub).
             await self._handle_lost_subscription(payer, exc)
 
@@ -313,30 +286,3 @@ class PaymentSyncService:
                 )
                 failed.append(payer_member_id)
         return failed
-
-    async def settle_once_discounts(self, payer_member_id: UUID) -> None:
-        """Finalize the payer's consumed ``once`` discounts (stamp end_date).
-
-        The same pre-sync once-settle ``update_payments_recurring`` runs,
-        exposed on its own so the ``invoice.paid`` webhook can call it the moment
-        Stripe invoices a subscription: a consumed ``once`` coupon drops off the
-        payer's live sub, and this records its ``end_date`` promptly instead of
-        waiting for the next manual op (or the reconciler sweep). Resolves the
-        payer's own profile, then runs the settle. A no-op when the payer has no
-        unconsumed ``once`` discounts.
-
-        The settle itself does **not** lock — its sole caller (the
-        ``invoice.paid`` webhook) wraps it in ``PayingMemberLock`` so it can't
-        race a concurrent sync on the same payer.
-
-        Args:
-            payer_member_id: The payer (a membership row's
-                ``paid_by_member_id``).
-        """
-        payer, stripe_account_id = await self._payer.resolve_payer_with_account(
-            payer_member_id,
-        )
-        await self._once_discounts.sync_once_discounts(
-            payer,
-            stripe_account_id,
-        )

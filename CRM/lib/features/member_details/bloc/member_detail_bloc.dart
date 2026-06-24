@@ -360,8 +360,8 @@ class MemberDetailBloc
     await _runMutation(
       actionLabel: 'Cancel membership',
       emit: emit,
-      action: () => _repository.cancelMembership(
-        itemId: event.itemId,
+      action: () => _repository.cancelMemberships(
+        itemIds: event.itemIds,
         memberId: event.memberId,
         idempotencyKey: const Uuid().v4(),
       ),

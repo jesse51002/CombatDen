@@ -19,10 +19,51 @@ from src.payments.schema.payments_invoice_schema import (
 )
 
 
-class MemberMembershipsCancelResponse(BaseModel):
-    """Response returned after cancelling a membership."""
+class MemberMembershipsCancelRequest(BaseModel):
+    """Cancel ONE OR MORE of a member's recurring memberships.
 
-    cancel_date: date
+    ``item_ids`` is the list of ``member_memberships`` rows to cancel (a single
+    cancel is a one-element list). The backend groups them by payer and
+    converges each payer's subscription once. ``idempotency_key`` is scoped to
+    this cancel; per-payer Stripe keys are derived from it deterministically so
+    a retry dedups.
+    """
+
+    item_ids: list[UUID] = Field(..., min_length=1)
+    member_id: UUID
+    idempotency_key: UUID
+
+    @field_validator("item_ids")
+    @classmethod
+    def _no_dupes(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("item_ids must not contain duplicates")
+        return value
+
+
+class MemberMembershipsCancelPreviewRequest(BaseModel):
+    """Preview cancelling ONE OR MORE of a member's recurring memberships."""
+
+    item_ids: list[UUID] = Field(..., min_length=1)
+    member_id: UUID
+
+    @field_validator("item_ids")
+    @classmethod
+    def _no_dupes(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("item_ids must not contain duplicates")
+        return value
+
+
+class MemberMembershipsCancelResponse(BaseModel):
+    """Response after a (possibly batched) cancel.
+
+    ``cancel_dates`` maps each cancelled ``item_id`` (as a string) to its
+    resolved ``cancel_date`` — the date through which that membership stays
+    active. A single cancel yields a one-entry map.
+    """
+
+    cancel_dates: dict[str, date]
 
 
 class MemberMembershipsFreezeRequest(BaseModel):
@@ -503,6 +544,5 @@ class MemberMembershipsAppliedDiscount(BaseModel):
     discount_type: DiscountType
     percentage_off: float | None = None
     dollar_off: int | None = None
-    discount_mode: str
     end_date: date | None = None
     stripe_coupon_id: str | None = None

@@ -121,12 +121,16 @@ class _PaymentAuthorizationsDialogState
     // "Can Receive Payments": `account` pays for this member (payee = member).
     final payeeId = isPay ? account.memberId : member.memberId;
     final payerId = isPay ? member.memberId : account.memberId;
+    // The payer is the focused member ("Can Pay For") or the linked account
+    // ("Can Receive Payments") — attribute the preview with their photo.
+    final payerPhotoUrl = isPay ? member.photoUrl : account.photoUrl;
     RemoveAuthorizationDialog.show(
       context: context,
       payeeMemberId: payeeId,
       payerMemberId: payerId,
       accountName: account.fullName,
       fallbackMonthly: member.totalMonthlyRecurringPrice,
+      payerPhotoUrl: payerPhotoUrl,
     );
   }
 

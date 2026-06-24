@@ -258,21 +258,24 @@ class TestValidation:
         types = {err["type"] for err in detail}
         assert "greater_than" in types
 
-    def test_start_missing_plan_id(self, api):
-        """POST / with missing plan_id returns 422."""
+    def test_start_missing_payer_member_id(self, api):
+        """POST / without payer_member_id returns 422 listing that field as missing.
+
+        The start request now requires payer_member_id (the payer identity) at
+        the top level; there is no plan_id field (items carry price_id inside
+        the memberships list).
+        """
         r = api.post(
             f"{BASE}/",
             json={
-                "member_id": MEMBER_ID,
                 "gym_id": GYM_ID,
-                "price_id": _NULL_PRICE_ID,
                 "idempotency_key": _IKEY,
             },
         )
         assert r.status_code == 422, r.text
         detail = r.json()["detail"]
         missing_fields = {err["loc"][-1] for err in detail if err["type"] == "missing"}
-        assert "plan_id" in missing_fields
+        assert "payer_member_id" in missing_fields
 
     def test_apply_discount_ids_duplicates_rejected(self, api):
         """POST /discounts/add rejects duplicate UUIDs in discount_ids."""
@@ -367,11 +370,14 @@ class TestNotFound:
     """
 
     def test_cancel_nonexistent_item(self, api):
-        """DELETE / with nonexistent item_id returns 404 with detail."""
-        r = api.delete(
+        """DELETE / with a nonexistent item_id returns 404 with detail."""
+        # DELETE now takes a request body (item_ids list); httpx.Client.delete
+        # can't carry a body, so use .request.
+        r = api.request(
+            "DELETE",
             f"{BASE}/",
-            params={
-                "item_id": _NULL_ITEM_ID,
+            json={
+                "item_ids": [_NULL_ITEM_ID],
                 "member_id": MEMBER_ID,
                 "idempotency_key": _idempotency_key(),
             },
@@ -415,21 +421,30 @@ class TestNotFound:
             f"Unexpected 500 on unfreeze — likely a serialisation or SQL bug; detail: {r.json()}"
         )
 
-    def test_start_nonexistent_plan(self, api):
-        """POST / with nonexistent plan_id returns 404 with detail."""
+    def test_start_nonexistent_payer(self, api):
+        """POST / with a nonexistent payer_member_id returns 404 with detail.
+
+        The start request now requires payer_member_id (no top-level plan_id);
+        the auth layer resolves the payer first and raises 404 when it does not
+        exist in the DB.
+        """
         r = api.post(
             f"{BASE}/",
             json={
-                "member_id": MEMBER_ID,
+                "payer_member_id": MEMBER_ID,
                 "gym_id": GYM_ID,
-                "plan_id": _NULL_PLAN_ID,
-                "price_id": _NULL_PRICE_ID,
                 "idempotency_key": _idempotency_key(),
+                "memberships": [
+                    {
+                        "member_id": MEMBER_ID,
+                        "price_id": _NULL_PRICE_ID,
+                    }
+                ],
             },
         )
         assert r.status_code == 404, r.text
         detail = r.json()["detail"].lower()
-        assert "plan" in detail or "price" in detail or "not found" in detail
+        assert "not found" in detail
 
     def test_update_price_nonexistent_item(self, api):
         """PUT /price with nonexistent item_id returns 404."""
@@ -496,15 +511,24 @@ class TestPreviewPaths:
     SAFE_STATUSES = {400, 404, 502}  # expected: validation / not-found / Stripe-not-wired
 
     def test_preview_start_invalid_plan(self, api):
-        """POST /preview with nonexistent plan returns 404 (plan lookup fails)."""
+        """POST /preview with nonexistent price/payer returns 404 or 400.
+
+        The start request now uses payer_member_id + a memberships list (no
+        top-level plan_id). Sending a nonexistent payer resolves to 404 (member
+        not found) before the plan/price lookup. Any non-500 is acceptable here.
+        """
         r = api.post(
             f"{BASE}/preview",
             json={
-                "member_id": MEMBER_ID,
+                "payer_member_id": MEMBER_ID,
                 "gym_id": GYM_ID,
-                "plan_id": _NULL_PLAN_ID,
-                "price_id": _NULL_PRICE_ID,
                 "idempotency_key": _idempotency_key(),
+                "memberships": [
+                    {
+                        "member_id": MEMBER_ID,
+                        "price_id": _NULL_PRICE_ID,
+                    }
+                ],
             },
         )
         assert r.status_code in self.SAFE_STATUSES, (
@@ -520,8 +544,8 @@ class TestPreviewPaths:
         """POST /cancel/preview with nonexistent item returns 404."""
         r = api.post(
             f"{BASE}/cancel/preview",
-            params={
-                "item_id": _NULL_ITEM_ID,
+            json={
+                "item_ids": [_NULL_ITEM_ID],
                 "member_id": MEMBER_ID,
             },
         )

@@ -121,9 +121,6 @@ from src.sync.service.sync_discounts import (
 from src.sync.service.sync_freeze import (
     PaymentSyncFreeze,
 )
-from src.sync.service.sync_once_discounts import (
-    PaymentSyncOnceDiscounts,
-)
 from src.sync.service.sync_one_time import (
     PaymentSyncOneTime,
 )
@@ -256,13 +253,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         PaymentSyncFreeze,
         subscription_service=payments_subscription_service,
     )
-    # Pre-sync settle of the once-discount lifecycle (stamps consumed `once`
-    # applied-discount rows); also the scheduled reconciler's core duty.
-    payment_sync_once_discounts = providers.Factory(
-        PaymentSyncOnceDiscounts,
-        db_pool=db_pool,
-        subscription_service=payments_subscription_service,
-    )
     # Owns the discount math + resolves each line's coupons (find-or-create,
     # percent→dollar), for both real and preview. Coupon I/O is delegated to the
     # payments discount service — the sync never touches the Stripe SDK directly.
@@ -282,7 +272,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         subscription_service=payments_subscription_service,
         payer_resolver=payer_resolver,
-        once_discounts=payment_sync_once_discounts,
         builder=payment_sync_builder,
         paying_lock=paying_member_lock,
     )
@@ -419,8 +408,6 @@ class DependencyInjector(containers.DeclarativeContainer):
     stripe_webhook_event_log = providers.Factory(StripeWebhookEventLog)
     stripe_webhook_invoice_paid_handler = providers.Factory(
         InvoicePaidHandler,
-        payment_sync_service=payment_sync_service,
-        paying_lock=paying_member_lock,
         stripe_client=stripe_client,
     )
     stripe_webhook_invoice_payment_paid_handler = providers.Factory(

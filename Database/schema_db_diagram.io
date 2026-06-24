@@ -441,13 +441,12 @@ Table gym_discount_values_unfiltered {
   gym_id uuid [not null]
   percentage_off float [note: 'nullable; exactly one of percentage_off/dollar_off set']
   dollar_off integer [note: 'nullable']
-  discount_mode discount_mode [not null, note: 'enum: once | ongoing']
   duration_amount integer [note: 'nullable; pairs with duration_unit']
-  duration_unit discount_duration_unit [note: 'nullable; enum: day | week | month']
+  duration_unit discount_duration_unit [note: 'nullable; enum: day | week | month | cycle (plan-relative)']
   end_date date [note: 'nullable; explicit absolute end; XOR with duration span']
   is_active boolean [not null, default: true, note: 'the one mutable column']
   created_at timestamptz [not null, default: `now()`]
-  // lifetime: discount_mode + (duration_amount+duration_unit) XOR end_date; neither = forever.
+  // lifetime: (duration_amount+duration_unit) XOR end_date; neither = forever. 1 cycle = the single-invoice discount (replaced once mode).
 
   indexes {
     (value_id, gym_id) [unique]

@@ -2,7 +2,6 @@
 
 import logging
 from typing import Annotated
-from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,6 +12,8 @@ from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
     MemberMembershipsBatchRepriceRequest,
     MemberMembershipsBatchRepriceResponse,
+    MemberMembershipsCancelPreviewRequest,
+    MemberMembershipsCancelRequest,
     MemberMembershipsCancelResponse,
     MemberMembershipsChargeCardRequest,
     MemberMembershipsFreezeRequest,
@@ -57,25 +58,24 @@ member_memberships_router = APIRouter(
 @member_memberships_router.delete(
     "/",
     response_model=MemberMembershipsCancelResponse,
-    summary="Cancel a membership",
+    summary="Cancel one or more memberships",
     description=(
-        "Cancels a specific active membership for a member. "
-        "Sets cancel_date to the membership's next_due_date, "
-        "or today if next_due_date is missing or in the past. "
-        "Returns the resolved cancel_date (the date through "
-        "which the membership remains active)."
+        "Cancels one or more active memberships for a member (a single "
+        "cancel is a one-element ``item_ids`` list). Sets each cancel_date "
+        "to the membership's next_due_date, or today if missing or in the "
+        "past. Memberships funded by different payers are each converged "
+        "once. Returns a map of item_id → resolved cancel_date (the date "
+        "through which each membership remains active)."
     ),
     responses={
-        200: {"description": "Membership cancelled successfully"},
+        200: {"description": "Membership(s) cancelled successfully"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
     },
 )
 @inject
 async def cancel_membership(
-    item_id: UUID,
-    member_id: UUID,
-    idempotency_key: UUID,
+    request: MemberMembershipsCancelRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
@@ -85,32 +85,43 @@ async def cancel_membership(
         Provide[DependencyInjector.tasks_service]
     ),
 ) -> MemberMembershipsCancelResponse:
-    """Cancel a specific membership for a member.
+    """Cancel one or more memberships for a member.
 
-    Syncs the cancellation to Stripe first, then updates the
+    Syncs each affected payer's cancellation to Stripe, then updates the
     CRM database.
 
     Args:
-        member_id: The member.
-        item_id: The membership item to cancel.
-        idempotency_key: Caller-supplied key scoped to this cancel.
+        request: The item_ids to cancel, the member, and the idempotency key.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
+        tasks_service: Injected tasks service (the in-task guard).
 
     Raises:
         HTTPException: 401 if not authenticated,
             403 if not authorized,
+            409 if a membership is inside an unfinished task,
             502 on Stripe errors,
             500 on unexpected errors.
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        await tasks_service.assert_memberships_not_in_task([item_id])
-        cancel_date = await memberships_service.cancel(item_id, member_id, idempotency_key)
-        return MemberMembershipsCancelResponse(cancel_date=cancel_date)
+        await tasks_service.assert_memberships_not_in_task(
+            request.item_ids,
+        )
+        cancel_dates = await memberships_service.cancel_many(
+            request.item_ids,
+            request.member_id,
+            request.idempotency_key,
+        )
+        return MemberMembershipsCancelResponse(
+            cancel_dates={
+                str(item_id): cancel_date
+                for item_id, cancel_date in cancel_dates.items()
+            },
+        )
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -134,9 +145,9 @@ async def cancel_membership(
         ) from None
     except Exception:
         logger.error(
-            "Failed to cancel membership: item_id=%s, member_id=%s",
-            item_id,
-            member_id,
+            "Failed to cancel memberships: item_ids=%s, member_id=%s",
+            request.item_ids,
+            request.member_id,
             exc_info=True,
         )
         raise HTTPException(
@@ -585,11 +596,13 @@ async def preview_start_membership(
 @member_memberships_router.post(
     "/cancel/preview",
     response_model=list[PayerInvoiceChange],
-    summary="Preview cancelling a membership",
+    summary="Preview cancelling one or more memberships",
     description=(
         "Dry-run of the cancel endpoint: a per-payer list of the post-cancel "
-        "subscription state (current → new). A single cancel has one payer, so "
-        "one entry; a payer with no billing change is omitted (empty list)."
+        "subscription state (current → new). One entry per payer that funds "
+        "any of the item_ids — a single cancel is one payer (one entry); a "
+        "member's memberships split across payers yield several entries. A "
+        "payer with no billing change is reported with affected=false."
     ),
     responses={
         200: {"description": "Preview retrieved successfully"},
@@ -599,20 +612,22 @@ async def preview_start_membership(
 )
 @inject
 async def preview_cancel_membership(
-    item_id: UUID,
-    member_id: UUID,
+    request: MemberMembershipsCancelPreviewRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> list[PayerInvoiceChange]:
-    """Preview what cancelling a membership would charge (per-payer list)."""
+    """Preview what cancelling one or more memberships would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        return await memberships_service.preview_cancel(item_id, member_id)
+        return await memberships_service.preview_cancel_many(
+            request.item_ids,
+            request.member_id,
+        )
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -631,9 +646,9 @@ async def preview_cancel_membership(
         ) from None
     except Exception:
         logger.error(
-            "Failed to preview cancel membership: item_id=%s, member_id=%s",
-            item_id,
-            member_id,
+            "Failed to preview cancel memberships: item_ids=%s, member_id=%s",
+            request.item_ids,
+            request.member_id,
             exc_info=True,
         )
         raise HTTPException(

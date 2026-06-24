@@ -80,9 +80,10 @@ flowchart TB
   d_pct --> d_dur
   d_dollar --> d_dur
 
-  d_dur["duration (co-occurs)"]
-  d_dur -->|"50%"| d_once["once"]
-  d_dur -->|"50%"| d_ongoing["ongoing<br/>½ time-bounded · ½ forever"]
+  d_dur["lifetime (co-occurs)"]
+  d_dur -->|"⅓"| d_cycle["N cycles 1–3<br/>single-invoice / short-run"]
+  d_dur -->|"⅓"| d_span["day/week/month span 1–12"]
+  d_dur -->|"⅓"| d_forever["forever (no end)"]
 
   Discounts -.->|"0–3 preset ids / live membership"| d_applied["applied snapshots<br/>preset discount_ids per item"]
   Discounts -.->|"~15% of live memberships"| d_custom["custom_discounts one-shot<br/>inline at start · backend-minted"]

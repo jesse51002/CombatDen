@@ -2,7 +2,6 @@ import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'package:crm/core/utils/money.dart';
-import 'package:crm/features/member_details/data/models/discount_mode.dart';
 import 'package:crm/features/member_details/data/models/discount_type.dart';
 
 part 'discount_info.g.dart';
@@ -34,8 +33,6 @@ class DiscountInfo extends Equatable {
   final String discountName;
   final double? percentageOff;
   final int? dollarOff;
-  @JsonKey(fromJson: DiscountMode.fromJson)
-  final DiscountMode discountMode;
   final DateTime? endDate;
 
   const DiscountInfo({
@@ -49,7 +46,6 @@ class DiscountInfo extends Equatable {
     required this.discountName,
     this.percentageOff,
     this.dollarOff,
-    required this.discountMode,
     this.endDate,
   });
 
@@ -85,7 +81,6 @@ class DiscountInfo extends Equatable {
         discountName,
         percentageOff,
         dollarOff,
-        discountMode,
         endDate,
       ];
 }

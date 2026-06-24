@@ -95,7 +95,6 @@ async def test_line_amount_vs_subtotal_with_discount(
         gym_id,
         name="Sem 10% Off",
         percentage_off=10.0,
-        discount_mode="ongoing",
     )
 
     try:
@@ -222,6 +221,8 @@ async def test_line_amount_is_total_for_quantity_not_per_unit(
         await memberships_service.link_account(
             child.member_id,
             parent.member_id,
+            signer_name="Test Payer",
+            consent_acknowledged=True,
         )
         await memberships_service.start(
             MemberMembershipsStartRequest(

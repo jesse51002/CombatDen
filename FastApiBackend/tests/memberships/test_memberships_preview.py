@@ -450,14 +450,21 @@ async def test_preview_cancel_active(
             connect_opts,
         )
 
-        preview = await memberships_service.preview_cancel(
+        changes = await memberships_service.preview_cancel(
             item_id,
             member.member_id,
         )
 
-        # Cancelling the only item on the subscription drops the bucket
-        # to zero — preview returns None for pure cancellations.
-        assert preview is None
+        # The per-payer cost preview is a list: this member funds the one
+        # cancelled item, so exactly one entry for them, affected=True.
+        assert len(changes) == 1
+        change = changes[0]
+        assert str(change.payer_member_id) == str(member.member_id)
+        assert change.affected is True
+        # Cancelling the only item on the subscription drops the bucket to
+        # zero — a cancelled sub has no remaining recurring invoice, so the
+        # affected entry's preview half is None (not a $0 invoice).
+        assert change.preview is None
 
         # CRM row still active: cancel_date must be NULL.
         async with db_pool.session() as session:
@@ -525,11 +532,13 @@ async def test_preview_cancel_already_cancelled_returns_none(
             connect_opts,
         )
 
-        preview = await memberships_service.preview_cancel(
+        changes = await memberships_service.preview_cancel(
             item_id,
             member.member_id,
         )
-        assert preview is None
+        # The item is already cancelled, so preview_cancel skips it — no
+        # payer funds anything still-cancellable, so the list is empty.
+        assert changes == []
 
         await assert_no_unexpected_charges(
             stripe_client,

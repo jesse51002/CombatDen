@@ -1,17 +1,17 @@
 """Pydantic schemas for the discounts domain.
 
 Presets are now plain, coupon-free gym config: regular-only (preset | custom),
-no Stripe coupon baked in. Each carries a lifetime spec — discount_mode
-(once | ongoing) PLUS, for an ongoing discount, an end set by EITHER a duration
-span (duration_amount + duration_unit) OR an explicit end_date, never both;
-neither = forever. Coupons are computed at sync-time and written back onto the
-applied-discount row, never on the preset.
+no Stripe coupon baked in. Each carries a lifetime spec — an end set by EITHER a
+duration span (duration_amount + duration_unit, where ``cycle`` is one plan
+billing cycle) OR an explicit end_date, never both; neither = forever. A 1-cycle
+span is the single-invoice discount that replaced the old ``once`` mode. Coupons
+are computed at sync-time and written back onto the applied-discount row, never
+on the preset.
 
 ``DiscountValue`` is the single shared shape for a discount value version —
-everything that determines the discount (how much, the mode, how long it
-lasts). Create requests, update requests, responses, and the membership
-start's inline customs all carry one; there is no flat duplicate of these
-fields anywhere in the API.
+everything that determines the discount (how much, how long it lasts). Create
+requests, update requests, responses, and the membership start's inline customs
+all carry one; there is no flat duplicate of these fields anywhere in the API.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator
 from schema.gym_discount import (
     DiscountDurationUnit,
-    DiscountMode,
     DiscountType,
 )
 
@@ -59,14 +58,13 @@ class DiscountValue(BaseModel):
     """One discount value version — everything that determines the discount.
 
     Mirrors a ``gym_discount_values`` row: how much (a percent XOR a fixed
-    dollar amount in cents), the once/ongoing mode, and how long it lasts
-    (a duration span XOR an explicit ``end_date``, never both; neither =
-    forever).
+    dollar amount in cents) and how long it lasts (a duration span XOR an
+    explicit ``end_date``, never both; neither = forever). A 1-``cycle`` span is
+    the single-invoice discount that replaced the old ``once`` mode.
     """
 
     percentage_off: float | None = Field(default=None, gt=0, le=100)
     dollar_off: int | None = Field(default=None, gt=0)
-    discount_mode: DiscountMode
     duration_amount: int | None = Field(default=None, gt=0)
     duration_unit: DiscountDurationUnit | None = None
     end_date: date | None = None
@@ -179,7 +177,6 @@ class DiscountResponse(BaseModel):
             value=DiscountValue(
                 percentage_off=row.get("percentage_off"),
                 dollar_off=row.get("dollar_off"),
-                discount_mode=row["discount_mode"],
                 duration_amount=row.get("duration_amount"),
                 duration_unit=row.get("duration_unit"),
                 end_date=row.get("end_date"),

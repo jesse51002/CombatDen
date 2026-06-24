@@ -299,7 +299,6 @@ async def create_discount(
     name: str = "Test Discount",
     percentage_off: float | None = 10,
     dollar_off: int | None = None,
-    discount_mode: str = "ongoing",
     duration_amount: int | None = None,
     duration_unit: str | None = None,
     end_date: str | None = None,
@@ -311,10 +310,9 @@ async def create_discount(
     ACTIVE value version (``gym_discount_values``: percent/dollar + lifetime).
     No Stripe coupon is pre-baked — the sync computes each consolidated line's
     coupon and writes the resolved id back onto the applied-discount row. The
-    lifetime spec is ``discount_mode`` (once/ongoing) plus either a duration span
-    (duration_amount + duration_unit) or an explicit end_date — never both;
-    ``discount_mode`` defaults to ``ongoing`` with no end (forever). Applied-
-    discount rows reference the returned ``value_id``.
+    lifetime spec is either a duration span (duration_amount + duration_unit) or
+    an explicit end_date — never both; neither = forever. Applied-discount rows
+    reference the returned ``value_id``.
     """
     discount_type = "preset"
 
@@ -330,12 +328,12 @@ async def create_discount(
         INSERT INTO gym_discount_values_unfiltered (
             discount_id, gym_id,
             percentage_off, dollar_off,
-            discount_mode, duration_amount, duration_unit, end_date,
+            duration_amount, duration_unit, end_date,
             is_active
         ) VALUES (
             :discount_id, :gym_id,
             :percentage_off, :dollar_off,
-            :discount_mode, :duration_amount, :duration_unit, :end_date,
+            :duration_amount, :duration_unit, :end_date,
             true
         )
         RETURNING value_id
@@ -357,7 +355,6 @@ async def create_discount(
                 "gym_id": str(gym_id),
                 "percentage_off": percentage_off,
                 "dollar_off": dollar_off,
-                "discount_mode": discount_mode,
                 "duration_amount": duration_amount,
                 "duration_unit": duration_unit,
                 "end_date": end_date,

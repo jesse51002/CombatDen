@@ -10,22 +10,35 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_membership_checklist.dart';
+import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_pay_for_others_section.dart';
+import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_preview_list.dart';
+import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_review_list.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_target.dart';
-import 'package:crm/features/member_details/presentation/widgets/invoice_preview_section.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
-/// Single-step cancellation for the viewed member: pick which of
-/// THEIR recurring memberships to cancel, then confirm via
-/// [BillingConfirmationDialog]. The member-detail page is
-/// member-centric (it shows only this member's own memberships), so
-/// cancellation is always for this member — there is no "who" to pick.
+/// Disclaimer shown on the review step (and on the remove-authorization
+/// dialog) — explains which invoice is shown and why there may be several.
+const String kBillingPayerDisclaimer =
+    'Each membership is billed to whoever pays for it. When different '
+    'people pay for different memberships, you\'ll see a separate invoice '
+    'for each payer below — every change is shown against the bill it '
+    'actually affects.';
+
+/// Multi-select cancellation for the focused member. Pick which of THEIR
+/// recurring memberships to cancel (checkboxes + a "Cancel all memberships"
+/// select-all); when the member also pays for other people a secondary
+/// "Also cancel the memberships you pay for others" scope appears. Confirming
+/// opens the review step — the disclaimer, the labelled list of what will be
+/// cancelled (each with its subject member), and the per-payer billing
+/// preview — then dispatches one [CancelMembershipRequested] with every
+/// selected item_id.
 class CancelMembershipDialog extends StatefulWidget {
   final MemberDetailResponse member;
 
   /// The membership the carousel was showing when cancel was pressed —
-  /// pre-selects it in the checklist when it is a cancellable target.
+  /// pre-selects it when it is a cancellable own target.
   final MembershipInfo? initialMembership;
 
   const CancelMembershipDialog({
@@ -57,118 +70,124 @@ class CancelMembershipDialog extends StatefulWidget {
       _CancelMembershipDialogState();
 }
 
-class _CancelMembershipDialogState
-    extends State<CancelMembershipDialog> {
+class _CancelMembershipDialogState extends State<CancelMembershipDialog> {
   final MemberRepository _repository =
       MemberRepository(apiClient: ApiClient());
-  String? _selectedItemId;
 
-  /// Whether "Review cancellation" was pressed — reveals the billing
-  /// preview + confirm inline at the bottom (no separate popup).
+  final Set<String> _selected = {};
   bool _reviewing = false;
-
-  /// The target for the selected item, or null when nothing is picked.
-  CancelTarget? get _selectedTarget {
-    final id = _selectedItemId;
-    if (id == null) return null;
-    for (final t in _targets) {
-      if (t.membership.itemId == id) return t;
-    }
-    return null;
-  }
 
   @override
   void initState() {
     super.initState();
-    // Open on the membership the carousel was showing, when it is a
-    // cancellable target for this member.
     final itemId = widget.initialMembership?.itemId;
     if (itemId != null &&
-        _targets.any((t) => t.membership.itemId == itemId)) {
-      _selectedItemId = itemId;
+        _ownTargets.any(
+          (t) => t.itemId == itemId && !t.alreadyCancelling,
+        )) {
+      _selected.add(itemId);
     }
   }
 
-  /// This member's recurring, cancellable memberships.
-  List<CancelTarget> get _targets {
+  // ── Targets ──────────────────────────────────────────────
+
+  /// The focused member's own recurring memberships.
+  List<CancelTarget> get _ownTargets {
     final out = <CancelTarget>[];
     for (final m in widget.member.memberships) {
       if (!_isRecurring(m)) continue;
-      out.add(CancelTarget(membership: m));
+      out.add(
+        CancelTarget(
+          itemId: m.itemId,
+          planName: m.planName,
+          subjectName: widget.member.fullName,
+          isOwn: true,
+          subtitle: _ownSubtitle(m),
+          alreadyCancelling:
+              m.exitDate?.kind == MembershipExitKind.cancelling,
+        ),
+      );
     }
     return out;
   }
 
+  /// The recurring memberships the focused member pays for OTHER people.
+  /// Sourced from the already-loaded `paysFor` (members other than the
+  /// focused one); each labelled with its subject member's name.
+  List<CancelTarget> get _payForOthersTargets {
+    final out = <CancelTarget>[];
+    for (final p in widget.member.paysFor) {
+      if (p.memberId == widget.member.memberId) continue;
+      for (final m in p.memberships) {
+        out.add(
+          CancelTarget(
+            itemId: m.itemId,
+            planName: m.planName,
+            subjectName: p.fullName,
+            isOwn: false,
+            subtitle: 'for ${p.fullName}',
+          ),
+        );
+      }
+    }
+    return out;
+  }
+
+  List<CancelTarget> get _allTargets =>
+      [..._ownTargets, ..._payForOthersTargets];
+
+  List<CancelTarget> get _selectedTargets =>
+      _allTargets.where((t) => _selected.contains(t.itemId)).toList();
+
+  // ── Selection ────────────────────────────────────────────
+
+  void _toggle(String itemId, bool selected) {
+    setState(() {
+      if (selected) {
+        _selected.add(itemId);
+      } else {
+        _selected.remove(itemId);
+      }
+      _reviewing = false;
+    });
+  }
+
+  void _toggleAll(Iterable<CancelTarget> targets, bool selected) {
+    setState(() {
+      for (final t in targets) {
+        if (t.alreadyCancelling) continue;
+        if (selected) {
+          _selected.add(t.itemId);
+        } else {
+          _selected.remove(t.itemId);
+        }
+      }
+      _reviewing = false;
+    });
+  }
+
+  // ── Build ────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final selected = _selectedTarget;
-    final reviewing = _reviewing && selected != null;
-    final dateFmt = DateFormat('MMM d, yyyy');
+    final hasSelection = _selected.isNotEmpty;
+    final reviewing = _reviewing && hasSelection;
     return AppDialog(
       title: 'Cancel membership',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
-        children: [
-          CancelMembershipChecklist(
-            targets: _targets,
-            selectedItemId: _selectedItemId,
-            // Changing the pick drops back to step 1 so the preview
-            // always reflects what "Review" was pressed for.
-            onSelect: (itemId) => setState(() {
-              _selectedItemId = itemId;
-              _reviewing = false;
-            }),
-          ),
-          if (reviewing) ...[
-            Text(
-              'Cancelling ${selected.membership.planName} for '
-              '${widget.member.fullName}. Access ends '
-              '${dateFmt.format(_accessUntil(selected).toLocal())}'
-              ' — recurring billing stops after the current '
-              'cycle.',
-              style: DesignConstants.p.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            ),
-            Text(
-              'Billing after cancellation',
-              style: DesignConstants.h3.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            ),
-            InvoicePreviewSection(
-              // The cancellation's effect on the paying sub: the
-              // recurring invoice drops the cancelled membership, shown
-              // as a current → new comparison against the payer's sub.
-              loadPreview: () async {
-                // A single cancel is one payer → a one-entry list.
-                final changes =
-                    await _repository.previewCancelMembership(
-                  selected.membership.itemId,
-                  widget.member.memberId,
-                );
-                return changes.isEmpty ? null : changes.first.preview;
-              },
-              loadCurrent: () => _repository.getUpcomingInvoice(
-                selected.membership.paidByMemberId,
-              ),
-              showDueNow: false,
-              recurringFallbackMonthly:
-                  widget.member.totalMonthlyRecurringPrice,
-              refreshKey: selected.membership.itemId,
-              emptyLabel: 'No change to recurring billing.',
-              errorLabel:
-                  'Could not load the cancellation preview.',
-            ),
-          ],
-        ],
+        children: reviewing ? _reviewBody() : _selectBody(),
       ),
       actions: AppDialogActions(
-        primaryLabel:
-            reviewing ? 'Cancel membership' : 'Review cancellation',
+        primaryLabel: reviewing
+            ? 'Cancel ${_selected.length} '
+                '${_selected.length == 1 ? 'membership' : 'memberships'}'
+            : (hasSelection
+                ? 'Review (${_selected.length})'
+                : 'Review cancellation'),
         primaryColor: DesignConstants.badRed,
-        primaryOnPressed: selected == null
+        primaryOnPressed: !hasSelection
             ? null
             : (reviewing ? _confirmCancel : _review),
         secondaryLabel: reviewing ? 'Back' : 'Cancel',
@@ -179,19 +198,62 @@ class _CancelMembershipDialogState
     );
   }
 
+  List<Widget> _selectBody() {
+    return [
+      CancelMembershipChecklist(
+        targets: _ownTargets,
+        selectedItemIds: _selected,
+        onToggle: _toggle,
+        onToggleAll: (sel) => _toggleAll(_ownTargets, sel),
+      ),
+      CancelPayForOthersSection(
+        targets: _payForOthersTargets,
+        selectedItemIds: _selected,
+        onToggle: _toggle,
+        onToggleAll: (sel) =>
+            _toggleAll(_payForOthersTargets, sel),
+      ),
+    ];
+  }
+
+  List<Widget> _reviewBody() {
+    return [
+      Text(
+        kBillingPayerDisclaimer,
+        style: DesignConstants.h3.copyWith(
+          color: DesignConstants.text2nd,
+        ),
+      ),
+      CancelReviewList(targets: _selectedTargets),
+      Text(
+        'Billing after cancellation',
+        style: DesignConstants.h3.copyWith(
+          color: DesignConstants.text2nd,
+        ),
+      ),
+      CancelPreviewList(
+        repository: _repository,
+        member: widget.member,
+        itemIds: _selected.toList(),
+        fallbackMonthly: widget.member.totalMonthlyRecurringPrice,
+      ),
+    ];
+  }
+
   void _review() => setState(() => _reviewing = true);
 
   void _confirmCancel() {
-    final target = _selectedTarget;
-    if (target == null) return;
+    if (_selected.isEmpty) return;
     context.read<MemberDetailBloc>().add(
           CancelMembershipRequested(
-            itemId: target.membership.itemId,
+            itemIds: _selected.toList(),
             memberId: widget.member.memberId,
           ),
         );
     Navigator.of(context).pop();
   }
+
+  // ── Helpers ──────────────────────────────────────────────
 
   static bool _isRecurring(MembershipInfo m) =>
       m.planType == 'recurring' &&
@@ -202,8 +264,17 @@ class _CancelMembershipDialogState
         MembershipStatus.overdue,
       }.contains(m.status);
 
-  static DateTime _accessUntil(CancelTarget t) =>
-      t.membership.exitDate?.date ??
-      t.membership.nextDueDate ??
-      t.membership.startDate;
+  static String _ownSubtitle(MembershipInfo m) {
+    final dateFmt = DateFormat('MMM d, yyyy');
+    final exit = m.exitDate;
+    if (exit?.kind == MembershipExitKind.cancelling) {
+      return 'Already cancelling '
+          '${dateFmt.format(exit!.date.toLocal())}';
+    }
+    if (exit != null) {
+      return 'Ends ${dateFmt.format(exit.date.toLocal())}';
+    }
+    final until = m.nextDueDate ?? m.startDate;
+    return 'Access until ${dateFmt.format(until.toLocal())}';
+  }
 }

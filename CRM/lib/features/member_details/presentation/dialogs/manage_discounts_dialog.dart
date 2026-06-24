@@ -226,17 +226,18 @@ class _ManageDiscountsDialogState
     // The shared preview viewer: a discount change has no due-now (nothing
     // extra is charged today), so it shows only the recurring section as a
     // current → new comparison.
+    final payerId = widget.membership.paidByMemberId;
     return InvoicePreviewSection(
       loadPreview: _loadPreview,
       // The "before" invoice is the sub that actually bills this
       // membership — its payer's subscription, not the covered
       // member's (who may be paid for by their parent).
-      loadCurrent: () => _repository.getUpcomingInvoice(
-        widget.membership.paidByMemberId,
-      ),
+      loadCurrent: () => _repository.getUpcomingInvoice(payerId),
       showDueNow: false,
       recurringFallbackMonthly:
           widget.member.totalMonthlyRecurringPrice,
+      payerName: widget.member.nameForMember(payerId),
+      payerPhotoUrl: widget.member.photoUrlForMember(payerId),
       emptyLabel: 'No billing change.',
       errorLabel: 'Could not load the preview.',
     );

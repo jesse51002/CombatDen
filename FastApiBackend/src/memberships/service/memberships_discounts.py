@@ -36,7 +36,7 @@ from datetime import date
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
-from schema.gym_discount import DiscountDurationUnit, DiscountMode, DiscountType
+from schema.gym_discount import DiscountDurationUnit, DiscountType
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
@@ -467,13 +467,17 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
     def _resolve_end_date(value: dict, apply_date: date) -> date | None:
         """Resolve an applied-discount row's absolute end_date from the value's lifetime.
 
-        ``once`` -> NULL (stamped by the sync on consumption). ``ongoing`` with a
-        duration span -> apply_date + span. ``ongoing`` with an explicit end_date
-        -> copied. ``ongoing`` with neither -> NULL (forever).
-        """
-        if value["discount_mode"] == DiscountMode.once.value:
-            return None
+        A duration span (duration_amount + duration_unit) -> apply_date + span; an
+        explicit end_date -> copied; neither -> NULL (forever). The Stripe coupon
+        is always ``forever`` — this resolved end_date is the cutoff the sync read
+        enforces (it drops the discount on/after it), so a 1-``cycle`` span is the
+        single-invoice discount that replaced the old ``once`` mode.
 
+        A ``cycle`` is one plan billing cycle. Recurring plans are monthly
+        (DB-enforced ``recurring_must_be_monthly``), so one cycle = one month;
+        if recurring plans ever gain other intervals this must resolve a cycle
+        against the membership's plan billing period.
+        """
         explicit_end = value["end_date"]
         if explicit_end is not None:
             return explicit_end
@@ -487,6 +491,9 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
             return apply_date + relativedelta(days=amount)
         if unit == DiscountDurationUnit.week.value:
             return apply_date + relativedelta(weeks=amount)
-        if unit == DiscountDurationUnit.month.value:
+        if unit in (
+            DiscountDurationUnit.month.value,
+            DiscountDurationUnit.cycle.value,
+        ):
             return apply_date + relativedelta(months=amount)
         raise ValueError(f"Unknown discount duration_unit: {unit}")

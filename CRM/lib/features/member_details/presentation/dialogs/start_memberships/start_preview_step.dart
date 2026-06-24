@@ -11,6 +11,7 @@ import 'package:crm/features/member_details/presentation/widgets/invoice_preview
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/proration_selector.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_attribution.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 import 'package:crm/shared/widgets/warning_message.dart';
@@ -58,6 +59,12 @@ class StartPreviewStep extends StatefulWidget {
   final ValueChanged<MemberMembershipsStartPreview>
       onLoaded;
 
+  /// The payer this request bills — shown once as an avatar+name
+  /// attribution header above the preview cards, so it's clear whose
+  /// card/subscription these charges land on.
+  final String? payerName;
+  final String? payerPhotoUrl;
+
   const StartPreviewStep({
     super.key,
     required this.repository,
@@ -68,6 +75,8 @@ class StartPreviewStep extends StatefulWidget {
     required this.hasRecurring,
     this.anchorDate,
     this.currentMonthly,
+    this.payerName,
+    this.payerPhotoUrl,
   });
 
   @override
@@ -109,10 +118,17 @@ class _StartPreviewStepState
 
   @override
   Widget build(BuildContext context) {
+    final payerName = widget.payerName;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingLarge,
       children: [
+        if (payerName != null)
+          InvoiceAttribution(
+            name: payerName,
+            photoUrl: widget.payerPhotoUrl,
+            caption: 'Billed to',
+          ),
         if (widget.hasRecurring)
           ProrationSelector(
             value: widget.prorationBehavior,

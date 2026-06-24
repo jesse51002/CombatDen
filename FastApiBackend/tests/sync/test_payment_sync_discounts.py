@@ -6,22 +6,19 @@ Pure logic, no DB or Stripe. Exercises ``PaymentSyncDiscounts``:
   price group of memberships). Within a membership multiple percents compound
   **sequentially** (``eff = 1 − Π(1 − pⱼ/100)``); the per-membership effective
   fractions are summed across the line then divided by the line quantity; fixed
-  dollars are summed; ``once`` and ``ongoing`` never mix; percent vs dollar carry
-  **disjoint** ``contributing_ids``.
+  dollars are summed; percent vs dollar carry **disjoint** ``contributing_ids``.
 * ``resolve`` — orders percent-before-dollar, find-or-creates one coupon per
   value (the Stripe I/O mocked), and records the ``applied_discount_id →
   coupon_id`` links.
 
-The date/end_date cutoff and the ``once``-consumption gate are NOT in this math —
-they live in the SQL read and ``PaymentSyncOnceDiscounts`` respectively — so they
-are exercised by the integration tests, not here.
+The date/end_date cutoff is NOT in this math — it lives in the SQL read — so it
+is exercised by the integration tests, not here.
 """
 
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit
 
 import src.shared.db_schema_path  # noqa: F401
@@ -40,7 +37,6 @@ from src.sync.sync_schema import (
 
 def _disc(
     *,
-    discount_mode: DiscountMode = DiscountMode.ongoing,
     percentage_off: float | None = None,
     dollar_off: int | None = None,
     applied_discount_id: UUID | None = None,
@@ -50,7 +46,6 @@ def _disc(
         item_id=uuid4(),
         member_id=uuid4(),
         plan_id=uuid4(),
-        discount_mode=discount_mode,
         percentage_off=percentage_off,
         dollar_off=dollar_off,
     )
@@ -99,7 +94,6 @@ def test_single_percent_qty_one() -> None:
     # Float artifact: 1 - (1 - 10/100) = 9.9999…; rounds to 10% / pct_1000.
     assert values[0].percentage_off == pytest.approx(10.0)
     assert values[0].dollar_off is None
-    assert values[0].discount_mode == DiscountMode.ongoing
     assert values[0].contributing_ids == [snap.applied_discount_id]
 
 
@@ -165,30 +159,12 @@ def test_dollars_summed_across_members_not_divided() -> None:
     assert values[0].dollar_off == 1000
 
 
-# ── once / ongoing separation ───────────────────────────────────────
-
-
-def test_once_and_ongoing_kept_separate() -> None:
-    """A once and an ongoing percent on one line produce two distinct values."""
-    snaps = [
-        _disc(discount_mode=DiscountMode.once, percentage_off=10.0),
-        _disc(discount_mode=DiscountMode.ongoing, percentage_off=20.0),
-    ]
-    values = _aggregate([_membership(snaps)])
-
-    by_mode = {v.discount_mode: v.percentage_off for v in values}
-    assert by_mode == {
-        DiscountMode.once: pytest.approx(10.0),
-        DiscountMode.ongoing: pytest.approx(20.0),
-    }
-
-
 # ── percent vs dollar: disjoint contributing_ids ────────────────────
 
 
 def test_percent_and_dollar_get_disjoint_contributing_ids() -> None:
-    """A percent and a dollar of the same mode produce two values whose
-    contributing_ids never overlap (each discount is percent XOR dollar)."""
+    """A percent and a dollar produce two values whose contributing_ids never
+    overlap (each discount is percent XOR dollar)."""
     pct = _disc(percentage_off=10.0)
     amt = _disc(dollar_off=500)
     values = _aggregate([_membership([pct, amt])])
@@ -235,8 +211,8 @@ class _FakeDiscountService:
 async def test_resolve_orders_percent_before_dollar_and_links() -> None:
     """One line with a percent + a dollar → percent coupon first, then dollar;
     links map each contributing id to its own coupon."""
-    pct = _disc(discount_mode=DiscountMode.ongoing, percentage_off=10.0)
-    amt = _disc(discount_mode=DiscountMode.ongoing, dollar_off=500)
+    pct = _disc(percentage_off=10.0)
+    amt = _disc(dollar_off=500)
     price_id = uuid4()
     groups = {price_id: [_membership([pct, amt])]}
 
@@ -245,9 +221,9 @@ async def test_resolve_orders_percent_before_dollar_and_links() -> None:
     )
 
     coupons = [d.coupon for d in resolved.coupons_by_price[price_id]]
-    assert coupons == ["pct_1000_ongoing", "amt_500_ongoing"]
-    assert resolved.links[amt.applied_discount_id] == "amt_500_ongoing"
-    assert resolved.links[pct.applied_discount_id] == "pct_1000_ongoing"
+    assert coupons == ["pct_1000", "amt_500"]
+    assert resolved.links[amt.applied_discount_id] == "amt_500"
+    assert resolved.links[pct.applied_discount_id] == "pct_1000"
 
 
 async def test_resolve_no_discounts_is_empty() -> None:
@@ -301,56 +277,6 @@ def test_member_amount_applies_percent_before_dollar() -> None:
     )
 
 
-def test_member_amount_existing_membership_includes_once() -> None:
-    """An existing membership (already on Stripe, has a stripe_item_id) counts
-    its once discount — it applies to an upcoming invoice. Percent then dollar:
-    10000 * 0.5 - 1000 = 4000."""
-    amt = _amount(
-        [
-            _disc(discount_mode=DiscountMode.once, percentage_off=50.0),
-            _disc(discount_mode=DiscountMode.ongoing, dollar_off=1000),
-        ],
-        10000,
-        stripe_item_id="si_existing",
-    )
-    assert amt == 4000
-
-
-def test_member_amount_new_membership_excludes_once() -> None:
-    """A brand-new membership (no stripe_item_id yet) excludes its once discount
-    — only the ongoing $10 off applies (10000 - 1000 = 9000)."""
-    amt = _amount(
-        [
-            _disc(discount_mode=DiscountMode.once, percentage_off=50.0),
-            _disc(discount_mode=DiscountMode.ongoing, dollar_off=1000),
-        ],
-        10000,
-        stripe_item_id=None,
-    )
-    assert amt == 9000
-
-
-def test_member_amount_existing_once_only_applies() -> None:
-    """An existing membership whose only discount is a once applies it."""
-    amt = _amount(
-        [_disc(discount_mode=DiscountMode.once, percentage_off=50.0)],
-        10000,
-        stripe_item_id="si_existing",
-    )
-    assert amt == 5000
-
-
-def test_member_amount_new_membership_once_only_is_full_price() -> None:
-    """A brand-new membership with only a once discount keeps its full plan
-    price (the once is excluded until it is on Stripe)."""
-    amt = _amount(
-        [_disc(discount_mode=DiscountMode.once, percentage_off=50.0)],
-        10000,
-        stripe_item_id=None,
-    )
-    assert amt == 10000
-
-
 def test_member_amount_no_discount_is_plan_price() -> None:
     assert _amount([], 7500) == 7500
 
@@ -396,35 +322,25 @@ def test_line_value_rejects_out_of_range_percent(bad_percent: float) -> None:
     """percentage_off must be 0 < p <= 100 — an impossible computed percent
     raises loudly instead of mis-billing."""
     with pytest.raises(ValidationError):
-        LineDiscountValue(
-            discount_mode=DiscountMode.ongoing, percentage_off=bad_percent
-        )
+        LineDiscountValue(percentage_off=bad_percent)
 
 
 def test_line_value_allows_boundary_percent_100() -> None:
-    value = LineDiscountValue(
-        discount_mode=DiscountMode.ongoing, percentage_off=100.0
-    )
+    value = LineDiscountValue(percentage_off=100.0)
     assert value.percentage_off == 100.0
 
 
 @pytest.mark.parametrize("bad_dollar", [0, -5])
 def test_line_value_rejects_non_positive_dollar(bad_dollar: int) -> None:
     with pytest.raises(ValidationError):
-        LineDiscountValue(
-            discount_mode=DiscountMode.once, dollar_off=bad_dollar
-        )
+        LineDiscountValue(dollar_off=bad_dollar)
 
 
 def test_line_value_rejects_neither_percent_nor_dollar() -> None:
     with pytest.raises(ValidationError):
-        LineDiscountValue(discount_mode=DiscountMode.ongoing)
+        LineDiscountValue()
 
 
 def test_line_value_rejects_both_percent_and_dollar() -> None:
     with pytest.raises(ValidationError):
-        LineDiscountValue(
-            discount_mode=DiscountMode.ongoing,
-            percentage_off=10.0,
-            dollar_off=500,
-        )
+        LineDiscountValue(percentage_off=10.0, dollar_off=500)

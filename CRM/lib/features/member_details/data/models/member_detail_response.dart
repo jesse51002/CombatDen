@@ -90,6 +90,41 @@ class MemberDetailResponse extends Equatable {
 
   String get fullName => '$firstName $lastName';
 
+  /// The photo for any member id known to this detail payload — the viewed
+  /// member themselves, an authorized payer, someone they're authorized to
+  /// pay for, or anyone in [paysFor]. Returns null when the id is unknown or
+  /// that person has no photo. Used to attribute a per-payer invoice preview
+  /// (the payer's NAME comes from the backend; the photo is resolved here).
+  String? photoUrlForMember(String memberId) {
+    if (memberId == this.memberId) return photoUrl;
+    for (final a in authorizedPayers) {
+      if (a.memberId == memberId) return a.photoUrl;
+    }
+    for (final a in authorizedToPayFor) {
+      if (a.memberId == memberId) return a.photoUrl;
+    }
+    for (final p in paysFor) {
+      if (p.memberId == memberId) return p.photoUrl;
+    }
+    return null;
+  }
+
+  /// The full name for any member id known to this detail payload (same
+  /// sources as [photoUrlForMember]). Returns null when the id is unknown.
+  String? nameForMember(String memberId) {
+    if (memberId == this.memberId) return fullName;
+    for (final a in authorizedPayers) {
+      if (a.memberId == memberId) return a.fullName;
+    }
+    for (final a in authorizedToPayFor) {
+      if (a.memberId == memberId) return a.fullName;
+    }
+    for (final p in paysFor) {
+      if (p.memberId == memberId) return p.fullName;
+    }
+    return null;
+  }
+
   /// Whether the membership payment is current.
   bool get isPaid =>
       accountStatus?.toLowerCase() == 'paid';

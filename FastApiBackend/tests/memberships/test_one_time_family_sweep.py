@@ -153,16 +153,18 @@ async def test_family_sweep_one_invoice_two_lines(
     )
     pct_preset = await created.discount(
         gym_id,
-        name="10% once sweep",
+        name="10% 1-cycle sweep",
         percentage_off=10.0,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
     amt_preset = await created.discount(
         gym_id,
-        name="$5 off once sweep",
+        name="$5 off 1-cycle sweep",
         percentage_off=None,
         dollar_off=500,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
 
     start_date = gym_today(_SEEDED_GYM_TZ)
@@ -233,10 +235,10 @@ async def test_family_sweep_one_invoice_two_lines(
     # different coupons (percent vs dollar), not an averaged single discount.
     payer_snaps = await get_applied_discounts(db_pool, payer_item)
     child_snaps = await get_applied_discounts(db_pool, child_item)
-    assert payer_snaps[0]["stripe_coupon_id"] == "pct_1000_once"
-    assert child_snaps[0]["stripe_coupon_id"] == "amt_500_once"
-    created.track_coupon("pct_1000_once")
-    created.track_coupon("amt_500_once")
+    assert payer_snaps[0]["stripe_coupon_id"] == "pct_1000"
+    assert child_snaps[0]["stripe_coupon_id"] == "amt_500"
+    created.track_coupon("pct_1000")
+    created.track_coupon("amt_500")
 
     # The Stripe invoice itself carries exactly 2 lines.
     invoice = await stripe_client.client.v1.invoices.retrieve_async(

@@ -230,7 +230,6 @@ async def test_reprice_one_member_off_shared_consolidated_line(
                         custom_discounts=[
                             DiscountValue(
                                 percentage_off=15.0,
-                                discount_mode="ongoing",
                             ),
                         ],
                     ),

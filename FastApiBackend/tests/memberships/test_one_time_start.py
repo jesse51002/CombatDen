@@ -11,6 +11,7 @@ from datetime import timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from dateutil.relativedelta import relativedelta
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -22,8 +23,7 @@ from src.memberships.memberships_schema import (
 from src.shared.gym_timezone import gym_today
 from tests.helpers.db_reads import get_applied_discounts
 
-# The single seeded gym is America/Chicago (tests/seed_constants.py); the once
-# consumption stamp is the gym-today date, so assert against that timezone.
+# The single seeded gym is America/Chicago (tests/seed_constants.py).
 _SEEDED_GYM_TZ = "America/Chicago"
 
 
@@ -121,9 +121,10 @@ async def test_one_time_start_with_preset_discount(
     )
     preset = await created.discount(
         gym_id,
-        name="10% once",
+        name="10% 1-cycle",
         percentage_off=10.0,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
 
     await memberships_service.start(
@@ -152,12 +153,11 @@ async def test_one_time_start_with_preset_discount(
     assert invoice.amount_paid == 4500
 
     # The applied-discount row has its resolved coupon written back, and the
-    # once-mode row is stamped consumed (end_date == the gym-today date) at the
-    # charge — the single invoice is the only charge.
+    # 1-cycle end_date is resolved at apply time as today + 1 month.
     snaps = await get_applied_discounts(db_pool, row["item_id"])
     assert len(snaps) == 1
     assert snaps[0]["stripe_coupon_id"] is not None
-    assert snaps[0]["end_date"] == gym_today(_SEEDED_GYM_TZ)
+    assert snaps[0]["end_date"] == gym_today(_SEEDED_GYM_TZ) + relativedelta(months=1)
 
 
 @pytest.mark.timeout(180)
@@ -204,7 +204,8 @@ async def test_add_discounts_rejected_on_one_time_membership(
         gym_id,
         name="10% add-test",
         percentage_off=10.0,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
 
     with pytest.raises(ValueError, match="non-recurring"):
@@ -263,7 +264,11 @@ async def test_one_time_start_with_inline_custom_discount(
                     member_id=member.member_id,
                     price_id=plan.price_id,
                     custom_discounts=[
-                        DiscountValue(percentage_off=20.0, discount_mode="once"),
+                        DiscountValue(
+                            percentage_off=20.0,
+                            duration_amount=1,
+                            duration_unit="cycle",
+                        ),
                     ],
                 ),
             ],
@@ -283,7 +288,7 @@ async def test_one_time_start_with_inline_custom_discount(
     snaps = await get_applied_discounts(db_pool, row["item_id"])
     assert len(snaps) == 1
     assert snaps[0]["stripe_coupon_id"] is not None
-    assert snaps[0]["end_date"] == gym_today(_SEEDED_GYM_TZ)
+    assert snaps[0]["end_date"] == gym_today(_SEEDED_GYM_TZ) + relativedelta(months=1)
 
     # Register the minted custom for teardown (it created a gym_discounts +
     # gym_discount_values pair the member cleanup does not touch).
@@ -312,10 +317,11 @@ async def test_one_time_start_with_dollar_off_discount(
     )
     preset = await created.discount(
         gym_id,
-        name="$5 off once",
+        name="$5 off 1-cycle",
         percentage_off=None,
         dollar_off=500,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
 
     await memberships_service.start(
@@ -346,7 +352,7 @@ async def test_one_time_start_with_dollar_off_discount(
     snaps = await get_applied_discounts(db_pool, row["item_id"])
     assert len(snaps) == 1
     coupon_id = snaps[0]["stripe_coupon_id"]
-    assert coupon_id == "amt_500_once"
+    assert coupon_id == "amt_500"
     # The deterministic coupon is find-or-created on the Connect account; clean
     # it up so it does not accumulate across runs.
     created.track_coupon(coupon_id)
@@ -381,16 +387,18 @@ async def test_one_time_start_with_mixed_discounts(
     )
     pct = await created.discount(
         gym_id,
-        name="20% once",
+        name="20% 1-cycle",
         percentage_off=20.0,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
     dol = await created.discount(
         gym_id,
-        name="$5 off once",
+        name="$5 off 1-cycle",
         percentage_off=None,
         dollar_off=500,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
 
     await memberships_service.start(
@@ -424,9 +432,9 @@ async def test_one_time_start_with_mixed_discounts(
     snaps = await get_applied_discounts(db_pool, row["item_id"])
     assert len(snaps) == 2
     coupons = {s["stripe_coupon_id"] for s in snaps}
-    assert coupons == {"pct_2000_once", "amt_500_once"}
+    assert coupons == {"pct_2000", "amt_500"}
     for s in snaps:
-        assert s["end_date"] == gym_today(_SEEDED_GYM_TZ)
+        assert s["end_date"] == gym_today(_SEEDED_GYM_TZ) + relativedelta(months=1)
         created.track_coupon(s["stripe_coupon_id"])
 
 
@@ -455,15 +463,17 @@ async def test_one_time_start_with_compound_discounts(
     )
     preset_10 = await created.discount(
         gym_id,
-        name="10% once compound",
+        name="10% 1-cycle compound",
         percentage_off=10.0,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
     preset_20 = await created.discount(
         gym_id,
-        name="20% once compound",
+        name="20% 1-cycle compound",
         percentage_off=20.0,
-        discount_mode="once",
+        duration_amount=1,
+        duration_unit="cycle",
     )
 
     await memberships_service.start(

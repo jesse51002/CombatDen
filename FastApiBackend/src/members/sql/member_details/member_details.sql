@@ -67,7 +67,6 @@ SELECT
             'discount_type', d.discount_type,
             'percentage_off', v.percentage_off,
             'dollar_off', v.dollar_off,
-            'discount_mode', v.discount_mode,
             'end_date', ad.end_date
          ) ORDER BY ad.created_at)
          FROM member_membership_applied_discounts ad

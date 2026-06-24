@@ -9,6 +9,7 @@ import 'package:crm/features/member_details/presentation/dialogs/mark_paid_cash_
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_attribution.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/section_card.dart';
@@ -288,6 +289,25 @@ class _InvoiceBody extends StatelessWidget {
     return null;
   }
 
+  /// The status eyebrow line — "Overdue" (red) or "Upcoming", plus the due
+  /// date. Sits above the shared breakdown; the payer identity (avatar +
+  /// name) is the breakdown's attribution header.
+  Widget _statusEyebrow() {
+    final due = invoice.date;
+    final dueText = due == null ? '' : ' · Due ${formatDay(due)}';
+    return Text(
+      '${invoice.overdue ? 'Overdue' : 'Upcoming'}$dueText',
+      style: DesignConstants.pBig.copyWith(
+        color: invoice.overdue
+            ? DesignConstants.badRed
+            : DesignConstants.text2nd,
+        fontWeight: FontWeight.w700,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final action = _cashAction(context);
@@ -295,60 +315,17 @@ class _InvoiceBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingBig,
       children: [
-        Row(
-          spacing: DesignConstants.spacingMedium,
-          children: [
-            CircleAvatar(
-              radius: DesignConstants.iconSizeMedium,
-              backgroundColor: DesignConstants.backgroundColor,
-              backgroundImage: payer.photoUrl != null
-                  ? NetworkImage(payer.photoUrl!)
-                  : null,
-              child: payer.photoUrl == null
-                  ? Text(
-                      payer.name.isNotEmpty
-                          ? payer.name[0].toUpperCase()
-                          : '?',
-                      style: DesignConstants.pSmall.copyWith(
-                        color: DesignConstants.text,
-                      ),
-                    )
-                  : null,
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: DesignConstants.spacingTiny,
-                children: [
-                  Text(
-                    invoice.overdue ? 'Overdue' : 'Upcoming',
-                    style: DesignConstants.pBig.copyWith(
-                      color: invoice.overdue
-                          ? DesignConstants.badRed
-                          : DesignConstants.text2nd,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    payer.name,
-                    style: DesignConstants.h3,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    'Due ${formatDay(invoice.date)}',
-                    style: DesignConstants.pSmall.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
+        _statusEyebrow(),
+        InvoiceBreakdown(
+          data: _money,
+          // Whose invoice this is — the payer of this member's
+          // memberships (self or a linked parent).
+          attribution: InvoiceAttribution(
+            name: payer.name,
+            photoUrl: payer.photoUrl,
+            caption: 'Billed to',
+          ),
         ),
-        InvoiceBreakdown(data: _money),
         ?action,
       ],
     );

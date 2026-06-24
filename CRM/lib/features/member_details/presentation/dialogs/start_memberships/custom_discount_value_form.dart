@@ -1,23 +1,19 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
-import 'package:crm/features/member_details/data/models/discount_mode.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_amount_fields.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_duration_fields.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_end_date_field.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_mode_fields.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_lifetime_fields.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_value_helpers.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_primary_button.dart';
 
 /// Inline form producing one custom [DiscountValue] for a
-/// membership draft: a % XOR $ amount, once / ongoing, and
-/// an optional lifetime (duration span XOR end date).
-/// Mirrors the value half of the preset editor
-/// (`edit_discount_dialog.dart`) — customs have no name and
-/// are minted server-side as one-shot `custom` discounts.
+/// membership draft: a % XOR $ amount and a lifetime
+/// (Forever / Cycle / Day / Week / Month). Cycle = 1 plan
+/// billing cycle (the former `once` mode). Mirrors the
+/// value half of the preset editor
+/// (`edit_discount_dialog.dart`).
 class CustomDiscountValueForm extends StatefulWidget {
   final ValueChanged<DiscountValue> onAdd;
   final VoidCallback onCancel;
@@ -42,12 +38,8 @@ class _CustomDiscountValueFormState
 
   CustomDiscountAmountKind _kind =
       CustomDiscountAmountKind.percentage;
-  DiscountMode _mode = DiscountMode.once;
-  DiscountDurationUnit _durationUnit =
-      DiscountDurationUnit.month;
-  CustomDiscountLifetimeKind _lifetime =
-      CustomDiscountLifetimeKind.duration;
-  DateTime? _endDate;
+  CustomDiscountLifetimeUnit _lifetimeUnit =
+      CustomDiscountLifetimeUnit.cycle;
   String? _formError;
 
   @override
@@ -57,22 +49,8 @@ class _CustomDiscountValueFormState
     super.dispose();
   }
 
-  bool get _isOngoing => _mode == DiscountMode.ongoing;
-
   double? get _amount =>
       double.tryParse(_amountController.text.trim());
-
-  Future<void> _pickEndDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate:
-          _endDate ?? now.add(const Duration(days: 30)),
-      firstDate: now,
-      lastDate: DateTime(now.year + 10),
-    );
-    if (picked != null) setState(() => _endDate = picked);
-  }
 
   void _add() {
     if (!(_formKey.currentState?.validate() ?? false)) {
@@ -80,20 +58,12 @@ class _CustomDiscountValueFormState
     }
     final amount = _amount;
     if (amount == null) return;
-    if (_isOngoing &&
-        _lifetime == CustomDiscountLifetimeKind.untilDate &&
-        _endDate == null) {
-      setState(() => _formError = 'Pick an end date.');
-      return;
-    }
+    setState(() => _formError = null);
     widget.onAdd(buildCustomDiscountValue(
       kind: _kind,
       amount: amount,
-      mode: _mode,
-      lifetime: _lifetime,
+      lifetimeUnit: _lifetimeUnit,
       durationText: _durationController.text,
-      durationUnit: _durationUnit,
-      endDate: _endDate,
     ));
   }
 
@@ -111,32 +81,13 @@ class _CustomDiscountValueFormState
             onKindChanged: (v) =>
                 setState(() => _kind = v ?? _kind),
           ),
-          CustomDiscountModeFields(
-            mode: _mode,
-            lifetime: _lifetime,
-            onModeChanged: (v) =>
-                setState(() => _mode = v ?? _mode),
-            onLifetimeChanged: (v) => setState(
-              () => _lifetime = v ?? _lifetime,
+          CustomDiscountLifetimeFields(
+            lifetimeUnit: _lifetimeUnit,
+            durationController: _durationController,
+            onUnitChanged: (v) => setState(
+              () => _lifetimeUnit = v ?? _lifetimeUnit,
             ),
           ),
-          if (_isOngoing &&
-              _lifetime ==
-                  CustomDiscountLifetimeKind.duration)
-            CustomDiscountDurationFields(
-              controller: _durationController,
-              unit: _durationUnit,
-              onUnitChanged: (v) => setState(
-                () => _durationUnit = v ?? _durationUnit,
-              ),
-            ),
-          if (_isOngoing &&
-              _lifetime ==
-                  CustomDiscountLifetimeKind.untilDate)
-            CustomDiscountEndDateField(
-              endDate: _endDate,
-              onTap: _pickEndDate,
-            ),
           if (_formError != null)
             Text(
               _formError!,

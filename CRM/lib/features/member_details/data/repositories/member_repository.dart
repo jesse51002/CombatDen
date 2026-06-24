@@ -338,21 +338,24 @@ class MemberRepository {
     );
   }
 
-  /// `DELETE /api/v1/member_memberships/` — cancel a
-  /// membership item. The merged contract takes
-  /// `item_id`, `member_id`, and `idempotency_key` as
-  /// query params.
-  Future<void> cancelMembership({
-    required String itemId,
+  /// `DELETE /api/v1/member_memberships/` — cancel ONE OR MORE
+  /// membership items in one call (a single cancel is a one-element
+  /// list). The merged contract takes `item_ids`, `member_id`, and
+  /// `idempotency_key` in the request body; the backend groups the
+  /// items by payer and converges each payer's subscription once.
+  Future<void> cancelMemberships({
+    required List<String> itemIds,
     required String memberId,
     required String idempotencyKey,
   }) async {
     try {
       await _apiClient.delete(
-        '/api/v1/member_memberships/'
-        '?item_id=$itemId'
-        '&member_id=$memberId'
-        '&idempotency_key=$idempotencyKey',
+        '/api/v1/member_memberships/',
+        data: {
+          'item_ids': itemIds,
+          'member_id': memberId,
+          'idempotency_key': idempotencyKey,
+        },
       );
     } on ServerException catch (e) {
       if (e.statusCode == 409) {
@@ -366,14 +369,19 @@ class MemberRepository {
   }
 
   /// `POST /api/v1/member_memberships/cancel/preview` — per-payer cost preview
-  /// (a single cancel is one payer → a one-entry list; empty = no change).
-  Future<List<PayerInvoiceChange>> previewCancelMembership(
-    String itemId,
+  /// of cancelling [itemIds] (a single cancel is one payer → a one-entry list;
+  /// a member's memberships split across payers yield several entries). Sends
+  /// `item_ids` + `member_id` in the request body.
+  Future<List<PayerInvoiceChange>> previewCancelMemberships(
+    List<String> itemIds,
     String memberId,
   ) async {
     final response = await _apiClient.post(
-      '/api/v1/member_memberships/cancel/preview'
-      '?item_id=$itemId&member_id=$memberId',
+      '/api/v1/member_memberships/cancel/preview',
+      data: {
+        'item_ids': itemIds,
+        'member_id': memberId,
+      },
     );
     return (response.data as List<dynamic>)
         .map(

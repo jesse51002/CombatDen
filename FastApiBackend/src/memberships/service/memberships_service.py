@@ -184,28 +184,68 @@ class MemberMembershipsService:
         member_id: UUID,
         idempotency_key: UUID,
     ) -> date:
-        """Cancel a specific active recurring membership.
+        """Cancel ONE active recurring membership (single-item convenience).
 
-        Returns the resolved ``cancel_date`` — the date through
-        which the membership remains active.
+        A thin wrapper over :meth:`cancel_many` — the list path is the one
+        real implementation. Returns the resolved ``cancel_date`` (the date
+        through which the membership remains active).
         """
-        payer_id = await self._get_payer_for_item(item_id)
-        async with self._paying_lock.lock([payer_id]):
-            dates = await self._cancel.cancel(
-                [item_id], member_id, idempotency_key,
+        dates = await self.cancel_many(
+            [item_id], member_id, idempotency_key,
+        )
+        return dates[item_id]
+
+    async def cancel_many(
+        self,
+        item_ids: list[UUID],
+        member_id: UUID,
+        idempotency_key: UUID,
+    ) -> dict[UUID, date]:
+        """Cancel ONE OR MORE of ``member_id``'s recurring memberships.
+
+        A member's memberships may be funded by different payers, so the lock
+        is taken over EVERY distinct payer of the passed items (the sub-service
+        then converges each payer's subscription once, under its own derived
+        idempotency key). Returns a map of each input ``item_id`` → its resolved
+        ``cancel_date``. An empty ``item_ids`` is a no-op (empty map).
+        """
+        if not item_ids:
+            return {}
+        payer_ids = await self._get_payers_for_items(item_ids)
+        async with self._paying_lock.lock(payer_ids):
+            return await self._cancel.cancel(
+                item_ids, member_id, idempotency_key,
             )
-            return dates[item_id]
 
     async def preview_cancel(
         self,
         item_id: UUID,
         member_id: UUID,
     ) -> list[PayerInvoiceChange]:
-        """Preview what cancelling a membership would charge (per-payer list;
-        a single cancel is one payer → a one-entry list)."""
-        payer_id = await self._get_payer_for_item(item_id)
-        async with self._paying_lock.lock([payer_id]):
-            return await self._cancel.preview_cancel([item_id], member_id)
+        """Preview cancelling ONE membership (single-item convenience).
+
+        A thin wrapper over :meth:`preview_cancel_many` — a single cancel is
+        one payer → a one-entry list.
+        """
+        return await self.preview_cancel_many([item_id], member_id)
+
+    async def preview_cancel_many(
+        self,
+        item_ids: list[UUID],
+        member_id: UUID,
+    ) -> list[PayerInvoiceChange]:
+        """Preview cancelling ONE OR MORE of ``member_id``'s memberships.
+
+        Locks every distinct payer of the passed items, then returns the
+        per-payer cost preview (one entry per payer that funds any of them —
+        a member's memberships split across payers yield several entries).
+        An empty ``item_ids`` is a no-op (empty list).
+        """
+        if not item_ids:
+            return []
+        payer_ids = await self._get_payers_for_items(item_ids)
+        async with self._paying_lock.lock(payer_ids):
+            return await self._cancel.preview_cancel(item_ids, member_id)
 
     # ── Freeze / Unfreeze ──────────────────────────────────────
 
@@ -501,3 +541,35 @@ class MemberMembershipsService:
         if not row:
             raise ValueError(f"Membership not found: item_id={item_id}")
         return UUID(str(row[0]))
+
+    async def _get_payers_for_items(
+        self,
+        item_ids: list[UUID],
+    ) -> list[UUID]:
+        """The DISTINCT payers of a batch of membership rows — the lock keys
+        for a multi-item cancel/preview.
+
+        ``paid_by_member_id`` is immutable, so reading it before locking is
+        race-free. Every passed item must exist (a multi-cancel over a stale
+        item_id is a caller error, not a silent skip).
+
+        Raises:
+            ValueError: If any ``item_id`` does not exist.
+        """
+        sql = load_sql(SQL_DIR / "member_memberships_get_payers.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {"item_ids": [str(i) for i in item_ids]},
+            )
+            rows = result.mappings().all()
+        payers = {
+            UUID(str(row["item_id"])): UUID(str(row["paid_by_member_id"]))
+            for row in rows
+        }
+        missing = [i for i in item_ids if i not in payers]
+        if missing:
+            raise ValueError(
+                f"Membership not found: item_ids={missing}",
+            )
+        return list(dict.fromkeys(payers.values()))

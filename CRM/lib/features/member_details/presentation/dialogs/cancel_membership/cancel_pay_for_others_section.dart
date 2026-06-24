@@ -5,20 +5,18 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_membership_row.dart';
 import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_target.dart';
 
-/// The focused member's own recurring memberships as a MULTI-select
-/// checklist, led by a "Cancel all memberships" select-all toggle. Selecting
-/// any reveals the bulk action in the dialog footer. Already-cancelling rows
-/// are shown disabled. The dialog owns the selected-id set and the
-/// pay-for-others section beneath this.
-class CancelMembershipChecklist extends StatelessWidget {
+/// The secondary cancel scope, surfaced only when the focused member ALSO
+/// pays for other people. A header toggle ("Also cancel the memberships you
+/// pay for others") selects / clears every pay-for-others membership at once;
+/// individual rows below let staff fine-tune. Each row is labelled with whose
+/// membership it is (the subject member's name).
+class CancelPayForOthersSection extends StatelessWidget {
   final List<CancelTarget> targets;
   final Set<String> selectedItemIds;
   final void Function(String itemId, bool selected) onToggle;
-
-  /// Selects / clears every selectable (not already-cancelling) own row.
   final ValueChanged<bool> onToggleAll;
 
-  const CancelMembershipChecklist({
+  const CancelPayForOthersSection({
     super.key,
     required this.targets,
     required this.selectedItemIds,
@@ -26,43 +24,23 @@ class CancelMembershipChecklist extends StatelessWidget {
     required this.onToggleAll,
   });
 
-  Iterable<CancelTarget> get _selectable =>
-      targets.where((t) => !t.alreadyCancelling);
-
   bool get _allSelected =>
-      _selectable.isNotEmpty &&
-      _selectable.every((t) => selectedItemIds.contains(t.itemId));
+      targets.isNotEmpty &&
+      targets.every((t) => selectedItemIds.contains(t.itemId));
 
   @override
   Widget build(BuildContext context) {
-    if (targets.isEmpty) {
-      return Text(
-        'No recurring memberships to cancel for this person.',
-        style: DesignConstants.pSmall.copyWith(
-          color: DesignConstants.text2nd,
-        ),
-      );
-    }
+    if (targets.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(
-          'Select memberships to cancel',
-          style: DesignConstants.h3,
+        Divider(color: DesignConstants.divider, height: 1),
+        _OthersToggle(
+          allSelected: _allSelected,
+          count: targets.length,
+          onToggle: onToggleAll,
         ),
-        Text(
-          'Cancelling ends access after the current cycle. '
-          'Recurring billing stops on the next billing date.',
-          style: DesignConstants.pSmall.copyWith(
-            color: DesignConstants.text2nd,
-          ),
-        ),
-        if (_selectable.length > 1)
-          _CancelAllToggle(
-            allSelected: _allSelected,
-            onToggle: onToggleAll,
-          ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingSmall,
@@ -81,18 +59,23 @@ class CancelMembershipChecklist extends StatelessWidget {
   }
 }
 
-/// The "Cancel all memberships" select-all affordance above the own rows.
-class _CancelAllToggle extends StatelessWidget {
+/// The header toggle for the pay-for-others scope.
+class _OthersToggle extends StatelessWidget {
   final bool allSelected;
+  final int count;
   final ValueChanged<bool> onToggle;
 
-  const _CancelAllToggle({
+  const _OthersToggle({
     required this.allSelected,
+    required this.count,
     required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final label = count == 1
+        ? 'Also cancel the 1 membership you pay for others'
+        : 'Also cancel the $count memberships you pay for others';
     return InkWell(
       onTap: () => onToggle(!allSelected),
       borderRadius: BorderRadius.circular(
@@ -115,9 +98,11 @@ class _CancelAllToggle extends StatelessWidget {
                   ? DesignConstants.badRed
                   : DesignConstants.text2nd,
             ),
-            Text(
-              'Cancel all memberships',
-              style: DesignConstants.h3,
+            Expanded(
+              child: Text(
+                label,
+                style: DesignConstants.h3,
+              ),
             ),
           ],
         ),

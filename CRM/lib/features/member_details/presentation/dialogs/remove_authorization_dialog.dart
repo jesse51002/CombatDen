@@ -7,6 +7,7 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/payer_invoice_change.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/member_details/presentation/dialogs/cancel_membership/cancel_membership_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_section.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
@@ -27,12 +28,18 @@ class RemoveAuthorizationDialog extends StatefulWidget {
   final String accountName;
   final int fallbackMonthly;
 
+  /// The payer's photo, for the per-payer invoice attribution. Resolved by
+  /// the caller (the payer is the focused member or the linked account, by
+  /// section); null falls back to an initials avatar.
+  final String? payerPhotoUrl;
+
   const RemoveAuthorizationDialog({
     super.key,
     required this.payeeMemberId,
     required this.payerMemberId,
     required this.accountName,
     required this.fallbackMonthly,
+    this.payerPhotoUrl,
   });
 
   static Future<void> show({
@@ -41,6 +48,7 @@ class RemoveAuthorizationDialog extends StatefulWidget {
     required String payerMemberId,
     required String accountName,
     required int fallbackMonthly,
+    String? payerPhotoUrl,
   }) {
     return showDialog<void>(
       context: context,
@@ -51,6 +59,7 @@ class RemoveAuthorizationDialog extends StatefulWidget {
           payerMemberId: payerMemberId,
           accountName: accountName,
           fallbackMonthly: fallbackMonthly,
+          payerPhotoUrl: payerPhotoUrl,
         ),
       ),
     );
@@ -108,6 +117,12 @@ class _RemoveAuthorizationDialogState
                 spacing: DesignConstants.spacingMedium,
                 children: [
                   Text(
+                    kBillingPayerDisclaimer,
+                    style: DesignConstants.h3.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                  ),
+                  Text(
                     'Billing after removal',
                     style: DesignConstants.h3.copyWith(
                       color: DesignConstants.text2nd,
@@ -119,6 +134,8 @@ class _RemoveAuthorizationDialogState
                         .getUpcomingInvoice(change.payerMemberId),
                     showDueNow: false,
                     recurringFallbackMonthly: widget.fallbackMonthly,
+                    payerName: change.payerFullName,
+                    payerPhotoUrl: widget.payerPhotoUrl,
                     emptyLabel: 'No recurring billing change.',
                     errorLabel: 'Could not load the billing preview.',
                   ),
