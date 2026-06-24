@@ -11,6 +11,7 @@ import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/presentation/dialogs/link_parent_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/remove_authorization_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
+import 'package:crm/features/member_details/presentation/widgets/membership_display_helpers.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
@@ -85,6 +86,7 @@ class _PaymentAuthorizationsDialogState
               _SectionList(
                 isPay: isPay,
                 accounts: accounts,
+                member: member,
                 onRemove: (a) => _onRemove(member, a, isPay),
               ),
               AppOutlineButton(
@@ -187,14 +189,44 @@ class _Description extends StatelessWidget {
   }
 }
 
+/// The recurring memberships funded across the (viewed member, [account])
+/// relationship — exactly what removing it would cancel. "Can Pay For" reads
+/// the viewed member's `paysFor` roster for the payee; "Can Receive Payments"
+/// reads the viewed member's own recurring memberships paid by that payer.
+List<String> _fundedPlanNames(
+  MemberDetailResponse member,
+  LinkedAccount account,
+  bool isPay,
+) {
+  if (isPay) {
+    for (final p in member.paysFor) {
+      if (p.memberId == account.memberId) {
+        return p.memberships.map((m) => m.planName).toList();
+      }
+    }
+    return const [];
+  }
+  return member.memberships
+      .where(
+        (m) =>
+            m.paidByMemberId == account.memberId &&
+            m.planType?.toLowerCase() == 'recurring' &&
+            !isTerminalStatus(m.status),
+      )
+      .map((m) => m.planName)
+      .toList();
+}
+
 class _SectionList extends StatelessWidget {
   final bool isPay;
   final List<LinkedAccount> accounts;
+  final MemberDetailResponse member;
   final ValueChanged<LinkedAccount> onRemove;
 
   const _SectionList({
     required this.isPay,
     required this.accounts,
+    required this.member,
     required this.onRemove,
   });
 
@@ -224,7 +256,13 @@ class _SectionList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: accounts
-          .map((a) => _AuthRow(account: a, onRemove: () => onRemove(a)))
+          .map(
+            (a) => _AuthRow(
+              account: a,
+              planNames: _fundedPlanNames(member, a, isPay),
+              onRemove: () => onRemove(a),
+            ),
+          )
           .toList(),
     );
   }
@@ -232,9 +270,14 @@ class _SectionList extends StatelessWidget {
 
 class _AuthRow extends StatelessWidget {
   final LinkedAccount account;
+  final List<String> planNames;
   final VoidCallback onRemove;
 
-  const _AuthRow({required this.account, required this.onRemove});
+  const _AuthRow({
+    required this.account,
+    required this.planNames,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -266,11 +309,30 @@ class _AuthRow extends StatelessWidget {
                 : null,
           ),
           Expanded(
-            child: Text(
-              account.fullName,
-              style: DesignConstants.h3,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              spacing: DesignConstants.spacingTiny,
+              children: [
+                Text(
+                  account.fullName,
+                  style: DesignConstants.h3,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  planNames.isEmpty
+                      ? 'No active memberships'
+                      : 'Cancels: ${planNames.join(', ')}',
+                  style: DesignConstants.pSmall.copyWith(
+                    color: planNames.isEmpty
+                        ? DesignConstants.text3rd
+                        : DesignConstants.text2nd,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
           TextButton.icon(
