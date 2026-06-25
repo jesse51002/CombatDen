@@ -801,7 +801,9 @@ def test_end_one_time_rejects_recurring_unit():
         "timezone": "America/Chicago",
     }
     with pytest.raises(ValueError, match="recurring"):
-        MemberMembershipsCancel._validate_end_one_time(row, uuid4(), uuid4())
+        MemberMembershipsCancel._validate_end_one_time(
+            row, uuid4(), uuid4(), date.today()
+        )
 
 
 def test_end_one_time_rejects_already_ended_unit():
@@ -813,4 +815,6 @@ def test_end_one_time_rejects_already_ended_unit():
         "timezone": "America/Chicago",
     }
     with pytest.raises(ValueError, match="already ended"):
-        MemberMembershipsCancel._validate_end_one_time(row, uuid4(), uuid4())
+        MemberMembershipsCancel._validate_end_one_time(
+            row, uuid4(), uuid4(), date.today()
+        )

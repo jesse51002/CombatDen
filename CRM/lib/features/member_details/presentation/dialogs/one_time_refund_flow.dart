@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
-import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
-import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
 import 'package:crm/features/member_details/data/models/charge_status.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/member_details/presentation/dialogs/end_membership_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/payment_invoice_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
 /// Refund a ONE-TIME / TRIAL membership's purchase, then offer to also end
 /// it. Refund + end are SEPARATE actions, but a refund usually pairs with
-/// ending the pack — so after a submitted refund this prompts "also end?".
+/// ending the pack — so after a submitted refund this opens
+/// [EndMembershipDialog] (its own confirm → processing → success), rather
+/// than firing the end in the background.
 ///
 /// Opens the membership's **purchase invoice** in the same rich popup
 /// Payment History uses ([PaymentInvoiceDialog]): the full breakdown, the
@@ -31,10 +31,10 @@ Future<void> runOneTimeRefundFlow(
   required MemberDetailResponse member,
   required MembershipInfo membership,
   required String coveredMemberId,
+  required String coveredMemberName,
   required bool allowEnd,
 }) async {
   final itemId = membership.itemId;
-  final bloc = context.read<MemberDetailBloc>();
   final repo = MemberRepository(apiClient: ApiClient());
 
   final PaymentRecord? charge;
@@ -82,26 +82,15 @@ Future<void> runOneTimeRefundFlow(
           false;
   if (!refunded || !allowEnd || !context.mounted) return;
 
-  final alsoEnd = await AppDialog.show<bool>(
-        context: context,
-        title: 'Refund submitted',
-        body: Text(
-          'Also end this membership now? It will be marked ended.',
-          style:
-              DesignConstants.p.copyWith(color: DesignConstants.text),
-        ),
-        primaryLabel: 'End membership',
-        primaryColor: DesignConstants.badRed,
-        primaryOnPressed: (c) => Navigator.of(c).pop(true),
-        secondaryLabel: 'Not now',
-        secondaryOnPressed: (c) => Navigator.of(c).pop(false),
-      ) ??
-      false;
-  if (alsoEnd) {
-    bloc.add(
-      EndMembershipRequested(itemId: itemId, memberId: coveredMemberId),
-    );
-  }
+  // Offer to also end the pack. The end dialog IS the "end this membership?"
+  // confirm plus its own visible processing → success step (Cancel = "not
+  // now") — so the end is never a silent background dispatch.
+  await EndMembershipDialog.show(
+    context: context,
+    membership: membership,
+    coveredMemberId: coveredMemberId,
+    coveredMemberName: coveredMemberName,
+  );
 }
 
 /// The succeeded payment whose line items include [itemId] — the charge
@@ -115,6 +104,10 @@ Future<PaymentRecord?> _findMembershipCharge(
   String memberId,
   String itemId,
 ) async {
+  // Searches only the first page (100 most-recent charges). A one-time pack's
+  // purchase is normally recent, so page 1 suffices; a member with >100 newer
+  // charges since the purchase would need pagination here to still find it —
+  // not handled (the same charge is always refundable from Payment History).
   final payments =
       await repo.getPayments(memberId, limit: 100, offset: 0);
   for (final p in payments) {

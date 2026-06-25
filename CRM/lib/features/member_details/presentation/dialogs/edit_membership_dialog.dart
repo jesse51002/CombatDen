@@ -179,6 +179,7 @@ class EditMembershipDialog extends StatelessWidget {
             member: member,
             membership: membership,
             coveredMemberId: coveredMemberId,
+            coveredMemberName: coveredMemberName,
             allowEnd: !_isTerminal,
           ),
         ),

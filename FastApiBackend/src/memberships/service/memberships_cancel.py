@@ -307,9 +307,11 @@ class MemberMembershipsCancel(MemberMembershipsBase):
             ValueError: not found, recurring, or already ended/cancelled.
         """
         row = await self._get_membership(item_id, member_id)
-        self._validate_end_one_time(row, item_id, member_id)
-
+        # One gym-local ``today`` for BOTH the guard and the end_date write, so
+        # they can't straddle midnight (validate on day N, end on day N+1).
         today = gym_today(row["timezone"])
+        self._validate_end_one_time(row, item_id, member_id, today)
+
         sql = load_sql(SQL_DIR / "member_memberships_end.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
@@ -409,6 +411,7 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         row: dict,
         item_id: UUID,
         member_id: UUID,
+        today: date,
     ) -> None:
         """Validate a one-time / trial membership can be ended early."""
         if row["plan_type"] == PlanType.recurring:
@@ -416,7 +419,6 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 f"Cannot end a recurring membership here — use cancel: "
                 f"item_id={item_id}, member_id={member_id}"
             )
-        today = gym_today(row["timezone"])
         if row["cancel_date"] is not None and row["cancel_date"] <= today:
             raise ValueError(
                 f"Membership already cancelled: "
