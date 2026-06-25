@@ -227,7 +227,7 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
           ),
         ),
         SizedBox(
-          height: 320,
+          height: DesignConstants.dialogMemberPickerHeight,
           child: PaginatedMemberPicker(
             fetchPage: _fetchPage,
             pageSize: _pageSize,
@@ -263,7 +263,7 @@ class _LinkParentDialogState extends State<LinkParentDialog> {
           ),
         ),
         SizedBox(
-          height: 240,
+          height: DesignConstants.dialogWaiverEditorHeight,
           child: WaiverMarkdownEditor(
             controller: _waiverController!,
           ),

@@ -144,9 +144,7 @@ class _Labels extends StatelessWidget {
       children: [
         Text(
           discount.name,
-          style: DesignConstants.p.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          style: DesignConstants.pSemibold,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),

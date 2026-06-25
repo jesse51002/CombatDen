@@ -286,8 +286,8 @@ class _CenteredSpinner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: SizedBox(
-        height: 32,
-        width: 32,
+        height: DesignConstants.spinnerSizeLarge,
+        width: DesignConstants.spinnerSizeLarge,
         child: CircularProgressIndicator(
           strokeWidth: 2,
           color: DesignConstants.primaryColor,

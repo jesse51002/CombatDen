@@ -11,7 +11,7 @@ class StartResultsProcessing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 160,
+      height: DesignConstants.dialogProcessingHeight,
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

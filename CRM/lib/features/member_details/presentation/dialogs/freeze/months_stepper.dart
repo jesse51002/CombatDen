@@ -112,7 +112,7 @@ class _StepButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 48,
-      height: 56,
+      height: DesignConstants.stepperButtonHeight,
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(

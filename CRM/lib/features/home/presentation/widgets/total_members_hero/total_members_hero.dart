@@ -33,7 +33,7 @@ class _ArcWithCount extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 400,
-      height: 200,
+      height: DesignConstants.heroChartHeight,
       child: Stack(
         alignment: Alignment.bottomCenter,
         children: [

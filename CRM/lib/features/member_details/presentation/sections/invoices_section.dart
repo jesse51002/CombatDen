@@ -297,11 +297,10 @@ class _InvoiceBody extends StatelessWidget {
     final dueText = due == null ? '' : ' · Due ${formatDay(due)}';
     return Text(
       '${invoice.overdue ? 'Overdue' : 'Upcoming'}$dueText',
-      style: DesignConstants.pBig.copyWith(
+      style: DesignConstants.pBigBold.copyWith(
         color: invoice.overdue
             ? DesignConstants.badRed
             : DesignConstants.text2nd,
-        fontWeight: FontWeight.w700,
       ),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,

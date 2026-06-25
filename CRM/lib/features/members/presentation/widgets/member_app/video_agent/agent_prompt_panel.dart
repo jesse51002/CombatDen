@@ -82,7 +82,7 @@ MarkdownStyleSheet _promptStyleSheet() {
     h4: DesignConstants.h3,
     h5: DesignConstants.h3,
     h6: DesignConstants.h3,
-    strong: body.copyWith(fontWeight: FontWeight.w700),
+    strong: DesignConstants.pBold.copyWith(color: DesignConstants.text2nd),
     em: body.copyWith(fontStyle: FontStyle.italic),
     listBullet: body,
     blockSpacing: DesignConstants.spacingMedium,

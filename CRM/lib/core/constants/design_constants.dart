@@ -288,6 +288,40 @@ class DesignConstants {
   // surface doesn't jump in size as it moves form -> processing -> result.
   static const double dialogProcessingHeight = 160.0;
 
+  // Dialog body region heights — fixed so the surface doesn't jump between
+  // steps. The scrollable account picker and the waiver markdown editor each
+  // hold a fixed area inside the authorized-payer dialogs.
+  static const double dialogMemberPickerHeight = 320.0;
+  static const double dialogWaiverEditorHeight = 240.0;
+
+  // Fixed-height controls (a selector pill, a +/- stepper button).
+  static const double pillControlHeight = 40.0;
+  static const double stepperButtonHeight = 56.0;
+
+  // Imagery / chart region heights (square assets use the *Size tokens for
+  // both width and height).
+  static const double heroChartHeight = 200.0;
+  static const double rewardThumbnailHeight = 80.0;
+  static const double rankBeltHeight = 99.0;
+  static const double rewardAvatarSize = 72.0;
+  static const double qrThumbnailSize = 120.0;
+
+  // Small glyph-scale boxes — deliberately distinct from iconSize* (reserved
+  // for Icon()). Loading spinners and the legend swatch dot.
+  static const double spinnerSizeSmall = 20.0;
+  static const double spinnerSizeLarge = 32.0;
+  static const double legendDotSize = 16.0;
+
+  // Height of the vertical status accent bar beside a status label.
+  static const double statusAccentBarHeight = 22.0;
+
+  // Line widths — the standard hairline, the heavier table-row separator, the
+  // thin progress / step bar, and the short inline vertical rule's length.
+  static const double dividerThickness = 1.0;
+  static const double tableRowSeparatorThickness = 2.0;
+  static const double progressBarThickness = 4.0;
+  static const double verticalDividerHeight = 16.0;
+
   // Geist — the landing page's typeface (LandingPage/hifi/ds.jsx `sans`).
   static final TextStyle baseFont = GoogleFonts.geist(
     fontFeatures: const [FontFeature.tabularFigures()],
@@ -334,6 +368,8 @@ class DesignConstants {
         letterSpacing: 0,
       );
 
+  static TextStyle get h3Regular => h3.copyWith(fontWeight: FontWeight.w400);
+
   /// Paragraph text style (regular, 12)
   static TextStyle get p => baseFont.copyWith(
         fontWeight: FontWeight.w400,
@@ -343,11 +379,13 @@ class DesignConstants {
       );
 
   static TextStyle get pBig => p.copyWith(fontSize: 16);
+  static TextStyle get pBigBold => pBig.copyWith(fontWeight: FontWeight.w700);
   static TextStyle get pSmall => p.copyWith(fontSize: 11);
 
   static TextStyle get pSmallBold => pSmall.copyWith(fontWeight: FontWeight.w700);
 
   static TextStyle get pSemibold => p.copyWith(fontWeight: FontWeight.w600);
+  static TextStyle get pBold => p.copyWith(fontWeight: FontWeight.w700);
   static TextStyle get pSmallSemibold =>
       pSmall.copyWith(fontWeight: FontWeight.w600);
 

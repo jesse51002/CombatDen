@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
@@ -200,7 +201,7 @@ class _ManageDiscountsDialogState
         if (snapshot.connectionState !=
             ConnectionState.done) {
           return const SizedBox(
-            height: 160,
+            height: DesignConstants.dialogProcessingHeight,
             child: Center(child: AppSpinner()),
           );
         }

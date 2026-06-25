@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:crm/core/constants/design_constants.dart';
+
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_results_breakdown.dart';
@@ -41,7 +43,7 @@ class StartResultsStep extends StatelessWidget {
       builder: (context, state) {
         if (state is! MemberDetailLoaded) {
           return const SizedBox(
-            height: 160,
+            height: DesignConstants.dialogProcessingHeight,
             child: Center(child: AppSpinner()),
           );
         }
