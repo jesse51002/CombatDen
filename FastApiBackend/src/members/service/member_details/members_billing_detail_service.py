@@ -247,7 +247,7 @@ class MembersBillingDetailService:
         self,
         membership_rows: list,
         today: date,
-    ) -> tuple[bool, bool, bool, bool, int]:
+    ) -> tuple[bool, bool, bool, bool, int, int, int]:
         """Scan membership rows for status flags.
 
         Args:
@@ -256,14 +256,18 @@ class MembersBillingDetailService:
 
         Returns:
             Tuple of (has_trial, has_cancelled, has_frozen, has_overdue,
-            paying_count). paying_count only includes active recurring
-            memberships.
+            paying_count, one_time_count, one_time_total). ``paying_count``
+            only includes active recurring memberships; ``one_time_count`` /
+            ``one_time_total`` are the active one-time (class-pack) count + the
+            sum of what was paid for them (minor units).
         """
         has_trial = False
         has_cancelled = False
         has_frozen = False
         has_overdue = False
         paying_count = 0
+        one_time_count = 0
+        one_time_total = 0
 
         for row in membership_rows:
             row_status = row["membership_status"]
@@ -280,8 +284,19 @@ class MembersBillingDetailService:
                 has_trial = True
             elif plan_type == PlanType.recurring and row_status == MembershipDbStatus.active:
                 paying_count += 1
+            elif plan_type == PlanType.one_time and row_status == MembershipDbStatus.active:
+                one_time_count += 1
+                one_time_total += row["total_price"] or 0
 
-        return has_trial, has_cancelled, has_frozen, has_overdue, paying_count
+        return (
+            has_trial,
+            has_cancelled,
+            has_frozen,
+            has_overdue,
+            paying_count,
+            one_time_count,
+            one_time_total,
+        )
 
     def _member_paying_total(self, rows: list) -> int:
         """Sum total_price across the active recurring memberships in ``rows``.
@@ -322,6 +337,8 @@ class MembersBillingDetailService:
             has_frozen,
             has_overdue,
             paying_count,
+            one_time_count,
+            one_time_total,
         ) = self._scan_membership_flags(own_rows, today)
 
         return MembershipOverviewContext(
@@ -331,6 +348,8 @@ class MembersBillingDetailService:
             has_frozen=has_frozen,
             has_overdue=has_overdue,
             paying_count=paying_count,
+            one_time_count=one_time_count,
+            one_time_total=one_time_total,
         )
 
     def _build_pays_for(
