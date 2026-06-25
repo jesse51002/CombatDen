@@ -2,6 +2,7 @@
 
 import logging
 from datetime import date
+from typing import NoReturn
 from uuid import UUID, uuid5
 
 from schema.member_membership import StripeSyncStatus
@@ -61,13 +62,14 @@ class MemberMembershipsCancel(MemberMembershipsBase):
         Raises:
             ValueError: If a membership is not found, has ended, or is
                 non-recurring (validation runs before any DB write).
-            PartialCancelError: If a converge fails AFTER an earlier payer
-                already succeeded — the batch is partial (earlier payers stay
-                cancelled, the failed payer is reverted). Carries the
-                succeeded/failed map.
-            SyncNotConfirmedError / PaymentsStripeError: If the FIRST payer's
-                converge fails (no payer succeeded yet → no partial state, the
-                underlying error propagates unwrapped).
+            PartialCancelError: If a cancel_date write or a converge fails
+                AFTER an earlier payer already succeeded — the batch is partial
+                (earlier payers stay cancelled, the failed payer is reverted).
+                Carries the succeeded/failed map.
+            SyncNotConfirmedError / PaymentsStripeError / DB error: If the FIRST
+                payer's cancel_date write or converge fails (no payer succeeded
+                yet → no partial state, the underlying error propagates
+                unwrapped).
         """
         # 1) Validation pass — no DB writes. Read every row, record
         #    already-cancelled items, validate the rest, and group the
@@ -91,9 +93,10 @@ class MemberMembershipsCancel(MemberMembershipsBase):
 
         # 2) Per-payer pass — payer-atomic. Write THIS payer's cancel_dates,
         #    converge it, record its successes; only then advance to the next
-        #    payer. On a payer's converge failure, sync_or_revert has already
-        #    reverted that payer's cancel_dates; if earlier payers succeeded the
-        #    batch is partial (surface the map), else the error propagates raw.
+        #    payer. On a write failure the loop reverts the cancel_dates it
+        #    wrote; on a converge failure sync_or_revert has already reverted
+        #    them. Either way, if earlier payers succeeded the batch is partial
+        #    (surface the map), else the error propagates raw.
         #    A payer's batch may span items with DIFFERENT subject member_ids
         #    (the payer funds several children), so every per-item op is keyed
         #    by the item's own subject — never the request actor.
@@ -103,10 +106,26 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 (item_id, subject) for item_id, subject, _ in payer_items
             ]
             payer_dates: dict[UUID, date] = {}
-            for item_id, subject, today in payer_items:
-                payer_dates[item_id] = await self._crm_cancel(
-                    item_id, subject, today
+            # Write THIS payer's cancel_dates first. If a write fails mid-loop
+            # the converge below never runs, so the rows already written here
+            # would have NO sync_or_revert path — an orphan cancel_date with the
+            # Stripe line still live (a mis-bill). Clear the ones we wrote before
+            # propagating; nothing is 'deleted' until the converge runs, so
+            # _uncancel is always permitted by the cancel_date-immutable trigger.
+            try:
+                for item_id, subject, today in payer_items:
+                    payer_dates[item_id] = await self._crm_cancel(
+                        item_id, subject, today
+                    )
+            except Exception as exc:
+                for item_id, subject in payer_keyed_items:
+                    if item_id in payer_dates:
+                        await self._uncancel(item_id, subject)
+                self._raise_payer_failure(
+                    succeeded, payer_member_id, payer_keyed_items, exc
                 )
+            # Converge this payer once. On failure sync_or_revert has already
+            # reverted this payer's still-unconfirmed cancel_dates.
             try:
                 await self._converge_cancellations(
                     payer_keyed_items,
@@ -118,22 +137,33 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                     uuid5(idempotency_key, str(payer_member_id)),
                 )
             except Exception as exc:
-                if not succeeded:
-                    # First payer failed — nothing committed before it, so
-                    # there is no partial state. Propagate the raw error.
-                    raise
-                raise PartialCancelError(
-                    succeeded=succeeded,
-                    failed_payer_id=payer_member_id,
-                    failed_item_ids=[
-                        item_id for item_id, _ in payer_keyed_items
-                    ],
-                    cause=exc,
-                ) from exc
+                self._raise_payer_failure(
+                    succeeded, payer_member_id, payer_keyed_items, exc
+                )
             succeeded.update(payer_dates)
 
         dates.update(succeeded)
         return dates
+
+    @staticmethod
+    def _raise_payer_failure(
+        succeeded: dict[UUID, date],
+        payer_member_id: UUID,
+        payer_keyed_items: list[tuple[UUID, UUID]],
+        exc: Exception,
+    ) -> NoReturn:
+        """Propagate a payer's cancel failure. If no earlier payer succeeded
+        there is no partial state — re-raise the raw error; otherwise the batch
+        is partial, so wrap it in a PartialCancelError carrying the
+        succeeded/failed split (this payer's items are already reverted)."""
+        if not succeeded:
+            raise exc
+        raise PartialCancelError(
+            succeeded=succeeded,
+            failed_payer_id=payer_member_id,
+            failed_item_ids=[item_id for item_id, _ in payer_keyed_items],
+            cause=exc,
+        ) from exc
 
     async def _converge_cancellations(
         self,

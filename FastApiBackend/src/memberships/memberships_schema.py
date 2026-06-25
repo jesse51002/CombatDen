@@ -19,7 +19,22 @@ from src.payments.schema.payments_invoice_schema import (
 )
 
 
-class MemberMembershipsCancelRequest(BaseModel):
+class _CancelItemsBase(BaseModel):
+    """Shared base for the cancel + cancel-preview requests: a non-empty,
+    duplicate-free list of ``member_memberships`` rows to cancel."""
+
+    item_ids: list[UUID] = Field(..., min_length=1)
+    member_id: UUID
+
+    @field_validator("item_ids")
+    @classmethod
+    def _no_dupes(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("item_ids must not contain duplicates")
+        return value
+
+
+class MemberMembershipsCancelRequest(_CancelItemsBase):
     """Cancel ONE OR MORE of a member's recurring memberships.
 
     ``item_ids`` is the list of ``member_memberships`` rows to cancel (a single
@@ -29,30 +44,11 @@ class MemberMembershipsCancelRequest(BaseModel):
     a retry dedups.
     """
 
-    item_ids: list[UUID] = Field(..., min_length=1)
-    member_id: UUID
     idempotency_key: UUID
 
-    @field_validator("item_ids")
-    @classmethod
-    def _no_dupes(cls, value: list[UUID]) -> list[UUID]:
-        if len(value) != len(set(value)):
-            raise ValueError("item_ids must not contain duplicates")
-        return value
 
-
-class MemberMembershipsCancelPreviewRequest(BaseModel):
+class MemberMembershipsCancelPreviewRequest(_CancelItemsBase):
     """Preview cancelling ONE OR MORE of a member's recurring memberships."""
-
-    item_ids: list[UUID] = Field(..., min_length=1)
-    member_id: UUID
-
-    @field_validator("item_ids")
-    @classmethod
-    def _no_dupes(cls, value: list[UUID]) -> list[UUID]:
-        if len(value) != len(set(value)):
-            raise ValueError("item_ids must not contain duplicates")
-        return value
 
 
 class MemberMembershipsCancelResponse(BaseModel):
