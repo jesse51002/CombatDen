@@ -24,6 +24,7 @@ JOIN membership_plans mp
     AND m.gym_id = mp.gym_id
 JOIN gyms g ON p.gym_id = g.gym_id
 {where_clause}
+    AND m.status = 'frozen'
 GROUP BY p.member_id, p.first_name, p.last_name, p.photo_url, g.timezone
 ORDER BY
     ((now() AT TIME ZONE g.timezone)::date - MIN(m.freeze_end_date)) ASC

@@ -75,8 +75,7 @@ class MemberRepository {
         '/api/v1/members/list',
         data: CrmMembersListRequest(
           gymId: gymId,
-          prevView: MembersListView.all,
-          requestedView: MembersListView.all,
+          view: MembersListView.all,
           count: pageSize,
           startIndex: startIndex,
         ).toJson(),

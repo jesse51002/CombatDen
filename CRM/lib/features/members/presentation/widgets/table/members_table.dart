@@ -24,6 +24,10 @@ class MembersTable extends StatelessWidget {
   final bool hasReachedEnd;
   final VoidCallback onLoadMore;
 
+  /// Whether any filter (status / plan / date / search) is active.
+  /// Drives the empty state's "try removing filters" hint.
+  final bool hasActiveFilters;
+
   const MembersTable({
     super.key,
     required this.activeView,
@@ -32,6 +36,7 @@ class MembersTable extends StatelessWidget {
     required this.isLoadingMore,
     required this.hasReachedEnd,
     required this.onLoadMore,
+    this.hasActiveFilters = false,
   });
 
   @override
@@ -216,12 +221,16 @@ class MembersTable extends StatelessWidget {
   }
 
   Widget _emptyState() {
-    final message = switch (activeView) {
-      MembersListView.all => 'No members yet',
-      MembersListView.trial => 'No trial members',
-      MembersListView.frozen => 'No frozen members',
-      MembersListView.overdue => 'No overdue members',
-    };
+    // With a filter active, zero rows means "nothing matched" — point
+    // at the filters. Otherwise it's a genuinely empty view.
+    final headline = hasActiveFilters
+        ? 'No members match your filters'
+        : switch (activeView) {
+            MembersListView.all => 'No members yet',
+            MembersListView.trial => 'No trial members',
+            MembersListView.frozen => 'No frozen members',
+            MembersListView.overdue => 'No overdue members',
+          };
 
     return Center(
       child: Column(
@@ -234,11 +243,26 @@ class MembersTable extends StatelessWidget {
             color: DesignConstants.text3rd,
             weight: DesignConstants.iconWeight,
           ),
-          Text(
-            message,
-            style: DesignConstants.h2.copyWith(
-              color: DesignConstants.text2nd,
-            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: DesignConstants.spacingSmall,
+            children: [
+              Text(
+                headline,
+                textAlign: TextAlign.center,
+                style: DesignConstants.h2.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+              if (hasActiveFilters)
+                Text(
+                  'Try removing filters to see more.',
+                  textAlign: TextAlign.center,
+                  style: DesignConstants.p.copyWith(
+                    color: DesignConstants.text3rd,
+                  ),
+                ),
+            ],
           ),
         ],
       ),
