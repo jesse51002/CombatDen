@@ -44,6 +44,8 @@ flowchart TB
     memberships_reprice["MemberMembershipsReprice<br/>src/memberships/ · TASK-AGNOSTIC same-plan reprice (imports NOTHING from tasks):<br/>reprice (optional target → else plan active)<br/>extends MemberMembershipsTransitionBase: cancel old + insert successor + copy discounts (txn) → converge → verify-or-REVERT"]
     memberships_upgrade["MemberMembershipsUpgrade<br/>src/memberships/ · CROSS-PLAN upgrade (standalone, no batch):<br/>upgrade/upgrade_preview → successor on a DIFFERENT plan, charge the prorated difference (downgrade = no charge)<br/>shares MemberMembershipsTransitionBase with reprice"]
     membership_reprice_task_handler["MembershipRepriceTaskHandler<br/>src/tasks/ · the ONE tasks↔memberships bridge (tasks → memberships):<br/>create_batch (discover targets + enqueue one item/membership) · execute_item (run + record successor)"]
+    memberships_invoice_fetch["MemberMembershipsInvoiceFetch<br/>src/memberships/ · on-demand post-op fetch engine:<br/>fetch_for_payer (per-payer, retry/early-stop on created >= op_start)<br/>+ reconciler backstop sweep_account (per account)<br/>· applies via webhook record() seams · payer with no billing profile = no-op"]
+    memberships_invoice_fetch_runner["MembershipsInvoiceFetchRunner<br/>src/memberships/ · fire-and-forget asyncio.create_task runner (Singleton)<br/>start_for_payer fired AFTER each invoice-creating op<br/>(after payer lock releases); drain() on shutdown"]
     subgraph Payments["💳 Payments — Stripe core (router-less)"]
       direction TB
       p_client["PaymentsStripeClient"]
@@ -97,6 +99,11 @@ flowchart TB
     memberships_reprice --> gym_stripe_service
     memberships_upgrade --> payment_sync_service
     memberships_upgrade --> gym_stripe_service
+    member_memberships_service --> memberships_invoice_fetch_runner
+    memberships_invoice_fetch_runner --> memberships_invoice_fetch
+    memberships_invoice_fetch -->|"webhook record() seams"| stripe_webhooks_service
+    memberships_invoice_fetch --> payer_resolver
+    memberships_invoice_fetch --> Payments
     stripe_webhooks_service -->|"invoice.paid → settle once discounts"| payment_sync_service
     stripe_webhooks_service -->|"invoice_payment.paid → retrieve PaymentIntent for charge id"| Payments
     members_billing_detail_service --> streak_service
@@ -124,7 +131,7 @@ flowchart TB
     payment_sync_service --> payer_resolver
     payer_resolver --> gym_stripe_service
     reconciler_service --> resource_lock
-    reconciler_service -->|"invoice-fetch: reuses handler record"| stripe_webhooks_service
+    reconciler_service -->|"invoice-fetch: delegates per gym"| memberships_invoice_fetch
     reconciler_service -->|"stale-task recovery: re-run unfinished"| tasks_executor
     reconciler_service -->|"push: bulk_payment_sync (billing none)"| payment_sync_service
     reconciler_service -->|"sub-orphans: list + cancel unlinked subs"| Payments
@@ -145,7 +152,7 @@ flowchart TB
   class CRM client;
   class Supabase,Stripe ext;
   class r_mem,r_gym,r_cls,r_rank,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task route;
-  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler svc;
+  class checkin_service,cycle_counts_service,crm_members_list_service,crm_total_counts_service,discounts_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner svc;
   class payment_sync_service,payer_resolver,reconciler_service hub;
   style CRM stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

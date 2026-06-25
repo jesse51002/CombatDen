@@ -12,11 +12,16 @@ description: >-
   create-with-cleanup, set_price versioning, soft delete, linked-discount
   re-mint, bulk member migration) or a membership lifecycle op (start, cancel,
   freeze, update_price, mark_paid_cash, charge_card, add/remove discounts) — each
-  of which recomputes payment state through the sync. Trigger on "membership plan",
-  "plan price", "set price", "active price", "price pinning", "upgrade a member",
-  "migrate members", "start a membership", "cancel membership", "freeze",
-  "mark paid cash", "charge card", "member_memberships", "membership status",
-  "ended vs cancelled vs frozen", or any change to the plan / membership data
+  of which recomputes payment state through the sync. Also covers the on-demand
+  post-op invoice fetch (MemberMembershipsInvoiceFetch + MembershipsInvoiceFetchRunner
+  — fire-and-forget asyncio fast path that applies new invoices via webhook record()
+  seams after each invoice-creating op, with retry/early-stop on created >= op_start;
+  webhooks + reconciler are backstops). Trigger on "membership plan", "plan price",
+  "set price", "active price", "price pinning", "upgrade a member", "migrate members",
+  "start a membership", "cancel membership", "freeze", "mark paid cash", "charge card",
+  "member_memberships", "membership status", "ended vs cancelled vs frozen",
+  "post-op invoice fetch", "invoice fetch runner", "fetch_for_payer", "sweep_account",
+  "invoice_fetch_on_demand_enabled", or any change to the plan / membership data
   model, services, SQL, or endpoints.
 ---
 
@@ -397,7 +402,62 @@ returns:
 
 ---
 
-## 7. Conceptual model + invariants
+## 7. On-demand post-op invoice fetch
+
+After any **invoice-creating** membership op — `charge_card`, `start` (charge groups),
+`upgrade`, prorating reprice, `mark-paid-cash` — `MemberMembershipsService` fires a
+**fire-and-forget invoice fetch** via `MembershipsInvoiceFetchRunner.start_for_payer`.
+This pulls that payer's new invoices from Stripe immediately and applies them through
+the **same idempotent webhook `record()` seams** used by the reconciler, without waiting
+for the `invoice.paid` / `invoice_payment.paid` webhooks (which can arrive seconds to
+minutes later). Webhooks + the twice-daily reconciler sweep remain backstops.
+
+**Key design points:**
+
+- **Fires AFTER the payer lock releases**, as an `asyncio.create_task` — it never extends
+  the lock-hold window and never blocks the HTTP response.
+- **Retry/early-stop on `created >= op_start`.** `fetch_for_payer` issues a bounded set
+  of retries (config: `invoice_fetch_retry_delays_seconds`, default `[0, 3, 8, 15, 25]`)
+  with a clock-skew buffer (`invoice_fetch_buffer_seconds`, default `120` s). It stops as
+  soon as it applies a paid invoice whose Stripe `created` timestamp is at/after the op's
+  start time — i.e. the bill THIS op cut, not a stale one already in the lookback window.
+- **Same engine for both callers.** `MemberMembershipsInvoiceFetch.sweep_account` is the
+  per-account loop the reconciler's `InvoiceFetchSweep` delegates to. The on-demand path
+  calls `sweep_account` scoped to a single Stripe customer (`customer=<id>`); the
+  reconciler calls it with `customer=None` (whole account sweep). There is **no
+  `memberships → reconciler` import edge** — the reconciler calls in, never the reverse.
+  `SweepResult` lives in `src/shared/sweep_result.py` to satisfy this constraint.
+- **Best-effort.** A payer with no billing profile (cash-only / engagement member) is a
+  no-op. A runner task lost to a process restart is covered by the webhook + cron backstop.
+- **Idempotent at the DB layer** (invoice upsert on `stripe_invoice_id`, charge / refund /
+  synthetic-failed-key UNIQUE), so the post-op fetch racing the webhook or the cron sweep
+  is safe — whichever lands first wins, the rest are no-ops.
+
+**`MembershipsInvoiceFetchRunner`** (`memberships_invoice_fetch_runner.py`):
+- Singleton; a `ClassVar` set holds strong references to in-flight `asyncio.Task` objects
+  so they aren't GC'd mid-flight.
+- `start_for_payer(payer_member_id, op_start)` — no-op when
+  `settings.invoice_fetch_on_demand_enabled` is False.
+- `drain()` — cancels + awaits all in-flight fetches on app shutdown (called from lifespan).
+
+**`MemberMembershipsInvoiceFetch`** (`memberships_invoice_fetch.py`):
+- Injects `PaymentsStripeClient`, `PayerResolver`, and the 4 webhook record handlers
+  (`InvoicePaidHandler`, `InvoicePaymentPaidHandler`, `InvoicePaymentFailedHandler`,
+  `RefundHandler` — they **stay in `src/stripe_webhooks/`**; the engine only injects them).
+- Full-account sweeps include refunds; customer-scoped on-demand fetches skip refunds
+  (refunds have their own op + webhook + cron backstop).
+
+**Config** (all `Settings` fields in `src/core/config.py`):
+
+| setting | default | meaning |
+| --- | --- | --- |
+| `invoice_fetch_on_demand_enabled` | `True` | master on/off switch |
+| `invoice_fetch_buffer_seconds` | `120` | clock-skew buffer subtracted from `op_start` to compute the Stripe `created` query cutoff |
+| `invoice_fetch_retry_delays_seconds` | `[0, 3, 8, 15, 25]` | delays (seconds) between retry attempts; `0` = immediate first try |
+
+---
+
+## 8. Conceptual model + invariants
 
 - **Plans are templates, memberships are instances.** Editing a template (rename,
   re-price) never silently re-bills holders. The only fan-out to existing members
@@ -429,7 +489,7 @@ returns:
 
 ---
 
-## 8. Endpoints
+## 9. Endpoints
 
 **Plans** — `plans_router.py`, prefix `/api/v1/membership_plans`:
 
@@ -506,7 +566,10 @@ so they gate on access to those members rather than on gym-employee status).
   `memberships_upgrade` (`MemberMembershipsUpgrade` — the **cross-plan** upgrade op +
   `upgrade_preview`; standalone, no batch), `memberships_freeze`,
   `memberships_mark_paid_cash`, `memberships_charge_card`,
-  `memberships_discounts`, `memberships_linked`); schemas in
+  `memberships_discounts`, `memberships_linked`,
+  **`memberships_invoice_fetch`** (`MemberMembershipsInvoiceFetch` — the fetch+apply
+  engine; §7), **`memberships_invoice_fetch_runner`** (`MembershipsInvoiceFetchRunner`
+  — the fire-and-forget asyncio runner; §7)); schemas in
   `src/memberships/memberships_schema.py` (`MemberMembershipsStartRequest` /
   `...StartItem` / `...StartResponse` / `...StartResultItem` /
   `...StartPreviewResponse` + the internal `...StartItemState`); router
@@ -521,11 +584,15 @@ so they gate on access to those members rather than on gym-employee status).
   `..._start_account_links`, `..._start_discounts_check`, the freeze/unfreeze
   profile pair, `..._delete_pending`). The one-time charge engine the start calls
   (`PaymentSyncOneTime`) lives in `src/sync/` — owned by `sync-guide`.
+- **Shared model:** `src/shared/sweep_result.py` (`SweepResult`) — imported by both
+  the memberships fetch engine and the reconciler sweep; lives in `shared` so there
+  is no `memberships → reconciler` import edge.
 - **Seams (do NOT duplicate):** the `src/sync/sql/`
   folder + the sync engine are owned by `sync-guide`; the
   `src/memberships/sql/applied_discounts/` folder + the applied-discount
   model are owned by `discounts-guide`; Stripe Product/Price/invoice/customer
-  primitives are owned by `payments-guide`.
+  primitives and the webhook `record()` handler internals are owned by
+  `payments-guide`.
 - **Engine design rationale (prose):** the **`sync-guide`** skill (the
   config-vs-outcomes split + the reconciler). `FastApiBackend/PaymentRefactor.md`
   is the remaining-work roadmap only.

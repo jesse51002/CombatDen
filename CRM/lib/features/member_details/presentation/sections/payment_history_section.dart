@@ -106,19 +106,38 @@ class _PaymentHistorySectionState
     }
   }
 
-  /// Resets pagination and re-fetches page 1. Bumping [_loadGen]
-  /// orphans any in-flight [_load] so it can't append onto the
-  /// cleared list.
-  void _reload() {
-    setState(() {
-      _loadGen++;
-      _payments.clear();
-      _offset = 0;
-      _hasMore = true;
-      _error = null;
-      _loading = false;
-    });
-    _load();
+  /// Re-fetches page 1 in the BACKGROUND and swaps it in, WITHOUT
+  /// clearing the visible list first — so a poll tick doesn't flash the
+  /// card to a spinner/empty state on every refresh (the poll runs ~3
+  /// min, so a clear-then-fetch would flicker repeatedly). Bumping
+  /// [_loadGen] orphans any in-flight [_load] (e.g. a "Show more") so it
+  /// can't append onto the swapped page.
+  Future<void> _reload() async {
+    final gen = ++_loadGen;
+    if (_error != null) setState(() => _error = null);
+    try {
+      final page = await _repo.getPayments(
+        widget.memberId,
+        limit: _kPageSize,
+        offset: 0,
+      );
+      if (!mounted || gen != _loadGen) return;
+      setState(() {
+        _payments
+          ..clear()
+          ..addAll(page);
+        _offset = page.length;
+        _hasMore = page.length == _kPageSize;
+        _loading = false;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted || gen != _loadGen) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
   }
 
   @override

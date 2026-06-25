@@ -429,6 +429,17 @@ inline — they go through the version-tolerant readers in
 `stripe_invoice_fields.py` (`line_subscription_item`, `invoice_metadata`), which
 read the nested location first and fall back to the old flat field.
 
+**The `handle/record` seam.** Each of the 4 invoice/payment/refund handlers
+(`InvoicePaidHandler`, `InvoicePaymentPaidHandler`, `InvoicePaymentFailedHandler`,
+`RefundHandler`) is split: `handle(session, event, gym_id)` unwraps the event
+envelope and calls `record(session, obj, gym_id, …)` with the plain body. The
+dispatcher calls `handle` (webhook behavior unchanged); the **on-demand post-op
+invoice fetch** (`MemberMembershipsInvoiceFetch` — `memberships-guide`) and the
+**reconciler backstop** (`InvoiceFetchSweep` — `reconciler-guide`) both call
+`record` directly with listed Stripe objects so they can apply invoices
+idempotently without a webhook event. Deep detail lives in those two skills;
+this section only documents what each handler writes.
+
 **Service** (`stripe_webhooks_service.py`): `StripeWebhooksService.handle_event`:
 
 1. Pulls `event.id` / `event.type` / `event.account` (the connected account id).

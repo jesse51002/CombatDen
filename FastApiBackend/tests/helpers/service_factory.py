@@ -17,6 +17,12 @@ from src.discounts.service.discounts_service import DiscountsService
 from src.members.service.management.members_management_service import (
     MembersManagementService,
 )
+from src.memberships.service.memberships_invoice_fetch import (
+    MemberMembershipsInvoiceFetch,
+)
+from src.memberships.service.memberships_invoice_fetch_runner import (
+    MembershipsInvoiceFetchRunner,
+)
 from src.memberships.service.memberships_reprice import (
     MemberMembershipsReprice,
 )
@@ -52,6 +58,16 @@ from src.shared.database import DirectDatabasePool
 from src.shared.gym_stripe_service import GymStripeService
 from src.shared.payer_resolver import PayerResolver
 from src.shared.paying_member_lock import PayingMemberLock
+from src.stripe_webhooks.service.invoice_paid_handler import (
+    InvoicePaidHandler,
+)
+from src.stripe_webhooks.service.invoice_payment_failed_handler import (
+    InvoicePaymentFailedHandler,
+)
+from src.stripe_webhooks.service.invoice_payment_paid_handler import (
+    InvoicePaymentPaidHandler,
+)
+from src.stripe_webhooks.service.refund_handler import RefundHandler
 from src.sync.service.sync_builder import (
     PaymentSyncBuilder,
 )
@@ -180,13 +196,46 @@ def build_member_management_service(
     return MembersManagementService(db_pool, members_svc, subscription_svc)
 
 
+def build_invoice_fetch(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MemberMembershipsInvoiceFetch:
+    """Build the on-demand / reconciler invoice fetch engine.
+
+    Mirrors ``src/core/dependencies.py`` (member_memberships_invoice_fetch).
+    """
+    payer_resolver = PayerResolver(db_pool, GymStripeService(db_pool))
+    return MemberMembershipsInvoiceFetch(
+        db_pool,
+        stripe_client,
+        InvoicePaidHandler(stripe_client=stripe_client),
+        InvoicePaymentPaidHandler(stripe_client=stripe_client),
+        InvoicePaymentFailedHandler(),
+        RefundHandler(),
+        payer_resolver,
+    )
+
+
+def build_invoice_fetch_runner(
+    db_pool: DirectDatabasePool,
+    stripe_client: PaymentsStripeClient,
+) -> MembershipsInvoiceFetchRunner:
+    """Build the fire-and-forget post-op invoice-fetch runner."""
+    return MembershipsInvoiceFetchRunner(
+        build_invoice_fetch(db_pool, stripe_client)
+    )
+
+
 def build_member_memberships_service(
     db_pool: DirectDatabasePool,
     stripe_client: PaymentsStripeClient,
 ) -> MemberMembershipsService:
     """Build the full memberships service chain.
 
-    Mirrors ``src/core/dependencies.py`` (member_memberships_service).
+    Mirrors ``src/core/dependencies.py`` (member_memberships_service). The
+    on-demand invoice fetch the facade fires is a no-op in tests unless
+    ``settings.invoice_fetch_on_demand_enabled`` is set (conftest disables it),
+    so ops don't kick off real background Stripe fetches.
     """
     price_svc = PaymentsStripePriceService(stripe_client)
     members_svc = PaymentsStripeMembersService(stripe_client)
@@ -232,6 +281,7 @@ def build_member_memberships_service(
         build_memberships_upgrade(db_pool, stripe_client),
         management_svc,
         waivers_svc,
+        build_invoice_fetch_runner(db_pool, stripe_client),
     )
 
 

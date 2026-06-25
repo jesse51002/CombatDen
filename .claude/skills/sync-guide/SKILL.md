@@ -743,15 +743,17 @@ subscription-orphans (cancel live Stripe subs with no live DB link; runs last so
 push re-links real subs first — owned by `reconciler-guide`) (no reconciler-wide
 lock — safety is the per-family `PayingMemberLock` every payment op already holds):
 
-- **`InvoiceFetchSweep`** — missed-webhook backstop. Per gym Connect account it
-  lists the configured lookback of invoices / payments / refunds and re-records each
-  through the SAME webhook handler `record(obj, ...)` methods (the `handle`/`record`
-  seam), driven by listed objects instead of events. Idempotent at the DB layer
-  (invoice upsert, succeeded-charge `stripe_charge_id` UNIQUE, refund
-  `stripe_refund_id` UNIQUE, and the failed-charge **synthetic per-attempt key**
-  `failed_attempt:<invoice>:<attempt_count>`, shared by webhook + fetcher so a
-  single in-window failure records once). Refreshing `next_due_date` here is what
-  clears a falsely-overdue member (overdue is date-derived, not Stripe-derived).
+- **`InvoiceFetchSweep`** — missed-webhook backstop. A thin gym-iteration caller that
+  **delegates per gym** to `MemberMembershipsInvoiceFetch.sweep_account` (the
+  fetch+apply engine that lives in `memberships` — see `memberships-guide` §7).
+  The engine lists the configured lookback of invoices / payments / refunds and
+  re-records each through the SAME webhook handler `record(obj, ...)` seams.
+  Idempotent at the DB layer (invoice upsert, succeeded-charge `stripe_charge_id`
+  UNIQUE, refund `stripe_refund_id` UNIQUE, and the failed-charge **synthetic
+  per-attempt key** `failed_attempt:<invoice>:<attempt_count>`, shared by webhook +
+  fetcher so a single in-window failure records once). Refreshing `next_due_date`
+  here is what clears a falsely-overdue member (overdue is date-derived, not
+  Stripe-derived). Dependency direction: `reconciler → memberships`.
 - **`OrphanCleanupSweep`** — deletes stranded `not_added` rows
   (`stripe_item_id IS NULL`) only when that row's payer lock (keyed on its
   `paid_by_member_id`) is free (non-blocking `try_lock`); a held lock means an op
