@@ -23,6 +23,7 @@ Table gyms {
   is_rank_enabled boolean [not null, default: true]
   stripe_account_id text [unique, note: 'nullable; Stripe Connect account id; service-role-only write']
   stripe_onboarding_status stripe_onboarding_status [not null, default: 'not_started', note: 'enum: not_started | pending | complete | disabled']
+  theme_design_id text [note: 'nullable; ThemeService design_id; written by presets import']
 }
 
 Table gym_employees {
@@ -216,6 +217,7 @@ Table gym_rewards {
   amount_off varchar
   image_url varchar
   point_cost integer [not null]
+  price_label varchar [note: 'nullable; display label for the reward price / value (e.g. "$50 off")']
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
 
@@ -769,3 +771,47 @@ Ref: video_gym_reward.gym_id > video_gym.gym_id
 Ref: video_gym_feed.gym_id > video_gym.gym_id
 Ref: video_gym_feed.video_id > video.video_id
 Ref: video_cost_log.gym_id > video_gym.gym_id
+
+// ============================================================
+// Real-gym video content (gym_video_* tables). These reference the
+// customer `gyms` table (UUID gym_id) and the shared `video` pool.
+// Written by the presets import (PresetsService); read by FastApiBackend
+// videos domain (VideosService). Separate from the template video_gym* tables.
+// ============================================================
+
+Table gym_video_spec {
+  spec_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null, note: 'FK to gyms.gym_id (real customer gym)']
+  videos_desc text [not null]
+  avoid_desc text [not null]
+  short_videos_desc text
+  short_avoid_desc text
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    gym_id [unique, note: 'one spec per gym']
+  }
+}
+
+Table gym_video_feed {
+  gym_id uuid [not null, note: 'FK to gyms.gym_id']
+  video_id text [not null, note: 'FK to video.video_id']
+  status video_gym_feed_status [not null, note: 'enum: good | rejected']
+
+  indexes {
+    (gym_id, video_id) [pk]
+    (gym_id, status)
+  }
+}
+
+Table gym_video_query {
+  query_id uuid [primary key, default: `uuid_generate_v4()`]
+  gym_id uuid [not null, note: 'FK to gyms.gym_id']
+  query text [not null]
+}
+
+Ref: gym_video_spec.gym_id > gyms.gym_id
+Ref: gym_video_feed.gym_id > gyms.gym_id
+Ref: gym_video_feed.video_id > video.video_id
+Ref: gym_video_query.gym_id > gyms.gym_id
