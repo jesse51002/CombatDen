@@ -182,6 +182,22 @@ class VideosService:
             rewards=rewards,
         )
 
+    async def load_template_feed_ids(self, video_gym_id: str) -> list[str]:
+        """A template's approved feed ids (slug-keyed), in pool-relevance order.
+        Powers the public template feed/preview the gym/theme picker renders."""
+        sql = load_sql(SQL_DIR / "videos_load_template_feed_ids.sql")
+        async with self._db.session() as session:
+            rows = (
+                (
+                    await session.execute(
+                        text(sql), {"video_gym_id": video_gym_id}
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return [r["video_id"] for r in rows]
+
     # ── the shared video pool (live feed) ────────────────────────
 
     async def load_feed_ids(self, gym_id: UUID) -> list[str]:

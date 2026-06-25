@@ -62,34 +62,36 @@ PREVIEW_PER_TAG = 10
 # ── Template catalog ──────────────────────────────────────────
 
 
+# The template catalog is PUBLIC (anon-readable): it serves only the
+# non-sensitive demo `video_gym` templates, and the unauthenticated public theme
+# browser previews them. This mirrors VideoService's open read API, which these
+# endpoints replace.
+
+
 @videos_router.get(
     "/api/v1/videos/templates",
     response_model=VideoTemplateCatalogPage,
-    summary="Page the video template catalog",
+    summary="Page the video template catalog (public)",
     description=(
         "A page of slim template cards (the slug-keyed ``video_gym`` catalog "
         "the preset import copies from). Each carries its theme + celebration "
         "image; ``total`` is the template count before pagination. ``query`` "
-        "filters on slug / theme / discipline. Any authenticated user."
+        "filters on slug / theme / discipline. Public (no auth)."
     ),
     responses={
         200: {"description": "A page of template cards"},
-        401: {"description": "Not authenticated"},
     },
 )
 @inject
 async def list_templates(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     query: str | None = None,
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     offset: int = Query(0, ge=0),
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> VideoTemplateCatalogPage:
-    """Return one page of the template catalog (any authenticated user)."""
-    auth.get_current_user(credentials)
+    """Return one page of the template catalog (public)."""
     try:
         return await videos_service.list_template_cards(
             limit=limit, offset=offset, query=query
@@ -108,25 +110,21 @@ async def list_templates(
     summary="Get one video template's full detail (spec, classes, rewards)",
     description=(
         "The template's feed specification, branded class cards, and points-"
-        "store reward cards, served verbatim. Any authenticated user."
+        "store reward cards, served verbatim. Public (no auth)."
     ),
     responses={
         200: {"description": "The template detail"},
-        401: {"description": "Not authenticated"},
         404: {"description": "No such template"},
     },
 )
 @inject
 async def get_template(
     video_gym_id: str,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> VideoTemplateDetail:
-    """Return one template's full detail by slug (any authenticated user)."""
-    auth.get_current_user(credentials)
+    """Return one template's full detail by slug (public)."""
     try:
         detail = await videos_service.load_template(video_gym_id)
     except Exception:
@@ -143,6 +141,148 @@ async def get_template(
             detail=f"No template {video_gym_id!r}",
         )
     return detail
+
+
+def _template_avatars(detail: VideoTemplateDetail) -> list[str]:
+    """The template's instructor headshots, deduped in first-seen order — the
+    avatar-backfill pool for the template feed (the shared pool carries none)."""
+    seen: dict[str, None] = {}
+    for card in detail.classes or ():
+        if card.instructor_image_url:
+            seen.setdefault(card.instructor_image_url, None)
+    return list(seen)
+
+
+@videos_router.get(
+    "/api/v1/videos/templates/{video_gym_id}/videos",
+    response_model=GymVideosFeed,
+    summary="Get a page of a template's video feed (public)",
+    description=(
+        "A page of the template's approved feed, hydrated from the shared pool "
+        "in relevance order. ``video_type``/``big_group`` filter as expected "
+        "(mutually exclusive). Public (no auth)."
+    ),
+    responses={
+        200: {"description": "A page of the template's feed"},
+        400: {"description": "`video_type` and `big_group` are mutually exclusive"},
+        404: {"description": "No such template"},
+    },
+)
+@inject
+async def get_template_videos(
+    video_gym_id: str,
+    video_type: VideoGenre | None = None,
+    big_group: BigGroup | None = None,
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> GymVideosFeed:
+    """Return one page of a template's feed, hydrated from the shared pool."""
+    if video_type is not None and big_group is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="video_type and big_group are mutually exclusive; pass at most one",
+        )
+    try:
+        detail = await videos_service.load_template(video_gym_id)
+        if detail is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No template {video_gym_id!r}",
+            )
+        ids = await videos_service.load_template_feed_ids(video_gym_id)
+        videos = await videos_service.load_pool_videos(ids)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error(
+            "Failed to load template videos for %s", video_gym_id, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to load template videos",
+        ) from None
+
+    if video_type is not None:
+        videos = [v for v in videos if v.tag == video_type]
+    elif big_group is not None:
+        videos = [
+            v
+            for v in videos
+            if v.tag is not None and big_group_for(v.tag) == big_group
+        ]
+
+    total = len(videos)
+    page = videos[offset : offset + limit]
+    avatars = _template_avatars(detail)
+    cards = [card_with_avatar(v, avatars) for v in page]
+    return GymVideosFeed(total=total, limit=limit, offset=offset, videos=cards)
+
+
+@videos_router.get(
+    "/api/v1/videos/templates/{video_gym_id}/videos/preview",
+    response_model=GymFeedPreview,
+    summary="Get a template's 'All' preview: a few videos per genre (public)",
+    description=(
+        "One section per genre present in the template's feed, each capped to "
+        "``per_tag`` videos in feed order. Public (no auth)."
+    ),
+    responses={
+        200: {"description": "One section per genre"},
+        404: {"description": "No such template"},
+    },
+)
+@inject
+async def get_template_videos_preview(
+    video_gym_id: str,
+    per_tag: int = Query(PREVIEW_PER_TAG, ge=1, le=MAX_LIMIT),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> GymFeedPreview:
+    """The template's "All" preview: its feed grouped by genre, capped per genre."""
+    try:
+        detail = await videos_service.load_template(video_gym_id)
+        if detail is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No template {video_gym_id!r}",
+            )
+        ids = await videos_service.load_template_feed_ids(video_gym_id)
+        videos = await videos_service.load_pool_videos(ids)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error(
+            "Failed to build template preview for %s",
+            video_gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to build template preview",
+        ) from None
+
+    order: list[VideoGenre] = []
+    by_tag: dict[VideoGenre, list] = {}
+    for v in videos:
+        if v.tag is None:
+            continue
+        if v.tag not in by_tag:
+            by_tag[v.tag] = []
+            order.append(v.tag)
+        if len(by_tag[v.tag]) < per_tag:
+            by_tag[v.tag].append(v)
+    avatars = _template_avatars(detail)
+    sections = [
+        GymFeedSection(
+            tag=t, videos=[card_with_avatar(v, avatars) for v in by_tag[t]]
+        )
+        for t in order
+    ]
+    return GymFeedPreview(sections=sections)
 
 
 # ── A real gym's live feed ────────────────────────────────────
