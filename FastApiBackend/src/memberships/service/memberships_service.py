@@ -416,14 +416,6 @@ class MemberMembershipsService:
             user_agent=user_agent,
         )
 
-    async def unlink_account(
-        self,
-        member_id: UUID,
-        payer_member_id: UUID,
-    ) -> None:
-        """Remove a payer's authorization for a member."""
-        await self._linked.unlink_account(member_id, payer_member_id)
-
     async def check_link_account(
         self,
         member_id: UUID,

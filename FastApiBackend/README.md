@@ -70,7 +70,7 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 
 | Domain | What it does |
 |---|---|
-| `members` | Member records + management + billing detail (profile, card, Stripe customer, invoices); **payer authorization**: `PUT /{member_id}/link` authorizes a payer (signs the gym's default authorized-payer waiver atomically; many-to-many `member_authorized_payers`), `DELETE /{member_id}/link` de-authorizes, `POST /link/remove` cascades-cancel then de-authorizes, `GET /{member_id}/authorized-payer-waiver` fetches the waiver to display before signing |
+| `members` | Member records + management + billing detail (profile, card, Stripe customer, invoices); **payer authorization**: `PUT /{member_id}/link` authorizes a payer (signs the gym's default authorized-payer waiver atomically; many-to-many `member_authorized_payers`), `POST /link/remove` cascades-cancel then de-authorizes (the only unlink path — de-authorizing without cancelling would orphan billing), `GET /{member_id}/authorized-payer-waiver` fetches the waiver to display before signing |
 | `classes` | Gated class check-in (plan eligibility + capacity + auto-end) + attendance streaks + per-cycle class usage (feeds member billing detail) |
 | `gyms` | Gym records + Stripe **Connect** Express onboarding |
 | `ranks` | Rank tiers / point thresholds + presets |

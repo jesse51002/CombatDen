@@ -11,4 +11,4 @@ SELECT
           AND ap.payer_member_id = :payer_member_id
     ) AS authorized
 FROM members m
-WHERE m.member_id = ANY(:member_ids)
+WHERE m.member_id = ANY(CAST(:member_ids AS UUID[]))

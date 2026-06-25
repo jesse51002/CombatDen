@@ -2,7 +2,7 @@ flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing API (WIP)"]
     direction TB
-    r_mem["<b>members</b> · /api/v1/members · 17 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link (authorize payer + sign waiver)<br/>DELETE /{member_id}/link<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/remove/preview<br/>POST /{member_id}/link/remove<br/>GET /{member_id}/authorized-payer-waiver<br/>GET /{member_id}/invoices<br/>GET /{member_id}/upcoming-invoice<br/>GET /{member_id}/payments"]
+    r_mem["<b>members</b> · /api/v1/members · 16 routes<br/>POST /<br/>PUT /{member_id}<br/>POST /list<br/>GET /counts<br/>GET /{member_id}<br/>GET /{member_id}/billing<br/>PUT /{member_id}/card<br/>DELETE /{member_id}/payment<br/>PUT /{member_id}/link (authorize payer + sign waiver)<br/>POST /{member_id}/link/check<br/>POST /{member_id}/link/remove/preview<br/>POST /{member_id}/link/remove (cascade-cancel + de-authorize)<br/>GET /{member_id}/authorized-payer-waiver<br/>GET /{member_id}/invoices<br/>GET /{member_id}/upcoming-invoice<br/>GET /{member_id}/payments"]
     r_gym["<b>gyms</b> · /api/v1/gyms · 5 routes<br/>POST /<br/>GET /<br/>GET /{gym_id}/onboarding<br/>POST /{gym_id}/onboarding/link<br/>PUT /{gym_id}"]
     r_cls["<b>classes</b> · /api/v1/classes · 2 routes<br/>POST /checkin<br/>GET /streak"]
     r_rank["<b>ranks</b> · /api/v1/ranks · 10 routes<br/>GET /<br/>POST /<br/>POST /from-preset<br/>GET /presets<br/>GET /presets/grouped<br/>GET /enabled<br/>PUT /enabled<br/>GET /{rank_id}<br/>PUT /{rank_id}<br/>DELETE /{rank_id}"]
@@ -36,7 +36,7 @@ flowchart TB
     streak_service["ClassesStreakService"]
     stripe_webhooks_service["StripeWebhooksService"]
     waivers_service["WaiversService"]
-    memberships_linked["MemberMembershipsLinked<br/>src/memberships/ · authorize / de-authorize payer (many-to-many)<br/>writes member_authorized_payers + signs authorized-payer waiver<br/>in one txn (no orphan signatures); owns two-family lock"]
+    memberships_linked["MemberMembershipsLinked<br/>src/memberships/ · authorize payer + check eligibility (many-to-many)<br/>writes member_authorized_payers + signs authorized-payer waiver<br/>in one txn (no orphan signatures); owns two-family lock"]
     reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>invoice-fetch → stale-task recovery → orphan-clean → push → sub-orphans (cancel unlinked subs)<br/>per-family lock guards mutations; no sweep-wide lock"]
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
     tasks_service["TasksService — src/tasks/ · tracked background ops<br/>create/read tasks + items · the in-task guard<br/>(item-targeted membership ops reject mid-task rows → 409)"]
@@ -109,7 +109,7 @@ flowchart TB
     member_memberships_service --> payer_resolver
     member_memberships_service -->|"mint inline custom discounts at start"| discounts_service
     member_memberships_service -->|"start: save one-off card as default"| members_management_service
-    member_memberships_service -->|"authorize / de-authorize payer (link/unlink)"| memberships_linked
+    member_memberships_service -->|"authorize payer + check eligibility (link)"| memberships_linked
     memberships_linked -->|"sign authorized-payer waiver at authorize"| waivers_service
     payment_sync_one_time --> Payments
     payment_sync_one_time --> payer_resolver

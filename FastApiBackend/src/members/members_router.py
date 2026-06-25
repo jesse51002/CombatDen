@@ -546,61 +546,6 @@ async def link_member_account(
         ) from None
 
 
-@members_router.delete(
-    "/{member_id}/link",
-    summary="De-authorize a payer for a member",
-    description=(
-        "Removes a payer (payer_member_id, a query parameter) as an authorized "
-        "payer for this member. The signature record is kept (append-only "
-        "audit). No subscription is re-billed and no charges are issued."
-    ),
-    responses={
-        200: {"description": "Payer de-authorized successfully"},
-        400: {"description": "That payer is not authorized for this member"},
-        401: {"description": "Not authenticated"},
-        403: {"description": "Not authorized to update this member"},
-        404: {"description": "Member not found"},
-    },
-)
-@inject
-async def unlink_member_account(
-    member_id: UUID,
-    payer_member_id: UUID,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-    auth: Auth = Depends(Provide[DependencyInjector.auth]),
-    memberships_service: MemberMembershipsService = Depends(
-        Provide[DependencyInjector.member_memberships_service]
-    ),
-) -> None:
-    """Remove a payer's authorization for a member."""
-    user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
-
-    try:
-        await memberships_service.unlink_account(member_id, payer_member_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
-        ) from None
-    except Exception:
-        logger.error(
-            "Failed to unlink member: member_id=%s",
-            member_id,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to unlink member",
-        ) from None
-
-
 @members_router.post(
     "/{member_id}/link/check",
     response_model=MembersBillingLinkCheckResponse,

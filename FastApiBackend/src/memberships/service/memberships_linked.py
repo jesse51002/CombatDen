@@ -135,39 +135,6 @@ class MemberMembershipsLinked:
                 )
                 await session.commit()
 
-    # ── De-authorize (unlink) ──────────────────────────────────
-
-    async def unlink_account(
-        self,
-        member_id: UUID,
-        payer_member_id: UUID,
-    ) -> None:
-        """Remove ``payer_member_id`` as an authorized payer for ``member_id``.
-
-        Deletes the ``member_authorized_payers`` row; the signature record
-        persists (append-only audit).
-
-        Raises:
-            ValueError: If no such authorization exists.
-        """
-        async with self._paying_lock.lock([member_id, payer_member_id]):
-            sql = load_sql(SQL_DIR / "member_authorized_payers_delete.sql")
-            async with self._db_pool.session() as session:
-                result = await session.execute(
-                    text(sql),
-                    {
-                        "member_id": str(member_id),
-                        "payer_member_id": str(payer_member_id),
-                    },
-                )
-                row = result.mappings().fetchone()
-                if not row:
-                    raise ValueError(
-                        f"Payer {payer_member_id} is not an authorized payer for "
-                        f"member {member_id}",
-                    )
-                await session.commit()
-
     # ── Check ──────────────────────────────────────────────────
 
     async def check_link_account(
