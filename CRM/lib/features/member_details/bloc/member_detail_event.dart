@@ -341,6 +341,13 @@ class ChargeCardOutcomeCleared extends MemberDetailEvent {
   const ChargeCardOutcomeCleared();
 }
 
+/// Clears the upgrade outcome (error) when the upgrade dialog
+/// opens, so a prior upgrade's failure doesn't flash (mirrors
+/// [ChargeCardOutcomeCleared]).
+class UpgradeMembershipOutcomeCleared extends MemberDetailEvent {
+  const UpgradeMembershipOutcomeCleared();
+}
+
 /// NOTE: refund has no backend endpoint in the merged
 /// contract (see `MemberRepository.refundCharge`).
 class RefundChargeRequested extends MemberDetailEvent {

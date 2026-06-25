@@ -64,6 +64,9 @@ class MemberDetailBloc
     );
     on<UpdatePriceRequested>(_onUpdatePrice);
     on<UpgradeMembershipRequested>(_onUpgradeMembership);
+    on<UpgradeMembershipOutcomeCleared>(
+      _onUpgradeMembershipOutcomeCleared,
+    );
     on<EndMembershipRequested>(_onEndMembership);
     on<FreezeAccountRequested>(_onFreezeAccount);
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
@@ -107,6 +110,7 @@ class MemberDetailBloc
       emit(MemberDetailError(
         e.toString(),
         memberId: event.memberId,
+        statusCode: e is ServerException ? e.statusCode : null,
       ));
     }
   }
@@ -535,19 +539,25 @@ class MemberDetailBloc
     );
   }
 
+  /// Cross-plan upgrade. Like [_onChargeCard], it rides a dedicated
+  /// channel ([isUpgrading] / [upgradeSuccess] / [upgradeError]) instead
+  /// of [_runMutation] so the screen-level overlay + error dialog never
+  /// fire while the upgrade dialog is open; the dialog flips to its own
+  /// success step on the bumped token. Member detail is re-fetched on
+  /// success so the carousel + Payment History refresh behind the
+  /// still-open step.
   Future<void> _onUpgradeMembership(
     UpgradeMembershipRequested event,
     Emitter<MemberDetailState> emit,
   ) async {
     final s = state;
     if (s is! MemberDetailLoaded) return;
-    await _runMutation(
-      actionLabel: 'Upgrade membership',
-      emit: emit,
-      // An upgrade charges the prorated difference now, settled via a
-      // Stripe webhook — poll so the invoice surfaces without a reload.
-      pollInvoices: true,
-      action: () => _repository.upgradeMembership(
+    emit(s.copyWith(
+      isUpgrading: true,
+      clearUpgradeOutcome: true,
+    ));
+    try {
+      await _repository.upgradeMembership(
         MemberMembershipsUpgradeRequest(
           itemId: event.itemId,
           memberId: event.memberId,
@@ -555,8 +565,55 @@ class MemberDetailBloc
           prorationBehavior: event.prorationBehavior,
           idempotencyKey: const Uuid().v4(),
         ),
-      ),
-    );
+      );
+    } catch (e, stackTrace) {
+      log('Upgrade membership failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isUpgrading: false,
+        upgradeError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    // The upgrade committed — the prorated difference (if any) is charged.
+    // Commit success now so a follow-up refresh failure can never make a
+    // real upgrade look failed. Mirrors [_onChargeCard].
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    emit(committed.copyWith(
+      isUpgrading: false,
+      upgradeSuccess: committed.upgradeSuccess + 1,
+      refreshToken: committed.refreshToken + 1,
+    ));
+    // The prorated-difference invoice lands asynchronously (Stripe
+    // webhook), so poll to surface it without a reload.
+    _startInvoicePolling();
+    try {
+      final refreshed = await _repository.getMemberDetail(s.member.memberId);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Upgrade succeeded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  void _onUpgradeMembershipOutcomeCleared(
+    UpgradeMembershipOutcomeCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearUpgradeOutcome: true));
   }
 
   Future<void> _onEndMembership(

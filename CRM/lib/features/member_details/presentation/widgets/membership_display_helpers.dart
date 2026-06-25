@@ -82,6 +82,19 @@ Widget costValue(int amount) {
   );
 }
 
+/// Refunded-amount display for a one-time / trial membership — shown
+/// under Cost only when some of its charge has been refunded (minor
+/// units, > 0). Rendered in the money-out colour to read as a credit
+/// back to the member.
+Widget refundedValue(int amount) {
+  return Text(
+    formatMinorUnits(amount),
+    style: DesignConstants.h2Bold.copyWith(
+      color: DesignConstants.badRed,
+    ),
+  );
+}
+
 /// Cost with a discount breakdown: when [shelf] (the pre-discount
 /// price) exceeds [total] (the member's own after-discount price),
 /// stack shelf → discount → total so the gym owner can see how the

@@ -6,21 +6,26 @@ import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/charge_kind.dart';
+import 'package:crm/features/member_details/data/models/charge_status.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/payment_record.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
-import 'package:crm/features/member_details/presentation/dialogs/refund_charge_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/payment_invoice_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
-/// Refund a ONE-TIME / TRIAL membership's charge, then offer to also end
+/// Refund a ONE-TIME / TRIAL membership's purchase, then offer to also end
 /// it. Refund + end are SEPARATE actions, but a refund usually pairs with
 /// ending the pack — so after a submitted refund this prompts "also end?".
 ///
-/// The charge is resolved from the member's payment history by matching a
-/// payment whose line items carry this membership's `item_id` and that
-/// still has a refundable balance. When none is found, the staff are
-/// pointed at Payment History.
+/// Opens the membership's **purchase invoice** in the same rich popup
+/// Payment History uses ([PaymentInvoiceDialog]): the full breakdown, the
+/// already-refunded amount, and a refund button for the remaining balance
+/// (full or partial). The charge is resolved from the member's payment
+/// history by matching the succeeded payment whose line items carry this
+/// membership's `item_id` — found **regardless of how much is already
+/// refunded**, so pressing Refund on an already-refunded pack shows the
+/// invoice (with its refund history) instead of a "nothing found" dead-end.
 Future<void> runOneTimeRefundFlow(
   BuildContext context, {
   required MemberDetailResponse member,
@@ -34,15 +39,15 @@ Future<void> runOneTimeRefundFlow(
 
   final PaymentRecord? charge;
   try {
-    charge = await _findRefundableCharge(repo, member.memberId, itemId);
+    charge = await _findMembershipCharge(repo, member.memberId, itemId);
   } catch (_) {
     if (!context.mounted) return;
     await AppDialog.show<void>(
       context: context,
       title: 'Could not load charges',
       body: Text(
-        "Could not load this member's payment history to find a "
-        'refundable charge. Please try again.',
+        "Could not load this member's payment history to find the "
+        'purchase invoice. Please try again.',
         style: DesignConstants.p.copyWith(color: DesignConstants.text),
       ),
       primaryLabel: 'OK',
@@ -56,10 +61,11 @@ Future<void> runOneTimeRefundFlow(
   if (charge == null) {
     await AppDialog.show<void>(
       context: context,
-      title: 'No refundable charge',
+      title: 'No purchase invoice yet',
       body: Text(
-        'No refundable charge was found for this membership. Check '
-        'Payment History to refund a specific charge.',
+        "This membership's purchase invoice isn't available yet — once "
+        'the charge settles it shows in Payment History, where it can be '
+        'refunded.',
         style: DesignConstants.p.copyWith(color: DesignConstants.text),
       ),
       primaryLabel: 'OK',
@@ -69,10 +75,12 @@ Future<void> runOneTimeRefundFlow(
     return;
   }
 
-  final submitted =
-      await RefundChargeDialog.show(context: context, charge: charge) ??
+  // Show the full purchase invoice (refund history + full/partial refund),
+  // exactly like Payment History. Resolves true once a refund is submitted.
+  final refunded =
+      await PaymentInvoiceDialog.show(context: context, payment: charge) ??
           false;
-  if (!submitted || !allowEnd || !context.mounted) return;
+  if (!refunded || !allowEnd || !context.mounted) return;
 
   final alsoEnd = await AppDialog.show<bool>(
         context: context,
@@ -96,11 +104,13 @@ Future<void> runOneTimeRefundFlow(
   }
 }
 
-/// The newest still-refundable payment (not a refund row) whose line
-/// items include [itemId]. Returns null when no matching refundable charge
-/// exists; THROWS on a fetch failure (the caller surfaces that as an error,
-/// so a transient 500 / network drop is not misreported as "no charge").
-Future<PaymentRecord?> _findRefundableCharge(
+/// The succeeded payment whose line items include [itemId] — the charge
+/// that bought this one-time membership. Matched **regardless of how much
+/// is already refunded** (so a fully-refunded pack still resolves and its
+/// invoice can be shown). Returns null when no such charge exists yet (a
+/// not-yet-settled purchase or a $0 trial); THROWS on a fetch failure so a
+/// transient 500 / network drop is not misreported as "no invoice".
+Future<PaymentRecord?> _findMembershipCharge(
   MemberRepository repo,
   String memberId,
   String itemId,
@@ -109,7 +119,7 @@ Future<PaymentRecord?> _findRefundableCharge(
       await repo.getPayments(memberId, limit: 100, offset: 0);
   for (final p in payments) {
     if (p.kind == ChargeKind.payment &&
-        p.netAmount > 0 &&
+        p.status == ChargeStatus.succeeded &&
         p.lineItems.any((l) => l.itemId == itemId)) {
       return p;
     }

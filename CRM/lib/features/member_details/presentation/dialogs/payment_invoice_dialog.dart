@@ -18,11 +18,19 @@ import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
 /// Shows a historical [PaymentRecord] as a full invoice via
-/// the shared [InvoiceBreakdown]. A refund affordance is
-/// rendered only for a succeeded, non-refund charge; it
-/// routes through the shared [RefundChargeDialog] and then
-/// dispatches [RefundChargeRequested]. A failure surfaces
-/// through the bloc's `actionError` path.
+/// the shared [InvoiceBreakdown] — line items, discounts, the
+/// refunded amount, and the per-attempt history. A refund
+/// affordance is rendered only for a succeeded, non-refund
+/// charge with a balance left; it routes through the shared
+/// [RefundChargeDialog] and then dispatches
+/// [RefundChargeRequested]. A failure surfaces through the
+/// bloc's `actionError` path.
+///
+/// [show] resolves to `true` once a refund is submitted (the refund
+/// form opens ON TOP of this invoice and both close on submit), so a
+/// caller can follow up — the one-time refund flow uses this to offer
+/// to end the membership after a refund. It resolves to `null` when the
+/// invoice is simply dismissed.
 class PaymentInvoiceDialog extends StatelessWidget {
   final PaymentRecord payment;
 
@@ -31,11 +39,11 @@ class PaymentInvoiceDialog extends StatelessWidget {
     required this.payment,
   });
 
-  static Future<void> show({
+  static Future<bool?> show({
     required BuildContext context,
     required PaymentRecord payment,
   }) {
-    return showDialog<void>(
+    return showDialog<bool>(
       context: context,
       builder: (_) => BlocProvider.value(
         value: context.read<MemberDetailBloc>(),
@@ -162,16 +170,18 @@ class PaymentInvoiceDialog extends StatelessWidget {
     };
   }
 
-  /// Closes the invoice, then routes the refund through the
-  /// shared [RefundChargeDialog] (confirmation +
-  /// [RefundChargeRequested]) so the refund flow lives in
-  /// one place.
-  void _onRefund(BuildContext context) {
-    Navigator.of(context).pop();
-    RefundChargeDialog.show(
-      context: context,
-      charge: payment,
-    );
+  /// Routes the refund through the shared [RefundChargeDialog]
+  /// (confirmation + [RefundChargeRequested]) so the refund flow lives
+  /// in one place. The refund form opens ON TOP of this invoice; once a
+  /// refund is submitted both close and [show] resolves to `true`.
+  /// Cancelling the refund leaves the invoice open.
+  Future<void> _onRefund(BuildContext context) async {
+    final submitted =
+        await RefundChargeDialog.show(context: context, charge: payment) ??
+            false;
+    if (submitted && context.mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override

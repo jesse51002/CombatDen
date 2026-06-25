@@ -93,6 +93,21 @@ class MemberDetailLoaded extends MemberDetailState {
   /// the charge dialog is open (mirrors [startError]).
   final String? chargeCardError;
 
+  /// True while the upgrade POST is in flight. Separate from
+  /// [isMutating] so the upgrade dialog owns its own loading +
+  /// success treatment (mirrors [isChargingCard]).
+  final bool isUpgrading;
+
+  /// Monotonic token bumped once an upgrade succeeds. The upgrade
+  /// dialog watches it to flip to its success step; the
+  /// confirmation is rendered from the picked plan name.
+  final int upgradeSuccess;
+
+  /// The last upgrade failure. Kept off [actionError] so the
+  /// screen-level error dialog doesn't swallow it while the
+  /// upgrade dialog is open (mirrors [chargeCardError]).
+  final String? upgradeError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -118,6 +133,9 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isChargingCard = false,
     this.chargeCardSuccess = 0,
     this.chargeCardError,
+    this.isUpgrading = false,
+    this.upgradeSuccess = 0,
+    this.upgradeError,
     this.refreshToken = 0,
   });
 
@@ -153,6 +171,10 @@ class MemberDetailLoaded extends MemberDetailState {
     int? chargeCardSuccess,
     String? chargeCardError,
     bool clearChargeOutcome = false,
+    bool? isUpgrading,
+    int? upgradeSuccess,
+    String? upgradeError,
+    bool clearUpgradeOutcome = false,
     int? refreshToken,
   }) {
     return MemberDetailLoaded(
@@ -192,6 +214,11 @@ class MemberDetailLoaded extends MemberDetailState {
       chargeCardError: clearChargeOutcome
           ? null
           : (chargeCardError ?? this.chargeCardError),
+      isUpgrading: isUpgrading ?? this.isUpgrading,
+      upgradeSuccess: upgradeSuccess ?? this.upgradeSuccess,
+      upgradeError: clearUpgradeOutcome
+          ? null
+          : (upgradeError ?? this.upgradeError),
       refreshToken: refreshToken ?? this.refreshToken,
     );
   }
@@ -215,6 +242,9 @@ class MemberDetailLoaded extends MemberDetailState {
         isChargingCard,
         chargeCardSuccess,
         chargeCardError,
+        isUpgrading,
+        upgradeSuccess,
+        upgradeError,
         refreshToken,
       ];
 }
@@ -223,11 +253,24 @@ class MemberDetailError extends MemberDetailState {
   final String message;
   final String memberId;
 
+  /// The HTTP status when the failure was a server error (null for a
+  /// transport / parse error). Lets the screen tell a "this id doesn't
+  /// line up" 4xx (bounce a deep link to the members list) apart from a
+  /// transient 5xx / network error (keep the retryable error view).
+  final int? statusCode;
+
   const MemberDetailError(
     this.message, {
     required this.memberId,
+    this.statusCode,
   });
 
+  /// A 4xx — the member id doesn't resolve to a viewable member (unknown
+  /// / malformed id, or a gym the caller can't see), as opposed to a
+  /// transient 5xx / network failure.
+  bool get isNotFound =>
+      statusCode != null && statusCode! >= 400 && statusCode! < 500;
+
   @override
-  List<Object?> get props => [message, memberId];
+  List<Object?> get props => [message, memberId, statusCode];
 }

@@ -21,9 +21,12 @@ import 'package:crm/core/navigation/app_routes.dart';
 /// Back/Forward is intentionally not wired (see `CRM/CLAUDE.md`).
 
 /// The top-level section routes whose URL should appear in the address bar.
-/// Detail / form sub-routes (member detail, class form) deliberately stay at
-/// their parent section's URL — they read route arguments and aren't
-/// deep-linkable today, so surfacing their URL would invite a broken refresh.
+/// Member detail is ALSO addressable, but through its own
+/// `/members/detail/<id>` path (see [AppRoutes.memberIdFromPath]) rather than
+/// this set. The remaining detail / form sub-routes (the class form, the
+/// plan / waiver editors) deliberately stay at their parent section's URL —
+/// they read route arguments and aren't deep-linkable, so surfacing their URL
+/// would invite a broken refresh.
 const Set<String> kAddressableRoutes = {
   AppRoutes.home,
   AppRoutes.members,
@@ -57,7 +60,11 @@ class UrlSyncObserver extends NavigatorObserver {
   void _sync(Route<dynamic>? route) {
     final name = route?.settings.name;
     if (name == null) return;
-    if (kAddressableRoutes.contains(Uri.parse(name).path)) {
+    final path = Uri.parse(name).path;
+    // Sync a top-level section OR a specific-member deep link
+    // (`/members/detail/<id>`), which carries the member id in its path.
+    if (kAddressableRoutes.contains(path) ||
+        AppRoutes.memberIdFromPath(path) != null) {
       syncBrowserUrl(name);
     }
   }

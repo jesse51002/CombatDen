@@ -188,6 +188,19 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
       settings: settings,
     );
   }
+  // A specific member's detail page is deep-linkable by id:
+  // `/members/detail/<memberId>`. Parse the id off the path and hand it
+  // to SpecificMemberScreen as the route argument (its existing id
+  // branch); the bare `/members/detail` (no id) still resolves the first
+  // roster member. Keep the path-with-id as the route name so the URL +
+  // UrlSyncObserver stay correct.
+  final memberId = AppRoutes.memberIdFromPath(path);
+  if (memberId != null) {
+    return MaterialPageRoute<dynamic>(
+      builder: (_) => const SpecificMemberScreen(),
+      settings: RouteSettings(name: settings.name, arguments: memberId),
+    );
+  }
   // The Memberships screen's three tabs are each addressable by URL,
   // mapped to the tab the screen opens on.
   const membershipsTabIndex = {

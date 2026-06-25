@@ -12,6 +12,11 @@ import 'package:crm/shared/widgets/app_spinner.dart';
 /// plans the member isn't already on) plus the proration choice.
 class UpgradePlanPicker extends StatelessWidget {
   final Future<List<MembershipPlanResponse>> plans;
+
+  /// The membership being upgraded — its plan name + current pinned price,
+  /// shown up top so staff see what the member is on before they pick.
+  final String currentPlanName;
+  final int currentPrice;
   final String? selectedPlanId;
   final ProrationBehavior proration;
   final ValueChanged<String> onPlanSelected;
@@ -20,6 +25,8 @@ class UpgradePlanPicker extends StatelessWidget {
   const UpgradePlanPicker({
     super.key,
     required this.plans,
+    required this.currentPlanName,
+    required this.currentPrice,
     required this.selectedPlanId,
     required this.proration,
     required this.onPlanSelected,
@@ -32,6 +39,10 @@ class UpgradePlanPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingLarge,
       children: [
+        _CurrentPlanCard(
+          planName: currentPlanName,
+          price: currentPrice,
+        ),
         Text(
           'Move this membership to a different plan. The prorated '
           'difference is charged now; a cheaper plan charges nothing.',
@@ -74,6 +85,62 @@ class UpgradePlanPicker extends StatelessWidget {
         ProrationSelector(
           value: proration,
           onChanged: onProrationChanged,
+        ),
+      ],
+    );
+  }
+}
+
+/// Non-interactive header showing the membership being upgraded — its plan
+/// name + current pinned price — so staff see what the member is on now.
+class _CurrentPlanCard extends StatelessWidget {
+  final String planName;
+  final int price;
+
+  const _CurrentPlanCard({
+    required this.planName,
+    required this.price,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: DesignConstants.spacingSmall,
+      children: [
+        Text(
+          'Currently on',
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.text2nd,
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(DesignConstants.spacingMedium),
+          decoration: BoxDecoration(
+            color: DesignConstants.backgroundColor,
+            borderRadius:
+                BorderRadius.circular(DesignConstants.radiusSmall),
+            border: Border.all(color: DesignConstants.divider),
+          ),
+          child: Row(
+            spacing: DesignConstants.spacingMedium,
+            children: [
+              Expanded(
+                child: Text(
+                  planName,
+                  style: DesignConstants.h3,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                formatMinorUnits(price),
+                style: DesignConstants.h3.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
