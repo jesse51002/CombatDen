@@ -20,4 +20,5 @@ DiscountInfo _$DiscountInfoFromJson(Map<String, dynamic> json) => DiscountInfo(
   endDate: json['end_date'] == null
       ? null
       : DateTime.parse(json['end_date'] as String),
+  stripeCouponId: json['stripe_coupon_id'] as String?,
 );

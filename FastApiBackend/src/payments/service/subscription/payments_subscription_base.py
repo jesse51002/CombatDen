@@ -82,7 +82,7 @@ class PaymentsSubscriptionBase:
         arrive as a bare coupon-id string. A bare ``di_…`` discount-id string is
         an *unexpanded* Discount and cannot be resolved here, so it is skipped
         (the retrieve expands ``items.data.discounts`` so this doesn't happen on
-        the read path the once-settle uses).
+        the live coupon read path).
         """
         if isinstance(d, str):
             return None if d.startswith("di_") else d
@@ -260,8 +260,8 @@ class PaymentsSubscriptionBase:
             subscription = await self._stripe.v1.subscriptions.retrieve_async(
                 subscription_id,
                 # Expand item discounts to Discount objects so _map_subscription
-                # can read each one's coupon (via discount.source.coupon) — the
-                # once-consumption settle reads items[*].discounts off this.
+                # can read each one's coupon (via discount.source.coupon) —
+                # items[*].discounts carries the live attached coupon ids.
                 params={"expand": ["items.data.discounts"]},
                 options=opts,
             )

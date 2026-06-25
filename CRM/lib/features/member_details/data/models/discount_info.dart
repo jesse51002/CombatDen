@@ -34,6 +34,10 @@ class DiscountInfo extends Equatable {
   final double? percentageOff;
   final int? dollarOff;
   final DateTime? endDate;
+  // The coupon the sync resolved/wrote back (snake: stripe_coupon_id). Optional
+  // and not consumed in the CRM yet, but tracked so the model matches the
+  // backend MemberMembershipsAppliedDiscount contract exactly.
+  final String? stripeCouponId;
 
   const DiscountInfo({
     required this.appliedDiscountId,
@@ -47,6 +51,7 @@ class DiscountInfo extends Equatable {
     this.percentageOff,
     this.dollarOff,
     this.endDate,
+    this.stripeCouponId,
   });
 
   factory DiscountInfo.fromJson(
@@ -82,5 +87,6 @@ class DiscountInfo extends Equatable {
         percentageOff,
         dollarOff,
         endDate,
+        stripeCouponId,
       ];
 }

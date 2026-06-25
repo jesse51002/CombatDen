@@ -21,8 +21,8 @@ class PaymentsSubscriptionRetrieve(PaymentsSubscriptionBase):
         Read-only. The mapped response carries each item's currently
         attached coupon ids (``items[*].discounts``) and the
         subscription-level coupon ids (``discounts``) — the payment sync
-        reads these to run the ``once``-consumption gate (a stored coupon
-        still present = pending, absent = Stripe already invoiced it).
+        reads these to verify which coupons Stripe currently has attached
+        to the subscription.
 
         Args:
             stripe_subscription_id: The live Stripe subscription ID.
