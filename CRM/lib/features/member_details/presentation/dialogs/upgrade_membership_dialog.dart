@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
@@ -97,7 +98,9 @@ class _UpgradeMembershipDialogState
         memberId: widget.coveredMemberId,
         targetPlanId: _targetPlanId!,
         prorationBehavior: _proration,
-        idempotencyKey: '',
+        // The preview endpoint ignores idempotency_key, but send a real
+        // UUID (not '') so it stays valid if the schema ever hardens.
+        idempotencyKey: const Uuid().v4(),
       ),
     );
   }

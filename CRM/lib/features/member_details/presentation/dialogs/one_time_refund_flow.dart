@@ -32,8 +32,25 @@ Future<void> runOneTimeRefundFlow(
   final bloc = context.read<MemberDetailBloc>();
   final repo = MemberRepository(apiClient: ApiClient());
 
-  final charge =
-      await _findRefundableCharge(repo, member.memberId, itemId);
+  final PaymentRecord? charge;
+  try {
+    charge = await _findRefundableCharge(repo, member.memberId, itemId);
+  } catch (_) {
+    if (!context.mounted) return;
+    await AppDialog.show<void>(
+      context: context,
+      title: 'Could not load charges',
+      body: Text(
+        "Could not load this member's payment history to find a "
+        'refundable charge. Please try again.',
+        style: DesignConstants.p.copyWith(color: DesignConstants.text),
+      ),
+      primaryLabel: 'OK',
+      primaryOnPressed: (c) => Navigator.of(c).pop(),
+      secondaryLabel: null,
+    );
+    return;
+  }
   if (!context.mounted) return;
 
   if (charge == null) {
@@ -80,24 +97,22 @@ Future<void> runOneTimeRefundFlow(
 }
 
 /// The newest still-refundable payment (not a refund row) whose line
-/// items include [itemId]. Returns null on none / a fetch failure.
+/// items include [itemId]. Returns null when no matching refundable charge
+/// exists; THROWS on a fetch failure (the caller surfaces that as an error,
+/// so a transient 500 / network drop is not misreported as "no charge").
 Future<PaymentRecord?> _findRefundableCharge(
   MemberRepository repo,
   String memberId,
   String itemId,
 ) async {
-  try {
-    final payments =
-        await repo.getPayments(memberId, limit: 100, offset: 0);
-    for (final p in payments) {
-      if (p.kind == ChargeKind.payment &&
-          p.netAmount > 0 &&
-          p.lineItems.any((l) => l.itemId == itemId)) {
-        return p;
-      }
+  final payments =
+      await repo.getPayments(memberId, limit: 100, offset: 0);
+  for (final p in payments) {
+    if (p.kind == ChargeKind.payment &&
+        p.netAmount > 0 &&
+        p.lineItems.any((l) => l.itemId == itemId)) {
+      return p;
     }
-  } catch (_) {
-    return null;
   }
   return null;
 }
