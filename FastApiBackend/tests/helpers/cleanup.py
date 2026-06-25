@@ -44,12 +44,8 @@ async def delete_all_gym_data(db_pool: DirectDatabasePool, gym_id: UUID) -> None
 
     Does NOT delete the gym row itself — caller handles that.
 
-    Linked discounts dissolved into applied-discount rows on
-    ``member_membership_applied_discounts`` (no preset entity, no
-    ``linked_discount_num`` ordering trigger), so the applied-discounts table is
-    deleted first like any other child. ``account_linked_to_id`` (the
-    family-billing self-link) is cleared before the members delete so the
-    self-FK doesn't block.
+    ``account_linked_to_id`` (the family-billing self-link) is cleared before
+    the members delete so the self-FK doesn't block.
     """
     async with db_pool.session() as session:
         await session.execute(

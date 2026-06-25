@@ -7,9 +7,7 @@ INSERT INTO membership_plans_unfiltered (
     duration_unit,
     is_public,
     stripe_product_id,
-    waiver_ids,
-    linked_discount_enabled,
-    linked_discount_ids
+    waiver_ids
 ) VALUES (
     :gym_id,
     :plan_name,
@@ -19,8 +17,6 @@ INSERT INTO membership_plans_unfiltered (
     :duration_unit,
     :is_public,
     :stripe_product_id,
-    CAST(:waiver_ids AS JSONB),
-    :linked_discount_enabled,
-    CAST(:linked_discount_ids AS JSONB)
+    CAST(:waiver_ids AS JSONB)
 )
 RETURNING *

@@ -140,11 +140,6 @@ CREATE TRIGGER trg_enforce_linked_account_hierarchy
     BEFORE INSERT OR UPDATE OF account_linked_to_id ON members
     FOR EACH ROW EXECUTE FUNCTION enforce_linked_account_hierarchy();
 
--- Linked (family) discounts dissolved: a family discount is now a snapshot row
--- on member_membership_applied_discounts (discount_type = 'linked'), not a
--- person-level pointer. members.linked_discount_id and its type-check trigger
--- are gone; account_linked_to_id (the family-billing link itself) is unchanged.
-
 -- Filtered view: members with a completed Stripe customer sync. Billing flows
 -- read through this so half-synced rows are never surfaced. `members` is the
 -- single source-of-truth table; this is just a billing-complete window onto it

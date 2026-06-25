@@ -233,9 +233,8 @@ GYM_DISCOUNTS: frozenset[str] = frozenset(
         "is_deleted",  # managed by the archive (delete) endpoint only
         "created_at",  # auto-generated timestamp
         # gym_discounts is identity-only: name (editable) + type
-        # (preset | custom | linked). The percent/dollar + lifetime live on the
-        # versioned gym_discount_values rows. A `linked` discount is a real entry
-        # a membership plan's family tiers reference by id.
+        # (preset | custom). The percent/dollar + lifetime live on the
+        # versioned gym_discount_values rows.
     }
 )
 

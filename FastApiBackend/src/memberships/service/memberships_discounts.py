@@ -13,9 +13,9 @@ stays pinned to the version it was applied at.
 - ``once`` applied-discount rows leave end_date NULL until the sync stamps it on
   consumption.
 
-Any discount is applied this way by id, including a ``linked`` (family) discount:
-the membership/family flow passes the linked discount's id in ``discount_ids``
-and it freezes an applied-discount row to that discount's active value like any other.
+A discount is applied this way by id: the membership flow passes the discount's
+id in ``discount_ids`` and it freezes an applied-discount row to that discount's
+active value version like any other.
 
 After writing the applied-discount rows the membership's subscription is re-synced
 so the sync computes each consolidated line's coupon and writes the resolved

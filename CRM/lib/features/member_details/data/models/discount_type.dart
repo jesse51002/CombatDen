@@ -5,7 +5,6 @@ import 'package:json_annotation/json_annotation.dart';
 enum DiscountType {
   preset('preset', 'Preset'),
   custom('custom', 'Custom'),
-  linked('linked', 'Linked'),
   unknown('unknown', 'Unknown');
 
   const DiscountType(this.value, this.displayLabel);

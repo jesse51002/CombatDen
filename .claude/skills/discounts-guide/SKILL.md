@@ -4,8 +4,7 @@ description: >-
   The single source of truth for how CombatDen membership discounts work — the
   three-table model (discount IDENTITY + versioned immutable VALUE rows + slim
   applied-discount rows that pin a membership to a value version), item-scoped
-  (per-membership) discounts, linked/family discounts as real version-backed
-  discount entries a plan references by id, and coupons computed at build then
+  (per-membership) discounts, and coupons computed at build then
   written back to Stripe. Load this whenever you touch
   anything discount-shaped: gym_discounts / gym_discount_values, the
   member_membership_applied_discounts rows, the apply/remove path
@@ -41,7 +40,7 @@ The discount system mirrors the **plans / prices** pattern
 (`membership_plans` + `membership_plan_prices`, documented in `memberships-guide`):
 
 1. **`gym_discounts`** — the **IDENTITY**: `discount_id`, `gym_id`,
-   `discount_name` (editable), `discount_type` ∈ `preset | custom | linked`, `is_deleted`.
+   `discount_name` (editable), `discount_type` ∈ `preset | custom`, `is_deleted`.
    No values. Plain gym config (NOT Stripe-gated).
 2. **`gym_discount_values`** — **versioned, truly immutable VALUE rows**, exactly
    like `membership_plan_prices`: `value_id` (PK / the version tag),
@@ -122,46 +121,7 @@ member-in-the-abstract.
 
 ---
 
-## 3. Linked (family) discounts are real discount entries a plan references
-
-A linked/family discount is a **real discount entry like any other** — a
-`gym_discounts` identity tagged `discount_type = linked` with a versioned value
-on `gym_discount_values`. So it gets **versioning + a stable id to point to**,
-exactly like a regular discount.
-
-A **membership plan references its family discounts by id**:
-`membership_plans.linked_discount_ids` stores a discount **id per family tier**
-(2nd, 3rd, 4th, 5th linked member, in order — capped at 5 members) pointing at
-real linked discount entries. The linked-discount **value is entered on the
-membership creation/edit screen**, owned by the membership/plan UI — exactly
-like a regular discount, each tier is a **$ off or % off value** (not a
-"member price"). The CRM sends per-tier `linked_discount_values` (each a
-`{percentage_off | dollar_off}`, exactly one set), and the **backend mints a real
-`linked` discount entry per value on plan create/update** (reusing
-`DiscountsService`) and stores their ids in `linked_discount_ids`. Plan **reads
-resolve the ids back to values** (a subquery on `gym_discount_values` building a
-`{percentage_off, dollar_off}` object per tier) so the CRM can display/edit them
-without ever seeing the linked discounts in the regular preset list. Editing a
-value mints a new active version on the same discount, so the stored id stays
-stable.
-
-**Applying** a linked discount is the same as any discount: the membership/family
-flow passes its id in `discount_ids` (to the start op at creation, or to
-`add_discounts` post-creation), which pins an applied-discount row to the
-discount's **active** value version. Editing the linked discount mints a new
-version, so future family applications get it — like a regular discount. The
-`linked` tag keeps it out of the regular per-membership discount picker (which
-lists only `preset`); family billing via `members.account_linked_to_id` is
-unchanged.
-
-**The thing we never want here:** a cross-member recalculation of discounts.
-Recomputing a family-wide assignment on every membership change is what produced
-"random-seeming" cross-member price moves and broke predictability. Each
-membership's billing is determined from that member's own memberships only.
-
----
-
-## Custom discounts — minted at membership creation, one-shot, single-owner
+## 3. Custom discounts — minted at membership creation, one-shot, single-owner
 
 A `custom` discount is an **inline value minted by the start op** (the one
 list-based membership-create flow — `memberships-guide`): each item in the start
@@ -396,6 +356,10 @@ re-applied on later cycles; changing the count while pending re-divides correctl
   backstop.** Precise **mid-cycle** `end_date` expiry and `once`-consumption
   finalization on an **idle** member depend on the daily reconciler running the
   sync on its own. Building it is out of scope (see `PaymentRefactor.md` §1).
+- **Linked (family) discounts — per-plan family tiers.** Pulled as unused MVP
+  scope. The intended design (real `linked` discount entries a plan references
+  by id, applied like any discount with no cross-member recalculation) is
+  captured in `PaymentRefactor.md` §6 for a rebuild.
 
 ---
 
@@ -405,8 +369,7 @@ re-applied on later cycles; changing the count while pending re-divides correctl
   `gym_discount_values.sql` (versioned values + the `discount_mode` /
   `discount_duration_unit` enums), `member_membership_applied_discounts.sql`
   (slim applied-discount rows + the `stripe_sync_status` enum). Access rules in
-  the parallel `access_rules/` files. Linked pricing lives on
-  `membership_plans.sql`.
+  the parallel `access_rules/` files.
 - **Models/enums:** `Database/python_data/schema/gym_discount.py`
   (`DiscountType`, `DiscountMode`, `DiscountDurationUnit`, `GymDiscountCreate`
   identity), `gym_discount_value.py` (`GymDiscountValueCreate`),

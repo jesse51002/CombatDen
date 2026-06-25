@@ -9,8 +9,8 @@ description: >-
   the append-only per-member instance (member_memberships) — one Stripe
   subscription item — with date-driven status, immutability triggers, and a
   filtered view. Load this whenever you touch plan CRUD (DB-first/Stripe-second
-  create-with-cleanup, set_price versioning, soft delete, linked-discount
-  re-mint, bulk member migration) or a membership lifecycle op (start, cancel,
+  create-with-cleanup, set_price versioning, soft delete, bulk member
+  migration) or a membership lifecycle op (start, cancel,
   freeze, update_price, mark_paid_cash, charge_card, add/remove discounts) — each
   of which recomputes payment state through the sync. Trigger on "membership plan",
   "plan price", "set price", "active price", "price pinning", "upgrade a member",
@@ -32,8 +32,8 @@ When the model changes, **update this skill in the same change** (it is a living
 document — see the bottom).
 
 Three sibling knowledge skills own the seams this doc only points at:
-`discounts-guide` owns the applied-discount model and linked/family
-discount semantics; `sync-guide` owns the payment sync engine every lifecycle op
+`discounts-guide` owns the applied-discount model and discount
+semantics; `sync-guide` owns the payment sync engine every lifecycle op
 calls; `payments-guide` owns the Stripe primitives (Product/Price/invoice/
 customer/card). This doc stays inside plans + memberships and defers the rest.
 
@@ -86,8 +86,6 @@ itself carries no amount.
 | `is_deleted` | soft-delete flag (archive, never hard-delete) |
 | `stripe_product_id` | the Stripe Product (the gate column) |
 | `waiver_ids` | jsonb array of waiver_id strings (`CHECK chk_plan_waiver_ids_array`: must be a jsonb array) |
-| `linked_discount_enabled` | family-discount flag |
-| `linked_discount_ids` | jsonb uuid array of real `linked` discount entries (`CHECK chk_plan_linked_ids_array`) — see §4 / `discounts-guide` |
 | `created_at` | |
 
 **Named CHECK constraints (verify against the schema, do not invent):**
@@ -168,8 +166,8 @@ sub-services that all extend `MembershipPlansBase`. Endpoints live on
 
 **Create — DB-first, Stripe-second, cleanup-on-failure**
 (`create.py`, `MembershipPlansCreate.create_plan`):
-1. Mint linked discount entries (below), then INSERT the plan row with a NULL
-   `stripe_product_id` (`membership_plans_insert.sql`) and the first price row
+1. INSERT the plan row with a NULL `stripe_product_id`
+   (`membership_plans_insert.sql`) and the first price row
    with a NULL `stripe_price_id` (`membership_plans_price_insert.sql`).
 2. Create the Stripe Product + Price (via `payments-guide`'s membership/price
    services). On any Stripe exception, `_cleanup_pending` hard-deletes both
@@ -182,23 +180,8 @@ sub-services that all extend `MembershipPlansBase`. Endpoints live on
    clients (filtered views) until step 3 completes — that is what makes the
    half-built state safe.
 
-**Linked-discount re-mint** (`MembershipPlansBase._mint_linked_discounts`): the
-CRM edits family tiers as per-tier **$ off / % off values** — a list of
-`LinkedDiscountValue` (`{percentage_off | dollar_off}`, exactly one set), capped
-at `MAX_LINKED_TIERS` (4 → max 5 members), sent as `linked_discount_values`. The
-plan service mints one real `linked` discount entry per value via
-`DiscountsService` (tiers numbered from 2 = 2nd family member up) and stores
-their ids in `linked_discount_ids`. **The discount model itself is owned by
-`discounts-guide`** — this doc only notes the mint-and-store seam. Plan **reads
-resolve those ids back to values** with a subquery joining
-`gym_discount_values WHERE is_active` that builds a `{percentage_off, dollar_off}`
-object per tier (`membership_plans_get.sql`, `membership_plans_list.sql`) so the
-CRM can display/edit them without ever seeing the linked discounts in the regular
-preset picker.
-
-**Update** (`update.py`): collect non-None changes, re-mint
-linked discounts if `linked_discount_prices` changed (swapping it for
-`linked_discount_ids`), run `validate_mutable_columns(MEMBERSHIP_PLANS, ...)`,
+**Update** (`update.py`): collect non-None changes, run
+`validate_mutable_columns(MEMBERSHIP_PLANS, ...)`,
 validate the merged state against the CHECKs, push the rename/metadata to Stripe
 **first**, then UPDATE the CRM row (`membership_plans_update.sql` with a dynamic
 `{set_clause}`; jsonb columns bound as text and cast). Update does **not** change
@@ -219,7 +202,7 @@ active on Stripe forever (a member pinned to an older version keeps billing on i
 referencing the plan.
 
 **Read** (`read.py`): list / get a plan joined to its active
-price (`_extract_active_price`) and to resolved linked-discount amounts; the list
+price (`_extract_active_price`); the list
 SQL also computes `enrolled_count` from `member_memberships_status` where
 `status = 'active'`. `list_prices` returns **all** price versions of one plan
 (`membership_plans_list_prices.sql`, active first), each with a per-price

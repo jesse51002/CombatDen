@@ -57,13 +57,7 @@ class MembershipPlansCreate(MembershipPlansBase):
         )
 
         # ── Step 1: DB insert (NULL stripe IDs) ──────────────────
-        # Mint a real `linked` discount entry per entered tier value ($/% off);
-        # the plan references them by id (linked_discount_ids).
-        linked_ids = await self._mint_linked_discounts(
-            request.gym_id,
-            request.linked_discount_values,
-        )
-        plan_row = await self._insert_plan(request, linked_ids)
+        plan_row = await self._insert_plan(request)
         plan_id = str(plan_row["plan_id"])
 
         price_row = await self._insert_price(
@@ -142,10 +136,6 @@ class MembershipPlansCreate(MembershipPlansBase):
                 crm_pk=price_id,
             ) from exc
 
-        # The stripe-update RETURNING row carries linked_discount_ids (the
-        # minted entries) but not the resolved values; surface the entered
-        # values so the create response matches the read shape.
-        plan_row["linked_discount_values"] = request.linked_discount_values
         return self._build_plan_response(
             plan_row,
             active_price=self._build_price_response(price_row),
@@ -156,7 +146,6 @@ class MembershipPlansCreate(MembershipPlansBase):
     async def _insert_plan(
         self,
         request: MembershipPlanCreateRequest,
-        linked_ids: list[str],
     ) -> dict:
         """Insert a plan row with NULL stripe_product_id."""
         sql = load_sql(SQL_DIR / "membership_plans_insert.sql")
@@ -170,8 +159,6 @@ class MembershipPlansCreate(MembershipPlansBase):
             "is_public": request.is_public,
             "stripe_product_id": None,
             "waiver_ids": json.dumps([str(w) for w in request.waiver_ids]),
-            "linked_discount_enabled": request.linked_discount_enabled,
-            "linked_discount_ids": json.dumps(linked_ids),
         }
         async with self._db_pool.session() as session:
             result = await session.execute(text(sql), params)

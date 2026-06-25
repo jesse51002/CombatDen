@@ -5,7 +5,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/member_details/data/models/duration_unit.dart';
-import 'package:crm/features/member_details/data/models/linked_discount_value.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/memberships/data/models/membership_plan_create_request.dart';
@@ -13,7 +12,6 @@ import 'package:crm/features/memberships/data/models/membership_plan_update_requ
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 import 'package:crm/features/tasks/data/repositories/tasks_repository.dart';
-import 'package:crm/features/memberships/presentation/widgets/linked_discount_section.dart';
 import 'package:crm/features/memberships/presentation/widgets/plan_price_versions_section.dart';
 import 'package:crm/features/memberships/presentation/widgets/plan_type_cards.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_multi_select.dart';
@@ -59,10 +57,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
   final _trialLength = TextEditingController(text: '1');
   final _formKey = GlobalKey<FormState>();
 
-  // Family tiers as real discount values ($ off / % off), owned by the
-  // linked-discount section and mirrored here for save.
-  List<LinkedDiscountValue> _linkedValues = const [];
-
   // The form reads best capped to a column width rather than stretched
   // across the whole content area.
   static const double _maxContentWidth = 640;
@@ -70,7 +64,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
   PlanType _type = PlanType.recurring;
   DurationUnit _trialUnit = DurationUnit.week;
   bool _unlimited = true;
-  bool _linkedEnabled = false;
   final Set<String> _waiverIds = {};
 
   List<WaiverResponse> _waivers = const [];
@@ -107,8 +100,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
     final price = plan.activePrice?.price;
     if (price != null) _price.text = (price / 100).toStringAsFixed(2);
     _waiverIds.addAll(plan.waiverIds);
-    _linkedEnabled = plan.linkedDiscountEnabled;
-    _linkedValues = List.of(plan.linkedDiscountValues);
   }
 
   Future<void> _loadWaivers() async {
@@ -172,13 +163,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
     final name = _name.text.trim();
     final duration = _duration;
     final waiverIds = _waiverIds.toList();
-    // Linked discount is recurring-only.
-    final recurringLinked = _type == PlanType.recurring && _linkedEnabled;
-    final linkedValues = recurringLinked ? _linkedValues : <LinkedDiscountValue>[];
-    if (recurringLinked && linkedValues.isEmpty) {
-      _snack('Enter at least one family discount, or turn linked off.');
-      return;
-    }
 
     setState(() => _saving = true);
     try {
@@ -194,8 +178,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
             durationAmount: duration.amount,
             durationUnit: duration.unit,
             waiverIds: waiverIds,
-            linkedDiscountEnabled: recurringLinked,
-            linkedDiscountValues: linkedValues,
           ),
         ));
       } else {
@@ -213,8 +195,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
           durationUnit: duration.unit,
           price: price,
           waiverIds: waiverIds,
-          linkedDiscountEnabled: recurringLinked,
-          linkedDiscountValues: linkedValues,
         ));
       }
       if (mounted) {
@@ -302,15 +282,6 @@ class _MembershipDetailsFormState extends State<MembershipDetailsForm> {
             _priceField(),
             _entitlement(),
             _waiversField(),
-            // Linked (family) discount is a recurring-only concept.
-            if (_type == PlanType.recurring)
-              LinkedDiscountSection(
-                enabled: _linkedEnabled,
-                onEnabledChanged: (v) => setState(() => _linkedEnabled = v),
-                initialValues: _linkedValues,
-                onChanged: (v) => _linkedValues = v,
-                priceController: _price,
-              ),
             _actions(),
           ],
         ),

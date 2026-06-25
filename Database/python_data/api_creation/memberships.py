@@ -139,7 +139,7 @@ def _start_item(member: MemberPlan) -> dict:
 
     The plan is derived server-side from ``price_id`` (a price belongs to exactly
     one plan), so the item carries no plan_id. ``discount_ids`` are the pre-drawn
-    preset / linked discounts chosen in the sequential build phase
+    preset discounts chosen in the sequential build phase
     (generators.members._assign_discounts) and applied before the first charge.
     ``custom_discounts`` carries at most one inline DiscountValue dict
     (generators.members._assign_custom_discounts) — the backend mints a one-shot
