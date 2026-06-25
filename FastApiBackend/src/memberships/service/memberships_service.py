@@ -490,6 +490,16 @@ class MemberMembershipsService:
                 only after a full cancel).
         """
         async with self._paying_lock.lock([member_id, payer_member_id]):
+            # Fast-fail BEFORE any Stripe cancel: if the authorization is already
+            # gone, reject now rather than cancelling the memberships and only
+            # then discovering the row is missing (which would commit Stripe
+            # cancels for a de-authorize that ultimately "fails"). We hold the
+            # lock, so the row cannot vanish between this check and the delete.
+            if not await self._authorization_exists(member_id, payer_member_id):
+                raise ValueError(
+                    f"Payer {payer_member_id} is not an authorized payer "
+                    f"for member {member_id}",
+                )
             rows = await self._pair_cancellable(member_id, payer_member_id)
             item_ids = [UUID(str(row["item_id"])) for row in rows]
             cancel_dates: dict[UUID, date] = {}
@@ -517,6 +527,24 @@ class MemberMembershipsService:
         return cancel_dates
 
     # ── Private ────────────────────────────────────────────────
+
+    async def _authorization_exists(
+        self,
+        member_id: UUID,
+        payer_member_id: UUID,
+    ) -> bool:
+        """Whether payer_member_id is currently an authorized payer for
+        member_id (the pre-check before a cascading de-authorize)."""
+        sql = load_sql(SQL_DIR / "member_authorized_payers_exists.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "member_id": str(member_id),
+                    "payer_member_id": str(payer_member_id),
+                },
+            )
+            return result.mappings().fetchone() is not None
 
     async def _pair_cancellable(
         self,

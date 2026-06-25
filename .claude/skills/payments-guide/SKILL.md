@@ -495,8 +495,9 @@ matching each line's `subscription_item` (`line_subscription_item` →
 membership's `paid_by_member_id` (one Stripe sub = one payer) and `paid_for` is the
 **distinct set of owners** billed on the invoice — gathering **all** memberships
 per item (a consolidated quantity>1 item is shared by several co-owners; the SQL
-is intentionally **un-`LIMIT`ed** so the second person isn't dropped). `settle_payer` is the payer for
-subscription invoices (drives the once-discount settle) and `None` for one-time. If
+is intentionally **un-`LIMIT`ed** so the second person isn't dropped). This resolves the
+subscription invoice's payer (`paid_by_member_id`, via `_resolve_attribution`); a one-time
+invoice reads its payer from the invoice metadata (`_attribution_from_metadata`) instead. If
 no payer resolves **and** lines reference sub-items, it raises
 **`SubscriptionItemPendingError`** (the create-flow hasn't committed
 `stripe_item_id` yet) → 200 + background retry.

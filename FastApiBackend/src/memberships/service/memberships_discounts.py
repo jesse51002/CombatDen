@@ -8,10 +8,10 @@ stays pinned to the version it was applied at.
 
 - A regular preset newly desired -> INSERT an applied-discount row referencing the
   preset's ACTIVE value version, with the absolute end_date resolved from that
-  version's lifetime spec. A preset already applied to this membership is skipped
-  (left frozen). An applied-discount row in the remove list -> DELETE.
-- ``once`` applied-discount rows leave end_date NULL until the sync stamps it on
-  consumption.
+  version's lifetime spec (a duration span -> apply_date + span; an explicit
+  end_date copied verbatim; neither -> NULL = forever). A preset already applied to
+  this membership is skipped (left frozen). An applied-discount row in the remove
+  list -> DELETE.
 
 Any discount is applied this way by id, including a ``linked`` (family) discount:
 the membership/family flow passes the linked discount's id in ``discount_ids``
@@ -19,12 +19,10 @@ and it freezes an applied-discount row to that discount's active value like any 
 
 After writing the applied-discount rows the membership's subscription is re-synced
 so the sync computes each consolidated line's coupon and writes the resolved
-stripe_coupon_id back onto the contributing applied-discount rows. Stripe attach for
-``once`` discounts lives entirely in the sync: a just-applied ``once`` row has a NULL
-stripe_coupon_id and NULL end_date; the first re-sync treats it as pending,
-find-or-creates its deterministic coupon, attaches it, and writes the coupon id
-back (the consumption handle). On a later cycle the coupon is absent from the
-live subscription, so the sync detects consumption and stamps end_date.
+stripe_coupon_id back onto the contributing applied-discount rows. The coupon is
+find-or-created once per distinct value (a single Stripe ``forever`` coupon); the
+discount's expiry is bounded by OUR resolved end_date, never by Stripe — the
+applied-discount read simply drops a row once its end_date has passed.
 
 DiscountsService never touches applied-discount rows — it owns only
 ``gym_discounts`` / ``gym_discount_values``. ``mint_custom_discounts`` returns

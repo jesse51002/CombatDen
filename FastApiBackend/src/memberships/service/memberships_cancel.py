@@ -381,10 +381,14 @@ class MemberMembershipsCancel(MemberMembershipsBase):
                 f"item_id={item_id}, member_id={member_id}"
             )
 
-        if row["end_date"] is not None and row["end_date"] <= gym_today(row["timezone"]):
-            logger.warning(
-                f"Recurring membership has ended set. "
-                f"Shouldn't be possible "
+        if row["end_date"] is not None and row["end_date"] <= gym_today(
+            row["timezone"]
+        ):
+            # A recurring membership should never carry an end_date; if one is
+            # already past, the Stripe item is gone — reject cleanly rather than
+            # writing cancel_date and converging against a dead item.
+            raise ValueError(
+                f"Cannot cancel an already-ended recurring membership "
                 f"(end_date={row['end_date']}): "
                 f"item_id={item_id}, member_id={member_id}"
             )

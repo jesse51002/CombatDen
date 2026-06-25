@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -506,22 +506,28 @@ async def unlink_member_payment(
 async def link_member_account(
     member_id: UUID,
     request: MembersBillingLinkRequest,
+    http_request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> None:
-    """Link a member to a paying parent account."""
+    """Link a member to a paying parent account (staff-only)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
 
+    # Capture the signer's IP + user-agent for the waiver signature audit.
+    ip_address = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
     try:
         await memberships_service.link_account(
             member_id,
             request.payer_member_id,
             signer_name=request.signer_name,
             consent_acknowledged=request.consent_acknowledged,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
     except ValueError as exc:
         error_msg = str(exc)
@@ -571,9 +577,9 @@ async def check_link_member_account(
         Provide[DependencyInjector.member_memberships_service]
     ),
 ) -> MembersBillingLinkCheckResponse:
-    """Check whether a payer can be authorized for a member."""
+    """Check whether a payer can be authorized for a member (staff-only)."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
 
     try:
         return await memberships_service.check_link_account(
@@ -632,7 +638,7 @@ async def preview_remove_authorization(
 ) -> list[PayerInvoiceChange]:
     """Preview the cascading cancel of removing a payer's authorization."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
 
     try:
         return await memberships_service.preview_remove_authorization(
@@ -686,7 +692,7 @@ async def remove_authorization(
 ) -> MemberMembershipsCancelResponse:
     """Remove a payer's authorization, cancelling the pair's memberships."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_gym_employee_for_member(member_id, user_payload)
 
     try:
         cancel_dates = await memberships_service.remove_authorization(
