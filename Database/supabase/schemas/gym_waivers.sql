@@ -36,25 +36,31 @@ CREATE INDEX idx_gym_waivers_gym ON gym_waivers (gym_id) WHERE is_deleted = fals
 CREATE UNIQUE INDEX idx_gym_waivers_one_default
     ON gym_waivers (gym_id) WHERE is_default = true;
 
--- The default waiver is undeletable: it can be edited (which versions normally
--- via gym_waiver_versions) but never archived (is_deleted) or hard-deleted, and
--- is_default itself is fixed once set. Enforced for ALL roles (incl.
--- service_role) so the authorized-payer gate always has a document to sign.
+-- The default waiver is protected from client tampering: gym staff
+-- (authenticated / anon) cannot archive (is_deleted) or hard-delete it, and
+-- is_default is immutable for ALL roles once set. The backend (service_role)
+-- may hard-delete a default waiver during gym-create teardown — if the waiver
+-- seeds but the Stripe account create fails, cleanup must be able to remove it
+-- so there is no dangling row after the gym is torn down.
 CREATE OR REPLACE FUNCTION prevent_default_waiver_removal()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN
-        IF OLD.is_default THEN
+        -- Block hard-delete for client roles only; service_role may delete
+        -- during gym teardown (see GymsCreateService._cleanup_pending).
+        IF OLD.is_default AND current_user IN ('authenticated', 'anon') THEN
             RAISE EXCEPTION
                 'Cannot delete the default waiver for gym %', OLD.gym_id;
         END IF;
         RETURN OLD;
     END IF;
-    -- UPDATE: block archiving a default and block toggling is_default.
-    IF OLD.is_default AND NEW.is_deleted THEN
+    -- UPDATE: block archiving a default waiver for client roles only.
+    IF OLD.is_default AND NEW.is_deleted
+        AND current_user IN ('authenticated', 'anon') THEN
         RAISE EXCEPTION
             'Cannot archive the default waiver for gym %', OLD.gym_id;
     END IF;
+    -- is_default is immutable for ALL roles once set.
     IF OLD.is_default <> NEW.is_default THEN
         RAISE EXCEPTION
             'is_default is immutable on gym_waivers (waiver %)', OLD.waiver_id;

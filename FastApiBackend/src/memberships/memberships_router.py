@@ -4,7 +4,8 @@ import logging
 from typing import Annotated
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -25,6 +26,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsStartPreviewResponse,
     MemberMembershipsStartRequest,
     MemberMembershipsStartResponse,
+    MemberMembershipsStartStatus,
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
     MemberMembershipsUpdatePriceResponse,
@@ -70,8 +72,17 @@ member_memberships_router = APIRouter(
     ),
     responses={
         200: {"description": "Membership(s) cancelled successfully"},
+        207: {
+            "description": (
+                "Partial cancel — some memberships cancelled, some failed. "
+                "Body carries succeeded_item_ids + failed_item_ids; the caller "
+                "re-issues the cancel for the failed items. A 2xx (not an "
+                "error) so a proxy never auto-retries a partial result."
+            )
+        },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        500: {"description": "Total failure — nothing cancelled (Stripe/sync)"},
     },
 )
 @inject
@@ -102,8 +113,8 @@ async def cancel_membership(
         HTTPException: 401 if not authenticated,
             403 if not authorized,
             409 if a membership is inside an unfinished task,
-            502 on Stripe errors,
-            500 on unexpected errors.
+            500 on a total Stripe failure or unexpected error
+            (a PARTIAL cancel is RETURNED as 207, not raised).
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_can_view_member(request.member_id, user_payload)
@@ -130,11 +141,11 @@ async def cancel_membership(
         ) from None
     except PartialCancelError as exc:
         # A later payer's converge failed AFTER an earlier payer succeeded —
-        # the batch is partial. Log the full succeeded/failed map and surface
-        # it as a STRUCTURED detail so the caller can show the accurate
-        # succeeded/failed split (and re-issue the cancel for the failed
-        # payer's items). A FastAPI HTTPException detail may be a dict — it
-        # serializes as the JSON body's ``detail``.
+        # the batch is partial. This is a real, parseable RESULT (not an error):
+        # RETURN it as 207 Multi-Status with the succeeded/failed split so the
+        # caller shows the accurate outcome and re-issues the cancel for the
+        # failed items. 207 is a 2xx, so a proxy never auto-retries a partial
+        # (which would needlessly re-cancel the already-succeeded payers).
         succeeded_item_ids = sorted(str(i) for i in exc.succeeded)
         failed_item_ids = sorted(str(i) for i in exc.failed_item_ids)
         logger.error(
@@ -146,14 +157,14 @@ async def cancel_membership(
             failed_item_ids,
             exc_info=True,
         )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
+        return JSONResponse(
+            status_code=status.HTTP_207_MULTI_STATUS,
+            content={
                 "message": str(exc),
                 "succeeded_item_ids": succeeded_item_ids,
                 "failed_item_ids": failed_item_ids,
             },
-        ) from None
+        )
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -166,8 +177,18 @@ async def cancel_membership(
             detail=error_msg,
         ) from None
     except PaymentsStripeError as exc:
+        # Total failure — nothing was cancelled (no payer succeeded). 500, not
+        # 502: a 502 is in the proxy auto-retry family and we don't want a
+        # partial-or-total cancel auto-retried at the gateway.
+        logger.error(
+            "Cancel failed (Stripe, nothing cancelled): item_ids=%s, "
+            "member_id=%s",
+            request.item_ids,
+            request.member_id,
+            exc_info=True,
+        )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -239,7 +260,7 @@ async def freeze_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -308,7 +329,7 @@ async def unfreeze_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -338,14 +359,23 @@ async def unfreeze_membership(
         "failed charge group surfaces there, not as an error status."
     ),
     responses={
-        201: {"description": "Breakdown of created/failed memberships"},
+        201: {"description": "All memberships created (full breakdown)"},
+        207: {
+            "description": (
+                "Partial — some memberships created, some failed; the "
+                "results[] breakdown carries the per-item split. A 2xx, never "
+                "auto-retried."
+            )
+        },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update these members"},
+        500: {"description": "Total failure — nothing created (Stripe/sync)"},
     },
 )
 @inject
 async def start_membership(
     request: MemberMembershipsStartRequest,
+    response: Response,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
@@ -356,6 +386,7 @@ async def start_membership(
 
     Args:
         request: Payer + the memberships to create (price + discounts each).
+        response: Injected so a mixed breakdown can be flagged 207 (below).
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
@@ -366,7 +397,7 @@ async def start_membership(
         await auth.verify_can_view_member(item_member_id, user_payload)
 
     try:
-        return await memberships_service.start(request)
+        result = await memberships_service.start(request)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -379,8 +410,18 @@ async def start_membership(
             detail=error_msg,
         ) from None
     except PaymentsStripeError as exc:
+        # Total failure before any membership was created. 500, not 502: a 502
+        # is in the proxy auto-retry family, and auto-retrying a create risks
+        # duplicate memberships/charges.
+        logger.error(
+            "Failed to start memberships (Stripe): payer_member_id=%s, "
+            "gym_id=%s",
+            request.payer_member_id,
+            request.gym_id,
+            exc_info=True,
+        )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -394,6 +435,16 @@ async def start_membership(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to start memberships",
         ) from None
+
+    # A breakdown with any failed charge group is a partial -> 207 Multi-Status
+    # (the results[] carries the per-item split). 207 is a 2xx, so a proxy never
+    # auto-retries a partial create; an all-created breakdown stays 201.
+    if any(
+        item.status == MemberMembershipsStartStatus.failed
+        for item in result.results
+    ):
+        response.status_code = status.HTTP_207_MULTI_STATUS
+    return result
 
 
 @member_memberships_router.put(
@@ -414,7 +465,7 @@ async def start_membership(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         409: {"description": "Membership is inside an unfinished task"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -468,7 +519,7 @@ async def update_membership_price(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -605,7 +656,7 @@ async def preview_start_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -668,7 +719,7 @@ async def preview_cancel_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -744,7 +795,7 @@ async def add_membership_discounts(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -819,7 +870,7 @@ async def remove_membership_discounts(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -895,7 +946,7 @@ async def mark_membership_paid_cash(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -931,7 +982,7 @@ async def mark_membership_paid_cash(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member profile not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -962,7 +1013,7 @@ async def charge_member_card(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -995,7 +1046,7 @@ async def charge_member_card(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to view this member"},
         404: {"description": "Member or charge not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -1032,7 +1083,7 @@ async def refund_charge(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:

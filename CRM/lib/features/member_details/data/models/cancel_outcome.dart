@@ -6,10 +6,10 @@
 ///
 /// - HTTP 200: all requested item_ids succeeded (parsed
 ///   from `cancel_dates` keys).
-/// - HTTP 502 partial: the router returns a structured
+/// - HTTP 207 partial: the router returns a structured
 ///   `detail` (`{succeeded_item_ids, failed_item_ids}`); the
 ///   real split is parsed from it. A full Stripe error (no
-///   structured detail) falls back to all-failed.
+///   structured detail, HTTP 500) falls back to all-failed.
 /// - Other error: all requested item_ids failed.
 class CancelOutcome {
   /// The item_ids that were successfully cancelled.

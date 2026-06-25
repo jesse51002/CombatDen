@@ -242,40 +242,42 @@ class MemberRepository {
   /// same completion screen):
   /// - HTTP 200: the cancelled item_ids come from the `cancel_dates` keys (the
   ///   map is empty when the relationship funded nothing — a clean de-authorize).
-  /// - HTTP 502 partial: the structured `detail`
-  ///   (`{succeeded_item_ids, failed_item_ids}`) carries the real split.
-  /// Any other error (no structured partial, transport failure) rethrows — the
+  /// - HTTP 207 partial: the body's `{succeeded_item_ids, failed_item_ids}`
+  ///   carries the real split (a 2xx, so it arrives on the success path).
+  /// Any other error (total failure 500, transport failure) rethrows — the
   /// caller surfaces it rather than showing an empty completion screen.
   Future<CancelOutcome> removeAuthorization(
     String memberId,
     String payerMemberId,
     String idempotencyKey,
   ) async {
-    try {
-      final response = await _apiClient.post(
-        '/api/v1/members/$memberId/link/remove',
-        data: {
-          'payer_member_id': payerMemberId,
-          'idempotency_key': idempotencyKey,
-        },
+    final response = await _apiClient.post(
+      '/api/v1/members/$memberId/link/remove',
+      data: {
+        'payer_member_id': payerMemberId,
+        'idempotency_key': idempotencyKey,
+      },
+    );
+    // HTTP 207 partial: the body carries the succeeded/failed split (a 2xx, so
+    // it arrives here on the success path, not as an exception).
+    if (response.statusCode == 207) {
+      final partial = _parsePartialCancel(
+        response.data is Map
+            ? (response.data as Map).cast<String, dynamic>()
+            : null,
       );
-      // HTTP 200: cancelled item_ids = cancel_dates keys (empty = nothing
-      // funded, just a de-authorize).
-      final data = response.data;
-      final cancelDates = data is Map
-          ? data['cancel_dates'] as Map<String, dynamic>?
-          : null;
-      return CancelOutcome(
-        succeededItemIds: cancelDates?.keys.toList() ?? const [],
-        failedItemIds: const [],
-      );
-    } on ServerException catch (e) {
-      if (e.statusCode == 502) {
-        final partial = _parsePartialCancel(e.data);
-        if (partial != null) return partial;
-      }
-      rethrow;
+      if (partial != null) return partial;
     }
+    // HTTP 200: cancelled item_ids = cancel_dates keys (empty = nothing
+    // funded, just a de-authorize).
+    final data = response.data;
+    final cancelDates = data is Map
+        ? data['cancel_dates'] as Map<String, dynamic>?
+        : null;
+    return CancelOutcome(
+      succeededItemIds: cancelDates?.keys.toList() ?? const [],
+      failedItemIds: const [],
+    );
   }
 
   /// `GET /api/v1/members/{member_id}/invoices`.
@@ -341,8 +343,9 @@ class MemberRepository {
 
   /// `POST /api/v1/member_memberships/` — start a payer's
   /// family memberships in one request. Returns the
-  /// per-membership created/failed breakdown (a 201 is NOT
-  /// success/fail — inspect each result).
+  /// per-membership created/failed breakdown (status is 201 when all
+  /// created, 207 when some failed — both 2xx; inspect each result
+  /// either way). A total failure (nothing created) throws.
   Future<MemberMembershipsStartResponse> startMemberships(
     MemberMembershipsStartRequest req,
   ) async {
@@ -381,14 +384,14 @@ class MemberRepository {
   /// Returns a [CancelOutcome] describing which item_ids succeeded
   /// and which failed:
   /// - HTTP 200: all [itemIds] succeeded (from `cancel_dates` keys).
-  /// - HTTP 502 partial: the structured `detail`
-  ///   (`{succeeded_item_ids, failed_item_ids}`) carries the real
-  ///   split — parse it so the completion screen shows which items
-  ///   actually cancelled. If the structured shape is missing, fall
-  ///   back to all-failed.
+  /// - HTTP 207 partial: the body's `{succeeded_item_ids, failed_item_ids}`
+  ///   carries the real split — a 207 is a 2xx, so it arrives on the
+  ///   SUCCESS path (no exception); parse it so the completion screen shows
+  ///   which items actually cancelled. If the structured shape is missing,
+  ///   fall back to all-failed.
   /// - HTTP 409: throws [MembershipInTaskException] (not a cancel
   ///   outcome — the request was blocked entirely).
-  /// - Other error: all [itemIds] reported as failed.
+  /// - Total failure (HTTP 500) / other error: all [itemIds] reported as failed.
   Future<CancelOutcome> cancelMemberships({
     required List<String> itemIds,
     required String memberId,
@@ -403,6 +406,15 @@ class MemberRepository {
           'idempotency_key': idempotencyKey,
         },
       );
+      // HTTP 207: partial — the body carries the real succeeded/failed split.
+      if (response.statusCode == 207) {
+        final partial = _parsePartialCancel(
+          response.data is Map
+              ? (response.data as Map).cast<String, dynamic>()
+              : null,
+        );
+        if (partial != null) return partial;
+      }
       // HTTP 200: parse succeeded item_ids from cancel_dates keys.
       final data = response.data;
       if (data is Map) {
@@ -414,7 +426,7 @@ class MemberRepository {
           failedItemIds: const [],
         );
       }
-      // Unexpected shape — treat all as succeeded (200 was returned).
+      // Unexpected shape — treat all as succeeded (a 2xx was returned).
       return CancelOutcome(
         succeededItemIds: itemIds,
         failedItemIds: const [],
@@ -426,11 +438,7 @@ class MemberRepository {
               'This membership is part of an in-progress upgrade task.',
         );
       }
-      if (e.statusCode == 502) {
-        final partial = _parsePartialCancel(e.data);
-        if (partial != null) return partial;
-      }
-      // Non-502 / unstructured server error: all items failed.
+      // Total failure (500) / unstructured server error: all items failed.
       return CancelOutcome(
         succeededItemIds: const [],
         failedItemIds: itemIds,
@@ -443,16 +451,15 @@ class MemberRepository {
     }
   }
 
-  /// Reads the structured partial-cancel split from a 502 error body
-  /// (`{"detail": {"succeeded_item_ids": [...], "failed_item_ids":
-  /// [...]}}`). Returns null when the body has no structured detail
-  /// (e.g. a full Stripe error whose `detail` is a plain string), so
-  /// the caller falls back to all-failed.
+  /// Reads the structured partial-cancel split from a 207 Multi-Status body
+  /// (`{"message": ..., "succeeded_item_ids": [...], "failed_item_ids":
+  /// [...]}`). The fields are top-level (a 207 is a returned RESULT, not an
+  /// HTTPException, so there is no `detail` wrapper). Returns null when the
+  /// body has no structured split, so the caller falls back appropriately.
   CancelOutcome? _parsePartialCancel(Map<String, dynamic>? data) {
-    final detail = data?['detail'];
-    if (detail is! Map) return null;
-    final succeeded = detail['succeeded_item_ids'];
-    final failed = detail['failed_item_ids'];
+    if (data == null) return null;
+    final succeeded = data['succeeded_item_ids'];
+    final failed = data['failed_item_ids'];
     if (succeeded is! List || failed is! List) return null;
     return CancelOutcome(
       succeededItemIds: succeeded.map((e) => e.toString()).toList(),

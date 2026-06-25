@@ -6,6 +6,7 @@ from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
@@ -377,7 +378,7 @@ async def get_member_billing_detail(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -414,7 +415,7 @@ async def update_member_card(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -677,7 +678,14 @@ async def preview_remove_authorization(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member not found"},
-        502: {"description": "Cascading cancel partially applied or Stripe error"},
+        207: {
+            "description": (
+                "Partial cascade — some memberships cancelled, some failed "
+                "(body has succeeded_item_ids/failed_item_ids); the "
+                "authorization row is left intact. A 2xx, never auto-retried."
+            )
+        },
+        500: {"description": "Total failure — nothing cancelled (Stripe/sync)"},
     },
 )
 @inject
@@ -708,10 +716,11 @@ async def remove_authorization(
         )
     except PartialCancelError as exc:
         # The cascading cancel partially applied (one payer converged, a later
-        # one failed). Mirror the cancel router: log the full succeeded/failed
-        # map and surface it as a STRUCTURED 502 detail so the caller shows the
-        # accurate split. The authorization row is left intact (the de-authorize
-        # runs only after a full cancel).
+        # one failed). Mirror the cancel router: this is a real, parseable
+        # RESULT, so RETURN it as 207 Multi-Status with the succeeded/failed
+        # split (a 2xx — a proxy never auto-retries a partial). The
+        # authorization row is left intact (the de-authorize runs only after a
+        # full cancel).
         succeeded_item_ids = sorted(str(i) for i in exc.succeeded)
         failed_item_ids = sorted(str(i) for i in exc.failed_item_ids)
         logger.error(
@@ -723,14 +732,14 @@ async def remove_authorization(
             failed_item_ids,
             exc_info=True,
         )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
+        return JSONResponse(
+            status_code=status.HTTP_207_MULTI_STATUS,
+            content={
                 "message": str(exc),
                 "succeeded_item_ids": succeeded_item_ids,
                 "failed_item_ids": failed_item_ids,
             },
-        ) from None
+        )
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -743,8 +752,16 @@ async def remove_authorization(
             detail=error_msg,
         ) from None
     except PaymentsStripeError as exc:
+        # Total failure — nothing cancelled, so nothing de-authorized. 500, not
+        # 502, so the gateway never auto-retries it.
+        logger.error(
+            "Remove-authorization failed (Stripe, nothing cancelled): "
+            "member_id=%s",
+            member_id,
+            exc_info=True,
+        )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
