@@ -108,6 +108,20 @@ class MemberDetailLoaded extends MemberDetailState {
   /// upgrade dialog is open (mirrors [chargeCardError]).
   final String? upgradeError;
 
+  /// True while the end-membership POST is in flight. Separate from
+  /// [isMutating] so the end dialog owns its own loading + success
+  /// treatment (mirrors [isUpgrading]).
+  final bool isEnding;
+
+  /// Monotonic token bumped once an end succeeds. The end dialog
+  /// watches it to flip to its success step.
+  final int endSuccess;
+
+  /// The last end-membership failure. Kept off [actionError] so the
+  /// screen-level error dialog doesn't swallow it while the end dialog
+  /// is open (mirrors [upgradeError]).
+  final String? endError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -136,6 +150,9 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isUpgrading = false,
     this.upgradeSuccess = 0,
     this.upgradeError,
+    this.isEnding = false,
+    this.endSuccess = 0,
+    this.endError,
     this.refreshToken = 0,
   });
 
@@ -175,6 +192,10 @@ class MemberDetailLoaded extends MemberDetailState {
     int? upgradeSuccess,
     String? upgradeError,
     bool clearUpgradeOutcome = false,
+    bool? isEnding,
+    int? endSuccess,
+    String? endError,
+    bool clearEndOutcome = false,
     int? refreshToken,
   }) {
     return MemberDetailLoaded(
@@ -219,6 +240,11 @@ class MemberDetailLoaded extends MemberDetailState {
       upgradeError: clearUpgradeOutcome
           ? null
           : (upgradeError ?? this.upgradeError),
+      isEnding: isEnding ?? this.isEnding,
+      endSuccess: endSuccess ?? this.endSuccess,
+      endError: clearEndOutcome
+          ? null
+          : (endError ?? this.endError),
       refreshToken: refreshToken ?? this.refreshToken,
     );
   }
@@ -245,6 +271,9 @@ class MemberDetailLoaded extends MemberDetailState {
         isUpgrading,
         upgradeSuccess,
         upgradeError,
+        isEnding,
+        endSuccess,
+        endError,
         refreshToken,
       ];
 }

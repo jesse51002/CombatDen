@@ -348,6 +348,13 @@ class UpgradeMembershipOutcomeCleared extends MemberDetailEvent {
   const UpgradeMembershipOutcomeCleared();
 }
 
+/// Clears the end-membership outcome (error) when the end dialog
+/// opens, so a prior end's failure doesn't flash (mirrors
+/// [UpgradeMembershipOutcomeCleared]).
+class EndMembershipOutcomeCleared extends MemberDetailEvent {
+  const EndMembershipOutcomeCleared();
+}
+
 /// NOTE: refund has no backend endpoint in the merged
 /// contract (see `MemberRepository.refundCharge`).
 class RefundChargeRequested extends MemberDetailEvent {
