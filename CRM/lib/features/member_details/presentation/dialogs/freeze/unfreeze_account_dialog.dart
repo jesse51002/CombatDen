@@ -3,7 +3,6 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
-import 'package:crm/features/member_details/data/models/paying_for_member.dart';
 import 'package:crm/shared/widgets/billing_confirmation_dialog.dart';
 
 /// Confirms resuming billing for a frozen account — listing
@@ -17,13 +16,9 @@ class UnfreezeAccountDialog {
     required BuildContext context,
     required MemberDetailResponse member,
   }) {
-    final byId = <String, PayingForMember>{};
-    for (final m in member.memberships) {
-      for (final p in m.payingFor) {
-        byId.putIfAbsent(p.memberId, () => p);
-      }
-    }
-    final affected = byId.values
+    // Every member this account funds (the viewed member included
+    // when they self-pay) — what resuming billing will affect.
+    final affected = member.paysFor
         .map(
           (p) => BillingAffectedPerson(
             fullName: p.fullName,

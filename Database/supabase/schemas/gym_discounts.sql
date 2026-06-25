@@ -13,8 +13,8 @@
 -- like any discount. The `linked` tag marks it as a family discount and keeps it
 -- out of the regular per-membership discount picker.
 --
--- The discount_mode / discount_duration_unit enums are declared in
--- gym_discount_values.sql (the earliest-loaded consumer of them).
+-- The discount_duration_unit enum is declared in gym_discount_values.sql
+-- (the earliest-loaded consumer of it).
 CREATE TABLE gym_discounts_unfiltered (
     discount_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_id UUID NOT NULL CONSTRAINT fk_discount_gym REFERENCES gyms(gym_id),

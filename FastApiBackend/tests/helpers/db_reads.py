@@ -106,7 +106,7 @@ async def get_applied_discounts(
     sql = (
         "SELECT ad.applied_discount_id, ad.item_id, ad.member_id, ad.gym_id, "
         "ad.value_id, d.discount_id, d.discount_name, d.discount_type, "
-        "v.percentage_off, v.dollar_off, v.discount_mode, "
+        "v.percentage_off, v.dollar_off, "
         "ad.end_date, ad.stripe_coupon_id "
         "FROM member_membership_applied_discounts_unfiltered ad "
         "JOIN gym_discount_values_unfiltered v ON ad.value_id = v.value_id "

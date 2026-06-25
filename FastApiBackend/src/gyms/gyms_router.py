@@ -69,7 +69,7 @@ gyms_router = APIRouter(
         201: {"description": "Gym + Stripe account created, onboarding pending"},
         400: {"description": "Invalid request data"},
         401: {"description": "Not authenticated"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -112,7 +112,7 @@ async def create_gym(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Stripe account created but DB update failed",
         ) from None
     except PaymentsStripeError as exc:
@@ -122,7 +122,7 @@ async def create_gym(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -199,7 +199,7 @@ async def list_my_gyms(
         401: {"description": "Not authenticated"},
         403: {"description": "Not the owner of this gym"},
         404: {"description": "Gym not found, or Stripe account missing"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -232,7 +232,7 @@ async def get_onboarding_status(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -267,7 +267,7 @@ async def get_onboarding_status(
         403: {"description": "Not the owner of this gym"},
         404: {"description": "Gym not found or has no Stripe account"},
         409: {"description": "Gym is not in a pending state"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -301,7 +301,7 @@ async def new_onboarding_link(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:

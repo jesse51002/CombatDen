@@ -1,7 +1,7 @@
 """Integration tests for PaymentsStripeDiscountService.
 
 Coupons are minted under a **deterministic id** derived from the value
-(``pct_<bps>_<mode>`` / ``amt_<cents>_<mode>``) by ``find_or_create_for_value`` —
+(``pct_<bps>`` / ``amt_<cents>``) by ``find_or_create_for_value`` —
 the single value→coupon path (no public raw-create). Every success path
 re-fetches the coupon from Stripe to catch response-mapper drift (service claims
 X, Stripe says Y).
@@ -9,7 +9,6 @@ X, Stripe says Y).
 
 import pytest
 import stripe
-from schema.gym_discount import DiscountMode
 
 import src.shared.db_schema_path  # noqa: F401
 from src.payments.payments_exceptions import PaymentsResourceNotFoundError
@@ -26,15 +25,13 @@ async def test_find_or_create_percentage_coupon(
     connect_opts,
     created,
 ):
-    value = PaymentsCouponValue(
-        discount_mode=DiscountMode.ongoing, percentage_off=10.0
-    )
+    value = PaymentsCouponValue(percentage_off=10.0)
     coupon_id = await discount_service.find_or_create_for_value(
         value, stripe_account_id
     )
     created.track_coupon(coupon_id)
 
-    assert coupon_id == "pct_1000_ongoing"
+    assert coupon_id == "pct_1000"
     coupon = await stripe_client.client.v1.coupons.retrieve_async(
         coupon_id, options=connect_opts
     )
@@ -51,20 +48,20 @@ async def test_find_or_create_amount_coupon(
     connect_opts,
     created,
 ):
-    value = PaymentsCouponValue(discount_mode=DiscountMode.once, dollar_off=500)
+    value = PaymentsCouponValue(dollar_off=500)
     coupon_id = await discount_service.find_or_create_for_value(
         value, stripe_account_id
     )
     created.track_coupon(coupon_id)
 
-    assert coupon_id == "amt_500_once"
+    assert coupon_id == "amt_500"
     coupon = await stripe_client.client.v1.coupons.retrieve_async(
         coupon_id, options=connect_opts
     )
     assert coupon.amount_off == 500
     assert coupon.percent_off is None
     assert coupon.currency == "usd"
-    assert coupon.duration == "once"
+    assert coupon.duration == "forever"
 
 
 async def test_find_or_create_is_idempotent(
@@ -74,15 +71,13 @@ async def test_find_or_create_is_idempotent(
 ):
     """A second resolve of the same value returns the same coupon id, no error
     — the deterministic-id find-or-create concurrency guarantee."""
-    value = PaymentsCouponValue(
-        discount_mode=DiscountMode.ongoing, percentage_off=20.0
-    )
+    value = PaymentsCouponValue(percentage_off=20.0)
     first = await discount_service.find_or_create_for_value(value, stripe_account_id)
     created.track_coupon(first)
     second = await discount_service.find_or_create_for_value(
         value, stripe_account_id
     )
-    assert first == second == "pct_2000_ongoing"
+    assert first == second == "pct_2000"
 
 
 async def test_find_or_create_replaces_mismatched_coupon(
@@ -94,7 +89,7 @@ async def test_find_or_create_replaces_mismatched_coupon(
 ):
     """A coupon already under the deterministic id with the WRONG value is
     deleted + recreated correct (Stripe coupons are immutable)."""
-    coupon_id = "pct_2500_ongoing"
+    coupon_id = "pct_2500"
     await stripe_client.client.v1.coupons.create_async(
         params={"id": coupon_id, "percent_off": 99.0, "duration": "forever"},
         options=discount_service._client.connect_opts(stripe_account_id),
@@ -102,11 +97,11 @@ async def test_find_or_create_replaces_mismatched_coupon(
     created.track_coupon(coupon_id)
 
     result = await discount_service.find_or_create_for_value(
-        PaymentsCouponValue(discount_mode=DiscountMode.ongoing, percentage_off=25.0),
+        PaymentsCouponValue(percentage_off=25.0),
         stripe_account_id,
     )
 
-    assert result == coupon_id
+    assert result == "pct_2500"
     coupon = await stripe_client.client.v1.coupons.retrieve_async(
         coupon_id, options=connect_opts
     )
@@ -120,7 +115,7 @@ async def test_find_discount_returns_none_when_absent(
     """find_discount is the non-raising lookup: absent id → None."""
     assert (
         await discount_service.find_discount(
-            "amt_999999_once", stripe_account_id
+            "amt_999999", stripe_account_id
         )
         is None
     )
@@ -134,7 +129,7 @@ async def test_delete_discount(
     created,
 ):
     coupon_id = await discount_service.find_or_create_for_value(
-        PaymentsCouponValue(discount_mode=DiscountMode.ongoing, percentage_off=5.0),
+        PaymentsCouponValue(percentage_off=5.0),
         stripe_account_id,
     )
     created.track_coupon(coupon_id)

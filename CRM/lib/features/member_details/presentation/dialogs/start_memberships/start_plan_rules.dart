@@ -19,40 +19,22 @@ const _blockingStatuses = {
   MembershipStatus.overdue,
 };
 
-/// Memberships from [all] that the participant [memberId]
-/// is actually enrolled in. A paying parent's detail also
-/// lists plans they cover for linked children, so filter to
-/// rows whose `members` map includes the participant —
-/// otherwise the parent would inherit a child's active plan
-/// and get wrongly blocked.
+/// The participant's memberships. The member-detail fetch is
+/// member-centric — already scoped to the viewed member — so every
+/// row in [all] is theirs. Kept as a named helper (the identity) so
+/// the orchestrator and plan step share one source of truth.
 List<MembershipInfo> membershipsForParticipant(
   List<MembershipInfo> all,
   String memberId,
 ) =>
-    // `all` is the participant's OWN detail fetch, so a
-    // membership with an EMPTY roster (the backend omits
-    // the per-member map on solo memberships) is theirs —
-    // dropping it hid a child's own memberships entirely.
-    // A non-empty roster attributes precisely (the payer's
-    // detail carries family plans whose roster names the
-    // covered children, not the payer).
-    all
-        .where(
-          (m) =>
-              m.members.isEmpty ||
-              m.members.containsKey(memberId),
-        )
-        .toList();
+    all;
 
-/// The participant's own status on a membership — their
-/// per-member roster status when present (a family plan's
-/// covered members each carry their own), falling back to
-/// the plan-level status.
+/// The participant's status on a membership — its flat status; each
+/// card is the participant's own membership row.
 MembershipStatus participantStatus(
   MembershipInfo membership,
   String memberId,
 ) =>
-    membership.payingForMemberFor(memberId)?.status ??
     membership.status;
 
 /// Memberships the participant currently holds in a

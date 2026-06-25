@@ -89,7 +89,7 @@ class _ChargeCardDialogState extends State<ChargeCardDialog> {
   bool _chargedPaidCash = false;
 
   bool get _hasPayerChoice =>
-      widget.member.linkedToAccount != null;
+      widget.member.authorizedPayers.isNotEmpty;
 
   @override
   void initState() {
@@ -105,40 +105,23 @@ class _ChargeCardDialogState extends State<ChargeCardDialog> {
     _initPayer();
   }
 
-  /// Default payer = the top-level paying account (self when
-  /// standalone, the linked parent otherwise). The payer step is only
-  /// reached when there's a real choice (a linked family); a
-  /// standalone member opens straight on the payment step.
+  /// Default payer = the viewed member (self-pay). The payer step is
+  /// only reached when there's a real choice — the member has
+  /// authorized payers whose card could be charged instead; a member
+  /// with none opens straight on the payment step.
   void _initPayer() {
     final viewed = widget.member;
     _memberDetails[viewed.memberId] = viewed;
-    final parentId = viewed.linkedToAccount;
-    if (parentId == null) {
-      _payer = StartMembershipParticipant(
-        memberId: viewed.memberId,
-        name: viewed.fullName,
-        photoUrl: viewed.photoUrl,
-        isPayer: true,
-      );
-      _payerDetail = viewed;
-      _step = _ChargeStep.payment;
-    } else {
-      final parents = viewed.linkedAccounts
-          .where((a) => a.memberId == parentId);
-      _payer = StartMembershipParticipant(
-        memberId: parentId,
-        name: parents.isEmpty
-            ? 'Paying account'
-            : parents.first.fullName,
-        photoUrl:
-            parents.isEmpty ? null : parents.first.photoUrl,
-        isPayer: true,
-      );
-      _step = _ChargeStep.payer;
-      // Fetch the parent's own billing for their card while the user
-      // is still on the payer step.
-      _loadPayerDetail();
-    }
+    _payer = StartMembershipParticipant(
+      memberId: viewed.memberId,
+      name: viewed.fullName,
+      photoUrl: viewed.photoUrl,
+      isPayer: true,
+    );
+    _payerDetail = viewed;
+    _step = viewed.authorizedPayers.isEmpty
+        ? _ChargeStep.payment
+        : _ChargeStep.payer;
   }
 
   @override
@@ -298,13 +281,11 @@ class _ChargeCardDialogState extends State<ChargeCardDialog> {
   Widget _buildBody() {
     switch (_step) {
       case _ChargeStep.payer:
-        final parentId = widget.member.linkedToAccount;
         return StartMembershipParticipantStep(
           member: widget.member,
+          candidates: widget.member.authorizedPayers,
           selectedMemberId: _payer.memberId,
           payerMemberId: _payer.memberId,
-          linkedAccountIds:
-              parentId != null ? {parentId} : const <String>{},
           onSelected: _onPayerSelected,
           title: "Who's paying for ${widget.member.firstName}?",
           subtitle: 'Whose card is charged for '

@@ -44,7 +44,6 @@ class MembersBillingProfileResponse(BaseModel):
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None
-    account_linked_to_id: UUID | None = None
     stripe_customer_id: str | None = None
     stripe_payment_method_id: str | None = None
     card_brand: str | None = None
@@ -74,15 +73,6 @@ class BillingLinkedAccount(BaseModel):
     first_name: str
     last_name: str
     photo_url: str | None = None
-
-
-class BillingPayingForMember(BillingLinkedAccount):
-    """A member on a plan with their class usage for the current cycle."""
-
-    status: CrmMemberStatus
-    class_count: int | None = None
-    classes_used: int = 0
-    classes_remaining: int | None = None
 
 
 class BillingPaidForMember(BillingLinkedAccount):
@@ -126,54 +116,46 @@ class BillingDiscountInfo(BaseModel):
     amount_off: int
 
 
-class BillingMembershipMemberInfo(BaseModel):
-    """Per-member membership details within a grouped plan.
-
-    ``base_cost`` and ``total_price`` are this membership's own
-    ``member_memberships`` numbers (its pinned price and its **own**
-    post-discount share — the plan price minus this member's own
-    discounts), so the CRM renders the membership card atomically for one
-    covered member at a time rather than as a family-wide aggregate.
-    ``paid_by_member_id`` is the membership's PAYER — whose subscription
-    bills it (the member themselves, or their linked parent) — driving the
-    CRM's "Paid by" display.
-    """
-
-    item_id: UUID
-    paid_by_member_id: UUID
-    end_date: date | None = None
-    cancel_date: date | None = None
-    on_outdated_price: bool = False
-    base_cost: int
-    total_price: int
-
-
 class BillingMembershipInfo(BaseModel):
-    """A grouped plan in the membership carousel.
+    """One membership in the CRM member-detail carousel.
 
-    ``total_price`` here is the plan-level total — the **sum** of the active
-    memberships' own post-discount shares (each ``members[...].total_price``).
-    Per-member shares live in ``members``; use those for an individual covered
-    member, this for the whole plan.
+    The carousel is scoped to the viewed member, and ``member_details.sql``
+    returns one row per (member, plan), so each card is exactly one of the
+    viewed member's own memberships — there is no cross-member grouping.
+
+    ``base_cost`` / ``total_price`` are this membership's own
+    ``member_memberships`` numbers (its pinned price and its **own**
+    post-discount share). They are kept regardless of status — the
+    ``status`` badge conveys frozen / cancelled — so a paused card still
+    shows what it bills. ``paid_by_member_id`` is the membership's PAYER
+    (the member themselves or an authorized payer), driving the "Paid by"
+    display. ``class_count`` / ``classes_used`` / ``classes_remaining`` are
+    the member's class usage for the current cycle (None / 0 when absent).
     """
 
     plan_id: UUID
     plan_name: str
     plan_type: PlanType | None = None
     status: CrmMemberStatus
+    item_id: UUID
+    paid_by_member_id: UUID
     base_cost: int
     current_active_price: int | None = None
+    on_outdated_price: bool = False
     duration_amount: int
     duration_unit: str
     total_price: int
     last_paid_date: date | None = None
     next_due_date: date | None = None
     start_date: date
+    end_date: date | None = None
+    cancel_date: date | None = None
     freeze_start_date: date | None = None
     freeze_end_date: date | None = None
-    paying_for: list[BillingPayingForMember] = []
+    class_count: int | None = None
+    classes_used: int = 0
+    classes_remaining: int | None = None
     discounts: list[MemberMembershipsAppliedDiscount] = []
-    members: dict[UUID, BillingMembershipMemberInfo] = {}
 
 
 class BillingRetention(BaseModel):
@@ -293,7 +275,7 @@ class MemberBillingDetailResponse(BaseModel):
     """Full member detail response for the CRM Specific Member screen.
 
     Extends the standard MemberDetailResponse with billing data:
-    memberships, payment history, linked accounts, and card on file.
+    memberships, payment history, authorization rosters, and card on file.
     """
 
     member_id: UUID
@@ -303,11 +285,13 @@ class MemberBillingDetailResponse(BaseModel):
     photo_url: str | None = None
     account_status: str | None = None
     membership_overview: str
-    linked_to_account: UUID | None = None
     total_monthly_recurring_price: int
     total_membership_count: int
     personal_info: BillingPersonalInfo
-    linked_accounts: list[BillingLinkedAccount] = []
+    # Authorization rosters (who MAY pay for whom — many-to-many), distinct from
+    # `pays_for` (the actual billing relationship via paid_by_member_id).
+    authorized_payers: list[BillingLinkedAccount] = []
+    authorized_to_pay_for: list[BillingLinkedAccount] = []
     # Every member (the viewed member included) whose recurring
     # memberships the viewed member funds — what a freeze on this member
     # would pause. Empty when they pay for nobody / nothing recurring.

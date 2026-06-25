@@ -71,7 +71,7 @@ class EditMembershipDialog extends StatelessWidget {
       }.contains(membership.status);
 
   bool get _isOutdated =>
-      membership.isOnOutdatedPriceFor(coveredMemberId) &&
+      membership.onOutdatedPrice &&
       membership.currentActivePrice != null;
 
   bool get _anyFrozen => member.memberships
@@ -129,7 +129,7 @@ class EditMembershipDialog extends StatelessWidget {
             () => UpdatePriceDialog.show(
               context: context,
               membership: membership,
-              coveredMemberId: coveredMemberId,
+              memberId: coveredMemberId,
               coveredMemberName: coveredMemberName,
             ),
           ),

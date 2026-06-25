@@ -28,8 +28,7 @@ Future<void> runOneTimeRefundFlow(
   required String coveredMemberId,
   required bool allowEnd,
 }) async {
-  final itemId = membership.itemIdFor(coveredMemberId);
-  if (itemId == null) return;
+  final itemId = membership.itemId;
   final bloc = context.read<MemberDetailBloc>();
   final repo = MemberRepository(apiClient: ApiClient());
 

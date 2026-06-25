@@ -7,17 +7,17 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_member_check_tile.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
-/// Step 2 — who's getting memberships. Multi-select over
-/// the payer + members already linked to the payer (the
-/// backend hard-rejects unlinked members: the start op
-/// never links). A payer who is themselves a LINKED member
-/// self-pays: nobody is linked to them, so the only valid
-/// covered member is the payer — the list collapses to just
-/// them. The "link a member first" affordance jumps to the
-/// existing link flow and returns here.
+/// Step 2 — who's getting memberships. Multi-select over the payer plus
+/// EVERYONE the payer is authorized to pay for (the backend hard-rejects
+/// members the payer isn't authorized for: the start op never authorizes).
+///
+/// Authorization is many-to-many: a payer may themselves have authorized
+/// payers AND still be authorized to pay for others, so this never collapses to
+/// "just the payer". The "authorize someone first" affordance jumps to the link
+/// flow and returns here.
 class StartMembersStep extends StatelessWidget {
-  /// The PAYER's member detail (its `linkedAccounts` are
-  /// the linkable family). Null while it is still loading.
+  /// The PAYER's member detail — its `authorizedToPayFor` are the members the
+  /// payer may enroll. Null while it is still loading.
   final MemberDetailResponse? payerDetail;
   final StartMembershipParticipant payer;
   final Set<String> selectedMemberIds;
@@ -42,22 +42,18 @@ class StartMembersStep extends StatelessWidget {
         child: Center(child: AppSpinner()),
       );
     }
-    // A linked payer (their detail carries a
-    // linkedToAccount) can bill only their own
-    // memberships — single-level linking means nobody can
-    // be linked TO them.
-    final payerIsLinked = detail.linkedToAccount != null;
+    // The payer plus everyone they're authorized to pay for — regardless of
+    // whether the payer also has authorized payers of their own.
     final candidates = <StartMembershipParticipant>[
       payer,
-      if (!payerIsLinked)
-        ...detail.linkedAccounts.map(
-          (a) => StartMembershipParticipant(
-            memberId: a.memberId,
-            name: a.fullName,
-            photoUrl: a.photoUrl,
-            isPayer: false,
-          ),
+      ...detail.authorizedToPayFor.map(
+        (a) => StartMembershipParticipant(
+          memberId: a.memberId,
+          name: a.fullName,
+          photoUrl: a.photoUrl,
+          isPayer: false,
         ),
+      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -72,12 +68,9 @@ class StartMembersStep extends StatelessWidget {
               style: DesignConstants.h2,
             ),
             Text(
-              detail.linkedToAccount != null
-                  ? 'A linked member pays for their own '
-                      'memberships only.'
-                  : 'Pick everyone to enroll in this '
-                      'run — the payer themselves and '
-                      'members already linked to them.',
+              'Pick everyone to enroll in this run — the payer '
+              'themselves and the members they’re authorized to pay '
+              'for.',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),
@@ -91,13 +84,11 @@ class StartMembersStep extends StatelessWidget {
             ...candidates.map(
               (c) => StartMemberCheckTile(
                 participant: c,
-                selected: selectedMemberIds
-                    .contains(c.memberId),
+                selected: selectedMemberIds.contains(c.memberId),
                 onTap: () => onToggle(c.memberId),
               ),
             ),
-            if (detail.linkedToAccount == null)
-              StartLinkFirstTile(onTap: onLinkFirst),
+            StartLinkFirstTile(onTap: onLinkFirst),
           ],
         ),
       ],

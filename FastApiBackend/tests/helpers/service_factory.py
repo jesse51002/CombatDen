@@ -61,9 +61,6 @@ from src.sync.service.sync_discounts import (
 from src.sync.service.sync_freeze import (
     PaymentSyncFreeze,
 )
-from src.sync.service.sync_once_discounts import (
-    PaymentSyncOnceDiscounts,
-)
 from src.sync.service.sync_one_time import (
     PaymentSyncOneTime,
 )
@@ -75,6 +72,7 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.waivers.service.waivers.waivers_service import WaiversService
 
 # ── Payment services namespace ──────────────────────────────────
 
@@ -135,7 +133,7 @@ def build_payment_sync_service(
 
     Mirrors ``src/core/dependencies.py`` (payment_sync_service). PaymentSyncService
     is a thin orchestrator: it takes the shared ``PayerResolver``, the
-    ``PaymentSyncFreeze`` / ``PaymentSyncOnceDiscounts`` sub-services, and a
+    ``PaymentSyncFreeze`` sub-service, and a
     ``PaymentSyncBuilder`` (which itself owns a ``PaymentSyncDiscounts`` coupon
     engine), and builds its Stripe-dispatch + writeback halves internally.
     """
@@ -150,7 +148,6 @@ def build_payment_sync_service(
     )
     gym_stripe_svc = GymStripeService(db_pool)
     payer_resolver = PayerResolver(db_pool, gym_stripe_svc)
-    once_discounts = PaymentSyncOnceDiscounts(db_pool, subscription_svc)
     discounts = PaymentSyncDiscounts(discount_svc)
     builder = PaymentSyncBuilder(db_pool, discounts)
     paying_lock = PayingMemberLock(db_pool)
@@ -158,7 +155,6 @@ def build_payment_sync_service(
         db_pool,
         subscription_svc,
         payer_resolver,
-        once_discounts,
         builder,
         paying_lock,
     )
@@ -221,6 +217,7 @@ def build_member_memberships_service(
         db_pool,
         stripe_client,
     )
+    waivers_svc = WaiversService(db_pool)
     return MemberMembershipsService(
         db_pool,
         sync_svc,
@@ -234,6 +231,7 @@ def build_member_memberships_service(
         build_memberships_reprice(db_pool, stripe_client),
         build_memberships_upgrade(db_pool, stripe_client),
         management_svc,
+        waivers_svc,
     )
 
 

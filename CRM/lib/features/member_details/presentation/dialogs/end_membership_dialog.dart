@@ -29,9 +29,6 @@ class EndMembershipDialog extends StatelessWidget {
     required String coveredMemberId,
     required String coveredMemberName,
   }) {
-    if (membership.itemIdFor(coveredMemberId) == null) {
-      return Future.value();
-    }
     return showDialog<void>(
       context: context,
       builder: (_) => BlocProvider.value(
@@ -46,11 +43,7 @@ class EndMembershipDialog extends StatelessWidget {
   }
 
   void _submit(BuildContext context) {
-    final itemId = membership.itemIdFor(coveredMemberId);
-    if (itemId == null) {
-      Navigator.of(context).pop();
-      return;
-    }
+    final itemId = membership.itemId;
     context.read<MemberDetailBloc>().add(
           EndMembershipRequested(
             itemId: itemId,

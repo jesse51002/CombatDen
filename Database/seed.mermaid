@@ -55,6 +55,8 @@ flowchart TB
   m_acc -->|"95%"| m_staff["staff-managed ×95"]
 
   Members -.->|"+2 extra"| m_overdue["overdue ×2<br/>past_due, via Stripe test-clock"]
+  m_fam -.->|"1 row / linked child<br/>(PUT /members/{id}/link)"| m_auth["member_authorized_payers<br/>payer authorized to bill for child"]
+  m_fam -.->|"1 signature / linked child<br/>(same link transaction)"| m_waiver["member_waiver_signatures<br/>parent signs default authorized-payer waiver"]
 
   %% ── Ranks · presets ×35 (this gym = BJJ — simple split) ──
   Ranks["🥋 Ranks · presets ×35"]
@@ -80,9 +82,10 @@ flowchart TB
   d_pct --> d_dur
   d_dollar --> d_dur
 
-  d_dur["duration (co-occurs)"]
-  d_dur -->|"50%"| d_once["once"]
-  d_dur -->|"50%"| d_ongoing["ongoing<br/>½ time-bounded · ½ forever"]
+  d_dur["lifetime (co-occurs)"]
+  d_dur -->|"⅓"| d_cycle["N cycles 1–3<br/>single-invoice / short-run"]
+  d_dur -->|"⅓"| d_span["day/week/month span 1–12"]
+  d_dur -->|"⅓"| d_forever["forever (no end)"]
 
   Discounts -.->|"0–3 preset ids / live membership"| d_applied["applied snapshots<br/>preset discount_ids per item"]
   Discounts -.->|"~15% of live memberships"| d_custom["custom_discounts one-shot<br/>inline at start · backend-minted"]
@@ -164,10 +167,14 @@ flowchart TB
   History["📈 gym_history ×30"]
   History -->|"daily"| h_day["active vs inactive rollup · 30 days"]
 
+  %% ── Waivers ×1 — the undeletable default authorized-payer waiver per gym ──
+  Waivers["📜 Waivers ×1"]
+  Waivers -->|"v1"| w_default["default authorized-payer (is_default)<br/>1 catalog + 1 version · seed-copied from platform default · editable · undeletable"]
+
   %% ── styling: hub = entity · dim = co-occurring dimension · leaf = a type ──
   classDef hub  fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef dim  fill:#ffe6cc,stroke:#d98a3a,color:#4a2c08;
   classDef leaf fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
-  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History hub;
+  class Staff,Members,Ranks,Plans,Discounts,Memberships,Classes,Attendance,Rewards,Activities,Financials,History,Waivers hub;
   class m_life,m_frz,m_acc,d_amt,d_dur,ms_live,ms_closed,c_state,c_cap,c_exc,f_method dim;
-  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_packs,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_packs,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day leaf;
+  class st_owner,st_staff,m_fam,m_non,m_never,m_former,m_trial,m_t2p,m_active,m_packs,m_resign,m_frozen,m_unfrozen,m_app,m_staff,m_overdue,m_auth,m_waiver,r_bjj,r_mma,r_gen,p_rec,p_once,p_trial,d_pct,d_dollar,d_once,d_ongoing,d_applied,d_custom,ms_active,ms_trial,ms_packs,ms_cancel,ms_ended,ms_former,ms_overdue,c_weekly,c_daily,c_monthly,c_active,c_inactive,c_capped,c_uncapped,c_inst,c_range,a_hist,a_yes,a_no,rw_active,rw_inactive,rd_none,rd_some,ac_attended,ac_rank,ac_reward,ac_checkin,f_ok,f_card,f_bank,f_fail,f_refund,h_day,w_default leaf;

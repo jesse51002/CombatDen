@@ -16,6 +16,7 @@ from src.payments.payments_exceptions import (
 from src.payments.schema.payments_enums import StripeResourceType
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
+from src.waivers.service.waivers.waivers_service import WaiversService
 
 logger = logging.getLogger(__name__)
 
@@ -27,14 +28,17 @@ class GymsCreateService:
         1. INSERT into ``gyms`` (stripe_account_id = NULL, status =
            'not_started') and the bootstrap ``gym_employees`` 'owner'
            row in a single transaction.
-        2. Create the Stripe Express Connect account. On failure,
-           delete both pending rows and re-raise.
-        3. UPDATE ``gyms`` to set ``stripe_account_id`` and flip
+        2. Seed the gym's default authorized-payer waiver. On failure,
+           ``_cleanup_pending`` tears down the pending gym + owner +
+           waiver rows — no orphaned Stripe account (none exists yet).
+        3. Create the Stripe Express Connect account. On failure,
+           delete the pending rows (owner, waiver, gym) and re-raise.
+        4. UPDATE ``gyms`` to set ``stripe_account_id`` and flip
            ``stripe_onboarding_status`` to 'pending'. Uses
            ``execute_with_retry`` — if all retries are exhausted,
            raise ``StripeOrphanError`` so the orphaned Stripe account
            is logged prominently.
-        4. Create the AccountLink for the hosted onboarding URL.
+        5. Create the AccountLink for the hosted onboarding URL.
            On failure, do NOT delete the gym row — the Stripe account
            is already bound and the client will retry via
            ``POST /{gym_id}/onboarding/link``.
@@ -44,9 +48,11 @@ class GymsCreateService:
         self,
         db_pool: DirectDatabasePool,
         stripe_connect_service: GymsStripeConnectService,
+        waivers_service: WaiversService,
     ) -> None:
         self._db_pool = db_pool
         self._stripe_connect = stripe_connect_service
+        self._waivers_service = waivers_service
 
     async def create_gym(
         self,
@@ -72,6 +78,16 @@ class GymsCreateService:
                 after retries — an operator must reconcile.
         """
         gym_id = await self._insert_pending_rows(request, user_id, user_email)
+
+        # Seed the default authorized-payer waiver BEFORE creating the Stripe
+        # account. If this fails, _cleanup_pending tears down the pending rows
+        # cleanly — no Stripe account has been created yet, so there is nothing
+        # to orphan.
+        try:
+            await self._waivers_service.create_default_waiver(gym_id)
+        except Exception:
+            await self._cleanup_pending(gym_id)
+            raise
 
         try:
             stripe_account_id = await self._stripe_connect.create_express_account(
@@ -176,20 +192,53 @@ class GymsCreateService:
             ) from exc
 
     async def _cleanup_pending(self, gym_id: UUID) -> None:
-        """Delete the pending owner + gym rows after a Stripe failure.
+        """Delete the pending owner + default-waiver + gym rows on failure.
 
-        Order matters: ``gym_employees`` references ``gyms``, so the
-        employee must go first. Both deletes are guarded (employee by
-        ``employee_type='owner'``, gym by ``stripe_account_id IS NULL``)
-        so a concurrent update cannot accidentally remove a now-linked row.
+        Order matters:
+          1. Owner employee (``gym_employees`` FK references ``gyms``).
+          2. NULL out ``gym_waivers.current_version_id`` to break the
+             circular FK before deleting version rows.
+          3. Delete ``gym_waiver_versions`` rows for the default waiver.
+          4. Delete the ``gym_waivers`` default row.
+          5. Delete the pending ``gyms`` row (``stripe_account_id IS NULL``
+             guard prevents removing a now-linked row).
+
+        The circular FK between ``gym_waivers.current_version_id``
+        (→ ``gym_waiver_versions``) and ``gym_waiver_versions.waiver_id``
+        (→ ``gym_waivers``) is resolved by NULLing the forward pointer
+        first, then deleting versions, then deleting the waiver.
+
+        All five statements run in one transaction so a partial cleanup
+        cannot leave dangling rows. The outer try/except logs and swallows
+        exceptions — cleanup is best-effort; the original error is the
+        caller's concern.
         """
         owner_sql = load_sql(SQL_DIR / "gym_employees_delete_owner.sql")
+        null_version_sql = load_sql(
+            SQL_DIR / "gyms_null_default_waiver_current_version.sql"
+        )
+        delete_versions_sql = load_sql(
+            SQL_DIR / "gyms_delete_default_waiver_versions.sql"
+        )
+        delete_waiver_sql = load_sql(SQL_DIR / "gyms_delete_default_waiver.sql")
         gym_sql = load_sql(SQL_DIR / "gyms_delete_pending.sql")
 
         try:
             async with self._db_pool.session() as session:
                 await session.execute(
                     text(owner_sql),
+                    {"gym_id": str(gym_id)},
+                )
+                await session.execute(
+                    text(null_version_sql),
+                    {"gym_id": str(gym_id)},
+                )
+                await session.execute(
+                    text(delete_versions_sql),
+                    {"gym_id": str(gym_id)},
+                )
+                await session.execute(
+                    text(delete_waiver_sql),
                     {"gym_id": str(gym_id)},
                 )
                 await session.execute(

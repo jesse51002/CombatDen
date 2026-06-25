@@ -17,34 +17,31 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 /// dispatches [UpdatePriceRequested].
 class UpdatePriceDialog extends StatefulWidget {
   final MembershipInfo membership;
-  final String coveredMemberId;
+  final String memberId;
   final String coveredMemberName;
 
   const UpdatePriceDialog({
     super.key,
     required this.membership,
-    required this.coveredMemberId,
+    required this.memberId,
     required this.coveredMemberName,
   });
 
-  /// Resolves the membership item for [coveredMemberId] and
-  /// shows the dialog. No-op when the member is not covered.
+  /// Shows the migrate-to-current-price dialog for the viewed
+  /// member's membership.
   static Future<void> show({
     required BuildContext context,
     required MembershipInfo membership,
-    required String coveredMemberId,
+    required String memberId,
     required String coveredMemberName,
   }) {
-    if (membership.itemIdFor(coveredMemberId) == null) {
-      return Future.value();
-    }
     return showDialog<void>(
       context: context,
       builder: (_) => BlocProvider.value(
         value: context.read<MemberDetailBloc>(),
         child: UpdatePriceDialog(
           membership: membership,
-          coveredMemberId: coveredMemberId,
+          memberId: memberId,
           coveredMemberName: coveredMemberName,
         ),
       ),
@@ -61,16 +58,10 @@ class _UpdatePriceDialogState extends State<UpdatePriceDialog> {
       ProrationBehavior.noCharge;
 
   void _submit() {
-    final itemId =
-        widget.membership.itemIdFor(widget.coveredMemberId);
-    if (itemId == null) {
-      Navigator.of(context).pop();
-      return;
-    }
     context.read<MemberDetailBloc>().add(
           UpdatePriceRequested(
-            itemId: itemId,
-            memberId: widget.coveredMemberId,
+            itemId: widget.membership.itemId,
+            memberId: widget.memberId,
             prorationBehavior: _prorationBehavior,
           ),
         );

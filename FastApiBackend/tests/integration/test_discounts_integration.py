@@ -5,7 +5,7 @@ Endpoints under test:
 
 These tests are READ-ONLY against the live backend at http://localhost:8000.
 Presets are now plain, coupon-free gym config (regular-only: preset | custom)
-with a lifetime spec (discount_mode + a duration span XOR an explicit end_date).
+with a lifetime spec (a duration span XOR an explicit end_date).
 The gym_discounts view is an unfiltered passthrough (no Stripe gate), so any
 seeded preset is surfaced. The tests validate contract shape, auth guards, and
 query-parameter validation rather than specific row data.
@@ -31,11 +31,8 @@ _OTHER_GYM_ID = "00000000-0000-0000-0000-000000000001"
 # DiscountType values surfaced by presets (regular-only; linked is applied-only).
 _VALID_DISCOUNT_TYPES = {"preset", "custom"}
 
-# DiscountMode values from the OpenAPI contract.
-_VALID_DISCOUNT_MODES = {"once", "ongoing"}
-
 # DiscountDurationUnit values from the OpenAPI contract.
-_VALID_DURATION_UNITS = {"day", "week", "month"}
+_VALID_DURATION_UNITS = {"day", "week", "month", "cycle"}
 
 # Required fields from the DiscountResponse schema.
 _REQUIRED_FIELDS = {
@@ -43,7 +40,8 @@ _REQUIRED_FIELDS = {
     "gym_id",
     "discount_name",
     "discount_type",
-    "discount_mode",
+    "value_id",
+    "value",
     "is_deleted",
     "created_at",
 }
@@ -54,6 +52,9 @@ def _assert_discount_response_shape(item: dict) -> None:
 
     Checks required fields, enum values, the value-exclusivity rule, and the
     lifetime spec (a duration span XOR an explicit end_date, never both).
+
+    The value fields (percentage_off, dollar_off, duration_*) are nested inside
+    the ``value`` sub-object (DiscountValue), not at the top level of the item.
     """
     for field in _REQUIRED_FIELDS:
         assert field in item, f"Required field '{field}' missing from item: {item}"
@@ -61,42 +62,45 @@ def _assert_discount_response_shape(item: dict) -> None:
     assert item["discount_type"] in _VALID_DISCOUNT_TYPES, (
         f"discount_type '{item['discount_type']}' not in {_VALID_DISCOUNT_TYPES}"
     )
-    assert item["discount_mode"] in _VALID_DISCOUNT_MODES, (
-        f"discount_mode '{item['discount_mode']}' not in {_VALID_DISCOUNT_MODES}"
+
+    # Value fields live inside the nested ``value`` object.
+    value = item["value"]
+    assert isinstance(value, dict), (
+        f"'value' expected dict, got {type(value)}: {value}"
     )
 
-    if item.get("dollar_off") is not None:
-        assert isinstance(item["dollar_off"], int), (
-            f"'dollar_off' expected int, got {type(item['dollar_off'])}"
+    if value.get("dollar_off") is not None:
+        assert isinstance(value["dollar_off"], int), (
+            f"'dollar_off' expected int, got {type(value['dollar_off'])}"
         )
-    if item.get("percentage_off") is not None:
-        assert isinstance(item["percentage_off"], (int, float)), (
-            f"'percentage_off' expected number, got {type(item['percentage_off'])}"
+    if value.get("percentage_off") is not None:
+        assert isinstance(value["percentage_off"], (int, float)), (
+            f"'percentage_off' expected number, got {type(value['percentage_off'])}"
         )
 
     # Exactly one of percentage_off / dollar_off must be set.
-    has_pct = item.get("percentage_off") is not None
-    has_amt = item.get("dollar_off") is not None
+    has_pct = value.get("percentage_off") is not None
+    has_amt = value.get("dollar_off") is not None
     assert has_pct != has_amt, (
         "Exactly one of percentage_off or dollar_off must be non-null; "
-        f"got percentage_off={item.get('percentage_off')}, "
-        f"dollar_off={item.get('dollar_off')}"
+        f"got percentage_off={value.get('percentage_off')}, "
+        f"dollar_off={value.get('dollar_off')}"
     )
 
     # Lifetime: a duration span (amount + unit together) XOR an explicit
     # end_date — never both; neither = forever.
-    has_amount = item.get("duration_amount") is not None
-    has_unit = item.get("duration_unit") is not None
+    has_amount = value.get("duration_amount") is not None
+    has_unit = value.get("duration_unit") is not None
     assert has_amount == has_unit, (
         "duration_amount and duration_unit must be set together; "
-        f"got duration_amount={item.get('duration_amount')}, "
-        f"duration_unit={item.get('duration_unit')}"
+        f"got duration_amount={value.get('duration_amount')}, "
+        f"duration_unit={value.get('duration_unit')}"
     )
     if has_unit:
-        assert item["duration_unit"] in _VALID_DURATION_UNITS, (
-            f"duration_unit '{item['duration_unit']}' not in {_VALID_DURATION_UNITS}"
+        assert value["duration_unit"] in _VALID_DURATION_UNITS, (
+            f"duration_unit '{value['duration_unit']}' not in {_VALID_DURATION_UNITS}"
         )
-    assert not (has_amount and item.get("end_date") is not None), (
+    assert not (has_amount and value.get("end_date") is not None), (
         "lifetime is a duration span OR an explicit end_date, never both"
     )
 

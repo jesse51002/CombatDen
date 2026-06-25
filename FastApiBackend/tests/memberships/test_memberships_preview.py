@@ -450,14 +450,21 @@ async def test_preview_cancel_active(
             connect_opts,
         )
 
-        preview = await memberships_service.preview_cancel(
+        changes = await memberships_service.preview_cancel(
             item_id,
             member.member_id,
         )
 
-        # Cancelling the only item on the subscription drops the bucket
-        # to zero — preview returns None for pure cancellations.
-        assert preview is None
+        # The per-payer cost preview is a list: this member funds the one
+        # cancelled item, so exactly one entry for them, affected=True.
+        assert len(changes) == 1
+        change = changes[0]
+        assert str(change.payer_member_id) == str(member.member_id)
+        assert change.affected is True
+        # Cancelling the only item on the subscription drops the bucket to
+        # zero — a cancelled sub has no remaining recurring invoice, so the
+        # affected entry's preview half is None (not a $0 invoice).
+        assert change.preview is None
 
         # CRM row still active: cancel_date must be NULL.
         async with db_pool.session() as session:
@@ -525,16 +532,90 @@ async def test_preview_cancel_already_cancelled_returns_none(
             connect_opts,
         )
 
-        preview = await memberships_service.preview_cancel(
+        changes = await memberships_service.preview_cancel(
             item_id,
             member.member_id,
         )
-        assert preview is None
+        # The item is already cancelled, so preview_cancel skips it — no
+        # payer funds anything still-cancellable, so the list is empty.
+        assert changes == []
 
         await assert_no_unexpected_charges(
             stripe_client,
             before,
             connect_opts,
         )
+    finally:
+        await delete_member_data(db_pool, member.member_id)
+
+
+async def test_staged_cancel_preview_restores_not_added_status(
+    memberships_service,
+    db_pool,
+    gym_id,
+    created,
+):
+    """Regression (finding #1): the staged-cancel preview must restore each
+    staged item to its OWN pre-stage status, never blindly ``applied``.
+
+    The two live callers (``preview_cancel`` via the filtered-view read, and
+    ``preview_remove_authorization`` which filters ``applied``) only ever hand
+    ``applied`` rows to ``_staged_cancel_preview`` today, so this exercises the
+    fixed method directly with a pending (``not_added``) row — inserted but not
+    yet synced (``stripe_item_id IS NULL``). The bug: ``_cleanup`` restored
+    every staged row to ``applied`` blindly, which would corrupt a never-synced
+    row into a fake-synced state. The fix captures and restores each row's own
+    pre-stage status, so a ``not_added`` row comes back ``not_added``.
+    """
+    member = await created.member(gym_id)
+    plan = await created.plan(gym_id)
+
+    try:
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "INSERT INTO member_memberships_unfiltered ("
+                    "  member_id, paid_by_member_id, gym_id, plan_id, "
+                    "  price_id, start_date, stripe_item_id, total_price, "
+                    "  stripe_sync_status"
+                    ") VALUES ("
+                    "  :member_id, :member_id, :gym_id, :plan_id, "
+                    "  :price_id, CURRENT_DATE - 7, NULL, :total_price, "
+                    "  CAST(:status AS stripe_sync_status)"
+                    ") RETURNING item_id"
+                ),
+                {
+                    "member_id": str(member.member_id),
+                    "gym_id": str(gym_id),
+                    "plan_id": str(plan.plan_id),
+                    "price_id": str(plan.price_id),
+                    "total_price": 5000,
+                    "status": "not_added",
+                },
+            )
+            item_id = UUID(str(result.mappings().one()["item_id"]))
+            await session.commit()
+
+        # Call the fixed method directly under the family lock the facade holds.
+        async with memberships_service._paying_lock.lock([member.member_id]):
+            await memberships_service._cancel._staged_cancel_preview(
+                [(item_id, member.member_id)],
+                member.member_id,
+            )
+
+        async with db_pool.session() as session:
+            result = await session.execute(
+                text(
+                    "SELECT stripe_sync_status::text AS status, cancel_date "
+                    "FROM member_memberships_unfiltered WHERE item_id = :i"
+                ),
+                {"i": str(item_id)},
+            )
+            row = result.mappings().one()
+
+        # Restored to its OWN original status, not blindly 'applied'.
+        assert row["status"] == "not_added"
+        # Read-only preview never sets cancel_date.
+        assert row["cancel_date"] is None
     finally:
         await delete_member_data(db_pool, member.member_id)

@@ -258,6 +258,9 @@ class StartMembershipsStepBody extends StatelessWidget {
           onProrationChanged: onProrationChanged,
           hasRecurring: hasRecurring,
           anchorDate: preview?.recurring?.nextPaymentAt,
+          // Attribute the charge to the payer it bills.
+          payerName: payerDetail?.fullName,
+          payerPhotoUrl: payerDetail?.photoUrl,
         );
       case StartMembershipsStep.payment:
         return StartPaymentStep(

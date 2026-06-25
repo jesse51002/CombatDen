@@ -2,7 +2,7 @@
 
 from datetime import date
 from enum import StrEnum
-from typing import Self
+from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -13,13 +13,53 @@ from schema.task import ProrationBehavior
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import DiscountValue
-from src.payments.schema.payments_invoice_schema import PreviewInvoice
+from src.payments.schema.payments_invoice_schema import (
+    DueNowVsRecurringPreview,
+    PreviewInvoice,
+)
+
+
+class _CancelItemsBase(BaseModel):
+    """Shared base for the cancel + cancel-preview requests: a non-empty,
+    duplicate-free list of ``member_memberships`` rows to cancel."""
+
+    item_ids: list[UUID] = Field(..., min_length=1)
+    member_id: UUID
+
+    @field_validator("item_ids")
+    @classmethod
+    def _no_dupes(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("item_ids must not contain duplicates")
+        return value
+
+
+class MemberMembershipsCancelRequest(_CancelItemsBase):
+    """Cancel ONE OR MORE of a member's recurring memberships.
+
+    ``item_ids`` is the list of ``member_memberships`` rows to cancel (a single
+    cancel is a one-element list). The backend groups them by payer and
+    converges each payer's subscription once. ``idempotency_key`` is scoped to
+    this cancel; per-payer Stripe keys are derived from it deterministically so
+    a retry dedups.
+    """
+
+    idempotency_key: UUID
+
+
+class MemberMembershipsCancelPreviewRequest(_CancelItemsBase):
+    """Preview cancelling ONE OR MORE of a member's recurring memberships."""
 
 
 class MemberMembershipsCancelResponse(BaseModel):
-    """Response returned after cancelling a membership."""
+    """Response after a (possibly batched) cancel.
 
-    cancel_date: date
+    ``cancel_dates`` maps each cancelled ``item_id`` (as a string) to its
+    resolved ``cancel_date`` — the date through which that membership stays
+    active. A single cancel yields a one-entry map.
+    """
+
+    cancel_dates: dict[str, date]
 
 
 class MemberMembershipsFreezeRequest(BaseModel):
@@ -478,9 +518,31 @@ class MemberMembershipsRemoveDiscountsRequest(BaseModel):
 
 
 class MembersBillingLinkRequest(BaseModel):
-    """Link an existing member to a paying parent account."""
+    """Authorize a payer for a member, signing the gym's default waiver.
 
-    parent_member_id: UUID
+    The payer (``payer_member_id``) is the signer: ``signer_name`` is their
+    typed legal name and ``consent_acknowledged`` must be True (a valid
+    e-signature). The signature + the authorization are recorded atomically.
+    """
+
+    payer_member_id: UUID
+    signer_name: str
+    # Literal[True]: a false consent is not a valid e-signature, so reject it at
+    # deserialization rather than relying on a downstream runtime guard.
+    consent_acknowledged: Literal[True]
+
+    @field_validator("signer_name")
+    @classmethod
+    def _check_signer_name(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("signer_name cannot be empty")
+        return v
+
+
+class MembersBillingLinkCheckRequest(BaseModel):
+    """Pre-flight check whether a payer can be authorized for a member."""
+
+    payer_member_id: UUID
 
 
 class MembersBillingLinkCheckResponse(BaseModel):
@@ -492,6 +554,60 @@ class MembersBillingLinkCheckResponse(BaseModel):
 
     can_link: bool
     error: str | None = None
+
+
+class MembersBillingRemoveAuthorizationPreviewRequest(BaseModel):
+    """Preview removing a payer's authorization for the path member.
+
+    Identifies the relationship by ``payer_member_id`` (the path member is the
+    payee). The preview is **read-only** — it stages nothing on Stripe and
+    mutates no membership row — so it carries NO ``idempotency_key`` (there is no
+    Stripe write to dedup). Returns the per-payer cancel cost preview (a list of
+    ``PayerInvoiceChange``; pair-scoped, so always a single entry).
+    """
+
+    payer_member_id: UUID
+
+
+class MembersBillingRemoveAuthorizationRequest(
+    MembersBillingRemoveAuthorizationPreviewRequest
+):
+    """Remove a payer's authorization for the path member, cascading a cancel.
+
+    Pair-scoped: cancels the path member's live recurring memberships that
+    ``payer_member_id`` funds, then de-authorizes the pair. Memberships paid by
+    OTHER payers — and the payer's memberships for OTHER members — are untouched.
+
+    Adds ``idempotency_key`` to the preview request: it is scoped to this
+    remove-authorization action and threads straight into the cascading cancel's
+    list path (which derives the payer's Stripe key from it deterministically),
+    so a retry of the same action dedups at Stripe instead of minting a fresh,
+    non-idempotent key. The preview needs no such key (read-only), which is why
+    it lives only on the mutating request.
+    """
+
+    idempotency_key: UUID
+
+
+class PayerInvoiceChange(BaseModel):
+    """One payer's billing outcome from a (possibly batched) cancel.
+
+    A LIST of these is the cancel / remove-authorization cost preview: one entry
+    per payer considered. ``affected`` is a **membership-level** flag — True iff
+    this payer funds at least one of the memberships being cancelled — decided
+    independently of the cost. When ``affected`` is True ``preview`` carries the
+    payer's subscription recurring current → new; when False the operation
+    cancels nothing for this payer (``preview`` is null) and the UI shows no
+    billing change. A single cancel yields a one-entry affected list; a member's
+    memberships may be funded by different payers, so a multi-cancel can change
+    several payers' bills at once.
+    """
+
+    payer_member_id: UUID
+    payer_first_name: str
+    payer_last_name: str
+    affected: bool
+    preview: DueNowVsRecurringPreview | None = None
 
 
 class MemberMembershipsAppliedDiscount(BaseModel):
@@ -512,6 +628,5 @@ class MemberMembershipsAppliedDiscount(BaseModel):
     discount_type: DiscountType
     percentage_off: float | None = None
     dollar_off: int | None = None
-    discount_mode: str
     end_date: date | None = None
     stripe_coupon_id: str | None = None

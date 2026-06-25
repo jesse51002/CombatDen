@@ -32,5 +32,9 @@ CREATE POLICY "Gym staff can delete waivers"
     FOR DELETE
     USING (is_gym_admin_or_owner(gym_waivers.gym_id));
 
--- Identity columns stay immutable.
-REVOKE UPDATE (waiver_id, gym_id, created_at) ON TABLE gym_waivers FROM authenticated;
+-- Identity columns stay immutable; the default flag is set once at seed/create
+-- by service_role and never changed (the undeletable platform-copied default),
+-- so clients can neither set it on insert nor change it on update.
+REVOKE UPDATE (waiver_id, gym_id, created_at, is_default)
+    ON TABLE gym_waivers FROM authenticated;
+REVOKE INSERT (is_default) ON TABLE gym_waivers FROM authenticated;

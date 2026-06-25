@@ -4,14 +4,24 @@ The catalog row, its first version, and the current-version pointer are written
 in a single transaction (the gym_waivers.current_version_id FK to
 gym_waiver_versions is satisfied because the version row exists in the same
 transaction before the pointer is set).
+
+``create_waiver`` is the gym-staff path (a normal waiver); ``create_default_waiver``
+seed-copies the shared platform default authorized-payer waiver into a gym's own
+undeletable ``is_default`` row (the gym then owns and versions its copy).
 """
 
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 
+from schema.default_waiver import (
+    DEFAULT_AUTHORIZED_PAYER_WAIVER_NAME,
+    default_authorized_payer_waiver_body,
+)
 from sqlalchemy import text
 
+import src.shared.db_schema_path  # noqa: F401
 from src.shared.sql_loader import load_sql
 from src.waivers import SQL_DIR
 from src.waivers.schema.waivers_schema import (
@@ -40,15 +50,51 @@ class WaiversCreate(WaiversBase):
         Returns:
             The created waiver with its current version embedded.
         """
-        insert_waiver_sql = load_sql(SQL_DIR / "waivers_insert.sql")
+        return await self._create(
+            request.gym_id,
+            request.name,
+            request.body,
+            is_default=False,
+        )
+
+    async def create_default_waiver(
+        self,
+        gym_id: UUID,
+    ) -> WaiverResponse:
+        """Seed-copy the shared default authorized-payer waiver into a gym.
+
+        Creates the gym's undeletable ``is_default`` waiver from the shared
+        platform default name + body. Called when a gym is created so the
+        authorized-payer gate always has a document to sign.
+        """
+        return await self._create(
+            gym_id,
+            DEFAULT_AUTHORIZED_PAYER_WAIVER_NAME,
+            default_authorized_payer_waiver_body(),
+            is_default=True,
+        )
+
+    async def _create(
+        self,
+        gym_id: UUID,
+        name: str,
+        body: str,
+        *,
+        is_default: bool,
+    ) -> WaiverResponse:
+        """Insert a waiver + version 1 + current-version pointer in one txn."""
+        insert_name = (
+            "waivers_insert_default.sql" if is_default else "waivers_insert.sql"
+        )
+        insert_waiver_sql = load_sql(SQL_DIR / insert_name)
         insert_version_sql = load_sql(SQL_DIR / "waiver_versions_insert.sql")
         set_current_sql = load_sql(SQL_DIR / "waivers_set_current_version.sql")
-        content_hash = self._compute_content_hash(request.body)
+        content_hash = self._compute_content_hash(body)
 
         async with self._db_pool.session() as session:
             waiver_result = await session.execute(
                 text(insert_waiver_sql),
-                {"gym_id": str(request.gym_id), "name": request.name},
+                {"gym_id": str(gym_id), "name": name},
             )
             waiver = dict(waiver_result.mappings().one())
 
@@ -56,9 +102,9 @@ class WaiversCreate(WaiversBase):
                 text(insert_version_sql),
                 {
                     "waiver_id": str(waiver["waiver_id"]),
-                    "gym_id": str(request.gym_id),
+                    "gym_id": str(gym_id),
                     "version_number": _FIRST_VERSION_NUMBER,
-                    "body": request.body,
+                    "body": body,
                     "content_hash": content_hash,
                 },
             )
@@ -69,12 +115,12 @@ class WaiversCreate(WaiversBase):
                 {
                     "version_id": str(version["version_id"]),
                     "waiver_id": str(waiver["waiver_id"]),
-                    "gym_id": str(request.gym_id),
+                    "gym_id": str(gym_id),
                 },
             )
             await session.commit()
 
         return await self._load_full_waiver(
             waiver["waiver_id"],
-            request.gym_id,
+            gym_id,
         )

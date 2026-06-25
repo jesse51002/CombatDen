@@ -2,17 +2,20 @@
 
 import logging
 from typing import Annotated
-from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
+from src.memberships.memberships_exceptions import PartialCancelError
 from src.memberships.memberships_schema import (
     MemberMembershipsAddDiscountsRequest,
     MemberMembershipsBatchRepriceRequest,
     MemberMembershipsBatchRepriceResponse,
+    MemberMembershipsCancelPreviewRequest,
+    MemberMembershipsCancelRequest,
     MemberMembershipsCancelResponse,
     MemberMembershipsChargeCardRequest,
     MemberMembershipsEndRequest,
@@ -25,12 +28,14 @@ from src.memberships.memberships_schema import (
     MemberMembershipsStartPreviewResponse,
     MemberMembershipsStartRequest,
     MemberMembershipsStartResponse,
+    MemberMembershipsStartStatus,
     MemberMembershipsUnfreezeRequest,
     MemberMembershipsUpdatePriceRequest,
     MemberMembershipsUpdatePriceResponse,
     MemberMembershipsUpgradePreviewRequest,
     MemberMembershipsUpgradeRequest,
     MemberMembershipsUpgradeResponse,
+    PayerInvoiceChange,
 )
 from src.memberships.service.memberships_refund import (
     MemberMembershipsRefund,
@@ -61,25 +66,33 @@ member_memberships_router = APIRouter(
 @member_memberships_router.delete(
     "/",
     response_model=MemberMembershipsCancelResponse,
-    summary="Cancel a membership",
+    summary="Cancel one or more memberships",
     description=(
-        "Cancels a specific active membership for a member. "
-        "Sets cancel_date to the membership's next_due_date, "
-        "or today if next_due_date is missing or in the past. "
-        "Returns the resolved cancel_date (the date through "
-        "which the membership remains active)."
+        "Cancels one or more active memberships for a member (a single "
+        "cancel is a one-element ``item_ids`` list). Sets each cancel_date "
+        "to the membership's next_due_date, or today if missing or in the "
+        "past. Memberships funded by different payers are each converged "
+        "once. Returns a map of item_id → resolved cancel_date (the date "
+        "through which each membership remains active)."
     ),
     responses={
-        200: {"description": "Membership cancelled successfully"},
+        200: {"description": "Membership(s) cancelled successfully"},
+        207: {
+            "description": (
+                "Partial cancel — some memberships cancelled, some failed. "
+                "Body carries succeeded_item_ids + failed_item_ids; the caller "
+                "re-issues the cancel for the failed items. A 2xx (not an "
+                "error) so a proxy never auto-retries a partial result."
+            )
+        },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        500: {"description": "Total failure — nothing cancelled (Stripe/sync)"},
     },
 )
 @inject
 async def cancel_membership(
-    item_id: UUID,
-    member_id: UUID,
-    idempotency_key: UUID,
+    request: MemberMembershipsCancelRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
@@ -89,37 +102,74 @@ async def cancel_membership(
         Provide[DependencyInjector.tasks_service]
     ),
 ) -> MemberMembershipsCancelResponse:
-    """Cancel a specific membership for a member.
+    """Cancel one or more memberships for a member.
 
-    Syncs the cancellation to Stripe first, then updates the
+    Syncs each affected payer's cancellation to Stripe, then updates the
     CRM database.
 
     Args:
-        member_id: The member.
-        item_id: The membership item to cancel.
-        idempotency_key: Caller-supplied key scoped to this cancel.
+        request: The item_ids to cancel, the member, and the idempotency key.
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
+        tasks_service: Injected tasks service (the in-task guard).
 
     Raises:
         HTTPException: 401 if not authenticated,
             403 if not authorized,
-            502 on Stripe errors,
-            500 on unexpected errors.
+            409 if a membership is inside an unfinished task,
+            500 on a total Stripe failure or unexpected error
+            (a PARTIAL cancel is RETURNED as 207, not raised).
     """
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        await tasks_service.assert_memberships_not_in_task([item_id])
-        cancel_date = await memberships_service.cancel(item_id, member_id, idempotency_key)
-        return MemberMembershipsCancelResponse(cancel_date=cancel_date)
+        await tasks_service.assert_memberships_not_in_task(
+            request.item_ids,
+        )
+        cancel_dates = await memberships_service.cancel_many(
+            request.item_ids,
+            request.member_id,
+            request.idempotency_key,
+        )
+        return MemberMembershipsCancelResponse(
+            cancel_dates={
+                str(item_id): cancel_date
+                for item_id, cancel_date in cancel_dates.items()
+            },
+        )
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from None
+    except PartialCancelError as exc:
+        # A later payer's converge failed AFTER an earlier payer succeeded —
+        # the batch is partial. This is a real, parseable RESULT (not an error):
+        # RETURN it as 207 Multi-Status with the succeeded/failed split so the
+        # caller shows the accurate outcome and re-issues the cancel for the
+        # failed items. 207 is a 2xx, so a proxy never auto-retries a partial
+        # (which would needlessly re-cancel the already-succeeded payers).
+        succeeded_item_ids = sorted(str(i) for i in exc.succeeded)
+        failed_item_ids = sorted(str(i) for i in exc.failed_item_ids)
+        logger.error(
+            "Cancel partially applied: member_id=%s succeeded=%s "
+            "failed_payer=%s failed_item_ids=%s",
+            request.member_id,
+            succeeded_item_ids,
+            exc.failed_payer_id,
+            failed_item_ids,
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_207_MULTI_STATUS,
+            content={
+                "message": str(exc),
+                "succeeded_item_ids": succeeded_item_ids,
+                "failed_item_ids": failed_item_ids,
+            },
+        )
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -132,15 +182,25 @@ async def cancel_membership(
             detail=error_msg,
         ) from None
     except PaymentsStripeError as exc:
+        # Total failure — nothing was cancelled (no payer succeeded). 500, not
+        # 502: a 502 is in the proxy auto-retry family and we don't want a
+        # partial-or-total cancel auto-retried at the gateway.
+        logger.error(
+            "Cancel failed (Stripe, nothing cancelled): item_ids=%s, "
+            "member_id=%s",
+            request.item_ids,
+            request.member_id,
+            exc_info=True,
+        )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
         logger.error(
-            "Failed to cancel membership: item_id=%s, member_id=%s",
-            item_id,
-            member_id,
+            "Failed to cancel memberships: item_ids=%s, member_id=%s",
+            request.item_ids,
+            request.member_id,
             exc_info=True,
         )
         raise HTTPException(
@@ -205,7 +265,7 @@ async def freeze_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -274,7 +334,7 @@ async def unfreeze_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -304,14 +364,23 @@ async def unfreeze_membership(
         "failed charge group surfaces there, not as an error status."
     ),
     responses={
-        201: {"description": "Breakdown of created/failed memberships"},
+        201: {"description": "All memberships created (full breakdown)"},
+        207: {
+            "description": (
+                "Partial — some memberships created, some failed; the "
+                "results[] breakdown carries the per-item split. A 2xx, never "
+                "auto-retried."
+            )
+        },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update these members"},
+        500: {"description": "Total failure — nothing created (Stripe/sync)"},
     },
 )
 @inject
 async def start_membership(
     request: MemberMembershipsStartRequest,
+    response: Response,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
@@ -322,6 +391,7 @@ async def start_membership(
 
     Args:
         request: Payer + the memberships to create (price + discounts each).
+        response: Injected so a mixed breakdown can be flagged 207 (below).
         credentials: Bearer token credentials.
         auth: Injected auth service.
         memberships_service: Injected memberships service.
@@ -332,7 +402,7 @@ async def start_membership(
         await auth.verify_can_view_member(item_member_id, user_payload)
 
     try:
-        return await memberships_service.start(request)
+        result = await memberships_service.start(request)
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -345,8 +415,18 @@ async def start_membership(
             detail=error_msg,
         ) from None
     except PaymentsStripeError as exc:
+        # Total failure before any membership was created. 500, not 502: a 502
+        # is in the proxy auto-retry family, and auto-retrying a create risks
+        # duplicate memberships/charges.
+        logger.error(
+            "Failed to start memberships (Stripe): payer_member_id=%s, "
+            "gym_id=%s",
+            request.payer_member_id,
+            request.gym_id,
+            exc_info=True,
+        )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -360,6 +440,16 @@ async def start_membership(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to start memberships",
         ) from None
+
+    # A breakdown with any failed charge group is a partial -> 207 Multi-Status
+    # (the results[] carries the per-item split). 207 is a 2xx, so a proxy never
+    # auto-retries a partial create; an all-created breakdown stays 201.
+    if any(
+        item.status == MemberMembershipsStartStatus.failed
+        for item in result.results
+    ):
+        response.status_code = status.HTTP_207_MULTI_STATUS
+    return result
 
 
 @member_memberships_router.put(
@@ -380,7 +470,7 @@ async def start_membership(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         409: {"description": "Membership is inside an unfinished task"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -434,7 +524,7 @@ async def update_membership_price(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -471,7 +561,7 @@ async def update_membership_price(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         409: {"description": "Membership is inside an unfinished task"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe error"},
     },
 )
 @inject
@@ -527,7 +617,7 @@ async def upgrade_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -593,7 +683,7 @@ async def preview_upgrade_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -799,7 +889,7 @@ async def preview_start_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -816,14 +906,14 @@ async def preview_start_membership(
 
 @member_memberships_router.post(
     "/cancel/preview",
-    response_model=DueNowVsRecurringPreview | None,
-    summary="Preview cancelling a membership",
+    response_model=list[PayerInvoiceChange],
+    summary="Preview cancelling one or more memberships",
     description=(
-        "Dry-run of the cancel endpoint: runs every validation "
-        "and returns the Stripe invoice preview for the "
-        "post-cancel subscription state. Returns null for the "
-        "last active membership (pure cancellation has no "
-        "upcoming invoice)."
+        "Dry-run of the cancel endpoint: a per-payer list of the post-cancel "
+        "subscription state (current → new). One entry per payer that funds "
+        "any of the item_ids — a single cancel is one payer (one entry); a "
+        "member's memberships split across payers yield several entries. A "
+        "payer with no billing change is reported with affected=false."
     ),
     responses={
         200: {"description": "Preview retrieved successfully"},
@@ -833,20 +923,22 @@ async def preview_start_membership(
 )
 @inject
 async def preview_cancel_membership(
-    item_id: UUID,
-    member_id: UUID,
+    request: MemberMembershipsCancelPreviewRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> DueNowVsRecurringPreview | None:
-    """Preview what cancelling a membership would charge."""
+) -> list[PayerInvoiceChange]:
+    """Preview what cancelling one or more memberships would charge."""
     user_payload = auth.get_current_user(credentials)
-    await auth.verify_can_view_member(member_id, user_payload)
+    await auth.verify_can_view_member(request.member_id, user_payload)
 
     try:
-        return await memberships_service.preview_cancel(item_id, member_id)
+        return await memberships_service.preview_cancel_many(
+            request.item_ids,
+            request.member_id,
+        )
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -860,14 +952,14 @@ async def preview_cancel_membership(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
         logger.error(
-            "Failed to preview cancel membership: item_id=%s, member_id=%s",
-            item_id,
-            member_id,
+            "Failed to preview cancel memberships: item_ids=%s, member_id=%s",
+            request.item_ids,
+            request.member_id,
             exc_info=True,
         )
         raise HTTPException(
@@ -936,7 +1028,7 @@ async def add_membership_discounts(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -1011,7 +1103,7 @@ async def remove_membership_discounts(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -1087,7 +1179,7 @@ async def mark_membership_paid_cash(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -1123,7 +1215,7 @@ async def mark_membership_paid_cash(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member profile not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -1154,7 +1246,7 @@ async def charge_member_card(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -1187,7 +1279,7 @@ async def charge_member_card(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to view this member"},
         404: {"description": "Member or charge not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -1224,7 +1316,7 @@ async def refund_charge(
             exc_info=True,
         )
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:

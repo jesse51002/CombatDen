@@ -41,9 +41,6 @@ class UpgradeMembershipDialog extends StatefulWidget {
     required MembershipInfo membership,
     required String coveredMemberId,
   }) {
-    if (membership.itemIdFor(coveredMemberId) == null) {
-      return Future.value();
-    }
     return showDialog<void>(
       context: context,
       builder: (_) => BlocProvider.value(
@@ -78,8 +75,7 @@ class _UpgradeMembershipDialogState
     _plans = _loadPlans();
   }
 
-  String get _itemId =>
-      widget.membership.itemIdFor(widget.coveredMemberId)!;
+  String get _itemId => widget.membership.itemId;
 
   /// The gym's recurring plans the member could upgrade TO — every
   /// recurring plan except the one this membership is already on.
@@ -127,9 +123,7 @@ class _UpgradeMembershipDialogState
           ? InvoicePreviewSection(
               loadPreview: _loadPreview,
               loadCurrent: () => _repository.getUpcomingInvoice(
-                widget.membership
-                        .paidByFor(widget.coveredMemberId) ??
-                    widget.coveredMemberId,
+                widget.membership.paidByMemberId,
               ),
               recurringFallbackMonthly:
                   widget.member.totalMonthlyRecurringPrice,

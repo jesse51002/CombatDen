@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from schema.gym_discount import DiscountMode, DiscountType
+from schema.gym_discount import DiscountType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
@@ -84,7 +84,6 @@ class MembershipPlansBase:
                     value=DiscountValue(
                         percentage_off=value.percentage_off,
                         dollar_off=value.dollar_off,
-                        discount_mode=DiscountMode.ongoing,
                     ),
                 ),
             )

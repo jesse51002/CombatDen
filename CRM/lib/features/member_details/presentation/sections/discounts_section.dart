@@ -12,32 +12,27 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 import 'package:crm/shared/widgets/subtitle_section.dart';
 
-/// Applied discounts for the **selected covered member**
-/// ([coveredMemberId]) only — every discount is a frozen,
-/// item-scoped snapshot on that member's membership. Adding and
-/// removing both happen in the Manage Discounts dialog (this
-/// table is read-only).
+/// Applied discounts for the viewed member's current membership —
+/// every discount is a frozen, item-scoped snapshot on that
+/// membership. Adding and removing both happen in the Manage
+/// Discounts dialog (this table is read-only).
 class DiscountsSection extends StatelessWidget {
   final MemberDetailResponse member;
   final MembershipInfo membership;
-  final String coveredMemberId;
 
   const DiscountsSection({
     super.key,
     required this.member,
     required this.membership,
-    required this.coveredMemberId,
   });
 
-  bool get _canManage =>
-      !isTerminalStatus(membership.status) &&
-      membership.itemIdFor(coveredMemberId) != null;
+  bool get _canManage => !isTerminalStatus(membership.status);
 
   @override
   Widget build(BuildContext context) {
-    final itemId = membership.itemIdFor(coveredMemberId);
+    final itemId = membership.itemId;
     final discounts = membership.discounts
-        .where((d) => itemId != null && d.itemId == itemId)
+        .where((d) => d.itemId == itemId)
         .toList();
 
     return SubtitleSection(
@@ -71,7 +66,6 @@ class DiscountsSection extends StatelessWidget {
                       context: context,
                       member: member,
                       membership: membership,
-                      coveredMemberId: coveredMemberId,
                     )
                 : null,
           ),

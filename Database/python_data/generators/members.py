@@ -312,10 +312,10 @@ def _random_custom_discount() -> dict:
     """Return one DiscountValue dict chosen from four representative shapes.
 
     Shapes are sampled uniformly to spread variety across seeded memberships:
-      0 — once percent (10-25 %)
-      1 — once dollar amount ($5-$15, expressed in cents)
-      2 — ongoing percent with a 2-3 month duration
-      3 — ongoing percent, forever (no duration, no end_date)
+      0 — percent (10-25 %), 1 cycle (the single-invoice case that replaced once)
+      1 — dollar amount ($5-$15, expressed in cents), 1 cycle
+      2 — percent with a 2-3 month duration
+      3 — percent, forever (no duration, no end_date)
 
     Dollar amounts are deliberately small so they're safe vs. the cheapest
     plan price even if Stripe floors at zero.
@@ -324,24 +324,24 @@ def _random_custom_discount() -> dict:
     if shape == 0:
         return {
             "percentage_off": round(random.uniform(10.0, 25.0), 1),
-            "discount_mode": "once",
+            "duration_amount": 1,
+            "duration_unit": "cycle",
         }
     if shape == 1:
         return {
             "dollar_off": random.randint(500, 1500),
-            "discount_mode": "once",
+            "duration_amount": 1,
+            "duration_unit": "cycle",
         }
     if shape == 2:
         return {
             "percentage_off": round(random.uniform(5.0, 20.0), 1),
-            "discount_mode": "ongoing",
             "duration_amount": random.randint(2, 3),
             "duration_unit": "month",
         }
-    # shape == 3: ongoing forever
+    # shape == 3: percent, forever
     return {
         "percentage_off": round(random.uniform(5.0, 15.0), 1),
-        "discount_mode": "ongoing",
     }
 
 

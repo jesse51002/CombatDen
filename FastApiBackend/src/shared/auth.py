@@ -189,3 +189,41 @@ class Auth:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this member",
         ) from None
+
+    async def verify_gym_employee_for_member(
+        self,
+        member_id: UUID,
+        user_payload: dict,
+    ) -> None:
+        """Verify the authenticated user is an employee of this member's gym.
+
+        Staff-only: unlike ``verify_can_view_member`` this does NOT grant the
+        member themselves access. Gates staff-managed billing writes — e.g.
+        authorizing / de-authorizing a payer — that a member must not
+        self-serve.
+
+        Raises:
+            HTTPException: 404 if the member is not found, 403 if the user is
+                not an employee of the member's gym.
+        """
+        member = await (
+            self._supabase.client.from_("members")
+            .select("gym_id")
+            .eq("member_id", str(member_id))
+            .maybe_single()
+            .execute()
+        )
+
+        if not member or not member.data:
+            logger.error(
+                "Member not found: member_id=%s",
+                member_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Member not found",
+            ) from None
+
+        await self.verify_gym_employee(
+            UUID(member.data["gym_id"]), user_payload
+        )

@@ -34,6 +34,12 @@ class InvoicePreviewSection extends StatefulWidget {
   /// Re-fetches whenever this changes.
   final Object? refreshKey;
 
+  /// Optional attribution — whose invoice this preview is (the payer whose
+  /// subscription it bills). Rendered once as an avatar+name header on the
+  /// shared [InvoicePreview].
+  final String? payerName;
+  final String? payerPhotoUrl;
+
   final String dueNowLabel;
   final String emptyLabel;
   final String errorLabel;
@@ -45,6 +51,8 @@ class InvoicePreviewSection extends StatefulWidget {
     this.recurringFallbackMonthly,
     this.showDueNow = true,
     this.refreshKey,
+    this.payerName,
+    this.payerPhotoUrl,
     this.dueNowLabel = 'What will be charged today',
     this.emptyLabel = 'No charge today.',
     this.errorLabel = 'Could not load the charge preview.',
@@ -140,6 +148,8 @@ class _InvoicePreviewSectionState
             recurringPrev: data?.current,
             recurringFallbackMonthly:
                 widget.recurringFallbackMonthly,
+            payerName: widget.payerName,
+            payerPhotoUrl: widget.payerPhotoUrl,
             dueNowLabel: widget.dueNowLabel,
             emptyLabel: widget.emptyLabel,
           );

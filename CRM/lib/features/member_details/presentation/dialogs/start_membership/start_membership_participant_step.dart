@@ -7,22 +7,25 @@ import 'package:crm/features/member_details/data/models/member_detail_response.d
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 
 /// Step 0 — pick which person the action applies to. Shown
-/// only when the member has linked accounts.
+/// only when the member has other selectable accounts.
 ///
-/// Reused by both the Start Membership and Cancel Membership
-/// flows. [disabledMemberIds] greys out (and blocks taps on)
+/// [candidates] are the OTHER accounts (besides the viewed
+/// [member], who is always listed first) the caller offers —
+/// the charge dialog passes the member's authorized payers,
+/// the start wizard the people the payer may pay for.
+/// [disabledMemberIds] greys out (and blocks taps on)
 /// participants the caller can't act on, mapping each member
 /// id to a reason shown in place of the tile subtitle.
 /// [title] / [subtitle] override the default copy.
-///
-/// [linkedAccountIds] restricts which linked accounts appear
-/// (the viewed [member] is always shown); the payer step uses
-/// it to offer only the member and their linked parent.
 /// [subtitleBuilder] supplies each tile's fixed role label
-/// (e.g. "Authorized Payer" / "Member getting Membership") —
+/// (e.g. "Authorized payer" / "Member getting Membership") —
 /// it does not change with selection.
 class StartMembershipParticipantStep extends StatelessWidget {
   final MemberDetailResponse member;
+
+  /// The other selectable accounts (the viewed [member] is
+  /// always listed first, ahead of these).
+  final List<LinkedAccount> candidates;
   final String selectedMemberId;
   final ValueChanged<StartMembershipParticipant> onSelected;
 
@@ -35,14 +38,9 @@ class StartMembershipParticipantStep extends StatelessWidget {
 
   /// Which member id is the billable party. Defaults to
   /// the viewed [member]; the Start Memberships wizard
-  /// overrides it when launched from a linked child's page
-  /// (the payer is then in `linkedAccounts`).
+  /// overrides it when launched from a member whose payer is
+  /// one of their authorized payers.
   final String? payerMemberId;
-
-  /// When non-null, only linked accounts whose id is in this
-  /// set are listed (the viewed member is always listed).
-  /// Null lists every linked account (the cancel flow).
-  final Set<String>? linkedAccountIds;
 
   /// Builds the fixed subtitle/role label for a tile. When
   /// null, tiles show only their name (plus any disabled
@@ -53,24 +51,19 @@ class StartMembershipParticipantStep extends StatelessWidget {
   const StartMembershipParticipantStep({
     super.key,
     required this.member,
+    required this.candidates,
     required this.selectedMemberId,
     required this.onSelected,
     this.disabledMemberIds = const {},
     this.title,
     this.subtitle,
     this.payerMemberId,
-    this.linkedAccountIds,
     this.subtitleBuilder,
   });
 
   @override
   Widget build(BuildContext context) {
     final payerId = payerMemberId ?? member.memberId;
-    final allowed = linkedAccountIds;
-    final visibleLinked = allowed == null
-        ? member.linkedAccounts
-        : member.linkedAccounts
-            .where((a) => allowed.contains(a.memberId));
     final participants = <StartMembershipParticipant>[
       StartMembershipParticipant(
         memberId: member.memberId,
@@ -78,7 +71,7 @@ class StartMembershipParticipantStep extends StatelessWidget {
         photoUrl: member.photoUrl,
         isPayer: member.memberId == payerId,
       ),
-      ...visibleLinked.map(
+      ...candidates.map(
         (LinkedAccount a) => StartMembershipParticipant(
           memberId: a.memberId,
           name: a.fullName,

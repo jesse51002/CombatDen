@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/presentation/sections/payment_histor
 import 'package:crm/features/member_details/presentation/sections/personal_info_section.dart';
 import 'package:crm/features/member_details/presentation/sections/rank_section.dart';
 import 'package:crm/features/member_details/presentation/sections/retention_section.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/balanced_columns.dart';
 
 /// Responsive body of the member detail screen.
@@ -39,11 +40,25 @@ class MemberDetailGrid extends StatelessWidget {
     required this.refreshToken,
   });
 
+  /// Active statuses that warrant an upcoming-invoice card. Mirrors
+  /// `_isRecurring` in `cancel_membership_dialog.dart` — must match.
+  static const _kActiveStatuses = {
+    MembershipStatus.active,
+    MembershipStatus.trial,
+    MembershipStatus.frozen,
+    MembershipStatus.overdue,
+  };
+
   /// The distinct payers behind this member's recurring memberships
   /// (self and/or their linked parent), each with the soonest next-due
   /// date among the memberships they fund. One Invoices card is shown
   /// per payer — up to two when the memberships are split. Membership
   /// order is preserved so the dominant payer leads.
+  ///
+  /// Only **active** recurring memberships are included. A payer with no
+  /// remaining active membership has no upcoming invoice, so no card is
+  /// shown for them (a cancelled member with all subs ended produces an
+  /// empty `payers` list and `InvoicesSection` renders nothing).
   List<InvoicePayer> get _invoicePayers {
     final order = <String>[];
     final dueByPayer = <String, DateTime?>{};
@@ -55,8 +70,14 @@ class MemberDetailGrid extends StatelessWidget {
 
     for (final m in member.memberships) {
       if (m.planType?.toLowerCase() != 'recurring') continue;
-      final payerId = m.paidByFor(member.memberId);
-      if (payerId == null) continue;
+      // A pending cancellation (cancel_date set) means the Stripe line is
+      // already removed and it will NEVER bill again — even though the status
+      // view still reports 'active' until cancel_date elapses. So it has no
+      // upcoming invoice and must not produce a payer here.
+      if (m.cancelDate != null) continue;
+      // Likewise skip terminal/non-billing statuses (cancelled/ended).
+      if (!_kActiveStatuses.contains(m.status)) continue;
+      final payerId = m.paidByMemberId;
       final due = m.nextDueDate;
       if (!dueByPayer.containsKey(payerId)) {
         order.add(payerId);
@@ -69,15 +90,11 @@ class MemberDetailGrid extends StatelessWidget {
         }
       }
       // Capture the first funded membership we find for this payer.
+      // Each card is the viewed member's own membership, so the cash
+      // handle is its item id + the viewed member.
       if (!cashItemIdByPayer.containsKey(payerId)) {
-        // Find the covered member whose membership is paid by payerId.
-        for (final entry in m.members.entries) {
-          if (entry.value.paidByMemberId == payerId) {
-            cashItemIdByPayer[payerId] = entry.value.itemId;
-            cashMemberIdByPayer[payerId] = entry.key;
-            break;
-          }
-        }
+        cashItemIdByPayer[payerId] = m.itemId;
+        cashMemberIdByPayer[payerId] = member.memberId;
       }
     }
     return [
@@ -95,15 +112,15 @@ class MemberDetailGrid extends StatelessWidget {
 
   String _payerNameFor(String id) {
     if (id == member.memberId) return member.fullName;
-    for (final a in member.linkedAccounts) {
+    for (final a in member.authorizedPayers) {
       if (a.memberId == id) return a.fullName;
     }
-    return 'Linked account';
+    return 'Authorized payer';
   }
 
   String? _payerPhotoFor(String id) {
     if (id == member.memberId) return member.photoUrl;
-    for (final a in member.linkedAccounts) {
+    for (final a in member.authorizedPayers) {
       if (a.memberId == id) return a.photoUrl;
     }
     return null;
