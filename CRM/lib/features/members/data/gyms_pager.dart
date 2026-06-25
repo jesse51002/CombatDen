@@ -6,10 +6,11 @@ import 'package:http/http.dart' as http;
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:theme_flutter/data/models/customization_style.dart';
 
-/// VideoService base (the gym browser lives there); mirrors the video carve-out.
+/// Backend base URL for the public template catalog (slug-keyed).
+/// Mirrors the video-client dart-define; the theme-browser hits the same API.
 const String _kVideoBaseUrl = String.fromEnvironment(
-  'VIDEO_BASE_URL',
-  defaultValue: 'http://localhost:8002',
+  'BACKEND_BASE_URL',
+  defaultValue: 'http://localhost:8000',
 );
 /// ThemeService base, used ONLY to absolutise a gym card's celebration image
 /// (a ThemeService-relative path). Mirrors the engine default.
@@ -125,7 +126,9 @@ class GymsPager extends ChangeNotifier {
     _errored = false;
     _safeNotify();
     try {
-      final uri = Uri.parse('$_kVideoBaseUrl/gyms').replace(
+      final uri = Uri.parse(
+        '$_kVideoBaseUrl/api/v1/videos/templates',
+      ).replace(
         queryParameters: {
           'offset': '${_items.length}',
           'limit': '$pageSize',
@@ -173,19 +176,23 @@ class GymsPager extends ChangeNotifier {
   ThemeStyle _toStyle(Map<String, dynamic> gym) {
     final theme = (gym['theme'] as String?) ?? '';
     final raw = (gym['celebration_image_url'] as String?) ?? '';
+    // The backend catalog uses `video_gym_id`; fall back to `gym_id` for any
+    // legacy VideoService response during the transition period.
+    final videoGymId =
+        (gym['video_gym_id'] as String?) ?? (gym['gym_id'] as String?) ?? '';
     return ThemeStyle(
       id: theme,
-      displayName: _titleize((gym['gym_id'] as String?) ?? ''),
+      displayName: _titleize(videoGymId),
       // Prefer the ThemeService styles catalog's celebration URL — it carries
       // the content-hash `?v=` token so the card refreshes when the image is
-      // regenerated; fall back to the bare VideoService-derived URL.
+      // regenerated; fall back to the bare backend-derived URL.
       celebrationImageUrl:
           _celebrationByDesign?[theme] ?? (raw.isEmpty ? '' : _resolve(raw)),
       // The coarse parent bucket (Fighting/Yoga/…) is what the picker filters by.
       gymType: gym['parent_gym_type'] as String?,
       // The content key: stored on selection so the loyalty/videos/preview
       // surfaces fetch this gym's detail + feed by it.
-      gymId: gym['gym_id'] as String?,
+      gymId: videoGymId.isEmpty ? null : videoGymId,
     );
   }
 

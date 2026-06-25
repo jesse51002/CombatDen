@@ -59,8 +59,10 @@ update-openapi:
 
 # --- Production deploy (S3 + CloudFront at app.combatden.net) ---------------
 # Build the web bundle pointed at the production API subdomains. The two
-# dart-defines override the localhost defaults in the VideoService/ThemeService
+# dart-defines override the localhost defaults in the backend / ThemeService
 # carve-outs (see CLAUDE.md). Output: build/web.
+# BACKEND_BASE_URL: the FastApiBackend (public video-templates endpoints + the
+# authed preset import path used by gyms_pager / gym_api_client / video_api_client).
 #
 # --no-tree-shake-icons is REQUIRED: the icon tree-shaker corrupts the variable
 # `weight` axis of the MaterialSymbolsSharp font in release builds, so Symbols
@@ -69,7 +71,7 @@ update-openapi:
 # (~25 MB, eagerly loaded), so prune_web_fonts.py strips them post-build. Keep
 # both lines together — see CLAUDE.md "Production deployment".
 build-web:
-	flutter build web --release --base-href=/ --no-tree-shake-icons --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net
+	flutter build web --release --base-href=/ --no-tree-shake-icons --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=BACKEND_BASE_URL=https://api.combatden.net
 	python3 deploy/prune_web_fonts.py build/web
 
 # One-time AWS infra (mirrors LandingPage/deploy): bucket + ACM cert, then the
@@ -98,7 +100,7 @@ deploy: build-web deploy-upload
 # --no-tree-shake-icons + post-build font prune for the same reason as build-web
 # (the theme browser uses the same Symbols.*_sharp icons; same build/web output).
 build-themes:
-	flutter build web --release --base-href=/ --no-tree-shake-icons --target lib/main_theme_browser.dart --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=VIDEO_BASE_URL=https://video.combatden.net
+	flutter build web --release --base-href=/ --no-tree-shake-icons --target lib/main_theme_browser.dart --dart-define=CUST_BASE_URL=https://theme.combatden.net --dart-define=BACKEND_BASE_URL=https://api.combatden.net
 	python3 deploy/prune_web_fonts.py build/web
 
 deploy-themes-install:

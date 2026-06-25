@@ -115,8 +115,14 @@ class GymDetail {
               .toList(growable: false)
         : const [];
     final spec = json['specification'];
+    // The backend catalog uses `video_gym_id`; fall back to `gym_id` for any
+    // legacy VideoService response during the transition period.
+    final gymId =
+        (json['video_gym_id'] as String?) ??
+        (json['gym_id'] as String?) ??
+        '';
     return GymDetail(
-      gymId: (json['gym_id'] as String?) ?? '',
+      gymId: gymId,
       theme: (json['theme'] as String?) ?? '',
       spec: GymSpec.fromJson(
         spec is Map ? Map<String, dynamic>.from(spec) : const {},

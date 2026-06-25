@@ -77,6 +77,27 @@ class SelectedGym extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Update the VideoService content gym id after a preset import, without
+  /// running the gym-detail fetch (the import already wrote the data server-side;
+  /// a subsequent navigation to the videos tab will pick it up). Optionally
+  /// also applies a new [designId] theme when the import returns one.
+  ///
+  /// This keeps the two id spaces ([gymId] / [videoGymId]) intact — only the
+  /// video content key changes here; the real gym UUID is untouched.
+  void setVideoGymId({
+    required String videoGymId,
+    String? designId,
+  }) {
+    _videoGymId = videoGymId;
+    if (designId != null && designId.isNotEmpty) {
+      _designId = designId;
+      if (ThemeRuntime.activeDesignId != designId) {
+        ThemeRuntime.selectDesign(designId);
+      }
+    }
+    notifyListeners();
+  }
+
   /// Clear all selection on sign-out — both the admin gym ([gymId]/[role]) and
   /// the VideoService content selection — so the next authenticated session
   /// resolves gyms from scratch. Without this, [gymId] persists past logout and
