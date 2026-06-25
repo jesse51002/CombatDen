@@ -7,10 +7,12 @@ import 'package:mocktail/mocktail.dart';
 
 class MockApiClient extends Mock implements ApiClient {}
 
-/// Repository-level coverage for `cancelMemberships` — specifically that the
-/// structured 502 partial-cancel body (`{"detail": {"succeeded_item_ids":
-/// [...], "failed_item_ids": [...]}}`) is parsed into the real
-/// succeeded/failed split, instead of the old all-failed fallback.
+/// Repository-level coverage for `cancelMemberships`: a 207 Multi-Status
+/// partial-cancel body (top-level `{succeeded_item_ids: [...],
+/// failed_item_ids: [...]}` — a 207 is a returned RESULT, not an
+/// HTTPException, so there is no `detail` wrapper) is parsed into the real
+/// succeeded/failed split; a 200 reports every item succeeded; a 409
+/// throws; and a total failure (500) reports all items failed.
 void main() {
   const memberId = 'member-1';
   const itemId1 = 'item-a';
@@ -19,9 +21,11 @@ void main() {
   late MockApiClient api;
   late MemberRepository repo;
 
-  Response<dynamic> response(Object? data) => Response<dynamic>(
+  Response<dynamic> response(Object? data, {int? statusCode}) =>
+      Response<dynamic>(
         requestOptions: RequestOptions(path: '/api/v1/member_memberships/'),
         data: data,
+        statusCode: statusCode,
       );
 
   setUp(() {
@@ -49,21 +53,18 @@ void main() {
   });
 
   test(
-    '502 partial: parses the structured detail into the real split',
+    '207 partial: parses the top-level split into succeeded/failed',
     () async {
       when(
         () => api.delete<dynamic>(any(), data: any(named: 'data')),
-      ).thenThrow(
-        const ServerException(
-          'Server error 502: Bad Gateway',
-          statusCode: 502,
-          data: {
-            'detail': {
-              'message': 'Cancel partially applied',
-              'succeeded_item_ids': [itemId1],
-              'failed_item_ids': [itemId2],
-            },
+      ).thenAnswer(
+        (_) async => response(
+          {
+            'message': 'Cancel partially applied',
+            'succeeded_item_ids': [itemId1],
+            'failed_item_ids': [itemId2],
           },
+          statusCode: 207,
         ),
       );
 
@@ -80,16 +81,15 @@ void main() {
   );
 
   test(
-    '502 unstructured (string detail): falls back to all-failed',
+    '500 total failure: every item reported as failed',
     () async {
       when(
         () => api.delete<dynamic>(any(), data: any(named: 'data')),
       ).thenThrow(
         const ServerException(
-          'Server error 502: Bad Gateway',
-          statusCode: 502,
+          'Server error 500: Internal Server Error',
+          statusCode: 500,
           detail: 'Stripe is down',
-          data: {'detail': 'Stripe is down'},
         ),
       );
 
