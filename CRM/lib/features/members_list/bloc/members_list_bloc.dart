@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:stream_transform/stream_transform.dart';
 
 import 'package:crm/core/constants/app_constants.dart';
+import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/members_list/bloc/members_list_event.dart';
 import 'package:crm/features/members_list/bloc/members_list_state.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
@@ -13,8 +14,8 @@ import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/members_list_total_counts.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
-import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 
 EventTransformer<E> _debounce<E>(Duration duration) {
   return (events, mapper) =>
@@ -23,17 +24,22 @@ EventTransformer<E> _debounce<E>(Duration duration) {
 
 /// BLoC for the Members List screen.
 ///
-/// Manages view switching, filtering, pagination,
-/// and server-side search.
+/// Manages view switching, filtering, pagination, and
+/// server-side search. The view and the filters are
+/// independent: switching a view tab keeps the active
+/// filters, and changing a filter never moves the view.
 class MembersListBloc
     extends Bloc<MembersListEvent, MembersListState> {
   final MembersListRepository _repository;
+  final MembershipsRepository _membershipsRepository;
 
   int _searchSeq = 0;
 
   MembersListBloc({
     required MembersListRepository repository,
+    required MembershipsRepository membershipsRepository,
   })  : _repository = repository,
+        _membershipsRepository = membershipsRepository,
         super(const MembersListInitial()) {
     on<MembersListInitRequested>(_onInitRequested);
     on<MembersListViewChanged>(_onViewChanged);
@@ -42,6 +48,9 @@ class MembersListBloc
     );
     on<MembersListStatusFilterRemoved>(
       _onStatusFilterRemoved,
+    );
+    on<MembersListPlanFilterRemoved>(
+      _onPlanFilterRemoved,
     );
     on<MembersListDateRangeFilterSet>(
       _onDateRangeFilterSet,
@@ -70,9 +79,12 @@ class MembersListBloc
     try {
       final request = CrmMembersListRequest(
         gymId: event.gymId,
-        prevView: MembersListView.all,
-        requestedView: MembersListView.all,
+        view: MembersListView.all,
       );
+
+      // Plans back the filter picker; their load is best-effort
+      // and must not fail the list, so it resolves separately.
+      final plansFuture = _loadPlans(event.gymId);
 
       final results = await Future.wait([
         _repository.getMembersList(request),
@@ -83,12 +95,13 @@ class MembersListBloc
           results[0] as CrmMembersListResponse;
       final totalCounts =
           results[1] as MembersListTotalCounts;
+      final plans = await plansFuture;
 
       emit(MembersListLoaded(
         gymId: event.gymId,
         activeView: MembersListView.all,
-        prevView: MembersListView.all,
         filters: listResponse.filters,
+        plans: plans,
         allRows: List<MemberRow>.from(
           listResponse.data,
         ),
@@ -120,17 +133,14 @@ class MembersListBloc
     if (currentState is! MembersListLoaded) return;
     if (currentState.activeView == event.newView) return;
 
-    // Keep date filters, reset membership_status
-    final newFilters = currentState.filters.copyWith(
-      membershipStatus: const [],
-    );
-
+    // Only the view (row shape) changes — every active filter
+    // is kept exactly as set.
     await _fetchFreshPage(
       emit: emit,
       gymId: currentState.gymId,
-      prevView: currentState.activeView,
-      requestedView: event.newView,
-      filters: newFilters,
+      view: event.newView,
+      filters: currentState.filters,
+      plans: currentState.plans,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -148,19 +158,14 @@ class MembersListBloc
       event.status,
     ];
 
-    final newFilters = currentState.filters.copyWith(
-      membershipStatus: newStatuses,
-    );
-
-    // Smart view switching: exactly 1 status → switch
-    final targetView = _resolveView(newStatuses);
-
     await _fetchFreshPage(
       emit: emit,
       gymId: currentState.gymId,
-      prevView: currentState.activeView,
-      requestedView: targetView,
-      filters: newFilters,
+      view: currentState.activeView,
+      filters: currentState.filters.copyWith(
+        membershipStatus: newStatuses,
+      ),
+      plans: currentState.plans,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -178,18 +183,38 @@ class MembersListBloc
         .where((s) => s != event.status)
         .toList();
 
-    final newFilters = currentState.filters.copyWith(
-      membershipStatus: newStatuses,
+    await _fetchFreshPage(
+      emit: emit,
+      gymId: currentState.gymId,
+      view: currentState.activeView,
+      filters: currentState.filters.copyWith(
+        membershipStatus: newStatuses,
+      ),
+      plans: currentState.plans,
+      totalCounts: currentState.totalCounts,
+      searchQuery: currentState.searchQuery,
     );
+  }
 
-    final targetView = _resolveView(newStatuses);
+  Future<void> _onPlanFilterRemoved(
+    MembersListPlanFilterRemoved event,
+    Emitter<MembersListState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! MembersListLoaded) return;
+
+    final newPlanIds = currentState.filters.planIds
+        .where((id) => id != event.planId)
+        .toList();
 
     await _fetchFreshPage(
       emit: emit,
       gymId: currentState.gymId,
-      prevView: currentState.activeView,
-      requestedView: targetView,
-      filters: newFilters,
+      view: currentState.activeView,
+      filters: currentState.filters.copyWith(
+        planIds: newPlanIds,
+      ),
+      plans: currentState.plans,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -202,16 +227,14 @@ class MembersListBloc
     final currentState = state;
     if (currentState is! MembersListLoaded) return;
 
-    final newFilters = currentState.filters.copyWith(
-      dateRange: event.dateRange,
-    );
-
     await _fetchFreshPage(
       emit: emit,
       gymId: currentState.gymId,
-      prevView: currentState.activeView,
-      requestedView: currentState.activeView,
-      filters: newFilters,
+      view: currentState.activeView,
+      filters: currentState.filters.copyWith(
+        dateRange: event.dateRange,
+      ),
+      plans: currentState.plans,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -224,16 +247,12 @@ class MembersListBloc
     final currentState = state;
     if (currentState is! MembersListLoaded) return;
 
-    final targetView = _resolveView(
-      event.filters.membershipStatus,
-    );
-
     await _fetchFreshPage(
       emit: emit,
       gymId: currentState.gymId,
-      prevView: currentState.activeView,
-      requestedView: targetView,
+      view: currentState.activeView,
       filters: event.filters,
+      plans: currentState.plans,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -246,16 +265,14 @@ class MembersListBloc
     final currentState = state;
     if (currentState is! MembersListLoaded) return;
 
-    final newFilters = currentState.filters.copyWith(
-      clearDateRange: true,
-    );
-
     await _fetchFreshPage(
       emit: emit,
       gymId: currentState.gymId,
-      prevView: currentState.activeView,
-      requestedView: currentState.activeView,
-      filters: newFilters,
+      view: currentState.activeView,
+      filters: currentState.filters.copyWith(
+        clearDateRange: true,
+      ),
+      plans: currentState.plans,
       totalCounts: currentState.totalCounts,
       searchQuery: currentState.searchQuery,
     );
@@ -278,8 +295,7 @@ class MembersListBloc
     try {
       final request = CrmMembersListRequest(
         gymId: currentState.gymId,
-        prevView: currentState.activeView,
-        requestedView: currentState.activeView,
+        view: currentState.activeView,
         filters: currentState.filters,
         startIndex: nextIndex,
       );
@@ -347,8 +363,7 @@ class MembersListBloc
     try {
       final request = CrmMembersListRequest(
         gymId: currentState.gymId,
-        prevView: currentState.activeView,
-        requestedView: currentState.activeView,
+        view: currentState.activeView,
         filters: newFilters,
       );
 
@@ -387,14 +402,14 @@ class MembersListBloc
     }
   }
 
-  /// Fetches a fresh first page after view/filter
-  /// change. Resets pagination.
+  /// Fetches a fresh first page after a view or filter
+  /// change. Resets pagination; keeps the loaded plans.
   Future<void> _fetchFreshPage({
     required Emitter<MembersListState> emit,
     required String gymId,
-    required MembersListView prevView,
-    required MembersListView requestedView,
+    required MembersListView view,
     required MembersListFilters filters,
+    required List<MembershipPlanResponse> plans,
     required MembersListTotalCounts totalCounts,
     String searchQuery = '',
   }) async {
@@ -403,8 +418,7 @@ class MembersListBloc
     try {
       final request = CrmMembersListRequest(
         gymId: gymId,
-        prevView: prevView,
-        requestedView: requestedView,
+        view: view,
         filters: filters,
       );
 
@@ -416,9 +430,9 @@ class MembersListBloc
 
       emit(MembersListLoaded(
         gymId: gymId,
-        activeView: requestedView,
-        prevView: prevView,
+        activeView: view,
         filters: response.filters,
+        plans: plans,
         allRows: rows,
         displayedRows: rows,
         searchQuery: searchQuery,
@@ -439,22 +453,22 @@ class MembersListBloc
     }
   }
 
-  /// Resolves the target view based on the number of
-  /// active membership status filters.
-  MembersListView _resolveView(
-    List<MembershipStatus> statuses,
-  ) {
-    if (statuses.length != 1) {
-      return MembersListView.all;
+  /// Loads the gym's membership plans for the filter picker.
+  /// Best-effort: a failure degrades to an empty list (the
+  /// plan filter section just won't show) rather than failing
+  /// the whole members list.
+  Future<List<MembershipPlanResponse>> _loadPlans(
+    String gymId,
+  ) async {
+    try {
+      return await _membershipsRepository.listPlans(gymId);
+    } catch (e, stackTrace) {
+      log(
+        'Failed to load plans for members filter',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return const [];
     }
-
-    return switch (statuses.first) {
-      MembershipStatus.trial => MembersListView.trial,
-      MembershipStatus.frozen =>
-        MembersListView.frozen,
-      MembershipStatus.overdue =>
-        MembersListView.overdue,
-      _ => MembersListView.all,
-    };
   }
 }

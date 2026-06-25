@@ -15,6 +15,7 @@ class MembersListTable extends StatelessWidget {
   final bool isLoadingMore;
   final bool hasReachedEnd;
   final VoidCallback onLoadMore;
+  final bool hasActiveFilters;
 
   const MembersListTable({
     super.key,
@@ -24,6 +25,7 @@ class MembersListTable extends StatelessWidget {
     required this.isLoadingMore,
     required this.hasReachedEnd,
     required this.onLoadMore,
+    this.hasActiveFilters = false,
   });
 
   @override
@@ -35,6 +37,7 @@ class MembersListTable extends StatelessWidget {
       isLoadingMore: isLoadingMore,
       hasReachedEnd: hasReachedEnd,
       onLoadMore: onLoadMore,
+      hasActiveFilters: hasActiveFilters,
     );
   }
 }
