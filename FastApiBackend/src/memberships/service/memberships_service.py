@@ -211,7 +211,7 @@ class MemberMembershipsService:
         """
         if not item_ids:
             return {}
-        payer_ids = await self._get_payers_for_items(item_ids)
+        payer_ids = await self._get_payers_for_items(item_ids, member_id)
         async with self._paying_lock.lock(payer_ids):
             return await self._cancel.cancel(
                 item_ids, member_id, idempotency_key,
@@ -243,7 +243,7 @@ class MemberMembershipsService:
         """
         if not item_ids:
             return []
-        payer_ids = await self._get_payers_for_items(item_ids)
+        payer_ids = await self._get_payers_for_items(item_ids, member_id)
         async with self._paying_lock.lock(payer_ids):
             return await self._cancel.preview_cancel(item_ids, member_id)
 
@@ -476,6 +476,15 @@ class MemberMembershipsService:
         Locks BOTH accounts itself (like link/unlink), so the facade does NOT
         wrap this in another lock.
 
+        The cancel (Stripe + ``cancel_date``, committed inside the cancel path)
+        and the authorization DELETE run in separate transactions — Stripe work
+        cannot share a DB transaction — so a DELETE that fails after a successful
+        cancel leaves the authorization row behind. This is **idempotent on
+        retry**: a retry passes the existence pre-check, finds no remaining
+        cancellable memberships, and still runs the DELETE, converging the
+        state — a transient failure self-heals rather than stranding a zombie
+        authorization.
+
         Returns the cascading cancel's outcome — the same ``item_id ->
         cancel_date`` map ``cancel`` returns (empty when the relationship funds
         nothing), so the caller can show which memberships were cancelled, exactly
@@ -588,22 +597,30 @@ class MemberMembershipsService:
     async def _get_payers_for_items(
         self,
         item_ids: list[UUID],
+        member_id: UUID,
     ) -> list[UUID]:
         """The DISTINCT payers of a batch of membership rows — the lock keys
         for a multi-item cancel/preview.
 
+        Scoped to items ``member_id`` is entitled to — its own or ones it pays
+        for, the same subject-or-payer rule ``_get_membership`` enforces — so an
+        item_id the actor isn't authorized for is rejected HERE, before the
+        billing lock is taken; it never locks an unrelated payer's subscription.
         ``paid_by_member_id`` is immutable, so reading it before locking is
-        race-free. Every passed item must exist (a multi-cancel over a stale
+        race-free. Every passed item must resolve (a stale or unauthorized
         item_id is a caller error, not a silent skip).
 
         Raises:
-            ValueError: If any ``item_id`` does not exist.
+            ValueError: If any ``item_id`` does not exist or is not the actor's.
         """
         sql = load_sql(SQL_DIR / "member_memberships_get_payers.sql")
         async with self._db_pool.session() as session:
             result = await session.execute(
                 text(sql),
-                {"item_ids": [str(i) for i in item_ids]},
+                {
+                    "item_ids": [str(i) for i in item_ids],
+                    "member_id": str(member_id),
+                },
             )
             rows = result.mappings().all()
         payers = {

@@ -2,7 +2,7 @@
 
 from datetime import date
 from enum import StrEnum
-from typing import Self
+from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -461,7 +461,9 @@ class MembersBillingLinkRequest(BaseModel):
 
     payer_member_id: UUID
     signer_name: str
-    consent_acknowledged: bool
+    # Literal[True]: a false consent is not a valid e-signature, so reject it at
+    # deserialization rather than relying on a downstream runtime guard.
+    consent_acknowledged: Literal[True]
 
     @field_validator("signer_name")
     @classmethod

@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
@@ -106,34 +107,54 @@ class MemberMembershipsLinked:
             if blocked is not None:
                 raise ValueError(blocked)
 
+            # TEMPORARY (TOCTOU): the waiver version is resolved here and signed
+            # below; if the gym published a new version in between, the signature
+            # records the server-resolved version, not necessarily the one the
+            # CRM showed the signer. Acceptable for now — this in-line sign is
+            # slated to move to a dedicated signing endpoint where the client
+            # echoes the version_id it displayed and the backend version-locks on
+            # it before signing, closing the window.
             default = await self._waivers.get_default_waiver_for_member(member_id)
 
             insert_sql = load_sql(
                 SQL_DIR / "member_authorized_payers_insert.sql",
             )
-            async with self._db_pool.session() as session:
-                signature_id = await self._waivers.record_signature(
-                    session,
-                    gym_id=default.gym_id,
-                    signer_member_id=payer_member_id,
-                    waiver_id=default.waiver_id,
-                    waiver_version_id=default.version_id,
-                    signer_name=signer_name,
-                    consent_acknowledged=consent_acknowledged,
-                    content_hash=default.content_hash,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                )
-                await session.execute(
-                    text(insert_sql),
-                    {
-                        "member_id": str(member_id),
-                        "payer_member_id": str(payer_member_id),
-                        "gym_id": str(default.gym_id),
-                        "signature_id": str(signature_id),
-                    },
-                )
-                await session.commit()
+            try:
+                async with self._db_pool.session() as session:
+                    signature_id = await self._waivers.record_signature(
+                        session,
+                        gym_id=default.gym_id,
+                        signer_member_id=payer_member_id,
+                        waiver_id=default.waiver_id,
+                        waiver_version_id=default.version_id,
+                        signer_name=signer_name,
+                        consent_acknowledged=consent_acknowledged,
+                        content_hash=default.content_hash,
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                    )
+                    await session.execute(
+                        text(insert_sql),
+                        {
+                            "member_id": str(member_id),
+                            "payer_member_id": str(payer_member_id),
+                            "gym_id": str(default.gym_id),
+                            "signature_id": str(signature_id),
+                        },
+                    )
+                    await session.commit()
+            except IntegrityError as exc:
+                # Backstop: the pair lock serializes same-pair link calls, so the
+                # _link_block_reason check above normally catches a duplicate. If
+                # two ever race past it, the second INSERT trips the
+                # member_authorized_payers PK — translate that to the same
+                # user-facing "already authorized" error (a 400) instead of an
+                # unhandled 500. The signature INSERT in the same txn rolls back
+                # with it, so no orphan signature is left.
+                raise ValueError(
+                    f"Payer {payer_member_id} is already an authorized payer "
+                    f"for member {member_id}",
+                ) from exc
 
     # ── Check ──────────────────────────────────────────────────
 
