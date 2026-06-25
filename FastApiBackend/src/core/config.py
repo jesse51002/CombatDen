@@ -133,6 +133,12 @@ class Settings(BaseSettings):
     task_item_retry_delay_seconds: int = 10
     task_stale_running_seconds: int = 120
 
+    # Presets: email allowlist for the preset import endpoint.
+    # Comma-separated; controls who may call POST /api/v1/gyms/{id}/presets/import.
+    # The import itself is a real production write path — this gate is a demo
+    # control only, not a security boundary (the owner check still applies).
+    preset_import_allowed_emails: str = "owner1@test.com"
+
 
 settings = Settings()
 

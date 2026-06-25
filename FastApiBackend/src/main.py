@@ -21,6 +21,7 @@ from src.memberships.service.memberships_invoice_fetch_runner import (
 from src.plans.plans_router import (
     membership_plans_router,
 )
+from src.presets.presets_router import presets_router
 from src.ranks.ranks_router import ranks_router
 from src.reconciler.reconciler_scheduler import build_scheduler
 from src.rewards.rewards_router import rewards_router
@@ -102,6 +103,9 @@ def create_app() -> FastAPI:
 
     # Videos: read-only template catalog + a real gym's live feed/showcase.
     application.include_router(videos_router)
+
+    # Presets: transactional template import into a real gym's production tables.
+    application.include_router(presets_router)
 
     return application
 

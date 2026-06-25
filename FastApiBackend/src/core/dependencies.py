@@ -70,6 +70,7 @@ from src.payments.service.subscription import (
 from src.plans.service.plans_service import (
     MembershipPlansService,
 )
+from src.presets.service.presets_service import PresetsService
 from src.ranks.service.ranks_service import RanksService
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
@@ -166,6 +167,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             # === end CRM billing router modules ===
             "src.tasks.tasks_router",
             "src.videos.videos_router",
+            "src.presets.presets_router",
         ],
     )
 
@@ -196,6 +198,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Videos: read-only — the slug-keyed video template catalog + a real gym's
     # live feed/spec/showcase from the gym_video_* tables. No Stripe, no writes.
     videos_service = providers.Factory(VideosService, db_pool=db_pool)
+
+    # Presets: transactional import of a video_gym template into a real gym's
+    # production tables. Owner-gated + email allowlist. No Stripe.
+    presets_service = providers.Factory(PresetsService, db_pool=db_pool)
 
     # === CRM billing DI providers (restored) ===
     # Shared Stripe infrastructure (per-gym connected-account lookups).
