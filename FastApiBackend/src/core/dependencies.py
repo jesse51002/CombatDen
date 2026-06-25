@@ -384,7 +384,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     member_memberships_invoice_fetch = providers.Factory(
         MemberMembershipsInvoiceFetch,
         db_pool=db_pool,
-        stripe_client=stripe_client,
+        payment_service=payments_payment_service,
         invoice_paid_handler=stripe_webhook_invoice_paid_handler,
         invoice_payment_paid_handler=(
             stripe_webhook_invoice_payment_paid_handler

@@ -205,9 +205,13 @@ def build_invoice_fetch(
     Mirrors ``src/core/dependencies.py`` (member_memberships_invoice_fetch).
     """
     payer_resolver = PayerResolver(db_pool, GymStripeService(db_pool))
+    payment_service = PaymentsStripePaymentService(
+        stripe_client,
+        PaymentsStripeMembersService(stripe_client),
+    )
     return MemberMembershipsInvoiceFetch(
         db_pool,
-        stripe_client,
+        payment_service,
         InvoicePaidHandler(stripe_client=stripe_client),
         InvoicePaymentPaidHandler(stripe_client=stripe_client),
         InvoicePaymentFailedHandler(),

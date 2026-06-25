@@ -10,8 +10,10 @@ Two callers, one engine:
     twice-daily full sweep delegates here per gym.
 
 The fetch + apply loop lives HERE (memberships); the reconciler calls in, never
-the reverse. The webhook ``record`` handlers stay in ``stripe_webhooks`` and are
-injected.
+the reverse. Stripe is reached ONLY through the payments layer — the
+``PaymentsStripePaymentService`` list primitives (this service never touches the
+Stripe client itself); the webhook ``record`` handlers stay in
+``stripe_webhooks`` and are injected.
 
 Idempotency is at the DB layer (invoice upsert on ``stripe_invoice_id``,
 succeeded-charge UNIQUE on ``stripe_charge_id``, refund UNIQUE, failed-charge
@@ -21,17 +23,17 @@ recorded in its OWN DB transaction so one bad object cannot roll back the rest.
 """
 
 import asyncio
-import json
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
 from uuid import UUID
 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
-from src.payments.service.payments_stripe_client import PaymentsStripeClient
+from src.payments.service.payments_stripe_payment_service import (
+    PaymentsStripePaymentService,
+)
 from src.shared.database import DirectDatabasePool
 from src.shared.payer_resolver import PayerResolver
 from src.shared.sweep_result import SweepResult
@@ -62,7 +64,7 @@ class MemberMembershipsInvoiceFetch:
     def __init__(
         self,
         db_pool: DirectDatabasePool,
-        stripe_client: PaymentsStripeClient,
+        payment_service: PaymentsStripePaymentService,
         invoice_paid_handler: InvoicePaidHandler,
         invoice_payment_paid_handler: InvoicePaymentPaidHandler,
         invoice_payment_failed_handler: InvoicePaymentFailedHandler,
@@ -70,7 +72,8 @@ class MemberMembershipsInvoiceFetch:
         payer_resolver: PayerResolver,
     ) -> None:
         self._db_pool = db_pool
-        self._stripe = stripe_client.client
+        # Stripe is reached only through this — no raw client here.
+        self._payments = payment_service
         self._invoice_paid = invoice_paid_handler
         self._invoice_payment_paid = invoice_payment_paid_handler
         self._invoice_payment_failed = invoice_payment_failed_handler
@@ -149,24 +152,21 @@ class MemberMembershipsInvoiceFetch:
         on-demand post-op path); ``None`` sweeps the whole account (the
         reconciler backstop). ``fresh`` / ``fresh_since`` (on-demand only) record
         the ids of paid invoices created ``>= fresh_since`` so the caller can
-        early-stop. Mutates ``result`` in place.
+        early-stop. Mutates ``result`` in place. All Stripe I/O goes through the
+        payments service.
         """
-        opts = PaymentsStripeClient.connect_opts_readonly(account_id)
-        invoice_params: dict[str, Any] = {
-            "created": {"gte": cutoff},
-            "limit": settings.reconciler_stripe_page_size,
-        }
-        if customer is not None:
-            invoice_params["customer"] = customer
-
-        async for invoice in self._iter(
-            self._stripe.v1.invoices.list_async, invoice_params, opts
-        ):
+        page_size = settings.reconciler_stripe_page_size
+        invoices = await self._payments.list_invoices(
+            account_id,
+            created_gte=cutoff,
+            limit=page_size,
+            customer=customer,
+        )
+        for invoice in invoices:
             await self._record_invoice(
                 invoice,
                 gym_id,
                 account_id,
-                opts,
                 result,
                 fresh=fresh,
                 fresh_since=fresh_since,
@@ -177,13 +177,12 @@ class MemberMembershipsInvoiceFetch:
         # about a new invoice / charge, not refunds (which have their own op +
         # webhook + the cron backstop).
         if customer is None:
-            refund_params = {
-                "created": {"gte": cutoff},
-                "limit": settings.reconciler_stripe_page_size,
-            }
-            async for refund in self._iter(
-                self._stripe.v1.refunds.list_async, refund_params, opts
-            ):
+            refunds = await self._payments.list_refunds(
+                account_id,
+                created_gte=cutoff,
+                limit=page_size,
+            )
+            for refund in refunds:
                 result.processed += 1
                 await self._run_record(
                     result,
@@ -192,10 +191,9 @@ class MemberMembershipsInvoiceFetch:
 
     async def _record_invoice(
         self,
-        invoice: Any,
+        invoice: dict,
         gym_id: UUID,
         account_id: str,
-        opts: Any,
         result: SweepResult,
         *,
         fresh: list[str] | None = None,
@@ -204,7 +202,7 @@ class MemberMembershipsInvoiceFetch:
         """Route one invoice to the bill / failed-attempt recorder."""
         status = invoice.get("status")
         if status == INVOICE_STATUS_PAID:
-            await self._complete_invoice_lines(invoice, opts)
+            await self._complete_invoice_lines(invoice, account_id)
             result.processed += 1
             applied = await self._run_record(
                 result,
@@ -219,9 +217,7 @@ class MemberMembershipsInvoiceFetch:
                 and int(invoice.get("created") or 0) >= fresh_since
             ):
                 fresh.append(invoice["id"])
-            await self._record_invoice_payments(
-                invoice, gym_id, account_id, opts, result
-            )
+            await self._record_invoice_payments(invoice, gym_id, account_id, result)
         elif (
             status == INVOICE_STATUS_OPEN
             and int(invoice.get("attempt_count") or 0) > 0
@@ -234,14 +230,18 @@ class MemberMembershipsInvoiceFetch:
                 ),
             )
 
-    async def _complete_invoice_lines(self, invoice: Any, opts: Any) -> None:
+    async def _complete_invoice_lines(
+        self,
+        invoice: dict,
+        account_id: str,
+    ) -> None:
         """Ensure a paid invoice carries ALL its line items before recording.
 
         ``invoices.list`` (and the webhook payload) inline only the first page
         of ``lines``; an invoice with more lines than the page size reports
         ``lines.has_more``. The record seam inserts one row per line and advances
         each line's membership dates, so the remaining lines must be paginated in
-        (via the dedicated line-items endpoint) and merged before recording — else
+        (via the payments line-items primitive) and merged before recording — else
         a large consolidated/family invoice would silently drop lines past the
         first page.
         """
@@ -251,20 +251,11 @@ class MemberMembershipsInvoiceFetch:
         invoice_id = invoice.get("id")
         if not invoice_id:
             return
-
-        async def _list_lines(params: Any = None, options: Any = None) -> Any:
-            return await self._stripe.v1.invoices.line_items.list_async(
-                invoice_id, params=params, options=options
-            )
-
-        full = [
-            line
-            async for line in self._iter(
-                _list_lines,
-                {"limit": settings.reconciler_stripe_page_size},
-                opts,
-            )
-        ]
+        full = await self._payments.list_invoice_line_items(
+            account_id,
+            invoice_id,
+            limit=settings.reconciler_stripe_page_size,
+        )
         if full:
             lines["data"] = full
             lines["has_more"] = False
@@ -272,20 +263,18 @@ class MemberMembershipsInvoiceFetch:
 
     async def _record_invoice_payments(
         self,
-        invoice: Any,
+        invoice: dict,
         gym_id: UUID,
         account_id: str,
-        opts: Any,
         result: SweepResult,
     ) -> None:
         """Record each succeeded payment of a paid invoice as a charge."""
-        params = {
-            "invoice": invoice["id"],
-            "limit": settings.reconciler_stripe_page_size,
-        }
-        async for payment in self._iter(
-            self._stripe.v1.invoice_payments.list_async, params, opts
-        ):
+        payments = await self._payments.list_invoice_payments(
+            account_id,
+            invoice["id"],
+            limit=settings.reconciler_stripe_page_size,
+        )
+        for payment in payments:
             if payment.get("status") != PAYMENT_STATUS_PAID:
                 continue
             result.processed += 1
@@ -323,28 +312,3 @@ class MemberMembershipsInvoiceFetch:
             )
             result.errors += 1
             return False
-
-    async def _iter(
-        self,
-        list_fn: Callable[..., Awaitable[Any]],
-        base_params: dict[str, Any],
-        opts: Any,
-    ) -> AsyncGenerator[Any]:
-        """Yield every object across a paginated Stripe list."""
-        starting_after: str | None = None
-        while True:
-            params = dict(base_params)
-            if starting_after:
-                params["starting_after"] = starting_after
-            page = await list_fn(params=params, options=opts)
-            data = list(page.data)
-            for obj in data:
-                # A list call yields Stripe OBJECTS; the record() seams expect
-                # the plain nested dict the webhook path gets from event JSON
-                # (StripeObject has no dict ``.get`` in this lib version). The
-                # object's ``str`` IS its canonical JSON, so this round-trips to
-                # exactly that shape.
-                yield json.loads(str(obj))
-            if not data or not getattr(page, "has_more", False):
-                break
-            starting_after = data[-1].id

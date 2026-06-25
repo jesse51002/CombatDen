@@ -232,6 +232,17 @@ back to active because the DB says it's current.
   which does the CRM write. (Note: Stripe does not propagate subscription
   metadata to generated invoices, so the webhook recovers `member_id` via
   sub-item lookup; only the cash flag rides on the invoice itself.)
+- **Paginated list read-primitives** — `list_invoices(account_id, *, created_gte,
+  limit, customer=None)`, `list_refunds(account_id, *, created_gte, limit)`,
+  `list_invoice_payments(account_id, invoice_id, *, limit)`,
+  `list_invoice_line_items(account_id, invoice_id, *, limit)`. Each auto-paginates
+  (`_paginate`: loop `starting_after` / `has_more` under `connect_opts_readonly`)
+  and returns a **list of plain nested dicts** — `json.loads(str(stripe_obj))`,
+  the same shape the webhook event JSON has, since a listed `StripeObject` has no
+  dict `.get`. These are the ONLY Stripe-list path: the on-demand / reconciler
+  invoice fetch (`MemberMembershipsInvoiceFetch`, see `memberships-guide` /
+  `reconciler-guide`) consumes them and never touches the Stripe client itself —
+  keeping all raw Stripe I/O inside this layer.
 
 **`PaymentsStripeDiscountService`** (`payments_stripe_discount_service.py`) — the
 **single owner of Stripe Coupon I/O AND the deterministic value→coupon

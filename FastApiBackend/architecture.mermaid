@@ -103,7 +103,7 @@ flowchart TB
     memberships_invoice_fetch_runner --> memberships_invoice_fetch
     memberships_invoice_fetch -->|"webhook record() seams"| stripe_webhooks_service
     memberships_invoice_fetch --> payer_resolver
-    memberships_invoice_fetch --> Payments
+    memberships_invoice_fetch -->|"list invoices/refunds/payments"| Payments
     stripe_webhooks_service -->|"invoice.paid → settle once discounts"| payment_sync_service
     stripe_webhooks_service -->|"invoice_payment.paid → retrieve PaymentIntent for charge id"| Payments
     members_billing_detail_service --> streak_service
