@@ -7,23 +7,23 @@ import 'package:crm/features/members_list/data/models/members_list_view.dart';
 ///
 /// Attributes:
 ///   gymId: The gym to list members for.
-///   prevView: The view the user was on before this request.
-///   requestedView: The view the user is requesting.
+///   view: The view to show (decides the row shape). The view
+///     and the filters are independent — the backend applies
+///     both as given and does not reconcile one against the
+///     other.
 ///   filters: Active filters from the frontend.
 ///   startIndex: Pagination offset.
 ///   count: Number of rows to fetch per page.
 class CrmMembersListRequest extends Equatable {
   final String gymId;
-  final MembersListView prevView;
-  final MembersListView requestedView;
+  final MembersListView view;
   final MembersListFilters filters;
   final int startIndex;
   final int count;
 
   const CrmMembersListRequest({
     required this.gymId,
-    required this.prevView,
-    required this.requestedView,
+    required this.view,
     this.filters = const MembersListFilters(),
     this.startIndex = 0,
     this.count = 25,
@@ -32,8 +32,7 @@ class CrmMembersListRequest extends Equatable {
   Map<String, dynamic> toJson() {
     return {
       'gym_id': gymId,
-      'prev_view': prevView.toJson(),
-      'requested_view': requestedView.toJson(),
+      'view': view.toJson(),
       'filters': filters.toJson(),
       'start_index': startIndex,
       'count': count,
@@ -43,8 +42,7 @@ class CrmMembersListRequest extends Equatable {
   @override
   List<Object?> get props => [
         gymId,
-        prevView,
-        requestedView,
+        view,
         filters,
         startIndex,
         count,

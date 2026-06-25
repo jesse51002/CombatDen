@@ -211,8 +211,7 @@ def test_list_members_returns_paginated_response(client, auth_headers, fake_gym_
             "/api/v1/members/list",
             json={
                 "gym_id": fake_gym_id,
-                "prev_view": "all",
-                "requested_view": "all",
+                "view": "all",
             },
             headers=auth_headers,
         )
@@ -254,8 +253,7 @@ def test_list_members_hydrates_nested_rank(client, auth_headers, fake_gym_id, fa
             "/api/v1/members/list",
             json={
                 "gym_id": fake_gym_id,
-                "prev_view": "all",
-                "requested_view": "all",
+                "view": "all",
             },
             headers=auth_headers,
         )

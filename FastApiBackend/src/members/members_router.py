@@ -182,10 +182,12 @@ async def update_member(
     description=(
         "Returns a filtered, sorted, paginated list of gym members "
         "for the CRM members list screen. The view (all / trial / "
-        "frozen / overdue) plus filters and pagination are resolved "
-        "and the rows are pre-formatted per view. Membership status is "
-        "derived from member_memberships (member_memberships_status), "
-        "not from a member_status column."
+        "frozen / overdue) decides the row shape; the filters and "
+        "pagination are applied as given (the view and filters are "
+        "independent — no reconciliation), and the rows are "
+        "pre-formatted per view. Membership status is derived from "
+        "member_memberships (member_memberships_status), not from a "
+        "member_status column."
     ),
     responses={
         200: {"description": "Members list retrieved"},
@@ -212,7 +214,7 @@ async def list_members(
         logger.error(
             "Failed to list members: gym_id=%s, view=%s",
             request.gym_id,
-            request.requested_view,
+            request.view,
             exc_info=True,
         )
         raise HTTPException(

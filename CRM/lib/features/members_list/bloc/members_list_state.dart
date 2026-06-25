@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/members_list_total_counts.dart';
@@ -28,19 +29,21 @@ class MembersListLoaded extends MembersListState {
   /// The gym ID for this list.
   final String gymId;
 
-  /// The currently active view.
+  /// The currently active view (decides the row shape).
   final MembersListView activeView;
-
-  /// The previously active view (for API prev_view).
-  final MembersListView prevView;
 
   /// Active filters.
   final MembersListFilters filters;
 
+  /// The gym's membership plans, for the filter picker and
+  /// for resolving plan-filter chip labels (plan id → name).
+  final List<MembershipPlanResponse> plans;
+
   /// All rows loaded so far (across pages).
   final List<MemberRow> allRows;
 
-  /// Rows after client-side search filtering.
+  /// The rows the table renders (mirrors [allRows];
+  /// filtering and search happen server-side).
   final List<MemberRow> displayedRows;
 
   /// Current search query.
@@ -61,8 +64,8 @@ class MembersListLoaded extends MembersListState {
   const MembersListLoaded({
     required this.gymId,
     required this.activeView,
-    required this.prevView,
     required this.filters,
+    this.plans = const [],
     required this.allRows,
     required this.displayedRows,
     this.searchQuery = '',
@@ -75,8 +78,8 @@ class MembersListLoaded extends MembersListState {
   MembersListLoaded copyWith({
     String? gymId,
     MembersListView? activeView,
-    MembersListView? prevView,
     MembersListFilters? filters,
+    List<MembershipPlanResponse>? plans,
     List<MemberRow>? allRows,
     List<MemberRow>? displayedRows,
     String? searchQuery,
@@ -88,8 +91,8 @@ class MembersListLoaded extends MembersListState {
     return MembersListLoaded(
       gymId: gymId ?? this.gymId,
       activeView: activeView ?? this.activeView,
-      prevView: prevView ?? this.prevView,
       filters: filters ?? this.filters,
+      plans: plans ?? this.plans,
       allRows: allRows ?? this.allRows,
       displayedRows:
           displayedRows ?? this.displayedRows,
@@ -107,8 +110,8 @@ class MembersListLoaded extends MembersListState {
   List<Object?> get props => [
         gymId,
         activeView,
-        prevView,
         filters,
+        plans,
         allRows,
         displayedRows,
         searchQuery,
