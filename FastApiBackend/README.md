@@ -1,8 +1,9 @@
 # FastApiBackend — CombatDen API
 
 The membership + billing backend for CombatDen: a Python/FastAPI service that the **CRM** calls to
-manage gyms, members, classes, ranks, rewards, and Stripe-backed billing. It owns no UI — it is a
-read/write REST API over the shared Supabase Postgres, authenticated with Supabase JWTs.
+manage gyms, members, classes, ranks, rewards, Stripe-backed billing, and gym **video content** (the
+merged VideoService read API + the gym-template preset import). It owns no UI — it is a read/write
+REST API over the shared Supabase Postgres, authenticated with Supabase JWTs.
 
 > **Status: WIP, not yet deployed** (prod target `api.combatden.net`). The CRM is its first client
 > and is still being wired up. See `../README.md` for where this sits in the whole system, and
@@ -15,7 +16,7 @@ read/write REST API over the shared Supabase Postgres, authenticated with Supaba
 ```mermaid
 flowchart TB
   CRM["🖥️ CRM (caller) · WIP"]
-  FB["⚙️ FastApiBackend — CRM / billing API<br/>11 domains · 73 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · memberships · plans · stripe_webhooks · tasks<br/>+ payments · sync · reconciler (router-less; reconciler = twice-daily billing sweep)"]
+  FB["⚙️ FastApiBackend — CRM / billing + video API<br/>13 domains · ~82 routes<br/>members · gyms · classes · ranks · rewards · waivers<br/>discounts · memberships · plans · stripe_webhooks · tasks<br/>videos (merged VideoService read API) · presets (import a gym template)<br/>+ payments · sync · reconciler (router-less; reconciler = twice-daily billing sweep)"]
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB)"]
   Stripe["Stripe — payments · Connect · webhooks"]
   CRM -->|"authenticated REST · WIP"| FB
@@ -83,6 +84,8 @@ Each domain is a vertical slice — `router/ + schema/ + service/ + sql/` — un
 | `plans` | Plan + price templates (Stripe products / prices); moving members to a new price is the per-plan reprice (in `memberships`, `POST /reprice-plan`) |
 | `stripe_webhooks` | Ingests Stripe webhook events and syncs billing state to the DB (invoices, charges, refunds, and `customer.subscription.deleted` → triggers a family sync that cancels the gone subscription in the CRM) |
 | `tasks` | Tracked background operations (`tasks` + `task_items` tables): an op endpoint creates a task and returns its id immediately; the executor claims items atomically, dispatches to the task_type's registered handler (e.g. `membership_reprice`), and retries ×3. Crash recovery lives in the **reconciler** — its twice-daily sweep re-runs unfinished tasks (the tasks domain has no scheduler of its own). Read-only polling routes (`GET /tasks/ongoing`, `GET /tasks/{id}`); item-targeted membership ops reject mid-task rows (409) |
+| `videos` | The merged **VideoService read API**: a **public** slug-keyed template catalog (`/api/v1/videos/templates*` — the 76 `video_gym*` demo templates: cards, detail, feed, preview) plus a real gym's authed live content keyed by UUID (`/api/v1/gyms/{id}/videos`, `/videos/preview`, `/videos/spec`, `/showcase` — the latter assembles `gym_video_spec` + `gym_classes ⋈ gym_employees` + `gym_rewards`). Read-only; the shared `video` pool + templates are written by the separate VideoService batch job |
+| `presets` | Import a gym-type template into a gym's **real** production tables in one transaction (`POST /api/v1/gyms/{id}/presets/import`): copies the template's videos/spec/queries + real `gym_classes` (synthesized schedule defaults) + instructors as `gym_employees` + `gym_rewards` + `gyms.theme_design_id`. FK-safe overwrite (soft-delete classes, deactivate rewards, upsert trainers). Owner + email-allowlist gated (`preset_import_allowed_emails`, demo: owner1) |
 | `sync` *(no router)* | Payment-sync engine: re-derives the family's desired Stripe subscription state from the DB on every membership mutation and converges Stripe onto it. Also owns the one-time invoice charge path. |
 | `payments` *(no router)* | Stripe service core (client, payment, price, members, membership, subscription, discount) injected into the billing domains |
 | `reconciler` *(no router)* | Twice-daily billing safety-net sweep (APScheduler in the lifespan): invoice-fetch backfill (delegates per gym to `MemberMembershipsInvoiceFetch.sweep_account` in `memberships` — the reconciler calls in, never the reverse), stale-task recovery (re-runs unfinished `tasks` whose in-process run died), `not_added` orphan cleanup, the CRM→Stripe push (`bulk_payment_sync`, whose sync self-heals a gone subscription), and the subscription-orphan sweep (cancel live Stripe subs with no live DB link). See the `reconciler-guide` skill |
