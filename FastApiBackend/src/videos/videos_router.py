@@ -173,13 +173,15 @@ async def get_template_videos(
     video_gym_id: str,
     video_type: VideoGenre | None = None,
     big_group: BigGroup | None = None,
+    rejected: bool = Query(False),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
     offset: int = Query(0, ge=0),
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> GymVideosFeed:
-    """Return one page of a template's feed, hydrated from the shared pool."""
+    """Return one page of a template's feed, hydrated from the shared pool.
+    ``rejected=true`` serves the scan's rejected list (admin review)."""
     if video_type is not None and big_group is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -192,7 +194,9 @@ async def get_template_videos(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No template {video_gym_id!r}",
             )
-        ids = await videos_service.load_template_feed_ids(video_gym_id)
+        ids = await videos_service.load_template_feed_ids(
+            video_gym_id, rejected=rejected
+        )
         videos = await videos_service.load_pool_videos(ids)
     except HTTPException:
         raise
@@ -237,12 +241,14 @@ async def get_template_videos(
 @inject
 async def get_template_videos_preview(
     video_gym_id: str,
+    rejected: bool = Query(False),
     per_tag: int = Query(PREVIEW_PER_TAG, ge=1, le=MAX_LIMIT),
     videos_service: VideosService = Depends(
         Provide[DependencyInjector.videos_service]
     ),
 ) -> GymFeedPreview:
-    """The template's "All" preview: its feed grouped by genre, capped per genre."""
+    """The template's "All" preview: its feed grouped by genre, capped per genre.
+    ``rejected=true`` previews the scan's rejected list."""
     try:
         detail = await videos_service.load_template(video_gym_id)
         if detail is None:
@@ -250,7 +256,9 @@ async def get_template_videos_preview(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No template {video_gym_id!r}",
             )
-        ids = await videos_service.load_template_feed_ids(video_gym_id)
+        ids = await videos_service.load_template_feed_ids(
+            video_gym_id, rejected=rejected
+        )
         videos = await videos_service.load_pool_videos(ids)
     except HTTPException:
         raise

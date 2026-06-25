@@ -19,6 +19,7 @@ import json
 from collections.abc import Iterable
 from uuid import UUID
 
+from schema.video import VideoGymFeedStatus
 from sqlalchemy import text
 
 from src.core.config import settings
@@ -182,15 +183,22 @@ class VideosService:
             rewards=rewards,
         )
 
-    async def load_template_feed_ids(self, video_gym_id: str) -> list[str]:
-        """A template's approved feed ids (slug-keyed), in pool-relevance order.
+    async def load_template_feed_ids(
+        self, video_gym_id: str, *, rejected: bool = False
+    ) -> list[str]:
+        """A template's feed ids (slug-keyed), in pool-relevance order. Serves the
+        approved feed by default, or the scan's rejected list when ``rejected``.
         Powers the public template feed/preview the gym/theme picker renders."""
+        status = (
+            VideoGymFeedStatus.rejected if rejected else VideoGymFeedStatus.good
+        )
         sql = load_sql(SQL_DIR / "videos_load_template_feed_ids.sql")
         async with self._db.session() as session:
             rows = (
                 (
                     await session.execute(
-                        text(sql), {"video_gym_id": video_gym_id}
+                        text(sql),
+                        {"video_gym_id": video_gym_id, "status": status.value},
                     )
                 )
                 .mappings()
