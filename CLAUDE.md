@@ -50,6 +50,16 @@ Every CLAUDE.md in this repo is a living document — exactly like a skill, it m
 - `claude-code-review.yml` (auto PR review) and `claude.yml` (the `@claude` assistant) run `claude-code-action`, whose GitHub App token exchange requires the workflow file on a PR branch to be **byte-identical to the version on `main`**. If a feature branch edits one of them, every review run on that branch dies at startup with `App token exchange failed: 401 Unauthorized — Workflow validation failed`.
 - So any change to these files must land on `main` FIRST, via a small dedicated PR, then be synced onto the feature branch — **never edit them on a feature branch alone.** This bites often; treat it as a hard rule. (Even the dedicated PR's own review run will 401, because that PR is the one changing the file — that's expected, ignore it; the merge still works.)
 
+## After pushing to a PR — poll the Claude review automatically
+- Every push to a PR branch triggers the `claude-code-review.yml` workflow, which posts an automated review (~5–9 min). **Pushing is not "done" — always poll for that review and address it, without being asked.**
+- **Do the polling in the BACKGROUND so the main session isn't blocked for those minutes.** Whichever is easiest:
+  - a **background `haiku` sub-agent** — cheap; have it watch the run, fetch the new `claude[bot]` review once it posts, and return just the findings; or
+  - a **background shell command** (`run_in_background: true`) — e.g. `gh pr checks <pr> --watch` then print the latest `claude[bot]` comment; the harness re-invokes the main agent when it exits.
+  - Either way the main agent keeps working / hands back, and picks the review up when the poller reports.
+- Where to read the review: it posts as an **issue comment** from `claude[bot]` — `gh api repos/<owner>/<repo>/issues/<pr>/comments`. Also check `.../pulls/<pr>/reviews` and `.../pulls/<pr>/comments` for any inline findings.
+- Triage **every** finding: fix the legitimate ones; for a finding that conflicts with a decision already made, is a false positive, or follows an established codebase convention, **reply with the rationale instead of silently applying it** (per *No assumptions* + challenging weak findings). Surface anything that needs a human decision.
+- A clean run is not enough — the workflow passing only means the review *ran*, not that its findings are resolved. Loop until the review is addressed (push fix → re-poll the new review).
+
 ## No inline prompts or SQL
 - Never inline an LLM/agent prompt in code. Every prompt lives in its own `.md` file and is read at use; code may hold the path, never the prompt text.
 - Never inline SQL in code. Every query lives in its own `.sql` file and is read at use.
