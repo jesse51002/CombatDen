@@ -27,17 +27,18 @@ class MembersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final apiClient = ApiClient();
+    // ApiClient is built inside each lazy `create:` (not in build())
+    // so it isn't re-allocated on every parent rebuild.
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider<MembersListRepository>(
           create: (_) => MembersListRepository(
-            apiClient: apiClient,
+            apiClient: ApiClient(),
           ),
         ),
         RepositoryProvider<MembershipsRepository>(
           create: (_) => MembershipsRepository(
-            apiClient: apiClient,
+            apiClient: ApiClient(),
           ),
         ),
       ],
