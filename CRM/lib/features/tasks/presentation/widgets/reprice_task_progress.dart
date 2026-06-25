@@ -88,9 +88,8 @@ class _PollingView extends StatelessWidget {
               Expanded(
                 child: Text(
                   _buildLabel(),
-                  style: DesignConstants.pSmall.copyWith(
+                  style: DesignConstants.pSmallSemibold.copyWith(
                     color: DesignConstants.primaryColor,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -103,7 +102,7 @@ class _PollingView extends StatelessWidget {
             valueColor: AlwaysStoppedAnimation<Color>(
               DesignConstants.primaryColor,
             ),
-            minHeight: 4,
+            minHeight: DesignConstants.progressBarThickness,
             borderRadius: BorderRadius.circular(2),
           ),
         ],
@@ -162,11 +161,10 @@ class _DoneView extends StatelessWidget {
                       '${state.task.totalCount} membership(s) migrated before '
                       'the error.'
                   : _buildSuccessLabel(),
-              style: DesignConstants.pSmall.copyWith(
+              style: DesignConstants.pSmallSemibold.copyWith(
                 color: failed
                     ? DesignConstants.badRed
                     : DesignConstants.goodGreen,
-                fontWeight: FontWeight.w600,
               ),
             ),
           ),

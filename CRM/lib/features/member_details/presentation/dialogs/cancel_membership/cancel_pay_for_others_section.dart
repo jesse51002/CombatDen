@@ -35,7 +35,11 @@ class CancelPayForOthersSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Divider(color: DesignConstants.divider, height: 1),
+        Divider(
+          color: DesignConstants.divider,
+          height: DesignConstants.dividerThickness,
+          thickness: DesignConstants.dividerThickness,
+        ),
         _OthersToggle(
           allSelected: _allSelected,
           count: targets.length,

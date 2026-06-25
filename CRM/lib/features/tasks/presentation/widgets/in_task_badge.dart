@@ -31,9 +31,8 @@ class InTaskBadge extends StatelessWidget {
           ),
           Text(
             'Migrating…',
-            style: DesignConstants.pSmall.copyWith(
+            style: DesignConstants.pSmallSemibold.copyWith(
               color: DesignConstants.primaryColor,
-              fontWeight: FontWeight.w600,
             ),
           ),
         ],

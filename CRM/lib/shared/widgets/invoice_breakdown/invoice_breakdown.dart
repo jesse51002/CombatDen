@@ -145,7 +145,8 @@ class InvoiceBreakdown extends StatelessWidget {
           ),
         Divider(
           color: DesignConstants.divider,
-          height: 1,
+          height: DesignConstants.dividerThickness,
+          thickness: DesignConstants.dividerThickness,
         ),
         _LineRow(
           label: data.isRefund ? 'Refunded' : data.totalLabel,
@@ -177,7 +178,8 @@ class InvoiceBreakdown extends StatelessWidget {
         if (data.attempts.isNotEmpty) ...[
           Divider(
             color: DesignConstants.divider,
-            height: 1,
+            height: DesignConstants.dividerThickness,
+            thickness: DesignConstants.dividerThickness,
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

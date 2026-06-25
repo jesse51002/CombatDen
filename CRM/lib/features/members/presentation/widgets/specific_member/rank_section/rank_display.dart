@@ -26,7 +26,7 @@ class RankDisplay extends StatelessWidget {
             fallback: AssetImage(member.rankIconAsset),
           ),
           width: 153,
-          height: 99,
+          height: DesignConstants.rankBeltHeight,
           fit: BoxFit.contain,
         ),
         Text(

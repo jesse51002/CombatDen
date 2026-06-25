@@ -224,7 +224,7 @@ class _RewardCard extends StatelessWidget {
             ),
             child: SizedBox(
               width: 120,
-              height: 80,
+              height: DesignConstants.rewardThumbnailHeight,
               child: reward.imageUrl != null
                   ? Image.network(
                       reward.imageUrl!,

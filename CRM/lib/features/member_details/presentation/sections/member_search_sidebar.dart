@@ -149,9 +149,8 @@ class _Row extends StatelessWidget {
               child: Text(
                 member.fullName,
                 style: isCurrent
-                    ? DesignConstants.p.copyWith(
+                    ? DesignConstants.pBold.copyWith(
                         color: DesignConstants.primaryColor,
-                        fontWeight: FontWeight.w700,
                       )
                     : DesignConstants.p,
                 maxLines: 1,
