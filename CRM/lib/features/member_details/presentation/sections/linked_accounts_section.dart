@@ -1,23 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
-import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/linked_account.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
-import 'package:crm/features/member_details/presentation/dialogs/link_parent_dialog.dart';
-import 'package:crm/features/member_details/presentation/dialogs/unlink_parent_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/payment_authorizations_dialog.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 
-/// Linked-accounts block for the profile header.
+/// Authorized-payer block for the profile header.
 ///
-/// Asymmetric by role: a dependent member shows the single
-/// **Authorized Payer** they can navigate to (no family-wide
-/// browsing); an authorized payer shows every account it is
-/// authorized to pay for. Plus the link / unlink affordance.
-/// When the member has no link at all, only a "Link to Paying
-/// Account" button shows. Each chip navigates via
+/// At-a-glance, read-only: shows both directions of the member's payment
+/// authorizations — "Authorized Payers" (who may pay for them) and "Authorized
+/// to pay for" (who they may pay for). Editing (add / remove) happens in the
+/// "Modify Payment Authorizations" popup. Each chip navigates via
 /// [onLinkedAccountTap].
 class LinkedAccountsSection extends StatelessWidget {
   final MemberDetailResponse member;
@@ -29,7 +23,49 @@ class LinkedAccountsSection extends StatelessWidget {
     this.onLinkedAccountTap,
   });
 
-  bool get _hasParent => member.linkedToAccount != null;
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      spacing: DesignConstants.spacingLarge,
+      children: [
+        if (member.authorizedPayers.isNotEmpty)
+          _Roster(
+            title: 'Authorized Payers',
+            accounts: member.authorizedPayers,
+            onTap: onLinkedAccountTap,
+          ),
+        if (member.authorizedToPayFor.isNotEmpty)
+          _Roster(
+            title: 'Authorized to pay for',
+            accounts: member.authorizedToPayFor,
+            onTap: onLinkedAccountTap,
+          ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: AppOutlineButton(
+            fullWidth: true,
+            text: 'Modify Payment Authorizations',
+            borderRadius: DesignConstants.radiusSmall,
+            onPressed: () => PaymentAuthorizationsDialog.show(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A titled, read-only roster of authorized-payer chips.
+class _Roster extends StatelessWidget {
+  final String title;
+  final List<LinkedAccount> accounts;
+  final ValueChanged<String>? onTap;
+
+  const _Roster({
+    required this.title,
+    required this.accounts,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -37,87 +73,22 @@ class LinkedAccountsSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingMedium,
       children: [
-        ..._relationshipBlock(),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: _hasParent
-              ? AppOutlineButton(
-                  fullWidth: true,
-                  text: 'Unlink Authorized Payer',
-                  borderColor: DesignConstants.badRed,
-                  textColor: DesignConstants.badRed,
-                  borderRadius: DesignConstants.radiusSmall,
-                  onPressed: () => UnlinkParentDialog.show(
-                    context: context,
-                    subjectName: member.fullName,
-                  ),
-                )
-              : AppOutlineButton(
-                  fullWidth: true,
-                  text: 'Add Authorized Payer',
-                  borderRadius: DesignConstants.radiusSmall,
-                  onPressed: () => _openLink(context),
+        Text(title, style: DesignConstants.h2),
+        Wrap(
+          spacing: DesignConstants.spacingMedium,
+          runSpacing: DesignConstants.spacingMedium,
+          alignment: WrapAlignment.center,
+          children: accounts
+              .map(
+                (a) => _LinkedAccountChip(
+                  account: a,
+                  onTap:
+                      onTap != null ? () => onTap!(a.memberId) : null,
                 ),
+              )
+              .toList(),
         ),
       ],
-    );
-  }
-
-  /// The heading + chip(s) for this member's billing relationship:
-  /// a dependent's single Authorized Payer, or an authorized payer's
-  /// list of accounts they may pay for. Empty for an unlinked solo.
-  List<Widget> _relationshipBlock() {
-    if (_hasParent) {
-      final payer = _payerAccount();
-      if (payer == null) return const [];
-      return [
-        Text('Authorized Payer', style: DesignConstants.h2),
-        _LinkedAccountChip(
-          account: payer,
-          onTap: onLinkedAccountTap != null
-              ? () => onLinkedAccountTap!(payer.memberId)
-              : null,
-        ),
-      ];
-    }
-    final dependents = member.linkedAccounts;
-    if (dependents.isEmpty) return const [];
-    return [
-      Text('Authorized to pay for', style: DesignConstants.h2),
-      Wrap(
-        spacing: DesignConstants.spacingMedium,
-        runSpacing: DesignConstants.spacingMedium,
-        alignment: WrapAlignment.center,
-        children: dependents
-            .map(
-              (a) => _LinkedAccountChip(
-                account: a,
-                onTap: onLinkedAccountTap != null
-                    ? () => onLinkedAccountTap!(a.memberId)
-                    : null,
-              ),
-            )
-            .toList(),
-      ),
-    ];
-  }
-
-  /// The account this member's memberships are authorized to be paid
-  /// by — their linked parent — resolved from the linked-accounts list.
-  LinkedAccount? _payerAccount() {
-    for (final a in member.linkedAccounts) {
-      if (a.memberId == member.linkedToAccount) return a;
-    }
-    return null;
-  }
-
-  void _openLink(BuildContext context) {
-    final state = context.read<MemberDetailBloc>().state;
-    if (state is! MemberDetailLoaded) return;
-    LinkParentDialog.show(
-      context: context,
-      subjectMemberId: member.memberId,
-      candidates: state.allMembers,
     );
   }
 }
@@ -165,8 +136,7 @@ class _LinkedAccountChip extends StatelessWidget {
               child: account.photoUrl == null
                   ? Text(
                       account.firstName.isNotEmpty
-                          ? account.firstName[0]
-                              .toUpperCase()
+                          ? account.firstName[0].toUpperCase()
                           : '?',
                       style: DesignConstants.pSmall.copyWith(
                         color: DesignConstants.text,

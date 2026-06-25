@@ -45,7 +45,6 @@ class MembershipActionsRow extends StatelessWidget {
   bool get _hasCancellable => member.memberships.any(
         (m) =>
             m.planType == 'recurring' &&
-            m.members.isNotEmpty &&
             const {
               MembershipStatus.active,
               MembershipStatus.trial,

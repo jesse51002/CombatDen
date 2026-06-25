@@ -59,14 +59,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
-from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
 )
 from src.shared.gym_timezone import gym_today
-from src.shared.sql_loader import load_sql
 from tests.helpers.cleanup import delete_member_data
+from tests.helpers.db_writes import authorize_payer
 from tests.helpers.stripe_assertions import snapshot_billing_state
 
 
@@ -442,17 +441,9 @@ async def _inject_open_invoice(
 
 
 async def _link_child(db_pool, child_id, parent_id) -> None:
-    """Link a child to the parent via the production link SQL."""
-    link_sql = load_sql(SQL_DIR / "member_memberships_link.sql")
-    async with db_pool.session() as session:
-        await session.execute(
-            text(link_sql),
-            {
-                "member_id": str(child_id),
-                "parent_member_id": str(parent_id),
-            },
-        )
-        await session.commit()
+    """Authorize ``parent_id`` to pay for ``child_id`` via the production
+    authorization service (sign-gated, inserts the junction row)."""
+    await authorize_payer(db_pool, child_id, parent_id)
 
 
 async def _start_recurring(

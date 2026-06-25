@@ -2,53 +2,41 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
-import 'package:crm/features/member_details/data/models/membership_member_info.dart';
-import 'package:crm/features/member_details/data/models/paying_for_member.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/membership_display_helpers.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/info_table.dart';
 
-/// Status / type / billing cycle / cost / usage / dates for
-/// the viewed member ([coveredMemberId]) on the current
-/// membership. Everything reads atomically for that one member:
-/// their status, their cost, their class usage. When the member
-/// is in a linked relationship, [payerName] is set and a
-/// "Paid by" row (a small avatar + the payer's name) leads the
-/// table so it stands out; the outdated-price prompt lives in
-/// its own card.
+/// Status / type / billing cycle / cost / usage / dates for the
+/// viewed member's current membership. Everything reads flat off
+/// the one membership row: its status, its cost, its class usage.
+/// When the member is in an authorization relationship, [payerName]
+/// is set and a "Paid by" row (a small avatar + the payer's name)
+/// leads the table so it stands out; the outdated-price prompt
+/// lives in its own card.
 class MembershipDetailsTable extends StatelessWidget {
   final MembershipInfo membership;
-  final String coveredMemberId;
 
   /// The payer's display name + photo, for the leading "Paid by"
-  /// row. Null for an unlinked solo member (the row is omitted —
-  /// a solo always pays their own way).
+  /// row. Null for a member with no authorization relationship
+  /// (the row is omitted — they always pay their own way).
   final String? payerName;
   final String? payerPhotoUrl;
 
   const MembershipDetailsTable({
     super.key,
     required this.membership,
-    required this.coveredMemberId,
     this.payerName,
     this.payerPhotoUrl,
   });
 
-  MembershipStatus get _status =>
-      membership.payingForMemberFor(coveredMemberId)?.status ??
-      membership.status;
-
   @override
   Widget build(BuildContext context) {
-    final status = _status;
-    final exit = membership.exitDateFor(coveredMemberId);
+    final status = membership.status;
+    final exit = membership.exitDate;
     final cancelling = exit != null &&
         exit.kind == MembershipExitKind.cancelling &&
         !isTerminalStatus(status);
-
-    final usage =
-        membership.payingForMemberFor(coveredMemberId);
 
     final planTypeLabel = membership.planType == null
         ? '—'
@@ -98,20 +86,19 @@ class MembershipDetailsTable extends StatelessWidget {
         (
           membershipLabel('Cost:'),
           costBreakdownValue(
-            membership.baseCostFor(coveredMemberId),
-            membership.totalPriceFor(coveredMemberId),
+            membership.baseCost,
+            membership.totalPrice,
           ),
         ),
-        if (usage != null)
-          (
-            membershipLabel('Usage:'),
-            Text(
-              _usageText(usage),
-              style: DesignConstants.h2.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+        (
+          membershipLabel('Usage:'),
+          Text(
+            _usageText(),
+            style: DesignConstants.h2.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
+        ),
         (
           membershipLabel('Last paid:'),
           dateValue(membership.lastPaidDate),
@@ -139,13 +126,13 @@ class MembershipDetailsTable extends StatelessWidget {
     );
   }
 
-  String _usageText(PayingForMember usage) {
-    if (usage.classCount == null) {
+  String _usageText() {
+    if (membership.classCount == null) {
       final cycle = membership.durationUnit.toLowerCase();
-      return '${usage.classesUsed} classes this $cycle';
+      return '${membership.classesUsed} classes this $cycle';
     }
-    return '${usage.classesUsed}/'
-        '${usage.classCount} classes';
+    return '${membership.classesUsed}/'
+        '${membership.classCount} classes';
   }
 }
 

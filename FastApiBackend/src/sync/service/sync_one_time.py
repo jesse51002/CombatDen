@@ -15,8 +15,6 @@ per-membership (qty-1) groups, where its averaging is a no-op (÷1).
 
 from uuid import UUID
 
-from schema.gym_discount import DiscountMode
-
 import src.shared.db_schema_path  # noqa: F401
 from src.payments.schema.metadata.stripe_membership_one_time_metadata import (
     StripeMembershipOneTimeMetadata,
@@ -186,8 +184,8 @@ class PaymentSyncOneTime:
         runs ÷1 (no averaging — each membership keeps its exact discount), and
         assembles the ordered ``OneTimeInvoicePlan`` (one item per membership,
         item-level coupons percent→dollar) plus the ``applied_discount_id →
-        coupon_id`` links and the ``once``-mode ids to mark consumed. No DB writes
-        (coupon find-or-create is an idempotent gym-wide Stripe op).
+        coupon_id`` links. No DB writes (coupon find-or-create is an idempotent
+        gym-wide Stripe op).
         """
         today = gym_today(payer.timezone)
         memberships = await self._queries.get_active_one_time(
@@ -213,18 +211,11 @@ class PaymentSyncOneTime:
             )
             for membership in memberships
         ]
-        once_consumed_ids = [
-            discount.applied_discount_id
-            for membership in memberships
-            for discount in membership.discounts
-            if discount.discount_mode == DiscountMode.once
-        ]
         return OneTimeInvoicePlan(
             items=items,
             payer=payer,
             stripe_account_id=stripe_account_id,
             coupon_links=resolved.links,
-            once_consumed_ids=once_consumed_ids,
         )
 
     @staticmethod
@@ -317,13 +308,11 @@ class PaymentSyncOneTime:
         ↔ ``result.line_item_ids[i]`` / ``line_amounts[i]``): stamps the line id +
         invoice id + post-discount ``total_price`` + ``applied`` on each row. Then
         reuses the recurring coupon-link writeback (the resolved coupon onto each
-        contributing applied-discount row, marked ``applied``) and the
-        once-consumption stamp (``end_date = today`` on the once-mode
-        applied-discount rows — the one invoice is the only charge).
+        contributing applied-discount row, marked ``applied``). A one-time
+        membership is terminal (one invoice), so there is no consumption stamp.
         ``strict=True`` fails loud if Stripe returned a different
         line count than we sent.
         """
-        today = gym_today(plan.payer.timezone)
         for item, line_id, amount in zip(
             plan.items,
             result.line_item_ids,
@@ -342,5 +331,3 @@ class PaymentSyncOneTime:
                 applied_discount_id,
                 coupon_id,
             )
-        if plan.once_consumed_ids:
-            await self._queries.mark_once_consumed(plan.once_consumed_ids, today)

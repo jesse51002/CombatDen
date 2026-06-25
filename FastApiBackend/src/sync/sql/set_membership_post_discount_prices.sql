@@ -1,7 +1,8 @@
 -- SYSTEM writeback (service-role): write each membership's OWN post-discount
 -- price onto its row, keyed by item_id. The amounts are computed at build time
--- by PaymentSyncDiscounts (each membership's plan price minus its own ongoing
--- discounts, plus its once discounts only when it is already on Stripe) and
+-- by PaymentSyncDiscounts (each membership's plan price minus its active
+-- discounts — all active discounts count uniformly; the date-lifetime cutoff
+-- in the read drops any expired or consumed ones before the math runs) and
 -- threaded through SyncParams; this just persists them. total_price is therefore
 -- the per-membership share, NOT a plan-level total fanned across the family.
 --

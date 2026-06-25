@@ -2,7 +2,6 @@
 
 from uuid import uuid4
 
-from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit, PlanType
 from schema.task import ProrationBehavior
 
@@ -155,9 +154,7 @@ async def test_create_subscription_with_discount(
     price_id = await _setup_price(membership_service, stripe_account_id, created)
 
     coupon_id = await discount_service.find_or_create_for_value(
-        PaymentsCouponValue(
-            discount_mode=DiscountMode.ongoing, percentage_off=20.0
-        ),
+        PaymentsCouponValue(percentage_off=20.0),
         stripe_account_id,
     )
     created.track_coupon(coupon_id)
@@ -186,9 +183,8 @@ async def test_create_subscription_with_discount(
 
     # The coupon is attached at the ITEM level (sub-level discounts were removed
     # — discounts ride the membership/item now). The contract that matters is
-    # that the read primitive ``get_subscription`` surfaces it: that is the path
-    # the sync's once-consumption settle reads to tell a pending coupon from a
-    # consumed one. (Stripe exposes the coupon at ``discount.source.coupon``.)
+    # that the read primitive ``get_subscription`` surfaces it.
+    # (Stripe exposes the coupon at ``discount.source.coupon``.)
     refetched = await subscription_service.get_subscription(
         resp.stripe_subscription_id,
         stripe_account_id,

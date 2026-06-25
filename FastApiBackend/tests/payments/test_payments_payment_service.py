@@ -2,7 +2,6 @@
 
 from uuid import uuid4
 
-from schema.gym_discount import DiscountMode
 from schema.membership_plan import DurationUnit, PlanType
 
 from src.payments.schema.metadata.stripe_customer_metadata import (
@@ -355,14 +354,10 @@ async def test_refund_partial_payment(
 # ── Mixed (percent + dollar) discounts on ONE invoice item ──────
 
 
-async def _once_coupon(discount_service, account, created, *, pct=None, dollars=None):
-    """Find-or-create a once-mode coupon and register it for cleanup."""
+async def _coupon(discount_service, account, created, *, pct=None, dollars=None):
+    """Find-or-create a coupon and register it for cleanup."""
     cid = await discount_service.find_or_create_for_value(
-        PaymentsCouponValue(
-            discount_mode=DiscountMode.once,
-            percentage_off=pct,
-            dollar_off=dollars,
-        ),
+        PaymentsCouponValue(percentage_off=pct, dollar_off=dollars),
         account,
     )
     created.track_coupon(cid)
@@ -393,10 +388,10 @@ async def test_preview_invoice_payment_mixed_discounts(
     price_id = await _one_time_price(
         membership_service, stripe_account_id, created, unit_amount=2500,
     )
-    pct = await _once_coupon(
+    pct = await _coupon(
         discount_service, stripe_account_id, created, pct=20.0,
     )
-    dol = await _once_coupon(
+    dol = await _coupon(
         discount_service, stripe_account_id, created, dollars=500,
     )
 
@@ -438,10 +433,10 @@ async def test_create_invoice_payment_mixed_discounts(
     price_id = await _one_time_price(
         membership_service, stripe_account_id, created, unit_amount=2500,
     )
-    pct = await _once_coupon(
+    pct = await _coupon(
         discount_service, stripe_account_id, created, pct=20.0,
     )
-    dol = await _once_coupon(
+    dol = await _coupon(
         discount_service, stripe_account_id, created, dollars=500,
     )
 

@@ -4,6 +4,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/presentation/widgets/invoice_preview_format.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_attribution.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 
@@ -29,6 +30,12 @@ class InvoicePreview extends StatelessWidget {
   /// [recurringPrev] can't be loaded.
   final int? recurringFallbackMonthly;
 
+  /// Optional attribution — whose invoice this is. When [payerName] is set
+  /// it renders once, as an avatar+name header on the FIRST visible section
+  /// (so a due-now + recurring pair reads as one person's invoice, not two).
+  final String? payerName;
+  final String? payerPhotoUrl;
+
   final String dueNowLabel;
   final String emptyLabel;
 
@@ -38,12 +45,26 @@ class InvoicePreview extends StatelessWidget {
     this.recurring,
     this.recurringPrev,
     this.recurringFallbackMonthly,
+    this.payerName,
+    this.payerPhotoUrl,
     this.dueNowLabel = 'What will be charged today',
     this.emptyLabel = 'No charge today.',
   });
 
   bool get _comparative =>
       recurringPrev != null || recurringFallbackMonthly != null;
+
+  /// The attribution header for the first visible section, or null when no
+  /// payer was supplied.
+  InvoiceAttribution? get _attribution {
+    final name = payerName;
+    if (name == null) return null;
+    return InvoiceAttribution(
+      name: name,
+      photoUrl: payerPhotoUrl,
+      caption: 'Billed to',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,12 +90,16 @@ class InvoicePreview extends StatelessWidget {
         if (due != null)
           InvoiceBreakdown(
             data: previewInvoiceBreakdown(due),
+            // Attribution rides the first section only.
+            attribution: _attribution,
             headerCaption: dueNowLabel,
             strongHeaderCaption: true,
           ),
         if (showRecurring)
           InvoiceBreakdown(
             data: _recurringData(rec),
+            // First section iff there was no due-now above it.
+            attribution: due == null ? _attribution : null,
             // "Then, each month" reads as a sequence after a due-now
             // charge; with no due-now it's just the monthly payment.
             headerCaption:

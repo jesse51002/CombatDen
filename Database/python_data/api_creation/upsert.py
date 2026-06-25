@@ -90,7 +90,7 @@ def find_discount(
     value = (
         client.table("gym_discount_values_unfiltered")
         .select(
-            "percentage_off,dollar_off,discount_mode,duration_amount,"
+            "percentage_off,dollar_off,duration_amount,"
             "duration_unit,end_date"
         )
         .eq("discount_id", row["discount_id"])
@@ -105,7 +105,6 @@ def find_discount(
         discount_type=row["discount_type"],
         percentage_off=v.get("percentage_off"),
         dollar_off=v.get("dollar_off"),
-        discount_mode=v.get("discount_mode"),
         duration_amount=v.get("duration_amount"),
         duration_unit=v.get("duration_unit"),
         end_date=v.get("end_date"),

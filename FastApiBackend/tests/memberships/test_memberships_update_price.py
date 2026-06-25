@@ -23,18 +23,17 @@ from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.discounts.schema.discounts_schema import DiscountValue
-from src.memberships import SQL_DIR
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
 )
 from src.plans.plans_schema import MembershipPlanPriceRequest
-from src.shared.sql_loader import load_sql
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_applied_discounts,
     get_profile_stripe_ids,
 )
+from tests.helpers.db_writes import authorize_payer
 from tests.helpers.service_factory import build_memberships_reprice
 from tests.helpers.stripe_assertions import (
     assert_no_unexpected_charges,
@@ -211,16 +210,7 @@ async def test_reprice_one_member_off_shared_consolidated_line(
     plan = await created.plan(gym_id)
     preset = await created.discount(gym_id, percentage_off=20)
 
-    link_sql = load_sql(SQL_DIR / "member_memberships_link.sql")
-    async with db_pool.session() as session:
-        await session.execute(
-            text(link_sql),
-            {
-                "member_id": str(child.member_id),
-                "parent_member_id": str(payer.member_id),
-            },
-        )
-        await session.commit()
+    await authorize_payer(db_pool, child.member_id, payer.member_id)
 
     try:
         await memberships_service.start(
@@ -240,7 +230,6 @@ async def test_reprice_one_member_off_shared_consolidated_line(
                         custom_discounts=[
                             DiscountValue(
                                 percentage_off=15.0,
-                                discount_mode="ongoing",
                             ),
                         ],
                     ),

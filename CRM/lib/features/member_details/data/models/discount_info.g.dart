@@ -17,8 +17,8 @@ DiscountInfo _$DiscountInfoFromJson(Map<String, dynamic> json) => DiscountInfo(
   discountName: json['discount_name'] as String,
   percentageOff: (json['percentage_off'] as num?)?.toDouble(),
   dollarOff: (json['dollar_off'] as num?)?.toInt(),
-  discountMode: DiscountMode.fromJson(json['discount_mode'] as String),
   endDate: json['end_date'] == null
       ? null
       : DateTime.parse(json['end_date'] as String),
+  stripeCouponId: json['stripe_coupon_id'] as String?,
 );

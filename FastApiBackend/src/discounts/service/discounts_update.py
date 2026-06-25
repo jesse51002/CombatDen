@@ -167,7 +167,6 @@ class DiscountsUpdate(DiscountsBase):
             "gym_id": gym_id,
             "percentage_off": value.percentage_off,
             "dollar_off": value.dollar_off,
-            "discount_mode": value.discount_mode.value,
             "duration_amount": value.duration_amount,
             "duration_unit": (
                 value.duration_unit.value if value.duration_unit is not None else None

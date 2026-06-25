@@ -5,7 +5,6 @@ from collections import defaultdict
 from datetime import date
 from uuid import UUID
 
-from schema.gym_discount import DiscountMode
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import DurationUnit
 from sqlalchemy import text
@@ -18,7 +17,6 @@ from src.sync import SQL_DIR
 from src.sync.sync_schema import (
     ActiveMembershipRow,
     AppliedDiscount,
-    OnceDiscount,
 )
 
 SYNC_SQL_DIR = SQL_DIR
@@ -198,28 +196,6 @@ class PaymentSyncQueries:
             grouped[discount.item_id].append(discount)
         return dict(grouped)
 
-    async def get_unconsumed_once_discounts(
-        self,
-        payer_member_id: UUID,
-    ) -> list[OnceDiscount]:
-        """Read the payer's attached-but-unconsumed ``once`` discounts.
-
-        Only ``once`` rows with no end_date and a coupon already attached — the
-        candidates the sync checks against the payer's live subscription. Scoped
-        by the membership's ``paid_by_member_id`` so the candidate set matches
-        the one subscription the settle reads. Reads the unfiltered base tables
-        (service-role).
-        """
-        sql = load_sql(APPLIED_SQL_DIR / "get_unconsumed_once_discounts.sql")
-        async with self._db_pool.session() as session:
-            result = await session.execute(
-                text(sql),
-                {"payer_member_id": str(payer_member_id)},
-            )
-            rows = result.mappings().fetchall()
-
-        return [OnceDiscount(**r) for r in rows]
-
     @staticmethod
     def _parse_applied_discount_row(row: dict) -> AppliedDiscount:
         """Parse a raw DB row into an AppliedDiscount."""
@@ -229,7 +205,6 @@ class PaymentSyncQueries:
             member_id=UUID(str(row["member_id"])),
             plan_id=UUID(str(row["plan_id"])),
             stripe_item_id=row["stripe_item_id"],
-            discount_mode=DiscountMode(row["discount_mode"]),
             percentage_off=row["percentage_off"],
             dollar_off=row["dollar_off"],
             end_date=row["end_date"],
@@ -244,8 +219,7 @@ class PaymentSyncQueries:
         """Write the sync-resolved coupon + 'applied' status onto one discount.
 
         Service-role writeback to the unfiltered base table: stamps the coupon
-        (for a ``once`` discount the consumption-tracking handle; for an ongoing
-        discount the coupon the line is currently using) and marks the row
+        the line is currently using and marks the row
         ``stripe_sync_status = 'applied'`` — synced and live on Stripe.
         """
         sql = load_sql(APPLIED_SQL_DIR / "set_applied_discount_coupon_id.sql")
@@ -255,28 +229,6 @@ class PaymentSyncQueries:
                 {
                     "applied_discount_id": str(applied_discount_id),
                     "stripe_coupon_id": stripe_coupon_id,
-                },
-            )
-            await session.commit()
-
-    async def mark_once_consumed(
-        self,
-        applied_discount_ids: list[UUID],
-        end_date: date,
-    ) -> None:
-        """Stamp end_date on the ``once`` discounts the sync found consumed.
-
-        Service-role writeback to the unfiltered base table — stamps the whole
-        consumed set in one statement. Only rows without an end_date are touched
-        (idempotent on re-run).
-        """
-        sql = load_sql(APPLIED_SQL_DIR / "mark_once_consumed.sql")
-        async with self._db_pool.session() as session:
-            await session.execute(
-                text(sql),
-                {
-                    "applied_discount_ids": [str(i) for i in applied_discount_ids],
-                    "end_date": end_date,
                 },
             )
             await session.commit()

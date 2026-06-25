@@ -1,4 +1,4 @@
-"""Regression: the CRM member-detail read path derives 'overdue'.
+"""Regression + unit coverage for the member-detail carousel + overview.
 
 A member whose membership ``next_due_date`` has passed must surface as
 ``overdue`` on the detail screen — both the per-membership status badge
@@ -11,6 +11,10 @@ member always read as ``active`` ("Active for 1 Membership"). The
 members-list endpoint already derived overdue; these tests lock in that
 the detail endpoint agrees, via the shared ``is_membership_overdue`` rule.
 
+Also covers the single-member card shape: the carousel is scoped to the
+viewed member and ``member_details.sql`` returns one row per (member, plan),
+so each row becomes exactly one card with its own membership fields inlined.
+
 Pure unit tests over the grouper + helper — no DB/Stripe. The service
 wiring (``gym_today`` from ``member_details.sql`` threaded into the
 grouper) is covered by the billing-detail integration tests.
@@ -21,7 +25,6 @@ from uuid import uuid4
 
 from schema.membership_plan import PlanType
 
-import src.shared.db_schema_path  # noqa: F401  # Register DB schema on sys.path
 from src.classes.schema.classes_cycle_counts_schema import MembershipUsage
 from src.members.schema.members_crm_members_list_schema import (
     CrmMemberStatus,
@@ -29,19 +32,12 @@ from src.members.schema.members_crm_members_list_schema import (
 from src.members.service.member_details.members_billing_grouper import (
     MembersBillingGrouper,
     MembershipOverviewContext,
-    OverviewKind,
 )
 from src.members.service.members_status_mapping import is_membership_overdue
 
 TODAY = date(2026, 6, 4)
 PAST = date(2026, 5, 1)
 FUTURE = date(2026, 7, 1)
-
-
-class _StubSupplementary:
-    """Minimal stand-in: the grouper only reads ``profiles_dict`` here."""
-
-    profiles_dict: dict = {}
 
 
 def _membership_row(*, status: str, next_due: date | None, **overrides) -> dict:
@@ -66,12 +62,8 @@ def _membership_row(*, status: str, next_due: date | None, **overrides) -> dict:
         "freeze_end_date": None,
         "on_outdated_price": False,
         "member_id": member_id,
-        # Defaults to self-pay (payer == member); override for linked payers.
         "paid_by_member_id": member_id,
         "item_id": uuid4(),
-        "first_name": "Ada",
-        "last_name": "Lovelace",
-        "photo_url": None,
         "applied_discounts": [],
     }
     row.update(overrides)
@@ -88,195 +80,136 @@ def test_is_membership_overdue_truth_table():
     assert is_membership_overdue("active", TODAY, TODAY) is False
 
 
-def test_group_by_plan_marks_past_due_membership_overdue():
+def test_card_marks_past_due_membership_overdue():
     grouper = MembersBillingGrouper()
     row = _membership_row(status="active", next_due=PAST)
 
-    grouped = grouper.group_by_plan(
-        [row],
-        _StubSupplementary(),
-        {},
-        row["member_id"],
-        TODAY,
-    )
+    cards = grouper.build_membership_cards([row], {}, TODAY)
 
-    assert len(grouped) == 1
-    # The carousel status badge.
-    assert grouped[0].status == CrmMemberStatus.overdue
-    # The covered member in the paying-for list reads overdue too.
-    assert grouped[0].paying_for[0].status == CrmMemberStatus.overdue
+    assert len(cards) == 1
+    assert cards[0].status == CrmMemberStatus.overdue
 
 
-def test_group_by_plan_keeps_active_when_not_past_due():
+def test_card_keeps_active_when_not_past_due():
     grouper = MembersBillingGrouper()
     row = _membership_row(status="active", next_due=FUTURE)
 
-    grouped = grouper.group_by_plan(
-        [row],
-        _StubSupplementary(),
-        {},
-        row["member_id"],
-        TODAY,
-    )
+    cards = grouper.build_membership_cards([row], {}, TODAY)
 
-    assert grouped[0].status == CrmMemberStatus.active
-    assert grouped[0].paying_for[0].status == CrmMemberStatus.active
+    assert cards[0].status == CrmMemberStatus.active
 
 
-def test_plan_total_sums_only_active_member_shares():
-    """Plan-level total_price = sum of the ACTIVE memberships' own shares;
-    frozen (paused) and cancelled (stale total_price) rows are excluded, and
-    each member keeps its own per-membership share in ``members``."""
+def test_card_inlines_membership_fields():
+    """Each card carries its own membership's fields directly (no nested
+    members map): item_id, paid_by_member_id, and its own price."""
     grouper = MembersBillingGrouper()
-    plan_id = uuid4()
-    parent = _membership_row(
-        status="active", next_due=FUTURE, plan_id=plan_id, total_price=5000
-    )
-    child = _membership_row(
-        status="active", next_due=FUTURE, plan_id=plan_id, total_price=3000
-    )
-    frozen = _membership_row(
-        status="frozen", next_due=FUTURE, plan_id=plan_id, total_price=7777
-    )
-    cancelled = _membership_row(
-        status="cancelled", next_due=None, plan_id=plan_id, total_price=9999
-    )
+    row = _membership_row(status="active", next_due=FUTURE, total_price=5000)
 
-    grouped = grouper.group_by_plan(
-        [parent, child, frozen, cancelled],
-        _StubSupplementary(),
-        {},
-        parent["member_id"],
-        TODAY,
-    )
+    cards = grouper.build_membership_cards([row], {}, TODAY)
 
-    assert len(grouped) == 1
-    # 5000 + 3000 (active) only; frozen 7777 and cancelled 9999 excluded.
-    assert grouped[0].total_price == 8000
-    assert grouped[0].members[parent["member_id"]].total_price == 5000
-    assert grouped[0].members[child["member_id"]].total_price == 3000
+    card = cards[0]
+    assert card.item_id == row["item_id"]
+    assert card.paid_by_member_id == row["paid_by_member_id"]
+    assert card.total_price == 5000
 
 
-def _pack_usage(row: dict, used: int) -> MembershipUsage:
-    return MembershipUsage(
-        item_id=row["item_id"],
-        plan_id=row["plan_id"],
-        start_date=row["membership_start_date"],
-        plan_type=PlanType.one_time,
-        status="active",
-        class_count=10,
-        classes_used=used,
-        classes_remaining=10 - used,
-        renew_date=None,
-        end_date=None,
-    )
-
-
-def test_one_time_packs_split_into_per_item_cards():
-    """Two one_time packs on the SAME plan for one member become TWO cards,
-    each carrying its OWN class usage (looked up by item_id, not collapsed)."""
+def test_card_keeps_own_price_when_frozen():
+    """A frozen card shows its own total_price — the status badge conveys
+    frozen; we do NOT zero it out."""
     grouper = MembersBillingGrouper()
-    member_id = uuid4()
-    plan_id = uuid4()
-    pack_a = _membership_row(
-        status="active", next_due=None, plan_id=plan_id,
-        plan_type="one_time", member_id=member_id,
-        paid_by_member_id=member_id,
-    )
-    pack_b = _membership_row(
-        status="active", next_due=None, plan_id=plan_id,
-        plan_type="one_time", member_id=member_id,
-        paid_by_member_id=member_id,
-    )
-    usage_lookup = {
-        (member_id, pack_a["item_id"]): _pack_usage(pack_a, used=4),
-        (member_id, pack_b["item_id"]): _pack_usage(pack_b, used=1),
+    row = _membership_row(status="frozen", next_due=FUTURE, total_price=7777)
+
+    cards = grouper.build_membership_cards([row], {}, TODAY)
+
+    assert cards[0].status == CrmMemberStatus.frozen
+    assert cards[0].total_price == 7777
+
+
+def test_one_card_per_row():
+    """Distinct rows yield distinct cards — no cross-row grouping."""
+    grouper = MembersBillingGrouper()
+    a = _membership_row(status="active", next_due=FUTURE)
+    b = _membership_row(status="active", next_due=FUTURE)
+
+    cards = grouper.build_membership_cards([a, b], {}, TODAY)
+
+    assert len(cards) == 2
+
+
+def _usage(*, item_id, plan_id, **overrides) -> MembershipUsage:
+    # Usage is keyed per membership (item_id), not per plan — a stacked /
+    # separately-bought pack on the same plan gets its own bucket (#32).
+    defaults = {
+        "item_id": item_id,
+        "plan_id": plan_id,
+        "start_date": date(2026, 1, 1),
+        "plan_type": PlanType.recurring,
+        "status": "active",
+        "class_count": 12,
+        "classes_used": 3,
+        "classes_remaining": 9,
+        "renew_date": FUTURE,
+        "end_date": None,
+    }
+    defaults.update(overrides)
+    return MembershipUsage(**defaults)
+
+
+def test_card_inlines_cycle_usage():
+    grouper = MembersBillingGrouper()
+    row = _membership_row(status="active", next_due=FUTURE)
+    lookup = {
+        (row["member_id"], row["item_id"]): _usage(
+            item_id=row["item_id"], plan_id=row["plan_id"]
+        )
     }
 
-    grouped = grouper.group_by_plan(
-        [pack_a, pack_b],
-        _StubSupplementary(),
-        usage_lookup,
-        member_id,
-        TODAY,
-    )
+    cards = grouper.build_membership_cards([row], lookup, TODAY)
 
-    # Two separate cards (one per pack), NOT collapsed into one.
-    assert len(grouped) == 2
-    by_item = {g.members[member_id].item_id: g for g in grouped}
-    assert by_item[pack_a["item_id"]].paying_for[0].classes_used == 4
-    assert by_item[pack_b["item_id"]].paying_for[0].classes_used == 1
+    assert cards[0].class_count == 12
+    assert cards[0].classes_used == 3
+    assert cards[0].classes_remaining == 9
 
 
-def test_recurring_family_stays_one_card():
-    """A recurring plan shared by two members stays ONE card with both in
-    paying_for (only one_time / trial packs split per item)."""
+def test_card_usage_defaults_when_absent():
     grouper = MembersBillingGrouper()
-    plan_id = uuid4()
-    parent = _membership_row(status="active", next_due=FUTURE, plan_id=plan_id)
-    child = _membership_row(status="active", next_due=FUTURE, plan_id=plan_id)
+    row = _membership_row(status="active", next_due=FUTURE)
 
-    grouped = grouper.group_by_plan(
-        [parent, child],
-        _StubSupplementary(),
-        {},
-        parent["member_id"],
-        TODAY,
-    )
+    cards = grouper.build_membership_cards([row], {}, TODAY)
 
-    assert len(grouped) == 1
-    assert len(grouped[0].paying_for) == 2
-
-
-class _PayerSupp:
-    """Stub supplementary exposing a single payer profile by id."""
-
-    def __init__(self, payer_id, first_name: str) -> None:
-        class _Profile:
-            pass
-
-        profile = _Profile()
-        profile.first_name = first_name
-        self.profiles_dict = {payer_id: profile}
+    assert cards[0].class_count is None
+    assert cards[0].classes_used == 0
+    assert cards[0].classes_remaining is None
 
 
 def _overview_ctx(**overrides) -> MembershipOverviewContext:
-    """Build a MembershipOverviewContext with self-pay defaults.
-
-    ``own_payer_ids`` defaults to the viewer paying themselves; override it
-    (and ``kind``) for the beneficiary / payer-for-others cases.
-    """
-    member_id = overrides.pop("viewed_member_id", uuid4())
+    """Build a MembershipOverviewContext with self-pay defaults."""
     defaults = {
-        "kind": OverviewKind.self_pay,
         "total": 12000,
         "has_trial": False,
         "has_cancelled": False,
         "has_frozen": False,
         "has_overdue": False,
         "paying_count": 1,
-        "members_paid_for_count": 0,
-        "own_payer_ids": frozenset({member_id}),
-        "viewed_member_id": member_id,
     }
     defaults.update(overrides)
     return MembershipOverviewContext(**defaults)
 
 
-def test_overview_self_pay_singular():
+def test_overview_singular():
     grouper = MembersBillingGrouper()
     ctx = _overview_ctx(total=13784, paying_count=1)
     assert (
-        grouper.build_membership_overview(ctx, None)
+        grouper.build_membership_overview(ctx)
         == "Paying $137.84/mo for 1 Membership"
     )
 
 
-def test_overview_self_pay_plural():
+def test_overview_plural():
     grouper = MembersBillingGrouper()
     ctx = _overview_ctx(total=20000, paying_count=2)
     assert (
-        grouper.build_membership_overview(ctx, None)
+        grouper.build_membership_overview(ctx)
         == "Paying $200/mo for 2 Memberships"
     )
 
@@ -285,7 +218,7 @@ def test_overview_reflects_overdue_with_price():
     grouper = MembersBillingGrouper()
     ctx = _overview_ctx(total=12000, has_overdue=True, paying_count=1)
     assert (
-        grouper.build_membership_overview(ctx, None)
+        grouper.build_membership_overview(ctx)
         == "Overdue · $120/mo for 1 Membership"
     )
 
@@ -293,56 +226,7 @@ def test_overview_reflects_overdue_with_price():
 def test_overview_reflects_overdue_without_price():
     grouper = MembersBillingGrouper()
     ctx = _overview_ctx(total=0, has_overdue=True, paying_count=1)
-    assert grouper.build_membership_overview(ctx, None) == "Overdue for 1 Membership"
-
-
-def test_overview_pays_for_others_counts_self_plus_others():
-    """A payer-for-others reads 'across N members' — N counts the payer too
-    when they hold a membership in the set (parent + 2 kids = 3)."""
-    grouper = MembersBillingGrouper()
-    ctx = _overview_ctx(
-        kind=OverviewKind.pays_for_others,
-        total=41250,
-        members_paid_for_count=3,
-        paying_count=3,
-    )
-    assert (
-        grouper.build_membership_overview(ctx, None)
-        == "Paying $412.50/mo across 3 members"
-    )
-
-
-def test_overview_beneficiary_all_paid_by_parent():
-    """A child whose memberships are all paid by the parent reads
-    '$X/mo worth of memberships (Paid by <parent>)' — no 'self'."""
-    grouper = MembersBillingGrouper()
-    child_id, parent_id = uuid4(), uuid4()
-    ctx = _overview_ctx(
-        kind=OverviewKind.beneficiary,
-        total=13784,
-        viewed_member_id=child_id,
-        own_payer_ids=frozenset({parent_id}),
-    )
-    assert (
-        grouper.build_membership_overview(ctx, _PayerSupp(parent_id, "Cynthia"))
-        == "$137.84/mo worth of memberships (Paid by Cynthia)"
-    )
-
-
-def test_overview_beneficiary_split_self_and_parent():
-    """A split beneficiary lists self first, then the parent."""
-    grouper = MembersBillingGrouper()
-    child_id, parent_id = uuid4(), uuid4()
-    ctx = _overview_ctx(
-        kind=OverviewKind.beneficiary,
-        total=20000,
-        viewed_member_id=child_id,
-        own_payer_ids=frozenset({child_id, parent_id}),
-    )
-    assert (
-        grouper.build_membership_overview(ctx, _PayerSupp(parent_id, "Cynthia"))
-        == "$200/mo worth of memberships (Paid by self / Cynthia)"
-    )
+    assert grouper.build_membership_overview(ctx) == "Overdue for 1 Membership"
 
 
 def test_overview_frozen_wins_over_overdue():
@@ -351,23 +235,4 @@ def test_overview_frozen_wins_over_overdue():
     ctx = _overview_ctx(
         total=12000, has_frozen=True, has_overdue=True, paying_count=0
     )
-    assert grouper.build_membership_overview(ctx, None) == "Account is Frozen"
-
-
-def test_overview_beneficiary_frozen_keeps_payer_suffix():
-    """A frozen beneficiary still shows who pays — the suffix survives the
-    salient-state short-circuit."""
-    grouper = MembersBillingGrouper()
-    child_id, parent_id = uuid4(), uuid4()
-    ctx = _overview_ctx(
-        kind=OverviewKind.beneficiary,
-        total=0,
-        has_frozen=True,
-        paying_count=0,
-        viewed_member_id=child_id,
-        own_payer_ids=frozenset({parent_id}),
-    )
-    assert (
-        grouper.build_membership_overview(ctx, _PayerSupp(parent_id, "Cynthia"))
-        == "Account is Frozen (Paid by Cynthia)"
-    )
+    assert grouper.build_membership_overview(ctx) == "Account is Frozen"

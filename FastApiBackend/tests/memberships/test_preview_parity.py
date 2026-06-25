@@ -307,11 +307,17 @@ async def test_preview_cancel_partial_matches_renewal(
             plan_b.plan_id,
         )
 
-        preview = await memberships_service.preview_cancel(
+        changes = await memberships_service.preview_cancel(
             item_id_b,
             member.member_id,
         )
-        assert preview is not None
+        # One payer funds both memberships, so cancelling one yields a
+        # single per-payer entry, affected, carrying the surviving recurring.
+        assert len(changes) == 1
+        change = changes[0]
+        assert str(change.payer_member_id) == str(member.member_id)
+        assert change.affected is True
+        assert change.preview is not None
 
         await memberships_service.cancel(
             item_id_b,
@@ -332,7 +338,7 @@ async def test_preview_cancel_partial_matches_renewal(
             before,
             connect_opts,
         )
-        assert_preview_matches_invoice(preview.recurring, invoice)
+        assert_preview_matches_invoice(change.preview.recurring, invoice)
     finally:
         if member is not None:
             await delete_member_data(db_pool, member.member_id)
@@ -377,7 +383,6 @@ async def test_preview_applied_discounts_matches_renewal(
             gym_id,
             name="Parity 15% Off",
             percentage_off=15.0,
-            discount_mode="ongoing",
         )
 
         await memberships_service.start(

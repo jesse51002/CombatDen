@@ -6,8 +6,8 @@
 -- Applied snapshots reference a value version, so a member's discount is frozen
 -- to the exact version it was applied at.
 --
--- The discount_mode / discount_duration_unit enums are declared in
--- gym_discount_values.sql (the earliest-loaded consumer of them).
+-- The discount_duration_unit enum is declared in gym_discount_values.sql
+-- (the earliest-loaded consumer of it).
 CREATE TABLE gym_discounts_unfiltered (
     discount_id UUID NOT NULL DEFAULT uuid_generate_v4(),
     gym_id UUID NOT NULL CONSTRAINT fk_discount_gym REFERENCES gyms(gym_id),

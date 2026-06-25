@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
@@ -71,15 +72,23 @@ String discountAmountLabel(DiscountResponse discount) =>
     discount.displayLabel;
 
 /// "End Date / Length" column: an absolute end date, a duration
-/// span, or the once/ongoing mode.
+/// span, or "Forever" when neither is set.
 String discountLengthLabel(DiscountResponse discount) {
   if (discount.value.endDate != null) {
     return DateFormat('MMM d, y').format(discount.value.endDate!);
   }
   final amount = discount.value.durationAmount;
-  final unit = discount.value.durationUnit?.displayLabel.toLowerCase();
-  if (amount != null && unit != null) {
-    return amount == 1 ? '1 $unit' : '$amount ${unit}s';
+  final unit = discount.value.durationUnit;
+  if (amount != null &&
+      unit != null &&
+      unit != DiscountDurationUnit.unknown) {
+    if (unit == DiscountDurationUnit.cycle) {
+      final cycleWord = amount == 1 ? 'cycle' : 'cycles';
+      final monthWord = amount == 1 ? 'month' : 'months';
+      return '$amount $cycleWord ($amount $monthWord)';
+    }
+    final unitLabel = unit.displayLabel.toLowerCase();
+    return amount == 1 ? '1 $unitLabel' : '$amount ${unitLabel}s';
   }
-  return discount.value.discountMode.displayLabel;
+  return 'Forever';
 }

@@ -40,7 +40,6 @@ class MemberCreate(SeedModel):
     emergency_contact_email: str | None = None
     freeze_start_date: date | None = None
     freeze_end_date: date | None = None
-    account_linked_to_id: UUID | None = None
     stripe_customer_id: str | None = None
     stripe_sub_id_month: str | None = None
     stripe_payment_method_id: str | None = None

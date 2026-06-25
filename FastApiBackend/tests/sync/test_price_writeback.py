@@ -131,6 +131,8 @@ async def test_family_same_plan_each_row_holds_own_price(
         await memberships_service.link_account(
             child.member_id,
             parent.member_id,
+            signer_name="Test Payer",
+            consent_acknowledged=True,
         )
 
         # Parent starts first → qty=1, line total = 5000
@@ -251,6 +253,8 @@ async def test_family_different_plans_per_row_totals(
         await memberships_service.link_account(
             child.member_id,
             parent.member_id,
+            signer_name="Test Payer",
+            consent_acknowledged=True,
         )
 
         await memberships_service.start(

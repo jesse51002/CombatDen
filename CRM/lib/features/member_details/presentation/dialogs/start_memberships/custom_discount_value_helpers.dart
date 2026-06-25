@@ -1,5 +1,4 @@
 import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
-import 'package:crm/features/member_details/data/models/discount_mode.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
 
 /// The custom-discount form's shared kinds, validators and
@@ -8,12 +7,57 @@ import 'package:crm/features/member_details/data/models/discount_value.dart';
 
 enum CustomDiscountAmountKind { percentage, dollar }
 
-/// How an `ongoing` custom ends: after a duration span, on
-/// an explicit date, or never.
-enum CustomDiscountLifetimeKind {
-  duration,
-  untilDate,
+/// Lifetime selector options for the custom-discount form.
+///
+/// `forever` sends no duration fields. `cycle` sends
+/// duration_unit=cycle (1 cycle = 1 plan billing cycle,
+/// replacement for the removed `once` mode). `day`, `week`,
+/// and `month` are calendar spans.
+enum CustomDiscountLifetimeUnit {
   forever,
+  cycle,
+  day,
+  week,
+  month,
+}
+
+/// Display label for the lifetime unit selector.
+String lifetimeUnitLabel(CustomDiscountLifetimeUnit unit) {
+  switch (unit) {
+    case CustomDiscountLifetimeUnit.forever:
+      return 'Forever';
+    case CustomDiscountLifetimeUnit.cycle:
+      return 'Cycle';
+    case CustomDiscountLifetimeUnit.day:
+      return 'Day';
+    case CustomDiscountLifetimeUnit.week:
+      return 'Week';
+    case CustomDiscountLifetimeUnit.month:
+      return 'Month';
+  }
+}
+
+/// True when the unit requires an amount field.
+bool lifetimeUnitNeedsAmount(CustomDiscountLifetimeUnit unit) =>
+    unit != CustomDiscountLifetimeUnit.forever;
+
+/// Converts a [CustomDiscountLifetimeUnit] to the backend
+/// [DiscountDurationUnit], or `null` for forever.
+DiscountDurationUnit? toDiscountDurationUnit(
+  CustomDiscountLifetimeUnit unit,
+) {
+  switch (unit) {
+    case CustomDiscountLifetimeUnit.forever:
+      return null;
+    case CustomDiscountLifetimeUnit.cycle:
+      return DiscountDurationUnit.cycle;
+    case CustomDiscountLifetimeUnit.day:
+      return DiscountDurationUnit.day;
+    case CustomDiscountLifetimeUnit.week:
+      return DiscountDurationUnit.week;
+    case CustomDiscountLifetimeUnit.month:
+      return DiscountDurationUnit.month;
+  }
 }
 
 String? validateCustomAmount(
@@ -38,33 +82,22 @@ String? validateCustomDuration(String? v) {
 }
 
 /// Assembles the wire [DiscountValue] from the form's
-/// inputs: a % XOR $ amount, once / ongoing, and — for
-/// ongoing — the picked lifetime (duration span XOR end
-/// date XOR forever).
+/// inputs: a % XOR $ amount and a lifetime (duration span
+/// for day/week/month/cycle, or forever).
 DiscountValue buildCustomDiscountValue({
   required CustomDiscountAmountKind kind,
   required double amount,
-  required DiscountMode mode,
-  required CustomDiscountLifetimeKind lifetime,
+  required CustomDiscountLifetimeUnit lifetimeUnit,
   required String durationText,
-  required DiscountDurationUnit durationUnit,
-  required DateTime? endDate,
 }) {
   int? outDurationAmount;
   DiscountDurationUnit? outDurationUnit;
-  DateTime? outEndDate;
-  if (mode == DiscountMode.ongoing) {
-    switch (lifetime) {
-      case CustomDiscountLifetimeKind.duration:
-        outDurationAmount =
-            int.tryParse(durationText.trim());
-        outDurationUnit = durationUnit;
-      case CustomDiscountLifetimeKind.untilDate:
-        outEndDate = endDate;
-      case CustomDiscountLifetimeKind.forever:
-        break;
-    }
+
+  outDurationUnit = toDiscountDurationUnit(lifetimeUnit);
+  if (outDurationUnit != null) {
+    outDurationAmount = int.tryParse(durationText.trim());
   }
+
   return DiscountValue(
     percentageOff:
         kind == CustomDiscountAmountKind.percentage
@@ -73,9 +106,7 @@ DiscountValue buildCustomDiscountValue({
     dollarOff: kind == CustomDiscountAmountKind.dollar
         ? (amount * 100).round()
         : null,
-    discountMode: mode,
     durationAmount: outDurationAmount,
     durationUnit: outDurationUnit,
-    endDate: outEndDate,
   );
 }

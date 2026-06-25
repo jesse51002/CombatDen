@@ -2,18 +2,23 @@
 
 Delegates to focused sub-services while preserving the public API. Waivers are
 plain gym config (no Stripe): a named, versioned document plus an append-only
-e-sign audit. Phase 1 covers catalog CRUD, version history, and read-only
-signature tracking; the front-desk signing capture is Phase 2.
+e-sign audit. Covers catalog CRUD, version history, read-only signature
+tracking, and seed-copying a gym's undeletable default authorized-payer waiver;
+the front-desk signing capture is recorded by the link flow (memberships).
 """
 
 from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.shared.database import DirectDatabasePool
 from src.waivers.schema.waivers_schema import (
+    AuthorizedPayerWaiverResponse,
     MemberWaiverStatusRow,
     WaiverCreateRequest,
+    WaiverDefaultInfo,
     WaiverResponse,
     WaiverSignatoryRow,
     WaiverUpdateRequest,
@@ -71,6 +76,13 @@ class WaiversService:
         """Create a waiver and publish its first version."""
         return await self._create.create_waiver(request)
 
+    async def create_default_waiver(
+        self,
+        gym_id: UUID,
+    ) -> WaiverResponse:
+        """Seed-copy the gym's undeletable default authorized-payer waiver."""
+        return await self._create.create_default_waiver(gym_id)
+
     async def update_waiver(
         self,
         request: WaiverUpdateRequest,
@@ -113,3 +125,62 @@ class WaiversService:
     ) -> list[MemberWaiverStatusRow]:
         """List every gym waiver and a member's sign status for each."""
         return await self._signatures.list_member_status(member_id, gym_id)
+
+    # ── Signing capture (used by the authorized-payer link flow) ──
+
+    async def get_default_waiver_for_member(
+        self,
+        member_id: UUID,
+    ) -> WaiverDefaultInfo:
+        """Resolve a member's gym default authorized-payer waiver + version."""
+        return await self._signatures.get_default_waiver_for_member(member_id)
+
+    async def get_default_waiver_with_body_for_member(
+        self,
+        member_id: UUID,
+    ) -> AuthorizedPayerWaiverResponse:
+        """Resolve a member's gym default authorized-payer waiver WITH its
+        current body — what the front-desk sign dialog renders before a payer
+        signs. Composes the id resolution (``get_default_waiver_for_member``)
+        with the body read (``get_waiver``)."""
+        default = await self._signatures.get_default_waiver_for_member(member_id)
+        waiver = await self._list.get_waiver(default.waiver_id, default.gym_id)
+        if waiver.current_version is None:
+            raise ValueError(
+                f"Default waiver has no current version: "
+                f"waiver_id={default.waiver_id}"
+            )
+        return AuthorizedPayerWaiverResponse(
+            waiver_id=default.waiver_id,
+            version_id=default.version_id,
+            name=waiver.name,
+            body=waiver.current_version.body,
+        )
+
+    async def record_signature(
+        self,
+        session: AsyncSession,
+        *,
+        gym_id: UUID,
+        signer_member_id: UUID,
+        waiver_id: UUID,
+        waiver_version_id: UUID,
+        signer_name: str,
+        consent_acknowledged: bool,
+        content_hash: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> UUID:
+        """Record an e-signature in the caller's transaction; return its id."""
+        return await self._signatures.record_signature(
+            session,
+            gym_id=gym_id,
+            signer_member_id=signer_member_id,
+            waiver_id=waiver_id,
+            waiver_version_id=waiver_version_id,
+            signer_name=signer_name,
+            consent_acknowledged=consent_acknowledged,
+            content_hash=content_hash,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )

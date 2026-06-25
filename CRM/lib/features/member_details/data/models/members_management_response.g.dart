@@ -19,7 +19,6 @@ MembersManagementResponse _$MembersManagementResponseFromJson(
   emergencyContactName: json['emergency_contact_name'] as String?,
   emergencyContactPhone: json['emergency_contact_phone'] as String?,
   emergencyContactEmail: json['emergency_contact_email'] as String?,
-  accountLinkedToId: json['account_linked_to_id'] as String?,
   stripeCustomerId: json['stripe_customer_id'] as String?,
   stripePaymentMethodId: json['stripe_payment_method_id'] as String?,
   cardBrand: json['card_brand'] as String?,

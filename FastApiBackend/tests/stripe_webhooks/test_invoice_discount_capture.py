@@ -48,8 +48,8 @@ async def test_capture_writes_one_row_per_discount(
 ):
     sid = "in_test_disc_capture_1"
     FAKE_INVOICE_DISCOUNTS[sid] = [
-        ("di_a", "pct_3000_ongoing"),
-        ("di_b", "amt_500_once"),
+        ("di_a", "pct_3000"),
+        ("di_b", "amt_500"),
     ]
     try:
         event = make_invoice_paid_event(
@@ -69,12 +69,12 @@ async def test_capture_writes_one_row_per_discount(
     rows = await _audit_rows(db_pool, sid)
     assert len(rows) == 2
     assert {r["stripe_coupon_id"] for r in rows} == {
-        "pct_3000_ongoing",
-        "amt_500_once",
+        "pct_3000",
+        "amt_500",
     }
     by_coupon = {r["stripe_coupon_id"]: r for r in rows}
-    assert by_coupon["pct_3000_ongoing"]["amount_off"] == 3000
-    assert by_coupon["amt_500_once"]["amount_off"] == 500
+    assert by_coupon["pct_3000"]["amount_off"] == 3000
+    assert by_coupon["amt_500"]["amount_off"] == 500
     # Coupon-only: no CRM discount link.
     assert all(r["discount_id"] is None for r in rows)
 
@@ -86,7 +86,7 @@ async def test_capture_is_idempotent_on_replay(
     webhook_fixture,
 ):
     sid = "in_test_disc_capture_idem_1"
-    FAKE_INVOICE_DISCOUNTS[sid] = [("di_a", "pct_2000_ongoing")]
+    FAKE_INVOICE_DISCOUNTS[sid] = [("di_a", "pct_2000")]
     try:
         event = make_invoice_paid_event(
             stripe_account_id=stripe_account_id,

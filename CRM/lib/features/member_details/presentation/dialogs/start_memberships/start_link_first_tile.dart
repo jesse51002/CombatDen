@@ -49,12 +49,12 @@ class StartLinkFirstTile extends StatelessWidget {
                 spacing: DesignConstants.spacingTiny,
                 children: [
                   Text(
-                    'Someone missing? Link them first',
+                    'Someone missing? Authorize them first',
                     style: DesignConstants.pSemibold,
                   ),
                   Text(
-                    'Unlinked members can’t be enrolled '
-                    'here — starting never links.',
+                    'Members the payer isn’t authorized to '
+                    'pay for can’t be enrolled here.',
                     style: DesignConstants.pSmall
                         .copyWith(
                       color: DesignConstants.text2nd,

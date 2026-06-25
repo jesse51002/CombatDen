@@ -82,6 +82,7 @@ def auth_mock(fake_user_id: str) -> AsyncMock:
     auth.verify_gym_employee = AsyncMock(return_value=None)
     auth.verify_gym_owner = AsyncMock(return_value=None)
     auth.verify_can_view_member = AsyncMock(return_value=None)
+    auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
     return auth
 
 

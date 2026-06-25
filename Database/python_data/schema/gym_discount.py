@@ -11,28 +11,20 @@ class DiscountType(StrEnum):
     custom = "custom"
 
 
-class DiscountMode(StrEnum):
-    """Discount lifetime mode. Mirrors the Postgres `discount_mode` enum.
-
-    Consumed by gym_discount_values (the versioned value rows). Kept here as the
-    stable import location (the backend imports it from schema.gym_discount).
-    """
-
-    once = "once"
-    ongoing = "ongoing"
-
-
 class DiscountDurationUnit(StrEnum):
-    """Duration span unit for an ongoing discount's lifetime.
+    """Duration span unit for a discount's lifetime.
 
     Mirrors the Postgres `discount_duration_unit` enum. Distinct from
-    membership_plans' duration_unit (week/month/year) — discounts use
-    day/week/month.
+    membership_plans' duration_unit (week/month/year). `cycle` is plan-relative
+    (one cycle = the membership's plan billing period, resolved to an absolute
+    end_date at apply-time); a 1-cycle span is the single-invoice discount that
+    replaced the old `once` mode.
     """
 
     day = "day"
     week = "week"
     month = "month"
+    cycle = "cycle"
 
 
 class GymDiscountCreate(SeedModel):

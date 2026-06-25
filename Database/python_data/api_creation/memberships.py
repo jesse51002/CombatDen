@@ -124,8 +124,8 @@ def _resolve_member(
         )
         api.delete(
             "/api/v1/member_memberships/",
-            params={
-                "item_id": existing["item_id"],
+            json={
+                "item_ids": [str(existing["item_id"])],
                 "member_id": str(member.member_id),
                 "idempotency_key": str(uuid.uuid4()),
             },
@@ -244,8 +244,8 @@ def _start_family(
         if member.current is not None and member.current.cancel_after_start:
             api.delete(
                 "/api/v1/member_memberships/",
-                params={
-                    "item_id": str(item_id),
+                json={
+                    "item_ids": [str(item_id)],
                     "member_id": str(member.member_id),
                     "idempotency_key": str(uuid.uuid4()),
                 },
@@ -258,18 +258,23 @@ def _link_child(
     child: MemberPlan,
     parent: MemberPlan,
 ) -> bool:
-    """Link a child to its paying parent. Runs BEFORE the family's start request
-    (the start never links, and a child's membership rides the parent's
-    subscription, so the link must already exist). The link endpoint is a pure DB
-    relationship change — it only requires the child to have no active recurring
-    membership and the parent to exist; it does NOT require the parent to be
-    billing yet. Returns False if unresolved.
+    """Authorize the parent as a payer for the child. Runs BEFORE the family's
+    start request (the start never authorizes, and a child's membership rides
+    the parent's subscription, so the authorization must already exist). The
+    link endpoint records the parent's signature on the gym's default
+    authorized-payer waiver + the authorization (member_authorized_payers) in
+    one transaction; it does NOT require the parent to be billing yet. Returns
+    False if unresolved.
     """
     if child.member_id is None or parent.member_id is None:
         return False
     api.put(
         f"/api/v1/members/{child.member_id}/link",
-        json={"parent_member_id": str(parent.member_id)},
+        json={
+            "payer_member_id": str(parent.member_id),
+            "signer_name": f"{parent.first_name} {parent.last_name}",
+            "consent_acknowledged": True,
+        },
     )
     return True
 
