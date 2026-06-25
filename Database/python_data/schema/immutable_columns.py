@@ -460,3 +460,33 @@ VIDEO_COST_LOG: frozenset[str] = frozenset(
         "gym_id",  # identity FK, set at insert (append-only)
     }
 )
+
+# ============================================================
+# Per-gym live video content (gym_video_* — the UUID-keyed prod counterpart of
+# the video_gym* template catalog). Written by the backend (preset import) at
+# service_role only; no user-facing update path, so identity + provenance columns
+# are listed for convention/parity.
+# ============================================================
+
+GYM_VIDEO_SPEC: frozenset[str] = frozenset(
+    {
+        "gym_id",  # PK / identity FK, per-gym resource
+        "imported_from",  # provenance, set by the preset import
+        "imported_at",  # provenance, set by the preset import
+        "updated_at",  # auto-managed timestamp
+    }
+)
+
+GYM_VIDEO_FEED: frozenset[str] = frozenset(
+    {
+        "gym_id",  # composite PK / identity FK
+        "video_id",  # composite PK / identity FK
+    }
+)
+
+GYM_VIDEO_QUERY: frozenset[str] = frozenset(
+    {
+        "query_id",  # PK, identity
+        "gym_id",  # identity FK, per-gym resource
+    }
+)

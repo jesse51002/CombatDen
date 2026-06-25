@@ -17,6 +17,11 @@ CREATE TABLE gyms (
     -- Stripe Connect onboarding state (service_role-only writes; see access_rules/gyms.sql)
     stripe_account_id TEXT UNIQUE,
     stripe_onboarding_status stripe_onboarding_status NOT NULL DEFAULT 'not_started',
+    -- The ThemeService design id selected for this gym's member app (branding).
+    -- ThemeService remains a separate service; this is just the chosen design's id.
+    -- The "app id" is NOT stored here — it is a single hardcoded API/Settings
+    -- constant (one app for now). Client-editable, so absent from immutable GYMS.
+    theme_design_id TEXT,
     PRIMARY KEY (gym_id)
 );
 

@@ -56,6 +56,15 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
+    # Videos domain (read-only template catalog + a gym's live feed/showcase).
+    # The ThemeService app id whose celebration images brand template cards, and
+    # the CDN base those images resolve from. The CDN base defaults to the prod
+    # CDN so the derived template celebration_image_url ALWAYS points at the CDN
+    # (matching ThemeService, whose images are de-baked); set it empty to emit
+    # the ThemeService-relative path the client absolutises (local dev).
+    video_app_id: str = "combatden"
+    video_assets_cdn_base_url: str = "https://cdn.combatden.net"
+
     # Logging Configuration
     log_level: str = "DEBUG"
 

@@ -55,6 +55,8 @@ class GymResponse(BaseModel):
     gym_name: str
     gym_description: str | None
     timezone: str
+    # The ThemeService design id this gym brands with (None until chosen).
+    theme_design_id: str | None = None
 
 
 class GymWithRoleResponse(GymResponse):

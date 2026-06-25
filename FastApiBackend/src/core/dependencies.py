@@ -138,6 +138,7 @@ from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
 )
 from src.tasks.service.tasks_service import TasksService
+from src.videos.service.videos_service import VideosService
 from src.waivers.service.waivers.waivers_service import WaiversService
 
 
@@ -164,6 +165,7 @@ class DependencyInjector(containers.DeclarativeContainer):
             "src.stripe_webhooks.stripe_webhooks_router",
             # === end CRM billing router modules ===
             "src.tasks.tasks_router",
+            "src.videos.videos_router",
         ],
     )
 
@@ -190,6 +192,10 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Waivers: plain gym config (versioned documents + read-only e-sign
     # tracking), no Stripe.
     waivers_service = providers.Factory(WaiversService, db_pool=db_pool)
+
+    # Videos: read-only — the slug-keyed video template catalog + a real gym's
+    # live feed/spec/showcase from the gym_video_* tables. No Stripe, no writes.
+    videos_service = providers.Factory(VideosService, db_pool=db_pool)
 
     # === CRM billing DI providers (restored) ===
     # Shared Stripe infrastructure (per-gym connected-account lookups).

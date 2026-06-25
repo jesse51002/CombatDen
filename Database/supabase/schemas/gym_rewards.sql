@@ -3,6 +3,10 @@ CREATE TABLE gym_rewards (
     gym_id UUID NOT NULL CONSTRAINT fk_reward_gym REFERENCES gyms(gym_id),
     title VARCHAR NOT NULL CHECK (title <> ''),
     amount_off VARCHAR,
+    -- Member-app reward-card badge, e.g. 'Free', '30% off'. Distinct from
+    -- amount_off (a longer descriptive string); rendered as the prominent price
+    -- tag. Nullable: rewards created before this column simply show no badge.
+    price_label VARCHAR,
     image_url VARCHAR,
     point_cost INTEGER NOT NULL CHECK (point_cost > 0),
     is_active BOOLEAN NOT NULL DEFAULT true,
