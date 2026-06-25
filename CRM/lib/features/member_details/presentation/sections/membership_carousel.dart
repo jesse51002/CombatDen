@@ -18,10 +18,10 @@ import 'package:crm/shared/widgets/section_card.dart';
 /// Paged membership card — one of the **viewed member's own**
 /// memberships at a time with prev/next navigation. Each page
 /// shows that membership's plan header, a "Paid by" banner (for
-/// a member in a linked relationship), the details table, the
-/// outdated-price prompt, discounts, and the account actions
-/// row. A linked family member's memberships live on their own
-/// page — reach them from the linked-accounts block.
+/// a member in an authorization relationship), the details table,
+/// the outdated-price prompt, discounts, and the account actions
+/// row. Another member's memberships live on their own page —
+/// reach them from the authorized-payers block.
 class MembershipCarousel extends StatelessWidget {
   final MemberDetailResponse member;
   final int currentIndex;
@@ -37,22 +37,20 @@ class MembershipCarousel extends StatelessWidget {
   List<MembershipInfo> get _memberships => member.memberships;
 
   /// The payer of this membership — the viewed member (named,
-  /// never "Self") or a linked account — with their photo, or
-  /// null when no payer is resolvable.
-  ({String name, String? photoUrl})? _payer(
+  /// never "Self") or an authorized payer — with their photo.
+  ({String name, String? photoUrl}) _payer(
     MembershipInfo membership,
   ) {
-    final payerId = membership.paidByFor(member.memberId);
-    if (payerId == null) return null;
+    final payerId = membership.paidByMemberId;
     if (payerId == member.memberId) {
       return (name: member.fullName, photoUrl: member.photoUrl);
     }
-    for (final account in member.linkedAccounts) {
+    for (final account in member.authorizedPayers) {
       if (account.memberId == payerId) {
         return (name: account.fullName, photoUrl: account.photoUrl);
       }
     }
-    return (name: 'Linked account', photoUrl: null);
+    return (name: 'Authorized payer', photoUrl: null);
   }
 
   @override
@@ -65,14 +63,11 @@ class MembershipCarousel extends StatelessWidget {
         currentIndex.clamp(0, _memberships.length - 1);
     final membership = _memberships[index];
     final hasMultiple = _memberships.length > 1;
-    final coveredId = member.memberId;
 
-    final status =
-        membership.payingForMemberFor(coveredId)?.status ??
-            membership.status;
+    final status = membership.status;
 
     // Whether this membership's row is currently in an upgrade task.
-    final itemId = membership.itemIdFor(coveredId);
+    final itemId = membership.itemId;
     final tasksState = context.watch<TasksBloc>().state;
     final inTaskIds = switch (tasksState) {
       TasksLoaded(:final inTaskItemIds) => inTaskItemIds,
@@ -80,18 +75,19 @@ class MembershipCarousel extends StatelessWidget {
       TaskPollingDone(:final inTaskItemIds) => inTaskItemIds,
       _ => const <String>{},
     };
-    final isInTask = itemId != null && inTaskIds.contains(itemId);
+    final isInTask = inTaskIds.contains(itemId);
 
     final showOutdated = !isInTask &&
         !isTerminalStatus(status) &&
-        membership.isOnOutdatedPriceFor(coveredId) &&
+        membership.onOutdatedPrice &&
         membership.currentActivePrice != null;
 
-    // The "Paid by" line shows for any member in a linked
-    // relationship (parent or child); an unlinked solo member
-    // always pays their own way, so it is omitted.
-    final payer =
-        member.linkedAccounts.isNotEmpty ? _payer(membership) : null;
+    // The "Paid by" line shows for any member in an authorization
+    // relationship (a payer or a payee); a member with none always
+    // pays their own way, so it is omitted.
+    final hasRelationships = member.authorizedPayers.isNotEmpty ||
+        member.authorizedToPayFor.isNotEmpty;
+    final payer = hasRelationships ? _payer(membership) : null;
 
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -110,9 +106,9 @@ class MembershipCarousel extends StatelessWidget {
         ),
         MembershipDetailsTable(
           membership: membership,
-          coveredMemberId: coveredId,
-          // A "Paid by" row leads the table for a linked member;
-          // null for a solo (they always pay their own way).
+          // A "Paid by" row leads the table for a member in an
+          // authorization relationship; null for a solo member
+          // (they always pay their own way).
           payerName: payer?.name,
           payerPhotoUrl: payer?.photoUrl,
         ),
@@ -120,13 +116,12 @@ class MembershipCarousel extends StatelessWidget {
         if (showOutdated)
           OutdatedPriceCard(
             membership: membership,
-            coveredMemberId: coveredId,
+            memberId: member.memberId,
             coveredMemberName: member.fullName,
           ),
         DiscountsSection(
           member: member,
           membership: membership,
-          coveredMemberId: coveredId,
         ),
       ],
     );

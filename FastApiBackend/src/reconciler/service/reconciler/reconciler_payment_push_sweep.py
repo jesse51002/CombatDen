@@ -6,8 +6,8 @@ distinct payers with an active recurring membership and hands them to the
 existing ``PaymentSyncService.bulk_payment_sync``, which mints a fresh key per
 payer, locks the payer, and runs ``update_payments_recurring`` with
 ``proration_behavior='none'`` (billing = none -> no charges). This is what
-enforces an ongoing discount's ``end_date`` and backstops a missed once-discount
-settle on an idle member.
+enforces an ongoing discount's ``end_date`` on idle members (a discount past its
+cutoff drops out of the read on the next sync).
 
 Accepted, documented gap (not built here): ``execute_sync`` issues a Stripe
 ``update`` every run with no skip-if-equal diff guard, so an in-sync payer still

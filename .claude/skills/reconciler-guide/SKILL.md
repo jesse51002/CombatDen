@@ -62,14 +62,10 @@ mechanics**. It does **not** own:
 The engine self-heals drift **only when a member is actively touched**. Drift on
 an **idle** member persists until the next manual op. The reconciler is the
 periodic sweep that runs the engine on a clock, independent of user activity,
-closing that gap. It is **load-bearing**, not just a backstop, for two shipped
-discount features on idle members (both owned by `discounts-guide`):
-
-1. **Ongoing-discount `end_date` enforcement** — an ongoing discount drops off
-   the line only the first time a sync runs on/after its cutoff; an idle member
-   triggers no sync, so the push sweep is what runs it on schedule.
-2. **`once`-consumption finalization** — the `invoice.paid` webhook settles a
-   consumed `once` promptly; the sweep is the backstop for a **missed** webhook.
+closing that gap. It is **load-bearing**, not just a backstop, for discount `end_date` enforcement
+on idle members (owned by `discounts-guide`): a discount drops off the line only
+the first time a sync runs on/after its cutoff; an idle member triggers no sync,
+so the push sweep is what runs it on schedule.
 
 It is a **safety net**: simple, idempotent, no manual controls. It invents no
 billing logic — every step reuses existing services.
@@ -148,10 +144,9 @@ deliberate:
   (`reconciler_active_billing_members.sql` → distinct paying parents with an
   active recurring membership, `member_id` only) and calls the existing
   `PaymentSyncService.bulk_payment_sync(ids)` (proration `none` → **billing
-  none**, no charge). This is the "touch on a clock": it enforces ongoing-discount
-  `end_date`, backstops a missed `once` settle, **and** — because the sync now
-  self-heals a gone sub (§4) — cancels memberships whose Stripe sub is gone, with
-  no separate status pass.
+  none**, no charge). This is the "touch on a clock": it enforces discount
+  `end_date` **and** — because the sync now self-heals a gone sub (§4) —
+  cancels memberships whose Stripe sub is gone, with no separate status pass.
 - **`SubscriptionOrphanSweep`** — the reverse of `OrphanCleanupSweep` (which deletes
   DB rows with no Stripe line): cancels live Stripe subscriptions whose items map to
   **no live membership row**. Per Connect account

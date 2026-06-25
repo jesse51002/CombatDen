@@ -17,6 +17,7 @@ from src.members.schema.members_crm_members_list_schema import (
     MembersListTotalCounts,
     MembersListView,
 )
+from src.memberships.memberships_schema import PayerInvoiceChange
 from tests.conftest import make_member_row
 
 
@@ -371,3 +372,71 @@ def test_member_detail_hydrates_nested_rank(
     body = response.json()
     assert body["retention"]["class_streak_weeks"] == 2
     assert body["member_id"] == fake_member_id
+
+
+def test_preview_remove_authorization_accepts_no_idempotency_key(
+    client, auth_headers, fake_member_id
+):
+    """The preview is read-only, so it must accept the CRM's body shape —
+    ``{payer_member_id}`` with NO ``idempotency_key``.
+
+    Regression guard: the preview endpoint once shared the mutating request
+    model (which requires ``idempotency_key``), so the CRM's preview call —
+    which sends only ``payer_member_id`` — was rejected with HTTP 422, and the
+    dialog showed "No memberships are funded" for genuinely-funded relationships.
+    A preview has nothing to dedup, so it must NOT demand the key.
+    """
+    payer_id = str(uuid4())
+    mock_service = MagicMock()
+    mock_service.preview_remove_authorization = AsyncMock(
+        return_value=[
+            PayerInvoiceChange(
+                payer_member_id=payer_id,
+                payer_first_name="Patricia",
+                payer_last_name="Taylor",
+                affected=True,
+                preview=None,
+            )
+        ]
+    )
+    container = client.app.container
+    container.member_memberships_service.override(mock_service)
+    try:
+        response = client.post(
+            f"/api/v1/members/{fake_member_id}/link/remove/preview",
+            json={"payer_member_id": payer_id},
+            headers=auth_headers,
+        )
+    finally:
+        container.member_memberships_service.reset_override()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["payer_member_id"] == payer_id
+    assert body[0]["affected"] is True
+    # The service is called with (path member_id = payee, body payer_id = payer).
+    mock_service.preview_remove_authorization.assert_awaited_once()
+    call = mock_service.preview_remove_authorization.await_args
+    assert str(call.args[0]) == fake_member_id
+    assert str(call.args[1]) == payer_id
+
+
+def test_remove_authorization_still_requires_idempotency_key(
+    client, auth_headers, fake_member_id
+):
+    """The MUTATING remove endpoint keeps ``idempotency_key`` required.
+
+    The asymmetry is deliberate: the cascading cancel writes to Stripe and must
+    dedup on retry, so the mutating request needs the key; the preview does not.
+    Omitting it on the real remove is a 422 (validation), never a silent cancel.
+    """
+    response = client.post(
+        f"/api/v1/members/{fake_member_id}/link/remove",
+        json={"payer_member_id": str(uuid4())},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+    assert any(
+        err["loc"][-1] == "idempotency_key"
+        for err in response.json()["detail"]
+    )

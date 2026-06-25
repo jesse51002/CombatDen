@@ -8,10 +8,10 @@ stays pinned to the version it was applied at.
 
 - A regular preset newly desired -> INSERT an applied-discount row referencing the
   preset's ACTIVE value version, with the absolute end_date resolved from that
-  version's lifetime spec. A preset already applied to this membership is skipped
-  (left frozen). An applied-discount row in the remove list -> DELETE.
-- ``once`` applied-discount rows leave end_date NULL until the sync stamps it on
-  consumption.
+  version's lifetime spec (a duration span -> apply_date + span; an explicit
+  end_date copied verbatim; neither -> NULL = forever). A preset already applied to
+  this membership is skipped (left frozen). An applied-discount row in the remove
+  list -> DELETE.
 
 Any discount is applied this way by id, including a ``linked`` (family) discount:
 the membership/family flow passes the linked discount's id in ``discount_ids``
@@ -19,12 +19,10 @@ and it freezes an applied-discount row to that discount's active value like any 
 
 After writing the applied-discount rows the membership's subscription is re-synced
 so the sync computes each consolidated line's coupon and writes the resolved
-stripe_coupon_id back onto the contributing applied-discount rows. Stripe attach for
-``once`` discounts lives entirely in the sync: a just-applied ``once`` row has a NULL
-stripe_coupon_id and NULL end_date; the first re-sync treats it as pending,
-find-or-creates its deterministic coupon, attaches it, and writes the coupon id
-back (the consumption handle). On a later cycle the coupon is absent from the
-live subscription, so the sync detects consumption and stamps end_date.
+stripe_coupon_id back onto the contributing applied-discount rows. The coupon is
+find-or-created once per distinct value (a single Stripe ``forever`` coupon); the
+discount's expiry is bounded by OUR resolved end_date, never by Stripe — the
+applied-discount read simply drops a row once its end_date has passed.
 
 DiscountsService never touches applied-discount rows — it owns only
 ``gym_discounts`` / ``gym_discount_values``. ``mint_custom_discounts`` returns
@@ -36,7 +34,7 @@ from datetime import date
 from uuid import UUID
 
 from dateutil.relativedelta import relativedelta
-from schema.gym_discount import DiscountDurationUnit, DiscountMode, DiscountType
+from schema.gym_discount import DiscountDurationUnit, DiscountType
 from schema.member_membership import StripeSyncStatus
 from schema.membership_plan import PlanType
 from sqlalchemy import text
@@ -467,13 +465,17 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
     def _resolve_end_date(value: dict, apply_date: date) -> date | None:
         """Resolve an applied-discount row's absolute end_date from the value's lifetime.
 
-        ``once`` -> NULL (stamped by the sync on consumption). ``ongoing`` with a
-        duration span -> apply_date + span. ``ongoing`` with an explicit end_date
-        -> copied. ``ongoing`` with neither -> NULL (forever).
-        """
-        if value["discount_mode"] == DiscountMode.once.value:
-            return None
+        A duration span (duration_amount + duration_unit) -> apply_date + span; an
+        explicit end_date -> copied; neither -> NULL (forever). The Stripe coupon
+        is always ``forever`` — this resolved end_date is the cutoff the sync read
+        enforces (it drops the discount on/after it), so a 1-``cycle`` span is the
+        single-invoice discount that replaced the old ``once`` mode.
 
+        A ``cycle`` is one plan billing cycle. Recurring plans are monthly
+        (DB-enforced ``recurring_must_be_monthly``), so one cycle = one month;
+        if recurring plans ever gain other intervals this must resolve a cycle
+        against the membership's plan billing period.
+        """
         explicit_end = value["end_date"]
         if explicit_end is not None:
             return explicit_end
@@ -487,6 +489,9 @@ class MemberMembershipsDiscounts(MemberMembershipsBase):
             return apply_date + relativedelta(days=amount)
         if unit == DiscountDurationUnit.week.value:
             return apply_date + relativedelta(weeks=amount)
-        if unit == DiscountDurationUnit.month.value:
+        if unit in (
+            DiscountDurationUnit.month.value,
+            DiscountDurationUnit.cycle.value,
+        ):
             return apply_date + relativedelta(months=amount)
         raise ValueError(f"Unknown discount duration_unit: {unit}")

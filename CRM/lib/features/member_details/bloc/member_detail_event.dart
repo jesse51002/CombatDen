@@ -81,33 +81,54 @@ class UnlinkPaymentRequested extends MemberDetailEvent {
   const UnlinkPaymentRequested();
 }
 
+/// Authorize a payer for a member (the sign-gated link).
+/// [memberId] is the payee (the link's path member); [payerMemberId]
+/// is authorized to pay for them AND is the waiver signer. The same
+/// event serves both add directions — authorizing a payer for the
+/// viewed member (payee = viewed) or authorizing the viewed member
+/// to pay for someone (payer = viewed).
 class LinkParentRequested extends MemberDetailEvent {
-  final String parentMemberId;
-
-  /// When null, links the currently viewed member to the
-  /// chosen parent. When set, links the given child to
-  /// the chosen parent (manage-linked-accounts flow).
-  final String? childMemberId;
-  const LinkParentRequested(
-    this.parentMemberId, {
-    this.childMemberId,
+  final String memberId;
+  final String payerMemberId;
+  final String signerName;
+  final bool consentAcknowledged;
+  const LinkParentRequested({
+    required this.memberId,
+    required this.payerMemberId,
+    required this.signerName,
+    required this.consentAcknowledged,
   });
 
   @override
-  List<Object?> get props =>
-      [parentMemberId, childMemberId];
+  List<Object?> get props => [
+        memberId,
+        payerMemberId,
+        signerName,
+        consentAcknowledged,
+      ];
 }
 
-class UnlinkParentRequested extends MemberDetailEvent {
-  /// When null, unlinks the currently viewed member from
-  /// their parent. When set, unlinks the given child from
-  /// the currently viewed parent (manage-linked-accounts
-  /// flow).
-  final String? childMemberId;
-  const UnlinkParentRequested({this.childMemberId});
+/// Remove a payer's authorization for a member, cascading a pair-scoped
+/// cancel. [memberId] is the payee; [payerMemberId] is the payer being
+/// removed. The backend cancels the member's live recurring memberships that
+/// payer funds, then de-authorizes the pair. Preview the impact first
+/// (MemberRepository.previewRemoveAuthorization).
+class RemoveAuthorizationRequested extends MemberDetailEvent {
+  final String memberId;
+  final String payerMemberId;
+  const RemoveAuthorizationRequested({
+    required this.memberId,
+    required this.payerMemberId,
+  });
 
   @override
-  List<Object?> get props => [childMemberId];
+  List<Object?> get props => [memberId, payerMemberId];
+}
+
+/// Clears the remove-authorization outcome when the unlink
+/// dialog closes, so a later remove run opens clean.
+class RemoveAuthorizationOutcomeCleared extends MemberDetailEvent {
+  const RemoveAuthorizationOutcomeCleared();
 }
 
 // ----- Membership mutations -----
@@ -132,21 +153,30 @@ class StartMembershipsCleared extends MemberDetailEvent {
   const StartMembershipsCleared();
 }
 
-class CancelMembershipRequested extends MemberDetailEvent {
-  final String itemId;
+/// Clears the cancel-memberships outcome when the cancel
+/// dialog closes, so a later cancel run opens clean.
+class CancelMembershipOutcomeCleared extends MemberDetailEvent {
+  const CancelMembershipOutcomeCleared();
+}
 
-  /// The covered person whose slot on this membership is
-  /// being cancelled — may be the primary member or a
-  /// linked child. Never assume `member.memberId`.
+/// Cancel ONE OR MORE memberships in one request (a single cancel is a
+/// one-element list). The backend groups [itemIds] by payer and converges
+/// each payer's subscription once.
+class CancelMembershipRequested extends MemberDetailEvent {
+  final List<String> itemIds;
+
+  /// The focused member the cancel was launched from — the auth + gym-scope
+  /// anchor for the request (the items themselves may be funded for other
+  /// members; the backend resolves each item's own payer).
   final String memberId;
 
   const CancelMembershipRequested({
-    required this.itemId,
+    required this.itemIds,
     required this.memberId,
   });
 
   @override
-  List<Object?> get props => [itemId, memberId];
+  List<Object?> get props => [itemIds, memberId];
 }
 
 /// Migrate a membership item to the plan's current active

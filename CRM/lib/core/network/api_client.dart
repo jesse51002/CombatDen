@@ -74,10 +74,13 @@ class ApiClient {
     );
   }
 
-  /// Sends a DELETE request to [path].
-  Future<Response<T>> delete<T>(String path) async {
+  /// Sends a DELETE request to [path] with optional [data] body.
+  Future<Response<T>> delete<T>(
+    String path, {
+    Object? data,
+  }) async {
     return _handleRequest(
-      () => _dio.delete<T>(path),
+      () => _dio.delete<T>(path, data: data),
     );
   }
 
@@ -100,12 +103,16 @@ class ApiClient {
         );
       }
       if (e.response != null) {
+        final body = e.response?.data;
         throw ServerException(
           'Server error '
           '${e.response?.statusCode}: '
           '${e.response?.statusMessage}',
           statusCode: e.response?.statusCode,
-          detail: _extractDetail(e.response?.data),
+          detail: _extractDetail(body),
+          data: body is Map
+              ? body.cast<String, dynamic>()
+              : null,
         );
       }
       throw NetworkException(

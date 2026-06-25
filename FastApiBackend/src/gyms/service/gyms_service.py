@@ -6,7 +6,6 @@ Handles:
     * get_onboarding_status / get_fresh_onboarding_link — Stripe status
 """
 
-import logging
 from uuid import UUID
 
 from schema.gym_employee import ThemeMode
@@ -30,8 +29,7 @@ from src.gyms.service.gyms_stripe_connect_service import GymsStripeConnectServic
 from src.shared.column_guard import validate_mutable_columns
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
-
-logger = logging.getLogger(__name__)
+from src.waivers.service.waivers.waivers_service import WaiversService
 
 
 class GymsService:
@@ -44,17 +42,23 @@ class GymsService:
     Args:
         db_pool: Injected database connection pool.
         stripe_connect_service: Injected Stripe Connect wrapper.
+        waivers_service: Injected waivers service; forwarded to
+            ``GymsCreateService`` so the default authorized-payer waiver
+            is seeded atomically (before the Stripe account) and torn
+            down cleanly if creation fails.
     """
 
     def __init__(
         self,
         db_pool: DirectDatabasePool,
         stripe_connect_service: GymsStripeConnectService,
+        waivers_service: WaiversService,
     ) -> None:
         self._db_pool = db_pool
         self._create_service = GymsCreateService(
             db_pool=db_pool,
             stripe_connect_service=stripe_connect_service,
+            waivers_service=waivers_service,
         )
         self._onboarding_service = GymsOnboardingService(
             db_pool=db_pool,
@@ -73,7 +77,9 @@ class GymsService:
 
         A user may own multiple gyms, so this does not pre-check for
         an existing gym. Delegates to ``GymsCreateService`` for the
-        DB-first insert + Stripe account + AccountLink flow.
+        DB-first insert + default-waiver seed + Stripe account +
+        AccountLink flow (waiver is seeded before Stripe so a failure
+        tears down cleanly with no orphaned Stripe account).
 
         Raises:
             ValueError: If ``user_email`` is empty.

@@ -61,7 +61,7 @@ async def test_add_discount_preview_reflects_then_stages_nothing(
         gym_id,
         name="Preview Add 20% Off",
         percentage_off=20.0,
-        discount_mode="ongoing",
+
     )
     try:
         item_id = await _start_recurring(
@@ -102,7 +102,7 @@ async def test_remove_discount_preview_reflects_then_reverts(
         gym_id,
         name="Preview Remove 20% Off",
         percentage_off=20.0,
-        discount_mode="ongoing",
+
     )
     try:
         item_id = await _start_recurring(

@@ -35,8 +35,8 @@ CREATE POLICY "Gym staff can insert members"
 -- Identity columns stay immutable (PK / FK / created_at).
 REVOKE UPDATE (member_id, user_id, gym_id, created_at) ON TABLE members FROM authenticated;
 
--- Column-level Stripe gating. The merged contact / freeze / linkage / Stripe
--- billing columns are written by service_role only — never by the client.
+-- Column-level Stripe gating. The merged contact / freeze / Stripe billing
+-- columns are written by service_role only — never by the client.
 -- This is a deliberate exception to the per-table Stripe-gating rule: `members`
 -- mixes client-writable identity with service_role billing, gated per-column
 -- instead of per-table (see Database/CLAUDE.md). The unified table replaces the
@@ -50,7 +50,6 @@ REVOKE INSERT, UPDATE (
     emergency_contact_email,
     freeze_start_date,
     freeze_end_date,
-    account_linked_to_id,
     stripe_customer_id,
     stripe_sub_id_month,
     stripe_payment_method_id,

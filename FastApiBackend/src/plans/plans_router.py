@@ -45,7 +45,7 @@ membership_plans_router = APIRouter(
         400: {"description": "Invalid request data"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -66,7 +66,7 @@ async def create_plan(
         plans_service: Injected plans service.
 
     Raises:
-        HTTPException: 400/401/403/502/500 on respective errors.
+        HTTPException: 400/401/403/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
@@ -80,7 +80,7 @@ async def create_plan(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -110,7 +110,7 @@ async def create_plan(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Plan not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -131,7 +131,7 @@ async def update_plan(
         plans_service: Injected plans service.
 
     Raises:
-        HTTPException: 400/401/403/404/502/500 on respective errors.
+        HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
@@ -151,7 +151,7 @@ async def update_plan(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -180,7 +180,7 @@ async def update_plan(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Plan not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -203,7 +203,7 @@ async def delete_plan(
         plans_service: Injected plans service.
 
     Raises:
-        HTTPException: 400/401/403/404/502/500 on respective errors.
+        HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(gym_id, user_payload)
@@ -223,7 +223,7 @@ async def delete_plan(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:
@@ -432,7 +432,7 @@ async def list_plan_prices(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
         404: {"description": "Plan not found"},
-        502: {"description": "Stripe error"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
@@ -453,7 +453,7 @@ async def set_price(
         plans_service: Injected plans service.
 
     Raises:
-        HTTPException: 400/401/403/404/502/500 on respective errors.
+        HTTPException: 400/401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee(request.gym_id, user_payload)
@@ -473,7 +473,7 @@ async def set_price(
         ) from None
     except PaymentsStripeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from None
     except Exception:

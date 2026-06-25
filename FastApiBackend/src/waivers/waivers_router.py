@@ -1,13 +1,13 @@
 """API routes for the waivers domain.
 
-Phase 1: waiver catalog CRUD, version history, and read-only signature tracking
+Waiver catalog CRUD, version history, and read-only signature tracking
 (per-waiver roster + per-member status). Editing a waiver's body publishes a new
 immutable version; signatures bind to the exact version signed.
 
-Phase 2 (NOT implemented here): a front-desk clickwrap signing-capture endpoint,
-e.g. `POST /{waiver_id}/sign`, that records a member_waiver_signatures row
-(signer name, consent, signed_at UTC, the version's content_hash, ip_address,
-user_agent). It also needs the INSERT RLS policy on member_waiver_signatures.
+Signature CAPTURE has no endpoint of its own: the authorized-payer waiver is
+signed as part of creating an authorized-payer link, so the signature row is
+recorded atomically by that link flow (memberships) via
+``WaiversService.record_signature``, not here.
 """
 
 import logging

@@ -286,6 +286,9 @@ src/
   - Focus on clear, descriptive exception messages that help debugging
 - **Layer Separation**: API logs + handles, Services raise + describe
 
+**Billing / Stripe error status codes — never 502/503/504**
+- Stripe-or-upstream failures in billing endpoints always return **500 Internal Server Error**, never 502/503/504. The 5xx proxy auto-retry family (502/503/504) causes reverse proxies and load balancers to replay the request automatically; auto-retrying a mutating billing op (charge, cancel, refund, reprice, freeze, …) risks duplicate side-effects. A partial batch result (some items succeeded, some failed) returns **207 Multi-Status** (a 2xx, also never auto-retried) with the per-item succeeded/failed split in the body; a total failure is 500.
+
 **Middleware**
 - CORS must be first in middleware stack
 - One purpose per middleware

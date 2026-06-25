@@ -26,7 +26,6 @@ class MembersManagementResponse extends Equatable {
   final String? emergencyContactName;
   final String? emergencyContactPhone;
   final String? emergencyContactEmail;
-  final String? accountLinkedToId;
   final String? stripeCustomerId;
   final String? stripePaymentMethodId;
   final String? cardBrand;
@@ -45,7 +44,6 @@ class MembersManagementResponse extends Equatable {
     this.emergencyContactName,
     this.emergencyContactPhone,
     this.emergencyContactEmail,
-    this.accountLinkedToId,
     this.stripeCustomerId,
     this.stripePaymentMethodId,
     this.cardBrand,
@@ -71,7 +69,6 @@ class MembersManagementResponse extends Equatable {
         emergencyContactName,
         emergencyContactPhone,
         emergencyContactEmail,
-        accountLinkedToId,
         stripeCustomerId,
         stripePaymentMethodId,
         cardBrand,

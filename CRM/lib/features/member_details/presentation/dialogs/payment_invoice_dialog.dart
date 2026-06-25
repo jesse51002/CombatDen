@@ -11,6 +11,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/presentation/dialogs/refund_charge_dialog.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_attempt_line.dart';
+import 'package:crm/shared/widgets/invoice_breakdown/invoice_attribution.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_breakdown_data.dart';
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
@@ -45,17 +46,12 @@ class PaymentInvoiceDialog extends StatelessWidget {
 
   bool get _isRefund => payment.kind == ChargeKind.refund;
 
-  /// "Paid by {payer} · For {beneficiaries}" — the who-paid / who-for
-  /// attribution. The "For" clause is shown only when the bill was for
-  /// someone other than the payer (otherwise it's redundant). Null when
-  /// there's nothing meaningful to show.
-  String? get _attributionLabel {
-    final payer = payment.paidByName;
+  /// "For {beneficiaries}" — who the bill was for, when that differs from the
+  /// payer (the payer is shown as the avatar attribution header). Null when
+  /// the bill was only for the payer.
+  String? get _forLabel {
     final others = _beneficiaryNames;
-    final parts = <String>[];
-    if (payer.isNotEmpty) parts.add('Paid by $payer');
-    if (others.isNotEmpty) parts.add('For ${others.join(', ')}');
-    return parts.isEmpty ? null : parts.join('  ·  ');
+    return others.isEmpty ? null : 'For ${others.join(', ')}';
   }
 
   /// Refundable only when this is a succeeded payment (not
@@ -180,7 +176,7 @@ class PaymentInvoiceDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final attribution = _attributionLabel;
+    final forLabel = _forLabel;
     return AppDialog(
       title: _isRefund ? 'Refund' : 'Invoice',
       body: Column(
@@ -188,15 +184,16 @@ class PaymentInvoiceDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingMedium,
         children: [
-          if (attribution != null)
-            Text(
-              attribution,
-              style: DesignConstants.pSmall.copyWith(
-                color: DesignConstants.text2nd,
-              ),
-            ),
           InvoiceBreakdown(
             data: _data,
+            // Whose invoice — the payer (their card billed it).
+            attribution: payment.paidByName.isEmpty
+                ? null
+                : InvoiceAttribution(
+                    name: payment.paidByName,
+                    photoUrl: payment.paidByPhotoUrl,
+                    caption: 'Paid by',
+                  ),
             headerCaption: _isRefund ? 'Refund' : 'Payment',
             headerMeta: formatDay(payment.chargeTime),
             strongHeaderCaption: true,
@@ -205,6 +202,13 @@ class PaymentInvoiceDialog extends StatelessWidget {
             onRefundPressed:
                 _canRefund ? () => _onRefund(context) : null,
           ),
+          if (forLabel != null)
+            Text(
+              forLabel,
+              style: DesignConstants.pSmall.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
         ],
       ),
     );

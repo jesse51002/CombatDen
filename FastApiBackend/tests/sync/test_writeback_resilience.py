@@ -41,7 +41,7 @@ def _params(memberships: list[ActiveMembershipRow] | None = None) -> SyncParams:
         bucket=IntervalBucket(interval=DurationUnit.month, items=[]),
         payer=payer,
         stripe_account_id="acct_test",
-        coupon_links={uuid4(): "pct_1000_ongoing"},
+        coupon_links={uuid4(): "pct_1000"},
         membership_post_discount_amounts={},
         memberships=memberships or [],
     )

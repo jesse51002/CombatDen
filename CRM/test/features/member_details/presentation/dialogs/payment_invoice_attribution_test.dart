@@ -45,8 +45,11 @@ void main() {
         .map((w) => w.data)
         .firstWhere((s) => s != null && s.contains(needle), orElse: () => null);
 
-    // Top: payer + BOTH beneficiaries.
-    expect(has('Paid by Daniel Jordan'), isNotNull);
+    // Top: "Paid by" caption and payer name are separate Text widgets
+    // (InvoiceAttribution renders them in a Column, not as one string).
+    expect(has('Paid by'), isNotNull);
+    expect(has('Daniel Jordan'), isNotNull);
+    // Beneficiaries are joined into a single "For …" Text below the breakdown.
     expect(has('For Carrie Hebert, Christopher Davis'), isNotNull);
     // THE BUG: a single consolidated line must show BOTH co-owners.
     expect(has('2 × Monthly ×2 · Carrie Hebert, Christopher Davis'), isNotNull,

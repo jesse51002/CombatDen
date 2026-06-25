@@ -4,9 +4,9 @@ import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
-import 'package:crm/features/member_details/data/models/discount_mode.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_value_helpers.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_bloc.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_event.dart';
 import 'package:crm/features/memberships/data/models/discount_create_request.dart';
@@ -18,14 +18,11 @@ import 'package:crm/shared/widgets/form/app_dropdown_field.dart';
 
 enum _AmountKind { percentage, dollar }
 
-/// How an `ongoing` discount ends: after a duration span, on an
-/// explicit date, or never (forever).
-enum _LifetimeKind { duration, untilDate, forever }
-
-/// Create / edit a discount preset: name, a % or \$ amount, and a
-/// once / ongoing lifetime (ongoing ends by a duration span, an
-/// explicit end date, or forever). Editing a value mints a new
-/// version on the backend; old versions stay as read-only history.
+/// Create / edit a discount preset: name, a % or \$ amount,
+/// and a lifetime (Forever / Cycle / Day / Week / Month).
+/// Cycle = 1 plan billing cycle — the replacement for the
+/// removed `once` mode. Editing a value mints a new version
+/// on the backend; old versions stay as read-only history.
 class EditDiscountDialog extends StatefulWidget {
   final DiscountsBloc bloc;
   final String gymId;
@@ -62,9 +59,8 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
   final _formKey = GlobalKey<FormState>();
 
   _AmountKind _kind = _AmountKind.percentage;
-  DiscountMode _mode = DiscountMode.once;
-  DiscountDurationUnit _durationUnit = DiscountDurationUnit.month;
-  _LifetimeKind _lifetime = _LifetimeKind.duration;
+  CustomDiscountLifetimeUnit _lifetimeUnit =
+      CustomDiscountLifetimeUnit.cycle;
   DateTime? _endDate;
 
   bool get _isEdit => widget.discount != null;
@@ -83,24 +79,38 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
         _kind = _AmountKind.percentage;
         _amountController.text = v.percentageOff!.toStringAsFixed(0);
       }
-      _mode = v.discountMode == DiscountMode.unknown
-          ? DiscountMode.once
-          : v.discountMode;
-      _durationUnit = v.durationUnit == null ||
-              v.durationUnit == DiscountDurationUnit.unknown
-          ? DiscountDurationUnit.month
-          : v.durationUnit!;
-      _durationController.text = (v.durationAmount ?? 1).toString();
+      // Resolve lifetime from the value's duration/end_date fields.
       if (v.endDate != null) {
-        _lifetime = _LifetimeKind.untilDate;
+        _lifetimeUnit = CustomDiscountLifetimeUnit.forever;
         _endDate = v.endDate;
-      } else if (v.durationAmount != null) {
-        _lifetime = _LifetimeKind.duration;
+      } else if (v.durationAmount != null && v.durationUnit != null) {
+        _lifetimeUnit =
+            _unitFromBackend(v.durationUnit!);
+        _durationController.text = v.durationAmount!.toString();
       } else {
-        _lifetime = _LifetimeKind.forever;
+        _lifetimeUnit = CustomDiscountLifetimeUnit.forever;
       }
     } else {
       _durationController.text = '1';
+    }
+  }
+
+  /// Maps a backend [DiscountDurationUnit] back to the UI
+  /// [CustomDiscountLifetimeUnit].
+  CustomDiscountLifetimeUnit _unitFromBackend(
+    DiscountDurationUnit unit,
+  ) {
+    switch (unit) {
+      case DiscountDurationUnit.cycle:
+        return CustomDiscountLifetimeUnit.cycle;
+      case DiscountDurationUnit.day:
+        return CustomDiscountLifetimeUnit.day;
+      case DiscountDurationUnit.week:
+        return CustomDiscountLifetimeUnit.week;
+      case DiscountDurationUnit.month:
+        return CustomDiscountLifetimeUnit.month;
+      case DiscountDurationUnit.unknown:
+        return CustomDiscountLifetimeUnit.forever;
     }
   }
 
@@ -111,8 +121,6 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
     _durationController.dispose();
     super.dispose();
   }
-
-  bool get _isOngoing => _mode == DiscountMode.ongoing;
 
   double? get _amount => double.tryParse(_amountController.text.trim());
 
@@ -205,22 +213,22 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
     int? durationAmount;
     DiscountDurationUnit? durationUnit;
     DateTime? endDate;
-    if (_isOngoing) {
-      switch (_lifetime) {
-        case _LifetimeKind.duration:
-          durationAmount = int.tryParse(_durationController.text.trim());
-          durationUnit = _durationUnit;
-        case _LifetimeKind.untilDate:
-          endDate = _endDate;
-        case _LifetimeKind.forever:
-          break;
+
+    // Until-date is a special case: the user selected Forever but picked a
+    // date — the date was set from an existing value on edit.
+    if (_endDate != null &&
+        _lifetimeUnit == CustomDiscountLifetimeUnit.forever) {
+      endDate = _endDate;
+    } else {
+      durationUnit = toDiscountDurationUnit(_lifetimeUnit);
+      if (durationUnit != null) {
+        durationAmount = int.tryParse(_durationController.text.trim());
       }
     }
 
     return DiscountValue(
       percentageOff: percentageOff,
       dollarOff: dollarOff,
-      discountMode: _mode,
       durationAmount: durationAmount,
       durationUnit: durationUnit,
       endDate: endDate,
@@ -231,16 +239,6 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final name = _nameController.text.trim();
     if (_amount == null) return;
-
-    // For `untilDate` lifetime, require a date to be picked.
-    if (_isOngoing &&
-        _lifetime == _LifetimeKind.untilDate &&
-        _endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick an end date.')),
-      );
-      return;
-    }
 
     final discountValue = _buildValue();
 
@@ -278,6 +276,24 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
     Navigator.of(context).pop();
   }
 
+  bool get _showDurationField =>
+      _lifetimeUnit != CustomDiscountLifetimeUnit.forever;
+
+  String _durationFieldLabel() {
+    switch (_lifetimeUnit) {
+      case CustomDiscountLifetimeUnit.cycle:
+        return 'Cycles';
+      case CustomDiscountLifetimeUnit.day:
+        return 'Days';
+      case CustomDiscountLifetimeUnit.week:
+        return 'Weeks';
+      case CustomDiscountLifetimeUnit.month:
+        return 'Months';
+      case CustomDiscountLifetimeUnit.forever:
+        return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppDialog(
@@ -288,129 +304,93 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           spacing: DesignConstants.spacingLarge,
           children: [
-          CustomTextField(
-            controller: _nameController,
-            label: 'Name',
-            hintText: 'New Year Discount',
-            validator: _validateName,
-          ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingMedium,
-            children: [
-              Expanded(
-                child: AppDropdownField<_AmountKind>(
-                  label: 'Type',
-                  value: _kind,
-                  items: const [
-                    DropdownMenuItem(
-                      value: _AmountKind.percentage,
-                      child: Text('% off'),
-                    ),
-                    DropdownMenuItem(
-                      value: _AmountKind.dollar,
-                      child: Text('\$ off'),
-                    ),
-                  ],
-                  onChanged: (v) => setState(() => _kind = v ?? _kind),
-                ),
-              ),
-              Expanded(
-                child: CustomTextField(
-                  controller: _amountController,
-                  label: _kind == _AmountKind.percentage
-                      ? 'Percent'
-                      : 'Amount (\$)',
-                  hintText: _kind == _AmountKind.percentage ? '20' : '30',
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  ],
-                  validator: _validateAmount,
-                ),
-              ),
-            ],
-          ),
-          AppDropdownField<DiscountMode>(
-            label: 'Applies',
-            value: _mode,
-            items: const [
-              DropdownMenuItem(
-                value: DiscountMode.once,
-                child: Text('Once'),
-              ),
-              DropdownMenuItem(
-                value: DiscountMode.ongoing,
-                child: Text('Ongoing'),
-              ),
-            ],
-            onChanged: (v) => setState(() => _mode = v ?? _mode),
-          ),
-          if (_isOngoing)
-            AppDropdownField<_LifetimeKind>(
-              label: 'Lifetime',
-              value: _lifetime,
-              items: const [
-                DropdownMenuItem(
-                  value: _LifetimeKind.duration,
-                  child: Text('For a duration'),
-                ),
-                DropdownMenuItem(
-                  value: _LifetimeKind.untilDate,
-                  child: Text('Until a date'),
-                ),
-                DropdownMenuItem(
-                  value: _LifetimeKind.forever,
-                  child: Text('Forever'),
-                ),
-              ],
-              onChanged: (v) => setState(() => _lifetime = v ?? _lifetime),
+            CustomTextField(
+              controller: _nameController,
+              label: 'Name',
+              hintText: 'New Year Discount',
+              validator: _validateName,
             ),
-          if (_isOngoing && _lifetime == _LifetimeKind.untilDate)
-            _endDateField(),
-          if (_isOngoing && _lifetime == _LifetimeKind.duration)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: DesignConstants.spacingMedium,
               children: [
                 Expanded(
-                  child: CustomTextField(
-                    controller: _durationController,
-                    label: 'For',
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
+                  child: AppDropdownField<_AmountKind>(
+                    label: 'Type',
+                    value: _kind,
+                    items: const [
+                      DropdownMenuItem(
+                        value: _AmountKind.percentage,
+                        child: Text('% off'),
+                      ),
+                      DropdownMenuItem(
+                        value: _AmountKind.dollar,
+                        child: Text('\$ off'),
+                      ),
                     ],
-                    validator: _validateDuration,
+                    onChanged: (v) => setState(() => _kind = v ?? _kind),
                   ),
                 ),
                 Expanded(
-                  child: AppDropdownField<DiscountDurationUnit>(
-                    label: 'Unit',
-                    value: _durationUnit,
-                    items: const [
-                      DropdownMenuItem(
-                        value: DiscountDurationUnit.day,
-                        child: Text('Day'),
-                      ),
-                      DropdownMenuItem(
-                        value: DiscountDurationUnit.week,
-                        child: Text('Week'),
-                      ),
-                      DropdownMenuItem(
-                        value: DiscountDurationUnit.month,
-                        child: Text('Month'),
-                      ),
+                  child: CustomTextField(
+                    controller: _amountController,
+                    label: _kind == _AmountKind.percentage
+                        ? 'Percent'
+                        : 'Amount (\$)',
+                    hintText:
+                        _kind == _AmountKind.percentage ? '20' : '30',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     ],
-                    onChanged: (v) =>
-                        setState(() => _durationUnit = v ?? _durationUnit),
+                    validator: _validateAmount,
                   ),
                 ),
               ],
             ),
-        ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: DesignConstants.spacingMedium,
+              children: [
+                Expanded(
+                  child: AppDropdownField<CustomDiscountLifetimeUnit>(
+                    label: 'Lifetime',
+                    value: _lifetimeUnit,
+                    items: CustomDiscountLifetimeUnit.values
+                        .map(
+                          (u) => DropdownMenuItem(
+                            value: u,
+                            child: Text(lifetimeUnitLabel(u)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(
+                      () => _lifetimeUnit = v ?? _lifetimeUnit,
+                    ),
+                  ),
+                ),
+                if (_showDurationField)
+                  Expanded(
+                    child: CustomTextField(
+                      controller: _durationController,
+                      label: _durationFieldLabel(),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      validator: _validateDuration,
+                    ),
+                  ),
+              ],
+            ),
+            if (_lifetimeUnit == CustomDiscountLifetimeUnit.cycle)
+              _CycleNote(controller: _durationController),
+            if (_isEdit && _endDate != null &&
+                _lifetimeUnit == CustomDiscountLifetimeUnit.forever)
+              _endDateField(),
+          ],
         ),
       ),
       actions: AppDialogActions(
@@ -421,6 +401,32 @@ class _EditDiscountDialogState extends State<EditDiscountDialog> {
         destructiveLabel: _isEdit ? 'Delete' : null,
         destructiveOnPressed: _isEdit ? _delete : null,
       ),
+    );
+  }
+}
+
+/// Parenthetical note below the Cycle amount field:
+/// "N cycle(s) (N month(s))".
+class _CycleNote extends StatelessWidget {
+  final TextEditingController controller;
+
+  const _CycleNote({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (_, _) {
+        final n = int.tryParse(controller.text.trim()) ?? 1;
+        final cycleWord = n == 1 ? 'cycle' : 'cycles';
+        final monthWord = n == 1 ? 'month' : 'months';
+        return Text(
+          '$n $cycleWord ($n $monthWord)',
+          style: DesignConstants.pSmall.copyWith(
+            color: DesignConstants.text2nd,
+          ),
+        );
+      },
     );
   }
 }

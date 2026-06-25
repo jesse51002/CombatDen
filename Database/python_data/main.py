@@ -13,8 +13,8 @@ Flow:
        a. Clone the rank ladder into gym_ranks (direct DB).
        b. Plans + prices via the backend (real Stripe products/prices).
        c. Discounts (regular-only presets) via the backend (coupons computed
-          at sync, not on the preset). The catalog randomizes %/$ , once vs
-          ongoing, and duration.
+          at sync, not on the preset). The catalog randomizes %/$ and
+          lifetime (a few billing cycles / a day-week-month span / forever).
        d. Build the per-member billing lifecycle (incl. a random
           0-DISCOUNTS_PER_MEMBERSHIP_MAX discount set per membership), then
           create every member concurrently via the backend (POST /members shell
@@ -55,6 +55,7 @@ from bootstrap import gyms as bs_gyms
 from bootstrap import history as bs_history
 from bootstrap import ranks as bs_ranks
 from bootstrap import rewards as bs_rewards
+from bootstrap import waivers as bs_waivers
 from config import get_supabase_client
 from constants import DEFAULT_PASSWORD, DISCOUNTS_PER_GYM, PLANS_PER_GYM, SEED
 from faker import Faker
@@ -99,6 +100,10 @@ def seed() -> None:
             ranks = bs_ranks.create_gym_ranks(client, gym_id, gym_type)
             progress.log(f"  {len(ranks)} ranks")
 
+            # Default authorized-payer waiver (undeletable, direct DB).
+            progress.log("Creating default authorized-payer waiver...")
+            bs_waivers.create(client, gym_id)
+
             # Plans + prices (real Stripe products + prices).
             progress.log("Creating plans...")
             plan_records = api_plans.create_all(
@@ -107,8 +112,8 @@ def seed() -> None:
             progress.log(f"  {len(plan_records)} plans")
 
             # Discounts (regular presets; coupons computed at sync). The catalog
-            # randomizes %/$ , once/ongoing, and duration; memberships draw a
-            # random subset of it below.
+            # randomizes %/$ and lifetime (cycle / span / forever); memberships
+            # draw a random subset of it below.
             progress.log("Creating discounts...")
             regular_discounts = api_discounts.create_regular(
                 api, client, gym_id, DISCOUNTS_PER_GYM

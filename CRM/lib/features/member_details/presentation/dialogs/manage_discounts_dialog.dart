@@ -32,24 +32,18 @@ enum _Step { select, preview }
 class ManageDiscountsDialog extends StatefulWidget {
   final MemberDetailResponse member;
   final MembershipInfo membership;
-  final String coveredMemberId;
 
   const ManageDiscountsDialog({
     super.key,
     required this.member,
     required this.membership,
-    required this.coveredMemberId,
   });
 
   static Future<void> show({
     required BuildContext context,
     required MemberDetailResponse member,
     required MembershipInfo membership,
-    required String coveredMemberId,
   }) {
-    if (membership.itemIdFor(coveredMemberId) == null) {
-      return Future.value();
-    }
     return showDialog<void>(
       context: context,
       builder: (_) => BlocProvider.value(
@@ -57,7 +51,6 @@ class ManageDiscountsDialog extends StatefulWidget {
         child: ManageDiscountsDialog(
           member: member,
           membership: membership,
-          coveredMemberId: coveredMemberId,
         ),
       ),
     );
@@ -93,17 +86,13 @@ class _ManageDiscountsDialogState
         _repository.listGymDiscounts(widget.member.gymId);
   }
 
-  String get _itemId =>
-      widget.membership.itemIdFor(widget.coveredMemberId)!;
+  String get _itemId => widget.membership.itemId;
 
-  /// Snapshots already applied to this member's line — the Remove
-  /// screen lists them. Resolved by item.
+  /// Snapshots already applied to this membership's line — the
+  /// Remove screen lists them. Resolved by item.
   List<DiscountInfo> get _applied {
-    final itemId =
-        widget.membership.itemIdFor(widget.coveredMemberId);
-    if (itemId == null) return const [];
     return widget.membership.discounts
-        .where((d) => d.itemId == itemId)
+        .where((d) => d.itemId == _itemId)
         .toList();
   }
 
@@ -135,7 +124,7 @@ class _ManageDiscountsDialogState
       return _repository.addMembershipDiscounts(
         MemberMembershipsAddDiscountsRequest(
           itemId: _itemId,
-          memberId: widget.coveredMemberId,
+          memberId: widget.member.memberId,
           discountIds: _toAdd.toList(),
           idempotencyKey: const Uuid().v4(),
           preview: true,
@@ -145,7 +134,7 @@ class _ManageDiscountsDialogState
     return _repository.removeMembershipDiscounts(
       MemberMembershipsRemoveDiscountsRequest(
         itemId: _itemId,
-        memberId: widget.coveredMemberId,
+        memberId: widget.member.memberId,
         appliedIds: _toRemove.toList(),
         idempotencyKey: const Uuid().v4(),
         preview: true,
@@ -160,7 +149,7 @@ class _ManageDiscountsDialogState
       bloc.add(
         AddDiscountsRequested(
           itemId: _itemId,
-          memberId: widget.coveredMemberId,
+          memberId: widget.member.memberId,
           discountIds: _toAdd.toList(),
         ),
       );
@@ -168,7 +157,7 @@ class _ManageDiscountsDialogState
       bloc.add(
         RemoveDiscountsRequested(
           itemId: _itemId,
-          memberId: widget.coveredMemberId,
+          memberId: widget.member.memberId,
           appliedIds: _toRemove.toList(),
         ),
       );
@@ -237,18 +226,18 @@ class _ManageDiscountsDialogState
     // The shared preview viewer: a discount change has no due-now (nothing
     // extra is charged today), so it shows only the recurring section as a
     // current → new comparison.
+    final payerId = widget.membership.paidByMemberId;
     return InvoicePreviewSection(
       loadPreview: _loadPreview,
       // The "before" invoice is the sub that actually bills this
       // membership — its payer's subscription, not the covered
       // member's (who may be paid for by their parent).
-      loadCurrent: () => _repository.getUpcomingInvoice(
-        widget.membership.paidByFor(widget.coveredMemberId) ??
-            widget.coveredMemberId,
-      ),
+      loadCurrent: () => _repository.getUpcomingInvoice(payerId),
       showDueNow: false,
       recurringFallbackMonthly:
           widget.member.totalMonthlyRecurringPrice,
+      payerName: widget.member.nameForMember(payerId),
+      payerPhotoUrl: widget.member.photoUrlForMember(payerId),
       emptyLabel: 'No billing change.',
       errorLabel: 'Could not load the preview.',
     );

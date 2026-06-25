@@ -26,7 +26,7 @@ List<StartMembershipParticipant> configMembersFor({
   final all = <StartMembershipParticipant>[
     payer,
     if (payerDetail != null)
-      ...payerDetail.linkedAccounts.map(
+      ...payerDetail.authorizedToPayFor.map(
         (a) => StartMembershipParticipant(
           memberId: a.memberId,
           name: a.fullName,
